@@ -18,7 +18,6 @@ export function Sidebar({ user }: Props) {
   const [open, setOpen] = useState(false);
   const [usage, setUsage] = useState<{ used: number } | null>(null);
 
-  // Synced state from ChatWindow
   const [activeMode, setActiveMode] = useState<'chat' | 'builder'>('chat');
   const [activePanelTool, setActivePanelTool] = useState<string | null>(null);
   const [searchOn, setSearchOn] = useState(false);
@@ -145,12 +144,12 @@ export function Sidebar({ user }: Props) {
 
       <aside
         className={`
-          fixed md:relative z-40 flex flex-col overflow-hidden
+          fixed md:relative z-40 flex flex-col
           w-[85vw] max-w-[300px] md:w-64
           bg-[#16161d] border-r border-white/5
           transition-transform duration-200 ease-in-out
           ${open ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
-          h-screen md:h-auto md:sticky md:top-0
+          h-[100dvh] md:h-auto md:sticky md:top-0
         `}
       >
         {/* Logo */}
@@ -185,8 +184,9 @@ export function Sidebar({ user }: Props) {
           </Link>
         </div>
 
-        {/* Scrollable content */}
-        <div className="flex-1 overflow-y-auto px-3 py-3 min-h-0">
+        {/* Scrollable EVERYTHING */}
+        <div className="flex-1 overflow-y-auto px-3 py-3 min-h-0 flex flex-col">
+
           {isInChat && (
             <>
               <div className="text-[10px] text-[#555566] uppercase mb-2">Mode</div>
@@ -238,20 +238,20 @@ export function Sidebar({ user }: Props) {
               </Link>
             ))
           )}
-        </div>
 
-        {/* Bottom */}
-        <div className="px-3 pb-4 border-t border-white/5 pt-3">
-          <Link href="/settings" className="text-sm text-[#6C63FF]">
-            Settings
-          </Link>
+          {/* Bottom INSIDE scroll */}
+          <div className="mt-auto pt-4 border-t border-white/5">
+            <Link href="/settings" className="block text-sm text-[#6C63FF]">
+              Settings
+            </Link>
 
-          <button
-            onClick={() => signOut({ callbackUrl: '/login' })}
-            className="block text-red-400 text-sm mt-2"
-          >
-            Sign out
-          </button>
+            <button
+              onClick={() => signOut({ callbackUrl: '/login' })}
+              className="block text-red-400 text-sm mt-2"
+            >
+              Sign out
+            </button>
+          </div>
         </div>
       </aside>
     </>
