@@ -151,7 +151,7 @@ export function PreviewPanel({ artifact, onClose }: Props) {
                 </div>
               </div>
             ) : (
-              <iframe ref={iframeRef} className="w-full h-full border-0" sandbox="allow-scripts allow-same-origin allow-forms allow-modals" title={artifact.title} />
+              <iframe ref={iframeRef} className="w-full h-full border-0" sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups" title={artifact.title} />
             )}
           </div>
         ) : (
