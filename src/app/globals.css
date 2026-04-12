@@ -1,0 +1,44 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --accent: #6C63FF;
+  --accent-dark: #4b44cc;
+}
+
+* { box-sizing: border-box; }
+
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+.scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+
+.prose-aria { 
+  @apply text-[#f0f0f5] leading-relaxed;
+}
+.prose-aria h1 { @apply text-xl font-semibold mt-4 mb-2; }
+.prose-aria h2 { @apply text-lg font-semibold mt-3 mb-2; }
+.prose-aria h3 { @apply text-base font-semibold mt-2 mb-1; }
+.prose-aria p { @apply mb-3 last:mb-0; }
+.prose-aria ul { @apply list-disc pl-5 mb-3 space-y-1; }
+.prose-aria ol { @apply list-decimal pl-5 mb-3 space-y-1; }
+.prose-aria blockquote { @apply border-l-2 border-accent pl-4 italic text-[#888899] my-3; }
+.prose-aria table { @apply w-full border-collapse my-3 text-sm; }
+.prose-aria th { @apply bg-[#272733] px-3 py-2 text-left font-semibold border border-white/10; }
+.prose-aria td { @apply px-3 py-2 border border-white/10; }
+.prose-aria a { @apply text-accent underline hover:text-accent-dark transition-colors; }
+.prose-aria strong { @apply font-semibold; }
+.prose-aria code { @apply font-mono text-xs bg-white/10 px-1.5 py-0.5 rounded; }
+.prose-aria hr { @apply border-white/10 my-4; }
+
+@keyframes typing {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+  30% { transform: translateY(-4px); opacity: 1; }
+}
+.typing-dot:nth-child(1) { animation: typing 1.2s infinite; }
+.typing-dot:nth-child(2) { animation: typing 1.2s infinite 0.2s; }
+.typing-dot:nth-child(3) { animation: typing 1.2s infinite 0.4s; }

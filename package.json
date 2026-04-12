@@ -1,0 +1,47 @@
+{
+  "name": "aria-saas",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "next": "14.2.5",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "next-auth": "^4.24.7",
+    "mongoose": "^8.5.1",
+    "bcryptjs": "^2.4.3",
+    "ai": "^3.3.0",
+    "@anthropic-ai/sdk": "^0.27.0",
+    "openai": "^4.56.0",
+    "@vercel/blob": "^0.23.4",
+    "stripe": "^16.2.0",
+    "react-markdown": "^9.0.1",
+    "remark-gfm": "^4.0.0",
+    "react-syntax-highlighter": "^15.5.0",
+    "lucide-react": "^0.436.0",
+    "clsx": "^2.1.1",
+    "tailwind-merge": "^2.5.2",
+    "framer-motion": "^11.3.21",
+    "react-hot-toast": "^2.4.1",
+    "zustand": "^4.5.5",
+    "date-fns": "^3.6.0",
+    "uuid": "^10.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.15",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@types/bcryptjs": "^2.4.6",
+    "typescript": "^5.5.4",
+    "tailwindcss": "^3.4.9",
+    "postcss": "^8.4.41",
+    "autoprefixer": "^10.4.20",
+    "eslint": "^8.57.0",
+    "eslint-config-next": "14.2.5"
+  }
+}
