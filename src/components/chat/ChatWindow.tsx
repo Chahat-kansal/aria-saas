@@ -9,7 +9,7 @@ import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import toast from 'react-hot-toast';
 import { PreviewPanel, CodeArtifact } from './PreviewPanel';
 import { extractArtifacts } from '@/lib/codeDetection';
-const uuid = () => crypto.randomUUID();
+import { v4 as uuid } from 'uuid';
 import { CodeExecutor } from '@/components/project/CodeExecutor';
 import { ImageGenerator } from '@/components/project/ImageGenerator';
 import { ProjectBuilder } from '@/components/project/ProjectBuilder';
@@ -130,10 +130,11 @@ export function ChatWindow({ conversationId }: Props) {
 
     setMessages(prev => [...prev, { role: 'assistant', content: '' }]);
 
-    // Streaming artifact for builder mode
+    // Streaming artifact for builder mode — pre-open the panel
     if (mode === 'builder') {
       const placeholder: CodeArtifact = { id: uuid(), title: text.slice(0, 40), language: 'html', code: '', streaming: true };
       setActiveArtifact(placeholder);
+      setRightPanel('preview');
     }
 
     try {
@@ -196,7 +197,14 @@ export function ChatWindow({ conversationId }: Props) {
             if (data.done) {
               const artifacts = extractArtifacts(fullContent, text);
               setMessages(prev => { const m = [...prev]; m[m.length - 1] = { ...m[m.length - 1], artifacts }; return m; });
-              if (artifacts.length > 0) setActiveArtifact({ ...artifacts[artifacts.length - 1], streaming: false });
+              if (artifacts.length > 0) {
+                const lastArtifact = { ...artifacts[artifacts.length - 1], streaming: false };
+                setActiveArtifact(lastArtifact);
+                // Auto-open preview panel for HTML/JSX/TSX artifacts
+                if (['html', 'jsx', 'tsx'].includes(lastArtifact.language)) {
+                  setRightPanel('preview');
+                }
+              }
               setLastAiMessage(fullContent);
             }
           } catch {}
