@@ -1,5 +1,5 @@
 'use client';
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import toast from 'react-hot-toast';
@@ -22,8 +22,7 @@ const PREVIEW_LANGUAGES = new Set(['html', 'jsx', 'tsx']);
 function buildPreviewHtml(artifact: CodeArtifact): string {
   if (artifact.language === 'html') {
     let html = artifact.code;
-    // Inject Tailwind if not already present
-    if (!html.includes('tailwind') && !html.includes('<style>') && !html.includes('<style ')) {
+    if (!html.includes('tailwind') && !html.includes('<style')) {
       html = html.includes('</head>')
         ? html.replace('</head>', '<script src="https://cdn.tailwindcss.com"></script></head>')
         : '<script src="https://cdn.tailwindcss.com"></script>' + html;
@@ -71,25 +70,31 @@ try {
 export function PreviewPanel({ artifact, onClose }: Props) {
   const [tab, setTab] = useState<'preview' | 'code'>(PREVIEW_LANGUAGES.has(artifact.language) ? 'preview' : 'code');
   const [copied, setCopied] = useState(false);
-  const [iframeKey, setIframeKey] = useState(0);
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const canPreview = PREVIEW_LANGUAGES.has(artifact.language);
 
-  // Reset to preview tab and force iframe remount when artifact changes
+  // Reset tab when artifact changes
   useEffect(() => {
-    if (canPreview) {
-      setTab('preview');
-      setIframeKey(k => k + 1);
-    }
+    if (canPreview) setTab('preview');
   }, [artifact.id]);
 
-  // Inject HTML into iframe via srcdoc whenever code or tab changes
+  // Build blob URL whenever code changes — blob: origin is completely
+  // isolated from the app, so Next.js middleware never intercepts it
+  // and links inside the preview can NEVER navigate the parent window
   useEffect(() => {
-    if (tab !== 'preview' || artifact.streaming || !canPreview) return;
-    const iframe = iframeRef.current;
-    if (!iframe) return;
-    iframe.srcdoc = buildPreviewHtml(artifact);
-  }, [artifact.code, artifact.language, tab, artifact.streaming, iframeKey]);
+    if (!canPreview || artifact.streaming) return;
+
+    const html = buildPreviewHtml(artifact);
+    const blob = new Blob([html], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    setBlobUrl(url);
+
+    // Revoke old URL after iframe has loaded it (1 second delay is enough)
+    return () => {
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+    };
+  }, [artifact.code, artifact.language, artifact.streaming, artifact.id]);
 
   function copy() {
     navigator.clipboard.writeText(artifact.code);
@@ -143,7 +148,7 @@ export function PreviewPanel({ artifact, onClose }: Props) {
         <div className="flex border-b border-white/5 bg-[#16161d] flex-shrink-0">
           {(['preview', 'code'] as const).map(t => (
             <button key={t} onClick={() => setTab(t)}
-              className={`px-4 py-2 text-xs font-medium border-b-2 transition-colors capitalize ${tab === t ? 'border-[#6C63FF] text-white' : 'border-transparent text-[#888899] hover:text-white'}`}>
+              className={`px-4 py-2 text-xs font-medium border-b-2 transition-colors ${tab === t ? 'border-[#6C63FF] text-white' : 'border-transparent text-[#888899] hover:text-white'}`}>
               {t === 'preview' ? '👁 Preview' : '📄 Code'}
             </button>
           ))}
@@ -165,14 +170,19 @@ export function PreviewPanel({ artifact, onClose }: Props) {
                   <span>Building preview…</span>
                 </div>
               </div>
-            ) : (
+            ) : blobUrl ? (
               <iframe
-                key={iframeKey}
                 ref={iframeRef}
+                key={blobUrl}
+                src={blobUrl}
                 className="w-full h-full border-0"
                 sandbox="allow-scripts allow-forms allow-modals"
                 title={artifact.title}
               />
+            ) : (
+              <div className="absolute inset-0 flex items-center justify-center bg-[#0e0e12] text-[#888899] text-sm">
+                Loading…
+              </div>
             )}
           </div>
         ) : (
