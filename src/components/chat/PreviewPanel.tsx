@@ -20,35 +20,13 @@ interface Props {
 const PREVIEW_LANGUAGES = new Set(['html', 'jsx', 'tsx']);
 
 function buildPreviewHtml(artifact: CodeArtifact): string {
-  // This script intercepts all link clicks and keeps them inside the iframe
-  const linkInterceptScript = `
-<script>
-document.addEventListener('click', function(e) {
-  const a = e.target.closest('a');
-  if (a && a.href && !a.href.startsWith('javascript:') && !a.target) {
-    e.preventDefault();
-    // Navigate inside the iframe instead of the parent window
-    window.location.href = a.href;
-  }
-});
-</script>`;
-
-  const baseTag = `<base target="_self"/>`;
-
   if (artifact.language === 'html') {
     let html = artifact.code;
-    // Inject Tailwind if not present
-    if (!html.includes('tailwind') && !html.includes('<style')) {
-      html = html.replace('</head>', '<script src="https://cdn.tailwindcss.com"></script></head>');
-    }
-    // Inject base tag and link interceptor
-    if (html.includes('<head>')) {
-      html = html.replace('<head>', `<head>${baseTag}`);
-    }
-    if (html.includes('</body>')) {
-      html = html.replace('</body>', `${linkInterceptScript}</body>`);
-    } else {
-      html += linkInterceptScript;
+    // Inject Tailwind if not already present
+    if (!html.includes('tailwind') && !html.includes('<style>') && !html.includes('<style ')) {
+      html = html.includes('</head>')
+        ? html.replace('</head>', '<script src="https://cdn.tailwindcss.com"></script></head>')
+        : '<script src="https://cdn.tailwindcss.com"></script>' + html;
     }
     return html;
   }
@@ -63,15 +41,11 @@ document.addEventListener('click', function(e) {
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-${baseTag}
 <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 <script src="https://cdn.tailwindcss.com"></script>
-<style>
-  body { margin: 0; font-family: system-ui, sans-serif; background: #fff; color: #111; }
-  * { box-sizing: border-box; }
-</style>
+<style>body{margin:0;font-family:system-ui,sans-serif;background:#fff;color:#111;}*{box-sizing:border-box;}</style>
 </head>
 <body>
 <div id="root"></div>
@@ -80,29 +54,28 @@ const { useState, useEffect, useRef, useCallback, useMemo } = React;
 ${code}
 const ComponentToRender = typeof __Component !== 'undefined' ? __Component
   : typeof App !== 'undefined' ? App
-  : () => React.createElement('div', { style: { padding: 20, fontFamily: 'sans-serif' } }, 'Component loaded');
+  : () => React.createElement('div', { style: { padding: 20 } }, 'Component loaded');
 try {
   ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(ComponentToRender));
 } catch(e) {
-  document.getElementById('root').innerHTML = '<div style="padding:20px;color:red;font-family:monospace;font-size:13px;">Render error: ' + e.message + '</div>';
+  document.getElementById('root').innerHTML = '<div style="padding:20px;color:red;font-family:monospace;font-size:13px;">Error: ' + e.message + '</div>';
 }
 </script>
-${linkInterceptScript}
 </body>
 </html>`;
   }
 
-  return `<!DOCTYPE html><html><head>${baseTag}</head><body><pre style="padding:16px;font-family:monospace;font-size:13px;line-height:1.6;white-space:pre-wrap;word-break:break-all;">${artifact.code.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre></body></html>`;
+  return `<!DOCTYPE html><html><body style="margin:0;"><pre style="padding:16px;font-family:monospace;font-size:13px;line-height:1.6;white-space:pre-wrap;word-break:break-all;">${artifact.code.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre></body></html>`;
 }
 
 export function PreviewPanel({ artifact, onClose }: Props) {
   const [tab, setTab] = useState<'preview' | 'code'>(PREVIEW_LANGUAGES.has(artifact.language) ? 'preview' : 'code');
   const [copied, setCopied] = useState(false);
-  const [iframeKey, setIframeKey] = useState(0); // force remount on new artifact
+  const [iframeKey, setIframeKey] = useState(0);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const canPreview = PREVIEW_LANGUAGES.has(artifact.language);
 
-  // When artifact changes, force iframe remount and reset to preview tab
+  // Reset to preview tab and force iframe remount when artifact changes
   useEffect(() => {
     if (canPreview) {
       setTab('preview');
@@ -110,23 +83,18 @@ export function PreviewPanel({ artifact, onClose }: Props) {
     }
   }, [artifact.id]);
 
-  // Write to iframe using srcdoc (safer than blob URLs, no revoking needed)
+  // Inject HTML into iframe via srcdoc whenever code or tab changes
   useEffect(() => {
-    if (tab !== 'preview' || !iframeRef.current || artifact.streaming || !canPreview) return;
-    const html = buildPreviewHtml(artifact);
-    // Use srcdoc for same-origin access, fallback for older browsers
-    try {
-      iframeRef.current.srcdoc = html;
-    } catch {
-      // Fallback to document.write for browsers that don't support srcdoc
-      const doc = iframeRef.current.contentDocument;
-      if (doc) { doc.open(); doc.write(html); doc.close(); }
-    }
+    if (tab !== 'preview' || artifact.streaming || !canPreview) return;
+    const iframe = iframeRef.current;
+    if (!iframe) return;
+    iframe.srcdoc = buildPreviewHtml(artifact);
   }, [artifact.code, artifact.language, tab, artifact.streaming, iframeKey]);
 
   function copy() {
     navigator.clipboard.writeText(artifact.code);
-    setCopied(true); toast.success('Copied!');
+    setCopied(true);
+    toast.success('Copied!');
     setTimeout(() => setCopied(false), 2000);
   }
 
@@ -164,7 +132,9 @@ export function PreviewPanel({ artifact, onClose }: Props) {
           )}
           <button onClick={download} title="Download" className="text-[#888899] hover:text-white text-xs px-2 py-1 rounded hover:bg-white/5">↓</button>
           <button onClick={copy} title="Copy" className="text-[#888899] hover:text-white text-xs px-2 py-1 rounded hover:bg-white/5">{copied ? '✓' : '⧉'}</button>
-          {onClose && <button onClick={onClose} className="text-[#888899] hover:text-white text-xs px-2 py-1 rounded hover:bg-white/5">✕</button>}
+          {onClose && (
+            <button onClick={onClose} className="text-[#888899] hover:text-white text-xs px-2 py-1 rounded hover:bg-white/5">✕</button>
+          )}
         </div>
       </div>
 
@@ -200,7 +170,7 @@ export function PreviewPanel({ artifact, onClose }: Props) {
                 key={iframeKey}
                 ref={iframeRef}
                 className="w-full h-full border-0"
-                sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups"
+                sandbox="allow-scripts allow-forms allow-modals"
                 title={artifact.title}
               />
             )}
@@ -221,4 +191,3 @@ export function PreviewPanel({ artifact, onClose }: Props) {
     </div>
   );
 }
-
