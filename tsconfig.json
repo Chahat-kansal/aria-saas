@@ -1,5 +1,6 @@
 {
   "compilerOptions": {
+    "typeRoots": ["./types", "./node_modules/@types"]
     "target": "es2018",
     "skipLibCheck": true,
     "lib": ["dom", "dom.iterable", "esnext"],
