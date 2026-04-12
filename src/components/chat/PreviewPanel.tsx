@@ -75,8 +75,11 @@ export function PreviewPanel({ artifact, onClose }: Props) {
   useEffect(() => {
     if (tab === 'preview' && iframeRef.current && !artifact.streaming) {
       const html = buildPreviewHtml(artifact);
-      const doc = iframeRef.current.contentDocument;
-      if (doc) { doc.open(); doc.write(html); doc.close(); }
+      // Use blob URL instead of doc.write() — avoids CSP restrictions on Vercel
+      const blob = new Blob([html], { type: 'text/html' });
+      const url = URL.createObjectURL(blob);
+      iframeRef.current.src = url;
+      return () => URL.revokeObjectURL(url);
     }
   }, [artifact.code, tab, artifact.streaming]);
 
