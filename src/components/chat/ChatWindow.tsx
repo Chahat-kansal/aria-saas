@@ -17,6 +17,7 @@ import { Canvas } from '@/components/canvas/Canvas';
 import { SIDEBAR_EVENT } from './Sidebar';
 
 interface Message {
+  id?: string; // ✅ ADD: Unique ID for proper key
   role: 'user' | 'assistant';
   content: string;
   fileUrl?: string;
@@ -70,6 +71,7 @@ export function ChatWindow({ conversationId }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const pendingConvoIdRef = useRef<string | null>(null); // ✅ Track pending conversation ID
 
   const isPro = userPlan === 'pro';
   const showSplit = !!activeArtifact || !!rightPanel;
@@ -84,8 +86,9 @@ export function ChatWindow({ conversationId }: Props) {
         .then(r => r.json())
         .then(data => {
           if (data.messages) {
-            const msgs: Message[] = data.messages.map((m: any) => ({
+            const msgs: Message[] = data.messages.map((m: any, i: number) => ({
               ...m,
+              id: m._id || `msg-${i}-${Date.now()}`, // ✅ Ensure unique ID
               artifacts: m.role === 'assistant' ? extractArtifacts(m.content) : undefined,
             }));
             setMessages(msgs);
@@ -105,7 +108,6 @@ export function ChatWindow({ conversationId }: Props) {
   useEffect(() => {
     function handleToolSelect(e: CustomEvent) {
       const tool = e.detail;
-      // Handle mode changes
       if (tool === 'mode:chat') { setMode('chat'); setRightPanel(null); return; }
       if (tool === 'mode:builder') { setMode('builder'); setRightPanel(null); return; }
       switch (tool) {
@@ -150,7 +152,18 @@ export function ChatWindow({ conversationId }: Props) {
     if (!text && !pendingFile) return;
     if (loading) return;
 
-    const userMsg: Message = { role: 'user', content: text, fileUrl: pendingFile?.url, fileName: pendingFile?.name };
+    // ✅ Generate unique IDs for messages to avoid key issues
+    const userMsgId = `user-${Date.now()}-${Math.random()}`;
+    const assistantMsgId = `assistant-${Date.now()}-${Math.random()}`;
+
+    const userMsg: Message = { 
+      id: userMsgId,
+      role: 'user', 
+      content: text, 
+      fileUrl: pendingFile?.url, 
+      fileName: pendingFile?.name 
+    };
+    
     setMessages(prev => [...prev, userMsg]);
     setInput('');
     setPendingFile(null);
@@ -164,7 +177,8 @@ export function ChatWindow({ conversationId }: Props) {
       setRightPanel('preview');
     }
 
-    setMessages(prev => [...prev, { role: 'assistant', content: '' }]);
+    // ✅ Add placeholder assistant message
+    setMessages(prev => [...prev, { id: assistantMsgId, role: 'assistant', content: '' }]);
 
     try {
       const endpoint = mode === 'builder' ? '/api/builder' : '/api/plugins';
@@ -199,7 +213,13 @@ export function ChatWindow({ conversationId }: Props) {
             const data = JSON.parse(line.slice(6));
             if (data.text) {
               fullContent += data.text;
-              setMessages(prev => { const m = [...prev]; m[m.length - 1] = { ...m[m.length - 1], content: fullContent }; return m; });
+              // ✅ Update message with unique ID
+              setMessages(prev => { 
+                const m = [...prev]; 
+                const lastIdx = m.length - 1;
+                m[lastIdx] = { ...m[lastIdx], content: fullContent };
+                return m;
+              });
               if (mode === 'builder') {
                 const match = fullContent.match(/```(\w+)?\n([\s\S]*?)(?:```|$)/);
                 if (match) {
@@ -218,15 +238,19 @@ export function ChatWindow({ conversationId }: Props) {
                   : p
               ));
             }
+            // ✅ FIX: Store conversation ID but DON'T navigate yet
             if (data.conversationId) {
+              pendingConvoIdRef.current = data.conversationId;
               setActiveConvoId(data.conversationId);
-              router.replace(`/chat/${data.conversationId}`);
-              // Tell sidebar to refresh conversations list — fixes mobile chat not saving
-              window.dispatchEvent(new CustomEvent('aria:new-conversation'));
+              // Don't call router.replace() here - it causes the reload/flash!
             }
             if (data.done) {
               const artifacts = extractArtifacts(fullContent, text);
-              setMessages(prev => { const m = [...prev]; m[m.length - 1] = { ...m[m.length - 1], artifacts }; return m; });
+              setMessages(prev => { 
+                const m = [...prev]; 
+                m[m.length - 1] = { ...m[m.length - 1], artifacts };
+                return m;
+              });
               if (artifacts.length > 0) {
                 const last = { ...artifacts[artifacts.length - 1], streaming: false };
                 setActiveArtifact(last);
@@ -235,6 +259,15 @@ export function ChatWindow({ conversationId }: Props) {
                 setActiveArtifact(prev => prev ? { ...prev, streaming: false } : null);
               }
               setLastAiMessage(fullContent);
+              
+              // ✅ Navigate AFTER streaming completes (non-blocking)
+              if (pendingConvoIdRef.current && pendingConvoIdRef.current !== activeConvoId) {
+                setTimeout(() => {
+                  router.replace(`/chat/${pendingConvoIdRef.current}`);
+                  window.dispatchEvent(new CustomEvent('aria:new-conversation'));
+                  pendingConvoIdRef.current = null;
+                }, 100);
+              }
             }
           } catch {}
         }
@@ -306,8 +339,9 @@ export function ChatWindow({ conversationId }: Props) {
             </div>
           )}
 
-          {messages.map((msg, i) => (
-            <div key={i} className={`flex gap-2 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
+          {/* ✅ FIX: Use msg.id as key instead of index */}
+          {messages.map((msg) => (
+            <div key={msg.id} className={`flex gap-2 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
               <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold flex-shrink-0 self-start mt-0.5 ${msg.role === 'assistant' ? 'bg-gradient-to-br from-[#6C63FF] to-[#a78bfa] text-white' : 'bg-white/10 text-white'}`}>
                 {msg.role === 'assistant' ? 'A' : session?.user?.name?.[0] || 'U'}
               </div>
@@ -321,7 +355,7 @@ export function ChatWindow({ conversationId }: Props) {
                   <div className="bg-[#6C63FF] text-white px-3 py-2.5 rounded-2xl rounded-tr-sm text-sm leading-relaxed break-words">{msg.content}</div>
                 ) : (
                   <>
-                    {msg.content === '' && loading && i === messages.length - 1 ? (
+                    {msg.content === '' && loading && messages[messages.length - 1].id === msg.id ? (
                       <div className="flex gap-1 py-2">
                         <span className="typing-dot w-1.5 h-1.5 rounded-full bg-[#888899]" />
                         <span className="typing-dot w-1.5 h-1.5 rounded-full bg-[#888899]" />
