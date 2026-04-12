@@ -1,5 +1,5 @@
 import { CodeArtifact } from '@/components/chat/PreviewPanel';
-import { v4 as uuid } from 'uuid';
+const uuid = () => crypto.randomUUID();
 
 const PREVIEWABLE = new Set(['html', 'jsx', 'tsx']);
 
