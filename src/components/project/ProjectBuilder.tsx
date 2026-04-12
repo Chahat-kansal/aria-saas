@@ -96,8 +96,11 @@ export function ProjectBuilder({ onClose }: Props) {
   useEffect(() => {
     if (tab === 'preview' && project && iframeRef.current) {
       const html = buildPreview(project.files, project.framework);
-      const doc = iframeRef.current.contentDocument;
-      if (doc) { doc.open(); doc.write(html); doc.close(); }
+      // Use blob URL — avoids CSP/doc.write restrictions on Vercel
+      const blob = new Blob([html], { type: 'text/html' });
+      const url = URL.createObjectURL(blob);
+      iframeRef.current.src = url;
+      return () => URL.revokeObjectURL(url);
     }
   }, [tab, project]);
 
