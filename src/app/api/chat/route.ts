@@ -41,36 +41,17 @@ export async function POST(req: Request) {
     });
   }
 
-  await connectDB();
-
-  const user = await User.findById((session.user as any).id);
-  if (!user) {
-    return new Response(JSON.stringify({ error: 'User not found' }), {
-      status: 404,
+  // ✅ Parse body early
+  let body;
+  try {
+    body = await req.json();
+  } catch {
+    return new Response(JSON.stringify({ error: 'Invalid JSON' }), {
+      status: 400,
     });
   }
 
-  // Reset monthly counter
-  const now = new Date();
-  if (now.getMonth() !== new Date(user.messagesResetAt).getMonth()) {
-    user.messagesUsedThisMonth = 0;
-    user.messagesResetAt = now;
-  }
-
-  const plan =
-    PLAN_LIMITS[user.plan as keyof typeof PLAN_LIMITS] || PLAN_LIMITS.free;
-
-  if (user.messagesUsedThisMonth >= plan.messages) {
-    return new Response(
-      JSON.stringify({
-        error: 'Monthly message limit reached. Upgrade to Pro.',
-      }),
-      { status: 429 }
-    );
-  }
-
-  const { message, conversationId, model, useWebSearch, system } =
-    await req.json();
+  const { message, conversationId, model, useWebSearch, system } = body;
 
   if (!message?.trim()) {
     return new Response(JSON.stringify({ error: 'Message required' }), {
@@ -78,52 +59,93 @@ export async function POST(req: Request) {
     });
   }
 
-  const safeModel =
-    ALLOWED_MODELS.has(model) && plan.models.includes(model)
-      ? model
-      : 'claude-haiku-4-5-20251001';
-
-  const canSearch = plan.webSearch && useWebSearch;
-
-  // Load or create conversation
-  let conversation = conversationId
-    ? await Conversation.findOne({
-        _id: conversationId,
-        userId: user._id,
-      })
-    : null;
-
-  if (!conversation) {
-    conversation = await Conversation.create({
-      userId: user._id,
-      title: message.slice(0, 60),
-      messages: [],
-      model: safeModel,
-    });
-  }
-
-  conversation.messages.push({
-    role: 'user',
-    content: message,
-    createdAt: new Date(),
-  });
-
-  const history = conversation.messages.slice(-40).map((m: any) => ({
-    role: m.role,
-    content: m.content,
-  }));
-
-  const systemPrompt =
-    system?.trim() ||
-    'You are Aria, a helpful AI assistant. Be concise and accurate.';
-
+  // ✅ Start streaming immediately with worker pattern
   const encoder = new TextEncoder();
 
   const stream = new ReadableStream({
     async start(controller) {
-      let fullReply = '';
-
       try {
+        // ✅ OPTIMIZATION: Parallel DB operations
+        await connectDB();
+        
+        const [user, conversation] = await Promise.all([
+          User.findById((session.user as any).id),
+          conversationId
+            ? Conversation.findOne({
+                _id: conversationId,
+                userId: (session.user as any).id,
+              })
+            : Promise.resolve(null),
+        ]);
+
+        if (!user) {
+          controller.enqueue(
+            encoder.encode(
+              `data: ${JSON.stringify({ error: 'User not found' })}\n\n`
+            )
+          );
+          controller.close();
+          return;
+        }
+
+        // Reset monthly counter
+        const now = new Date();
+        if (now.getMonth() !== new Date(user.messagesResetAt).getMonth()) {
+          user.messagesUsedThisMonth = 0;
+          user.messagesResetAt = now;
+        }
+
+        const plan =
+          PLAN_LIMITS[user.plan as keyof typeof PLAN_LIMITS] ||
+          PLAN_LIMITS.free;
+
+        if (user.messagesUsedThisMonth >= plan.messages) {
+          controller.enqueue(
+            encoder.encode(
+              `data: ${JSON.stringify({
+                error: 'Monthly message limit reached. Upgrade to Pro.',
+              })}\n\n`
+            )
+          );
+          controller.close();
+          return;
+        }
+
+        const safeModel =
+          ALLOWED_MODELS.has(model) && plan.models.includes(model)
+            ? model
+            : 'claude-haiku-4-5-20251001';
+
+        const canSearch = plan.webSearch && useWebSearch;
+
+        // Create or use existing conversation
+        let activeConversation = conversation;
+        if (!activeConversation) {
+          activeConversation = await Conversation.create({
+            userId: user._id,
+            title: message.slice(0, 60),
+            messages: [],
+            model: safeModel,
+          });
+        }
+
+        activeConversation.messages.push({
+          role: 'user',
+          content: message,
+          createdAt: new Date(),
+        });
+
+        const history = activeConversation.messages.slice(-40).map((m: any) => ({
+          role: m.role,
+          content: m.content,
+        }));
+
+        const systemPrompt =
+          system?.trim() ||
+          'You are Aria, a helpful AI assistant. Be concise and accurate.';
+
+        let fullReply = '';
+
         const tools = canSearch
           ? [{ type: 'web_search_20250305' as const, name: 'web_search' }]
           : undefined;
@@ -151,27 +173,33 @@ export async function POST(req: Request) {
           }
         }
 
-        // Save assistant message
-        conversation.messages.push({
+        // ✅ OPTIMIZATION: Save in background (fire and forget)
+        activeConversation.messages.push({
           role: 'assistant',
           content: fullReply,
           createdAt: new Date(),
         });
 
-        await conversation.save();
-
         user.messagesUsedThisMonth += 1;
-        await user.save();
+
+        // Don't await - let it save in background
+        activeConversation.save().catch(err => {
+          console.error('Failed to save conversation:', err);
+        });
+        user.save().catch(err => {
+          console.error('Failed to save user:', err);
+        });
 
         controller.enqueue(
           encoder.encode(
             `data: ${JSON.stringify({
               done: true,
-              conversationId: conversation._id.toString(),
+              conversationId: activeConversation._id.toString(),
             })}\n\n`
           )
         );
       } catch (err: any) {
+        console.error('Chat error:', err);
         controller.enqueue(
           encoder.encode(
             `data: ${JSON.stringify({ error: err.message })}\n\n`
@@ -183,7 +211,6 @@ export async function POST(req: Request) {
     },
   });
 
-  // ✅ IMPORTANT: return STREAM ONLY (no JSON return!)
   return new Response(stream, {
     headers: {
       'Content-Type': 'text/event-stream',
