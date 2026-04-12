@@ -20,12 +20,37 @@ interface Props {
 const PREVIEW_LANGUAGES = new Set(['html', 'jsx', 'tsx']);
 
 function buildPreviewHtml(artifact: CodeArtifact): string {
+  // This script intercepts all link clicks and keeps them inside the iframe
+  const linkInterceptScript = `
+<script>
+document.addEventListener('click', function(e) {
+  const a = e.target.closest('a');
+  if (a && a.href && !a.href.startsWith('javascript:') && !a.target) {
+    e.preventDefault();
+    // Navigate inside the iframe instead of the parent window
+    window.location.href = a.href;
+  }
+});
+</script>`;
+
+  const baseTag = `<base target="_self"/>`;
+
   if (artifact.language === 'html') {
-    // Inject Tailwind if not already present
-    if (!artifact.code.includes('tailwind') && !artifact.code.includes('<style')) {
-      return artifact.code.replace('</head>', '<script src="https://cdn.tailwindcss.com"></script></head>');
+    let html = artifact.code;
+    // Inject Tailwind if not present
+    if (!html.includes('tailwind') && !html.includes('<style')) {
+      html = html.replace('</head>', '<script src="https://cdn.tailwindcss.com"></script></head>');
     }
-    return artifact.code;
+    // Inject base tag and link interceptor
+    if (html.includes('<head>')) {
+      html = html.replace('<head>', `<head>${baseTag}`);
+    }
+    if (html.includes('</body>')) {
+      html = html.replace('</body>', `${linkInterceptScript}</body>`);
+    } else {
+      html += linkInterceptScript;
+    }
+    return html;
   }
 
   if (artifact.language === 'jsx' || artifact.language === 'tsx') {
@@ -38,6 +63,7 @@ function buildPreviewHtml(artifact: CodeArtifact): string {
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+${baseTag}
 <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -61,11 +87,12 @@ try {
   document.getElementById('root').innerHTML = '<div style="padding:20px;color:red;font-family:monospace;font-size:13px;">Render error: ' + e.message + '</div>';
 }
 </script>
+${linkInterceptScript}
 </body>
 </html>`;
   }
 
-  return `<!DOCTYPE html><html><body><pre style="padding:16px;font-family:monospace;font-size:13px;line-height:1.6;white-space:pre-wrap;word-break:break-all;">${artifact.code.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre></body></html>`;
+  return `<!DOCTYPE html><html><head>${baseTag}</head><body><pre style="padding:16px;font-family:monospace;font-size:13px;line-height:1.6;white-space:pre-wrap;word-break:break-all;">${artifact.code.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre></body></html>`;
 }
 
 export function PreviewPanel({ artifact, onClose }: Props) {
@@ -194,3 +221,4 @@ export function PreviewPanel({ artifact, onClose }: Props) {
     </div>
   );
 }
+
