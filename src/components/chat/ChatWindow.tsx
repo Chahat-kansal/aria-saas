@@ -230,73 +230,88 @@ export function ChatWindow({ conversationId }: Props) {
   function openExecutor(code: string, language: string) { setExecCode({ code, language }); setRightPanel('execute'); setActiveArtifact(null); }
 
   return (
-    <div className="flex h-full overflow-hidden">
+    <div className="flex overflow-hidden relative" style={{ height: '100dvh' }}>
       {/* ── CHAT PANEL ── */}
-      <div className={`flex flex-col transition-all duration-300 ${showSplit ? 'w-[44%] min-w-[320px]' : 'flex-1'} border-r border-white/5`}>
+      <div className={`flex flex-col min-w-0 transition-all duration-200 overflow-hidden
+        ${showSplit ? 'hidden md:flex md:w-[44%] md:min-w-[300px]' : 'flex-1'}
+        border-r border-white/5`}>
 
         {/* Toolbar */}
-        <div className="flex items-center gap-2 px-3 py-2 border-b border-white/5 bg-[#16161d] flex-shrink-0 overflow-x-auto">
+        <div className="flex items-center gap-1.5 px-2 py-1.5 border-b border-white/5 bg-[#16161d] flex-shrink-0 overflow-x-auto scrollbar-hide">
+          {/* Hamburger — mobile only, sits inside toolbar to avoid overlap */}
+          <button
+            onClick={() => {
+              const aside = document.querySelector('aside');
+              if (!aside) return;
+              const hidden = aside.style.transform === 'translateX(-100%)' || aside.classList.contains('-translate-x-full');
+              aside.style.transform = hidden ? 'translateX(0)' : 'translateX(-100%)';
+            }}
+            className="md:hidden flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg bg-white/5 text-[#888899] border border-white/10 text-sm"
+          >☰</button>
+
+          {/* Mode toggle */}
           <div className="flex bg-white/5 rounded-lg p-0.5 flex-shrink-0">
             {(['chat','builder'] as const).map(m => (
               <button key={m} onClick={() => setMode(m)}
-                className={`px-3 py-1 text-xs rounded-md font-medium transition-all ${mode === m ? 'bg-[#6C63FF] text-white' : 'text-[#888899] hover:text-white'}`}>
-                {m === 'chat' ? '💬 Chat' : '🔨 Builder'}
+                className={`px-2 py-1 text-[11px] rounded-md font-medium transition-all whitespace-nowrap ${mode === m ? 'bg-[#6C63FF] text-white' : 'text-[#888899]'}`}>
+                {m === 'chat' ? '💬' : '🔨'}<span className="hidden sm:inline ml-1">{m === 'chat' ? 'Chat' : 'Builder'}</span>
               </button>
             ))}
           </div>
 
-          <select value={model} onChange={e => setModel(e.target.value)} className="bg-white/5 border border-white/10 text-xs rounded-lg px-2 py-1.5 outline-none text-white flex-shrink-0">
-            {MODELS.map(m => <option key={m.id} value={m.id} disabled={m.plan === 'pro' && !isPro}>{m.label}{m.plan === 'pro' && !isPro ? ' ⭐' : ''}</option>)}
+          {/* Model selector */}
+          <select value={model} onChange={e => setModel(e.target.value)}
+            className="bg-white/5 border border-white/10 text-[11px] rounded-lg px-1.5 py-1.5 outline-none text-white flex-shrink-0 max-w-[80px] sm:max-w-[120px]">
+            {MODELS.map(m => <option key={m.id} value={m.id} disabled={m.plan === 'pro' && !isPro}>{m.label}{m.plan === 'pro' && !isPro ? '⭐' : ''}</option>)}
           </select>
 
           {mode === 'chat' && (
             <>
-              <button onClick={() => { setWebSearch(w => !w); setDeepResearch(false); }} disabled={!isPro}
-                className={`text-xs px-2.5 py-1.5 rounded-lg border transition-all flex-shrink-0 ${webSearch ? 'bg-[#6C63FF]/20 border-[#6C63FF]/50 text-[#a78bfa]' : 'bg-white/5 border-white/10 text-[#888899] hover:text-white'} ${!isPro ? 'opacity-40 cursor-not-allowed' : ''}`}>
-                🔍 Search
+              <button onClick={() => { setWebSearch(w => !w); setDeepResearch(false); }} disabled={!isPro} title="Web search"
+                className={`text-[11px] px-2 py-1.5 rounded-lg border transition-all flex-shrink-0 ${webSearch ? 'bg-[#6C63FF]/20 border-[#6C63FF]/50 text-[#a78bfa]' : 'bg-white/5 border-white/10 text-[#888899]'} ${!isPro ? 'opacity-40' : ''}`}>
+                🔍<span className="hidden sm:inline ml-1">Search</span>
               </button>
-              <button onClick={() => { setDeepResearch(d => !d); setWebSearch(!deepResearch); }} disabled={!isPro}
-                className={`text-xs px-2.5 py-1.5 rounded-lg border transition-all flex-shrink-0 ${deepResearch ? 'bg-purple-500/20 border-purple-500/50 text-purple-300' : 'bg-white/5 border-white/10 text-[#888899] hover:text-white'} ${!isPro ? 'opacity-40 cursor-not-allowed' : ''}`}>
-                🔬 Research
+              <button onClick={() => { setDeepResearch(d => !d); setWebSearch(!deepResearch); }} disabled={!isPro} title="Deep research"
+                className={`text-[11px] px-2 py-1.5 rounded-lg border transition-all flex-shrink-0 ${deepResearch ? 'bg-purple-500/20 border-purple-500/50 text-purple-300' : 'bg-white/5 border-white/10 text-[#888899]'} ${!isPro ? 'opacity-40' : ''}`}>
+                🔬<span className="hidden sm:inline ml-1">Research</span>
               </button>
             </>
           )}
-          <button onClick={openImageGen}
-            className={`text-xs px-2.5 py-1.5 rounded-lg border transition-all flex-shrink-0 ${rightPanel === 'image' ? 'bg-pink-500/20 border-pink-500/50 text-pink-300' : 'bg-white/5 border-white/10 text-[#888899] hover:text-white'}`}>
-            🎨 Image
+          <button onClick={openImageGen} title="Image generation"
+            className={`text-[11px] px-2 py-1.5 rounded-lg border transition-all flex-shrink-0 ${rightPanel === 'image' ? 'bg-pink-500/20 border-pink-500/50 text-pink-300' : 'bg-white/5 border-white/10 text-[#888899]'}`}>
+            🎨<span className="hidden sm:inline ml-1">Image</span>
           </button>
-          <button onClick={openProjectBuilder}
-            className={`text-xs px-2.5 py-1.5 rounded-lg border transition-all flex-shrink-0 ${rightPanel === 'project' ? 'bg-amber-500/20 border-amber-500/50 text-amber-300' : 'bg-white/5 border-white/10 text-[#888899] hover:text-white'}`}>
-            🏗️ Projects
+          <button onClick={openProjectBuilder} title="Project builder"
+            className={`text-[11px] px-2 py-1.5 rounded-lg border transition-all flex-shrink-0 ${rightPanel === 'project' ? 'bg-amber-500/20 border-amber-500/50 text-amber-300' : 'bg-white/5 border-white/10 text-[#888899]'}`}>
+            🏗️<span className="hidden sm:inline ml-1">Projects</span>
           </button>
-          <button onClick={openCanvas}
-            className={`text-xs px-2.5 py-1.5 rounded-lg border transition-all flex-shrink-0 ${rightPanel === 'canvas' ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300' : 'bg-white/5 border-white/10 text-[#888899] hover:text-white'}`}>
-            📝 Canvas
+          <button onClick={openCanvas} title="Canvas"
+            className={`text-[11px] px-2 py-1.5 rounded-lg border transition-all flex-shrink-0 ${rightPanel === 'canvas' ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300' : 'bg-white/5 border-white/10 text-[#888899]'}`}>
+            📝<span className="hidden sm:inline ml-1">Canvas</span>
           </button>
-          <button onClick={() => setPlugins(p => !p)}
-            className={`text-xs px-2.5 py-1.5 rounded-lg border transition-all flex-shrink-0 ${plugins ? 'bg-orange-500/20 border-orange-500/50 text-orange-300' : 'bg-white/5 border-white/10 text-[#888899] hover:text-white'}`}
-            title="Toggle plugins (weather, stocks, calculator, email, calendar)">
-            🔌 Plugins
+          <button onClick={() => setPlugins(p => !p)} title="Plugins"
+            className={`text-[11px] px-2 py-1.5 rounded-lg border transition-all flex-shrink-0 ${plugins ? 'bg-orange-500/20 border-orange-500/50 text-orange-300' : 'bg-white/5 border-white/10 text-[#888899]'}`}>
+            🔌<span className="hidden sm:inline ml-1">Plugins</span>
           </button>
         </div>
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto px-4 py-5 space-y-5">
+        <div className="flex-1 overflow-y-auto px-3 py-4 space-y-4 min-h-0">
           {messages.length === 0 && (
-            <div className="flex flex-col items-center justify-center h-full text-center gap-4 pb-16">
-              <div className="w-14 h-14 rounded-full bg-gradient-to-br from-[#6C63FF] to-[#a78bfa] flex items-center justify-center text-2xl animate-float shadow-[0_0_40px_rgba(108,99,255,0.3)]">
+            <div className="flex flex-col items-center justify-center h-full text-center gap-3 pb-8 px-2">
+              <div className="w-12 h-12 rounded-full bg-gradient-to-br from-[#6C63FF] to-[#a78bfa] flex items-center justify-center text-xl animate-float shadow-[0_0_40px_rgba(108,99,255,0.3)]">
                 {mode === 'builder' ? '🔨' : '✦'}
               </div>
               <div>
-                <h2 className="text-xl font-semibold">{mode === 'builder' ? 'Aria Builder' : 'Hi, I\'m Aria'}</h2>
-                <p className="text-[#888899] text-sm mt-1 max-w-xs">
-                  {mode === 'builder' ? 'Describe what to build — I\'ll generate it with live preview.' : 'Your AI assistant for real work.'}
+                <h2 className="text-base sm:text-lg font-semibold">{mode === 'builder' ? 'Aria Builder' : "Hi, I'm Aria"}</h2>
+                <p className="text-[#888899] text-xs mt-1 max-w-[260px]">
+                  {mode === 'builder' ? "Describe what to build — I'll generate it with live preview." : 'Your AI assistant for real work.'}
                 </p>
               </div>
-              <div className="grid grid-cols-2 gap-2 w-full max-w-xs">
+              <div className="grid grid-cols-2 gap-2 w-full max-w-[280px]">
                 {(mode === 'builder' ? BUILDER_STARTERS : CHAT_STARTERS).map(s => (
                   <button key={s.text} onClick={() => { setInput(s.text); textareaRef.current?.focus(); }}
-                    className="text-left text-xs bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl px-3 py-2.5 text-[#888899] hover:text-white transition-all">
+                    className="text-left text-[11px] bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl px-3 py-2 text-[#888899] hover:text-white transition-all leading-snug">
                     {s.icon} {s.text}
                   </button>
                 ))}
@@ -305,18 +320,18 @@ export function ChatWindow({ conversationId }: Props) {
           )}
 
           {messages.map((msg, i) => (
-            <div key={i} className={`flex gap-2.5 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
-              <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 self-start mt-0.5 ${msg.role === 'assistant' ? 'bg-gradient-to-br from-[#6C63FF] to-[#a78bfa] text-white' : 'bg-white/10 text-white'}`}>
+            <div key={i} className={`flex gap-2 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
+              <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold flex-shrink-0 self-start mt-0.5 ${msg.role === 'assistant' ? 'bg-gradient-to-br from-[#6C63FF] to-[#a78bfa] text-white' : 'bg-white/10 text-white'}`}>
                 {msg.role === 'assistant' ? 'A' : session?.user?.name?.[0] || 'U'}
               </div>
-              <div className={`flex flex-col gap-2 ${msg.role === 'user' ? 'items-end max-w-[80%]' : 'flex-1 min-w-0'}`}>
+              <div className={`flex flex-col gap-1.5 min-w-0 ${msg.role === 'user' ? 'items-end max-w-[85%]' : 'flex-1'}`}>
                 {msg.fileUrl && (
                   <div className="text-xs text-[#888899] bg-white/5 border border-white/10 rounded-lg px-3 py-1.5">
                     📎 <a href={msg.fileUrl} target="_blank" rel="noopener" className="hover:underline">{msg.fileName}</a>
                   </div>
                 )}
                 {msg.role === 'user' ? (
-                  <div className="bg-[#6C63FF] text-white px-4 py-2.5 rounded-2xl rounded-tr-sm text-sm leading-relaxed">{msg.content}</div>
+                  <div className="bg-[#6C63FF] text-white px-3 py-2.5 rounded-2xl rounded-tr-sm text-sm leading-relaxed break-words">{msg.content}</div>
                 ) : (
                   <>
                     {msg.content === '' && loading && i === messages.length - 1 ? (
@@ -326,7 +341,7 @@ export function ChatWindow({ conversationId }: Props) {
                         <span className="typing-dot w-1.5 h-1.5 rounded-full bg-[#888899]" />
                       </div>
                     ) : (
-                      <div className="prose-aria text-sm">
+                      <div className="prose-aria text-sm overflow-x-hidden">
                         <ReactMarkdown remarkPlugins={[remarkGfm]} components={{
                           code({ className, children, ...props }: any) {
                             const match = /language-(\w+)/.exec(className || '');
@@ -335,27 +350,31 @@ export function ChatWindow({ conversationId }: Props) {
                               const code = String(children).replace(/\n$/, '');
                               const art = msg.artifacts?.find(a => a.code.slice(0, 60) === code.slice(0, 60));
                               const isPreview = ['html','jsx','tsx','js','javascript'].includes(lang);
+                              const isRunnable = ['python','javascript','typescript','bash','c','cpp','go','rust','ruby','java','r','php'].includes(lang);
                               return (
-                                <div className="my-3">
-                                  <div className="flex items-center justify-between bg-[#1a1a28] px-3 py-1.5 rounded-t-lg border border-white/10 border-b-0">
+                                <div className="my-3 overflow-hidden rounded-lg border border-white/10">
+                                  <div className="flex items-center justify-between bg-[#1a1a28] px-3 py-1.5">
                                     <span className="text-[10px] text-[#888899] font-mono">{lang}</span>
-                                    <div className="flex gap-1.5">
+                                    <div className="flex gap-2">
                                       {isPreview && art && (
-                                        <button onClick={() => setActiveArtifact(art)} className="text-[10px] text-[#6C63FF] hover:underline">
-                                          Preview ↗
-                                        </button>
+                                        <button onClick={() => { setActiveArtifact(art); setRightPanel('preview'); }} className="text-[10px] text-[#6C63FF]">👁 Preview</button>
+                                      )}
+                                      {isRunnable && (
+                                        <button onClick={() => openExecutor(code, lang)} className="text-[10px] text-green-400">▶ Run</button>
                                       )}
                                       <button onClick={() => { navigator.clipboard.writeText(code); toast.success('Copied!'); }} className="text-[10px] text-[#888899] hover:text-white">Copy</button>
                                     </div>
                                   </div>
-                                  <SyntaxHighlighter style={oneDark} language={lang} PreTag="div"
-                                    customStyle={{ margin: 0, borderRadius: '0 0 8px 8px', fontSize: '11.5px', border: '1px solid rgba(255,255,255,0.1)', borderTop: 'none' }}>
-                                    {code}
-                                  </SyntaxHighlighter>
+                                  <div className="overflow-x-auto">
+                                    <SyntaxHighlighter style={oneDark} language={lang} PreTag="div"
+                                      customStyle={{ margin: 0, borderRadius: 0, fontSize: '11.5px', border: 'none' }}>
+                                      {code}
+                                    </SyntaxHighlighter>
+                                  </div>
                                 </div>
                               );
                             }
-                            return <code className="font-mono text-xs bg-white/10 px-1.5 py-0.5 rounded">{children}</code>;
+                            return <code className="font-mono text-xs bg-white/10 px-1.5 py-0.5 rounded break-all">{children}</code>;
                           },
                         }}>
                           {msg.content}
@@ -365,9 +384,9 @@ export function ChatWindow({ conversationId }: Props) {
                     {msg.artifacts && msg.artifacts.length > 0 && (
                       <div className="flex flex-wrap gap-1.5">
                         {msg.artifacts.map(a => (
-                          <button key={a.id} onClick={() => setActiveArtifact(a)}
-                            className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border transition-all ${activeArtifact?.id === a.id ? 'bg-[#6C63FF]/20 border-[#6C63FF]/40 text-[#a78bfa]' : 'bg-white/5 border-white/10 text-[#888899] hover:text-white'}`}>
-                            {['html','jsx','tsx'].includes(a.language) ? '👁' : '📄'} {a.title.slice(0, 24)} <span className="font-mono text-[10px] opacity-60">.{a.language}</span>
+                          <button key={a.id} onClick={() => { setActiveArtifact(a); if (['html','jsx','tsx'].includes(a.language)) setRightPanel('preview'); }}
+                            className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border transition-all ${activeArtifact?.id === a.id ? 'bg-[#6C63FF]/20 border-[#6C63FF]/40 text-[#a78bfa]' : 'bg-white/5 border-white/10 text-[#888899] hover:text-white'}`}>
+                            {['html','jsx','tsx'].includes(a.language) ? '👁' : '📄'} {a.title.slice(0, 20)} <span className="font-mono text-[10px] opacity-60">.{a.language}</span>
                           </button>
                         ))}
                       </div>
@@ -380,80 +399,75 @@ export function ChatWindow({ conversationId }: Props) {
           <div ref={bottomRef} />
         </div>
 
-        {/* Input */}
-        <div className="px-3 pb-3 flex-shrink-0">
-          {/* Plugin status indicators */}
+        {/* Input area */}
+        <div className="px-2 pb-2 flex-shrink-0" style={{ paddingBottom: 'max(8px, env(safe-area-inset-bottom))' }}>
           {pluginCalls.length > 0 && (
-            <div className="flex gap-1.5 flex-wrap mb-2">
+            <div className="flex gap-1 flex-wrap mb-1">
               {pluginCalls.map((p, i) => (
-                <div key={i} className={`flex items-center gap-1.5 text-[10px] px-2 py-1 rounded-lg border ${
+                <div key={i} className={`flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-lg border ${
                   p.status === 'running' ? 'bg-orange-500/10 border-orange-500/20 text-orange-300 animate-pulse' :
                   p.status === 'done' ? 'bg-green-500/10 border-green-500/20 text-green-400' :
                   'bg-red-500/10 border-red-500/20 text-red-400'
-                }`}>
-                  {p.status === 'running' ? '⟳' : p.status === 'done' ? '✓' : '✗'}
-                  {p.name.replace(/_/g, ' ')}
-                </div>
+                }`}>{p.status === 'running' ? '⟳' : p.status === 'done' ? '✓' : '✗'} {p.name.replace(/_/g, ' ')}</div>
               ))}
             </div>
           )}
-          {/* Voice mode */}
-          <div className="flex items-center gap-2 mb-2">
+          <div className="flex items-center gap-1.5 mb-1">
             <VoiceMode
               onTranscript={text => { setInput(text); setTimeout(() => sendMessage(), 100); }}
-              isSpeaking={speaking}
-              onStopSpeaking={stopSpeaking}
-              lastAiMessage={lastAiMessage}
-              autoRead={false}
+              isSpeaking={speaking} onStopSpeaking={stopSpeaking}
+              lastAiMessage={lastAiMessage} autoRead={false}
             />
             {lastAiMessage && (
               <button onClick={() => speaking ? stopSpeaking() : speak(lastAiMessage)}
-                className={`text-[10px] px-2 py-1 rounded-lg border transition-all ${speaking ? 'bg-blue-500/20 border-blue-500/40 text-blue-300' : 'bg-white/5 border-white/10 text-[#888899] hover:text-white'}`}>
-                {speaking ? '⏹ Stop reading' : '🔊 Read aloud'}
+                className={`text-[10px] px-2 py-1 rounded-lg border transition-all ${speaking ? 'bg-blue-500/20 border-blue-500/40 text-blue-300' : 'bg-white/5 border-white/10 text-[#888899]'}`}>
+                {speaking ? '⏹' : '🔊'}
               </button>
             )}
           </div>
           {pendingFile && (
-            <div className="flex items-center gap-2 mb-2 bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-xs text-[#888899]">
-              📎 {pendingFile.name} <button onClick={() => setPendingFile(null)} className="ml-auto hover:text-white">✕</button>
+            <div className="flex items-center gap-2 mb-1 bg-white/5 border border-white/10 rounded-xl px-3 py-1.5 text-xs text-[#888899]">
+              📎 <span className="truncate flex-1">{pendingFile.name}</span>
+              <button onClick={() => setPendingFile(null)} className="hover:text-white flex-shrink-0">✕</button>
             </div>
           )}
           <div className="flex gap-2 items-end bg-[#1f1f2a] border border-white/10 rounded-2xl px-3 py-2 focus-within:border-[#6C63FF]/50 transition-colors">
             <input ref={fileRef} type="file" className="hidden" accept="image/*,.pdf,.txt,.csv,.md" onChange={e => e.target.files?.[0] && uploadFile(e.target.files[0])} />
-            <button onClick={() => fileRef.current?.click()} disabled={uploading} className="text-[#888899] hover:text-white p-1.5 transition-colors flex-shrink-0">
-              {uploading ? <span className="animate-spin">⟳</span> : '📎'}
+            <button onClick={() => fileRef.current?.click()} disabled={uploading} className="text-[#888899] hover:text-white transition-colors flex-shrink-0 text-base leading-none pb-0.5">
+              {uploading ? <span className="animate-spin inline-block text-sm">⟳</span> : '📎'}
             </button>
             <textarea ref={textareaRef} value={input} onChange={e => setInput(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
               placeholder={mode === 'builder' ? 'Describe what to build…' : 'Message Aria…'}
-              rows={1} className="flex-1 bg-transparent resize-none outline-none text-sm text-white placeholder:text-[#555566] max-h-40" />
+              rows={1} className="flex-1 bg-transparent resize-none outline-none text-sm text-white placeholder:text-[#555566] max-h-28 leading-5"
+              style={{ minHeight: '20px' }}
+              onInput={e => { const t = e.target as HTMLTextAreaElement; t.style.height = 'auto'; t.style.height = Math.min(t.scrollHeight, 112) + 'px'; }}
+            />
             <button onClick={sendMessage} disabled={loading || (!input.trim() && !pendingFile)}
-              className="bg-[#6C63FF] hover:bg-[#4b44cc] disabled:opacity-40 text-white w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0">
+              className="bg-[#6C63FF] hover:bg-[#4b44cc] disabled:opacity-40 text-white w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 transition-colors">
               {loading ? <span className="animate-spin text-sm">⟳</span> : '↑'}
             </button>
           </div>
-          <p className="text-center text-[10px] text-[#555566] mt-1.5">Shift+Enter for new line · Aria can make mistakes</p>
+          <p className="text-center text-[10px] text-[#555566] mt-1 hidden sm:block">Shift+Enter for new line · Aria can make mistakes</p>
         </div>
       </div>
 
-      {/* ── PREVIEW PANEL ── */}
+      {/* ── RIGHT PANEL ── */}
       {showSplit && (
-        <div className="flex-1 overflow-hidden min-w-0">
-          {rightPanel === 'preview' && activeArtifact && (
-            <PreviewPanel artifact={activeArtifact} onClose={closePanel} />
-          )}
-          {rightPanel === 'image' && (
-            <ImageGenerator isPro={isPro} onClose={closePanel} />
-          )}
-          {rightPanel === 'project' && (
-            <ProjectBuilder onClose={closePanel} />
-          )}
-          {rightPanel === 'execute' && execCode && (
-            <CodeExecutor code={execCode.code} language={execCode.language} onClose={closePanel} />
-          )}
-          {rightPanel === 'canvas' && (
-            <Canvas isPro={isPro} onClose={closePanel} />
-          )}
+        <div className="absolute inset-0 md:relative md:inset-auto flex-1 overflow-hidden min-w-0 bg-[#0e0e12] flex flex-col">
+          {/* Mobile back button */}
+          <div className="md:hidden flex items-center gap-2 px-3 py-2 bg-[#16161d] border-b border-white/5 flex-shrink-0">
+            <button onClick={closePanel} className="flex items-center gap-1.5 text-sm text-[#888899] hover:text-white">
+              ← Back to chat
+            </button>
+          </div>
+          <div className="flex-1 overflow-hidden">
+            {rightPanel === 'preview' && activeArtifact && <PreviewPanel artifact={activeArtifact} onClose={closePanel} />}
+            {rightPanel === 'image' && <ImageGenerator isPro={isPro} onClose={closePanel} />}
+            {rightPanel === 'project' && <ProjectBuilder onClose={closePanel} />}
+            {rightPanel === 'execute' && execCode && <CodeExecutor code={execCode.code} language={execCode.language} onClose={closePanel} />}
+            {rightPanel === 'canvas' && <Canvas isPro={isPro} onClose={closePanel} />}
+          </div>
         </div>
       )}
     </div>
