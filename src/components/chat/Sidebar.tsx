@@ -111,7 +111,7 @@ export function Sidebar({ user }: Props) {
 
       <aside
         className={`fixed md:relative z-40 flex flex-col w-[280px] md:w-64 bg-[#16161d] border-r border-white/5 transition-transform duration-200 ease-in-out ${open ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}
-        style={{ height: '100dvh' }}>
+       className={`... h-screen md:h-auto`}>
 
         {/* Logo */}
         <div className="flex items-center gap-2 px-4 py-3.5 border-b border-white/5 flex-shrink-0">
