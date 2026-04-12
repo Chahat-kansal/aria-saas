@@ -9,6 +9,22 @@
 
 * { box-sizing: border-box; }
 
+/* ── MOBILE VIEWPORT FIX ── */
+/* Fixes the 100vh = address bar issue on mobile Chrome/Safari */
+html, body { height: 100%; }
+#__next { height: 100%; }
+
+/* Use dvh (dynamic viewport height) where supported, fallback to 100% */
+.h-screen-mobile {
+  height: 100vh;
+  height: 100dvh;
+}
+
+/* Safe area insets for notch/home indicator on iOS/Android */
+.pb-safe { padding-bottom: env(safe-area-inset-bottom, 0px); }
+.pt-safe { padding-top: env(safe-area-inset-top, 0px); }
+
+/* ── SCROLLBARS ── */
 ::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
@@ -17,6 +33,7 @@
 .scrollbar-hide::-webkit-scrollbar { display: none; }
 .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
 
+/* ── PROSE ── */
 .prose-aria { 
   @apply text-[#f0f0f5] leading-relaxed;
 }
@@ -35,6 +52,10 @@
 .prose-aria code { @apply font-mono text-xs bg-white/10 px-1.5 py-0.5 rounded; }
 .prose-aria hr { @apply border-white/10 my-4; }
 
+/* Prevent code blocks from breaking layout on mobile */
+.prose-aria pre { @apply overflow-x-auto; }
+
+/* ── ANIMATIONS ── */
 @keyframes typing {
   0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
   30% { transform: translateY(-4px); opacity: 1; }
@@ -42,3 +63,10 @@
 .typing-dot:nth-child(1) { animation: typing 1.2s infinite; }
 .typing-dot:nth-child(2) { animation: typing 1.2s infinite 0.2s; }
 .typing-dot:nth-child(3) { animation: typing 1.2s infinite 0.4s; }
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-8px); }
+}
+.animate-float { animation: float 3s ease-in-out infinite; }
+
