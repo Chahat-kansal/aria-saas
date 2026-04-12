@@ -9,7 +9,7 @@ import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import toast from 'react-hot-toast';
 import { PreviewPanel, CodeArtifact } from './PreviewPanel';
 import { extractArtifacts } from '@/lib/codeDetection';
-import { v4 as uuid } from 'uuid';
+const uuid = () => crypto.randomUUID();
 import { CodeExecutor } from '@/components/project/CodeExecutor';
 import { ImageGenerator } from '@/components/project/ImageGenerator';
 import { ProjectBuilder } from '@/components/project/ProjectBuilder';
