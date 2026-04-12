@@ -194,4 +194,3 @@ export function PreviewPanel({ artifact, onClose }: Props) {
     </div>
   );
 }
-
