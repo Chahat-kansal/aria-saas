@@ -67,6 +67,7 @@ export function ChatWindow({ conversationId }: Props) {
   const [plugins, setPlugins] = useState(true);
   const [pluginCalls, setPluginCalls] = useState<{ name: string; status: 'running' | 'done' | 'error'; result?: any }[]>([]);
   const [lastAiMessage, setLastAiMessage] = useState('');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const { speak, stop: stopSpeaking, speaking } = useTextToSpeech();
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -231,6 +232,47 @@ export function ChatWindow({ conversationId }: Props) {
 
   return (
     <div className="flex overflow-hidden relative" style={{ height: '100dvh' }}>
+
+      {/* Mobile sidebar overlay — closes sidebar when tapping outside */}
+      {sidebarOpen && (
+        <div
+          className="md:hidden fixed inset-0 bg-black/60 z-30"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      {/* Mobile sidebar drawer — controlled by sidebarOpen state */}
+      <div className={`md:hidden fixed inset-y-0 left-0 z-40 transition-transform duration-200 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+        {/* We render a copy of the sidebar content inline here for mobile */}
+        <div className="w-[75vw] max-w-[280px] h-full bg-[#16161d] border-r border-white/5 flex flex-col" style={{ height: '100dvh' }}>
+          <div className="flex items-center gap-2 px-4 py-3.5 border-b border-white/5 flex-shrink-0">
+            <div className="w-7 h-7 rounded-full bg-gradient-to-br from-[#6C63FF] to-[#a78bfa] flex items-center justify-center text-white text-xs font-bold">A</div>
+            <span className="font-semibold text-sm">Aria</span>
+            <button onClick={() => setSidebarOpen(false)} className="ml-auto text-[#888899] hover:text-white p-1 text-lg leading-none">✕</button>
+          </div>
+          <div className="px-3 pt-3 flex-shrink-0">
+            <a href="/chat" onClick={() => setSidebarOpen(false)}
+              className="flex items-center gap-2 w-full bg-[#6C63FF] hover:bg-[#4b44cc] text-white text-sm font-medium px-3 py-2.5 rounded-xl transition-colors">
+              <span className="text-lg leading-none">+</span> New conversation
+            </a>
+          </div>
+          <div className="flex-1 overflow-y-auto px-3 py-3 space-y-0.5 min-h-0">
+            <p className="text-xs text-[#555566] text-center py-4">Open the full sidebar on desktop, or use New conversation above</p>
+          </div>
+          <div className="px-3 pb-4 border-t border-white/5 pt-3 flex-shrink-0">
+            <a href="/settings" onClick={() => setSidebarOpen(false)}
+              className="flex items-center gap-2 px-2 py-2 rounded-xl hover:bg-white/5 transition-colors">
+              <div className="w-7 h-7 rounded-full bg-[#6C63FF]/30 flex items-center justify-center text-xs font-medium text-[#a78bfa] flex-shrink-0">
+                {session?.user?.name?.[0]?.toUpperCase() || 'U'}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-xs font-medium text-white truncate">{session?.user?.name}</div>
+                <div className="text-[10px] text-[#555566] truncate">{session?.user?.email}</div>
+              </div>
+            </a>
+          </div>
+        </div>
+      </div>
       {/* ── CHAT PANEL ── */}
       <div className={`flex flex-col min-w-0 transition-all duration-200 overflow-hidden
         ${showSplit ? 'hidden md:flex md:w-[44%] md:min-w-[300px]' : 'flex-1'}
@@ -238,16 +280,13 @@ export function ChatWindow({ conversationId }: Props) {
 
         {/* Toolbar */}
         <div className="flex items-center gap-1.5 px-2 py-1.5 border-b border-white/5 bg-[#16161d] flex-shrink-0 overflow-x-auto scrollbar-hide">
-          {/* Hamburger — mobile only, sits inside toolbar to avoid overlap */}
+          {/* Hamburger — mobile only, uses React state not DOM manipulation */}
           <button
-            onClick={() => {
-              const aside = document.querySelector('aside');
-              if (!aside) return;
-              const hidden = aside.style.transform === 'translateX(-100%)' || aside.classList.contains('-translate-x-full');
-              aside.style.transform = hidden ? 'translateX(0)' : 'translateX(-100%)';
-            }}
+            onClick={() => setSidebarOpen(o => !o)}
             className="md:hidden flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg bg-white/5 text-[#888899] border border-white/10 text-sm"
-          >☰</button>
+            aria-label="Menu">
+            ☰
+          </button>
 
           {/* Mode toggle */}
           <div className="flex bg-white/5 rounded-lg p-0.5 flex-shrink-0">
