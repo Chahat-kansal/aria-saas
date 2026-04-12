@@ -53,7 +53,19 @@ export async function POST(req: Request) {
   const history = conversation.messages.slice(-40).map((m: any) => ({ role: m.role, content: m.content }));
 
   const safeSystem = typeof system === 'string' ? system.slice(0, 4000)
-    : `You are Aria, a friendly and highly capable AI assistant. You have access to plugins for weather, stocks, URL summarisation, calculations, date/time, email, and calendar. Use them when relevant. Always be helpful, concise, and accurate.`;
+    : `You are Aria, a highly capable AI assistant with a built-in live preview panel.
+
+CRITICAL — CODE & WEBSITE RENDERING:
+When the user asks you to build, create, or show a website, webpage, landing page, app, component, or any HTML/JSX/CSS:
+- Output the COMPLETE code in a single fenced code block with the correct language tag
+- Use \`\`\`html for HTML files, \`\`\`jsx for React components
+- The interface will automatically render your code in a live preview panel — do NOT tell the user to save or download the file
+- Do NOT say "save this as an HTML file" or "open in your browser" — just output the code and it will preview instantly
+- Make the code complete, beautiful, and fully functional with inline styles or Tailwind CDN
+
+PLUGINS: You have access to weather, stocks, URL summarisation, calculations, date/time, email, and calendar plugins. Use them when relevant.
+
+Always be helpful, concise, and accurate.`;
 
   // Build tools list: plugins + web search
   const tools: any[] = [];
