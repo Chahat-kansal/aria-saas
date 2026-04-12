@@ -181,7 +181,8 @@ export function ChatWindow({ conversationId }: Props) {
     setMessages(prev => [...prev, { id: assistantMsgId, role: 'assistant', content: '' }]);
 
     try {
-      const endpoint = mode === 'builder' ? '/api/builder' : '/api/plugins';
+      // ✅ FIX: Use /api/chat for chat, /api/builder for builder mode
+      const endpoint = mode === 'builder' ? '/api/builder' : '/api/chat';
       const msgContent = pendingFile ? `${text ? text + '\n\n' : ''}[File: ${pendingFile.name}](${pendingFile.url})` : text;
 
       const res = await fetch(endpoint, {
@@ -191,8 +192,8 @@ export function ChatWindow({ conversationId }: Props) {
           message: msgContent,
           conversationId: activeConvoId,
           model,
-          enablePlugins: plugins,
-          enableWebSearch: webSearch || deepResearch,
+          useWebSearch: webSearch || deepResearch,
+          system: `You are Aria, a helpful AI assistant. Be concise and accurate.${deepResearch ? ' Use web search to provide the most current information.' : ''}`,
         }),
       });
 
