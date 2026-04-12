@@ -5,6 +5,11 @@ import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import toast from 'react-hot-toast';
 import Link from 'next/link';
+import SettingsClient from './SettingsClient';
+
+export default function Page() {
+  return <SettingsClient />;
+}
 
 interface UserData {
   name: string;
