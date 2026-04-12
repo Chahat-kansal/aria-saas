@@ -1,5 +1,5 @@
 'use client';
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import ReactMarkdown from 'react-markdown';
@@ -17,7 +17,7 @@ import { Canvas } from '@/components/canvas/Canvas';
 import { SIDEBAR_EVENT } from './Sidebar';
 
 interface Message {
-  id?: string; // ✅ ADD: Unique ID for proper key
+  id?: string;
   role: 'user' | 'assistant';
   content: string;
   fileUrl?: string;
@@ -71,10 +71,30 @@ export function ChatWindow({ conversationId }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
-  const pendingConvoIdRef = useRef<string | null>(null); // ✅ Track pending conversation ID
+  const pendingConvoIdRef = useRef<string | null>(null);
 
   const isPro = userPlan === 'pro';
   const showSplit = !!activeArtifact || !!rightPanel;
+
+  // ✅ FIX: Memoize height adjustment function (runs once)
+  const adjustTextareaHeight = useCallback((element: HTMLTextAreaElement) => {
+    element.style.height = 'auto';
+    element.style.height = Math.min(element.scrollHeight, 112) + 'px';
+  }, []);
+
+  // ✅ FIX: Optimized input handler with useCallback (prevents re-renders)
+  const handleInputChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setInput(e.target.value);
+    adjustTextareaHeight(e.target);
+  }, [adjustTextareaHeight]);
+
+  // ✅ FIX: Optimized key handler
+  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  }, []);
 
   useEffect(() => {
     fetch('/api/user').then(r => r.json()).then(d => setUserPlan(d.plan || 'free')).catch(() => {});
@@ -88,7 +108,7 @@ export function ChatWindow({ conversationId }: Props) {
           if (data.messages) {
             const msgs: Message[] = data.messages.map((m: any, i: number) => ({
               ...m,
-              id: m._id || `msg-${i}-${Date.now()}`, // ✅ Ensure unique ID
+              id: m._id || `msg-${i}-${Date.now()}`,
               artifacts: m.role === 'assistant' ? extractArtifacts(m.content) : undefined,
             }));
             setMessages(msgs);
@@ -104,7 +124,6 @@ export function ChatWindow({ conversationId }: Props) {
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
 
-  // Handle tool selection from sidebar
   useEffect(() => {
     function handleToolSelect(e: CustomEvent) {
       const tool = e.detail;
@@ -131,7 +150,6 @@ export function ChatWindow({ conversationId }: Props) {
     return () => window.removeEventListener('aria:tool-select', handleToolSelect as EventListener);
   }, []);
 
-  // Sync mode changes to sidebar
   useEffect(() => {
     window.dispatchEvent(new CustomEvent('aria:mode-change', { detail: { mode, isPro, activeTool: rightPanel, plugins, webSearch, deepResearch } }));
   }, [mode, isPro, rightPanel, plugins, webSearch, deepResearch]);
@@ -152,7 +170,6 @@ export function ChatWindow({ conversationId }: Props) {
     if (!text && !pendingFile) return;
     if (loading) return;
 
-    // ✅ Generate unique IDs for messages to avoid key issues
     const userMsgId = `user-${Date.now()}-${Math.random()}`;
     const assistantMsgId = `assistant-${Date.now()}-${Math.random()}`;
 
@@ -170,18 +187,15 @@ export function ChatWindow({ conversationId }: Props) {
     setLoading(true);
     setPluginCalls([]);
 
-    // Builder mode: pre-open panel immediately
     if (mode === 'builder') {
       const placeholder: CodeArtifact = { id: crypto.randomUUID(), title: text.slice(0, 40), language: 'html', code: '', streaming: true };
       setActiveArtifact(placeholder);
       setRightPanel('preview');
     }
 
-    // ✅ Add placeholder assistant message
     setMessages(prev => [...prev, { id: assistantMsgId, role: 'assistant', content: '' }]);
 
     try {
-      // ✅ FIX: Use /api/chat for chat, /api/builder for builder mode
       const endpoint = mode === 'builder' ? '/api/builder' : '/api/chat';
       const msgContent = pendingFile ? `${text ? text + '\n\n' : ''}[File: ${pendingFile.name}](${pendingFile.url})` : text;
 
@@ -214,7 +228,6 @@ export function ChatWindow({ conversationId }: Props) {
             const data = JSON.parse(line.slice(6));
             if (data.text) {
               fullContent += data.text;
-              // ✅ Update message with unique ID
               setMessages(prev => { 
                 const m = [...prev]; 
                 const lastIdx = m.length - 1;
@@ -239,11 +252,9 @@ export function ChatWindow({ conversationId }: Props) {
                   : p
               ));
             }
-            // ✅ FIX: Store conversation ID but DON'T navigate yet
             if (data.conversationId) {
               pendingConvoIdRef.current = data.conversationId;
               setActiveConvoId(data.conversationId);
-              // Don't call router.replace() here - it causes the reload/flash!
             }
             if (data.done) {
               const artifacts = extractArtifacts(fullContent, text);
@@ -261,7 +272,6 @@ export function ChatWindow({ conversationId }: Props) {
               }
               setLastAiMessage(fullContent);
               
-              // ✅ Navigate AFTER streaming completes (non-blocking)
               if (pendingConvoIdRef.current && pendingConvoIdRef.current !== activeConvoId) {
                 setTimeout(() => {
                   router.replace(`/chat/${pendingConvoIdRef.current}`);
@@ -280,34 +290,34 @@ export function ChatWindow({ conversationId }: Props) {
     } finally {
       setLoading(false);
     }
-  }, [input, pendingFile, loading, model, mode, webSearch, deepResearch, activeConvoId, plugins, router, activeArtifact]);
+  }, [input, pendingFile, loading, model, mode, webSearch, deepResearch, activeConvoId, router, activeArtifact]);
 
   function closePanel() { setActiveArtifact(null); setRightPanel(null); setExecCode(null); }
   function openExecutor(code: string, language: string) { setExecCode({ code, language }); setRightPanel('execute'); setActiveArtifact(null); }
 
-  // Compute active tool for sidebar highlight
   const activeTool = rightPanel || (webSearch ? 'search' : deepResearch ? 'research' : plugins ? 'plugins' : '');
+
+  // ✅ Memoize placeholder text
+  const placeholderText = useMemo(() => 
+    mode === 'builder' ? 'Describe what to build…' : 'Message Aria…',
+    [mode]
+  );
 
   return (
     <div className="flex overflow-hidden" style={{ height: '100dvh' }}>
-      {/* ── CHAT PANEL ── */}
       <div className={`flex flex-col min-w-0 overflow-hidden transition-all duration-200
         ${showSplit ? 'hidden md:flex md:w-[46%] md:min-w-[300px]' : 'flex-1'}`}>
 
-        {/* Slim top bar — just hamburger + model selector, no tool buttons */}
         <div className="flex items-center gap-2 px-3 py-2 border-b border-white/5 bg-[#16161d] flex-shrink-0">
-          {/* Hamburger — mobile only */}
           <button
             onClick={() => window.dispatchEvent(new Event(SIDEBAR_EVENT))}
             className="md:hidden flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg bg-white/5 text-[#888899] border border-white/10 text-sm">
             ☰
           </button>
-          {/* Model selector */}
           <select value={model} onChange={e => setModel(e.target.value)}
             className="bg-white/5 border border-white/10 text-xs rounded-lg px-2 py-1.5 outline-none text-white flex-shrink-0">
             {MODELS.map(m => <option key={m.id} value={m.id} disabled={m.plan === 'pro' && !isPro}>{m.label}{m.plan === 'pro' && !isPro ? ' ⭐' : ''}</option>)}
           </select>
-          {/* Active tool badges */}
           <div className="flex gap-1 flex-wrap flex-1 min-w-0">
             {mode === 'builder' && <span className="text-[10px] bg-[#6C63FF]/20 text-[#a78bfa] border border-[#6C63FF]/30 px-2 py-0.5 rounded-full">🔨 Builder</span>}
             {webSearch && <span className="text-[10px] bg-[#6C63FF]/20 text-[#a78bfa] border border-[#6C63FF]/30 px-2 py-0.5 rounded-full">🔍 Search on</span>}
@@ -316,7 +326,6 @@ export function ChatWindow({ conversationId }: Props) {
           </div>
         </div>
 
-        {/* Messages */}
         <div className="flex-1 overflow-y-auto px-3 py-4 space-y-4 min-h-0">
           {messages.length === 0 && (
             <div className="flex flex-col items-center justify-center h-full text-center gap-3 pb-8 px-2">
@@ -340,7 +349,6 @@ export function ChatWindow({ conversationId }: Props) {
             </div>
           )}
 
-          {/* ✅ FIX: Use msg.id as key instead of index */}
           {messages.map((msg) => (
             <div key={msg.id} className={`flex gap-2 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
               <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold flex-shrink-0 self-start mt-0.5 ${msg.role === 'assistant' ? 'bg-gradient-to-br from-[#6C63FF] to-[#a78bfa] text-white' : 'bg-white/10 text-white'}`}>
@@ -421,9 +429,7 @@ export function ChatWindow({ conversationId }: Props) {
           <div ref={bottomRef} />
         </div>
 
-        {/* Input area */}
         <div className="px-2 pb-2 flex-shrink-0" style={{ paddingBottom: 'max(8px, env(safe-area-inset-bottom))' }}>
-          {/* Plugin status */}
           {pluginCalls.length > 0 && (
             <div className="flex gap-1 flex-wrap mb-1">
               {pluginCalls.map((p, i) => (
@@ -435,7 +441,6 @@ export function ChatWindow({ conversationId }: Props) {
               ))}
             </div>
           )}
-          {/* Voice */}
           <div className="flex items-center gap-1.5 mb-1">
             <VoiceMode
               onTranscript={text => { setInput(text); setTimeout(() => sendMessage(), 100); }}
@@ -449,25 +454,27 @@ export function ChatWindow({ conversationId }: Props) {
               </button>
             )}
           </div>
-          {/* Pending file */}
           {pendingFile && (
             <div className="flex items-center gap-2 mb-1 bg-white/5 border border-white/10 rounded-xl px-3 py-1.5 text-xs text-[#888899]">
               📎 <span className="truncate flex-1">{pendingFile.name}</span>
               <button onClick={() => setPendingFile(null)} className="hover:text-white flex-shrink-0">✕</button>
             </div>
           )}
-          {/* Message box */}
           <div className="flex gap-2 items-end bg-[#1f1f2a] border border-white/10 rounded-2xl px-3 py-2 focus-within:border-[#6C63FF]/50 transition-colors">
             <input ref={fileRef} type="file" className="hidden" accept="image/*,.pdf,.txt,.csv,.md" onChange={e => e.target.files?.[0] && uploadFile(e.target.files[0])} />
             <button onClick={() => fileRef.current?.click()} disabled={uploading} className="text-[#888899] hover:text-white transition-colors flex-shrink-0 text-base leading-none pb-0.5">
               {uploading ? <span className="animate-spin inline-block text-sm">⟳</span> : '📎'}
             </button>
-            <textarea ref={textareaRef} value={input} onChange={e => setInput(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
-              placeholder={mode === 'builder' ? 'Describe what to build…' : 'Message Aria…'}
-              rows={1} className="flex-1 bg-transparent resize-none outline-none text-sm text-white placeholder:text-[#555566] max-h-28 leading-5"
+            {/* ✅ OPTIMIZED TEXTAREA - Uses useCallback to prevent unnecessary re-renders */}
+            <textarea 
+              ref={textareaRef} 
+              value={input} 
+              onChange={handleInputChange}
+              onKeyDown={handleKeyDown}
+              placeholder={placeholderText}
+              rows={1} 
+              className="flex-1 bg-transparent resize-none outline-none text-sm text-white placeholder:text-[#555566] max-h-28 leading-5"
               style={{ minHeight: '20px' }}
-              onInput={e => { const t = e.target as HTMLTextAreaElement; t.style.height = 'auto'; t.style.height = Math.min(t.scrollHeight, 112) + 'px'; }}
             />
             <button onClick={sendMessage} disabled={loading || (!input.trim() && !pendingFile)}
               className="bg-[#6C63FF] hover:bg-[#4b44cc] disabled:opacity-40 text-white w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 transition-colors">
@@ -478,7 +485,6 @@ export function ChatWindow({ conversationId }: Props) {
         </div>
       </div>
 
-      {/* ── RIGHT PANEL ── */}
       {showSplit && (
         <div className="absolute inset-0 md:relative md:inset-auto flex-1 overflow-hidden min-w-0 bg-[#0e0e12] flex flex-col">
           <div className="md:hidden flex items-center gap-2 px-3 py-2 bg-[#16161d] border-b border-white/5 flex-shrink-0">
