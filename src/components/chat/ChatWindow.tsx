@@ -76,17 +76,17 @@ export function ChatWindow({ conversationId }: Props) {
   const isPro = userPlan === 'pro';
   const showSplit = !!activeArtifact || !!rightPanel;
 
-  // ✅ FIX: Memoize height adjustment function (runs once)
-  const adjustTextareaHeight = useCallback((element: HTMLTextAreaElement) => {
-    element.style.height = 'auto';
-    element.style.height = Math.min(element.scrollHeight, 112) + 'px';
-  }, []);
-
-  // ✅ FIX: Optimized input handler with useCallback (prevents re-renders)
+  // ✅ FIX: UNBLOCK TEXTAREA INPUT IMMEDIATELY
+  // This handler MUST be instant with NO external dependencies
   const handleInputChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setInput(e.target.value);
-    adjustTextareaHeight(e.target);
-  }, [adjustTextareaHeight]);
+    const value = e.target.value;
+    setInput(value);
+    
+    // ✅ Adjust height synchronously (no async, no awaits)
+    const textarea = e.target;
+    textarea.style.height = 'auto';
+    textarea.style.height = Math.min(textarea.scrollHeight, 112) + 'px';
+  }, []);
 
   // ✅ FIX: Optimized key handler
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -96,33 +96,46 @@ export function ChatWindow({ conversationId }: Props) {
     }
   }, []);
 
+  // ✅ FIX: Load user data in BACKGROUND - do NOT block input
   useEffect(() => {
-    fetch('/api/user').then(r => r.json()).then(d => setUserPlan(d.plan || 'free')).catch(() => {});
+    // Non-blocking: fetch in background without awaiting
+    fetch('/api/user')
+      .then(r => r.json())
+      .then(d => setUserPlan(d.plan || 'free'))
+      .catch(() => setUserPlan('free'));
   }, []);
 
+  // ✅ FIX: Load conversation in BACKGROUND - do NOT block input
   useEffect(() => {
-    if (conversationId) {
-      fetch(`/api/conversations/${conversationId}`)
-        .then(r => r.json())
-        .then(data => {
-          if (data.messages) {
-            const msgs: Message[] = data.messages.map((m: any, i: number) => ({
-              ...m,
-              id: m._id || `msg-${i}-${Date.now()}`,
-              artifacts: m.role === 'assistant' ? extractArtifacts(m.content) : undefined,
-            }));
-            setMessages(msgs);
-            const last = [...msgs].reverse().find(m => m.artifacts?.length);
-            if (last?.artifacts?.[0]) setActiveArtifact(last.artifacts[0]);
-          }
-          if (data.model) setModel(data.model);
-        }).catch(() => {});
-    } else {
-      setMessages([]); setActiveConvoId(undefined); setActiveArtifact(null);
+    if (!conversationId) {
+      setMessages([]);
+      setActiveConvoId(undefined);
+      setActiveArtifact(null);
+      return;
     }
+
+    // Non-blocking: fetch in background
+    fetch(`/api/conversations/${conversationId}`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.messages) {
+          const msgs: Message[] = data.messages.map((m: any, i: number) => ({
+            ...m,
+            id: m._id || `msg-${i}-${Date.now()}`,
+            artifacts: m.role === 'assistant' ? extractArtifacts(m.content) : undefined,
+          }));
+          setMessages(msgs);
+          const last = [...msgs].reverse().find(m => m.artifacts?.length);
+          if (last?.artifacts?.[0]) setActiveArtifact(last.artifacts[0]);
+        }
+        if (data.model) setModel(data.model);
+      })
+      .catch(() => {});
   }, [conversationId]);
 
-  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
+  useEffect(() => { 
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); 
+  }, [messages]);
 
   useEffect(() => {
     function handleToolSelect(e: CustomEvent) {
@@ -296,12 +309,7 @@ export function ChatWindow({ conversationId }: Props) {
   function openExecutor(code: string, language: string) { setExecCode({ code, language }); setRightPanel('execute'); setActiveArtifact(null); }
 
   const activeTool = rightPanel || (webSearch ? 'search' : deepResearch ? 'research' : plugins ? 'plugins' : '');
-
-  // ✅ Memoize placeholder text
-  const placeholderText = useMemo(() => 
-    mode === 'builder' ? 'Describe what to build…' : 'Message Aria…',
-    [mode]
-  );
+  const placeholderText = mode === 'builder' ? 'Describe what to build…' : 'Message Aria…';
 
   return (
     <div className="flex overflow-hidden" style={{ height: '100dvh' }}>
@@ -465,7 +473,7 @@ export function ChatWindow({ conversationId }: Props) {
             <button onClick={() => fileRef.current?.click()} disabled={uploading} className="text-[#888899] hover:text-white transition-colors flex-shrink-0 text-base leading-none pb-0.5">
               {uploading ? <span className="animate-spin inline-block text-sm">⟳</span> : '📎'}
             </button>
-            {/* ✅ OPTIMIZED TEXTAREA - Uses useCallback to prevent unnecessary re-renders */}
+            {/* ✅ CRITICAL FIX: Unblock textarea input */}
             <textarea 
               ref={textareaRef} 
               value={input} 
