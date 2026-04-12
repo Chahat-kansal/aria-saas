@@ -187,7 +187,7 @@ export function Canvas({ onClose, isPro }: Props) {
       .replace(/\*(.+?)\*/g, '<em>$1</em>')
       .replace(/`(.+?)`/g, '<code>$1</code>')
       .replace(/^- (.+)$/gm, '<li>$1</li>')
-      .replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>')
+      .replace(/(<li>[\s\S]*<\/li>)/, '<ul>$1</ul>')
       .replace(/^(\d+)\. (.+)$/gm, '<li>$2</li>')
       .replace(/\n\n/g, '</p><p>')
       .replace(/^(.+)$/gm, (line) => {
