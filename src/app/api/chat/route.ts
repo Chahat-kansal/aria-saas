@@ -112,7 +112,13 @@ export async function POST(req: Request) {
     },
   });
 
-  return new Response(stream, {
-    headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive' },
-  });
-}
+ return new Response(JSON.stringify({
+  success: true,
+  message: fullReply,
+  conversationId: conversation._id.toString(),
+  pluginResults
+}), {
+  headers: {
+    'Content-Type': 'application/json'
+  }
+});
