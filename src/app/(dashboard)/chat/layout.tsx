@@ -25,6 +25,7 @@ export default async function ChatLayout({
       <main
         style={{
           minWidth: 0,
+          height: '100%',
           overflow: 'hidden',
           display: 'flex',
           flexDirection: 'column',
