@@ -215,7 +215,7 @@ export function ChatWindow({ conversationId }: Props) {
   function openExecutor(code: string, language: string) { setExecCode({ code, language }); setRightPanel('execute'); setActiveArtifact(null); }
 
   return (
-    <div className="flex overflow-hidden" style={{ height: '100dvh' }}>
+    <div className="flex h-full overflow-hidden">
 
       {/* ── CHAT PANEL ── */}
       <div className={`flex flex-col min-w-0 overflow-hidden transition-all duration-200 ${showSplit ? 'hidden md:flex md:w-[46%] md:min-w-[300px]' : 'flex-1'}`}>
