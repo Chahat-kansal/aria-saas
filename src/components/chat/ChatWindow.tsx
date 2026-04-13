@@ -215,188 +215,197 @@ export function ChatWindow({ conversationId }: Props) {
   function openExecutor(code: string, language: string) { setExecCode({ code, language }); setRightPanel('execute'); setActiveArtifact(null); }
 
   return (
+    // Outer: fills the <main> column completely
     <div style={{ display:'flex', height:'100%', overflow:'hidden', position:'relative' }}>
 
       {/* ── CHAT PANEL ── */}
-      <div style={{
-        display: 'flex', flexDirection: 'column',
-        flex: showSplit ? undefined : 1,
-        width: showSplit ? undefined : '100%',
-        minWidth: 0, overflow: 'hidden', height: '100%'
-      }} className={showSplit ? 'hidden md:flex md:w-[46%] md:min-w-[300px]' : ''}>
+      {/* Uses CSS Grid: 3 rows = [topbar][messages(1fr)][input] */}
+      {(!showSplit || typeof window !== 'undefined') && (
+        <div
+          style={{
+            display: showSplit ? 'none' : 'grid',
+            gridTemplateRows: 'auto 1fr auto',
+            flex: 1,
+            minWidth: 0,
+            height: '100%',
+            overflow: 'hidden',
+          }}
+          className={showSplit ? 'md:!grid md:w-[46%] md:min-w-[300px]' : ''}
+        >
 
-        {/* Top bar */}
-        <div className="flex items-center gap-2 px-3 py-2 border-b border-white/5 bg-[#16161d] flex-shrink-0">
-          <button onClick={() => window.dispatchEvent(new Event(SIDEBAR_EVENT))}
-            className="md:hidden w-8 h-8 flex items-center justify-center rounded-lg bg-white/5 text-[#888899] border border-white/10 text-sm flex-shrink-0">☰</button>
-          <select value={model} onChange={e => setModel(e.target.value)}
-            className="bg-white/5 border border-white/10 text-xs rounded-lg px-2 py-1.5 outline-none text-white flex-shrink-0">
-            {MODELS.map(m => <option key={m.id} value={m.id} disabled={m.plan === 'pro' && !isPro}>{m.label}{m.plan === 'pro' && !isPro ? ' ⭐' : ''}</option>)}
-          </select>
-          <div className="flex gap-1 flex-wrap flex-1 min-w-0 overflow-hidden">
-            {mode === 'builder' && <span className="text-[10px] bg-[#6C63FF]/20 text-[#a78bfa] border border-[#6C63FF]/30 px-2 py-0.5 rounded-full whitespace-nowrap">🔨 Builder</span>}
-            {webSearch && <span className="text-[10px] bg-[#6C63FF]/20 text-[#a78bfa] border border-[#6C63FF]/30 px-2 py-0.5 rounded-full whitespace-nowrap">🔍 Search</span>}
-            {deepResearch && <span className="text-[10px] bg-purple-500/20 text-purple-300 border border-purple-500/30 px-2 py-0.5 rounded-full whitespace-nowrap">🔬 Research</span>}
-            {!plugins && <span className="text-[10px] bg-red-500/10 text-red-400 border border-red-500/20 px-2 py-0.5 rounded-full whitespace-nowrap">Plugins off</span>}
-          </div>
-        </div>
-
-        {/* Messages — flex-1 so it fills all space between toolbar and input */}
-        <div style={{ flex: 1, overflowY: 'auto', minHeight: 0, display: 'flex', flexDirection: 'column' }} className="px-3 py-4">
-          {messages.length === 0 && (
-            <div style={{ flex: 1 }} className="flex flex-col items-center justify-center text-center gap-3 pb-8 px-2">
-              <div className="w-12 h-12 rounded-full bg-gradient-to-br from-[#6C63FF] to-[#a78bfa] flex items-center justify-center text-xl animate-float shadow-[0_0_40px_rgba(108,99,255,0.3)]">
-                {mode === 'builder' ? '🔨' : '✦'}
-              </div>
-              <div>
-                <h2 className="text-base font-semibold">{mode === 'builder' ? 'Aria Builder' : "Hi, I'm Aria"}</h2>
-                <p className="text-[#888899] text-xs mt-1 max-w-[260px]">
-                  {mode === 'builder' ? "Describe what to build — live preview opens automatically." : 'Pick a tool from the sidebar or just start chatting.'}
-                </p>
-              </div>
-              <div className="grid grid-cols-2 gap-2 w-full max-w-[280px]">
-                {(mode === 'builder' ? BUILDER_STARTERS : CHAT_STARTERS).map(s => (
-                  <button key={s.text} onClick={() => { setInput(s.text); textareaRef.current?.focus(); }}
-                    className="text-left text-[11px] bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl px-3 py-2 text-[#888899] hover:text-white transition-all leading-snug">
-                    {s.icon} {s.text}
-                  </button>
-                ))}
-              </div>
+          {/* Row 1: Top bar */}
+          <div className="flex items-center gap-2 px-3 py-2 border-b border-white/5 bg-[#16161d]">
+            <button onClick={() => window.dispatchEvent(new Event(SIDEBAR_EVENT))}
+              className="md:hidden w-8 h-8 flex items-center justify-center rounded-lg bg-white/5 text-[#888899] border border-white/10 text-sm flex-shrink-0">☰</button>
+            <select value={model} onChange={e => setModel(e.target.value)}
+              className="bg-white/5 border border-white/10 text-xs rounded-lg px-2 py-1.5 outline-none text-white flex-shrink-0">
+              {MODELS.map(m => <option key={m.id} value={m.id} disabled={m.plan === 'pro' && !isPro}>{m.label}{m.plan === 'pro' && !isPro ? ' ⭐' : ''}</option>)}
+            </select>
+            <div className="flex gap-1 flex-wrap flex-1 min-w-0 overflow-hidden">
+              {mode === 'builder' && <span className="text-[10px] bg-[#6C63FF]/20 text-[#a78bfa] border border-[#6C63FF]/30 px-2 py-0.5 rounded-full whitespace-nowrap">🔨 Builder</span>}
+              {webSearch && <span className="text-[10px] bg-[#6C63FF]/20 text-[#a78bfa] border border-[#6C63FF]/30 px-2 py-0.5 rounded-full whitespace-nowrap">🔍 Search</span>}
+              {deepResearch && <span className="text-[10px] bg-purple-500/20 text-purple-300 border border-purple-500/30 px-2 py-0.5 rounded-full whitespace-nowrap">🔬 Research</span>}
+              {!plugins && <span className="text-[10px] bg-red-500/10 text-red-400 border border-red-500/20 px-2 py-0.5 rounded-full whitespace-nowrap">Plugins off</span>}
             </div>
-          )}
+          </div>
 
-          <div className="space-y-4">
-            {messages.map((msg, i) => (
-              <div key={i} className={`flex gap-2 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
-                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold flex-shrink-0 self-start mt-0.5 ${msg.role === 'assistant' ? 'bg-gradient-to-br from-[#6C63FF] to-[#a78bfa] text-white' : 'bg-white/10 text-white'}`}>
-                  {msg.role === 'assistant' ? 'A' : session?.user?.name?.[0] || 'U'}
+          {/* Row 2: Messages — grid gives this row exactly the remaining space */}
+          <div style={{ overflowY: 'auto', display: 'flex', flexDirection: 'column' }} className="px-3 py-4">
+            {messages.length === 0 && (
+              <div style={{ flex: 1 }} className="flex flex-col items-center justify-center text-center gap-3 pb-8 px-2">
+                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-[#6C63FF] to-[#a78bfa] flex items-center justify-center text-xl animate-float shadow-[0_0_40px_rgba(108,99,255,0.3)]">
+                  {mode === 'builder' ? '🔨' : '✦'}
                 </div>
-                <div className={`flex flex-col gap-1.5 min-w-0 ${msg.role === 'user' ? 'items-end max-w-[85%]' : 'flex-1'}`}>
-                  {msg.fileUrl && (
-                    <div className="text-xs text-[#888899] bg-white/5 border border-white/10 rounded-lg px-3 py-1.5">
-                      📎 <a href={msg.fileUrl} target="_blank" rel="noopener" className="hover:underline">{msg.fileName}</a>
-                    </div>
-                  )}
-                  {msg.role === 'user' ? (
-                    <div className="bg-[#6C63FF] text-white px-3 py-2.5 rounded-2xl rounded-tr-sm text-sm leading-relaxed break-words">{msg.content}</div>
-                  ) : (
-                    <>
-                      {msg.content === '' && loading && i === messages.length - 1 ? (
-                        <div className="flex gap-1 py-2">
-                          <span className="typing-dot w-1.5 h-1.5 rounded-full bg-[#888899]" />
-                          <span className="typing-dot w-1.5 h-1.5 rounded-full bg-[#888899]" />
-                          <span className="typing-dot w-1.5 h-1.5 rounded-full bg-[#888899]" />
-                        </div>
-                      ) : (
-                        <div className="prose-aria text-sm overflow-x-hidden">
-                          <ReactMarkdown remarkPlugins={[remarkGfm]} components={{
-                            code({ className, children, ...props }: any) {
-                              const match = /language-(\w+)/.exec(className || '');
-                              if (!props.inline && match) {
-                                const lang = match[1];
-                                const code = String(children).replace(/\n$/, '');
-                                const art = msg.artifacts?.find(a => a.code.slice(0, 60) === code.slice(0, 60));
-                                const isPreview = ['html','jsx','tsx','js','javascript'].includes(lang);
-                                const isRunnable = ['python','javascript','typescript','bash','c','cpp','go','rust','ruby','java','r','php','swift','kotlin'].includes(lang);
-                                return (
-                                  <div className="my-3 overflow-hidden rounded-lg border border-white/10">
-                                    <div className="flex items-center justify-between bg-[#1a1a28] px-3 py-1.5">
-                                      <span className="text-[10px] text-[#888899] font-mono">{lang}</span>
-                                      <div className="flex gap-2">
-                                        {isPreview && art && (
-                                          <button onClick={() => { setActiveArtifact(art); setRightPanel('preview'); }} className="text-[10px] text-[#6C63FF]">👁 Preview</button>
-                                        )}
-                                        {isRunnable && (
-                                          <button onClick={() => openExecutor(code, lang)} className="text-[10px] text-green-400">▶ Run</button>
-                                        )}
-                                        <button onClick={() => { navigator.clipboard.writeText(code); toast.success('Copied!'); }} className="text-[10px] text-[#888899] hover:text-white">Copy</button>
+                <div>
+                  <h2 className="text-base font-semibold">{mode === 'builder' ? 'Aria Builder' : "Hi, I'm Aria"}</h2>
+                  <p className="text-[#888899] text-xs mt-1 max-w-[260px]">
+                    {mode === 'builder' ? "Describe what to build — live preview opens automatically." : 'Pick a tool from the sidebar or just start chatting.'}
+                  </p>
+                </div>
+                <div className="grid grid-cols-2 gap-2 w-full max-w-[280px]">
+                  {(mode === 'builder' ? BUILDER_STARTERS : CHAT_STARTERS).map(s => (
+                    <button key={s.text} onClick={() => { setInput(s.text); textareaRef.current?.focus(); }}
+                      className="text-left text-[11px] bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl px-3 py-2 text-[#888899] hover:text-white transition-all leading-snug">
+                      {s.icon} {s.text}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div className="space-y-4">
+              {messages.map((msg, i) => (
+                <div key={i} className={`flex gap-2 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
+                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold flex-shrink-0 self-start mt-0.5 ${msg.role === 'assistant' ? 'bg-gradient-to-br from-[#6C63FF] to-[#a78bfa] text-white' : 'bg-white/10 text-white'}`}>
+                    {msg.role === 'assistant' ? 'A' : session?.user?.name?.[0] || 'U'}
+                  </div>
+                  <div className={`flex flex-col gap-1.5 min-w-0 ${msg.role === 'user' ? 'items-end max-w-[85%]' : 'flex-1'}`}>
+                    {msg.fileUrl && (
+                      <div className="text-xs text-[#888899] bg-white/5 border border-white/10 rounded-lg px-3 py-1.5">
+                        📎 <a href={msg.fileUrl} target="_blank" rel="noopener" className="hover:underline">{msg.fileName}</a>
+                      </div>
+                    )}
+                    {msg.role === 'user' ? (
+                      <div className="bg-[#6C63FF] text-white px-3 py-2.5 rounded-2xl rounded-tr-sm text-sm leading-relaxed break-words">{msg.content}</div>
+                    ) : (
+                      <>
+                        {msg.content === '' && loading && i === messages.length - 1 ? (
+                          <div className="flex gap-1 py-2">
+                            <span className="typing-dot w-1.5 h-1.5 rounded-full bg-[#888899]" />
+                            <span className="typing-dot w-1.5 h-1.5 rounded-full bg-[#888899]" />
+                            <span className="typing-dot w-1.5 h-1.5 rounded-full bg-[#888899]" />
+                          </div>
+                        ) : (
+                          <div className="prose-aria text-sm overflow-x-hidden">
+                            <ReactMarkdown remarkPlugins={[remarkGfm]} components={{
+                              code({ className, children, ...props }: any) {
+                                const match = /language-(\w+)/.exec(className || '');
+                                if (!props.inline && match) {
+                                  const lang = match[1];
+                                  const code = String(children).replace(/\n$/, '');
+                                  const art = msg.artifacts?.find(a => a.code.slice(0, 60) === code.slice(0, 60));
+                                  const isPreview = ['html','jsx','tsx','js','javascript'].includes(lang);
+                                  const isRunnable = ['python','javascript','typescript','bash','c','cpp','go','rust','ruby','java','r','php','swift','kotlin'].includes(lang);
+                                  return (
+                                    <div className="my-3 overflow-hidden rounded-lg border border-white/10">
+                                      <div className="flex items-center justify-between bg-[#1a1a28] px-3 py-1.5">
+                                        <span className="text-[10px] text-[#888899] font-mono">{lang}</span>
+                                        <div className="flex gap-2">
+                                          {isPreview && art && (
+                                            <button onClick={() => { setActiveArtifact(art); setRightPanel('preview'); }} className="text-[10px] text-[#6C63FF]">👁 Preview</button>
+                                          )}
+                                          {isRunnable && (
+                                            <button onClick={() => openExecutor(code, lang)} className="text-[10px] text-green-400">▶ Run</button>
+                                          )}
+                                          <button onClick={() => { navigator.clipboard.writeText(code); toast.success('Copied!'); }} className="text-[10px] text-[#888899] hover:text-white">Copy</button>
+                                        </div>
+                                      </div>
+                                      <div className="overflow-x-auto">
+                                        <SyntaxHighlighter style={oneDark} language={lang} PreTag="div"
+                                          customStyle={{ margin: 0, borderRadius: 0, fontSize: '11.5px', border: 'none' }}>
+                                          {code}
+                                        </SyntaxHighlighter>
                                       </div>
                                     </div>
-                                    <div className="overflow-x-auto">
-                                      <SyntaxHighlighter style={oneDark} language={lang} PreTag="div"
-                                        customStyle={{ margin: 0, borderRadius: 0, fontSize: '11.5px', border: 'none' }}>
-                                        {code}
-                                      </SyntaxHighlighter>
-                                    </div>
-                                  </div>
-                                );
-                              }
-                              return <code className="font-mono text-xs bg-white/10 px-1.5 py-0.5 rounded break-all">{children}</code>;
-                            },
-                          }}>
-                            {msg.content}
-                          </ReactMarkdown>
-                        </div>
-                      )}
-                      {msg.artifacts && msg.artifacts.length > 0 && (
-                        <div className="flex flex-wrap gap-1.5">
-                          {msg.artifacts.map(a => (
-                            <button key={a.id} onClick={() => { setActiveArtifact(a); if (['html','jsx','tsx'].includes(a.language)) setRightPanel('preview'); }}
-                              className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border transition-all ${activeArtifact?.id === a.id ? 'bg-[#6C63FF]/20 border-[#6C63FF]/40 text-[#a78bfa]' : 'bg-white/5 border-white/10 text-[#888899] hover:text-white'}`}>
-                              {['html','jsx','tsx'].includes(a.language) ? '👁' : '📄'} {a.title.slice(0, 20)} <span className="font-mono text-[10px] opacity-60">.{a.language}</span>
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-          <div ref={bottomRef} />
-        </div>
-
-        {/* Input — always pinned to bottom */}
-        <div className="flex-shrink-0 px-2" style={{ paddingBottom: 'max(8px, env(safe-area-inset-bottom))' }}>
-          {pluginCalls.length > 0 && (
-            <div className="flex gap-1 flex-wrap mb-1">
-              {pluginCalls.map((p, i) => (
-                <div key={i} className={`flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-lg border ${p.status === 'running' ? 'bg-orange-500/10 border-orange-500/20 text-orange-300 animate-pulse' : p.status === 'done' ? 'bg-green-500/10 border-green-500/20 text-green-400' : 'bg-red-500/10 border-red-500/20 text-red-400'}`}>
-                  {p.status === 'running' ? '⟳' : p.status === 'done' ? '✓' : '✗'} {p.name.replace(/_/g, ' ')}
+                                  );
+                                }
+                                return <code className="font-mono text-xs bg-white/10 px-1.5 py-0.5 rounded break-all">{children}</code>;
+                              },
+                            }}>
+                              {msg.content}
+                            </ReactMarkdown>
+                          </div>
+                        )}
+                        {msg.artifacts && msg.artifacts.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5">
+                            {msg.artifacts.map(a => (
+                              <button key={a.id} onClick={() => { setActiveArtifact(a); if (['html','jsx','tsx'].includes(a.language)) setRightPanel('preview'); }}
+                                className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border transition-all ${activeArtifact?.id === a.id ? 'bg-[#6C63FF]/20 border-[#6C63FF]/40 text-[#a78bfa]' : 'bg-white/5 border-white/10 text-[#888899] hover:text-white'}`}>
+                                {['html','jsx','tsx'].includes(a.language) ? '👁' : '📄'} {a.title.slice(0, 20)} <span className="font-mono text-[10px] opacity-60">.{a.language}</span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
-          )}
-          <div className="flex items-center gap-1.5 mb-1">
-            <VoiceMode onTranscript={t => { setInput(t); setTimeout(() => sendMessage(), 100); }} isSpeaking={speaking} onStopSpeaking={stopSpeaking} lastAiMessage={lastAiMessage} autoRead={false} />
-            {lastAiMessage && (
-              <button onClick={() => speaking ? stopSpeaking() : speak(lastAiMessage)}
-                className={`text-[10px] px-2 py-1 rounded-lg border transition-all ${speaking ? 'bg-blue-500/20 border-blue-500/40 text-blue-300' : 'bg-white/5 border-white/10 text-[#888899]'}`}>
-                {speaking ? '⏹' : '🔊'}
-              </button>
+            <div ref={bottomRef} />
+          </div>
+
+          {/* Row 3: Input — grid pins this to the bottom automatically */}
+          <div className="px-2 border-t border-white/5 bg-[#0e0e12]" style={{ paddingBottom: 'max(8px, env(safe-area-inset-bottom))', paddingTop: '8px' }}>
+            {pluginCalls.length > 0 && (
+              <div className="flex gap-1 flex-wrap mb-1">
+                {pluginCalls.map((p, i) => (
+                  <div key={i} className={`flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-lg border ${p.status === 'running' ? 'bg-orange-500/10 border-orange-500/20 text-orange-300 animate-pulse' : p.status === 'done' ? 'bg-green-500/10 border-green-500/20 text-green-400' : 'bg-red-500/10 border-red-500/20 text-red-400'}`}>
+                    {p.status === 'running' ? '⟳' : p.status === 'done' ? '✓' : '✗'} {p.name.replace(/_/g, ' ')}
+                  </div>
+                ))}
+              </div>
             )}
-          </div>
-          {pendingFile && (
-            <div className="flex items-center gap-2 mb-1 bg-white/5 border border-white/10 rounded-xl px-3 py-1.5 text-xs text-[#888899]">
-              📎 <span className="truncate flex-1">{pendingFile.name}</span>
-              <button onClick={() => setPendingFile(null)} className="hover:text-white flex-shrink-0">✕</button>
+            <div className="flex items-center gap-1.5 mb-1">
+              <VoiceMode onTranscript={t => { setInput(t); setTimeout(() => sendMessage(), 100); }} isSpeaking={speaking} onStopSpeaking={stopSpeaking} lastAiMessage={lastAiMessage} autoRead={false} />
+              {lastAiMessage && (
+                <button onClick={() => speaking ? stopSpeaking() : speak(lastAiMessage)}
+                  className={`text-[10px] px-2 py-1 rounded-lg border transition-all ${speaking ? 'bg-blue-500/20 border-blue-500/40 text-blue-300' : 'bg-white/5 border-white/10 text-[#888899]'}`}>
+                  {speaking ? '⏹' : '🔊'}
+                </button>
+              )}
             </div>
-          )}
-          <div className="flex gap-2 items-end bg-[#1f1f2a] border border-white/10 rounded-2xl px-3 py-2 focus-within:border-[#6C63FF]/50 transition-colors">
-            <input ref={fileRef} type="file" className="hidden" accept="image/*,.pdf,.txt,.csv,.md" onChange={e => e.target.files?.[0] && uploadFile(e.target.files[0])} />
-            <button onClick={() => fileRef.current?.click()} disabled={uploading} className="text-[#888899] hover:text-white flex-shrink-0 text-base leading-none pb-0.5">
-              {uploading ? <span className="animate-spin inline-block text-sm">⟳</span> : '📎'}
-            </button>
-            <textarea ref={textareaRef} value={input} onChange={e => setInput(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
-              placeholder={mode === 'builder' ? 'Describe what to build…' : 'Message Aria…'}
-              rows={1} className="flex-1 bg-transparent resize-none outline-none text-sm text-white placeholder:text-[#555566] max-h-28 leading-5"
-              style={{ minHeight: '20px' }}
-              onInput={e => { const t = e.target as HTMLTextAreaElement; t.style.height = 'auto'; t.style.height = Math.min(t.scrollHeight, 112) + 'px'; }}
-            />
-            <button onClick={sendMessage} disabled={loading || (!input.trim() && !pendingFile)}
-              className="bg-[#6C63FF] hover:bg-[#4b44cc] disabled:opacity-40 text-white w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0">
-              {loading ? <span className="animate-spin text-sm">⟳</span> : '↑'}
-            </button>
+            {pendingFile && (
+              <div className="flex items-center gap-2 mb-1 bg-white/5 border border-white/10 rounded-xl px-3 py-1.5 text-xs text-[#888899]">
+                📎 <span className="truncate flex-1">{pendingFile.name}</span>
+                <button onClick={() => setPendingFile(null)} className="hover:text-white flex-shrink-0">✕</button>
+              </div>
+            )}
+            <div className="flex gap-2 items-end bg-[#1f1f2a] border border-white/10 rounded-2xl px-3 py-2 focus-within:border-[#6C63FF]/50 transition-colors">
+              <input ref={fileRef} type="file" className="hidden" accept="image/*,.pdf,.txt,.csv,.md" onChange={e => e.target.files?.[0] && uploadFile(e.target.files[0])} />
+              <button onClick={() => fileRef.current?.click()} disabled={uploading} className="text-[#888899] hover:text-white flex-shrink-0 text-base leading-none pb-0.5">
+                {uploading ? <span className="animate-spin inline-block text-sm">⟳</span> : '📎'}
+              </button>
+              <textarea ref={textareaRef} value={input} onChange={e => setInput(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
+                placeholder={mode === 'builder' ? 'Describe what to build…' : 'Message Aria…'}
+                rows={1} className="flex-1 bg-transparent resize-none outline-none text-sm text-white placeholder:text-[#555566] max-h-28 leading-5"
+                style={{ minHeight: '20px' }}
+                onInput={e => { const t = e.target as HTMLTextAreaElement; t.style.height = 'auto'; t.style.height = Math.min(t.scrollHeight, 112) + 'px'; }}
+              />
+              <button onClick={sendMessage} disabled={loading || (!input.trim() && !pendingFile)}
+                className="bg-[#6C63FF] hover:bg-[#4b44cc] disabled:opacity-40 text-white w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0">
+                {loading ? <span className="animate-spin text-sm">⟳</span> : '↑'}
+              </button>
+            </div>
+            <p className="text-center text-[10px] text-[#555566] mt-1 hidden sm:block">Shift+Enter for new line · Aria can make mistakes</p>
           </div>
-          <p className="text-center text-[10px] text-[#555566] mt-1 hidden sm:block">Shift+Enter for new line · Aria can make mistakes</p>
         </div>
-      </div>
+      )}
 
       {/* ── RIGHT PANEL ── */}
       {showSplit && (
-        <div className="absolute inset-0 md:relative md:inset-auto bg-[#0e0e12]" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', background: '#0e0e12' }}
+          className="md:relative md:inset-auto md:flex-1 md:min-w-0">
           <div className="md:hidden flex items-center px-3 py-2 bg-[#16161d] border-b border-white/5 flex-shrink-0">
             <button onClick={closePanel} className="text-sm text-[#888899] hover:text-white">← Back to chat</button>
           </div>
