@@ -16,17 +16,28 @@ import { VoiceMode, useTextToSpeech } from '@/components/voice/VoiceMode';
 import { Canvas } from '@/components/canvas/Canvas';
 import { SIDEBAR_EVENT } from './Sidebar';
 
-interface Message {
-  role: 'user' | 'assistant';
-  content: string;
-  fileUrl?: string;
-  fileName?: string;
-  artifacts?: CodeArtifact[];
-}
+interface Message { role: 'user' | 'assistant'; content: string; fileUrl?: string; fileName?: string; artifacts?: CodeArtifact[]; }
+interface Props { conversationId?: string; }
 
-interface Props {
-  conversationId?: string;
-}
+const MODELS = [
+  { id: 'claude-haiku-4-5-20251001', label: 'Haiku 4.5', plan: 'free' },
+  { id: 'claude-sonnet-4-20250514',  label: 'Sonnet 4',  plan: 'pro' },
+  { id: 'claude-opus-4-20250514',    label: 'Opus 4',    plan: 'pro' },
+];
+
+const CHAT_STARTERS = [
+  { icon: '💡', text: 'Brainstorm startup ideas' },
+  { icon: '🐛', text: 'Debug my code' },
+  { icon: '✍️', text: 'Help me write an email' },
+  { icon: '📊', text: 'Analyse this data' },
+];
+
+const BUILDER_STARTERS = [
+  { icon: '🌐', text: 'Build a landing page for a SaaS' },
+  { icon: '🧩', text: 'Create a React dashboard with charts' },
+  { icon: '🎨', text: 'Design a pricing page with 3 tiers' },
+  { icon: '📝', text: 'Build a contact form with validation' },
+];
 
 export function ChatWindow({ conversationId }: Props) {
   const { data: session } = useSession();
@@ -35,15 +46,13 @@ export function ChatWindow({ conversationId }: Props) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-
   const [model, setModel] = useState('claude-haiku-4-5-20251001');
   const [mode, setMode] = useState<'chat' | 'builder'>('chat');
-
   const [webSearch, setWebSearch] = useState(false);
   const [deepResearch, setDeepResearch] = useState(false);
   const [plugins, setPlugins] = useState(true);
 
-  const [pendingFile, setPendingFile] = useState<any>(null);
+  const [pendingFile, setPendingFile] = useState<{ url: string; name: string; type: string } | null>(null);
   const [uploading, setUploading] = useState(false);
 
   const [activeConvoId, setActiveConvoId] = useState<string | undefined>(conversationId);
@@ -54,7 +63,6 @@ export function ChatWindow({ conversationId }: Props) {
     useState<'preview' | 'image' | 'project' | 'execute' | 'canvas' | null>(null);
 
   const [execCode, setExecCode] = useState<{ code: string; language: string } | null>(null);
-
   const [pluginCalls, setPluginCalls] = useState<any[]>([]);
   const [lastAiMessage, setLastAiMessage] = useState('');
 
@@ -83,7 +91,7 @@ export function ChatWindow({ conversationId }: Props) {
       .then(r => r.json())
       .then(data => {
         if (data.messages) {
-          const msgs = data.messages.map((m: any) => ({
+          const msgs: Message[] = data.messages.map((m: any) => ({
             ...m,
             artifacts: m.role === 'assistant' ? extractArtifacts(m.content) : undefined,
           }));
@@ -94,40 +102,13 @@ export function ChatWindow({ conversationId }: Props) {
         }
 
         if (data.model) setModel(data.model);
-      });
+      })
+      .catch(() => {});
   }, [conversationId]);
 
-  // Scroll
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
-
-  // Sync sidebar
-  useEffect(() => {
-    window.dispatchEvent(
-      new CustomEvent('aria:mode-change', {
-        detail: { mode, isPro, activeTool: rightPanel, plugins, webSearch, deepResearch },
-      })
-    );
-  }, [mode, isPro, rightPanel, plugins, webSearch, deepResearch]);
-
-  // Tool listener
-  useEffect(() => {
-    function onTool(e: Event) {
-      const tool = (e as CustomEvent).detail;
-
-      if (tool === 'mode:chat') setMode('chat');
-      if (tool === 'mode:builder') setMode('builder');
-
-      if (tool === 'image') setRightPanel(p => (p === 'image' ? null : 'image'));
-      if (tool === 'project') setRightPanel(p => (p === 'project' ? null : 'project'));
-      if (tool === 'canvas') setRightPanel(p => (p === 'canvas' ? null : 'canvas'));
-      if (tool === 'execute') setRightPanel(p => (p === 'execute' ? null : 'execute'));
-    }
-
-    window.addEventListener('aria:tool-select', onTool);
-    return () => window.removeEventListener('aria:tool-select', onTool);
-  }, []);
 
   function closePanel() {
     setActiveArtifact(null);
@@ -142,39 +123,23 @@ export function ChatWindow({ conversationId }: Props) {
   }
 
   return (
-    <div className="flex flex-col h-full relative overflow-hidden">
+    <div style={{ display:"flex", flexDirection:"column", height:"100%", overflow:"hidden" }}>
 
-      {/* CHAT AREA */}
-      <div
-        className={`grid grid-rows-[auto_1fr_auto] h-full transition-all ${
-          showSplit ? 'md:w-[46%]' : 'w-full'
-        }`}
-      >
-
-        {/* TOP BAR */}
-        <div className="flex items-center gap-2 px-3 py-2 border-b border-white/5 bg-[#16161d]">
-          <select
-            value={model}
-            onChange={e => setModel(e.target.value)}
-            className="bg-white/5 text-white text-xs px-2 py-1 rounded"
-          >
-            <option value="claude-haiku-4-5-20251001">Haiku</option>
-            <option value="claude-sonnet-4-20250514">Sonnet</option>
-          </select>
-        </div>
+      {/* CHAT */}
+      <div className={`grid grid-rows-[auto_1fr_auto] h-full ${showSplit ? 'md:w-[46%]' : 'w-full'}`}>
 
         {/* MESSAGES */}
-        <div className="overflow-y-auto min-h-0 px-3 py-4 flex flex-col">
+        <div className="overflow-y-auto px-3 py-4 min-h-0">
           {messages.map((msg, i) => (
-            <div key={i} className="mb-3">
-              <div className="text-sm text-white">{msg.content}</div>
+            <div key={i} className="mb-3 text-white text-sm">
+              {msg.content}
             </div>
           ))}
           <div ref={bottomRef} />
         </div>
 
         {/* INPUT */}
-        <div className="p-2 border-t border-white/5 bg-[#0e0e12]">
+        <div className="p-2 border-t border-white/5">
           <textarea
             ref={textareaRef}
             value={input}
@@ -184,23 +149,34 @@ export function ChatWindow({ conversationId }: Props) {
         </div>
       </div>
 
-      {/* RIGHT PANEL (FIXED) */}
+      {/* RIGHT PANEL — FIXED */}
       {showSplit && (
         <div className="absolute top-0 right-0 h-full w-[54%] bg-[#0e0e12] flex flex-col overflow-hidden">
 
-          <div className="flex-1 min-h-0 overflow-hidden">
+          <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
             {rightPanel === 'preview' && activeArtifact && (
-              <div className="h-full w-full flex flex-col">
-                <PreviewPanel artifact={activeArtifact} onClose={closePanel} />
-              </div>
+              <PreviewPanel artifact={activeArtifact} onClose={closePanel} />
             )}
 
-            {rightPanel === 'image' && <ImageGenerator isPro={isPro} onClose={closePanel} />}
-            {rightPanel === 'project' && <ProjectBuilder onClose={closePanel} />}
-            {rightPanel === 'execute' && execCode && (
-              <CodeExecutor code={execCode.code} language={execCode.language} onClose={closePanel} />
+            {rightPanel === 'image' && (
+              <ImageGenerator isPro={isPro} onClose={closePanel} />
             )}
-            {rightPanel === 'canvas' && <Canvas isPro={isPro} onClose={closePanel} />}
+
+            {rightPanel === 'project' && (
+              <ProjectBuilder onClose={closePanel} />
+            )}
+
+            {rightPanel === 'execute' && execCode && (
+              <CodeExecutor
+                code={execCode.code}
+                language={execCode.language}
+                onClose={closePanel}
+              />
+            )}
+
+            {rightPanel === 'canvas' && (
+              <Canvas isPro={isPro} onClose={closePanel} />
+            )}
           </div>
         </div>
       )}
