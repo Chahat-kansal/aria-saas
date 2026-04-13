@@ -87,9 +87,12 @@ export function Sidebar({ user }: Props) {
   return (
     <>
       {open && <div className="md:hidden fixed inset-0 bg-black/60 z-30" onClick={() => setOpen(false)} />}
+      
       <aside
-        style={{ height: '100dvh' }}
-        className={`fixed md:relative z-40 flex flex-col w-[280px] md:w-64 bg-[#16161d] border-r border-white/5 transition-transform duration-200 ${open ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
+        className={`fixed md:relative z-40 flex flex-col w-[280px] md:w-64 bg-[#16161d] border-r border-white/5 transition-transform duration-200 h-screen ${
+          open ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
+        }`}
+      >
 
         {/* Logo */}
         <div className="flex items-center gap-2 px-4 py-3.5 border-b border-white/5 flex-shrink-0">
@@ -110,7 +113,6 @@ export function Sidebar({ user }: Props) {
         {/* Tools */}
         {inChat && (
           <div className="px-3 pt-4 flex-shrink-0">
-            {/* Mode */}
             <div className="text-[10px] text-[#444455] uppercase tracking-wider px-1 mb-1.5">Mode</div>
             <div className="flex bg-white/5 rounded-xl p-1 mb-3 gap-1">
               {(['chat', 'builder'] as const).map(m => (
@@ -121,7 +123,7 @@ export function Sidebar({ user }: Props) {
                 </button>
               ))}
             </div>
-            {/* Tools */}
+
             <div className="text-[10px] text-[#444455] uppercase tracking-wider px-1 mb-1.5">Tools</div>
             <div className="space-y-0.5">
               <ToolBtn name="search"   emoji="🔍" label="Web search"       pro />
@@ -165,6 +167,7 @@ export function Sidebar({ user }: Props) {
               <Link href="/settings" onClick={() => setOpen(false)} className="block text-center text-xs text-[#6C63FF] hover:underline mt-2">Upgrade to Pro →</Link>
             </div>
           )}
+
           <Link href="/settings" onClick={() => setOpen(false)}
             className="flex items-center gap-2 px-2 py-2 rounded-xl hover:bg-white/5 transition-colors group">
             {user.image
