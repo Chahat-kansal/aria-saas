@@ -2,34 +2,38 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { NextResponse } from 'next/server';
 
-// Piston API — free, open source code execution engine
-// Supports Python, JavaScript, TypeScript, C, C++, Go, Rust, Ruby, Java, etc.
-const PISTON_URL = 'https://emkc.org/api/v2/piston';
+// Judge0 CE — free code execution API
+// Free tier: 100 requests/day on rapidapi, or use the public instance
+const JUDGE0_URL = 'https://ce.judge0.com';
 
-const LANGUAGE_MAP: Record<string, { language: string; version: string }> = {
-  python:     { language: 'python',     version: '3.10.0' },
-  python3:    { language: 'python',     version: '3.10.0' },
-  py:         { language: 'python',     version: '3.10.0' },
-  javascript: { language: 'javascript', version: '18.15.0' },
-  js:         { language: 'javascript', version: '18.15.0' },
-  typescript: { language: 'typescript', version: '5.0.3' },
-  ts:         { language: 'typescript', version: '5.0.3' },
-  bash:       { language: 'bash',       version: '5.2.0' },
-  sh:         { language: 'bash',       version: '5.2.0' },
-  c:          { language: 'c',          version: '10.2.0' },
-  cpp:        { language: 'c++',        version: '10.2.0' },
-  'c++':      { language: 'c++',        version: '10.2.0' },
-  go:         { language: 'go',         version: '1.16.2' },
-  rust:       { language: 'rust',       version: '1.50.0' },
-  ruby:       { language: 'ruby',       version: '3.0.1' },
-  java:       { language: 'java',       version: '15.0.2' },
-  r:          { language: 'r',          version: '4.1.1' },
-  php:        { language: 'php',        version: '8.2.3' },
-  swift:      { language: 'swift',      version: '5.3.3' },
-  kotlin:     { language: 'kotlin',     version: '1.8.20' },
+// Judge0 language IDs
+const LANGUAGE_MAP: Record<string, { id: number; name: string }> = {
+  python:     { id: 71,  name: 'Python 3' },
+  python3:    { id: 71,  name: 'Python 3' },
+  py:         { id: 71,  name: 'Python 3' },
+  javascript: { id: 63,  name: 'JavaScript (Node.js)' },
+  js:         { id: 63,  name: 'JavaScript (Node.js)' },
+  typescript: { id: 74,  name: 'TypeScript' },
+  ts:         { id: 74,  name: 'TypeScript' },
+  bash:       { id: 46,  name: 'Bash' },
+  sh:         { id: 46,  name: 'Bash' },
+  c:          { id: 50,  name: 'C (GCC)' },
+  cpp:        { id: 54,  name: 'C++ (GCC)' },
+  'c++':      { id: 54,  name: 'C++ (GCC)' },
+  go:         { id: 60,  name: 'Go' },
+  rust:       { id: 73,  name: 'Rust' },
+  ruby:       { id: 72,  name: 'Ruby' },
+  java:       { id: 62,  name: 'Java' },
+  r:          { id: 80,  name: 'R' },
+  php:        { id: 68,  name: 'PHP' },
+  swift:      { id: 83,  name: 'Swift' },
+  kotlin:     { id: 78,  name: 'Kotlin' },
+  csharp:     { id: 51,  name: 'C#' },
+  'c#':       { id: 51,  name: 'C#' },
+  sql:        { id: 82,  name: 'SQL' },
+  perl:       { id: 85,  name: 'Perl' },
+  lua:        { id: 64,  name: 'Lua' },
 };
-
-const TIMEOUT_MS = 10000;
 
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
@@ -48,53 +52,53 @@ export async function POST(req: Request) {
   }
 
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
-
-    const res = await fetch(`${PISTON_URL}/execute`, {
+    // Submit code for execution
+    const submitRes = await fetch(`${JUDGE0_URL}/submissions?base64_encoded=false&wait=true`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      signal: controller.signal,
       body: JSON.stringify({
-        language: lang.language,
-        version: lang.version,
-        files: [{ name: `main.${language}`, content: code }],
-        stdin,
-        args: [],
-        compile_timeout: 5000,
-        run_timeout: 8000,
-        compile_memory_limit: -1,
-        run_memory_limit: -1,
+        language_id: lang.id,
+        source_code: code,
+        stdin: stdin || '',
+        cpu_time_limit: 10,
+        memory_limit: 128000,
       }),
     });
 
-    clearTimeout(timeout);
-
-    if (!res.ok) {
-      const err = await res.text();
+    if (!submitRes.ok) {
+      const err = await submitRes.text();
       return NextResponse.json({ error: `Execution service error: ${err}` }, { status: 500 });
     }
 
-    const data = await res.json();
+    const result = await submitRes.json();
+
+    // Status IDs: 1=In Queue, 2=Processing, 3=Accepted, 4=Wrong Answer, 5=TLE, 6=CE, 11=RE, 12=MLE
+    const statusId = result.status?.id;
+    const stderr = result.stderr || result.compile_output || '';
+    const stdout = result.stdout || '';
+    const exitCode = statusId === 3 ? 0 : 1;
+
+    let errorMsg = '';
+    if (statusId === 5) errorMsg = 'Time limit exceeded (10s)';
+    else if (statusId === 12) errorMsg = 'Memory limit exceeded (128MB)';
+    else if (statusId === 6) errorMsg = `Compilation error:\n${result.compile_output || ''}`;
 
     return NextResponse.json({
-      stdout: data.run?.stdout || '',
-      stderr: data.run?.stderr || '',
-      code: data.run?.code ?? 0,
-      signal: data.run?.signal || null,
-      compile_output: data.compile?.output || '',
-      language: lang.language,
-      version: lang.version,
+      stdout,
+      stderr,
+      code: exitCode,
+      signal: null,
+      compile_output: result.compile_output || '',
+      language: lang.name,
+      error: errorMsg || undefined,
+      status: result.status?.description || 'Unknown',
     });
+
   } catch (err: any) {
-    if (err.name === 'AbortError') {
-      return NextResponse.json({ error: 'Code execution timed out (10s limit)' }, { status: 408 });
-    }
-    return NextResponse.json({ error: 'Execution service unavailable' }, { status: 503 });
+    return NextResponse.json({ error: `Execution failed: ${err.message}` }, { status: 503 });
   }
 }
 
-// GET supported languages
 export async function GET() {
   return NextResponse.json({ supported: Object.keys(LANGUAGE_MAP) });
 }
