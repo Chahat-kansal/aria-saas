@@ -215,12 +215,17 @@ export function ChatWindow({ conversationId }: Props) {
   function openExecutor(code: string, language: string) { setExecCode({ code, language }); setRightPanel('execute'); setActiveArtifact(null); }
 
   return (
-    <div className="flex h-full overflow-hidden">
+    <div style={{ display:'flex', height:'100%', overflow:'hidden', position:'relative' }}>
 
       {/* ── CHAT PANEL ── */}
-      <div className={`flex flex-col min-w-0 overflow-hidden transition-all duration-200 ${showSplit ? 'hidden md:flex md:w-[46%] md:min-w-[300px]' : 'flex-1'}`}>
+      <div style={{
+        display: 'flex', flexDirection: 'column',
+        flex: showSplit ? undefined : 1,
+        width: showSplit ? undefined : '100%',
+        minWidth: 0, overflow: 'hidden', height: '100%'
+      }} className={showSplit ? 'hidden md:flex md:w-[46%] md:min-w-[300px]' : ''}>
 
-        {/* Top bar: hamburger + model + status badges */}
+        {/* Top bar */}
         <div className="flex items-center gap-2 px-3 py-2 border-b border-white/5 bg-[#16161d] flex-shrink-0">
           <button onClick={() => window.dispatchEvent(new Event(SIDEBAR_EVENT))}
             className="md:hidden w-8 h-8 flex items-center justify-center rounded-lg bg-white/5 text-[#888899] border border-white/10 text-sm flex-shrink-0">☰</button>
@@ -236,10 +241,10 @@ export function ChatWindow({ conversationId }: Props) {
           </div>
         </div>
 
-        {/* Messages */}
-        <div className="flex-1 overflow-y-auto px-3 py-4 min-h-0 flex flex-col">
+        {/* Messages — flex-1 so it fills all space between toolbar and input */}
+        <div style={{ flex: 1, overflowY: 'auto', minHeight: 0, display: 'flex', flexDirection: 'column' }} className="px-3 py-4">
           {messages.length === 0 && (
-            <div className="flex-1 flex flex-col items-center justify-center text-center gap-3 pb-8 px-2">
+            <div style={{ flex: 1 }} className="flex flex-col items-center justify-center text-center gap-3 pb-8 px-2">
               <div className="w-12 h-12 rounded-full bg-gradient-to-br from-[#6C63FF] to-[#a78bfa] flex items-center justify-center text-xl animate-float shadow-[0_0_40px_rgba(108,99,255,0.3)]">
                 {mode === 'builder' ? '🔨' : '✦'}
               </div>
@@ -261,90 +266,89 @@ export function ChatWindow({ conversationId }: Props) {
           )}
 
           <div className="space-y-4">
-          {messages.map((msg, i) => (
-            <div key={i} className={`flex gap-2 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
-              <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold flex-shrink-0 self-start mt-0.5 ${msg.role === 'assistant' ? 'bg-gradient-to-br from-[#6C63FF] to-[#a78bfa] text-white' : 'bg-white/10 text-white'}`}>
-                {msg.role === 'assistant' ? 'A' : session?.user?.name?.[0] || 'U'}
-              </div>
-              <div className={`flex flex-col gap-1.5 min-w-0 ${msg.role === 'user' ? 'items-end max-w-[85%]' : 'flex-1'}`}>
-                {msg.fileUrl && (
-                  <div className="text-xs text-[#888899] bg-white/5 border border-white/10 rounded-lg px-3 py-1.5">
-                    📎 <a href={msg.fileUrl} target="_blank" rel="noopener" className="hover:underline">{msg.fileName}</a>
-                  </div>
-                )}
-                {msg.role === 'user' ? (
-                  <div className="bg-[#6C63FF] text-white px-3 py-2.5 rounded-2xl rounded-tr-sm text-sm leading-relaxed break-words">{msg.content}</div>
-                ) : (
-                  <>
-                    {msg.content === '' && loading && i === messages.length - 1 ? (
-                      <div className="flex gap-1 py-2">
-                        <span className="typing-dot w-1.5 h-1.5 rounded-full bg-[#888899]" />
-                        <span className="typing-dot w-1.5 h-1.5 rounded-full bg-[#888899]" />
-                        <span className="typing-dot w-1.5 h-1.5 rounded-full bg-[#888899]" />
-                      </div>
-                    ) : (
-                      <div className="prose-aria text-sm overflow-x-hidden">
-                        <ReactMarkdown remarkPlugins={[remarkGfm]} components={{
-                          code({ className, children, ...props }: any) {
-                            const match = /language-(\w+)/.exec(className || '');
-                            if (!props.inline && match) {
-                              const lang = match[1];
-                              const code = String(children).replace(/\n$/, '');
-                              const art = msg.artifacts?.find(a => a.code.slice(0, 60) === code.slice(0, 60));
-                              const isPreview = ['html','jsx','tsx','js','javascript'].includes(lang);
-                              const isRunnable = ['python','javascript','typescript','bash','c','cpp','go','rust','ruby','java','r','php','swift','kotlin'].includes(lang);
-                              return (
-                                <div className="my-3 overflow-hidden rounded-lg border border-white/10">
-                                  <div className="flex items-center justify-between bg-[#1a1a28] px-3 py-1.5">
-                                    <span className="text-[10px] text-[#888899] font-mono">{lang}</span>
-                                    <div className="flex gap-2">
-                                      {isPreview && art && (
-                                        <button onClick={() => { setActiveArtifact(art); setRightPanel('preview'); }} className="text-[10px] text-[#6C63FF]">👁 Preview</button>
-                                      )}
-                                      {isRunnable && (
-                                        <button onClick={() => openExecutor(code, lang)} className="text-[10px] text-green-400">▶ Run</button>
-                                      )}
-                                      <button onClick={() => { navigator.clipboard.writeText(code); toast.success('Copied!'); }} className="text-[10px] text-[#888899] hover:text-white">Copy</button>
+            {messages.map((msg, i) => (
+              <div key={i} className={`flex gap-2 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
+                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold flex-shrink-0 self-start mt-0.5 ${msg.role === 'assistant' ? 'bg-gradient-to-br from-[#6C63FF] to-[#a78bfa] text-white' : 'bg-white/10 text-white'}`}>
+                  {msg.role === 'assistant' ? 'A' : session?.user?.name?.[0] || 'U'}
+                </div>
+                <div className={`flex flex-col gap-1.5 min-w-0 ${msg.role === 'user' ? 'items-end max-w-[85%]' : 'flex-1'}`}>
+                  {msg.fileUrl && (
+                    <div className="text-xs text-[#888899] bg-white/5 border border-white/10 rounded-lg px-3 py-1.5">
+                      📎 <a href={msg.fileUrl} target="_blank" rel="noopener" className="hover:underline">{msg.fileName}</a>
+                    </div>
+                  )}
+                  {msg.role === 'user' ? (
+                    <div className="bg-[#6C63FF] text-white px-3 py-2.5 rounded-2xl rounded-tr-sm text-sm leading-relaxed break-words">{msg.content}</div>
+                  ) : (
+                    <>
+                      {msg.content === '' && loading && i === messages.length - 1 ? (
+                        <div className="flex gap-1 py-2">
+                          <span className="typing-dot w-1.5 h-1.5 rounded-full bg-[#888899]" />
+                          <span className="typing-dot w-1.5 h-1.5 rounded-full bg-[#888899]" />
+                          <span className="typing-dot w-1.5 h-1.5 rounded-full bg-[#888899]" />
+                        </div>
+                      ) : (
+                        <div className="prose-aria text-sm overflow-x-hidden">
+                          <ReactMarkdown remarkPlugins={[remarkGfm]} components={{
+                            code({ className, children, ...props }: any) {
+                              const match = /language-(\w+)/.exec(className || '');
+                              if (!props.inline && match) {
+                                const lang = match[1];
+                                const code = String(children).replace(/\n$/, '');
+                                const art = msg.artifacts?.find(a => a.code.slice(0, 60) === code.slice(0, 60));
+                                const isPreview = ['html','jsx','tsx','js','javascript'].includes(lang);
+                                const isRunnable = ['python','javascript','typescript','bash','c','cpp','go','rust','ruby','java','r','php','swift','kotlin'].includes(lang);
+                                return (
+                                  <div className="my-3 overflow-hidden rounded-lg border border-white/10">
+                                    <div className="flex items-center justify-between bg-[#1a1a28] px-3 py-1.5">
+                                      <span className="text-[10px] text-[#888899] font-mono">{lang}</span>
+                                      <div className="flex gap-2">
+                                        {isPreview && art && (
+                                          <button onClick={() => { setActiveArtifact(art); setRightPanel('preview'); }} className="text-[10px] text-[#6C63FF]">👁 Preview</button>
+                                        )}
+                                        {isRunnable && (
+                                          <button onClick={() => openExecutor(code, lang)} className="text-[10px] text-green-400">▶ Run</button>
+                                        )}
+                                        <button onClick={() => { navigator.clipboard.writeText(code); toast.success('Copied!'); }} className="text-[10px] text-[#888899] hover:text-white">Copy</button>
+                                      </div>
+                                    </div>
+                                    <div className="overflow-x-auto">
+                                      <SyntaxHighlighter style={oneDark} language={lang} PreTag="div"
+                                        customStyle={{ margin: 0, borderRadius: 0, fontSize: '11.5px', border: 'none' }}>
+                                        {code}
+                                      </SyntaxHighlighter>
                                     </div>
                                   </div>
-                                  <div className="overflow-x-auto">
-                                    <SyntaxHighlighter style={oneDark} language={lang} PreTag="div"
-                                      customStyle={{ margin: 0, borderRadius: 0, fontSize: '11.5px', border: 'none' }}>
-                                      {code}
-                                    </SyntaxHighlighter>
-                                  </div>
-                                </div>
-                              );
-                            }
-                            return <code className="font-mono text-xs bg-white/10 px-1.5 py-0.5 rounded break-all">{children}</code>;
-                          },
-                        }}>
-                          {msg.content}
-                        </ReactMarkdown>
-                      </div>
-                    )}
-                    {msg.artifacts && msg.artifacts.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5">
-                        {msg.artifacts.map(a => (
-                          <button key={a.id} onClick={() => { setActiveArtifact(a); if (['html','jsx','tsx'].includes(a.language)) setRightPanel('preview'); }}
-                            className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border transition-all ${activeArtifact?.id === a.id ? 'bg-[#6C63FF]/20 border-[#6C63FF]/40 text-[#a78bfa]' : 'bg-white/5 border-white/10 text-[#888899] hover:text-white'}`}>
-                            {['html','jsx','tsx'].includes(a.language) ? '👁' : '📄'} {a.title.slice(0, 20)} <span className="font-mono text-[10px] opacity-60">.{a.language}</span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </>
-                )}
+                                );
+                              }
+                              return <code className="font-mono text-xs bg-white/10 px-1.5 py-0.5 rounded break-all">{children}</code>;
+                            },
+                          }}>
+                            {msg.content}
+                          </ReactMarkdown>
+                        </div>
+                      )}
+                      {msg.artifacts && msg.artifacts.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5">
+                          {msg.artifacts.map(a => (
+                            <button key={a.id} onClick={() => { setActiveArtifact(a); if (['html','jsx','tsx'].includes(a.language)) setRightPanel('preview'); }}
+                              className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border transition-all ${activeArtifact?.id === a.id ? 'bg-[#6C63FF]/20 border-[#6C63FF]/40 text-[#a78bfa]' : 'bg-white/5 border-white/10 text-[#888899] hover:text-white'}`}>
+                              {['html','jsx','tsx'].includes(a.language) ? '👁' : '📄'} {a.title.slice(0, 20)} <span className="font-mono text-[10px] opacity-60">.{a.language}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            ))}
           </div>
           <div ref={bottomRef} />
         </div>
 
-        {/* Input */}
-        <div className="px-2 flex-shrink-0" style={{ paddingBottom: 'max(8px, env(safe-area-inset-bottom))' }}>
-          {/* Plugin status pills */}
+        {/* Input — always pinned to bottom */}
+        <div className="flex-shrink-0 px-2" style={{ paddingBottom: 'max(8px, env(safe-area-inset-bottom))' }}>
           {pluginCalls.length > 0 && (
             <div className="flex gap-1 flex-wrap mb-1">
               {pluginCalls.map((p, i) => (
@@ -354,7 +358,6 @@ export function ChatWindow({ conversationId }: Props) {
               ))}
             </div>
           )}
-          {/* Voice */}
           <div className="flex items-center gap-1.5 mb-1">
             <VoiceMode onTranscript={t => { setInput(t); setTimeout(() => sendMessage(), 100); }} isSpeaking={speaking} onStopSpeaking={stopSpeaking} lastAiMessage={lastAiMessage} autoRead={false} />
             {lastAiMessage && (
@@ -364,14 +367,12 @@ export function ChatWindow({ conversationId }: Props) {
               </button>
             )}
           </div>
-          {/* Pending file */}
           {pendingFile && (
             <div className="flex items-center gap-2 mb-1 bg-white/5 border border-white/10 rounded-xl px-3 py-1.5 text-xs text-[#888899]">
               📎 <span className="truncate flex-1">{pendingFile.name}</span>
               <button onClick={() => setPendingFile(null)} className="hover:text-white flex-shrink-0">✕</button>
             </div>
           )}
-          {/* Text input */}
           <div className="flex gap-2 items-end bg-[#1f1f2a] border border-white/10 rounded-2xl px-3 py-2 focus-within:border-[#6C63FF]/50 transition-colors">
             <input ref={fileRef} type="file" className="hidden" accept="image/*,.pdf,.txt,.csv,.md" onChange={e => e.target.files?.[0] && uploadFile(e.target.files[0])} />
             <button onClick={() => fileRef.current?.click()} disabled={uploading} className="text-[#888899] hover:text-white flex-shrink-0 text-base leading-none pb-0.5">
@@ -395,7 +396,7 @@ export function ChatWindow({ conversationId }: Props) {
 
       {/* ── RIGHT PANEL ── */}
       {showSplit && (
-        <div className="absolute inset-0 md:relative md:inset-auto flex-1 overflow-hidden min-w-0 bg-[#0e0e12] flex flex-col">
+        <div className="absolute inset-0 md:relative md:inset-auto bg-[#0e0e12]" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           <div className="md:hidden flex items-center px-3 py-2 bg-[#16161d] border-b border-white/5 flex-shrink-0">
             <button onClick={closePanel} className="text-sm text-[#888899] hover:text-white">← Back to chat</button>
           </div>
