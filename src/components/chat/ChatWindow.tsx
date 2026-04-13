@@ -216,7 +216,7 @@ export function ChatWindow({ conversationId }: Props) {
 
   return (
     // Outer: fills the <main> column completely
-    <div style={{ display:'flex', height:'100%', overflow:'hidden', position:'relative' }}>
+    <div className="flex flex-col h-full min-h-0 overflow-hidden relative">
 
       {/* ── CHAT PANEL ── */}
       {/* Uses CSS Grid: 3 rows = [topbar][messages(1fr)][input] */}
