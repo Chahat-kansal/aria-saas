@@ -191,7 +191,7 @@ export function ChatWindow({ conversationId }: Props) {
               const artifacts = extractArtifacts(fullContent, text);
               setMessages(prev => { const m = [...prev]; m[m.length - 1] = { ...m[m.length - 1], artifacts }; return m; });
               if (artifacts.length > 0) {
-                const last = {...artifacts[artifacts.length - 1], streaming: true, // keep loader for render transition};
+                const last = {...artifacts[artifacts.length - 1], streaming: true,};
 setActiveArtifact(last);
 
 setTimeout(() => {
