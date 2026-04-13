@@ -191,8 +191,19 @@ export function ChatWindow({ conversationId }: Props) {
               const artifacts = extractArtifacts(fullContent, text);
               setMessages(prev => { const m = [...prev]; m[m.length - 1] = { ...m[m.length - 1], artifacts }; return m; });
               if (artifacts.length > 0) {
-                const last = { ...artifacts[artifacts.length - 1], streaming: false };
-                setActiveArtifact(last);
+                const last = {
+  ...artifacts[artifacts.length - 1],
+  streaming: true,
+};
+
+setActiveArtifact(last);
+
+// optional smooth stop after render
+setTimeout(() => {
+  setActiveArtifact(prev =>
+    prev ? { ...prev, streaming: false } : null
+  );
+}, 300);
                 if (['html', 'jsx', 'tsx'].includes(last.language)) setRightPanel('preview');
               } else if (mode === 'builder') {
                 setActiveArtifact(prev => prev ? { ...prev, streaming: false } : null);
