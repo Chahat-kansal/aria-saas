@@ -17,14 +17,34 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function ChatLayout({ children }: { children: React.ReactNode }) {
+  const session = await getServerSession(authOptions);
+  if (!session) redirect('/login');
+
   return (
-    <html lang="en" className="h-full dark">
-      <body
-        className={`${sora.variable} ${mono.variable} font-sans bg-[#0e0e12] text-[#f0f0f5] antialiased h-full`}
+    <div
+      style={{
+        display: 'grid',
+        gridTemplateColumns: 'auto 1fr',
+        height: '100dvh',
+        overflow: 'hidden',
+        background: '#0e0e12',
+      }}
+    >
+      <Sidebar user={session.user as any} />
+
+      <main
+        style={{
+          minWidth: 0,
+          minHeight: 0,      // ✅ IMPORTANT FIX
+          height: '100dvh',  // ✅ CRITICAL FIX
+          overflow: 'hidden',
+          display: 'flex',
+          flexDirection: 'column',
+        }}
       >
-        <Providers>{children}</Providers>
-      </body>
-    </html>
+        {children}
+      </main>
+    </div>
   );
 }
