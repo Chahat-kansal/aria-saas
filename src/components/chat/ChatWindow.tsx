@@ -226,6 +226,7 @@ export function ChatWindow({ conversationId }: Props) {
             visibility: showSplit ? 'hidden' : 'visible', pointerEvents: showSplit ? 'none' : 'auto',
             gridTemplateRows: 'auto 1fr auto',
             flex: 1,
+            height: 100vh,
             minWidth: 0,
             overflow: 'hidden',
           }}
