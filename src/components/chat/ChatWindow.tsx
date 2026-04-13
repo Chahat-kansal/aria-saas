@@ -220,18 +220,18 @@ export function ChatWindow({ conversationId }: Props) {
 
       {/* ── CHAT PANEL ── */}
       {/* Uses CSS Grid: 3 rows = [topbar][messages(1fr)][input] */}
-      {(!showSplit || typeof window !== 'undefined') && (
+      {true && (
         <div
           style={{
-            display: showSplit ? 'none' : 'grid',
+            display: 'grid',
             gridTemplateRows: 'auto minmax(0, 1fr) auto',
-            width: '100%',
+            width: showSplit ? undefined : '100%',
             height: '100%',
             minWidth: 0,
             minHeight: 0,
             overflow: 'hidden',
           }}
-          className={showSplit ? 'md:!grid md:w-[46%] md:min-w-[300px]' : ''}
+          className={showSplit ? 'hidden md:grid md:w-[46%] md:min-w-[300px]' : ''}
         >
 
           {/* Row 1: Top bar */}
@@ -251,9 +251,9 @@ export function ChatWindow({ conversationId }: Props) {
           </div>
 
           {/* Row 2: Messages — grid gives this row exactly the remaining space */}
-         <div style={{ overflowY:"auto", minHeight:0 }} className="px-3 py-4">
+         <div style={{ overflowY:"auto", minHeight:0, height:"100%", display:"flex", flexDirection:"column" }} className="px-3 py-4">
             {messages.length === 0 && (
-              <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", height:"100%", textAlign:"center", gap:"12px", paddingBottom:"32px", paddingLeft:"8px", paddingRight:"8px" }}>
+              <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", flex:1, textAlign:"center", gap:"12px", paddingBottom:"32px", paddingLeft:"8px", paddingRight:"8px" }}>
                 <div className="w-12 h-12 rounded-full bg-gradient-to-br from-[#6C63FF] to-[#a78bfa] flex items-center justify-center text-xl animate-float shadow-[0_0_40px_rgba(108,99,255,0.3)]">
                   {mode === 'builder' ? '🔨' : '✦'}
                 </div>
