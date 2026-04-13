@@ -15,7 +15,7 @@ export default async function ChatLayout({ children }: { children: React.ReactNo
       background: '#0e0e12',
     }}>
       <Sidebar user={session.user as any} />
-      <main style={{ minWidth: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+      <main style={{ minWidth: 0, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
         {children}
       </main>
     </div>
