@@ -7,9 +7,9 @@ export default async function ChatLayout({ children }: { children: React.ReactNo
   const session = await getServerSession(authOptions);
   if (!session) redirect('/login');
   return (
-    <div className="flex bg-[#0e0e12] overflow-hidden" style={{ height: '100dvh' }}>
+    <div className="flex bg-[#0e0e12]" style={{ height: '100dvh', overflow: 'hidden' }}>
       <Sidebar user={session.user as any} />
-      <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
+      <main style={{ flex: 1, minWidth: 0, height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         {children}
       </main>
     </div>
