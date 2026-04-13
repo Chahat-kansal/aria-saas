@@ -250,7 +250,7 @@ export function ChatWindow({ conversationId }: Props) {
           </div>
 
           {/* Row 2: Messages — grid gives this row exactly the remaining space */}
-          <div style={{ overflowY: 'auto', minHeight: 0 }} className="px-3 py-4"> className="px-3 py-4">
+         <div style={{ overflowY: 'auto', minHeight: 0 }} className="px-3 py-4">
             {messages.length === 0 && (
               <div style={{ flex: 1 }} className="flex flex-col items-center justify-center text-center gap-3 pb-8 px-2">
                 <div className="w-12 h-12 rounded-full bg-gradient-to-br from-[#6C63FF] to-[#a78bfa] flex items-center justify-center text-xl animate-float shadow-[0_0_40px_rgba(108,99,255,0.3)]">
