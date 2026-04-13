@@ -10,7 +10,7 @@ export default async function ChatLayout({ children }: { children: React.ReactNo
     <div style={{
       display: 'grid',
       gridTemplateColumns: 'auto 1fr',
-      height: '100dvh',
+      height: '100vh',
       overflow: 'hidden',
       background: '#0e0e12',
     }}>
