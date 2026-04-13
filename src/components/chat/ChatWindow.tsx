@@ -237,9 +237,9 @@ export function ChatWindow({ conversationId }: Props) {
         </div>
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto px-3 py-4 space-y-4 min-h-0">
+        <div className="flex-1 overflow-y-auto px-3 py-4 min-h-0 flex flex-col">
           {messages.length === 0 && (
-            <div className="flex flex-col items-center justify-center h-full text-center gap-3 pb-8 px-2">
+            <div className="flex-1 flex flex-col items-center justify-center text-center gap-3 pb-8 px-2">
               <div className="w-12 h-12 rounded-full bg-gradient-to-br from-[#6C63FF] to-[#a78bfa] flex items-center justify-center text-xl animate-float shadow-[0_0_40px_rgba(108,99,255,0.3)]">
                 {mode === 'builder' ? '🔨' : '✦'}
               </div>
@@ -260,6 +260,7 @@ export function ChatWindow({ conversationId }: Props) {
             </div>
           )}
 
+          <div className="space-y-4">
           {messages.map((msg, i) => (
             <div key={i} className={`flex gap-2 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
               <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold flex-shrink-0 self-start mt-0.5 ${msg.role === 'assistant' ? 'bg-gradient-to-br from-[#6C63FF] to-[#a78bfa] text-white' : 'bg-white/10 text-white'}`}>
@@ -337,6 +338,7 @@ export function ChatWindow({ conversationId }: Props) {
               </div>
             </div>
           ))}
+          </div>
           <div ref={bottomRef} />
         </div>
 
