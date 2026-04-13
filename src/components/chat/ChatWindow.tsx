@@ -220,10 +220,10 @@ export function ChatWindow({ conversationId }: Props) {
 
       {/* ── CHAT PANEL ── */}
       {/* Uses CSS Grid: 3 rows = [topbar][messages(1fr)][input] */}
-      {(!showSplit || typeof window !== 'undefined') && (
+      {!showSplit && (
         <div
           style={{
-            display: showSplit ? 'none' : 'grid',
+            visibility: showSplit ? 'hidden' : 'visible', pointerEvents: showSplit ? 'none' : 'auto',
             gridTemplateRows: 'auto 1fr auto',
             flex: 1,
             minWidth: 0,
