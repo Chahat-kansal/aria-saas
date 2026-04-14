@@ -5,6 +5,9 @@ import { User } from '@/models/User';
 import { Conversation } from '@/models/Conversation';
 import Anthropic from '@anthropic-ai/sdk';
 
+export const maxDuration = 60; // Allow 60s for Claude streaming
+
+
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 const BUILDER_SYSTEM = `You are Aria Builder — an elite full-stack developer and UI/UX designer with 20 years of experience building production web applications.
