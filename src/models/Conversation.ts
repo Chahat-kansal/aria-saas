@@ -38,6 +38,12 @@ const ConversationSchema = new Schema<IConversation>({
   title: { type: String, default: 'New conversation' },
   messages: [MessageSchema],
   aimodel: { type: String, default: 'claude-sonnet-4-20250514' },
+
+  
+  shareToken: { type: String, index: { sparse: true } },
+  parentConversationId: String,
+  branchPoint: Number,
+  tone: { type: String, default: 'default' },
 }, { timestamps: true });
 
 export const Conversation = mongoose.models.Conversation || mongoose.model<IConversation>('Conversation', ConversationSchema);
