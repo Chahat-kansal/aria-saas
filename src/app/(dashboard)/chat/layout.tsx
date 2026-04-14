@@ -24,8 +24,9 @@ export default async function ChatLayout({
       <Sidebar user={session.user as any} />
       <main
         style={{
+          flex: 1,
           minWidth: 0,
-          height: '100%',
+          minHeight: 0,
           overflow: 'hidden',
           display: 'flex',
           flexDirection: 'column',
