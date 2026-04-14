@@ -64,7 +64,7 @@ export function ChatWindow({ conversationId }: Props) {
   const fileRef = useRef<HTMLInputElement>(null);
 
   const isPro = userPlan === 'pro';
-  const showSplit = !!activeArtifact || !!rightPanel;
+  const showSplit = (!!activeArtifact && (activeArtifact.streaming || !!activeArtifact.code)) || (!!rightPanel && rightPanel !== null);
 
   // Load user plan
   useEffect(() => {
@@ -141,9 +141,9 @@ export function ChatWindow({ conversationId }: Props) {
     setPluginCalls([]);
 
     if (mode === 'builder') {
-      const placeholder: CodeArtifact = { id: crypto.randomUUID(), title: text.slice(0, 40), language: 'html', code: '', streaming: true };
-      setActiveArtifact(placeholder);
-      setRightPanel('preview');
+      // Don't show split yet - wait until we have actual code
+      setRightPanel(null);
+      setActiveArtifact(null);
     }
     setMessages(prev => [...prev, { role: 'assistant', content: '' }]);
 
@@ -178,8 +178,16 @@ export function ChatWindow({ conversationId }: Props) {
                 if (match) {
                   const rawCode = match[2].replace(/```\s*$/, ''); // strip trailing ``` if present
                   const lang = (match[1] || 'html').toLowerCase() as CodeArtifact['language'];
-                  if (rawCode.trim()) {
-                    setActiveArtifact(prev => prev ? { ...prev, language: lang, code: rawCode, streaming: true } : null);
+                  if (rawCode.trim().length > 20) {
+                    const art: CodeArtifact = {
+                      id: activeArtifact?.id || crypto.randomUUID(),
+                      title: text.slice(0, 40),
+                      language: lang,
+                      code: rawCode,
+                      streaming: true,
+                    };
+                    setActiveArtifact(art);
+                    setRightPanel('preview');
                   }
                 }
               }
@@ -204,7 +212,7 @@ export function ChatWindow({ conversationId }: Props) {
                 if (fm) {
                   const lang = (fm[1] || 'html').toLowerCase() as CodeArtifact['language'];
                   const code = fm[2].trim();
-                  const art: CodeArtifact = { id: crypto.randomUUID(), title: text.slice(0, 40), language: lang, code, streaming: false };
+                  const art: CodeArtifact = { id: (typeof crypto !== "undefined" ? crypto : (globalThis as any).crypto).randomUUID(), title: text.slice(0, 40), language: lang, code, streaming: false };
                   setActiveArtifact(art);
                   if (['html','jsx','tsx'].includes(lang)) setRightPanel('preview');
                 } else {
@@ -239,7 +247,7 @@ export function ChatWindow({ conversationId }: Props) {
 
   return (
     // Outer: fills the <main> column completely
-    <div style={{ display:"flex", flexDirection:"column", flex:1, minHeight:0, overflow:"hidden", position:"relative" }}>
+    <div style={{ display:"flex", flexDirection: showSplit ? "row" : "column", flex:1, minHeight:0, overflow:"hidden", position:"relative" }}>
 
       {/* ── CHAT PANEL ── */}
       {/* Uses CSS Grid: 3 rows = [topbar][messages(1fr)][input] */}
@@ -248,12 +256,12 @@ export function ChatWindow({ conversationId }: Props) {
           style={{
             display: 'grid',
             gridTemplateRows: 'auto minmax(0, 1fr) auto',
-            flex: 1,
+            flex: showSplit ? '0 0 45%' : 1,
             minWidth: 0,
             minHeight: 0,
             overflow: 'hidden',
           }}
-          className={showSplit ? 'hidden md:grid md:w-[46%] md:min-w-[300px]' : ''}
+          className={showSplit ? 'hidden md:block' : ''}
         >
 
           {/* Row 1: Top bar */}
@@ -436,8 +444,8 @@ export function ChatWindow({ conversationId }: Props) {
 
       {/* ── RIGHT PANEL ── */}
       {showSplit && (
-        <div style={{ display:'flex', flexDirection:'column', minWidth:0, minHeight:0, overflow:'hidden', background:'#0e0e12' }}
-          className="absolute inset-0 md:relative md:inset-auto md:flex-1">
+        <div style={{ display:'flex', flexDirection:'column', flex:1, minWidth:0, minHeight:0, overflow:'hidden', background:'#0e0e12' }}
+          className="absolute inset-0 md:relative md:inset-auto">
           <div className="md:hidden flex items-center px-3 py-2 bg-[#16161d] border-b border-white/5 flex-shrink-0">
             <button onClick={closePanel} className="text-sm text-[#888899] hover:text-white">← Back to chat</button>
           </div>
