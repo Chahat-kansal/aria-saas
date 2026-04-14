@@ -174,7 +174,7 @@ export function ChatWindow({ conversationId }: Props) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
   const [model, setModel] = useState('claude-haiku-4-5-20251001');
-  const [mode, setMode] = useState<'chat' | 'builder'>('chat');
+  const [mode, setMode] = useState<'chat' | 'builder' | 'agent'>('chat');
   const [webSearch, setWebSearch] = useState(false);
   const [deepResearch, setDeepResearch] = useState(false);
   const [plugins, setPlugins] = useState(true);
@@ -269,6 +269,7 @@ export function ChatWindow({ conversationId }: Props) {
     }
 
     if (tool === 'mode:agent') {
+      setMode('agent');
       setRightPanel('agent');
       setActiveArtifact(null);
       return;
