@@ -14,6 +14,8 @@ import { ImageGenerator } from '@/components/project/ImageGenerator';
 import { ProjectBuilder } from '@/components/project/ProjectBuilder';
 import { VoiceMode, useTextToSpeech } from '@/components/voice/VoiceMode';
 import { Canvas } from '@/components/canvas/Canvas';
+import { ScreenshotToCode } from './ScreenshotToCode';
+import { AgentMode } from './AgentMode';
 import { SIDEBAR_EVENT } from './Sidebar';
 
 interface Message { role: 'user' | 'assistant'; content: string; fileUrl?: string; fileName?: string; artifacts?: CodeArtifact[]; userPrompt?: string; }
@@ -140,16 +142,18 @@ const MessageBubble = memo(({ msg, isLast, loading, session, onPreview, onRun, o
         )}
         {/* Regenerate button — shown below last assistant message */}
         {isLast && !loading && onRegenerate && (
-          <button onClick={onRegenerate}
-            className="flex items-center gap-1.5 text-[10px] text-[#555566] hover:text-[#888899] transition-colors mt-1 group">
-            <svg className="w-3 h-3 group-hover:rotate-180 transition-transform duration-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
-              <path d="M21 3v5h-5"/>
-              <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
-              <path d="M8 16H3v5"/>
-            </svg>
-            Regenerate response
-          </button>
+          <div className="flex items-center gap-3 mt-1">
+            <button onClick={onRegenerate}
+              className="flex items-center gap-1.5 text-[10px] text-[#555566] hover:text-[#888899] transition-colors group">
+              <svg className="w-3 h-3 group-hover:rotate-180 transition-transform duration-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
+                <path d="M21 3v5h-5"/>
+                <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
+                <path d="M8 16H3v5"/>
+              </svg>
+              Regenerate
+            </button>
+          </div>
         )}
       </div>
     </div>
@@ -179,10 +183,12 @@ export function ChatWindow({ conversationId }: Props) {
   const [activeConvoId, setActiveConvoId] = useState<string | undefined>(conversationId);
   const [userPlan, setUserPlan] = useState('free');
   const [activeArtifact, setActiveArtifact] = useState<CodeArtifact | null>(null);
-  const [rightPanel, setRightPanel] = useState<'preview' | 'image' | 'project' | 'execute' | 'canvas' | null>(null);
+  const [rightPanel, setRightPanel] = useState<'preview' | 'image' | 'project' | 'execute' | 'canvas' | 'screenshot' | 'agent' | null>(null);
   const [execCode, setExecCode] = useState<{ code: string; language: string } | null>(null);
   const [pluginCalls, setPluginCalls] = useState<{ name: string; status: 'running' | 'done' | 'error' }[]>([]);
   const [lastAiMessage, setLastAiMessage] = useState('');
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const [sharing, setSharing] = useState(false);
   const { speak, stop: stopSpeaking, speaking } = useTextToSpeech();
 
   // Refs — no re-renders on change
@@ -258,6 +264,8 @@ export function ChatWindow({ conversationId }: Props) {
       if (tool === 'project')      { setRightPanel(p => p === 'project' ? null : 'project'); setActiveArtifact(null); return; }
       if (tool === 'canvas')       { setRightPanel(p => p === 'canvas'  ? null : 'canvas');  setActiveArtifact(null); return; }
       if (tool === 'execute')      { setRightPanel(p => p === 'execute' ? null : 'execute'); setActiveArtifact(null); return; }
+      if (tool === 'screenshot')   { setRightPanel(p => p === 'screenshot' ? null : 'screenshot'); setActiveArtifact(null); return; }
+      if (tool === 'agent')        { setRightPanel(p => p === 'agent' ? null : 'agent'); setActiveArtifact(null); return; }
     }
     window.addEventListener('aria:tool-select', onTool);
     return () => window.removeEventListener('aria:tool-select', onTool);
@@ -378,6 +386,25 @@ export function ChatWindow({ conversationId }: Props) {
 
   const closePanel = useCallback(() => { setActiveArtifact(null); setRightPanel(null); setExecCode(null); }, []);
 
+  const shareConversation = useCallback(async () => {
+    const s = stateRef.current;
+    if (!s.activeConvoId) return;
+    setSharing(true);
+    try {
+      const res = await fetch('/api/share', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ conversationId: s.activeConvoId }) });
+      const data = await res.json();
+      if (data.shareUrl) { setShareUrl(data.shareUrl); navigator.clipboard.writeText(data.shareUrl); toast.success('Share link copied!'); }
+    } finally { setSharing(false); }
+  }, []);
+
+  const branchConversation = useCallback(async (fromIndex: number) => {
+    const s = stateRef.current;
+    if (!s.activeConvoId) return;
+    const res = await fetch('/api/conversations/branch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ conversationId: s.activeConvoId, fromMessageIndex: fromIndex }) });
+    const data = await res.json();
+    if (data.conversationId) { toast.success('Branch created!'); window.location.href = `/chat/${data.conversationId}`; }
+  }, []);
+
   // Regenerate: remove last assistant message and resend the last user message
   const regenerate = useCallback(async () => {
     const s = stateRef.current;
@@ -429,7 +456,13 @@ export function ChatWindow({ conversationId }: Props) {
             {deepResearch && <span className="text-[10px] bg-purple-500/20 text-purple-300 border border-purple-500/30 px-2 py-0.5 rounded-full whitespace-nowrap">🔬 Research</span>}
             {!plugins && <span className="text-[10px] bg-red-500/10 text-red-400 border border-red-500/20 px-2 py-0.5 rounded-full whitespace-nowrap">Plugins off</span>}
             {activeConvoId && (
-              <div className="relative group ml-auto flex-shrink-0">
+              <button onClick={shareConversation} disabled={sharing} title="Share conversation"
+                className="text-[#555566] hover:text-white transition-colors p-1 rounded-lg hover:bg-white/5 flex-shrink-0" style={{marginLeft:'auto'}}>
+                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16,6 12,2 8,6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
+              </button>
+            )}
+            {activeConvoId && (
+              <div className="relative group flex-shrink-0">
                 <button className="text-[10px] text-[#555566] hover:text-white transition-colors px-2 py-1 rounded-lg hover:bg-white/5">⬇ Export</button>
                 <div className="absolute right-0 top-full mt-1 bg-[#16161d] border border-white/10 rounded-xl overflow-hidden shadow-xl hidden group-hover:block z-50 w-36">
                   <button onClick={() => exportConversation('markdown')} className="w-full text-left px-3 py-2 text-xs text-[#888899] hover:text-white hover:bg-white/5">📄 Markdown</button>
@@ -553,6 +586,8 @@ export function ChatWindow({ conversationId }: Props) {
               </div>
             )}
             {rightPanel === 'canvas' && <Canvas isPro={isPro} onClose={closePanel} />}
+            {rightPanel === 'screenshot' && <ScreenshotToCode onClose={closePanel} />}
+            {rightPanel === 'agent' && <AgentMode isPro={isPro} onClose={closePanel} />}
           </div>
         </div>
       )}
