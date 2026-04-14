@@ -16,7 +16,7 @@ import { VoiceMode, useTextToSpeech } from '@/components/voice/VoiceMode';
 import { Canvas } from '@/components/canvas/Canvas';
 import { SIDEBAR_EVENT } from './Sidebar';
 
-interface Message { role: 'user' | 'assistant'; content: string; fileUrl?: string; fileName?: string; artifacts?: CodeArtifact[]; }
+interface Message { role: 'user' | 'assistant'; content: string; fileUrl?: string; fileName?: string; artifacts?: CodeArtifact[]; userPrompt?: string; }
 interface Props { conversationId?: string; }
 
 const MODELS = [
@@ -45,6 +45,8 @@ const MessageBubble = memo(({ msg, isLast, loading, session, onPreview, onRun, o
   onRun: (code: string, lang: string) => void;
   onArtifactClick: (art: CodeArtifact) => void;
   activeArtifactId?: string;
+  onRegenerate?: () => void;
+  msgIndex: number;
 }) => {
   if (msg.role === 'user') {
     return (
@@ -81,12 +83,36 @@ const MessageBubble = memo(({ msg, isLast, loading, session, onPreview, onRun, o
                   const art = msg.artifacts?.find(a => a.code.slice(0, 60) === code.slice(0, 60));
                   const isPreview = ['html','jsx','tsx','js','javascript'].includes(lang);
                   const isRunnable = ['python','javascript','typescript','bash','c','cpp','go','rust','ruby','java','r','php','swift','kotlin'].includes(lang);
+                  // Long code (>20 lines or previewable) → show as artifact pill, not inline flood
+                  const lineCount = code.split('\n').length;
+                  const isLongCode = lineCount > 15 || isPreview;
+                  
+                  if (isLongCode && art) {
+                    // Show as a clean file pill — like Claude's artifact cards
+                    return (
+                      <div className="my-2 flex items-center gap-3 bg-[#16161d] border border-white/10 rounded-xl px-4 py-3 cursor-pointer hover:border-[#6C63FF]/40 transition-all group" onClick={() => isPreview ? onPreview(art) : onRun(code, lang)}>
+                        <div className="w-8 h-8 rounded-lg bg-[#6C63FF]/20 flex items-center justify-center flex-shrink-0 text-sm">
+                          {isPreview ? '👁' : isRunnable ? '▶' : '📄'}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-medium text-white truncate">{art.title || `${lang} file`}</div>
+                          <div className="text-[10px] text-[#555566]">{lineCount} lines · <span className="font-mono">.{lang}</span></div>
+                        </div>
+                        <div className="flex gap-2 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                          {isPreview && <span className="text-[10px] text-[#6C63FF]">Open preview →</span>}
+                          {isRunnable && !isPreview && <span className="text-[10px] text-green-400">Run →</span>}
+                          <button onClick={e => { e.stopPropagation(); navigator.clipboard.writeText(code); toast.success('Copied!'); }} className="text-[10px] text-[#888899] hover:text-white">Copy</button>
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  // Short code → show inline with syntax highlighting
                   return (
                     <div className="my-3 overflow-hidden rounded-lg border border-white/10">
                       <div className="flex items-center justify-between bg-[#1a1a28] px-3 py-1.5">
                         <span className="text-[10px] text-[#888899] font-mono">{lang}</span>
                         <div className="flex gap-2">
-                          {isPreview && art && <button onClick={() => onPreview(art)} className="text-[10px] text-[#6C63FF]">👁 Preview</button>}
                           {isRunnable && <button onClick={() => onRun(code, lang)} className="text-[10px] text-green-400">▶ Run</button>}
                           <button onClick={() => { navigator.clipboard.writeText(code); toast.success('Copied!'); }} className="text-[10px] text-[#888899] hover:text-white">Copy</button>
                         </div>
@@ -112,6 +138,19 @@ const MessageBubble = memo(({ msg, isLast, loading, session, onPreview, onRun, o
             ))}
           </div>
         )}
+        {/* Regenerate button — shown below last assistant message */}
+        {isLast && !loading && onRegenerate && (
+          <button onClick={onRegenerate}
+            className="flex items-center gap-1.5 text-[10px] text-[#555566] hover:text-[#888899] transition-colors mt-1 group">
+            <svg className="w-3 h-3 group-hover:rotate-180 transition-transform duration-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
+              <path d="M21 3v5h-5"/>
+              <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
+              <path d="M8 16H3v5"/>
+            </svg>
+            Regenerate response
+          </button>
+        )}
       </div>
     </div>
   );
@@ -120,7 +159,8 @@ const MessageBubble = memo(({ msg, isLast, loading, session, onPreview, onRun, o
   return prev.msg.content === next.msg.content &&
     prev.msg.artifacts === next.msg.artifacts &&
     prev.loading === next.loading &&
-    prev.activeArtifactId === next.activeArtifactId;
+    prev.activeArtifactId === next.activeArtifactId &&
+    prev.isLast === next.isLast;
 });
 MessageBubble.displayName = 'MessageBubble';
 
@@ -244,7 +284,7 @@ export function ChatWindow({ conversationId }: Props) {
     // Clear textarea immediately - feels instant
     if (textareaRef.current) { textareaRef.current.value = ''; textareaRef.current.style.height = 'auto'; }
 
-    setMessages(prev => [...prev, { role: 'user', content: text, fileUrl: s.pendingFile?.url, fileName: s.pendingFile?.name }]);
+    setMessages(prev => [...prev, { role: 'user', content: text, fileUrl: s.pendingFile?.url, fileName: s.pendingFile?.name, userPrompt: text }]);
     setPendingFile(null);
     setLoading(true);
     setPluginCalls([]);
@@ -337,6 +377,33 @@ export function ChatWindow({ conversationId }: Props) {
   }
 
   const closePanel = useCallback(() => { setActiveArtifact(null); setRightPanel(null); setExecCode(null); }, []);
+
+  // Regenerate: remove last assistant message and resend the last user message
+  const regenerate = useCallback(async () => {
+    const s = stateRef.current;
+    if (s.loading) return;
+    setMessages(prev => {
+      // Find and remove the last assistant message
+      const lastAssistant = [...prev].reverse().findIndex(m => m.role === 'assistant');
+      if (lastAssistant === -1) return prev;
+      const idx = prev.length - 1 - lastAssistant;
+      return prev.slice(0, idx);
+    });
+    // Get last user message prompt and re-fire it
+    setMessages(prev => {
+      const lastUser = [...prev].reverse().find(m => m.role === 'user');
+      if (lastUser && textareaRef.current) {
+        // Temporarily set textarea value so sendMessage picks it up
+        textareaRef.current.value = lastUser.content;
+        // Use setTimeout to let state settle before calling sendMessage
+        setTimeout(() => {
+          if (textareaRef.current) textareaRef.current.value = lastUser.content;
+          sendMessage();
+        }, 50);
+      }
+      return prev;
+    });
+  }, [sendMessage]);
   const openExecutor = useCallback((code: string, language: string) => { setExecCode({ code, language }); setRightPanel('execute'); setActiveArtifact(null); }, []);
   const onPreview = useCallback((art: CodeArtifact) => { setActiveArtifact(art); setRightPanel('preview'); }, []);
   const onArtifactClick = useCallback((art: CodeArtifact) => { setActiveArtifact(art); if (['html','jsx','tsx'].includes(art.language)) setRightPanel('preview'); }, []);
@@ -402,6 +469,7 @@ export function ChatWindow({ conversationId }: Props) {
               <MessageBubble
                 key={i}
                 msg={msg}
+                msgIndex={i}
                 isLast={i === messages.length - 1}
                 loading={loading}
                 session={session}
@@ -409,6 +477,7 @@ export function ChatWindow({ conversationId }: Props) {
                 onRun={openExecutor}
                 onArtifactClick={onArtifactClick}
                 activeArtifactId={activeArtifact?.id}
+                onRegenerate={msg.role === 'assistant' ? regenerate : undefined}
               />
             ))}
           </div>
