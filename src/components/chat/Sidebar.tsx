@@ -116,7 +116,7 @@ export function Sidebar({ user }: Props) {
           <div className="px-3 pt-4 flex-shrink-0">
             <div className="text-[10px] text-[#444455] uppercase tracking-wider px-1 mb-1.5">Mode</div>
             <div className="flex bg-white/5 rounded-xl p-1 mb-3 gap-1">
-              {(['chat', 'builder'] as const).map(m => (
+              {(['chat', 'builder', 'agent'] as const).map(m => (
                 <button key={m} onClick={() => emit('mode:' + m)}
                   className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-medium transition-all
                     ${activeMode === m ? 'bg-[#6C63FF] text-white shadow-sm' : 'text-[#888899] hover:text-white'}`}>
