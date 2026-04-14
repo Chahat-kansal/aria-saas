@@ -2,224 +2,128 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { connectDB } from '@/lib/mongodb';
 import { User } from '@/models/User';
-import { Memory } from '@/models/Memory';
 import { Conversation } from '@/models/Conversation';
 import Anthropic from '@anthropic-ai/sdk';
 
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-});
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 const ALLOWED_MODELS = new Set([
   'claude-haiku-4-5-20251001',
-  'claude-sonnet-4-20250514',
-  'claude-opus-4-20250514',
+  'claude-sonnet-4-5-20250929',
+  'claude-opus-4-5-20251101',
 ]);
 
 const PLAN_LIMITS = {
-  free: {
-    messages: 50,
-    models: ['claude-haiku-4-5-20251001'],
-    webSearch: false,
-  },
-  pro: {
-    messages: Infinity,
-    models: [
-      'claude-haiku-4-5-20251001',
-      'claude-sonnet-4-5-20250929',
-      'claude-opus-4-5-20251101',
-    ],
-    webSearch: true,
-  },
+  free:  { messages: 50,       models: ['claude-haiku-4-5-20251001'], webSearch: false },
+  pro:   { messages: Infinity, models: ['claude-haiku-4-5-20251001','claude-sonnet-4-5-20250929','claude-opus-4-5-20251101'], webSearch: true },
 };
+
+const ARIA_SYSTEM = `You are Aria — a brilliant, friendly AI assistant built for real work.
+
+You excel at:
+- Writing, editing, and proofreading
+- Coding in any language — you write clean, complete, working code
+- Analysis, research, and problem-solving
+- Brainstorming and creative tasks
+- Explaining complex topics simply
+
+Coding guidelines:
+- Always write complete, working code — never truncate or use placeholders
+- Include comments for complex logic
+- Follow best practices for the language/framework
+- If asked to fix code, explain what was wrong and what you fixed
+- For HTML/CSS/JS, write self-contained files that work immediately
+
+Response style:
+- Be direct and concise — get to the point
+- Use markdown formatting for clarity (code blocks, headers, lists)
+- Match the user's tone — casual or formal
+- If something is unclear, make a reasonable assumption and proceed rather than asking`;
 
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
+  if (!session?.user) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
 
-  if (!session?.user) {
-    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-      status: 401,
-    });
-  }
+  let body: any;
+  try { body = await req.json(); } catch { return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400 }); }
 
-  // ✅ Parse body early
-  let body;
-  try {
-    body = await req.json();
-  } catch {
-    return new Response(JSON.stringify({ error: 'Invalid JSON' }), {
-      status: 400,
-    });
-  }
+  const { message, conversationId, model, useWebSearch, enableWebSearch, system } = body;
+  if (!message?.trim()) return new Response(JSON.stringify({ error: 'Message required' }), { status: 400 });
 
-  const { message, conversationId, model, useWebSearch, enableWebSearch, enablePlugins, system } = body;
-
-  if (!message?.trim()) {
-    return new Response(JSON.stringify({ error: 'Message required' }), {
-      status: 400,
-    });
-  }
-
-  // ✅ Start streaming immediately with worker pattern
   const encoder = new TextEncoder();
-
   const stream = new ReadableStream({
     async start(controller) {
+      const send = (data: object) => controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
       try {
-        // ✅ OPTIMIZATION: Parallel DB operations
         await connectDB();
-        
+
         const [user, conversation] = await Promise.all([
           User.findById((session.user as any).id),
-          conversationId
-            ? Conversation.findOne({
-                _id: conversationId,
-                userId: (session.user as any).id,
-              })
-            : Promise.resolve(null),
+          conversationId ? Conversation.findOne({ _id: conversationId, userId: (session.user as any).id }) : null,
         ]);
 
-        if (!user) {
-          controller.enqueue(
-            encoder.encode(
-              `data: ${JSON.stringify({ error: 'User not found' })}\n\n`
-            )
-          );
-          controller.close();
-          return;
-        }
+        if (!user) { send({ error: 'User not found' }); controller.close(); return; }
 
-        // Reset monthly counter
         const now = new Date();
         if (now.getMonth() !== new Date(user.messagesResetAt).getMonth()) {
-          user.messagesUsedThisMonth = 0;
-          user.messagesResetAt = now;
+          user.messagesUsedThisMonth = 0; user.messagesResetAt = now;
         }
 
-        const plan =
-          PLAN_LIMITS[user.plan as keyof typeof PLAN_LIMITS] ||
-          PLAN_LIMITS.free;
-
+        const plan = PLAN_LIMITS[user.plan as keyof typeof PLAN_LIMITS] || PLAN_LIMITS.free;
         if (user.messagesUsedThisMonth >= plan.messages) {
-          controller.enqueue(
-            encoder.encode(
-              `data: ${JSON.stringify({
-                error: 'Monthly message limit reached. Upgrade to Pro.',
-              })}\n\n`
-            )
-          );
-          controller.close();
-          return;
+          send({ error: 'Monthly message limit reached. Upgrade to Pro.' }); controller.close(); return;
         }
 
-        const safeModel =
-          ALLOWED_MODELS.has(model) && plan.models.includes(model)
-            ? model
-            : 'claude-haiku-4-5-20251001';
+        const safeModel = ALLOWED_MODELS.has(model) && plan.models.includes(model) ? model : 'claude-haiku-4-5-20251001';
+        const canSearch = plan.webSearch && (useWebSearch || enableWebSearch);
 
-        const canSearch = plan.webSearch && useWebSearch;
-
-        // Create or use existing conversation
-        let activeConversation = conversation;
-        if (!activeConversation) {
-          activeConversation = await Conversation.create({
-            userId: user._id,
-            title: message.slice(0, 60),
-            messages: [],
-            model: safeModel,
-          });
+        let activeConv = conversation;
+        if (!activeConv) {
+          activeConv = await Conversation.create({ userId: user._id, title: message.slice(0, 60), messages: [], model: safeModel });
         }
+        activeConv.messages.push({ role: 'user', content: message, createdAt: new Date() });
 
-        activeConversation.messages.push({
-          role: 'user',
-          content: message,
-          createdAt: new Date(),
-        });
+        const history = activeConv.messages.slice(-40).map((m: any) => ({ role: m.role, content: m.content }));
 
-        const history = activeConversation.messages.slice(-40).map((m: any) => ({
-          role: m.role,
-          content: m.content,
-        }));
-
-        const baseSystem = system?.trim() || 'You are Aria, a helpful AI assistant. Be concise and accurate.';
+        // Build system prompt — use custom if provided, else Aria's default
         const systemPrompt = [
-          customSystemPrefix,
-          baseSystem,
-          memoryContext,
+          user.customPersona || '',
+          user.systemPrompt || '',
+          system?.trim() || ARIA_SYSTEM,
         ].filter(Boolean).join('\n\n');
 
+        const tools = canSearch ? [{ type: 'web_search_20250305' as const, name: 'web_search' }] : undefined;
+
         let fullReply = '';
-
-        const tools = canSearch
-          ? [{ type: 'web_search_20250305' as const, name: 'web_search' }]
-          : undefined;
-
         const claudeStream = await anthropic.messages.stream({
           model: safeModel,
-          max_tokens: 4096,
+          max_tokens: 8096,
           system: systemPrompt,
           messages: history,
           ...(tools ? { tools } : {}),
         } as any);
 
         for await (const chunk of claudeStream) {
-          if (
-            chunk.type === 'content_block_delta' &&
-            chunk.delta.type === 'text_delta'
-          ) {
+          if (chunk.type === 'content_block_delta' && chunk.delta.type === 'text_delta') {
             fullReply += chunk.delta.text;
-
-            controller.enqueue(
-              encoder.encode(
-                `data: ${JSON.stringify({ text: chunk.delta.text })}\n\n`
-              )
-            );
+            send({ text: chunk.delta.text });
           }
         }
 
-        // ✅ OPTIMIZATION: Save in background (fire and forget)
-        activeConversation.messages.push({
-          role: 'assistant',
-          content: fullReply,
-          createdAt: new Date(),
-        });
-
+        activeConv.messages.push({ role: 'assistant', content: fullReply, createdAt: new Date() });
         user.messagesUsedThisMonth += 1;
+        activeConv.save().catch(console.error);
+        user.save().catch(console.error);
 
-        // Don't await - let it save in background
-        activeConversation.save().catch(err => {
-          console.error('Failed to save conversation:', err);
-        });
-        user.save().catch(err => {
-          console.error('Failed to save user:', err);
-        });
-
-        controller.enqueue(
-          encoder.encode(
-            `data: ${JSON.stringify({
-              done: true,
-              conversationId: activeConversation._id.toString(),
-            })}\n\n`
-          )
-        );
+        send({ done: true, conversationId: activeConv._id.toString() });
       } catch (err: any) {
         console.error('Chat error:', err);
-        controller.enqueue(
-          encoder.encode(
-            `data: ${JSON.stringify({ error: err.message })}\n\n`
-          )
-        );
+        send({ error: err.message || 'Something went wrong' });
       } finally {
         controller.close();
       }
     },
   });
 
-  return new Response(stream, {
-    headers: {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      Connection: 'keep-alive',
-    },
-  });
+  return new Response(stream, { headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' } });
 }
