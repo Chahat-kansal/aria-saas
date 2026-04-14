@@ -123,7 +123,7 @@ export function PreviewPanel({ artifact, onClose }: Props) {
   }
 
   return (
-    <div className="flex flex-col bg-[#0e0e12] border-l border-white/5" style={{ height: '100%' }}>
+    <div style={{ display:"flex", flexDirection:"column", flex:1, height:"100%", background:"#0e0e12", borderLeft:"1px solid rgba(255,255,255,0.05)", overflow:"hidden" }}>
       {/* Header */}
       <div className="flex items-center gap-2 px-3 py-2 border-b border-white/5 bg-[#16161d] flex-shrink-0">
         <div className="flex items-center gap-1.5 flex-1 min-w-0">
