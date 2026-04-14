@@ -37,7 +37,7 @@ const ConversationSchema = new Schema<IConversation>({
   userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
   title: { type: String, default: 'New conversation' },
   messages: [MessageSchema],
-  model: { type: String, default: 'claude-sonnet-4-20250514' },
+  aimodel: { type: String, default: 'claude-sonnet-4-20250514' },
 }, { timestamps: true });
 
 export const Conversation = mongoose.models.Conversation || mongoose.model<IConversation>('Conversation', ConversationSchema);
