@@ -5,7 +5,7 @@ import { User } from '@/models/User';
 import { Conversation } from '@/models/Conversation';
 import Anthropic from '@anthropic-ai/sdk';
 
-export const maxDuration = 60; // Allow 60s for Claude streaming
+export const maxDuration = 120; // Allow 120s for Claude streaming
 
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
