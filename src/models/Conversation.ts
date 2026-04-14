@@ -12,7 +12,7 @@ export interface IConversation extends Document {
   userId: mongoose.Types.ObjectId;
   title: string;
   messages: IMessage[];
-  model: string;
+  aimodel: string;
   createdAt: Date;
   updatedAt: Date;
   shareToken?: string;
