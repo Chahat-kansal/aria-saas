@@ -4,7 +4,6 @@ import { connectDB } from '@/lib/mongodb';
 import { User } from '@/models/User';
 import { Conversation } from '@/models/Conversation';
 import Anthropic from '@anthropic-ai/sdk';
-import { runPlugin, PLUGIN_TOOLS } from '@/lib/plugins';
 
 export const maxDuration = 60; // Allow 60s for Claude streaming
 
