@@ -29,6 +29,7 @@ interface RunResponse {
   finalCode: string;
   autoFixed: boolean;
   totalAttempts: number;
+  error?: string;
 }
 
 export function CodeExecutor({ code: initialCode, language: initialLang, onClose }: Props) {
