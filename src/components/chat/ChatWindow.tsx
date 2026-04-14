@@ -173,10 +173,14 @@ export function ChatWindow({ conversationId }: Props) {
               fullContent += data.text;
               setMessages(prev => { const m = [...prev]; m[m.length - 1] = { ...m[m.length - 1], content: fullContent }; return m; });
               if (mode === 'builder') {
-                const match = fullContent.match(/```(\w+)?\n([\s\S]*?)(?:```|$)/);
+                // Greedy match - get the LAST/longest code block as it streams in
+                const match = fullContent.match(/```(\w+)?\n([\s\S]*)$/);
                 if (match) {
+                  const rawCode = match[2].replace(/```\s*$/, ''); // strip trailing ``` if present
                   const lang = (match[1] || 'html').toLowerCase() as CodeArtifact['language'];
-                  setActiveArtifact(prev => prev ? { ...prev, language: lang, code: match[2], streaming: true } : null);
+                  if (rawCode.trim()) {
+                    setActiveArtifact(prev => prev ? { ...prev, language: lang, code: rawCode, streaming: true } : null);
+                  }
                 }
               }
             }
@@ -195,7 +199,17 @@ export function ChatWindow({ conversationId }: Props) {
                 setActiveArtifact(last);
                 if (['html', 'jsx', 'tsx'].includes(last.language)) setRightPanel('preview');
               } else if (mode === 'builder') {
-                setActiveArtifact(prev => prev ? { ...prev, streaming: false } : null);
+                // extractArtifacts found nothing - try direct regex on fullContent
+                const fm = fullContent.match(/```(\w+)?\n([\s\S]+?)```/s);
+                if (fm) {
+                  const lang = (fm[1] || 'html').toLowerCase() as CodeArtifact['language'];
+                  const code = fm[2].trim();
+                  const art: CodeArtifact = { id: crypto.randomUUID(), title: text.slice(0, 40), language: lang, code, streaming: false };
+                  setActiveArtifact(art);
+                  if (['html','jsx','tsx'].includes(lang)) setRightPanel('preview');
+                } else {
+                  setActiveArtifact(prev => prev ? { ...prev, streaming: false } : null);
+                }
               }
               setLastAiMessage(fullContent);
             }
