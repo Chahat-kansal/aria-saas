@@ -471,6 +471,11 @@ export function ChatWindow({ conversationId }: Props) {
           </select>
           <div className="flex gap-1 flex-wrap flex-1 min-w-0 overflow-hidden">
             {mode === 'builder' && <span className="text-[10px] bg-[#6C63FF]/20 text-[#a78bfa] border border-[#6C63FF]/30 px-2 py-0.5 rounded-full whitespace-nowrap">🔨 Builder</span>}
+            {mode === 'agent' && (
+  <span className="text-[10px] bg-[#6C63FF]/20 text-[#a78bfa] border border-[#6C63FF]/30 px-2 py-0.5 rounded-full whitespace-nowrap">
+    🤖 Agent
+  </span>
+)}
             {webSearch && <span className="text-[10px] bg-[#6C63FF]/20 text-[#a78bfa] border border-[#6C63FF]/30 px-2 py-0.5 rounded-full whitespace-nowrap">🔍 Search</span>}
             {deepResearch && <span className="text-[10px] bg-purple-500/20 text-purple-300 border border-purple-500/30 px-2 py-0.5 rounded-full whitespace-nowrap">🔬 Research</span>}
             {!plugins && <span className="text-[10px] bg-red-500/10 text-red-400 border border-red-500/20 px-2 py-0.5 rounded-full whitespace-nowrap">Plugins off</span>}
