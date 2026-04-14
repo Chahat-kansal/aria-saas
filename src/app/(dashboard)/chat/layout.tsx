@@ -12,26 +12,22 @@ export default async function ChatLayout({
   if (!session) redirect('/login');
 
   return (
-    <div
-      style={{
-        display: 'grid',
-        gridTemplateColumns: 'auto 1fr',
-        height: '100dvh',
-        overflow: 'hidden',
-        background: '#0e0e12',
-      }}
-    >
+    <div style={{
+      position: 'fixed',
+      inset: 0,
+      display: 'flex',
+      background: '#0e0e12',
+      overflow: 'hidden',
+    }}>
       <Sidebar user={session.user as any} />
-      <main
-        style={{
-          flex: 1,
-          minWidth: 0,
-          minHeight: 0,
-          overflow: 'hidden',
-          display: 'flex',
-          flexDirection: 'column',
-        }}
-      >
+      <main style={{
+        flex: 1,
+        minWidth: 0,
+        height: '100%',
+        overflow: 'hidden',
+        display: 'flex',
+        flexDirection: 'column',
+      }}>
         {children}
       </main>
     </div>
