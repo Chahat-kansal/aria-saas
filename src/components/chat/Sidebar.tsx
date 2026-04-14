@@ -120,7 +120,9 @@ export function Sidebar({ user }: Props) {
                 <button key={m} onClick={() => emit('mode:' + m)}
                   className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-medium transition-all
                     ${activeMode === m ? 'bg-[#6C63FF] text-white shadow-sm' : 'text-[#888899] hover:text-white'}`}>
-                  {m === 'chat' ? '💬' : '🔨'} {m === 'chat' ? 'Chat' : 'Builder'}
+                  {m === 'chat' && '💬 Chat'}
+                  {m === 'builder' && '🔨 Builder'}
+                  {m === 'agent' && '🤖 Agent'}
                 </button>
               ))}
             </div>
