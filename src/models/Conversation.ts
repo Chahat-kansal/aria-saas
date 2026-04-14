@@ -25,10 +25,6 @@ const MessageSchema = new Schema<IMessage>({
   role: { type: String, enum: ['user', 'assistant'], required: true },
   content: { type: String, required: true },
   createdAt: { type: Date, default: Date.now },
-  shareToken: { type: String, index: { sparse: true } },
-  parentConversationId: String,
-  branchPoint: Number,
-  tone: { type: String, default: 'default' },
   fileUrl: String,
   fileName: String,
 });
