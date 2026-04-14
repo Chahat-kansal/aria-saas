@@ -19,7 +19,9 @@ export async function POST(req: Request) {
   if (!session?.user) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
 
   await connectDB();
-  const user = await User.findById((session.user as any).id);
+  const [user] = await Promise.all([
+    User.findById((session.user as any).id),
+  ]);
   if (!user) return new Response(JSON.stringify({ error: 'User not found' }), { status: 404 });
 
   const now = new Date();
