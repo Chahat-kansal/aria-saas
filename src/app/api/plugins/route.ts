@@ -6,6 +6,9 @@ import { Conversation } from '@/models/Conversation';
 import Anthropic from '@anthropic-ai/sdk';
 import { runPlugin, PLUGIN_TOOLS } from '@/lib/plugins';
 
+export const maxDuration = 60; // Allow 60s for Claude streaming
+
+
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 const ARIA_SYSTEM = `You are Aria — a brilliant, friendly AI assistant built for real work.
