@@ -136,6 +136,7 @@ export function Sidebar({ user }: Props) {
               <ToolBtn name="canvas"   emoji="📝" label="Canvas editor"    />
               <ToolBtn name="execute"  emoji="▶️" label="Code executor"    />
               <ToolBtn name="plugins"  emoji="🔌" label="Plugins"          />
+              <ToolBtn name="screenshot" emoji="📸" label="Screenshot to code" />
             </div>
           </div>
         )}
