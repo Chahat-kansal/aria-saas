@@ -1,6 +1,7 @@
 'use client';
 import { useState, useRef, useCallback } from 'react';
 import { PreviewPanel, CodeArtifact } from './PreviewPanel';
+import toast from 'react-hot-toast';
 
 interface Props { onClose: () => void; }
 
@@ -28,54 +29,78 @@ export function ScreenshotToCode({ onClose }: Props) {
   }
 
   async function generate() {
-    if (!image) return;
-    setGenerating(true);
-    setOutput('');
-    setArtifact(null);
-    let fullText = '';
+  if (!image) return;
+  setGenerating(true);
+  setOutput('');
+  setArtifact(null);
+  let fullText = '';
 
-    try {
-      const res = await fetch('/api/screenshot-to-code', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imageBase64: image.base64, mimeType: image.mimeType, framework }),
-      });
+  try {
+    const res = await fetch('/api/screenshot-to-code', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        imageBase64: image.base64,
+        mimeType: image.mimeType,
+        framework,
+      }),
+    });
 
-      const reader = res.body!.getReader();
-      const decoder = new TextDecoder();
-      let buf = '';
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Failed to generate code' }));
+      throw new Error(err.error || 'Failed to generate code');
+    }
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buf += decoder.decode(value, { stream: true });
-        const lines = buf.split('\n'); buf = lines.pop() || '';
-        for (const line of lines) {
-          if (!line.startsWith('data: ')) continue;
-          try {
-            const d = JSON.parse(line.slice(6));
-            if (d.text) {
-              fullText += d.text;
-              setOutput(fullText);
-              // Extract code as it streams
-              const match = fullText.match(/```(?:html|jsx)\n([\s\S]*?)(?:```|$)/);
-              if (match && match[1].trim().length > 50) {
-                setArtifact({
-                  id: 'screenshot-result',
-                  title: 'Screenshot recreation',
-                  language: framework,
-                  code: match[1].trim(),
-                  streaming: !d.done,
-                });
-              }
+    if (!res.body) {
+      throw new Error('No response stream received');
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      const lines = buf.split('\n');
+      buf = lines.pop() || '';
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        try {
+          const d = JSON.parse(line.slice(6));
+
+          if (d.error) {
+            throw new Error(d.error);
+          }
+
+          if (d.text) {
+            fullText += d.text;
+            setOutput(fullText);
+
+            const match = fullText.match(/```(?:html|jsx)\n([\s\S]*?)(?:```|$)/);
+            if (match && match[1].trim().length > 50) {
+              setArtifact({
+                id: 'screenshot-result',
+                title: 'Screenshot recreation',
+                language: framework,
+                code: match[1].trim(),
+                streaming: !d.done,
+              });
             }
-          } catch {}
+          }
+        } catch (err) {
+          if (err instanceof Error) throw err;
         }
       }
-    } finally {
-      setGenerating(false);
     }
+  } catch (err: any) {
+    toast.error(err.message || 'Screenshot to code failed');
+  } finally {
+    setGenerating(false);
   }
+}
 
   const onDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault(); setDragging(false);
