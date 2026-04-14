@@ -211,6 +211,15 @@ export function ChatWindow({ conversationId }: Props) {
     }
   }, [input, pendingFile, loading, model, mode, webSearch, deepResearch, activeConvoId, plugins, router]);
 
+  async function exportConversation(format: 'markdown' | 'json') {
+    if (!activeConvoId) { return; }
+    const url = `/api/export?id=${activeConvoId}&format=${format}`;
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = format === 'markdown' ? 'conversation.md' : 'conversation.json';
+    a.click();
+  }
+
   function closePanel() { setActiveArtifact(null); setRightPanel(null); setExecCode(null); }
   function openExecutor(code: string, language: string) { setExecCode({ code, language }); setRightPanel('execute'); setActiveArtifact(null); }
 
@@ -246,6 +255,15 @@ export function ChatWindow({ conversationId }: Props) {
               {webSearch && <span className="text-[10px] bg-[#6C63FF]/20 text-[#a78bfa] border border-[#6C63FF]/30 px-2 py-0.5 rounded-full whitespace-nowrap">🔍 Search</span>}
               {deepResearch && <span className="text-[10px] bg-purple-500/20 text-purple-300 border border-purple-500/30 px-2 py-0.5 rounded-full whitespace-nowrap">🔬 Research</span>}
               {!plugins && <span className="text-[10px] bg-red-500/10 text-red-400 border border-red-500/20 px-2 py-0.5 rounded-full whitespace-nowrap">Plugins off</span>}
+            {activeConvoId && (
+              <div className="relative group ml-auto">
+                <button className="text-[10px] text-[#555566] hover:text-white transition-colors px-2 py-1 rounded-lg hover:bg-white/5">⬇ Export</button>
+                <div className="absolute right-0 top-full mt-1 bg-[#16161d] border border-white/10 rounded-xl overflow-hidden shadow-xl hidden group-hover:block z-50 w-36">
+                  <button onClick={() => exportConversation('markdown')} className="w-full text-left px-3 py-2 text-xs text-[#888899] hover:text-white hover:bg-white/5 transition-colors">📄 Markdown</button>
+                  <button onClick={() => exportConversation('json')} className="w-full text-left px-3 py-2 text-xs text-[#888899] hover:text-white hover:bg-white/5 transition-colors">📦 JSON</button>
+                </div>
+              </div>
+            )}
             </div>
           </div>
 
@@ -404,12 +422,11 @@ export function ChatWindow({ conversationId }: Props) {
 
       {/* ── RIGHT PANEL ── */}
       {showSplit && (
-        <div style={{ position: 'absolute', inset: 0, overflowY: 'auto', minHeight: 0, background: '#0e0e12', }}>
-          className="md:relative md:inset-auto md:flex-1 md:min-w-0">
+        <div style={{ display:'flex', flexDirection:'column', flex:1, minWidth:0, minHeight:0, overflow:'hidden', background:'#0e0e12' }}>
           <div className="md:hidden flex items-center px-3 py-2 bg-[#16161d] border-b border-white/5 flex-shrink-0">
             <button onClick={closePanel} className="text-sm text-[#888899] hover:text-white">← Back to chat</button>
           </div>
-          <div className="flex-1 overflow-hidden">
+          <div style={{ flex:1, overflow:'hidden', display:'flex', flexDirection:'column' }}>
             {rightPanel === 'preview' && activeArtifact && <PreviewPanel artifact={activeArtifact} onClose={closePanel} />}
             {rightPanel === 'image'   && <ImageGenerator isPro={isPro} onClose={closePanel} />}
             {rightPanel === 'project' && <ProjectBuilder onClose={closePanel} />}
@@ -422,6 +439,8 @@ export function ChatWindow({ conversationId }: Props) {
               </div>
             )}
             {rightPanel === 'canvas'  && <Canvas isPro={isPro} onClose={closePanel} />}
+            {rightPanel === 'compare' && <ModelComparison isPro={isPro} onClose={closePanel} />}
+            {rightPanel === 'prompts' && <PromptPicker onSelect={(p) => { setInput(p); closePanel(); }} onClose={closePanel} />}
           </div>
         </div>
       )}
