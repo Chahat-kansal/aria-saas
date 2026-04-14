@@ -252,24 +252,42 @@ export function ChatWindow({ conversationId }: Props) {
     }));
   }, [mode, isPro, rightPanel, plugins, webSearch, deepResearch]);
 
-  useEffect(() => {
-    function onTool(e: Event) {
-      const tool = (e as CustomEvent).detail as string;
-      if (tool === 'mode:chat')    { setMode('chat'); setRightPanel(null); return; }
-      if (tool === 'mode:builder') { setMode('builder'); setRightPanel(null); return; }
-      if (tool === 'search')       { setWebSearch(w => !w); setDeepResearch(false); setRightPanel(null); return; }
-      if (tool === 'research')     { setDeepResearch(d => !d); setWebSearch(false); setRightPanel(null); return; }
-      if (tool === 'plugins')      { setPlugins(p => !p); return; }
-      if (tool === 'image')        { setRightPanel(p => p === 'image'   ? null : 'image');   setActiveArtifact(null); return; }
-      if (tool === 'project')      { setRightPanel(p => p === 'project' ? null : 'project'); setActiveArtifact(null); return; }
-      if (tool === 'canvas')       { setRightPanel(p => p === 'canvas'  ? null : 'canvas');  setActiveArtifact(null); return; }
-      if (tool === 'execute')      { setRightPanel(p => p === 'execute' ? null : 'execute'); setActiveArtifact(null); return; }
-      if (tool === 'screenshot')   { setRightPanel(p => p === 'screenshot' ? null : 'screenshot'); setActiveArtifact(null); return; }
-      if (tool === 'agent')        { setRightPanel(p => p === 'agent' ? null : 'agent'); setActiveArtifact(null); return; }
+ useEffect(() => {
+  function onTool(e: Event) {
+    const tool = (e as CustomEvent).detail as string;
+
+    if (tool === 'mode:chat') {
+      setMode('chat');
+      setRightPanel(null);
+      return;
     }
-    window.addEventListener('aria:tool-select', onTool);
-    return () => window.removeEventListener('aria:tool-select', onTool);
-  }, []);
+
+    if (tool === 'mode:builder') {
+      setMode('builder');
+      setRightPanel(null);
+      return;
+    }
+
+    if (tool === 'mode:agent') {
+      setRightPanel('agent');
+      setActiveArtifact(null);
+      return;
+    }
+
+    if (tool === 'search')       { setWebSearch(w => !w); setDeepResearch(false); setRightPanel(null); return; }
+    if (tool === 'research')     { setDeepResearch(d => !d); setWebSearch(false); setRightPanel(null); return; }
+    if (tool === 'plugins')      { setPlugins(p => !p); return; }
+    if (tool === 'image')        { setRightPanel(p => p === 'image' ? null : 'image'); setActiveArtifact(null); return; }
+    if (tool === 'project')      { setRightPanel(p => p === 'project' ? null : 'project'); setActiveArtifact(null); return; }
+    if (tool === 'canvas')       { setRightPanel(p => p === 'canvas' ? null : 'canvas'); setActiveArtifact(null); return; }
+    if (tool === 'execute')      { setRightPanel(p => p === 'execute' ? null : 'execute'); setActiveArtifact(null); return; }
+    if (tool === 'screenshot')   { setRightPanel(p => p === 'screenshot' ? null : 'screenshot'); setActiveArtifact(null); return; }
+    if (tool === 'agent')        { setRightPanel(p => p === 'agent' ? null : 'agent'); setActiveArtifact(null); return; }
+  }
+
+  window.addEventListener('aria:tool-select', onTool);
+  return () => window.removeEventListener('aria:tool-select', onTool);
+}, []);
 
   async function uploadFile(file: File) {
     setUploading(true);
