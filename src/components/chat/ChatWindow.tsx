@@ -216,7 +216,7 @@ export function ChatWindow({ conversationId }: Props) {
 
   return (
     // Outer: fills the <main> column completely
-    <div style={{ display:"flex", flexDirection:"column", height:"100%", minHeight:0, overflow:"hidden", position:"relative" }}>
+    <div style={{ display:"flex", flexDirection:"column", flex:1, minHeight:0, overflow:"hidden", position:"relative" }}>
 
       {/* ── CHAT PANEL ── */}
       {/* Uses CSS Grid: 3 rows = [topbar][messages(1fr)][input] */}
@@ -225,8 +225,7 @@ export function ChatWindow({ conversationId }: Props) {
           style={{
             display: 'grid',
             gridTemplateRows: 'auto minmax(0, 1fr) auto',
-            width: showSplit ? undefined : '100%',
-            height: '100%',
+            flex: 1,
             minWidth: 0,
             minHeight: 0,
             overflow: 'hidden',
