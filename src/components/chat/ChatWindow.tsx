@@ -41,7 +41,7 @@ const BUILDER_STARTERS = [
 ];
 
 // ── Memoized message bubble — only re-renders when its own content changes ──
-const MessageBubble = memo(({ msg, isLast, loading, session, onPreview, onRun, onArtifactClick, activeArtifactId }: {
+const MessageBubble = memo(({ msg, isLast, loading, session, onPreview, onRun, onArtifactClick, activeArtifactId, onRegenerate, msgIndex }: {
   msg: Message; isLast: boolean; loading: boolean; session: any;
   onPreview: (art: CodeArtifact) => void;
   onRun: (code: string, lang: string) => void;
@@ -213,7 +213,7 @@ export function ChatWindow({ conversationId }: Props) {
     if (conversationId) {
       fetch(`/api/conversations/${conversationId}`).then(r => r.json()).then(data => {
         if (data.messages) {
-          const msgs: Message[] = data.messages?.map((m: any) => ({
+          const msgs: Message[] = data.messages.map((m: any) => ({
             ...m, artifacts: m.role === 'assistant' ? extractArtifacts(m.content) : undefined,
           }));
           setMessages(msgs);
@@ -498,7 +498,7 @@ export function ChatWindow({ conversationId }: Props) {
             </div>
           )}
           <div className="space-y-4">
-            {messages?.map((msg, i) => (
+            {messages.map((msg, i) => (
               <MessageBubble
                 key={i}
                 msg={msg}
