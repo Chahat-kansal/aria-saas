@@ -15,7 +15,7 @@ export function Sidebar({ user }: Props) {
   const [convos, setConvos] = useState<Convo[]>([]);
   const [open, setOpen] = useState(false);
   const [usage, setUsage] = useState<number>(0);
-  const [activeMode, setActiveMode] = useState<'chat' | 'builder'>('chat');
+  const [activeMode, setActiveMode] = useState<'chat' | 'builder' | 'agent'>('chat');
   const [activeTool, setActiveTool] = useState<string | null>(null);
   const [searchOn, setSearchOn] = useState(false);
   const [pluginsOn, setPluginsOn] = useState(true);
