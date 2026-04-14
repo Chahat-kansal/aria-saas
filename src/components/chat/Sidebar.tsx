@@ -89,9 +89,10 @@ export function Sidebar({ user }: Props) {
       {open && <div className="md:hidden fixed inset-0 bg-black/60 z-30" onClick={() => setOpen(false)} />}
       
       <aside
-        className={`fixed md:relative z-40 flex flex-col w-[280px] md:w-64 bg-[#16161d] border-r border-white/5 transition-transform duration-200 h-screen ${
+        className={`fixed md:relative z-40 flex flex-col w-[280px] md:w-64 bg-[#16161d] border-r border-white/5 transition-transform duration-200 ${
           open ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
         }`}
+        style={{ height: '100dvh' }}
       >
 
         {/* Logo */}
