@@ -54,24 +54,23 @@ function ModelComparison({ isPro, onClose }: { isPro: boolean; onClose: () => vo
     <div className="flex flex-col items-center justify-center h-full text-center px-6 gap-3">
       <span className="text-4xl">🔄</span>
       <p className="text-[#888899] text-sm">Model comparison feature coming soon</p>
-      <button onClick={onClose} className="text-xs text-[#555566] hover:text-white">Close</button>
+      <button onClick={onClose} className="text-xs text-[#555566] hover:text-white">
+        Close
+      </button>
     </div>
   );
 }
 
 // Placeholder component for PromptPicker
 function PromptPicker({ onSelect, onClose }: { onSelect: (prompt: string) => void; onClose: () => void }) {
-  const prompts = [
-    'Explain this code',
-    'Write unit tests',
-    'Optimize performance',
-    'Add error handling',
-  ];
+  const prompts = ['Explain this code', 'Write unit tests', 'Optimize performance', 'Add error handling'];
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between px-4 py-3 border-b border-white/5">
         <h3 className="text-sm font-semibold text-white">Saved Prompts</h3>
-        <button onClick={onClose} className="text-[#888899] hover:text-white">✕</button>
+        <button onClick={onClose} className="text-[#888899] hover:text-white">
+          ✕
+        </button>
       </div>
       <div className="flex-1 overflow-y-auto p-4 space-y-2">
         {prompts.map((p, i) => (
@@ -124,7 +123,6 @@ export function ChatWindow({ conversationId }: Props) {
       .then(d => setUserPlan(d.plan || 'free'))
       .catch(err => {
         console.error('Failed to fetch user plan:', err);
-        // Default to free plan on error
       });
   }, []);
 
@@ -350,5 +348,5 @@ export function ChatWindow({ conversationId }: Props) {
               });
 
               if (mode === 'builder') {
-                // Match the last code block as it streams
-                const match = fullContent.match(/
+                // Match the last code block as it streams - FIXED REGEX
+                const codeBlockRegex = /
