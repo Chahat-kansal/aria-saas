@@ -92,7 +92,7 @@ export function Sidebar({ user }: Props) {
         className={`fixed md:relative z-40 flex flex-col w-[280px] md:w-64 bg-[#16161d] border-r border-white/5 transition-transform duration-200 ${
           open ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
         }`}
-        style={{ height: '100dvh' }}
+        style={{ height: '100%', flexShrink: 0 }}
       >
 
         {/* Logo */}
