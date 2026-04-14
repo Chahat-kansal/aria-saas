@@ -422,7 +422,8 @@ export function ChatWindow({ conversationId }: Props) {
 
       {/* ── RIGHT PANEL ── */}
       {showSplit && (
-        <div style={{ display:'flex', flexDirection:'column', flex:1, minWidth:0, minHeight:0, overflow:'hidden', background:'#0e0e12' }}>
+        <div style={{ display:'flex', flexDirection:'column', minWidth:0, minHeight:0, overflow:'hidden', background:'#0e0e12' }}
+          className="absolute inset-0 md:relative md:inset-auto md:flex-1">
           <div className="md:hidden flex items-center px-3 py-2 bg-[#16161d] border-b border-white/5 flex-shrink-0">
             <button onClick={closePanel} className="text-sm text-[#888899] hover:text-white">← Back to chat</button>
           </div>
