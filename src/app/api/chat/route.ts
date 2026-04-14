@@ -2,6 +2,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { connectDB } from '@/lib/mongodb';
 import { User } from '@/models/User';
+import { Memory } from '@/models/Memory';
 import { Conversation } from '@/models/Conversation';
 import Anthropic from '@anthropic-ai/sdk';
 
@@ -25,8 +26,8 @@ const PLAN_LIMITS = {
     messages: Infinity,
     models: [
       'claude-haiku-4-5-20251001',
-      'claude-sonnet-4-20250514',
-      'claude-opus-4-20250514',
+      'claude-sonnet-4-5-20250929',
+      'claude-opus-4-5-20251101',
     ],
     webSearch: true,
   },
@@ -51,7 +52,7 @@ export async function POST(req: Request) {
     });
   }
 
-  const { message, conversationId, model, useWebSearch, system } = body;
+  const { message, conversationId, model, useWebSearch, enableWebSearch, enablePlugins, system } = body;
 
   if (!message?.trim()) {
     return new Response(JSON.stringify({ error: 'Message required' }), {
@@ -140,9 +141,12 @@ export async function POST(req: Request) {
           content: m.content,
         }));
 
-        const systemPrompt =
-          system?.trim() ||
-          'You are Aria, a helpful AI assistant. Be concise and accurate.';
+        const baseSystem = system?.trim() || 'You are Aria, a helpful AI assistant. Be concise and accurate.';
+        const systemPrompt = [
+          customSystemPrefix,
+          baseSystem,
+          memoryContext,
+        ].filter(Boolean).join('\n\n');
 
         let fullReply = '';
 
