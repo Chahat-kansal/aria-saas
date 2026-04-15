@@ -4,7 +4,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { connectDB } from '@/lib/mongodb';
 import { User } from '@/models/User';
 
-export const maxDuration = 60;
+export const maxDuration = 120;
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 const AGENT_SYSTEM = `You are Aria Agent — an autonomous AI that breaks down goals into steps and executes them.
