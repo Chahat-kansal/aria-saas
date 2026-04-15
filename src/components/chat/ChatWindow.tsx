@@ -372,7 +372,10 @@ export function ChatWindow({ conversationId }: Props) {
                 setActiveArtifact(last);
                 if (['html','jsx','tsx'].includes(last.language)) setRightPanel('preview');
               } else if (s.mode === 'builder') {
-                const fm = fullContent.match(/```(\w+)?\n([\s\S]+?)(?:```|$)/s);
+               const fm = fullContent.match(/```(\w+)?\n([\s\S]+?)```/s);
+              if (fm) {
+  // preview only complete code block
+              }
                 if (fm) {
                   const lang = (fm[1] || 'html').toLowerCase() as CodeArtifact['language'];
                   setActiveArtifact({ id: artifactId, title: text.slice(0, 40), language: lang, code: fm[2].trim(), streaming: false });
