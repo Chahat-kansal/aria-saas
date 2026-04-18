@@ -133,8 +133,8 @@ export async function POST(req: Request) {
 
         for (let step = 0; step < 8; step++) {
           console.log('TOOLS SENT:', JSON.stringify(tools, null, 2));
-console.log('SYSTEM PROMPT:', systemPrompt);
-console.log('LAST USER MESSAGE:', message);
+          console.log('SYSTEM PROMPT:', systemPrompt);
+          console.log('LAST USER MESSAGE:', message);
           const response = await anthropic.messages.create({
             model: safeModel,
             max_tokens: 4096,
@@ -144,7 +144,7 @@ console.log('LAST USER MESSAGE:', message);
           } as any);
 
           const assistantContent = response.content || [];
-
+          console.log('ASSISTANT CONTENT:', JSON.stringify(assistantContent, null, 2));
           loopMessages.push({
             role: 'assistant',
             content: assistantContent,
