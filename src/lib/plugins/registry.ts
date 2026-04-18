@@ -1,6 +1,7 @@
 // ── PLUGIN REGISTRY ──────────────────────────────────────────────────────────
 // Each plugin is a Claude tool definition + a server-side handler.
 // Claude decides which plugin(s) to call based on the user's message.
+
 import { scrapeUrl, crawlSite, summarisePublicUrl } from '@/lib/web';
 import {
   browserOpen,
@@ -14,6 +15,7 @@ import {
   browserClose,
   browserCheckWebsite,
 } from '@/lib/browser';
+
 export interface PluginResult {
   plugin: string;
   success: boolean;
@@ -24,41 +26,17 @@ export interface PluginResult {
 // ── TOOL DEFINITIONS (sent to Claude so it knows what's available) ────────────
 export const PLUGIN_TOOLS = [
   {
-  name: 'fetch_url',
-  description: 'Fetch and extract readable content from a public URL'
-},
-{
-  name: 'crawl_site',
-  description: 'Crawl a website and return important pages'
-},
-{
-  name: 'browser_open',
-  description: 'Open a URL in a real browser session'
-},
-{
-  name: 'browser_click',
-  description: 'Click an element on the current page'
-},
-{
-  name: 'browser_type',
-  description: 'Type into an input field'
-},
-{
-  name: 'browser_screenshot',
-  description: 'Take a screenshot of the current page'
-},
-{
-  name: 'browser_get_text',
-  description: 'Extract visible text from the current page'
-},
-  {
     name: 'get_weather',
     description: 'Get current weather and forecast for any city or location. Use when user asks about weather, temperature, rain, forecast.',
     input_schema: {
       type: 'object',
       properties: {
         location: { type: 'string', description: 'City name, e.g. "London" or "New York, US"' },
-        units: { type: 'string', enum: ['metric', 'imperial'], description: 'Temperature units. metric=Celsius, imperial=Fahrenheit. Default: metric' },
+        units: {
+          type: 'string',
+          enum: ['metric', 'imperial'],
+          description: 'Temperature units. metric=Celsius, imperial=Fahrenheit. Default: metric',
+        },
       },
       required: ['location'],
     },
@@ -86,12 +64,159 @@ export const PLUGIN_TOOLS = [
     },
   },
   {
+    name: 'scrape_url',
+    description: 'Read and extract the main content from a public webpage URL.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        url: { type: 'string', description: 'Public URL to scrape' },
+        includeHtml: { type: 'boolean' },
+        includeLinks: { type: 'boolean' },
+        screenshot: { type: 'boolean' },
+      },
+      required: ['url'],
+    },
+  },
+  {
+    name: 'crawl_site',
+    description: 'Crawl a website and extract content from multiple pages.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        url: { type: 'string', description: 'Website URL to crawl' },
+        limit: { type: 'number', description: 'Max pages to crawl' },
+      },
+      required: ['url'],
+    },
+  },
+  {
+    name: 'browser_check_website',
+    description: 'Check a live website for console errors, failed requests, and load issues.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        url: { type: 'string', description: 'Live website URL' },
+      },
+      required: ['url'],
+    },
+  },
+  {
+    name: 'browser_open',
+    description: 'Open a real browser session on a URL.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        url: { type: 'string', description: 'The URL to open in a browser' },
+      },
+      required: ['url'],
+    },
+  },
+  {
+    name: 'browser_click',
+    description: 'Click an element in the open browser session.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        sessionId: { type: 'string' },
+        selector: { type: 'string' },
+      },
+      required: ['sessionId', 'selector'],
+    },
+  },
+  {
+    name: 'browser_type',
+    description: 'Type text into an input in the open browser session.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        sessionId: { type: 'string' },
+        selector: { type: 'string' },
+        text: { type: 'string' },
+      },
+      required: ['sessionId', 'selector', 'text'],
+    },
+  },
+  {
+    name: 'browser_press',
+    description: 'Press a keyboard key in the open browser session.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        sessionId: { type: 'string' },
+        selector: { type: 'string' },
+        key: { type: 'string' },
+      },
+      required: ['sessionId', 'selector', 'key'],
+    },
+  },
+  {
+    name: 'browser_wait',
+    description: 'Wait in the browser session for a short time.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        sessionId: { type: 'string' },
+        ms: { type: 'number' },
+      },
+      required: ['sessionId'],
+    },
+  },
+  {
+    name: 'browser_get_text',
+    description: 'Extract text from the current page or one element in the browser session.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        sessionId: { type: 'string' },
+        selector: { type: 'string' },
+      },
+      required: ['sessionId'],
+    },
+  },
+  {
+    name: 'browser_screenshot',
+    description: 'Take a screenshot of the current browser page.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        sessionId: { type: 'string' },
+      },
+      required: ['sessionId'],
+    },
+  },
+  {
+    name: 'browser_eval',
+    description: 'Run a simple JavaScript expression in the browser page.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        sessionId: { type: 'string' },
+        expression: { type: 'string' },
+      },
+      required: ['sessionId', 'expression'],
+    },
+  },
+  {
+    name: 'browser_close',
+    description: 'Close the open browser session.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        sessionId: { type: 'string' },
+      },
+      required: ['sessionId'],
+    },
+  },
+  {
     name: 'calculate',
     description: 'Evaluate a mathematical expression or convert units. Use for complex calculations, unit conversions, percentages, currency conversions.',
     input_schema: {
       type: 'object',
       properties: {
-        expression: { type: 'string', description: 'Math expression to evaluate, e.g. "sqrt(144) * 3.14159" or "15% of 2500"' },
+        expression: {
+          type: 'string',
+          description: 'Math expression to evaluate, e.g. "sqrt(144) * 3.14159" or "15% of 2500"',
+        },
       },
       required: ['expression'],
     },
@@ -102,7 +227,10 @@ export const PLUGIN_TOOLS = [
     input_schema: {
       type: 'object',
       properties: {
-        timezone: { type: 'string', description: 'IANA timezone, e.g. "America/New_York", "Europe/London", "Asia/Tokyo". Default: UTC' },
+        timezone: {
+          type: 'string',
+          description: 'IANA timezone, e.g. "America/New_York", "Europe/London", "Asia/Tokyo". Default: UTC',
+        },
         format: { type: 'string', description: 'Optional format hint like "full", "date only", "time only"' },
       },
       required: [],
@@ -145,7 +273,6 @@ export async function handleWeather(input: { location: string; units?: string })
   const apiKey = process.env.OPENWEATHER_API_KEY;
 
   if (!apiKey) {
-    // Fallback: return mock data with a note
     return {
       plugin: 'get_weather',
       success: false,
@@ -167,7 +294,7 @@ export async function handleWeather(input: { location: string; units?: string })
         location: `${data.name}, ${data.sys.country}`,
         temperature: `${Math.round(data.main.temp)}°${units === 'metric' ? 'C' : 'F'}`,
         feels_like: `${Math.round(data.main.feels_like)}°${units === 'metric' ? 'C' : 'F'}`,
-        condition: data.weather[0].description,
+        condition: data.weather?.[0]?.description || 'Unknown',
         humidity: `${data.main.humidity}%`,
         wind: `${data.wind.speed} ${units === 'metric' ? 'm/s' : 'mph'}`,
         visibility: data.visibility ? `${(data.visibility / 1000).toFixed(1)} km` : 'N/A',
@@ -222,46 +349,157 @@ export async function handleStockPrice(input: { symbol: string }): Promise<Plugi
 
 export async function handleSummariseUrl(input: { url: string }): Promise<PluginResult> {
   try {
-    const res = await fetch(input.url, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; AriaBot/1.0)' },
-      signal: AbortSignal.timeout(8000),
-    });
-
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-    const contentType = res.headers.get('content-type') || '';
-    if (!contentType.includes('text')) {
-      return { plugin: 'summarise_url', success: false, error: `Cannot read this file type: ${contentType}` };
-    }
-
-    const html = await res.text();
-
-    // Strip HTML tags and clean up
-    const text = html
-      .replace(/<script[\s\S]*?<\/script>/gi, '')
-      .replace(/<style[\s\S]*?<\/style>/gi, '')
-      .replace(/<[^>]+>/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim()
-      .slice(0, 8000); // First 8000 chars
-
-    // Extract title
-    const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
-    const title = titleMatch ? titleMatch[1].trim() : input.url;
-
+    const data = await summarisePublicUrl(input.url);
     return {
       plugin: 'summarise_url',
       success: true,
-      data: { url: input.url, title, content: text },
+      data,
     };
   } catch (err: any) {
     return { plugin: 'summarise_url', success: false, error: `Could not fetch URL: ${err.message}` };
   }
 }
 
+export async function handleScrapeUrl(input: {
+  url: string;
+  includeHtml?: boolean;
+  includeLinks?: boolean;
+  screenshot?: boolean;
+}): Promise<PluginResult> {
+  try {
+    const data = await scrapeUrl(input.url, {
+      includeHtml: !!input.includeHtml,
+      includeLinks: !!input.includeLinks,
+      screenshot: !!input.screenshot,
+    });
+
+    return { plugin: 'scrape_url', success: true, data };
+  } catch (err: any) {
+    return { plugin: 'scrape_url', success: false, error: err.message };
+  }
+}
+
+export async function handleCrawlSite(input: {
+  url: string;
+  limit?: number;
+}): Promise<PluginResult> {
+  try {
+    const data = await crawlSite(input.url, {
+      limit: input.limit || 8,
+    });
+
+    return { plugin: 'crawl_site', success: true, data };
+  } catch (err: any) {
+    return { plugin: 'crawl_site', success: false, error: err.message };
+  }
+}
+
+export async function handleBrowserCheckWebsite(input: { url: string }): Promise<PluginResult> {
+  try {
+    const data = await browserCheckWebsite(input.url);
+    return { plugin: 'browser_check_website', success: true, data };
+  } catch (err: any) {
+    return { plugin: 'browser_check_website', success: false, error: err.message };
+  }
+}
+
+export async function handleBrowserOpen(input: { url: string }): Promise<PluginResult> {
+  try {
+    const data = await browserOpen(input.url);
+    return { plugin: 'browser_open', success: true, data };
+  } catch (err: any) {
+    return { plugin: 'browser_open', success: false, error: err.message };
+  }
+}
+
+export async function handleBrowserClick(input: { sessionId: string; selector: string }): Promise<PluginResult> {
+  try {
+    const data = await browserClick(input.sessionId, input.selector);
+    return { plugin: 'browser_click', success: true, data };
+  } catch (err: any) {
+    return { plugin: 'browser_click', success: false, error: err.message };
+  }
+}
+
+export async function handleBrowserType(input: {
+  sessionId: string;
+  selector: string;
+  text: string;
+}): Promise<PluginResult> {
+  try {
+    const data = await browserType(input.sessionId, input.selector, input.text);
+    return { plugin: 'browser_type', success: true, data };
+  } catch (err: any) {
+    return { plugin: 'browser_type', success: false, error: err.message };
+  }
+}
+
+export async function handleBrowserPress(input: {
+  sessionId: string;
+  selector: string;
+  key: string;
+}): Promise<PluginResult> {
+  try {
+    const data = await browserPress(input.sessionId, input.selector, input.key);
+    return { plugin: 'browser_press', success: true, data };
+  } catch (err: any) {
+    return { plugin: 'browser_press', success: false, error: err.message };
+  }
+}
+
+export async function handleBrowserWait(input: { sessionId: string; ms?: number }): Promise<PluginResult> {
+  try {
+    const data = await browserWait(input.sessionId, input.ms || 2000);
+    return { plugin: 'browser_wait', success: true, data };
+  } catch (err: any) {
+    return { plugin: 'browser_wait', success: false, error: err.message };
+  }
+}
+
+export async function handleBrowserGetText(input: {
+  sessionId: string;
+  selector?: string;
+}): Promise<PluginResult> {
+  try {
+    const data = await browserGetText(input.sessionId, input.selector);
+    return { plugin: 'browser_get_text', success: true, data };
+  } catch (err: any) {
+    return { plugin: 'browser_get_text', success: false, error: err.message };
+  }
+}
+
+export async function handleBrowserScreenshot(input: { sessionId: string }): Promise<PluginResult> {
+  try {
+    const data = await browserScreenshot(input.sessionId);
+    return { plugin: 'browser_screenshot', success: true, data };
+  } catch (err: any) {
+    return { plugin: 'browser_screenshot', success: false, error: err.message };
+  }
+}
+
+export async function handleBrowserEval(input: {
+  sessionId: string;
+  expression: string;
+}): Promise<PluginResult> {
+  try {
+    const data = await browserEvaluate(input.sessionId, input.expression);
+    return { plugin: 'browser_eval', success: true, data };
+  } catch (err: any) {
+    return { plugin: 'browser_eval', success: false, error: err.message };
+  }
+}
+
+export async function handleBrowserClose(input: { sessionId: string }): Promise<PluginResult> {
+  try {
+    const data = await browserClose(input.sessionId);
+    return { plugin: 'browser_close', success: true, data };
+  } catch (err: any) {
+    return { plugin: 'browser_close', success: false, error: err.message };
+  }
+}
+
 export async function handleCalculate(input: { expression: string }): Promise<PluginResult> {
   try {
-    // Safe math evaluation using Function constructor with limited scope
     const expr = input.expression
       .replace(/[^0-9+\-*/().%, sqrt sin cos tan log abs pi e\s]/gi, '')
       .replace(/sqrt/g, 'Math.sqrt')
@@ -287,7 +525,7 @@ export async function handleCalculate(input: { expression: string }): Promise<Pl
         result: Number.isInteger(result) ? result : parseFloat(result.toFixed(10)),
       },
     };
-  } catch (err: any) {
+  } catch {
     return { plugin: 'calculate', success: false, error: `Could not evaluate: ${input.expression}` };
   }
 }
@@ -314,13 +552,12 @@ export async function handleGetDatetime(input: { timezone?: string; format?: str
       success: true,
       data: { timezone: tz, datetime: formatted, utc: now.toISOString() },
     };
-  } catch (err: any) {
+  } catch {
     return { plugin: 'get_datetime', success: false, error: `Invalid timezone: ${input.timezone}` };
   }
 }
 
 export async function handleSendEmail(input: { to: string; subject: string; body: string }): Promise<PluginResult> {
-  // This requires Gmail OAuth setup — returns instructions if not configured
   const gmailToken = process.env.GMAIL_ACCESS_TOKEN;
 
   if (!gmailToken) {
@@ -364,7 +601,11 @@ export async function handleSendEmail(input: { to: string; subject: string; body
 }
 
 export async function handleCreateCalendarEvent(input: {
-  title: string; date: string; time?: string; duration_minutes?: number; description?: string;
+  title: string;
+  date: string;
+  time?: string;
+  duration_minutes?: number;
+  description?: string;
 }): Promise<PluginResult> {
   const calendarToken = process.env.GOOGLE_CALENDAR_TOKEN;
 
@@ -377,9 +618,7 @@ export async function handleCreateCalendarEvent(input: {
   }
 
   try {
-    const startTime = input.time
-      ? `${input.date}T${input.time}:00`
-      : `${input.date}T09:00:00`;
+    const startTime = input.time ? `${input.date}T${input.time}:00` : `${input.date}T09:00:00`;
     const duration = input.duration_minutes || 60;
 
     const start = new Date(startTime);
@@ -392,14 +631,11 @@ export async function handleCreateCalendarEvent(input: {
       end: { dateTime: end.toISOString(), timeZone: 'UTC' },
     };
 
-    const res = await fetch(
-      'https://www.googleapis.com/calendar/v3/calendars/primary/events',
-      {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${calendarToken}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify(event),
-      }
-    );
+    const res = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${calendarToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(event),
+    });
 
     if (!res.ok) {
       const err = await res.json();
@@ -407,6 +643,7 @@ export async function handleCreateCalendarEvent(input: {
     }
 
     const created = await res.json();
+
     return {
       plugin: 'create_calendar_event',
       success: true,
@@ -426,13 +663,45 @@ export async function handleCreateCalendarEvent(input: {
 // ── DISPATCH ───────────────────────────────────────────────────────────────────
 export async function dispatchPlugin(name: string, input: any): Promise<PluginResult> {
   switch (name) {
-    case 'get_weather':            return handleWeather(input);
-    case 'get_stock_price':        return handleStockPrice(input);
-    case 'summarise_url':          return handleSummariseUrl(input);
-    case 'calculate':              return handleCalculate(input);
-    case 'get_datetime':           return handleGetDatetime(input);
-    case 'send_email':             return handleSendEmail(input);
-    case 'create_calendar_event':  return handleCreateCalendarEvent(input);
-    default: return { plugin: name, success: false, error: `Unknown plugin: ${name}` };
+    case 'get_weather':
+      return handleWeather(input);
+    case 'get_stock_price':
+      return handleStockPrice(input);
+    case 'summarise_url':
+      return handleSummariseUrl(input);
+    case 'scrape_url':
+      return handleScrapeUrl(input);
+    case 'crawl_site':
+      return handleCrawlSite(input);
+    case 'browser_check_website':
+      return handleBrowserCheckWebsite(input);
+    case 'browser_open':
+      return handleBrowserOpen(input);
+    case 'browser_click':
+      return handleBrowserClick(input);
+    case 'browser_type':
+      return handleBrowserType(input);
+    case 'browser_press':
+      return handleBrowserPress(input);
+    case 'browser_wait':
+      return handleBrowserWait(input);
+    case 'browser_get_text':
+      return handleBrowserGetText(input);
+    case 'browser_screenshot':
+      return handleBrowserScreenshot(input);
+    case 'browser_eval':
+      return handleBrowserEval(input);
+    case 'browser_close':
+      return handleBrowserClose(input);
+    case 'calculate':
+      return handleCalculate(input);
+    case 'get_datetime':
+      return handleGetDatetime(input);
+    case 'send_email':
+      return handleSendEmail(input);
+    case 'create_calendar_event':
+      return handleCreateCalendarEvent(input);
+    default:
+      return { plugin: name, success: false, error: `Unknown plugin: ${name}` };
   }
 }
