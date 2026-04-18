@@ -12,6 +12,34 @@ export interface PluginResult {
 // ── TOOL DEFINITIONS (sent to Claude so it knows what's available) ────────────
 export const PLUGIN_TOOLS = [
   {
+  name: 'fetch_url',
+  description: 'Fetch and extract readable content from a public URL'
+},
+{
+  name: 'crawl_site',
+  description: 'Crawl a website and return important pages'
+},
+{
+  name: 'browser_open',
+  description: 'Open a URL in a real browser session'
+},
+{
+  name: 'browser_click',
+  description: 'Click an element on the current page'
+},
+{
+  name: 'browser_type',
+  description: 'Type into an input field'
+},
+{
+  name: 'browser_screenshot',
+  description: 'Take a screenshot of the current page'
+},
+{
+  name: 'browser_get_text',
+  description: 'Extract visible text from the current page'
+},
+  {
     name: 'get_weather',
     description: 'Get current weather and forecast for any city or location. Use when user asks about weather, temperature, rain, forecast.',
     input_schema: {
