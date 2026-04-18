@@ -87,7 +87,8 @@ export async function POST(req: Request) {
             ? model
             : 'claude-haiku-4-5-20251001';
 
-        const canSearch = plan.webSearch && (useWebSearch || enableWebSearch);
+        //const canSearch = plan.webSearch && (useWebSearch || enableWebSearch);
+        const canSearch = true;
         const canUseTools = plan.tools && !!enablePlugins;
 
         let activeConv = conversation;
