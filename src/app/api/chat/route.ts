@@ -131,6 +131,7 @@ export async function POST(req: Request) {
         let fullReply = '';
 
         for (let step = 0; step < 8; step++) {
+          console.log('TOOLS SENT:', tools);
           const response = await anthropic.messages.create({
             model: safeModel,
             max_tokens: 4096,
