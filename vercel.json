@@ -8,6 +8,9 @@
     },
     "src/app/api/plugins/route.ts": {
       "maxDuration": 120
+    },
+    "src/app/api/research/route.ts": {
+      "maxDuration": 120
     }
   }
 }
