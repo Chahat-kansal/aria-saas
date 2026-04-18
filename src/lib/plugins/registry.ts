@@ -1,7 +1,19 @@
 // ── PLUGIN REGISTRY ──────────────────────────────────────────────────────────
 // Each plugin is a Claude tool definition + a server-side handler.
 // Claude decides which plugin(s) to call based on the user's message.
-
+import { scrapeUrl, crawlSite, summarisePublicUrl } from '@/lib/web';
+import {
+  browserOpen,
+  browserClick,
+  browserType,
+  browserPress,
+  browserWait,
+  browserGetText,
+  browserScreenshot,
+  browserEvaluate,
+  browserClose,
+  browserCheckWebsite,
+} from '@/lib/browser';
 export interface PluginResult {
   plugin: string;
   success: boolean;
