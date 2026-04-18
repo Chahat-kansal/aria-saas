@@ -119,12 +119,12 @@ export async function POST(req: Request) {
           tools.push({ type: 'web_search_20250305', name: 'web_search' });
         }
         if (canUseTools) {
-          for (const tool of ARIA_TOOLS) {
-            if (tool.type !== 'web_search_20250305') {
-              tools.push(tool);
-            }
-          }
-        }
+  for (const tool of ARIA_TOOLS) {
+    if (!('type' in tool) || tool.type !== 'web_search_20250305') {
+      tools.push(tool);
+    }
+  }
+}
 
         let loopMessages: any[] = [...history];
         let fullReply = '';
