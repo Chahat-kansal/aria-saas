@@ -90,7 +90,7 @@ export async function POST(req: Request) {
         //const canSearch = plan.webSearch && (useWebSearch || enableWebSearch);
         const canSearch = true;
         const canUseTools = true;
-        const canUseTools = plan.tools && !!enablePlugins;
+        //const canUseTools = plan.tools && !!enablePlugins;
 
         let activeConv = conversation;
         if (!activeConv) {
