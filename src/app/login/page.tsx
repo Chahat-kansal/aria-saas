@@ -25,7 +25,14 @@ export default function LoginPage() {
     setError('');
     const { error: err } = await supabase.auth.signInWithPassword({ email, password });
     setLoading(false);
-    if (err) { setError(err.message); return; }
+    if (err) {
+      if (err.message.toLowerCase().includes('email not confirmed')) {
+        setError('Please check your email and click the confirmation link before logging in.');
+      } else {
+        setError(err.message);
+      }
+      return;
+    }
     router.push('/dashboard');
     router.refresh();
   }
