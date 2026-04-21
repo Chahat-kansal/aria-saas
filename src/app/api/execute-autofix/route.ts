@@ -1,5 +1,5 @@
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+
+
 import { NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 
@@ -163,8 +163,10 @@ Return ONLY a JSON object with this exact format, no other text:
 }
 
 export async function POST(req: Request) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const { createServerSupabaseClient } = await import('@/lib/supabase-server');
+  const supabase = createServerSupabaseClient();
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { code, language, stdin = '', autoFix = true } = await req.json();
 

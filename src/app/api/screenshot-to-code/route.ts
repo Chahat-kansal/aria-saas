@@ -1,20 +1,19 @@
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+
+
 import Anthropic from '@anthropic-ai/sdk';
 import { NextResponse } from 'next/server';
-import { connectDB } from '@/lib/mongodb';
-import { User } from '@/models/User';
+
+
+
+import { createServerSupabaseClient } from '@/lib/supabase-server';
 
 export const maxDuration = 120;
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 export async function POST(req: Request) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-  await connectDB();
-  const user = await User.findById((session.user as any).id);
-  if (!user) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  const supabase = createServerSupabaseClient();
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { imageBase64, mimeType = 'image/png', framework = 'html' } = await req.json();
 

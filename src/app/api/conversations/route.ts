@@ -1,25 +1,27 @@
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
-import { connectDB } from '@/lib/mongodb';
-import { Conversation } from '@/models/Conversation';
+import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
 
 export async function GET() {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  await connectDB();
-  const convos = await Conversation.find({ userId: (session.user as any).id })
-    .sort({ updatedAt: -1 })
-    .limit(50)
-    .select('_id title updatedAt model');
-  return NextResponse.json(convos);
+  const supabase = createServerSupabaseClient();
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  const { data } = await supabase
+    .from('conversations')
+    .select('id,title,updated_at,aimodel')
+    .eq('user_id', session.user.id)
+    .order('updated_at', { ascending: false })
+    .limit(50);
+
+  return NextResponse.json(data || []);
 }
 
 export async function DELETE(req: Request) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const supabase = createServerSupabaseClient();
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
   const { id } = await req.json();
-  await connectDB();
-  await Conversation.deleteOne({ _id: id, userId: (session.user as any).id });
+  await supabase.from('conversations').delete().eq('id', id).eq('user_id', session.user.id);
   return NextResponse.json({ success: true });
 }

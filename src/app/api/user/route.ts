@@ -1,16 +1,23 @@
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
-import { connectDB } from '@/lib/mongodb';
-import { User } from '@/models/User';
+import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
 
 export async function GET() {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  await connectDB();
-  const user = await User.findById((session.user as any).id).select('-password');
+  const supabase = createServerSupabaseClient();
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  const user = session.user;
+  const { data: business } = await supabase
+    .from('businesses')
+    .select('name,plan,owner_name')
+    .eq('user_id', user.id)
+    .single();
+
   return NextResponse.json({
-    name: user?.name, email: user?.email, image: user?.image,
-    plan: user?.plan, messagesUsedThisMonth: user?.messagesUsedThisMonth,
+    id: user.id,
+    name: user.user_metadata?.full_name || business?.owner_name || '',
+    email: user.email,
+    image: user.user_metadata?.avatar_url || null,
+    plan: business?.plan || 'starter',
   });
 }

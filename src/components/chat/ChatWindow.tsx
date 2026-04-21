@@ -1,7 +1,6 @@
 'use client';
 import { useState, useRef, useEffect, useCallback, memo } from 'react';
 import { useRouter } from 'next/navigation';
-import { useSession } from 'next-auth/react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
@@ -41,8 +40,8 @@ const BUILDER_STARTERS = [
 ];
 
 // ── Memoized message bubble — only re-renders when its own content changes ──
-const MessageBubble = memo(({ msg, isLast, loading, session, onPreview, onRun, onArtifactClick, activeArtifactId, onRegenerate, msgIndex }: {
-  msg: Message; isLast: boolean; loading: boolean; session: any;
+const MessageBubble = memo(({ msg, isLast, loading, userInitial, onPreview, onRun, onArtifactClick, activeArtifactId, onRegenerate, msgIndex }: {
+  msg: Message; isLast: boolean; loading: boolean; userInitial: string;
   onPreview: (art: CodeArtifact) => void;
   onRun: (code: string, lang: string) => void;
   onArtifactClick: (art: CodeArtifact) => void;
@@ -54,7 +53,7 @@ const MessageBubble = memo(({ msg, isLast, loading, session, onPreview, onRun, o
     return (
       <div className="flex gap-2 flex-row-reverse">
         <div className="w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold flex-shrink-0 self-start mt-0.5 bg-white/10 text-white">
-          {session?.user?.name?.[0] || 'U'}
+          {userInitial}
         </div>
         <div className="flex flex-col gap-1.5 min-w-0 items-end max-w-[85%]">
           {msg.fileUrl && <div className="text-xs text-[#888899] bg-white/5 border border-white/10 rounded-lg px-3 py-1.5">📎 <a href={msg.fileUrl} target="_blank" rel="noopener" className="hover:underline">{msg.fileName}</a></div>}
@@ -169,7 +168,7 @@ const MessageBubble = memo(({ msg, isLast, loading, session, onPreview, onRun, o
 MessageBubble.displayName = 'MessageBubble';
 
 export function ChatWindow({ conversationId }: Props) {
-  const { data: session } = useSession();
+  const [userName, setUserName] = useState('U');
   const router = useRouter();
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
@@ -206,7 +205,7 @@ export function ChatWindow({ conversationId }: Props) {
   const showSplit = (!!activeArtifact && (activeArtifact.streaming || !!activeArtifact.code)) || !!rightPanel;
 
   useEffect(() => {
-    fetch('/api/user').then(r => r.json()).then(d => setUserPlan(d.plan || 'free')).catch(() => {});
+    fetch('/api/user').then(r => r.json()).then(d => { setUserPlan(d.plan || 'free'); setUserName((d.name || 'U')[0]); }).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -532,7 +531,7 @@ export function ChatWindow({ conversationId }: Props) {
                 msgIndex={i}
                 isLast={i === messages.length - 1}
                 loading={loading}
-                session={session}
+                userInitial={userName}
                 onPreview={onPreview}
                 onRun={openExecutor}
                 onArtifactClick={onArtifactClick}

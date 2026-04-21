@@ -1,29 +1,36 @@
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
-import { connectDB } from '@/lib/mongodb';
-import { Conversation } from '@/models/Conversation';
 
 export async function POST(req: Request) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const supabase = createServerSupabaseClient();
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { conversationId, fromMessageIndex } = await req.json();
-  await connectDB();
 
-  const original = await Conversation.findOne({ _id: conversationId, userId: (session.user as any).id });
+  const { data: original } = await supabase
+    .from('conversations')
+    .select('*')
+    .eq('id', conversationId)
+    .eq('user_id', session.user.id)
+    .single();
+
   if (!original) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-  // Clone conversation up to the branch point
-  const branchedMessages = original.messages.slice(0, fromMessageIndex + 1);
-  const branch = await Conversation.create({
-    userId: original.userId,
-    title: `🌿 Branch of: ${original.title}`,
-    messages: branchedMessages,
-    model: original.model,
-    parentConversationId: conversationId,
-    branchPoint: fromMessageIndex,
-  });
+  const branchedMessages = (original.messages as any[]).slice(0, fromMessageIndex + 1);
 
-  return NextResponse.json({ conversationId: branch._id.toString(), title: branch.title });
+  const { data: branch } = await supabase
+    .from('conversations')
+    .insert({
+      user_id: session.user.id,
+      title: `🌿 Branch of: ${original.title}`,
+      messages: branchedMessages,
+      aimodel: original.aimodel,
+      parent_conversation_id: conversationId,
+      branch_point: fromMessageIndex,
+    })
+    .select()
+    .single();
+
+  return NextResponse.json({ conversationId: branch?.id, title: branch?.title });
 }

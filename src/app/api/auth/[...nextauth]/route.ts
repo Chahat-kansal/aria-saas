@@ -1,5 +1,5 @@
-import NextAuth from 'next-auth';
-import { authOptions } from '@/lib/auth';
-
-const handler = NextAuth(authOptions);
-export { handler as GET, handler as POST };
+// NextAuth removed — auth is handled by Supabase.
+// This stub prevents 404s from any lingering client references.
+import { NextResponse } from 'next/server';
+export async function GET() { return NextResponse.json({ error: 'Not used' }, { status: 410 }); }
+export async function POST() { return NextResponse.json({ error: 'Not used' }, { status: 410 }); }

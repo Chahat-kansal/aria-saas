@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import Stripe from 'stripe';
-import { connectDB } from '@/lib/mongodb';
-import { User } from '@/models/User';
+import { supabaseAdmin } from '@/lib/supabase';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2024-06-20' });
 
@@ -16,25 +15,36 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Invalid signature' }, { status: 400 });
   }
 
-  await connectDB();
-
   if (event.type === 'checkout.session.completed') {
     const session = event.data.object as Stripe.Checkout.Session;
     const userId = session.metadata?.userId;
+    const plan = (session.metadata?.plan as 'starter' | 'growth' | 'pro') || 'starter';
+
     if (userId) {
-      await User.findByIdAndUpdate(userId, {
-        plan: 'pro',
-        stripeSubscriptionId: session.subscription as string,
-      });
+      await supabaseAdmin
+        .from('businesses')
+        .update({
+          plan,
+          stripe_subscription_id: session.subscription as string,
+        })
+        .eq('user_id', userId);
     }
+  }
+
+  if (event.type === 'customer.subscription.updated') {
+    const sub = event.data.object as Stripe.Subscription;
+    await supabaseAdmin
+      .from('businesses')
+      .update({ plan: sub.metadata?.plan || 'starter' })
+      .eq('stripe_subscription_id', sub.id);
   }
 
   if (event.type === 'customer.subscription.deleted') {
     const sub = event.data.object as Stripe.Subscription;
-    await User.findOneAndUpdate(
-      { stripeSubscriptionId: sub.id },
-      { plan: 'free', stripeSubscriptionId: null }
-    );
+    await supabaseAdmin
+      .from('businesses')
+      .update({ plan: 'starter', stripe_subscription_id: null })
+      .eq('stripe_subscription_id', sub.id);
   }
 
   return NextResponse.json({ received: true });

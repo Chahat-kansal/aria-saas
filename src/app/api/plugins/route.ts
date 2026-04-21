@@ -1,12 +1,7 @@
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
-import { connectDB } from '@/lib/mongodb';
-import { User } from '@/models/User';
-import { Conversation } from '@/models/Conversation';
+import { createServerSupabaseClient } from '@/lib/supabase-server';
 import Anthropic from '@anthropic-ai/sdk';
 
-export const maxDuration = 120; // Allow 120s for Claude streaming
-
+export const maxDuration = 120;
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -39,66 +34,65 @@ const ALLOWED_MODELS = new Set([
 ]);
 
 export async function POST(req: Request) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
+  const supabase = createServerSupabaseClient();
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
 
   let body: any;
   try { body = await req.json(); } catch { return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400 }); }
 
-  const { message, conversationId, model, enableWebSearch, enablePlugins, system } = body;
+  const { message, conversationId, model, enableWebSearch, system } = body;
   if (!message?.trim()) return new Response(JSON.stringify({ error: 'Message required' }), { status: 400 });
+
+  const { data: business } = await supabase
+    .from('businesses')
+    .select('plan')
+    .eq('user_id', session.user.id)
+    .single();
+
+  const plan = business?.plan ?? 'starter';
+  const planModels = plan === 'pro'
+    ? ['claude-haiku-4-5-20251001', 'claude-sonnet-4-5-20250929', 'claude-opus-4-5-20251101']
+    : ['claude-haiku-4-5-20251001'];
+  const safeModel = ALLOWED_MODELS.has(model) && planModels.includes(model) ? model : 'claude-haiku-4-5-20251001';
+  const canSearch = plan === 'pro' && enableWebSearch;
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {
       const send = (data: object) => controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
       try {
-        await connectDB();
+        let convId = conversationId;
+        let history: Array<{ role: string; content: string }> = [];
 
-        const [user, conversation] = await Promise.all([
-          User.findById((session.user as any).id),
-          conversationId ? Conversation.findOne({ _id: conversationId, userId: (session.user as any).id }) : null,
-        ]);
-
-        if (!user) { send({ error: 'User not found' }); controller.close(); return; }
-
-        const now = new Date();
-        if (now.getMonth() !== new Date(user.messagesResetAt).getMonth()) {
-          user.messagesUsedThisMonth = 0; user.messagesResetAt = now;
+        if (convId) {
+          const { data } = await supabase
+            .from('conversations')
+            .select('messages')
+            .eq('id', convId)
+            .eq('user_id', session.user.id)
+            .single();
+          if (data) history = (data.messages as any[]) || [];
+        } else {
+          const { data } = await supabase
+            .from('conversations')
+            .insert({ user_id: session.user.id, title: message.slice(0, 60), messages: [], aimodel: safeModel })
+            .select('id')
+            .single();
+          convId = data?.id;
         }
 
-        if (user.plan === 'free' && user.messagesUsedThisMonth >= 50) {
-          send({ error: 'Monthly limit reached. Upgrade to Pro.' }); controller.close(); return;
-        }
+        history.push({ role: 'user', content: message });
 
-        const planModels = user.plan === 'pro'
-          ? ['claude-haiku-4-5-20251001','claude-sonnet-4-5-20250929','claude-opus-4-5-20251101']
-          : ['claude-haiku-4-5-20251001'];
-        const safeModel = ALLOWED_MODELS.has(model) && planModels.includes(model) ? model : 'claude-haiku-4-5-20251001';
-        const canSearch = user.plan === 'pro' && enableWebSearch;
-
-        let activeConv = conversation;
-        if (!activeConv) {
-          activeConv = await Conversation.create({ userId: user._id, title: message.slice(0, 60), messages: [], model: safeModel });
-        }
-        activeConv.messages.push({ role: 'user', content: message, createdAt: new Date() });
-
-        const history = activeConv.messages.slice(-40).map((m: any) => ({ role: m.role, content: m.content }));
-
-        const systemPrompt = [
-          user.customPersona || '',
-          user.systemPrompt || '',
-          system?.trim() || ARIA_SYSTEM,
-        ].filter(Boolean).join('\n\n');
-
+        const systemPrompt = system?.trim() || ARIA_SYSTEM;
         const tools = canSearch ? [{ type: 'web_search_20250305' as const, name: 'web_search' }] : undefined;
 
         let fullReply = '';
-        const claudeStream = await anthropic.messages.stream({
+        const claudeStream = anthropic.messages.stream({
           model: safeModel,
           max_tokens: 8096,
           system: systemPrompt,
-          messages: history,
+          messages: history.slice(-40) as any,
           ...(tools ? { tools } : {}),
         } as any);
 
@@ -109,12 +103,13 @@ export async function POST(req: Request) {
           }
         }
 
-        activeConv.messages.push({ role: 'assistant', content: fullReply, createdAt: new Date() });
-        user.messagesUsedThisMonth += 1;
-        activeConv.save().catch(console.error);
-        user.save().catch(console.error);
+        history.push({ role: 'assistant', content: fullReply });
+        await supabase
+          .from('conversations')
+          .update({ messages: history, updated_at: new Date().toISOString() })
+          .eq('id', convId);
 
-        send({ done: true, conversationId: activeConv._id.toString() });
+        send({ done: true, conversationId: convId });
       } catch (err: any) {
         console.error('Plugins error:', err);
         send({ error: err.message || 'Something went wrong' });

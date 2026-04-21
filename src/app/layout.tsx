@@ -7,20 +7,20 @@ const sora = Sora({ subsets: ['latin'], variable: '--font-sora' });
 const mono = JetBrains_Mono({ subsets: ['latin'], variable: '--font-mono' });
 
 export const metadata: Metadata = {
-  title: 'Aria — Your AI Assistant',
-  description: 'Aria is a powerful AI assistant for real work. Chat, search the web, analyse files, and more.',
+  title: 'Aria OS — AI Operating System for Local Business',
+  description: 'Aria OS helps cafes, tradies, salons, and retailers run smarter with AI-powered insights, automation, and customer intelligence.',
   icons: { icon: '/favicon.ico' },
   openGraph: {
-    title: 'Aria — Your AI Assistant',
-    description: 'A powerful AI assistant for real work.',
+    title: 'Aria OS — AI Operating System for Local Business',
+    description: 'AI-powered operations for local businesses.',
     type: 'website',
   },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className="dark">
-      <body className={`${sora.variable} ${mono.variable} font-sans bg-[#0e0e12] text-[#f0f0f5] antialiased`}>
+    <html lang="en">
+      <body className={`${sora.variable} ${mono.variable} font-sans antialiased`}>
         <Providers>{children}</Providers>
       </body>
     </html>

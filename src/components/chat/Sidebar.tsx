@@ -2,7 +2,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { signOut } from 'next-auth/react';
+import { createClient } from '@supabase/supabase-js';
+const _sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
 
 interface Convo { _id: string; title: string; }
 interface Props { user: { name?: string; email?: string; image?: string; plan?: string; }; }
@@ -181,7 +182,7 @@ export function Sidebar({ user }: Props) {
               <div className="text-xs font-medium text-white truncate">{user.name}</div>
               <div className="text-[10px] text-[#555566] truncate">{user.email}</div>
             </div>
-            <button onClick={e => { e.preventDefault(); signOut({ callbackUrl: '/login' }); }}
+            <button onClick={e => { e.preventDefault(); _sb.auth.signOut().then(() => { window.location.href = '/login'; }); }}
               className="opacity-0 group-hover:opacity-100 text-[#555566] hover:text-white text-xs" title="Sign out">⏻</button>
           </Link>
         </div>

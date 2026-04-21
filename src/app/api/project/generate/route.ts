@@ -1,7 +1,4 @@
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
-import { connectDB } from '@/lib/mongodb';
-import { User } from '@/models/User';
+import { createServerSupabaseClient } from '@/lib/supabase-server';
 import Anthropic from '@anthropic-ai/sdk';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -45,31 +42,18 @@ Common project structures:
 - Dashboard: index.html, css/style.css, js/main.js, js/charts.js`;
 
 export async function POST(req: Request) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
-
-  await connectDB();
-  const user = await User.findById((session.user as any).id);
-  if (!user) return new Response(JSON.stringify({ error: 'User not found' }), { status: 404 });
-
-  const now = new Date();
-  if (now.getMonth() !== new Date(user.messagesResetAt).getMonth()) {
-    user.messagesUsedThisMonth = 0;
-    user.messagesResetAt = now;
-  }
-  if (user.plan === 'free' && user.messagesUsedThisMonth >= 50) {
-    return new Response(JSON.stringify({ error: 'Monthly limit reached. Upgrade to Pro.' }), { status: 429 });
-  }
+  const supabase = createServerSupabaseClient();
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
 
   const { prompt, model, existingProject } = await req.json();
   if (!prompt?.trim()) return new Response(JSON.stringify({ error: 'Prompt required' }), { status: 400 });
 
-  const safeModel = ['claude-sonnet-4-20250514', 'claude-opus-4-20250514'].includes(model)
-    ? model : 'claude-sonnet-4-20250514'; // Project builder always uses Sonnet minimum
+  const safeModel = ['claude-sonnet-4-5-20250929', 'claude-opus-4-5-20251101'].includes(model)
+    ? model : 'claude-sonnet-4-5-20250929';
 
   const messages: any[] = [];
 
-  // If iterating on existing project, include context
   if (existingProject) {
     const fileList = existingProject.files.map((f: any) => `${f.path}: ${f.content.slice(0, 200)}...`).join('\n');
     messages.push({
@@ -85,7 +69,7 @@ export async function POST(req: Request) {
     async start(controller) {
       let fullReply = '';
       try {
-        const claudeStream = await anthropic.messages.stream({
+        const claudeStream = anthropic.messages.stream({
           model: safeModel,
           max_tokens: 8192,
           system: MULTIFILE_SYSTEM,
@@ -99,7 +83,6 @@ export async function POST(req: Request) {
           }
         }
 
-        // Parse the JSON project from the response
         let project = null;
         try {
           const jsonMatch = fullReply.match(/\{[\s\S]*\}/);
@@ -107,9 +90,6 @@ export async function POST(req: Request) {
         } catch {
           project = null;
         }
-
-        user.messagesUsedThisMonth += 1;
-        await user.save();
 
         controller.enqueue(encoder.encode(`data: ${JSON.stringify({ done: true, project })}\n\n`));
       } catch (err: any) {
