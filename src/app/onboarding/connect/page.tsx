@@ -1,7 +1,6 @@
 'use client';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { supabase } from '@/lib/supabase';
 
 export default function ConnectPage() {

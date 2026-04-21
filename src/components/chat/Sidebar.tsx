@@ -2,8 +2,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { createClient } from '@supabase/supabase-js';
-const _sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
+import { supabase as _sb } from '@/lib/supabase';
 
 interface Convo { _id: string; title: string; }
 interface Props { user: { name?: string; email?: string; image?: string; plan?: string; }; }
