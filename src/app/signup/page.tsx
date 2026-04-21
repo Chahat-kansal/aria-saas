@@ -25,17 +25,22 @@ export default function SignupPage() {
     if (password.length < 8) { setError('Password must be at least 8 characters'); return; }
     setLoading(true);
     setError('');
-    const { error: err } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: { full_name: name },
-        emailRedirectTo: `${process.env.NEXT_PUBLIC_APP_URL ?? location.origin}/auth/callback`,
-      },
-    });
-    setLoading(false);
-    if (err) { setError(err.message); return; }
-    router.push('/onboarding/industry');
+    try {
+      const { error: err } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: { full_name: name },
+          emailRedirectTo: `${process.env.NEXT_PUBLIC_APP_URL ?? location.origin}/auth/callback`,
+        },
+      });
+      if (err) { setError(err.message); return; }
+      router.push('/onboarding/industry');
+    } catch (e: any) {
+      setError(e?.message ?? 'An unexpected error occurred. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function handleGoogle() {

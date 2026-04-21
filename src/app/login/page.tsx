@@ -23,18 +23,23 @@ export default function LoginPage() {
     e.preventDefault();
     setLoading(true);
     setError('');
-    const { error: err } = await supabase.auth.signInWithPassword({ email, password });
-    setLoading(false);
-    if (err) {
-      if (err.message.toLowerCase().includes('email not confirmed')) {
-        setError('Please check your email and click the confirmation link before logging in.');
-      } else {
-        setError(err.message);
+    try {
+      const { error: err } = await supabase.auth.signInWithPassword({ email, password });
+      if (err) {
+        if (err.message.toLowerCase().includes('email not confirmed')) {
+          setError('Please check your email and click the confirmation link before logging in.');
+        } else {
+          setError(err.message);
+        }
+        return;
       }
-      return;
+      router.push('/dashboard');
+      router.refresh();
+    } catch (e: any) {
+      setError(e?.message ?? 'An unexpected error occurred. Please try again.');
+    } finally {
+      setLoading(false);
     }
-    router.push('/dashboard');
-    router.refresh();
   }
 
   async function handleGoogle() {
