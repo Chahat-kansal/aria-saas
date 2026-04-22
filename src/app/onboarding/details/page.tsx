@@ -40,19 +40,48 @@ export default function DetailsPage() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { router.push('/login'); return; }
 
-    const { error: err } = await supabase.from('businesses').upsert({
-      user_id: user.id,
-      name: form.name,
-      owner_name: form.ownerName,
-      industry,
-      address: form.address,
-      phone: form.phone ? `+61${form.phone}` : null,
-      email: form.email || user.email,
-      staff_count: form.staffCount,
-      monthly_revenue: form.monthlyRevenue,
-      biggest_challenge: form.biggestChallenge,
-      google_business_url: form.googleUrl || null,
-    }, { onConflict: 'user_id' });
+    const { data: existing } = await supabase
+      .from('businesses')
+      .select('id')
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    let err;
+    if (existing?.id) {
+      const { error } = await supabase
+        .from('businesses')
+        .update({
+          name: form.name,
+          owner_name: form.ownerName,
+          industry,
+          address: form.address,
+          phone: form.phone ? `+61${form.phone}` : null,
+          email: form.email || user.email,
+          staff_count: form.staffCount,
+          monthly_revenue: form.monthlyRevenue,
+          biggest_challenge: form.biggestChallenge,
+          google_business_url: form.googleUrl || null,
+        })
+        .eq('user_id', user.id);
+      err = error;
+    } else {
+      const { error } = await supabase
+        .from('businesses')
+        .insert({
+          user_id: user.id,
+          name: form.name,
+          owner_name: form.ownerName,
+          industry,
+          address: form.address,
+          phone: form.phone ? `+61${form.phone}` : null,
+          email: form.email || user.email,
+          staff_count: form.staffCount,
+          monthly_revenue: form.monthlyRevenue,
+          biggest_challenge: form.biggestChallenge,
+          google_business_url: form.googleUrl || null,
+        });
+      err = error;
+    }
 
     setLoading(false);
     if (err) { setError(err.message); return; }
