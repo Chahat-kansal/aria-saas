@@ -31,12 +31,16 @@ export default function LoginPage() {
       console.log('Attempting sign in...');
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       console.log('Sign in result:', { data, error });
+      console.log('Session:', data?.session);
+      console.log('User:', data?.user);
 
       if (error) {
         setError(error.message);
         return;
       }
-      router.push('/dashboard');
+
+      console.log('Redirecting to dashboard...');
+      window.location.href = '/dashboard';
     } catch (err) {
       console.log('Caught error:', err);
       setError('An unexpected error occurred');
