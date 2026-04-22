@@ -15,6 +15,7 @@ export async function POST(req: Request) {
     items, customer_id, payment_method,
     subtotal, tax_amount, discount_amount, total_amount,
     cash_tendered, change_given, notes,
+    split_cash, split_card, outlet_id,
   } = body;
 
   if (!items?.length) return NextResponse.json({ error: 'No items' }, { status: 400 });
@@ -71,6 +72,9 @@ export async function POST(req: Request) {
       total_amount: +total_amount.toFixed(2),
       cash_tendered: cash_tendered ?? null,
       change_given: change_given ?? null,
+      split_cash: split_cash ?? null,
+      split_card: split_card ?? null,
+      outlet_id: outlet_id ?? null,
       notes: notes ?? null,
       status: 'completed',
     })
@@ -114,11 +118,13 @@ export async function POST(req: Request) {
 
   // Update session totals
   if (openSession) {
-    const isCash = payment_method === 'cash';
-    const isCard = payment_method === 'card';
+    const cashAmt = payment_method === 'cash' ? total_amount
+      : payment_method === 'split' ? (split_cash ?? 0) : 0;
+    const cardAmt = payment_method === 'card' ? total_amount
+      : payment_method === 'split' ? (split_card ?? 0) : 0;
     await supabase.from('pos_cash_sessions').update({
-      cash_sales: isCash ? (openSession.cash_sales ?? 0) + total_amount : openSession.cash_sales,
-      card_sales: isCard ? (openSession.card_sales ?? 0) + total_amount : openSession.card_sales,
+      cash_sales: (openSession.cash_sales ?? 0) + cashAmt,
+      card_sales: (openSession.card_sales ?? 0) + cardAmt,
     }).eq('id', openSession.id);
   }
 
