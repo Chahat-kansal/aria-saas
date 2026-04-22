@@ -47,6 +47,13 @@ const NAV = [
       { href: '/dashboard/compliance', label: 'Compliance', icon: CheckSquareIcon },
     ],
   },
+  {
+    section: 'Modules',
+    items: [
+      { href: '/visa', label: 'VisaAI', icon: PassportIcon, badge: 'New' },
+      { href: '/pos', label: 'AriaPOS', icon: RegisterIcon, badge: 'New' },
+    ],
+  },
 ];
 
 export function Sidebar({ business }: { business: Business }) {
@@ -95,7 +102,9 @@ export function Sidebar({ business }: { business: Business }) {
                   <span className="flex-1">{item.label}</span>
                   {item.badge && (
                     <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-medium ${
-                      item.badge === 'AI' ? 'bg-[rgba(29,158,117,0.2)] text-[#1D9E75]' : 'bg-[rgba(245,158,11,0.2)] text-amber-400'
+                      item.badge === 'AI'  ? 'bg-[rgba(29,158,117,0.2)] text-[#1D9E75]' :
+                      item.badge === 'New' ? 'bg-[rgba(249,115,22,0.2)] text-orange-400' :
+                      'bg-[rgba(245,158,11,0.2)] text-amber-400'
                     }`}>
                       {item.badge}
                     </span>
@@ -151,4 +160,10 @@ function FileTextIcon({ className }: { className?: string }) {
 }
 function CheckSquareIcon({ className }: { className?: string }) {
   return <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><polyline points="9 11 12 14 22 4"/><path strokeLinecap="round" d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>;
+}
+function PassportIcon({ className }: { className?: string }) {
+  return <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><rect x="4" y="2" width="16" height="20" rx="2"/><circle cx="12" cy="11" r="3"/><line x1="8" y1="17" x2="16" y2="17"/></svg>;
+}
+function RegisterIcon({ className }: { className?: string }) {
+  return <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>;
 }
