@@ -19,28 +19,31 @@ export default function LoginPage() {
     );
   }
 
-  async function handleSubmit(e: React.FormEvent) {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    console.log('Form submitted');
+    console.log('Supabase client:', supabase);
+    console.log('Email:', email);
     setLoading(true);
     setError('');
+
     try {
-      const { error: err } = await supabase.auth.signInWithPassword({ email, password });
-      if (err) {
-        if (err.message.toLowerCase().includes('email not confirmed')) {
-          setError('Please check your email and click the confirmation link before logging in.');
-        } else {
-          setError(err.message);
-        }
+      console.log('Attempting sign in...');
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      console.log('Sign in result:', { data, error });
+
+      if (error) {
+        setError(error.message);
         return;
       }
       router.push('/dashboard');
-      router.refresh();
-    } catch (e: any) {
-      setError(e?.message ?? 'An unexpected error occurred. Please try again.');
+    } catch (err) {
+      console.log('Caught error:', err);
+      setError('An unexpected error occurred');
     } finally {
       setLoading(false);
     }
-  }
+  };
 
   async function handleGoogle() {
     await supabase.auth.signInWithOAuth({
