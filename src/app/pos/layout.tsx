@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
-import { PosSidebar } from '@/components/pos/PosSidebar';
+import { POSLayout } from '@/components/pos/POSLayout';
 
 export const metadata = { title: 'AriaPOS — Point of Sale' };
 
@@ -11,23 +11,17 @@ export default async function PosLayout({ children }: { children: React.ReactNod
 
   const { data: business } = await supabase
     .from('businesses')
-    .select('id')
+    .select('id, name, owner_name')
     .eq('user_id', session.user.id)
     .maybeSingle();
 
   if (!business) redirect('/onboarding/industry');
 
-  const { data: openSession } = await supabase
-    .from('pos_cash_sessions')
-    .select('id')
-    .eq('business_id', business.id)
-    .eq('status', 'open')
-    .maybeSingle();
+  const userName = business.owner_name || session.user.email || 'User';
 
   return (
-    <div className="flex h-screen bg-[#f5f4ef] overflow-hidden">
-      <PosSidebar openSession={!!openSession} />
-      <main className="flex-1 overflow-hidden flex flex-col">{children}</main>
-    </div>
+    <POSLayout userName={userName}>
+      {children}
+    </POSLayout>
   );
 }
