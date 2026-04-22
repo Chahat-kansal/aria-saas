@@ -2,7 +2,7 @@ import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
 
 async function getBusinessId(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string) {
-  const { data } = await supabase.from('businesses').select('id').eq('user_id', userId).single();
+  const { data } = await supabase.from('businesses').select('id').eq('user_id', userId).maybeSingle();
   return data?.id ?? null;
 }
 
@@ -21,8 +21,8 @@ export async function GET(req: Request) {
     .from('pos_cash_sessions')
     .select('*')
     .eq('business_id', bid)
-    .is('closed_at', null)
-    .single();
+    .eq('status', 'open')
+    .maybeSingle();
 
   if (!history) return NextResponse.json({ openSession: openSession || null });
 
@@ -48,8 +48,8 @@ export async function POST(req: Request) {
     .from('pos_cash_sessions')
     .select('id')
     .eq('business_id', bid)
-    .is('closed_at', null)
-    .single();
+    .eq('status', 'open')
+    .maybeSingle();
 
   if (existing) return NextResponse.json({ error: 'A session is already open' }, { status: 400 });
 
@@ -60,8 +60,9 @@ export async function POST(req: Request) {
       business_id: bid,
       opened_by: session.user.id,
       opening_float: opening_float ?? 0,
-      total_cash_sales: 0,
-      total_card_sales: 0,
+      status: 'open',
+      cash_sales: 0,
+      card_sales: 0,
     })
     .select()
     .single();
@@ -83,10 +84,14 @@ export async function PATCH(req: Request) {
 
   const { error } = await supabase
     .from('pos_cash_sessions')
-    .update({ closed_at: new Date().toISOString(), closing_float: closing_float ?? 0 })
+    .update({
+      status: 'closed',
+      closed_at: new Date().toISOString(),
+      closing_float: closing_float ?? 0,
+    })
     .eq('id', session_id)
     .eq('business_id', bid)
-    .is('closed_at', null);
+    .eq('status', 'open');
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });
