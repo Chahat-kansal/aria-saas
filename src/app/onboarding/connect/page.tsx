@@ -17,7 +17,8 @@ export default function ConnectPage() {
         .update({ onboarding_complete: true })
         .eq('user_id', user.id);
     }
-    router.push('/dashboard');
+    // Full page reload so the server re-reads the latest session cookie
+    window.location.href = '/dashboard';
   }
 
   return (

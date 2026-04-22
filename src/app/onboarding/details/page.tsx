@@ -40,7 +40,7 @@ export default function DetailsPage() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { router.push('/login'); return; }
 
-    const { error: err } = await supabase.from('businesses').insert({
+    const { error: err } = await supabase.from('businesses').upsert({
       user_id: user.id,
       name: form.name,
       owner_name: form.ownerName,
@@ -52,7 +52,7 @@ export default function DetailsPage() {
       monthly_revenue: form.monthlyRevenue,
       biggest_challenge: form.biggestChallenge,
       google_business_url: form.googleUrl || null,
-    });
+    }, { onConflict: 'user_id' });
 
     setLoading(false);
     if (err) { setError(err.message); return; }

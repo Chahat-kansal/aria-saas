@@ -13,7 +13,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
     .from('businesses')
     .select('*')
     .eq('user_id', session.user.id)
-    .single();
+    .limit(1)
+    .maybeSingle();
 
   if (!business) redirect('/onboarding/industry');
 
