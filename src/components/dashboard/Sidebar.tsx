@@ -1,7 +1,9 @@
 'use client';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { industryConfig, type Industry } from '@/lib/industry-config';
+import { supabase } from '@/lib/supabase';
+import { useState } from 'react';
 
 interface Business {
   id: string;
@@ -46,28 +48,42 @@ const SECTION_ORDER = ['Overview', 'Revenue', 'Reputation', 'Intelligence', 'Pro
 /* ─── Component ─────────────────────────────────────────────────── */
 export function Sidebar({ business }: { business: Business }) {
   const pathname = usePathname();
+  const router = useRouter();
+  const [signingOut, setSigningOut] = useState(false);
   const industry = (business.industry ?? 'professional') as Industry;
   const config = industryConfig[industry] ?? industryConfig.professional;
 
   // Build sections from the industry's sidebar list
   const sections: Record<string, NavItemDef[]> = {};
 
-  // Always include Ask Aria in Overview
   sections['Overview'] = [
     ALL_ITEMS['dashboard'],
     { href: '/dashboard/ask-aria', label: 'Ask Aria', icon: ChatIcon, badge: 'AI', section: 'Overview' },
   ];
 
   for (const key of config.sidebar as readonly string[]) {
-    if (key === 'dashboard') continue; // already in Overview
+    if (key === 'dashboard') continue;
     const item = ALL_ITEMS[key];
     if (!item) continue;
     if (!sections[item.section]) sections[item.section] = [];
-    // Avoid duplicates
     if (!sections[item.section].some(i => i.href === item.href)) {
       sections[item.section].push(item);
     }
   }
+
+  async function handleSignOut() {
+    setSigningOut(true);
+    localStorage.removeItem('aria_active_business_id');
+    await supabase.auth.signOut();
+    router.push('/login');
+  }
+
+  // Initials for avatar
+  const initials = (business.owner_name ?? business.name)
+    .split(' ')
+    .slice(0, 2)
+    .map(w => w[0]?.toUpperCase() ?? '')
+    .join('');
 
   return (
     <aside className="w-[220px] flex-shrink-0 bg-[#13131a] h-screen flex flex-col overflow-y-auto">
@@ -77,9 +93,30 @@ export function Sidebar({ business }: { business: Business }) {
           <span className="text-white">aria</span>
           <span className="text-[#1D9E75]">OS</span>
         </div>
-        {/* Industry badge */}
         <div className="mt-1.5 inline-flex items-center px-2 py-0.5 rounded-full bg-[rgba(255,255,255,0.06)] border border-[rgba(255,255,255,0.08)]">
           <span className="text-[10px] text-[rgba(255,255,255,0.45)]">{config.label}</span>
+        </div>
+      </div>
+
+      {/* Business switcher */}
+      <div className="px-3 mb-3 flex-shrink-0">
+        <div className="bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.07)] rounded-xl px-3 py-2.5 flex items-center justify-between gap-2">
+          <div className="min-w-0">
+            <div className="text-[12px] font-semibold text-[rgba(255,255,255,0.85)] truncate leading-tight">
+              {business.name}
+            </div>
+            <div className="text-[10px] text-[rgba(255,255,255,0.35)] mt-0.5 capitalize">
+              {config.label}
+            </div>
+          </div>
+          <Link
+            href="/businesses"
+            className="flex-shrink-0 text-[10px] text-[rgba(255,255,255,0.35)] hover:text-[#1D9E75] transition-colors font-medium whitespace-nowrap flex items-center gap-1"
+            title="Switch business"
+          >
+            <SwitchIcon />
+            Switch
+          </Link>
         </div>
       </div>
 
@@ -134,11 +171,40 @@ export function Sidebar({ business }: { business: Business }) {
         })}
       </nav>
 
-      {/* Business info */}
-      <div className="px-4 py-4 border-t border-[rgba(255,255,255,0.05)] flex-shrink-0">
-        <div className="text-[13px] font-medium text-[rgba(255,255,255,0.8)] truncate">{business.name}</div>
-        <div className="text-[11px] text-[rgba(255,255,255,0.3)] mt-0.5">
-          {business.plan}{business.city ? ` · ${business.city}` : ''}
+      {/* User footer — always visible */}
+      <div className="px-3 py-3 border-t border-[rgba(255,255,255,0.05)] flex-shrink-0">
+        <div className="flex items-center gap-2.5">
+          {/* Avatar */}
+          <div className="w-8 h-8 rounded-full bg-[rgba(29,158,117,0.2)] border border-[rgba(29,158,117,0.3)] flex items-center justify-center flex-shrink-0">
+            <span className="text-[11px] font-semibold text-[#1D9E75]">{initials || '?'}</span>
+          </div>
+          {/* Name + email truncated */}
+          <div className="flex-1 min-w-0">
+            <div className="text-[12px] font-medium text-[rgba(255,255,255,0.75)] truncate leading-tight">
+              {business.owner_name || business.name}
+            </div>
+            {business.city && (
+              <div className="text-[10px] text-[rgba(255,255,255,0.3)] truncate">{business.city}</div>
+            )}
+          </div>
+          {/* Action icons */}
+          <div className="flex items-center gap-1 flex-shrink-0">
+            <Link
+              href="/profile"
+              title="Profile &amp; settings"
+              className="w-7 h-7 rounded-lg flex items-center justify-center text-[rgba(255,255,255,0.3)] hover:text-[rgba(255,255,255,0.7)] hover:bg-[rgba(255,255,255,0.06)] transition-colors"
+            >
+              <ProfileIcon />
+            </Link>
+            <button
+              onClick={handleSignOut}
+              disabled={signingOut}
+              title="Sign out"
+              className="w-7 h-7 rounded-lg flex items-center justify-center text-[rgba(255,255,255,0.3)] hover:text-red-400 hover:bg-[rgba(239,68,68,0.08)] transition-colors disabled:opacity-40"
+            >
+              {signingOut ? <Spinner /> : <SignOutIcon />}
+            </button>
+          </div>
         </div>
       </div>
     </aside>
@@ -187,4 +253,16 @@ function CheckSquareIcon({ className }: { className?: string }) {
 }
 function RegisterIcon({ className }: { className?: string }) {
   return <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>;
+}
+function ProfileIcon() {
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-3.5 h-3.5"><circle cx="12" cy="8" r="4"/><path strokeLinecap="round" d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>;
+}
+function SignOutIcon() {
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-3.5 h-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75"/></svg>;
+}
+function SwitchIcon() {
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-3 h-3"><path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5"/></svg>;
+}
+function Spinner() {
+  return <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>;
 }
