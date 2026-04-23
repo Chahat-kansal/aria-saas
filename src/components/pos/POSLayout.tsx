@@ -1,7 +1,8 @@
 'use client';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { useState, useEffect, useCallback } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { supabase } from '@/lib/supabase';
 
 /* ─── Nav data ──────────────────────────────────────────────────── */
 type NavItem = { label: string; href: string };
@@ -186,13 +187,8 @@ export function POSLayout({ children, userName }: { children: React.ReactNode; u
             <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4"><path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM10 18a3 3 0 01-3-3h6a3 3 0 01-3 3z"/></svg>
           } />
 
-          {/* User avatar */}
-          <div className="flex items-center gap-2 pl-2 ml-1 border-l border-[rgba(255,255,255,0.1)]">
-            <div className="w-7 h-7 rounded-full bg-[rgba(37,99,235,0.4)] flex items-center justify-center text-[11px] font-semibold text-white flex-shrink-0">
-              {userName.charAt(0).toUpperCase()}
-            </div>
-            <span className="text-[11px] text-[rgba(255,255,255,0.65)] hidden md:block max-w-[100px] truncate">{userName}</span>
-          </div>
+          {/* User avatar dropdown */}
+          <UserMenu userName={userName} />
         </div>
       </header>
 
@@ -303,6 +299,71 @@ export function POSLayout({ children, userName }: { children: React.ReactNode; u
           {children}
         </main>
       </div>
+    </div>
+  );
+}
+
+/* ─── User avatar dropdown ───────────────────────────────────────── */
+function UserMenu({ userName }: { userName: string }) {
+  const router = useRouter();
+  const ref = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
+
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  async function handleSignOut() {
+    setSigningOut(true);
+    localStorage.removeItem('aria_active_business_id');
+    await supabase.auth.signOut();
+    router.push('/login');
+  }
+
+  return (
+    <div ref={ref} className="relative flex items-center gap-2 pl-2 ml-1 border-l border-[rgba(255,255,255,0.1)]">
+      <button onClick={() => setOpen(o => !o)}
+        className="flex items-center gap-2 hover:opacity-80 transition-opacity">
+        <div className="w-7 h-7 rounded-full bg-[rgba(37,99,235,0.4)] flex items-center justify-center text-[11px] font-semibold text-white flex-shrink-0">
+          {userName.charAt(0).toUpperCase()}
+        </div>
+        <span className="text-[11px] text-[rgba(255,255,255,0.65)] hidden md:block max-w-[100px] truncate">{userName}</span>
+        <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 text-[rgba(255,255,255,0.3)] hidden md:block">
+          <path fillRule="evenodd" d="M4.293 5.293a1 1 0 011.414 0L8 7.586l2.293-2.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd"/>
+        </svg>
+      </button>
+
+      {open && (
+        <div className="absolute right-0 top-full mt-2 w-44 bg-[#1e1e1e] border border-[rgba(255,255,255,0.1)] rounded-xl shadow-2xl py-1 z-50">
+          <Link href="/businesses" onClick={() => setOpen(false)}
+            className="flex items-center gap-2.5 px-3.5 py-2.5 text-[12px] text-[rgba(255,255,255,0.7)] hover:bg-[rgba(255,255,255,0.07)] hover:text-white transition-colors">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-3.5 h-3.5 flex-shrink-0">
+              <path d="M2 6l6-4 6 4v7a1 1 0 01-1 1H3a1 1 0 01-1-1V6z"/>
+            </svg>
+            Switch Business
+          </Link>
+          <Link href="/profile" onClick={() => setOpen(false)}
+            className="flex items-center gap-2.5 px-3.5 py-2.5 text-[12px] text-[rgba(255,255,255,0.7)] hover:bg-[rgba(255,255,255,0.07)] hover:text-white transition-colors">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-3.5 h-3.5 flex-shrink-0">
+              <circle cx="8" cy="5" r="3"/><path d="M2 14c0-3.314 2.686-6 6-6s6 2.686 6 6"/>
+            </svg>
+            Profile
+          </Link>
+          <div className="my-1 border-t border-[rgba(255,255,255,0.07)]" />
+          <button onClick={handleSignOut} disabled={signingOut}
+            className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-[12px] text-red-400 hover:bg-[rgba(220,38,38,0.1)] hover:text-red-300 disabled:opacity-50 transition-colors">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-3.5 h-3.5 flex-shrink-0">
+              <path d="M10 8H2m0 0l3-3m-3 3l3 3M6 5V3a1 1 0 011-1h6a1 1 0 011 1v10a1 1 0 01-1 1H7a1 1 0 01-1-1v-2"/>
+            </svg>
+            {signingOut ? 'Signing out…' : 'Sign Out'}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

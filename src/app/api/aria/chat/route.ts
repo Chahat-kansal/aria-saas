@@ -9,8 +9,8 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 export async function POST(req: Request) {
   const supabase = createServerSupabaseClient();
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
 
   const { messages, businessId } = await req.json();
   if (!messages?.length || !businessId) {
@@ -22,7 +22,7 @@ export async function POST(req: Request) {
     .from('businesses')
     .select('*')
     .eq('id', businessId)
-    .eq('user_id', session.user.id)
+    .eq('user_id', user.id)
     .single();
 
   if (!business) return new Response(JSON.stringify({ error: 'Business not found' }), { status: 404 });

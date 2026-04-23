@@ -12,7 +12,6 @@ export default function AskAriaPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [convId, setConvId] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
@@ -24,10 +23,12 @@ export default function AskAriaPage() {
     setMessages(prev => [...prev, { role: 'user', content: msg }]);
     setLoading(true);
 
+    const fullHistory: Message[] = [...messages, { role: 'user', content: msg }];
+
     const res = await fetch('/api/aria/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: msg, conversationId: convId }),
+      body: JSON.stringify({ messages: fullHistory, businessId: business.id }),
     });
 
     if (!res.body) { setLoading(false); return; }
@@ -53,7 +54,7 @@ export default function AskAriaPage() {
               return copy;
             });
           }
-          if (data.conversationId) setConvId(data.conversationId);
+
         } catch {}
       }
     }

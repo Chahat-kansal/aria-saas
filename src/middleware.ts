@@ -25,14 +25,19 @@ export async function middleware(request: NextRequest) {
     }
   );
 
-  const { data: { session } } = await supabase.auth.getSession();
+  const { data: { user } } = await supabase.auth.getUser();
   const { pathname } = request.nextUrl;
 
   const isProtected =
     pathname.startsWith('/dashboard') ||
-    pathname.startsWith('/onboarding');
+    pathname.startsWith('/onboarding') ||
+    pathname.startsWith('/pos') ||
+    pathname.startsWith('/visa') ||
+    pathname.startsWith('/businesses') ||
+    pathname.startsWith('/chat') ||
+    pathname.startsWith('/settings');
 
-  if (isProtected && !session) {
+  if (isProtected && !user) {
     return NextResponse.redirect(new URL('/login', request.url));
   }
 
@@ -41,8 +46,8 @@ export async function middleware(request: NextRequest) {
     pathname === '/signup' ||
     pathname === '/forgot-password';
 
-  if (isAuthPage && session) {
-    return NextResponse.redirect(new URL('/dashboard', request.url));
+  if (isAuthPage && user) {
+    return NextResponse.redirect(new URL('/businesses', request.url));
   }
 
   return response;
@@ -52,6 +57,10 @@ export const config = {
   matcher: [
     '/dashboard/:path*',
     '/onboarding/:path*',
+    '/businesses/:path*',
+    '/businesses',
+    '/pos/:path*',
+    '/visa/:path*',
     '/login',
     '/signup',
     '/forgot-password',
