@@ -1,5 +1,5 @@
 'use client';
-import { createContext, useContext, useState, useCallback } from 'react';
+import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 
@@ -17,78 +17,134 @@ export interface Business {
   monthly_revenue: string | null;
   biggest_challenge: string | null;
   google_business_url: string | null;
-  google_rating: number;
-  google_review_count: number;
-  plan: 'starter' | 'growth' | 'pro';
+  google_rating: number | null;
+  google_review_count: number | null;
+  plan: string;
   stripe_customer_id: string | null;
   stripe_subscription_id: string | null;
-  trial_ends_at: string;
-  onboarding_complete: boolean;
+  trial_ends_at: string | null;
+  onboarding_complete: boolean | null;
   created_at: string;
+  logo_url: string | null;
+  abn: string | null;
+  website: string | null;
+  is_active: boolean | null;
+  subscription_status: string | null;
 }
 
-interface BusinessContextValue {
-  business: Business;
+interface BusinessContextType {
+  business: Business | null;
   allBusinesses: Business[];
+  loading: boolean;
   switchBusiness: (id: string) => Promise<void>;
+  refreshBusiness: () => Promise<void>;
+  refreshAllBusinesses: () => Promise<void>;
 }
 
-const BusinessContext = createContext<BusinessContextValue | null>(null);
+const BusinessContext = createContext<BusinessContextType>({
+  business: null,
+  allBusinesses: [],
+  loading: true,
+  switchBusiness: async () => {},
+  refreshBusiness: async () => {},
+  refreshAllBusinesses: async () => {},
+});
 
-export function BusinessProvider({
-  business: initialBusiness,
-  allBusinesses: initialAll,
-  children,
-}: {
-  business: Business;
-  allBusinesses: Business[];
-  children: React.ReactNode;
-}) {
+export function BusinessProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const [business, setBusiness] = useState<Business>(initialBusiness);
-  const [allBusinesses] = useState<Business[]>(initialAll);
+  const [business, setBusiness] = useState<Business | null>(null);
+  const [allBusinesses, setAllBusinesses] = useState<Business[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchAllBusinesses = useCallback(async (): Promise<Business[]> => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return [];
+    const { data, error } = await supabase
+      .from('businesses')
+      .select('*')
+      .eq('user_id', user.id)
+      .eq('is_active', true)
+      .order('created_at', { ascending: true });
+    if (error) {
+      console.error('Error fetching businesses:', error);
+      return [];
+    }
+    return data || [];
+  }, []);
+
+  const loadBusinesses = useCallback(async () => {
+    setLoading(true);
+    try {
+      const businesses = await fetchAllBusinesses();
+      setAllBusinesses(businesses);
+
+      if (businesses.length === 0) {
+        setBusiness(null);
+        setLoading(false);
+        router.push('/onboarding/industry');
+        return;
+      }
+
+      const savedId = typeof window !== 'undefined'
+        ? localStorage.getItem('aria_active_business_id')
+        : null;
+      const savedBusiness = savedId ? businesses.find(b => b.id === savedId) : null;
+      const activeBusiness = savedBusiness || businesses[0];
+      setBusiness(activeBusiness);
+
+      if (!savedId && activeBusiness) {
+        localStorage.setItem('aria_active_business_id', activeBusiness.id);
+      }
+    } catch (err) {
+      console.error('BusinessProvider error:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [fetchAllBusinesses, router]);
+
+  useEffect(() => {
+    loadBusinesses();
+  }, [loadBusinesses]);
 
   const switchBusiness = useCallback(async (id: string) => {
     const target = allBusinesses.find(b => b.id === id);
-    if (!target) {
-      router.push('/businesses');
-      return;
-    }
+    if (!target) return;
+    setBusiness(target);
     localStorage.setItem('aria_active_business_id', id);
     const { data: { user } } = await supabase.auth.getUser();
     if (user) {
-      const { data: existing } = await supabase
-        .from('user_active_business')
-        .select('id')
-        .eq('user_id', user.id)
-        .maybeSingle();
-      if (existing) {
-        await supabase.from('user_active_business')
-          .update({ business_id: id, updated_at: new Date().toISOString() })
-          .eq('user_id', user.id);
-      } else {
-        await supabase.from('user_active_business').insert({ user_id: user.id, business_id: id });
-      }
+      await supabase.from('user_active_business').upsert(
+        { user_id: user.id, business_id: id, updated_at: new Date().toISOString() },
+        { onConflict: 'user_id' }
+      );
     }
-    setBusiness(target);
-    router.refresh();
-  }, [allBusinesses, router]);
+  }, [allBusinesses]);
+
+  const refreshBusiness = useCallback(async () => {
+    if (!business) return;
+    const { data } = await supabase.from('businesses').select('*').eq('id', business.id).single();
+    if (data) setBusiness(data);
+  }, [business]);
+
+  const refreshAllBusinesses = useCallback(async () => {
+    const businesses = await fetchAllBusinesses();
+    setAllBusinesses(businesses);
+  }, [fetchAllBusinesses]);
 
   return (
-    <BusinessContext.Provider value={{ business, allBusinesses, switchBusiness }}>
+    <BusinessContext.Provider value={{
+      business, allBusinesses, loading,
+      switchBusiness, refreshBusiness, refreshAllBusinesses,
+    }}>
       {children}
     </BusinessContext.Provider>
   );
 }
 
-export function useBusiness(): Business {
-  const ctx = useContext(BusinessContext);
-  if (!ctx) throw new Error('useBusiness must be used within BusinessProvider');
-  return ctx.business;
+export function useBusiness(): Business | null {
+  return useContext(BusinessContext).business;
 }
 
-export function useBusinessContext(): BusinessContextValue {
-  const ctx = useContext(BusinessContext);
-  if (!ctx) throw new Error('useBusinessContext must be used within BusinessProvider');
-  return ctx;
+export function useBusinessContext(): BusinessContextType {
+  return useContext(BusinessContext);
 }

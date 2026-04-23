@@ -3,16 +3,8 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { industryConfig, type Industry } from '@/lib/industry-config';
 import { supabase } from '@/lib/supabase';
+import { useBusinessContext } from '@/components/providers/BusinessProvider';
 import { useState } from 'react';
-
-interface Business {
-  id: string;
-  name: string;
-  owner_name: string | null;
-  industry: string | null;
-  plan: string;
-  city: string | null;
-}
 
 /* ─── Nav item registry ─────────────────────────────────────────── */
 type NavItemDef = {
@@ -46,7 +38,9 @@ const ALL_ITEMS: Record<string, NavItemDef> = {
 const SECTION_ORDER = ['Overview', 'Revenue', 'Reputation', 'Intelligence', 'Pro tools', 'VisaAI', 'Modules'];
 
 /* ─── Component ─────────────────────────────────────────────────── */
-export function Sidebar({ business }: { business: Business }) {
+export function Sidebar() {
+  const { business: b } = useBusinessContext();
+  const business = b!;
   const pathname = usePathname();
   const router = useRouter();
   const [signingOut, setSigningOut] = useState(false);

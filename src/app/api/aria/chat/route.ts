@@ -1,134 +1,106 @@
-import { createServerSupabaseClient } from '@/lib/supabase-server';
 import Anthropic from '@anthropic-ai/sdk';
-import { ARIA_TOOLS, runAriaTool } from '@/lib/claudeTools';
-import { browserClose } from '@/lib/browser';
+import { createServerSupabaseClient } from '@/lib/supabase-server';
+import { NextResponse } from 'next/server';
 
-export const maxDuration = 120;
-
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+export const runtime = 'nodejs';
+export const maxDuration = 60;
 
 export async function POST(req: Request) {
-  const supabase = createServerSupabaseClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
+  try {
+    const supabase = createServerSupabaseClient();
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
 
-  const { messages, businessId } = await req.json();
-  if (!messages?.length || !businessId) {
-    return new Response(JSON.stringify({ error: 'messages and businessId required' }), { status: 400 });
-  }
+    const body = await req.json();
+    const { messages, business_id } = body;
 
-  // Verify ownership
-  const { data: business } = await supabase
-    .from('businesses')
-    .select('*')
-    .eq('id', businessId)
-    .eq('user_id', user.id)
-    .single();
+    if (!messages || !Array.isArray(messages) || messages.length === 0) {
+      return NextResponse.json({ error: 'Messages required' }, { status: 400 });
+    }
 
-  if (!business) return new Response(JSON.stringify({ error: 'Business not found' }), { status: 404 });
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) {
+      return NextResponse.json({ error: 'API key not configured' }, { status: 500 });
+    }
 
-  const systemPrompt = `You are Aria, an AI business assistant for ${business.name}, a ${business.industry || 'local'} business${business.city ? ` in ${business.city}` : ''} on the ${business.plan} plan.
+    let systemPrompt = `You are Aria, an expert AI business advisor for local Australian businesses. You help owners increase revenue, retain customers, reduce costs, and make smarter decisions. Be direct, specific, and always reference numbers when you can.`;
 
-Owner: ${business.owner_name || 'the owner'}
-Industry: ${business.industry || 'general business'}
-Staff: ${business.staff_count || 'unknown'}
-Monthly revenue: ${business.monthly_revenue || 'unknown'}
-Google rating: ${business.google_rating || 'not tracked'}
-Biggest challenge: ${business.biggest_challenge || 'not specified'}
+    if (business_id) {
+      const { data: business } = await supabase
+        .from('businesses')
+        .select('*')
+        .eq('id', business_id)
+        .eq('user_id', user.id)
+        .single();
 
-Your job is to give specific, actionable advice to help this business make more money, retain customers, and run more efficiently. Be direct, confident, and specific to their industry. Reference their actual data when relevant.
+      if (business) {
+        systemPrompt = `You are Aria, an expert AI business advisor for ${business.name}, a ${business.industry} business in ${business.city || 'Australia'}.
 
-You also have live internet access — use it when the owner asks about competitors, trends, or anything time-sensitive.`;
+Business profile:
+- Industry: ${business.industry}
+- Location: ${business.city || 'Australia'}
+- Plan: ${business.plan}
+- Monthly revenue: ${business.monthly_revenue || 'not specified'}
+- Staff: ${business.staff_count || 'not specified'}
+- Biggest challenge: ${business.biggest_challenge || 'growing the business'}
 
-  const encoder = new TextEncoder();
-  const stream = new ReadableStream({
-    async start(controller) {
-      const send = (data: object) => controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
-      const openedSessions = new Set<string>();
-      let fullReply = '';
+Your role: help ${business.owner_name || 'the owner'} make more money and run a better business. Be direct and specific. Give actionable advice with real numbers. Never be vague.`;
+      }
+    }
 
-      try {
-        // Save user message
-        const lastUserMsg = messages[messages.length - 1];
-        if (lastUserMsg?.role === 'user') {
-          await supabase.from('aria_conversations').insert({
-            business_id: businessId,
-            role: 'user',
-            content: lastUserMsg.content,
-          });
-        }
+    const anthropic = new Anthropic({ apiKey });
 
-        const tools: any[] = [
-          { type: 'web_search_20250305' as const, name: 'web_search' },
-          ...ARIA_TOOLS.filter(t => !('type' in t) || t.type !== 'web_search_20250305'),
-        ];
+    const formattedMessages = messages
+      .filter((m: { role: string; content: string }) => m.role === 'user' || m.role === 'assistant')
+      .map((m: { role: string; content: string }) => ({
+        role: m.role as 'user' | 'assistant',
+        content: String(m.content),
+      }));
 
-        let loopMessages = messages.map((m: { role: string; content: string }) => ({
-          role: m.role,
-          content: m.content,
-        }));
+    const stream = await anthropic.messages.stream({
+      model: 'claude-sonnet-4-5-20250929',
+      max_tokens: 2048,
+      system: systemPrompt,
+      messages: formattedMessages,
+    });
 
-        for (let step = 0; step < 8; step++) {
-          const response = await anthropic.messages.create({
-            model: 'claude-sonnet-4-5-20250929',
-            max_tokens: 4096,
-            system: systemPrompt,
-            messages: loopMessages,
-            tools,
-          } as any);
-
-          const content = response.content || [];
-          loopMessages.push({ role: 'assistant', content });
-
-          let usedTool = false;
-          for (const block of content) {
-            if (block.type === 'text') {
-              fullReply += block.text;
-              send({ text: block.text });
-            }
-            if (block.type === 'tool_use') {
-              usedTool = true;
-              try {
-                const result = await runAriaTool(block.name, block.input || {});
-                if (result && typeof result === 'object' && 'sessionId' in result) {
-                  openedSessions.add((result as any).sessionId);
-                }
-                loopMessages.push({
-                  role: 'user',
-                  content: [{ type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(result) }],
-                });
-                send({ tool: block.name, toolResult: result });
-              } catch (err: any) {
-                loopMessages.push({
-                  role: 'user',
-                  content: [{ type: 'tool_result', tool_use_id: block.id, content: JSON.stringify({ error: err.message }) }],
-                });
-              }
+    const encoder = new TextEncoder();
+    const readable = new ReadableStream({
+      async start(controller) {
+        try {
+          for await (const chunk of stream) {
+            if (
+              chunk.type === 'content_block_delta' &&
+              chunk.delta.type === 'text_delta'
+            ) {
+              const data = JSON.stringify({ text: chunk.delta.text });
+              controller.enqueue(encoder.encode(`data: ${data}\n\n`));
             }
           }
-          if (!usedTool) break;
+          controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+          controller.close();
+        } catch (streamErr) {
+          console.error('Stream error:', streamErr);
+          controller.error(streamErr);
         }
+      },
+    });
 
-        // Save assistant reply
-        if (fullReply) {
-          await supabase.from('aria_conversations').insert({
-            business_id: businessId,
-            role: 'assistant',
-            content: fullReply,
-          });
-        }
-
-        for (const sid of openedSessions) await browserClose(sid).catch(() => {});
-        send({ done: true });
-      } catch (err: any) {
-        send({ error: err.message || 'Something went wrong' });
-      } finally {
-        controller.close();
-      }
-    },
-  });
-
-  return new Response(stream, {
-    headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' },
-  });
+    return new Response(readable, {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache, no-transform',
+        'Connection': 'keep-alive',
+        'X-Accel-Buffering': 'no',
+      },
+    });
+  } catch (err) {
+    console.error('Aria chat fatal error:', err);
+    return NextResponse.json(
+      { error: 'Chat failed', details: err instanceof Error ? err.message : 'Unknown error' },
+      { status: 500 }
+    );
+  }
 }

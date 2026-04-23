@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 
 const INDUSTRIES = [
@@ -16,11 +16,18 @@ const INDUSTRIES = [
 export default function IndustryPage() {
   const router = useRouter();
   const [selected, setSelected] = useState('');
+  const [isNew, setIsNew] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    setIsNew(params.get('new') === 'true');
+  }, []);
 
   function handleContinue() {
     if (!selected) return;
     localStorage.setItem('aria_industry', selected);
-    router.push('/onboarding/details');
+    const dest = isNew ? '/onboarding/details?new=true' : '/onboarding/details';
+    router.push(dest);
   }
 
   return (
@@ -32,6 +39,13 @@ export default function IndustryPage() {
       <ProgressBar step={1} />
 
       <div className="w-full max-w-xl bg-white rounded-2xl border border-[rgba(0,0,0,0.08)] shadow-sm p-8 mt-6">
+        {isNew && (
+          <div className="mb-5 bg-[rgba(29,158,117,0.08)] border border-[rgba(29,158,117,0.2)] rounded-xl px-4 py-3">
+            <p className="text-sm font-medium text-[#1D9E75]">Adding a new business</p>
+            <p className="text-xs text-[rgba(26,26,22,0.5)] mt-0.5">This will create a separate dashboard and POS for your new business.</p>
+          </div>
+        )}
+
         <h1 className="text-xl font-medium text-[#1a1a16] mb-1">What type of business are you?</h1>
         <p className="text-sm text-[rgba(26,26,22,0.45)] mb-6">
           Aria OS customises every feature specifically for your industry
@@ -65,7 +79,10 @@ export default function IndustryPage() {
         </button>
 
         <button
-          onClick={() => { localStorage.setItem('aria_industry', 'professional'); router.push('/onboarding/details'); }}
+          onClick={() => {
+            localStorage.setItem('aria_industry', 'professional');
+            router.push(isNew ? '/onboarding/details?new=true' : '/onboarding/details');
+          }}
           className="block w-full text-center text-xs text-[rgba(26,26,22,0.35)] hover:text-[rgba(26,26,22,0.6)] mt-4 transition-colors"
         >
           I&apos;ll set this up later

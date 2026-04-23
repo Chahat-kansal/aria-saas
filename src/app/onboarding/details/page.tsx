@@ -19,6 +19,8 @@ export default function DetailsPage() {
   const [industry, setIndustry] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [isNew, setIsNew] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const [form, setForm] = useState({
     name: '', ownerName: '', address: '', phone: '', email: '',
@@ -27,6 +29,9 @@ export default function DetailsPage() {
 
   useEffect(() => {
     setIndustry(localStorage.getItem('aria_industry') || 'professional');
+    const params = new URLSearchParams(window.location.search);
+    setIsNew(params.get('new') === 'true');
+    setEditingId(params.get('edit') || null);
   }, []);
 
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
@@ -40,51 +45,81 @@ export default function DetailsPage() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { router.push('/login'); return; }
 
-    const { data: existing } = await supabase
-      .from('businesses')
-      .select('id')
-      .eq('user_id', user.id)
-      .maybeSingle();
+    const payload = {
+      name: form.name,
+      owner_name: form.ownerName,
+      industry,
+      address: form.address,
+      phone: form.phone ? `+61${form.phone}` : null,
+      email: form.email || user.email,
+      staff_count: form.staffCount,
+      monthly_revenue: form.monthlyRevenue,
+      biggest_challenge: form.biggestChallenge,
+      google_business_url: form.googleUrl || null,
+    };
 
-    let err;
-    if (existing?.id) {
-      const { error } = await supabase
+    let businessId: string;
+    let err: { message: string } | null = null;
+
+    if (editingId) {
+      // Editing specific existing business
+      const { error: e } = await supabase
         .from('businesses')
-        .update({
-          name: form.name,
-          owner_name: form.ownerName,
-          industry,
-          address: form.address,
-          phone: form.phone ? `+61${form.phone}` : null,
-          email: form.email || user.email,
-          staff_count: form.staffCount,
-          monthly_revenue: form.monthlyRevenue,
-          biggest_challenge: form.biggestChallenge,
-          google_business_url: form.googleUrl || null,
-        })
+        .update(payload)
+        .eq('id', editingId)
         .eq('user_id', user.id);
-      err = error;
-    } else {
-      const { error } = await supabase
+      err = e;
+      businessId = editingId;
+    } else if (isNew) {
+      // Always insert a brand new business
+      const { data, error: e } = await supabase
         .from('businesses')
-        .insert({
-          user_id: user.id,
-          name: form.name,
-          owner_name: form.ownerName,
-          industry,
-          address: form.address,
-          phone: form.phone ? `+61${form.phone}` : null,
-          email: form.email || user.email,
-          staff_count: form.staffCount,
-          monthly_revenue: form.monthlyRevenue,
-          biggest_challenge: form.biggestChallenge,
-          google_business_url: form.googleUrl || null,
-        });
-      err = error;
+        .insert({ user_id: user.id, is_active: true, ...payload })
+        .select('id')
+        .single();
+      err = e;
+      businessId = data?.id ?? '';
+    } else {
+      // First-time onboarding: check if a business exists, update if so, insert if not
+      const { data: existing } = await supabase
+        .from('businesses')
+        .select('id')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle();
+
+      if (existing?.id) {
+        const { error: e } = await supabase
+          .from('businesses')
+          .update(payload)
+          .eq('id', existing.id)
+          .eq('user_id', user.id);
+        err = e;
+        businessId = existing.id;
+      } else {
+        const { data, error: e } = await supabase
+          .from('businesses')
+          .insert({ user_id: user.id, is_active: true, ...payload })
+          .select('id')
+          .single();
+        err = e;
+        businessId = data?.id ?? '';
+      }
     }
 
     setLoading(false);
     if (err) { setError(err.message); return; }
+
+    // Save active business
+    if (businessId) {
+      localStorage.setItem('aria_active_business_id', businessId);
+      await supabase.from('user_active_business').upsert(
+        { user_id: user.id, business_id: businessId, updated_at: new Date().toISOString() },
+        { onConflict: 'user_id' }
+      );
+    }
+
     router.push('/onboarding/plan');
   }
 
@@ -103,6 +138,13 @@ export default function DetailsPage() {
         <button onClick={() => router.back()} className="text-xs text-[rgba(26,26,22,0.4)] hover:text-[#1a1a16] mb-5 flex items-center gap-1 transition-colors">
           ← Back
         </button>
+
+        {isNew && (
+          <div className="mb-4 bg-[rgba(29,158,117,0.08)] border border-[rgba(29,158,117,0.2)] rounded-xl px-4 py-3">
+            <p className="text-sm font-medium text-[#1D9E75]">New business</p>
+            <p className="text-xs text-[rgba(26,26,22,0.5)] mt-0.5">This will be added to your account as a separate business.</p>
+          </div>
+        )}
 
         {industry && (
           <span className="inline-block bg-[rgba(29,158,117,0.1)] text-[#1D9E75] border border-[rgba(29,158,117,0.2)] rounded-full text-xs px-3 py-1 mb-4 capitalize">

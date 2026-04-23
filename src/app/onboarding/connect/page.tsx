@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 
@@ -7,15 +7,41 @@ export default function ConnectPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [smsEnabled, setSmsEnabled] = useState(false);
+  const [isNew, setIsNew] = useState(false);
+  const [businessName, setBusinessName] = useState('');
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    setIsNew(params.get('new') === 'true');
+
+    const savedId = localStorage.getItem('aria_active_business_id');
+    if (savedId) {
+      (async () => {
+        const { data } = await supabase.from('businesses').select('name').eq('id', savedId).single();
+        if (data) setBusinessName(data.name as string);
+      })();
+    }
+  }, []);
 
   async function handleLaunch() {
     setLoading(true);
     const { data: { user } } = await supabase.auth.getUser();
     if (user) {
-      await supabase
-        .from('businesses')
-        .update({ onboarding_complete: true })
-        .eq('user_id', user.id);
+      // Only update the specific business that was just onboarded
+      const businessId = localStorage.getItem('aria_active_business_id');
+      if (businessId) {
+        await supabase
+          .from('businesses')
+          .update({ onboarding_complete: true })
+          .eq('id', businessId)
+          .eq('user_id', user.id);
+
+        // Ensure user_active_business is set
+        await supabase.from('user_active_business').upsert(
+          { user_id: user.id, business_id: businessId, updated_at: new Date().toISOString() },
+          { onConflict: 'user_id' }
+        );
+      }
     }
     // Full page reload so the server re-reads the latest session cookie
     window.location.href = '/dashboard';
@@ -33,6 +59,15 @@ export default function ConnectPage() {
         <button onClick={() => router.back()} className="text-xs text-[rgba(26,26,22,0.4)] hover:text-[#1a1a16] mb-5 flex items-center gap-1 transition-colors">
           ← Back
         </button>
+
+        {isNew && businessName && (
+          <div className="mb-6 bg-[rgba(29,158,117,0.08)] border border-[rgba(29,158,117,0.2)] rounded-xl px-4 py-3">
+            <p className="text-sm font-medium text-[#1D9E75]">Your new business is ready!</p>
+            <p className="text-xs text-[rgba(26,26,22,0.5)] mt-0.5">
+              <strong>{businessName}</strong> has been added to your account. Connect your tools then go to its dashboard.
+            </p>
+          </div>
+        )}
 
         <h1 className="text-xl font-medium text-[#1a1a16] mb-1">Connect your tools</h1>
         <p className="text-sm text-[rgba(26,26,22,0.45)] mb-6">
@@ -90,8 +125,8 @@ export default function ConnectPage() {
               </div>
               <button
                 onClick={() => setSmsEnabled(!smsEnabled)}
-                className={`relative w-10 h-5.5 rounded-full flex-shrink-0 transition-colors mt-0.5 ${smsEnabled ? 'bg-[#1D9E75]' : 'bg-[rgba(0,0,0,0.15)]'}`}
-                style={{height:'22px',width:'40px'}}
+                className={`relative flex-shrink-0 rounded-full transition-colors mt-0.5 ${smsEnabled ? 'bg-[#1D9E75]' : 'bg-[rgba(0,0,0,0.15)]'}`}
+                style={{ height: '22px', width: '40px' }}
               >
                 <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${smsEnabled ? 'left-5' : 'left-0.5'}`} />
               </button>
@@ -104,7 +139,7 @@ export default function ConnectPage() {
           disabled={loading}
           className="w-full bg-[#1a1a16] hover:bg-[#2d2d25] disabled:opacity-60 text-white py-3 rounded-full font-medium text-sm transition-colors"
         >
-          {loading ? 'Launching…' : 'Launch Aria →'}
+          {loading ? 'Launching…' : isNew ? `Go to ${businessName || 'Dashboard'} →` : 'Launch Aria →'}
         </button>
       </div>
     </div>
