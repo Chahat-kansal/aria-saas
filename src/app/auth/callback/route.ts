@@ -15,7 +15,10 @@ export async function GET(request: Request) {
         .from('businesses')
         .select('id, onboarding_complete')
         .eq('user_id', data.session.user.id)
-        .single();
+        .eq('is_active', true)
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle();
 
       if (business?.onboarding_complete) {
         return NextResponse.redirect(`${origin}/dashboard`);

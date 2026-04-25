@@ -4,7 +4,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { industryConfig, type Industry } from '@/lib/industry-config';
 import { supabase } from '@/lib/supabase';
 import { useBusinessContext } from '@/components/providers/BusinessProvider';
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 
 /* ─── Nav item registry ─────────────────────────────────────────── */
 type NavItemDef = {
@@ -16,36 +16,65 @@ type NavItemDef = {
 };
 
 const ALL_ITEMS: Record<string, NavItemDef> = {
-  'dashboard':          { href: '/dashboard',               label: 'Dashboard',         icon: GridIcon,         section: 'Overview'     },
-  'pos':                { href: '/pos',                     label: 'AriaPOS',           icon: RegisterIcon,     badge: 'New', section: 'Modules' },
-  'winback':            { href: '/dashboard/winback',       label: 'Customer winback',  icon: UsersIcon,        section: 'Revenue'      },
-  'slow-day':           { href: '/dashboard/churn',         label: 'Slow day filler',   icon: DollarIcon,       badge: '⚡', section: 'Revenue' },
-  'reviews':            { href: '/dashboard/reviews',       label: 'Reviews',           icon: StarIcon,         section: 'Reputation'   },
-  'profit-leaks':       { href: '/dashboard/profit-leaks',  label: 'Profit leaks',      icon: AlertIcon,        section: 'Intelligence' },
-  'competitors':        { href: '/dashboard/competitors',   label: 'Competitor watch',  icon: SearchIcon,       section: 'Reputation'   },
-  'churn':              { href: '/dashboard/churn',         label: 'Churn prevention',  icon: TrendingDownIcon, section: 'Intelligence' },
-  'bookings':           { href: '/dashboard/bookings',      label: 'Bookings + sales',  icon: CalendarIcon,     section: 'Revenue'      },
-  'quote-builder':      { href: '/dashboard/quote-builder', label: 'Quote builder',     icon: FileTextIcon,     section: 'Pro tools'    },
-  'compliance':         { href: '/dashboard/compliance',    label: 'Compliance',        icon: CheckSquareIcon,  section: 'Pro tools'    },
-  'visa/clients':       { href: '/visa/clients',            label: 'Clients',           icon: UsersIcon,        section: 'VisaAI'       },
-  'visa/applications':  { href: '/visa/applications',       label: 'Applications',      icon: FileTextIcon,     section: 'VisaAI'       },
-  'visa/documents':     { href: '/visa/documents',          label: 'Documents',         icon: FolderIcon,       section: 'VisaAI'       },
-  'visa/alerts':        { href: '/visa/alerts',             label: 'Alerts',            icon: AlertIcon,        section: 'VisaAI'       },
-  'visa/news':          { href: '/visa/news',               label: 'News',              icon: NewsIcon,         section: 'VisaAI'       },
-  'visa/ask':           { href: '/visa/ask',                label: 'Ask VisaAI',        icon: ChatIcon,         badge: 'AI', section: 'VisaAI' },
+  'dashboard':          { href: '/dashboard',                  label: 'Dashboard',         icon: GridIcon,         section: 'Overview'     },
+  'pos':                { href: '/pos',                        label: 'AriaPOS',           icon: RegisterIcon,     badge: 'New', section: 'Modules' },
+  'winback':            { href: '/dashboard/winback',          label: 'Customer winback',  icon: UsersIcon,        section: 'Revenue'      },
+  'slow-day':           { href: '/dashboard/churn',            label: 'Slow day filler',   icon: DollarIcon,       badge: '⚡', section: 'Revenue' },
+  'reviews':            { href: '/dashboard/reviews',          label: 'Reviews',           icon: StarIcon,         section: 'Reputation'   },
+  'profit-leaks':       { href: '/dashboard/profit-leaks',     label: 'Profit leaks',      icon: AlertIcon,        section: 'Intelligence' },
+  'competitors':        { href: '/dashboard/competitors',      label: 'Competitor watch',  icon: SearchIcon,       section: 'Reputation'   },
+  'churn':              { href: '/dashboard/churn',            label: 'Churn prevention',  icon: TrendingDownIcon, section: 'Intelligence' },
+  'bookings':           { href: '/dashboard/bookings',         label: 'Bookings + sales',  icon: CalendarIcon,     section: 'Revenue'      },
+  'quote-builder':      { href: '/dashboard/quote-builder',    label: 'Quote builder',     icon: FileTextIcon,     section: 'Pro tools'    },
+  'compliance':         { href: '/dashboard/compliance',       label: 'Compliance',        icon: CheckSquareIcon,  section: 'Pro tools'    },
+  'website-chat':       { href: '/dashboard/website-chat',     label: 'Website chat',      icon: GlobeIcon,        badge: 'New', section: 'Modules' },
+  'visa/clients':       { href: '/visa/clients',               label: 'Clients',           icon: UsersIcon,        section: 'VisaAI'       },
+  'visa/applications':  { href: '/visa/applications',          label: 'Applications',      icon: FileTextIcon,     section: 'VisaAI'       },
+  'visa/documents':     { href: '/visa/documents',             label: 'Documents',         icon: FolderIcon,       section: 'VisaAI'       },
+  'visa/alerts':        { href: '/visa/alerts',                label: 'Alerts',            icon: AlertIcon,        section: 'VisaAI'       },
+  'visa/news':          { href: '/visa/news',                  label: 'News',              icon: NewsIcon,         section: 'VisaAI'       },
+  'visa/ask':           { href: '/visa/ask',                   label: 'Ask VisaAI',        icon: ChatIcon,         badge: 'AI', section: 'VisaAI' },
 };
 
 const SECTION_ORDER = ['Overview', 'Revenue', 'Reputation', 'Intelligence', 'Pro tools', 'VisaAI', 'Modules'];
 
 /* ─── Component ─────────────────────────────────────────────────── */
 export function Sidebar() {
-  const { business: b } = useBusinessContext();
+  const { business: b, allBusinesses, switchBusiness } = useBusinessContext();
   const business = b!;
   const pathname = usePathname();
   const router = useRouter();
   const [signingOut, setSigningOut] = useState(false);
+  const [switcherOpen, setSwitcherOpen] = useState(false);
+  const [switching, setSwitching] = useState<string | null>(null);
+  const switcherRef = useRef<HTMLDivElement>(null);
   const industry = (business.industry ?? 'professional') as Industry;
   const config = industryConfig[industry] ?? industryConfig.professional;
+
+  // Close switcher on outside click
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (switcherRef.current && !switcherRef.current.contains(e.target as Node)) {
+        setSwitcherOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
+
+  async function handleSwitch(id: string) {
+    if (id === business.id) { setSwitcherOpen(false); return; }
+    setSwitching(id);
+    await fetch('/api/businesses/switch', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ business_id: id }),
+    });
+    await switchBusiness(id);
+    setSwitching(null);
+    setSwitcherOpen(false);
+    router.refresh();
+  }
 
   // Build sections from the industry's sidebar list
   const sections: Record<string, NavItemDef[]> = {};
@@ -93,9 +122,12 @@ export function Sidebar() {
       </div>
 
       {/* Business switcher */}
-      <div className="px-3 mb-3 flex-shrink-0">
-        <div className="bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.07)] rounded-xl px-3 py-2.5 flex items-center justify-between gap-2">
-          <div className="min-w-0">
+      <div className="px-3 mb-3 flex-shrink-0 relative" ref={switcherRef}>
+        <button
+          onClick={() => setSwitcherOpen(o => !o)}
+          className="w-full bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.07)] rounded-xl px-3 py-2.5 flex items-center justify-between gap-2 hover:border-[rgba(255,255,255,0.12)] transition-colors"
+        >
+          <div className="min-w-0 text-left">
             <div className="text-[12px] font-semibold text-[rgba(255,255,255,0.85)] truncate leading-tight">
               {business.name}
             </div>
@@ -103,15 +135,50 @@ export function Sidebar() {
               {config.label}
             </div>
           </div>
-          <Link
-            href="/businesses"
-            className="flex-shrink-0 text-[10px] text-[rgba(255,255,255,0.35)] hover:text-[#1D9E75] transition-colors font-medium whitespace-nowrap flex items-center gap-1"
-            title="Switch business"
-          >
-            <SwitchIcon />
-            Switch
-          </Link>
-        </div>
+          <SwitchIcon />
+        </button>
+
+        {switcherOpen && (
+          <div className="absolute left-3 right-3 top-full mt-1 z-50 bg-[#1e1e28] border border-[rgba(255,255,255,0.1)] rounded-xl shadow-2xl overflow-hidden">
+            {allBusinesses.map(biz => {
+              const isActive = biz.id === business.id;
+              return (
+                <button
+                  key={biz.id}
+                  onClick={() => handleSwitch(biz.id)}
+                  disabled={switching === biz.id}
+                  className={`w-full px-3 py-2.5 flex items-center gap-2.5 text-left transition-colors ${
+                    isActive
+                      ? 'bg-[rgba(29,158,117,0.1)]'
+                      : 'hover:bg-[rgba(255,255,255,0.04)]'
+                  }`}
+                >
+                  {switching === biz.id ? (
+                    <Spinner />
+                  ) : (
+                    <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isActive ? 'bg-[#1D9E75]' : 'bg-[rgba(255,255,255,0.2)]'}`} />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[12px] font-medium text-[rgba(255,255,255,0.8)] truncate">{biz.name}</div>
+                    <div className="text-[10px] text-[rgba(255,255,255,0.3)] capitalize">{biz.industry}</div>
+                  </div>
+                  {isActive && (
+                    <span className="text-[9px] font-semibold text-[#1D9E75] flex-shrink-0">Active</span>
+                  )}
+                </button>
+              );
+            })}
+            <div className="border-t border-[rgba(255,255,255,0.06)] px-3 py-2">
+              <Link
+                href="/businesses"
+                onClick={() => setSwitcherOpen(false)}
+                className="text-[10px] text-[rgba(255,255,255,0.35)] hover:text-[#1D9E75] transition-colors flex items-center gap-1"
+              >
+                Manage all businesses →
+              </Link>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Plan badge */}
@@ -256,6 +323,9 @@ function SignOutIcon() {
 }
 function SwitchIcon() {
   return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-3 h-3"><path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5"/></svg>;
+}
+function GlobeIcon({ className }: { className?: string }) {
+  return <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path strokeLinecap="round" d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>;
 }
 function Spinner() {
   return <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>;

@@ -78,16 +78,10 @@ export default function BusinessesPage() {
       // Upsert active business record
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-        const { data: existing } = await supabase
-          .from('user_active_business')
-          .select('id')
-          .eq('user_id', user.id)
-          .maybeSingle();
-        if (existing) {
-          await supabase.from('user_active_business').update({ business_id: id, updated_at: new Date().toISOString() }).eq('user_id', user.id);
-        } else {
-          await supabase.from('user_active_business').insert({ user_id: user.id, business_id: id });
-        }
+        await supabase.from('user_active_business').upsert(
+            { user_id: user.id, business_id: id, updated_at: new Date().toISOString() },
+            { onConflict: 'user_id' }
+          );
       }
       router.push('/dashboard');
     } catch {
@@ -221,7 +215,7 @@ export default function BusinessesPage() {
 
             {/* Add new business card */}
             <button
-              onClick={() => router.push('/onboarding/industry')}
+              onClick={() => router.push('/onboarding/industry?new=true')}
               disabled={!!selecting}
               className="bg-white rounded-2xl border-2 border-dashed border-[rgba(0,0,0,.12)] p-6 flex flex-col items-center justify-center gap-3 transition-all hover:border-[rgba(0,0,0,.25)] hover:bg-[rgba(0,0,0,.01)] disabled:opacity-40 min-h-[200px]"
             >
