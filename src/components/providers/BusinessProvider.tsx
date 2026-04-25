@@ -1,6 +1,5 @@
 'use client';
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 
 export interface Business {
@@ -51,7 +50,6 @@ const BusinessContext = createContext<BusinessContextType>({
 });
 
 export function BusinessProvider({ children }: { children: React.ReactNode }) {
-  const router = useRouter();
   const [business, setBusiness] = useState<Business | null>(null);
   const [allBusinesses, setAllBusinesses] = useState<Business[]>([]);
   const [loading, setLoading] = useState(true);
@@ -63,7 +61,7 @@ export function BusinessProvider({ children }: { children: React.ReactNode }) {
       .from('businesses')
       .select('*')
       .eq('user_id', user.id)
-      .eq('is_active', true)
+      .or('is_active.eq.true,is_active.is.null')
       .order('created_at', { ascending: true });
     if (error) {
       console.error('Error fetching businesses:', error);
@@ -81,7 +79,6 @@ export function BusinessProvider({ children }: { children: React.ReactNode }) {
       if (businesses.length === 0) {
         setBusiness(null);
         setLoading(false);
-        router.push('/onboarding/industry');
         return;
       }
 
@@ -100,7 +97,7 @@ export function BusinessProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, [fetchAllBusinesses, router]);
+  }, [fetchAllBusinesses]);
 
   useEffect(() => {
     loadBusinesses();
