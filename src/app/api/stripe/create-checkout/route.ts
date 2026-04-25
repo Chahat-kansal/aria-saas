@@ -4,21 +4,82 @@ import Stripe from 'stripe';
 
 const PRICE_IDS: Record<string, string | undefined> = {
   starter: process.env.STRIPE_STARTER_PRICE_ID,
-  growth: process.env.STRIPE_GROWTH_PRICE_ID,
-  pro: process.env.STRIPE_PRO_PRICE_ID,
+  growth:  process.env.STRIPE_GROWTH_PRICE_ID,
+  pro:     process.env.STRIPE_PRO_PRICE_ID,
 };
 
 export async function POST(req: Request) {
   const supabase = createServerSupabaseClient();
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   if (!process.env.STRIPE_SECRET_KEY) {
-    // Stripe not configured — return null url so onboarding can skip
     return NextResponse.json({ url: null });
   }
 
-  const { plan } = await req.json();
+  const { plan, is_additional, business_id } = await req.json();
+
+  // Additional business seat — flat $49/mo regardless of plan
+  if (is_additional) {
+    const additionalPriceId = process.env.STRIPE_ADDITIONAL_BUSINESS_PRICE_ID;
+    if (!additionalPriceId) {
+      // Stripe add-on not configured — skip to connect
+      return NextResponse.json({ url: null });
+    }
+
+    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2024-06-20' });
+
+    // Reuse existing Stripe customer from any of the user's businesses
+    const { data: anyBusiness } = await supabase
+      .from('businesses')
+      .select('stripe_customer_id, email, name')
+      .eq('user_id', user.id)
+      .not('stripe_customer_id', 'is', null)
+      .limit(1)
+      .single();
+
+    let customerId = anyBusiness?.stripe_customer_id as string | undefined;
+
+    if (!customerId) {
+      // No customer yet — create one from the new business record
+      const { data: newBiz } = await supabase
+        .from('businesses')
+        .select('email, name')
+        .eq('id', business_id)
+        .eq('user_id', user.id)
+        .single();
+
+      if (!newBiz) return NextResponse.json({ error: 'Business not found' }, { status: 404 });
+
+      const customer = await stripe.customers.create({
+        email: newBiz.email || user.email || '',
+        name: newBiz.name,
+        metadata: { userId: user.id },
+      });
+      customerId = customer.id;
+
+      // Store on the new business
+      await supabase
+        .from('businesses')
+        .update({ stripe_customer_id: customerId })
+        .eq('id', business_id)
+        .eq('user_id', user.id);
+    }
+
+    const checkoutSession = await stripe.checkout.sessions.create({
+      customer: customerId,
+      payment_method_types: ['card'],
+      line_items: [{ price: additionalPriceId, quantity: 1 }],
+      mode: 'subscription',
+      success_url: `${process.env.NEXT_PUBLIC_APP_URL}/onboarding/connect?new=true`,
+      cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/onboarding/plan?new=true`,
+      metadata: { userId: user.id, business_id: business_id ?? '', plan: 'additional' },
+    });
+
+    return NextResponse.json({ url: checkoutSession.url });
+  }
+
+  // First business — standard plan checkout
   const priceId = PRICE_IDS[plan];
   if (!priceId) return NextResponse.json({ url: null });
 
@@ -26,21 +87,28 @@ export async function POST(req: Request) {
 
   const { data: business } = await supabase
     .from('businesses')
-    .select('stripe_customer_id,email,name')
-    .eq('user_id', session.user.id)
+    .select('stripe_customer_id, email, name')
+    .eq('user_id', user.id)
+    .order('created_at', { ascending: true })
+    .limit(1)
     .single();
 
   if (!business) return NextResponse.json({ error: 'Business not found' }, { status: 404 });
 
-  let customerId = business.stripe_customer_id;
+  let customerId = business.stripe_customer_id as string | undefined;
   if (!customerId) {
     const customer = await stripe.customers.create({
-      email: business.email || session.user.email || '',
+      email: business.email || user.email || '',
       name: business.name,
-      metadata: { userId: session.user.id },
+      metadata: { userId: user.id },
     });
     customerId = customer.id;
-    await supabase.from('businesses').update({ stripe_customer_id: customerId }).eq('user_id', session.user.id);
+    await supabase
+      .from('businesses')
+      .update({ stripe_customer_id: customerId })
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: true })
+      .limit(1);
   }
 
   const checkoutSession = await stripe.checkout.sessions.create({
@@ -51,7 +119,7 @@ export async function POST(req: Request) {
     subscription_data: { trial_period_days: 14 },
     success_url: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard?onboarded=true`,
     cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/onboarding/plan`,
-    metadata: { userId: session.user.id, plan },
+    metadata: { userId: user.id, plan },
   });
 
   return NextResponse.json({ url: checkoutSession.url });

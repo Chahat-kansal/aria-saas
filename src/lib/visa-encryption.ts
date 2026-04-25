@@ -15,47 +15,40 @@ const SENSITIVE_APPLICATION_FIELDS = [
   'personal_circumstances',
 ] as const;
 
-type VisaClient = Record<string, unknown>;
-type VisaApplication = Record<string, unknown>;
+type AnyRecord = Record<string, unknown>;
 
-export function encryptVisaClient(client: VisaClient, businessId: string): VisaClient {
-  const result = { ...client, encryption_version: 1 };
-  for (const field of SENSITIVE_CLIENT_FIELDS) {
-    if (field in result) {
-      result[field] = encryptFieldSafe(result[field] as string, businessId);
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mutateFields(obj: any, fields: readonly string[], fn: (v: string) => string | null): any {
+  for (const field of fields) {
+    if (field in obj) {
+      obj[field] = fn(obj[field] as string);
     }
   }
-  return result;
+  return obj;
 }
 
-export function decryptVisaClient(client: VisaClient, businessId: string): VisaClient {
+export function encryptVisaClient(client: AnyRecord, businessId: string): AnyRecord {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const result: any = { ...client, encryption_version: 1 };
+  return mutateFields(result, SENSITIVE_CLIENT_FIELDS, v => encryptFieldSafe(v, businessId));
+}
+
+export function decryptVisaClient(client: AnyRecord, businessId: string): AnyRecord {
   if (!client) return client;
-  const result = { ...client };
-  for (const field of SENSITIVE_CLIENT_FIELDS) {
-    if (field in result) {
-      result[field] = decryptFieldSafe(result[field] as string, businessId);
-    }
-  }
-  return result;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const result: any = { ...client };
+  return mutateFields(result, SENSITIVE_CLIENT_FIELDS, v => decryptFieldSafe(v, businessId));
 }
 
-export function encryptVisaApplication(app: VisaApplication, businessId: string): VisaApplication {
-  const result = { ...app, encryption_version: 1 };
-  for (const field of SENSITIVE_APPLICATION_FIELDS) {
-    if (field in result) {
-      result[field] = encryptFieldSafe(result[field] as string, businessId);
-    }
-  }
-  return result;
+export function encryptVisaApplication(app: AnyRecord, businessId: string): AnyRecord {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const result: any = { ...app, encryption_version: 1 };
+  return mutateFields(result, SENSITIVE_APPLICATION_FIELDS, v => encryptFieldSafe(v, businessId));
 }
 
-export function decryptVisaApplication(app: VisaApplication, businessId: string): VisaApplication {
+export function decryptVisaApplication(app: AnyRecord, businessId: string): AnyRecord {
   if (!app) return app;
-  const result = { ...app };
-  for (const field of SENSITIVE_APPLICATION_FIELDS) {
-    if (field in result) {
-      result[field] = decryptFieldSafe(result[field] as string, businessId);
-    }
-  }
-  return result;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const result: any = { ...app };
+  return mutateFields(result, SENSITIVE_APPLICATION_FIELDS, v => decryptFieldSafe(v, businessId));
 }
