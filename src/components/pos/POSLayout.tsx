@@ -1,6 +1,6 @@
 'use client';
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 
@@ -305,7 +305,6 @@ export function POSLayout({ children, userName }: { children: React.ReactNode; u
 
 /* ─── User avatar dropdown ───────────────────────────────────────── */
 function UserMenu({ userName }: { userName: string }) {
-  const router = useRouter();
   const ref = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
@@ -322,7 +321,7 @@ function UserMenu({ userName }: { userName: string }) {
     setSigningOut(true);
     localStorage.removeItem('aria_active_business_id');
     await supabase.auth.signOut();
-    router.push('/login');
+    window.location.href = '/login';
   }
 
   return (

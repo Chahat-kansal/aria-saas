@@ -98,7 +98,7 @@ export function Sidebar() {
     setSigningOut(true);
     localStorage.removeItem('aria_active_business_id');
     await supabase.auth.signOut();
-    router.push('/login');
+    window.location.href = '/login';
   }
 
   // Initials for avatar
