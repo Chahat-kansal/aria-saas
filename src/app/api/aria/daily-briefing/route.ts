@@ -47,25 +47,6 @@ export async function POST(req: Request) {
 
     // Run all data queries in parallel
     const [
-      lapsedResult,
-      reviewsResult,
-      stockResult,
-      winbackResult,
-      competitorResult,
-      revenueResult,
-      slowDayResult,
-    ] = await Promise.all([
-      supabase.rpc('exec_sql', {}).then(() => null).catch(() => null), // placeholder — use direct query below
-      supabase.rpc('exec_sql', {}).then(() => null).catch(() => null),
-      supabase.rpc('exec_sql', {}).then(() => null).catch(() => null),
-      supabase.rpc('exec_sql', {}).then(() => null).catch(() => null),
-      supabase.rpc('exec_sql', {}).then(() => null).catch(() => null),
-      supabase.rpc('exec_sql', {}).then(() => null).catch(() => null),
-      supabase.rpc('exec_sql', {}).then(() => null).catch(() => null),
-    ]);
-
-    // Direct parallel queries (the rpc stubs above are discarded)
-    const [
       { count: lapsedCount },
       { count: unansweredReviews },
       { count: lowStockCount },
