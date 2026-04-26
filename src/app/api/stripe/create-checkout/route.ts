@@ -17,10 +17,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ url: null });
   }
 
-  const { plan, is_additional, business_id } = await req.json();
+  const { plan, type, is_additional, business_id } = await req.json();
 
-  // Additional business seat — flat $49/mo regardless of plan
-  if (is_additional) {
+  // Additional business seat
+  if (type === 'additional_business' || is_additional) {
     const additionalPriceId = process.env.STRIPE_ADDITIONAL_BUSINESS_PRICE_ID;
     if (!additionalPriceId) {
       // Stripe add-on not configured — skip to connect
