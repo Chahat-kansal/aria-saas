@@ -18,8 +18,8 @@ const DOC_PROMPTS: Record<string, (client: any) => string> = {
 
 export async function POST(req: Request) {
   const supabase = createServerSupabaseClient();
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { document_type, client_id } = await req.json();
   if (!document_type) return NextResponse.json({ error: 'document_type is required' }, { status: 400 });

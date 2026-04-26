@@ -18,16 +18,30 @@ export async function POST(req: Request) {
   if (event.type === 'checkout.session.completed') {
     const session = event.data.object as Stripe.Checkout.Session;
     const userId = session.metadata?.userId;
+    const businessId = session.metadata?.business_id;
     const plan = (session.metadata?.plan as 'starter' | 'growth' | 'pro') || 'starter';
 
-    if (userId) {
+    if (userId && businessId) {
+      // Target the specific business from checkout metadata
       await supabaseAdmin
         .from('businesses')
         .update({
           plan,
           stripe_subscription_id: session.subscription as string,
+          stripe_customer_id: session.customer as string,
         })
+        .eq('id', businessId)
         .eq('user_id', userId);
+    } else if (userId) {
+      // Fallback: update by customer ID if business_id not in metadata
+      const customerId = session.customer as string;
+      if (customerId) {
+        await supabaseAdmin
+          .from('businesses')
+          .update({ plan, stripe_subscription_id: session.subscription as string })
+          .eq('stripe_customer_id', customerId)
+          .eq('user_id', userId);
+      }
     }
   }
 

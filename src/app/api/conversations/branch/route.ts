@@ -3,8 +3,8 @@ import { NextResponse } from 'next/server';
 
 export async function POST(req: Request) {
   const supabase = createServerSupabaseClient();
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { conversationId, fromMessageIndex } = await req.json();
 
@@ -12,7 +12,7 @@ export async function POST(req: Request) {
     .from('conversations')
     .select('*')
     .eq('id', conversationId)
-    .eq('user_id', session.user.id)
+    .eq('user_id', user.id)
     .single();
 
   if (!original) return NextResponse.json({ error: 'Not found' }, { status: 404 });
@@ -22,7 +22,7 @@ export async function POST(req: Request) {
   const { data: branch } = await supabase
     .from('conversations')
     .insert({
-      user_id: session.user.id,
+      user_id: user.id,
       title: `🌿 Branch of: ${original.title}`,
       messages: branchedMessages,
       aimodel: original.aimodel,

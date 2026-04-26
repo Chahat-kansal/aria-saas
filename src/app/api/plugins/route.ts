@@ -35,8 +35,8 @@ const ALLOWED_MODELS = new Set([
 
 export async function POST(req: Request) {
   const supabase = createServerSupabaseClient();
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
 
   let body: any;
   try { body = await req.json(); } catch { return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400 }); }
@@ -47,7 +47,7 @@ export async function POST(req: Request) {
   const { data: business } = await supabase
     .from('businesses')
     .select('plan')
-    .eq('user_id', session.user.id)
+    .eq('user_id', user.id)
     .single();
 
   const plan = business?.plan ?? 'starter';
@@ -70,13 +70,13 @@ export async function POST(req: Request) {
             .from('conversations')
             .select('messages')
             .eq('id', convId)
-            .eq('user_id', session.user.id)
+            .eq('user_id', user.id)
             .single();
           if (data) history = (data.messages as any[]) || [];
         } else {
           const { data } = await supabase
             .from('conversations')
-            .insert({ user_id: session.user.id, title: message.slice(0, 60), messages: [], aimodel: safeModel })
+            .insert({ user_id: user.id, title: message.slice(0, 60), messages: [], aimodel: safeModel })
             .select('id')
             .single();
           convId = data?.id;

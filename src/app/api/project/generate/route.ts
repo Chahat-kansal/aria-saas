@@ -43,8 +43,8 @@ Common project structures:
 
 export async function POST(req: Request) {
   const supabase = createServerSupabaseClient();
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
 
   const { prompt, model, existingProject } = await req.json();
   if (!prompt?.trim()) return new Response(JSON.stringify({ error: 'Prompt required' }), { status: 400 });

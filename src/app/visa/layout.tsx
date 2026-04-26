@@ -6,17 +6,17 @@ export const metadata = { title: 'VisaAI — Migration Agent' };
 
 export default async function VisaLayout({ children }: { children: React.ReactNode }) {
   const supabase = createServerSupabaseClient();
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) redirect('/login');
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect('/login');
 
   const [
     { count: alertCount },
     { count: pendingApps },
   ] = await Promise.all([
     supabase.from('immigration_alerts').select('*', { count: 'exact', head: true })
-      .eq('agent_id', session.user.id).eq('is_read', false),
+      .eq('agent_id', user!.id).eq('is_read', false),
     supabase.from('visa_applications').select('*', { count: 'exact', head: true })
-      .eq('agent_id', session.user.id).eq('status', 'lodged'),
+      .eq('agent_id', user!.id).eq('status', 'lodged'),
   ]);
 
   return (

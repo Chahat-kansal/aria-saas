@@ -1,11 +1,12 @@
 import { createServerSupabaseClient } from '@/lib/supabase-server';
+import { redirect } from 'next/navigation';
 import Link from 'next/link';
 
 export default async function VisaDashboard() {
   const supabase = createServerSupabaseClient();
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) return null;
-  const agentId = session.user.id;
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (!user) redirect('/login');
+  const agentId = user.id;
   const today = new Date().toISOString().split('T')[0];
   const in90 = new Date(Date.now() + 90 * 864e5).toISOString().split('T')[0];
 

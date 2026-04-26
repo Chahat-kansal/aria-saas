@@ -3,8 +3,8 @@ import { NextResponse } from 'next/server';
 
 export async function GET(req: Request) {
   const supabase = createServerSupabaseClient();
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { searchParams } = new URL(req.url);
   const businessId = searchParams.get('businessId');
@@ -15,7 +15,7 @@ export async function GET(req: Request) {
     .from('businesses')
     .select('google_rating,google_review_count')
     .eq('id', businessId)
-    .eq('user_id', session.user.id)
+    .eq('user_id', user.id)
     .single();
 
   if (!business) return NextResponse.json({ error: 'Not found' }, { status: 404 });

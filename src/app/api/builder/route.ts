@@ -62,8 +62,8 @@ Always output the complete updated file — never partial updates or diffs.`;
 
 export async function POST(req: Request) {
   const supabase = createServerSupabaseClient();
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
 
   const { message, conversationId, model } = await req.json();
   if (!message?.trim()) return new Response(JSON.stringify({ error: 'Message required' }), { status: 400 });
@@ -79,13 +79,13 @@ export async function POST(req: Request) {
       .from('conversations')
       .select('messages')
       .eq('id', convId)
-      .eq('user_id', session.user.id)
+      .eq('user_id', user.id)
       .single();
     if (data) history = (data.messages as any[]) || [];
   } else {
     const { data } = await supabase
       .from('conversations')
-      .insert({ user_id: session.user.id, title: `🔨 ${message.slice(0, 55)}`, messages: [], aimodel: safeModel })
+      .insert({ user_id: user.id, title: `🔨 ${message.slice(0, 55)}`, messages: [], aimodel: safeModel })
       .select('id')
       .single();
     convId = data?.id;

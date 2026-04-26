@@ -1,18 +1,34 @@
 import { createServerSupabaseClient } from '@/lib/supabase-server';
+import { redirect } from 'next/navigation';
 import Link from 'next/link';
 
 export default async function DashboardPage() {
   const supabase = createServerSupabaseClient();
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) return null;
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect('/login');
 
-  const { data: business } = await supabase
-    .from('businesses')
-    .select('*')
-    .eq('user_id', session.user.id)
+  // Respect the active business selection
+  const { data: activeRecord } = await supabase
+    .from('user_active_business')
+    .select('business_id')
+    .eq('user_id', user!.id)
     .maybeSingle();
 
-  if (!business) return null;
+  const businessQuery = supabase
+    .from('businesses')
+    .select('*')
+    .eq('user_id', user!.id)
+    .eq('is_active', true)
+    .order('created_at', { ascending: true });
+
+  const { data: allBusinesses } = await businessQuery;
+  if (!allBusinesses || allBusinesses.length === 0) redirect('/onboarding/industry');
+
+  const business =
+    (activeRecord?.business_id && allBusinesses!.find((b: { id: string }) => b.id === activeRecord.business_id)) ||
+    allBusinesses![0];
+
+  if (!business) redirect('/onboarding/industry');
 
   const industry = business.industry ?? 'professional';
 

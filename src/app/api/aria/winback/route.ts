@@ -6,14 +6,14 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 export async function POST(req: Request) {
   const supabase = createServerSupabaseClient();
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { customerId, businessId } = await req.json();
   if (!customerId || !businessId) return NextResponse.json({ error: 'customerId and businessId required' }, { status: 400 });
 
   const [{ data: business }, { data: customer }] = await Promise.all([
-    supabase.from('businesses').select('*').eq('id', businessId).eq('user_id', session.user.id).single(),
+    supabase.from('businesses').select('*').eq('id', businessId).eq('user_id', user.id).single(),
     supabase.from('customers').select('*').eq('id', customerId).eq('business_id', businessId).single(),
   ]);
 

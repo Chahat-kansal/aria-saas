@@ -3,11 +3,11 @@ import { createServerSupabaseClient } from '@/lib/supabase-server';
 
 export async function POST(req: Request) {
   const supabase = createServerSupabaseClient();
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { data: business } = await supabase
-    .from('businesses').select('id').eq('user_id', session.user.id).maybeSingle();
+    .from('businesses').select('id').eq('user_id', user.id).maybeSingle();
   if (!business) return NextResponse.json({ error: 'Business not found' }, { status: 404 });
 
   const body = await req.json();

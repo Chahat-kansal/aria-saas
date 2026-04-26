@@ -8,10 +8,10 @@ async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, u
 
 export async function GET() {
   const supabase = createServerSupabaseClient();
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const bid = await getBid(supabase, session.user.id);
+  const bid = await getBid(supabase, user.id);
   if (!bid) return NextResponse.json({ outlets: [] });
 
   const { data } = await supabase.from('pos_outlets').select('*').eq('business_id', bid).order('name');
@@ -20,10 +20,10 @@ export async function GET() {
 
 export async function POST(req: Request) {
   const supabase = createServerSupabaseClient();
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const bid = await getBid(supabase, session.user.id);
+  const bid = await getBid(supabase, user.id);
   if (!bid) return NextResponse.json({ error: 'No business found' }, { status: 400 });
 
   const body = await req.json();
@@ -34,10 +34,10 @@ export async function POST(req: Request) {
 
 export async function PATCH(req: Request) {
   const supabase = createServerSupabaseClient();
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const bid = await getBid(supabase, session.user.id);
+  const bid = await getBid(supabase, user.id);
   if (!bid) return NextResponse.json({ error: 'No business found' }, { status: 400 });
 
   const { searchParams } = new URL(req.url);
@@ -52,10 +52,10 @@ export async function PATCH(req: Request) {
 
 export async function DELETE(req: Request) {
   const supabase = createServerSupabaseClient();
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const bid = await getBid(supabase, session.user.id);
+  const bid = await getBid(supabase, user.id);
   if (!bid) return NextResponse.json({ error: 'No business found' }, { status: 400 });
 
   const { searchParams } = new URL(req.url);

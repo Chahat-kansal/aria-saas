@@ -8,10 +8,10 @@ async function getBusinessId(supabase: ReturnType<typeof createServerSupabaseCli
 
 export async function GET(req: Request) {
   const supabase = createServerSupabaseClient();
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const bid = await getBusinessId(supabase, session.user.id);
+  const bid = await getBusinessId(supabase, user.id);
   if (!bid) return NextResponse.json({ customers: [] });
 
   const { searchParams } = new URL(req.url);
@@ -34,10 +34,10 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   const supabase = createServerSupabaseClient();
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const bid = await getBusinessId(supabase, session.user.id);
+  const bid = await getBusinessId(supabase, user.id);
   if (!bid) return NextResponse.json({ error: 'No business found' }, { status: 400 });
 
   const { name, email, phone } = await req.json();

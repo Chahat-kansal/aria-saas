@@ -4,8 +4,8 @@ import crypto from 'node:crypto';
 
 export async function POST(req: Request) {
   const supabase = createServerSupabaseClient();
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { conversationId } = await req.json();
 
@@ -13,7 +13,7 @@ export async function POST(req: Request) {
     .from('conversations')
     .select('share_token')
     .eq('id', conversationId)
-    .eq('user_id', session.user.id)
+    .eq('user_id', user.id)
     .single();
 
   if (!conv) return NextResponse.json({ error: 'Not found' }, { status: 404 });
@@ -30,10 +30,10 @@ export async function POST(req: Request) {
 
 export async function DELETE(req: Request) {
   const supabase = createServerSupabaseClient();
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { conversationId } = await req.json();
-  await supabase.from('conversations').update({ share_token: null }).eq('id', conversationId).eq('user_id', session.user.id);
+  await supabase.from('conversations').update({ share_token: null }).eq('id', conversationId).eq('user_id', user.id);
   return NextResponse.json({ success: true });
 }

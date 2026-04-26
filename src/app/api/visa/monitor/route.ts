@@ -62,8 +62,8 @@ ${content.slice(0, 8000)}`,
 
 export async function POST(req: Request) {
   const supabase = createServerSupabaseClient();
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   let saved = 0;
   let alertsCreated = 0;
@@ -101,11 +101,11 @@ export async function POST(req: Request) {
           const { data: affectedClients } = await supabase
             .from('visa_clients')
             .select('id')
-            .eq('agent_id', session.user.id)
+            .eq('agent_id', user.id)
             .in('visa_type', article.visa_classes.map((v: string) => `%${v}%`));
 
           await (supabaseAdmin || supabase).from('immigration_alerts').insert({
-            agent_id: session.user.id,
+            agent_id: user.id,
             title: article.title,
             description: article.summary,
             source_url: source.url,

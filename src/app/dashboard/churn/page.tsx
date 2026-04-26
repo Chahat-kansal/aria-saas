@@ -3,13 +3,13 @@ import { redirect } from 'next/navigation';
 
 export default async function ChurnPage() {
   const supabase = createServerSupabaseClient();
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) redirect('/login');
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect('/login');
 
   const { data: business } = await supabase
     .from('businesses')
     .select('id')
-    .eq('user_id', session.user.id)
+    .eq('user_id', user!.id)
     .single();
 
   const cutoff30 = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();

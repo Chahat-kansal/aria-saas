@@ -4,8 +4,8 @@ import { NextResponse } from 'next/server';
 
 export async function POST(req: Request) {
   const supabase = createServerSupabaseClient();
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   try {
     const form = await req.formData();
@@ -22,7 +22,7 @@ export async function POST(req: Request) {
 
     if (blobToken && blobToken !== 'vercel_blob_rw_your-token') {
       const blob = await put(
-        `visa-docs/${session.user.id}/${clientId}/${Date.now()}-${file.name}`,
+        `visa-docs/${user.id}/${clientId}/${Date.now()}-${file.name}`,
         file,
         { access: 'public', token: blobToken }
       );
@@ -30,7 +30,7 @@ export async function POST(req: Request) {
     }
 
     const { data: doc, error } = await supabase.from('visa_documents').insert({
-      agent_id: session.user.id,
+      agent_id: user.id,
       client_id: clientId,
       document_name: file.name,
       document_type: documentType,

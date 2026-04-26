@@ -36,15 +36,15 @@ Be thorough. Actually do the work at each step, don't just describe it.`;
 
 export async function POST(req: Request) {
   const supabase = createServerSupabaseClient();
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
 
-  // Check plan
-  const { data: business } = await supabase
+  // Check plan — use most permissive plan across all businesses
+  const { data: allBiz } = await supabase
     .from('businesses')
     .select('plan')
-    .eq('user_id', session.user.id)
-    .single();
+    .eq('user_id', user.id);
+  const business = { plan: (allBiz ?? []).some(b => b.plan === 'pro') ? 'pro' : (allBiz ?? []).some(b => b.plan === 'growth') ? 'growth' : 'starter' };
 
   if (business?.plan === 'starter') {
     return new Response(JSON.stringify({ error: 'Agent mode requires Growth or Pro plan' }), { status: 403 });

@@ -8,10 +8,10 @@ async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, u
 
 export async function GET() {
   const supabase = createServerSupabaseClient();
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const bid = await getBid(supabase, session.user.id);
+  const bid = await getBid(supabase, user.id);
   if (!bid) return NextResponse.json({ orders: [] });
 
   const { data } = await supabase
@@ -25,10 +25,10 @@ export async function GET() {
 
 export async function POST(req: Request) {
   const supabase = createServerSupabaseClient();
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const bid = await getBid(supabase, session.user.id);
+  const bid = await getBid(supabase, user.id);
   if (!bid) return NextResponse.json({ error: 'No business found' }, { status: 400 });
 
   const { count } = await supabase.from('pos_purchase_orders').select('id', { count: 'exact', head: true }).eq('business_id', bid);
@@ -47,10 +47,10 @@ export async function POST(req: Request) {
 
 export async function PATCH(req: Request) {
   const supabase = createServerSupabaseClient();
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const bid = await getBid(supabase, session.user.id);
+  const bid = await getBid(supabase, user.id);
   if (!bid) return NextResponse.json({ error: 'No business found' }, { status: 400 });
 
   const { searchParams } = new URL(req.url);

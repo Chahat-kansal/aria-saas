@@ -87,7 +87,7 @@ export async function POST(req: Request) {
 
   const { data: business } = await supabase
     .from('businesses')
-    .select('stripe_customer_id, email, name')
+    .select('id, stripe_customer_id, email, name')
     .eq('user_id', user.id)
     .order('created_at', { ascending: true })
     .limit(1)
@@ -106,9 +106,7 @@ export async function POST(req: Request) {
     await supabase
       .from('businesses')
       .update({ stripe_customer_id: customerId })
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: true })
-      .limit(1);
+      .eq('id', business.id);
   }
 
   const checkoutSession = await stripe.checkout.sessions.create({
@@ -119,7 +117,7 @@ export async function POST(req: Request) {
     subscription_data: { trial_period_days: 14 },
     success_url: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard?onboarded=true`,
     cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/onboarding/plan`,
-    metadata: { userId: user.id, plan },
+    metadata: { userId: user.id, business_id: business.id, plan },
   });
 
   return NextResponse.json({ url: checkoutSession.url });

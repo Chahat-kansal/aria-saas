@@ -8,10 +8,10 @@ async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, u
 
 export async function GET(req: Request) {
   const supabase = createServerSupabaseClient();
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const bid = await getBid(supabase, session.user.id);
+  const bid = await getBid(supabase, user.id);
   if (!bid) return NextResponse.json({ summary: null, daily: [] });
 
   const { searchParams } = new URL(req.url);
