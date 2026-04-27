@@ -1,8 +1,21 @@
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
 
-async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string) {
-  const { data } = await supabase.from('businesses').select('id').eq('user_id', userId).maybeSingle();
+async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
+  const { data: active } = await supabase
+    .from('user_active_business')
+    .select('business_id')
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (active?.business_id) return active.business_id as string;
+  const { data } = await supabase
+    .from('businesses')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('is_active', true)
+    .order('created_at', { ascending: true })
+    .limit(1)
+    .maybeSingle();
   return data?.id ?? null;
 }
 
@@ -19,7 +32,6 @@ export async function GET() {
       .from('pos_products')
       .select('id,name,sku,barcode,description,price,cost_price,tax_rate,stock_quantity,low_stock_threshold,track_stock,is_active,show_online,image_url,category_id,supplier_id,pos_categories(name,color)')
       .eq('business_id', bid)
-      .eq('is_active', true)
       .order('name'),
     supabase
       .from('pos_categories')

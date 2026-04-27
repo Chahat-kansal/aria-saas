@@ -1,8 +1,21 @@
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 
-async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string) {
-  const { data } = await supabase.from('businesses').select('id').eq('user_id', userId).maybeSingle();
+async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
+  const { data: active } = await supabase
+    .from('user_active_business')
+    .select('business_id')
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (active?.business_id) return active.business_id as string;
+  const { data } = await supabase
+    .from('businesses')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('is_active', true)
+    .order('created_at', { ascending: true })
+    .limit(1)
+    .maybeSingle();
   return data?.id ?? null;
 }
 

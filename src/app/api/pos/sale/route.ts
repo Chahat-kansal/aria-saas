@@ -6,8 +6,15 @@ export async function POST(req: Request) {
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const { data: business } = await supabase
-    .from('businesses').select('id').eq('user_id', user.id).maybeSingle();
+  const { data: activeBiz } = await supabase
+    .from('user_active_business')
+    .select('business_id')
+    .eq('user_id', user.id)
+    .maybeSingle();
+  const activeId = activeBiz?.business_id
+    ?? (await supabase.from('businesses').select('id').eq('user_id', user.id)
+        .eq('is_active', true).order('created_at', { ascending: true }).limit(1).maybeSingle()).data?.id;
+  const business = activeId ? { id: activeId } : null;
   if (!business) return NextResponse.json({ error: 'Business not found' }, { status: 404 });
 
   const body = await req.json();
