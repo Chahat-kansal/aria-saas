@@ -74,20 +74,29 @@ export default async function WinbackPage() {
             <h2 className="font-medium text-white">Campaign History</h2>
           </div>
           <div style={{ background: '#0d0d14' }}>
-            {campaigns && campaigns.length > 0 ? campaigns.map(c => (
+            {campaigns && campaigns.length > 0 ? campaigns.map(c => {
+              const failed = c.sms_sent === false && (c.failed_at || c.error);
+              return (
               <div key={c.id} className="px-5 py-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
                 <div className="flex justify-between items-start">
-                  <p className="text-sm font-medium text-white">{c.name ?? 'Winback Campaign'}</p>
+                  <p className="text-sm font-medium text-white">{c.name ?? (c.type === 'review_request' ? 'Review Request' : 'Winback Campaign')}</p>
                   <span className="text-xs px-2 py-0.5 rounded-full"
-                    style={{ background: 'rgba(29,158,117,0.15)', color: '#1D9E75' }}>
-                    {c.status ?? 'sent'}
+                    style={failed
+                      ? { background: 'rgba(239,68,68,0.15)', color: '#ef4444' }
+                      : { background: 'rgba(29,158,117,0.15)', color: '#1D9E75' }}>
+                    {failed ? 'Failed' : (c.sms_sent ? 'Sent' : (c.status ?? 'sent'))}
                   </span>
                 </div>
                 <p className="text-xs mt-1" style={{ color: '#6b7280' }}>
-                  {c.recipients_count ?? 0} recipients · {new Date(c.created_at).toLocaleDateString()}
+                  {new Date(c.created_at).toLocaleDateString()}
+                  {c.message && <span className="ml-2 italic">&ldquo;{c.message.slice(0, 60)}{c.message.length > 60 ? '…' : ''}&rdquo;</span>}
                 </p>
+                {failed && c.error && (
+                  <p className="text-xs mt-1" style={{ color: '#f87171' }}>Error: {c.error}</p>
+                )}
               </div>
-            )) : (
+              );
+            }) : (
               <p className="px-5 py-8 text-center text-sm" style={{ color: '#6b7280' }}>
                 No campaigns yet. Ask Aria to run a winback campaign.
               </p>

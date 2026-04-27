@@ -19,6 +19,28 @@ export async function POST(req: Request) {
 
   if (!business || !customer) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
+  const twilioSid   = process.env.TWILIO_ACCOUNT_SID;
+  const twilioToken = process.env.TWILIO_AUTH_TOKEN;
+  const twilioFrom  = process.env.TWILIO_PHONE_NUMBER;
+
+  if (!twilioSid || !twilioToken || !twilioFrom) {
+    return NextResponse.json({
+      error: 'SMS not configured',
+      message: 'Twilio credentials are not set. Configure SMS in Settings before sending review requests.',
+      sms_sent: false,
+      code: 'TWILIO_NOT_CONFIGURED',
+    }, { status: 503 });
+  }
+
+  if (!customer.phone) {
+    return NextResponse.json({
+      error: 'No phone number',
+      message: `${customer.name} has no phone number on file. Add a phone number before sending SMS.`,
+      sms_sent: false,
+      code: 'NO_PHONE',
+    }, { status: 400 });
+  }
+
   const prompt = `Write a short, friendly review request SMS (max 160 chars) for:
 Customer: ${customer.name}
 Business: ${business.name} (${business.industry})
@@ -33,49 +55,87 @@ Keep it warm and personal. Ask them to share their experience. Return ONLY the S
 
   const messageText = response.content.filter(b => b.type === 'text').map(b => b.text).join('').trim();
 
-  let smsSent = false;
-  if (process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && customer.phone) {
-    try {
-      const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${process.env.TWILIO_ACCOUNT_SID}/Messages.json`;
-      const body = new URLSearchParams({
-        From: process.env.TWILIO_PHONE_NUMBER!,
-        To: customer.phone,
-        Body: messageText,
+  try {
+    const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${twilioSid}/Messages.json`;
+    const body = new URLSearchParams({ From: twilioFrom, To: customer.phone, Body: messageText });
+    const res = await fetch(twilioUrl, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${Buffer.from(`${twilioSid}:${twilioToken}`).toString('base64')}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body,
+    });
+
+    const twilioData = await res.json();
+
+    if (!res.ok) {
+      await supabase.from('campaigns').insert({
+        business_id: businessId,
+        customer_id: customerId,
+        type: 'review_request',
+        message: messageText,
+        sms_sent: false,
+        error: twilioData?.message ?? 'Twilio rejected the request',
+        failed_at: new Date().toISOString(),
       });
-      const res = await fetch(twilioUrl, {
-        method: 'POST',
-        headers: {
-          Authorization: `Basic ${Buffer.from(`${process.env.TWILIO_ACCOUNT_SID}:${process.env.TWILIO_AUTH_TOKEN}`).toString('base64')}`,
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body,
+
+      await supabase.from('activity_log').insert({
+        business_id: businessId,
+        action_type: 'review',
+        description: `Review request SMS to ${customer.name} FAILED: ${twilioData?.message ?? 'Unknown error'}`,
+        metadata: { customerId, smsSent: false },
       });
-      smsSent = res.ok;
-    } catch {}
+
+      return NextResponse.json({
+        error: 'SMS delivery failed',
+        message: twilioData?.message ?? 'Twilio rejected the request',
+        sms_sent: false,
+      }, { status: 500 });
+    }
+
+    await supabase.from('reviews').insert({
+      business_id: businessId,
+      customer_id: customerId,
+      platform: 'google',
+      request_sent_at: new Date().toISOString(),
+    });
+
+    await supabase.from('campaigns').insert({
+      business_id: businessId,
+      customer_id: customerId,
+      type: 'review_request',
+      message: messageText,
+      sms_sent: true,
+      twilio_sid: twilioData.sid,
+      sent_at: new Date().toISOString(),
+    });
+
+    await supabase.from('activity_log').insert({
+      business_id: businessId,
+      action_type: 'review',
+      description: `Review request SMS sent to ${customer.name} (${customer.phone})`,
+      metadata: { customerId, smsSent: true, sid: twilioData.sid },
+    });
+
+    return NextResponse.json({ success: true, message: messageText, sms_sent: true, sid: twilioData.sid });
+  } catch (twilioErr) {
+    const errMsg = twilioErr instanceof Error ? twilioErr.message : 'Unknown error';
+
+    await supabase.from('campaigns').insert({
+      business_id: businessId,
+      customer_id: customerId,
+      type: 'review_request',
+      message: messageText,
+      sms_sent: false,
+      error: errMsg,
+      failed_at: new Date().toISOString(),
+    });
+
+    return NextResponse.json({
+      error: 'SMS delivery failed',
+      message: errMsg,
+      sms_sent: false,
+    }, { status: 500 });
   }
-
-  // Update review request_sent_at
-  await supabase.from('reviews').insert({
-    business_id: businessId,
-    customer_id: customerId,
-    platform: 'google',
-    request_sent_at: new Date().toISOString(),
-  });
-
-  await supabase.from('campaigns').insert({
-    business_id: businessId,
-    type: 'review_request',
-    status: 'sent',
-    sent_count: 1,
-    scheduled_for: new Date().toISOString(),
-  });
-
-  await supabase.from('activity_log').insert({
-    business_id: businessId,
-    action_type: 'review',
-    description: `Review request sent to ${customer.name}${smsSent ? ' via SMS' : ''}`,
-    metadata: { customerId, smsSent },
-  });
-
-  return NextResponse.json({ success: true, message: messageText, smsSent });
 }

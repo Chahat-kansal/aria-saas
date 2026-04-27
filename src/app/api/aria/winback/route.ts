@@ -19,6 +19,28 @@ export async function POST(req: Request) {
 
   if (!business || !customer) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
+  const twilioSid   = process.env.TWILIO_ACCOUNT_SID;
+  const twilioToken = process.env.TWILIO_AUTH_TOKEN;
+  const twilioFrom  = process.env.TWILIO_PHONE_NUMBER;
+
+  if (!twilioSid || !twilioToken || !twilioFrom) {
+    return NextResponse.json({
+      error: 'SMS not configured',
+      message: 'Twilio credentials are not set. Configure SMS in Settings before sending campaigns.',
+      sms_sent: false,
+      code: 'TWILIO_NOT_CONFIGURED',
+    }, { status: 503 });
+  }
+
+  if (!customer.phone) {
+    return NextResponse.json({
+      error: 'No phone number',
+      message: `${customer.name} has no phone number on file. Add a phone number before sending SMS.`,
+      sms_sent: false,
+      code: 'NO_PHONE',
+    }, { status: 400 });
+  }
+
   const daysSince = customer.last_visit
     ? Math.floor((Date.now() - new Date(customer.last_visit).getTime()) / 86400000)
     : null;
@@ -27,7 +49,7 @@ export async function POST(req: Request) {
 Customer: ${customer.name}
 Business: ${business.name} (${business.industry})
 Days since last visit: ${daysSince || 'unknown'}
-Include a personalised offer and a short call to action. Do not include a URL (we'll add that separately). Return ONLY the SMS text.`;
+Include a personalised offer and a short call to action. Do not include a URL. Return ONLY the SMS text.`;
 
   const response = await anthropic.messages.create({
     model: 'claude-haiku-4-5-20251001',
@@ -37,44 +59,80 @@ Include a personalised offer and a short call to action. Do not include a URL (w
 
   const messageText = response.content.filter(b => b.type === 'text').map(b => b.text).join('').trim();
 
-  // Send SMS via Twilio if configured
-  let smsSent = false;
-  if (process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && customer.phone) {
-    try {
-      const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${process.env.TWILIO_ACCOUNT_SID}/Messages.json`;
-      const body = new URLSearchParams({
-        From: process.env.TWILIO_PHONE_NUMBER!,
-        To: customer.phone,
-        Body: messageText,
+  try {
+    const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${twilioSid}/Messages.json`;
+    const body = new URLSearchParams({ From: twilioFrom, To: customer.phone, Body: messageText });
+    const res = await fetch(twilioUrl, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${Buffer.from(`${twilioSid}:${twilioToken}`).toString('base64')}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body,
+    });
+
+    const twilioData = await res.json();
+
+    if (!res.ok) {
+      await supabase.from('campaigns').insert({
+        business_id: businessId,
+        customer_id: customerId,
+        type: 'winback',
+        message: messageText,
+        sms_sent: false,
+        error: twilioData?.message ?? 'Twilio rejected the request',
+        failed_at: new Date().toISOString(),
       });
-      const res = await fetch(twilioUrl, {
-        method: 'POST',
-        headers: {
-          Authorization: `Basic ${Buffer.from(`${process.env.TWILIO_ACCOUNT_SID}:${process.env.TWILIO_AUTH_TOKEN}`).toString('base64')}`,
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body,
+
+      await supabase.from('activity_log').insert({
+        business_id: businessId,
+        action_type: 'winback',
+        description: `Winback SMS to ${customer.name} FAILED: ${twilioData?.message ?? 'Unknown error'}`,
+        metadata: { customerId, smsSent: false },
       });
-      smsSent = res.ok;
-    } catch {}
+
+      return NextResponse.json({
+        error: 'SMS delivery failed',
+        message: twilioData?.message ?? 'Twilio rejected the request',
+        sms_sent: false,
+      }, { status: 500 });
+    }
+
+    await supabase.from('campaigns').insert({
+      business_id: businessId,
+      customer_id: customerId,
+      type: 'winback',
+      message: messageText,
+      sms_sent: true,
+      twilio_sid: twilioData.sid,
+      sent_at: new Date().toISOString(),
+    });
+
+    await supabase.from('activity_log').insert({
+      business_id: businessId,
+      action_type: 'winback',
+      description: `Winback SMS sent to ${customer.name} (${customer.phone})`,
+      metadata: { customerId, smsSent: true, sid: twilioData.sid },
+    });
+
+    return NextResponse.json({ success: true, message: messageText, sms_sent: true, sid: twilioData.sid });
+  } catch (twilioErr) {
+    const errMsg = twilioErr instanceof Error ? twilioErr.message : 'Unknown error';
+
+    await supabase.from('campaigns').insert({
+      business_id: businessId,
+      customer_id: customerId,
+      type: 'winback',
+      message: messageText,
+      sms_sent: false,
+      error: errMsg,
+      failed_at: new Date().toISOString(),
+    });
+
+    return NextResponse.json({
+      error: 'SMS delivery failed',
+      message: errMsg,
+      sms_sent: false,
+    }, { status: 500 });
   }
-
-  // Create campaign record
-  await supabase.from('campaigns').insert({
-    business_id: businessId,
-    type: 'winback',
-    status: 'sent',
-    sent_count: 1,
-    scheduled_for: new Date().toISOString(),
-  });
-
-  // Log activity
-  await supabase.from('activity_log').insert({
-    business_id: businessId,
-    action_type: 'winback',
-    description: `Winback message sent to ${customer.name}${smsSent ? ' via SMS' : ' (SMS not configured)'}`,
-    metadata: { customerId, smsSent },
-  });
-
-  return NextResponse.json({ success: true, message: messageText, smsSent });
 }

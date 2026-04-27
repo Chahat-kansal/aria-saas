@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 
 /* ─── Nav data ──────────────────────────────────────────────────── */
-type NavItem = { label: string; href: string };
+type NavItem = { label: string; href: string; soon?: true };
 type NavSection =
   | { type: 'link';  id: string; label: string; icon: React.ReactNode; href: string }
   | { type: 'group'; id: string; label: string; icon: React.ReactNode; items: NavItem[] }
@@ -20,7 +20,7 @@ const NAV: NavSection[] = [
       { label: 'Manage Cash',            href: '/pos/cash'     },
       { label: 'Close Register',         href: '/pos/close'    },
       { label: 'Sales History',          href: '/pos/sales'    },
-      { label: 'Open Customer Display',  href: '/pos/display'  },
+      { label: 'Open Customer Display',  href: '/pos/display',  soon: true },
     ],
   },
   {
@@ -29,67 +29,67 @@ const NAV: NavSection[] = [
       { label: 'Products',          href: '/pos/products'    },
       { label: 'Classifications',   href: '/pos/categories'  },
       { label: 'Suppliers',         href: '/pos/suppliers'   },
-      { label: 'Orders & Invoices', href: '/pos/orders'      },
+      { label: 'Orders & Invoices', href: '/pos/orders',      soon: true },
       { label: 'Stocktake',         href: '/pos/stocktake'   },
     ],
   },
   {
     type: 'group', id: 'customers', label: 'Customer Management', icon: <UsersIcon />,
     items: [
-      { label: 'Customers',       href: '/pos/customers'        },
-      { label: 'Customer Groups', href: '/pos/customer-groups'  },
-      { label: 'Price Lists',     href: '/pos/price-lists'      },
-      { label: 'Balances',        href: '/pos/balances'         },
-      { label: 'Gift Cards',      href: '/pos/gift-cards'       },
+      { label: 'Customers',       href: '/pos/customers'                    },
+      { label: 'Customer Groups', href: '/pos/customer-groups', soon: true  },
+      { label: 'Price Lists',     href: '/pos/price-lists',    soon: true   },
+      { label: 'Balances',        href: '/pos/balances',       soon: true   },
+      { label: 'Gift Cards',      href: '/pos/gift-cards',     soon: true   },
     ],
   },
   {
     type: 'group', id: 'marketing', label: 'Marketing', icon: <MegaphoneIcon />,
     items: [
-      { label: 'Promotions',    href: '/pos/promotions'     },
-      { label: 'Shelf Tickets', href: '/pos/shelf-tickets'  },
-      { label: 'Media Centre',  href: '/pos/media'          },
+      { label: 'Promotions',    href: '/pos/promotions',    soon: true },
+      { label: 'Shelf Tickets', href: '/pos/shelf-tickets', soon: true },
+      { label: 'Media Centre',  href: '/pos/media',         soon: true },
     ],
   },
   {
     type: 'group', id: 'reporting', label: 'Reporting', icon: <ReportIcon />,
     items: [
-      { label: 'Reporting Dashboard', href: '/pos/reports'             },
-      { label: 'Sales Reports',       href: '/pos/reports/sales'       },
-      { label: 'Inventory Reports',   href: '/pos/reports/inventory'   },
-      { label: 'Purchase Reports',    href: '/pos/reports/purchases'   },
-      { label: 'Transfer Reports',    href: '/pos/reports/transfers'   },
-      { label: 'Register Closures',   href: '/pos/reports/closures'    },
+      { label: 'Reporting Dashboard', href: '/pos/reports'                          },
+      { label: 'Sales Reports',       href: '/pos/reports/sales',      soon: true   },
+      { label: 'Inventory Reports',   href: '/pos/reports/inventory',  soon: true   },
+      { label: 'Purchase Reports',    href: '/pos/reports/purchases',  soon: true   },
+      { label: 'Transfer Reports',    href: '/pos/reports/transfers',  soon: true   },
+      { label: 'Register Closures',   href: '/pos/reports/closures',   soon: true   },
     ],
   },
   {
     type: 'group', id: 'setup', label: 'Setup', icon: <GearIcon />,
     items: [
-      { label: 'General',              href: '/pos/settings'                },
-      { label: 'Payment Methods',      href: '/pos/settings/payments'       },
-      { label: 'Tax Rates',            href: '/pos/settings/tax'            },
-      { label: 'Sale Keys',            href: '/pos/sale-keys'               },
-      { label: 'Receipts',             href: '/pos/settings/receipts'       },
-      { label: 'Users',                href: '/pos/settings/users'          },
-      { label: 'Loyalty',              href: '/pos/settings/loyalty'        },
-      { label: 'Surcharging',          href: '/pos/settings/surcharging'    },
-      { label: 'Registers & Outlets',  href: '/pos/outlets'                 },
-      { label: 'Integrations',         href: '/pos/settings/integrations'   },
-      { label: 'Barcode Templates',    href: '/pos/barcodes'                },
-      { label: 'Price Sets',           href: '/pos/price-lists'             },
-      { label: 'Transfer List',        href: '/pos/transfers'               },
-      { label: 'Enterprise Policies',  href: '/pos/settings/enterprise'     },
+      { label: 'General',              href: '/pos/settings'                              },
+      { label: 'Payment Methods',      href: '/pos/settings/payments',  soon: true        },
+      { label: 'Tax Rates',            href: '/pos/settings/tax',       soon: true        },
+      { label: 'Sale Keys',            href: '/pos/sale-keys'                             },
+      { label: 'Receipts',             href: '/pos/settings/receipts',  soon: true        },
+      { label: 'Users',                href: '/pos/settings/users',     soon: true        },
+      { label: 'Loyalty',              href: '/pos/settings/loyalty',   soon: true        },
+      { label: 'Surcharging',          href: '/pos/settings/surcharging', soon: true      },
+      { label: 'Registers & Outlets',  href: '/pos/outlets'                               },
+      { label: 'Integrations',         href: '/pos/settings/integrations', soon: true     },
+      { label: 'Barcode Templates',    href: '/pos/barcodes',           soon: true        },
+      { label: 'Price Sets',           href: '/pos/price-lists',        soon: true        },
+      { label: 'Transfer List',        href: '/pos/transfers',          soon: true        },
+      { label: 'Enterprise Policies',  href: '/pos/settings/enterprise', soon: true       },
     ],
   },
   {
     type: 'group', id: 'utilities', label: 'Utilities', icon: <WrenchIcon />,
     items: [
-      { label: 'Future Prices',     href: '/pos/future-prices'        },
-      { label: 'Future Costs',      href: '/pos/settings/future-costs'},
-      { label: 'Mail Log',          href: '/pos/utilities/mail-log'   },
-      { label: 'Vendor Connections',href: '/pos/settings/vendors'     },
-      { label: 'Trashed Items',     href: '/pos/utilities/trash'      },
-      { label: 'Barcodes',          href: '/pos/utilities/barcodes'   },
+      { label: 'Future Prices',      href: '/pos/future-prices',         soon: true },
+      { label: 'Future Costs',       href: '/pos/settings/future-costs', soon: true },
+      { label: 'Mail Log',           href: '/pos/utilities/mail-log',    soon: true },
+      { label: 'Vendor Connections', href: '/pos/settings/vendors',      soon: true },
+      { label: 'Trashed Items',      href: '/pos/utilities/trash',       soon: true },
+      { label: 'Barcodes',           href: '/pos/utilities/barcodes',    soon: true },
     ],
   },
   { type: 'spacer' },
@@ -263,6 +263,19 @@ export function POSLayout({ children, userName }: { children: React.ReactNode; u
                       <div className="ml-[26px] mt-0.5 mb-1 pl-2.5 border-l border-[rgba(0,0,0,0.07)] space-y-0.5">
                         {section.items.map(item => {
                           const active = pathname === item.href || pathname.startsWith(item.href + '/');
+                          if (item.soon) {
+                            return (
+                              <div key={item.href}
+                                className="flex items-center justify-between px-2 py-[5px] rounded-md text-[12px] cursor-not-allowed"
+                                style={{ opacity: 0.45 }}>
+                                <span className="text-[rgba(26,26,22,0.5)]">{item.label}</span>
+                                <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full"
+                                  style={{ background: 'rgba(245,158,11,0.15)', color: '#d97706' }}>
+                                  Soon
+                                </span>
+                              </div>
+                            );
+                          }
                           return (
                             <Link key={item.href} href={item.href}
                               className={`block px-2 py-[5px] rounded-md text-[12px] transition-all ${

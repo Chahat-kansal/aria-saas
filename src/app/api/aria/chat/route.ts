@@ -36,17 +36,50 @@ export async function POST(req: Request) {
         .single();
 
       if (business) {
+        const today = new Date().toISOString().slice(0, 10);
+        const sixtyDaysAgo = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString();
+
+        const [
+          { data: todaySales },
+          { data: lowStock },
+          { count: atRiskCount },
+          { count: totalCustomers },
+          { data: recentLeaks },
+        ] = await Promise.all([
+          supabase.from('pos_sales').select('total_amount, payment_method')
+            .eq('business_id', business_id).eq('status', 'completed').gte('created_at', today),
+          supabase.from('pos_products').select('name, stock_quantity, low_stock_threshold')
+            .eq('business_id', business_id).eq('is_active', true)
+            .not('stock_quantity', 'is', null)
+            .lte('stock_quantity', 5).order('stock_quantity').limit(10),
+          supabase.from('customers').select('id', { count: 'exact', head: true })
+            .eq('business_id', business_id).lt('last_visit', sixtyDaysAgo),
+          supabase.from('customers').select('id', { count: 'exact', head: true })
+            .eq('business_id', business_id),
+          supabase.from('profit_leaks').select('category, description, monthly_loss')
+            .eq('business_id', business_id).neq('status', 'fixed').limit(3),
+        ]);
+
+        const todayRevenue = (todaySales ?? []).reduce((s: number, r: { total_amount: number }) => s + (r.total_amount || 0), 0);
+        const todayCount   = (todaySales ?? []).length;
+
         systemPrompt = `You are Aria, an expert AI business advisor for ${business.name}, a ${business.industry} business in ${business.city || 'Australia'}.
 
 Business profile:
 - Industry: ${business.industry}
 - Location: ${business.city || 'Australia'}
 - Plan: ${business.plan}
-- Monthly revenue: ${business.monthly_revenue || 'not specified'}
+- Monthly revenue target: ${business.monthly_revenue || 'not specified'}
 - Staff: ${business.staff_count || 'not specified'}
 - Biggest challenge: ${business.biggest_challenge || 'growing the business'}
 
-Your role: help ${business.owner_name || 'the owner'} make more money and run a better business. Be direct and specific. Give actionable advice with real numbers. Never be vague.`;
+LIVE BUSINESS DATA (right now):
+- Revenue today: $${todayRevenue.toFixed(2)} from ${todayCount} transaction${todayCount !== 1 ? 's' : ''}
+- Low stock alerts: ${(lowStock ?? []).length} product${(lowStock ?? []).length !== 1 ? 's' : ''} below threshold${(lowStock ?? []).length > 0 ? '\n' + (lowStock ?? []).map((p: { name: string; stock_quantity: number }) => `  • ${p.name}: ${p.stock_quantity} left`).join('\n') : ''}
+- Total customers: ${totalCustomers ?? 0}
+- Customers at churn risk (60+ days inactive): ${atRiskCount ?? 0}${(recentLeaks ?? []).length > 0 ? `\n- Active profit leaks: ${(recentLeaks ?? []).map((l: { category: string; monthly_loss: number }) => `${l.category} (-$${l.monthly_loss}/mo)`).join(', ')}` : ''}
+
+Your role: help ${business.owner_name || 'the owner'} make more money and run a better business. Reference the real numbers above when relevant. Be direct, specific, and actionable. Never be vague.`;
       }
     }
 

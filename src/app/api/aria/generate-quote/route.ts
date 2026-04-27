@@ -9,17 +9,33 @@ export async function POST(req: Request) {
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const { jobDescription, businessId } = await req.json();
-  if (!jobDescription || !businessId) return NextResponse.json({ error: 'jobDescription and businessId required' }, { status: 400 });
+  // Accept both field names for backwards compatibility
+  const body = await req.json();
+  const jobDescription = body.jobDescription ?? body.description;
+  const { businessId, customerName, customerEmail, customerPhone } = body;
+
+  if (!jobDescription) return NextResponse.json({ error: 'jobDescription required' }, { status: 400 });
+
+  // Get active business if businessId not provided
+  let bid = businessId;
+  if (!bid) {
+    const { data: active } = await supabase
+      .from('user_active_business').select('business_id').eq('user_id', user.id).maybeSingle();
+    bid = active?.business_id;
+    if (!bid) {
+      const { data } = await supabase.from('businesses').select('id').eq('user_id', user.id)
+        .eq('is_active', true).order('created_at', { ascending: true }).limit(1).maybeSingle();
+      bid = data?.id;
+    }
+  }
+
+  if (!bid) return NextResponse.json({ error: 'No business found' }, { status: 404 });
 
   const { data: business } = await supabase
-    .from('businesses')
-    .select('*')
-    .eq('id', businessId)
-    .eq('user_id', user.id)
-    .single();
+    .from('businesses').select('*').eq('id', bid).eq('user_id', user.id).single();
 
-  if (!business) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  if (!business) return NextResponse.json({ error: 'Business not found' }, { status: 404 });
+
   if (business.plan !== 'pro') return NextResponse.json({ error: 'Quote builder requires Pro plan' }, { status: 403 });
 
   const prompt = `Generate a professional quote for a ${business.industry} business called "${business.name}".
@@ -54,9 +70,77 @@ Use realistic Australian pricing for the industry. Return ONLY the JSON.`;
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (!jsonMatch) throw new Error('No JSON returned');
 
-    const quote = JSON.parse(jsonMatch[0]);
-    return NextResponse.json({ quote });
+    const quoteData = JSON.parse(jsonMatch[0]);
+
+    // Save to quotes table
+    const { data: saved, error: saveErr } = await supabase
+      .from('quotes')
+      .insert({
+        business_id: bid,
+        customer_name: customerName ?? null,
+        customer_email: customerEmail ?? null,
+        customer_phone: customerPhone ?? null,
+        job_description: jobDescription,
+        quote_amount: quoteData.total,
+        quote_breakdown: quoteData,
+        status: 'draft',
+        generated_by_ai: true,
+        generated_at: new Date().toISOString(),
+        expires_at: new Date(Date.now() + 30 * 86400000).toISOString(),
+      })
+      .select()
+      .single();
+
+    if (saveErr) {
+      // Table may not exist yet — return quote without saving
+      console.error('Quote save error:', saveErr.message);
+      return NextResponse.json({ quote: quoteData, saved: false });
+    }
+
+    return NextResponse.json({ quote: quoteData, id: saved.id, saved: true });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
+}
+
+export async function GET(req: Request) {
+  const supabase = createServerSupabaseClient();
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  const { data: active } = await supabase
+    .from('user_active_business').select('business_id').eq('user_id', user.id).maybeSingle();
+  const bid = active?.business_id
+    ?? (await supabase.from('businesses').select('id').eq('user_id', user.id)
+        .eq('is_active', true).order('created_at', { ascending: true }).limit(1).maybeSingle()).data?.id;
+
+  if (!bid) return NextResponse.json({ quotes: [] });
+
+  const { data: quotes } = await supabase
+    .from('quotes')
+    .select('*')
+    .eq('business_id', bid)
+    .order('created_at', { ascending: false })
+    .limit(50);
+
+  return NextResponse.json({ quotes: quotes ?? [] });
+}
+
+export async function PATCH(req: Request) {
+  const supabase = createServerSupabaseClient();
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  const { searchParams } = new URL(req.url);
+  const id = searchParams.get('id');
+  if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
+
+  const body = await req.json();
+  const { error } = await supabase
+    .from('quotes')
+    .update({ ...body, updated_at: new Date().toISOString() })
+    .eq('id', id);
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ ok: true });
 }
