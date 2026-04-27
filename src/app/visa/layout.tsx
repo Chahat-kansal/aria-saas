@@ -2,9 +2,14 @@ import { redirect } from 'next/navigation';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { VisaSidebar } from '@/components/visa/VisaSidebar';
 
+// Feature flag — visa module only activates when NEXT_PUBLIC_ENABLE_VISA_MODULE=true
+// Set false in retail deployment, true in migration agent deployment
+
 export const metadata = { title: 'VisaAI — Migration Agent' };
 
 export default async function VisaLayout({ children }: { children: React.ReactNode }) {
+  if (process.env.NEXT_PUBLIC_ENABLE_VISA_MODULE !== 'true') redirect('/dashboard');
+
   const supabase = createServerSupabaseClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');

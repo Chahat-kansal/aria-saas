@@ -1,5 +1,32 @@
 import Link from 'next/link';
 
+const FEATURES = [
+  { icon: '💬', name: 'Conversational sales insights', desc: "Ask Aria anything about your business. 'What's my best margin product this month?' returns instantly with a chart." },
+  { icon: '🍽️', name: 'Recipe → ingredient tracking', desc: 'Upload your menu PDF. Aria extracts every dish\'s ingredients and deducts stock automatically with every sale.' },
+  { icon: '📸', name: 'Receipt photo → instant stock-in', desc: 'Photograph a supplier invoice. Aria reads it and updates your inventory in seconds — no manual entry.' },
+  { icon: '🔮', name: 'Predictive reordering', desc: 'Aria factors in your sales history, upcoming public holidays, local events and weather to recommend exactly what to order and when.' },
+  { icon: '📦', name: 'Dead stock recovery', desc: 'Aria finds capital tied up in slow-moving stock and writes you a recovery plan — bundle ideas, markdown suggestions, placement tips.' },
+  { icon: '💬', name: 'Customer winback on autopilot', desc: 'When a regular goes quiet, Aria notices and drafts a personalised SMS offer. You approve, Aria sends.' },
+  { icon: '🎤', name: 'Voice stocktake', desc: 'Walk your shop floor speaking counts into your phone. Aria transcribes and updates inventory hands-free.' },
+  { icon: '🌐', name: "Your website's AI assistant", desc: 'Embed Aria on your website. It answers customer questions using your live inventory, menu, and hours — 24/7.' },
+  { icon: '📊', name: 'Cross-business benchmarking', desc: 'See how businesses like yours are performing — anonymised, aggregated, privacy-safe — so you always know where you stand.' },
+  { icon: '📋', name: 'Rostering assistant', desc: 'Aria forecasts how many staff you need based on expected demand, flags Fair Work compliance risks, and helps you build the roster.' },
+];
+
+const INDUSTRIES = [
+  'Liquor stores', 'Bottle shops', 'Convenience stores', 'Specialty retail',
+  'Cafés', 'Restaurants', 'Bakeries', 'Butchers',
+];
+
+const INTEGRATIONS = [
+  { name: 'Square', sub: 'Connect in 60 seconds' },
+  { name: 'Shopfront', sub: 'Native integration' },
+  { name: 'AriaPOS', sub: 'Built-in — no connection needed' },
+  { name: 'Xero', sub: 'Accounting sync' },
+  { name: 'MYOB', sub: 'Accounting sync' },
+  { name: 'Twilio', sub: 'SMS campaigns' },
+];
+
 export default function LandingPage() {
   return (
     <main className="min-h-screen bg-[#f5f4ef] text-[#1a1a16] overflow-x-hidden">
@@ -7,17 +34,14 @@ export default function LandingPage() {
         @keyframes float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-20px)} }
         @keyframes floatB { 0%,100%{transform:translateY(0)} 50%{transform:translateY(15px)} }
         @keyframes gradshift { 0%{background-position:0% 50%} 50%{background-position:100% 50%} 100%{background-position:0% 50%} }
-        @keyframes orbit { from{transform:rotate(0deg) translateX(42px)} to{transform:rotate(360deg) translateX(42px)} }
         @keyframes ticker { from{transform:translateX(0)} to{transform:translateX(-50%)} }
         .animate-float{animation:float 6s ease-in-out infinite}
         .animate-floatB{animation:floatB 8s ease-in-out infinite}
         .grad-text{background:linear-gradient(90deg,#1D9E75,#0fa86d,#16c987,#1D9E75);background-size:200%;-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;animation:gradshift 4s ease infinite}
-        .ticker-track{animation:ticker 30s linear infinite}
-        .feature-card:hover .arrow-btn{opacity:1;transform:translateX(0)}
-        .arrow-btn{opacity:0;transform:translateX(-4px);transition:all .2s}
+        .ticker-track{animation:ticker 40s linear infinite}
       `}</style>
 
-      {/* Blobs */}
+      {/* Background blobs */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
         <div className="animate-float absolute top-[-10%] left-[-5%] w-[600px] h-[600px] rounded-full" style={{background:'radial-gradient(circle,rgba(29,158,117,0.07) 0%,transparent 70%)'}} />
         <div className="animate-floatB absolute bottom-[-10%] right-[-5%] w-[500px] h-[500px] rounded-full" style={{background:'radial-gradient(circle,rgba(29,158,117,0.05) 0%,transparent 70%)'}} />
@@ -25,9 +49,9 @@ export default function LandingPage() {
 
       {/* Nav */}
       <nav className="sticky top-0 z-50 flex items-center justify-between px-8 py-4 bg-[rgba(245,244,239,0.85)] backdrop-blur-md border-b border-[rgba(0,0,0,0.05)]">
-        <div className="text-xl font-medium tracking-tight">aria<span className="text-[#1D9E75]">OS</span></div>
-        <div className="hidden md:flex items-center gap-8 text-sm text-[rgba(26,26,22,0.38)]">
-          {['Features','Industries','Pricing','About'].map(l => (
+        <div className="text-xl font-medium tracking-tight text-[#1a1a16]">aria</div>
+        <div className="hidden md:flex items-center gap-8 text-sm text-[rgba(26,26,22,0.4)]">
+          {['Features','Integrations','Pricing'].map(l => (
             <a key={l} href={`#${l.toLowerCase()}`} className="hover:text-[#1a1a16] transition-colors">{l}</a>
           ))}
         </div>
@@ -39,47 +63,29 @@ export default function LandingPage() {
 
       {/* Hero */}
       <section className="relative z-10 flex flex-col items-center text-center px-6 pt-24 pb-20">
-        <div className="flex items-center gap-3 mb-8">
-          <div className="h-px w-8 bg-[#1D9E75]" />
-          <span className="text-xs tracking-[.15em] uppercase text-[#1D9E75] font-medium">AI OPERATING SYSTEM FOR LOCAL BUSINESS</span>
-          <div className="h-px w-8 bg-[#1D9E75]" />
+        <div className="inline-flex items-center gap-2 bg-[rgba(29,158,117,0.08)] border border-[rgba(29,158,117,0.2)] rounded-full px-4 py-1.5 mb-8">
+          <span className="w-1.5 h-1.5 rounded-full bg-[#1D9E75]" />
+          <span className="text-xs text-[#1D9E75] font-medium">Founding customers now open — 14-day free trial</span>
         </div>
 
         <h1 className="text-5xl md:text-6xl font-medium leading-tight tracking-[-0.8px] mb-6 max-w-3xl">
-          <span className="block">Your business,</span>
-          <span className="block grad-text">running itself</span>
-          <span className="block text-[rgba(26,26,22,0.2)]">while you live your life</span>
+          The AI brain for your
+          <span className="block grad-text">shop or café</span>
         </h1>
 
-        <p className="text-[15px] text-[rgba(26,26,22,0.45)] max-w-lg mb-10 leading-relaxed">
-          Aria finds your hidden revenue, brings back lost customers, and grows your reputation — automatically, every single day.
+        <p className="text-[16px] text-[rgba(26,26,22,0.5)] max-w-xl mb-10 leading-relaxed">
+          Aria connects to your Square account (or runs its own POS) and turns your sales data into decisions — automatically, every morning.
         </p>
 
-        <div className="flex flex-col sm:flex-row gap-3 mb-10">
-          <Link href="/onboarding/industry" className="bg-[#1a1a16] text-white rounded-full px-7 py-3.5 text-sm font-medium hover:bg-[#2d2d25] transition-colors">
-            Start free — 14 days
+        <div className="flex flex-col sm:flex-row gap-3 mb-6">
+          <Link href="/onboarding/industry?source=square" className="bg-[#1D9E75] text-white rounded-full px-7 py-3.5 text-sm font-medium hover:bg-[#179968] transition-colors">
+            Connect Square free
           </Link>
-          <button className="border border-[rgba(0,0,0,0.15)] text-[#1a1a16] rounded-full px-7 py-3.5 text-sm font-medium hover:border-[#1a1a16] transition-colors">
-            Watch it work
-          </button>
+          <Link href="/onboarding/industry" className="bg-[#1a1a16] text-white rounded-full px-7 py-3.5 text-sm font-medium hover:bg-[#2d2d25] transition-colors">
+            Start with Aria POS
+          </Link>
         </div>
-
-        <p className="text-xs text-[rgba(26,26,22,0.35)]">Trusted by 200+ local businesses across Australia · No card required</p>
-
-        {/* Orb */}
-        <div className="relative mt-16 mb-4 w-20 h-20">
-          <div className="absolute inset-0 rounded-full bg-[#1D9E75] shadow-[0_0_40px_rgba(29,158,117,0.35)]" />
-          <div className="absolute inset-[-8px] rounded-full border border-[rgba(29,158,117,0.25)]" />
-          <div className="absolute inset-[-18px] rounded-full border border-[rgba(29,158,117,0.12)]" />
-          <div className="absolute inset-0 flex items-center justify-center">
-            <span className="text-white text-xl font-bold">A</span>
-          </div>
-          {[['#1D9E75','0s'],['#7c3aed','1.5s'],['#f59e0b','3s']].map(([color, delay], i) => (
-            <div key={i} className="absolute inset-0 flex items-center justify-center" style={{animation:`orbit 4s linear infinite`,animationDelay:delay as string}}>
-              <div className="w-2.5 h-2.5 rounded-full" style={{background:color,boxShadow:`0 0 8px ${color}`}} />
-            </div>
-          ))}
-        </div>
+        <p className="text-xs text-[rgba(26,26,22,0.35)]">Built by an Australian liquor store owner. No lock-in contracts.</p>
       </section>
 
       {/* Ticker */}
@@ -87,10 +93,10 @@ export default function LandingPage() {
         <div className="ticker-track flex gap-10 whitespace-nowrap w-max">
           {[...Array(2)].map((_, ri) => (
             <div key={ri} className="flex gap-10">
-              {['AI booking agent','Customer winback','Review autopilot','Profit leak detection','Competitor watch','Slow day filler','Churn prevention','Quote builder','Revenue recovery','Compliance AI'].map(item => (
-                <span key={item} className="flex items-center gap-2 text-sm text-[rgba(26,26,22,0.32)]">
+              {FEATURES.map(f => (
+                <span key={f.name} className="flex items-center gap-2 text-sm text-[rgba(26,26,22,0.35)]">
                   <span className="w-1.5 h-1.5 rounded-full bg-[#1D9E75] flex-shrink-0" />
-                  {item}
+                  {f.name}
                 </span>
               ))}
             </div>
@@ -98,74 +104,21 @@ export default function LandingPage() {
         </div>
       </div>
 
-      {/* Stats */}
-      <section className="relative z-10 px-6 py-16 max-w-4xl mx-auto">
-        <div className="bg-white border border-[rgba(0,0,0,0.08)] rounded-2xl p-8 grid grid-cols-2 md:grid-cols-4 gap-6">
-          {[
-            { val: '$2.4M', label: 'Revenue recovered for clients' },
-            { val: '200+', label: 'Businesses on autopilot' },
-            { val: '4.8★', label: 'Average Google rating lift' },
-            { val: '8', label: 'AI systems in one platform' },
-          ].map(s => (
-            <div key={s.val} className="text-center">
-              <div className="text-3xl font-semibold text-[#1a1a16] mb-1">{s.val}</div>
-              <div className="text-xs text-[rgba(26,26,22,0.45)] leading-snug">{s.label}</div>
-            </div>
-          ))}
-        </div>
-      </section>
-
       {/* Features */}
-      <section id="features" className="relative z-10 px-6 pb-16 max-w-4xl mx-auto">
-        <div className="rounded-2xl overflow-hidden" style={{background:'rgba(26,26,22,0.07)',gap:'1px',display:'grid',gridTemplateColumns:'repeat(3,1fr)'}}>
-          {[
-            { n:'01', name:'AI booking + sales agent', desc:'Answers enquiries, books appointments, and follows up leads automatically — 24/7.' },
-            { n:'02', name:'Customer winback engine', desc:'Identifies lapsed customers and sends personalised SMS offers to bring them back.' },
-            { n:'03', name:'Review growth autopilot', desc:'Sends review requests at the perfect moment, growing your Google rating on cruise control.' },
-            { n:'04', name:'Profit leak detector', desc:'Analyses your revenue patterns and surfaces hidden money being left on the table.' },
-            { n:'05', name:'Slow day revenue filler', desc:'Detects upcoming quiet periods and launches targeted campaigns to fill them.' },
-            { n:'06', name:'Competitor intelligence', desc:'Monitors what competitors are doing so you can stay one step ahead, always.' },
-          ].map(f => (
-            <div key={f.n} className="feature-card bg-white p-6 relative group cursor-pointer hover:bg-[#fafffe] transition-colors">
-              <div className="text-[11px] text-[rgba(26,26,22,0.2)] tracking-[.1em] uppercase mb-3">{f.n}</div>
-              <div className="w-8 h-px bg-[rgba(29,158,117,0.5)] mb-3" />
-              <div className="text-sm font-medium text-[#1a1a16] mb-2">{f.name}</div>
-              <div className="text-[12px] text-[rgba(26,26,22,0.4)] leading-[1.7]">{f.desc}</div>
-              <button className="arrow-btn absolute bottom-5 right-5 w-6 h-6 rounded-full bg-[rgba(29,158,117,0.1)] flex items-center justify-center text-[#1D9E75] text-xs">→</button>
-            </div>
-          ))}
+      <section id="features" className="relative z-10 px-6 py-20 max-w-5xl mx-auto">
+        <div className="text-center mb-12">
+          <h2 className="text-3xl font-medium mb-3">Everything your business needs, automated</h2>
+          <p className="text-sm text-[rgba(26,26,22,0.45)]">Ten AI systems working together, every day, while you focus on what matters.</p>
         </div>
-      </section>
-
-      {/* Industries */}
-      <section id="industries" className="relative z-10 px-6 py-16 max-w-3xl mx-auto text-center">
-        <h2 className="text-3xl font-medium mb-3">Built for your industry</h2>
-        <p className="text-sm text-[rgba(26,26,22,0.45)] mb-10">Pick your business type at signup — Aria customises everything for you</p>
-        <div className="flex flex-wrap justify-center gap-2">
-          {['Retail shops','Cafes + restaurants','Tradies','Real estate agents','Salons + beauty','Visa + migration','Gyms + fitness','Professional services'].map(ind => (
-            <span key={ind} className="border border-[rgba(0,0,0,0.1)] bg-white rounded-full px-4 py-2 text-sm text-[rgba(26,26,22,0.6)] hover:border-[#1D9E75] hover:text-[#1D9E75] hover:bg-[rgba(29,158,117,0.04)] transition-all cursor-pointer">
-              {ind}
-            </span>
-          ))}
-        </div>
-      </section>
-
-      {/* Testimonials */}
-      <section className="relative z-10 px-6 pb-16 max-w-4xl mx-auto">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {[
-            { quote: "Aria brought back 14 lapsed customers in the first week. I didn't do a thing — it just happened.", name: 'Sarah M.', biz: 'Hair salon · Melbourne', initials: 'SM', color: '#1D9E75' },
-            { quote: "My Google rating went from 4.1 to 4.7 in two months. Aria sends the review requests automatically.", name: 'James T.', biz: 'Café · Sydney', initials: 'JT', color: '#7c3aed' },
-            { quote: "Found $3,200 a month in profit leaks I didn't know existed. The profit leak detector is insane.", name: 'Priya K.', biz: 'Migration agent · Brisbane', initials: 'PK', color: '#f59e0b' },
-          ].map(t => (
-            <div key={t.name} className="bg-white border border-[rgba(0,0,0,0.08)] rounded-2xl p-6">
-              <div className="flex gap-0.5 mb-4">{[...Array(5)].map((_, i) => <span key={i} className="text-amber-400 text-sm">★</span>)}</div>
-              <p className="text-sm text-[rgba(26,26,22,0.7)] leading-relaxed mb-6">&ldquo;{t.quote}&rdquo;</p>
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-medium" style={{background:t.color}}>{t.initials}</div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {FEATURES.map((f, i) => (
+            <div key={f.name} className="bg-white rounded-2xl border border-[rgba(0,0,0,0.08)] p-6 hover:border-[rgba(29,158,117,0.3)] hover:shadow-[0_0_20px_rgba(29,158,117,0.06)] transition-all">
+              <div className="flex items-start gap-4">
+                <div className="text-2xl flex-shrink-0">{f.icon}</div>
                 <div>
-                  <div className="text-sm font-medium">{t.name}</div>
-                  <div className="text-[11px] text-[rgba(26,26,22,0.4)]">{t.biz}</div>
+                  <div className="text-[11px] text-[rgba(26,26,22,0.25)] font-medium tracking-widest uppercase mb-1">{String(i + 1).padStart(2, '0')}</div>
+                  <div className="text-sm font-semibold text-[#1a1a16] mb-1.5">{f.name}</div>
+                  <div className="text-[13px] text-[rgba(26,26,22,0.5)] leading-relaxed">{f.desc}</div>
                 </div>
               </div>
             </div>
@@ -173,52 +126,115 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Pricing */}
-      <section id="pricing" className="relative z-10 px-6 pb-16 max-w-4xl mx-auto">
-        <div className="text-center mb-10">
-          <h2 className="text-3xl font-medium mb-2">Simple, transparent pricing</h2>
-          <p className="text-sm text-[rgba(26,26,22,0.45)]">14-day free trial on all plans. Cancel anytime.</p>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {[
-            { name:'Starter', price:'$297', features:['AI booking agent','Review autopilot','Basic dashboard','1 location','Email support'] },
-            { name:'Growth', price:'$597', popular:true, features:['Everything in Starter','Customer winback','Slow day filler','Profit leak detector','Competitor watch','Priority support'] },
-            { name:'Pro', price:'$997', features:['Everything in Growth','Churn prevention','Multi-location','Quote builder','Compliance AI','Dedicated support','Monthly strategy call'] },
-          ].map(p => (
-            <div key={p.name} className={`bg-white rounded-2xl p-6 relative ${p.popular ? 'border-[1.5px] border-[#1D9E75] shadow-[0_0_30px_rgba(29,158,117,0.1)]' : 'border border-[rgba(0,0,0,0.08)]'}`}>
-              {p.popular && <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-[#1D9E75] text-white text-[11px] font-medium px-3 py-1 rounded-full">Most popular</div>}
-              <div className="text-[11px] bg-[rgba(29,158,117,0.08)] text-[#1D9E75] border border-[rgba(29,158,117,0.15)] rounded-full px-2.5 py-1 inline-block mb-4">14-day free trial</div>
-              <div className="text-sm font-medium mb-1">{p.name}</div>
-              <div className="text-3xl font-semibold mb-4">{p.price}<span className="text-sm font-normal text-[rgba(26,26,22,0.4)]">/mo</span></div>
-              <Link href="/onboarding/industry" className={`block text-center rounded-full py-2.5 text-sm font-medium mb-5 transition-colors ${p.popular ? 'bg-[#1a1a16] text-white hover:bg-[#2d2d25]' : 'border border-[rgba(0,0,0,0.15)] hover:border-[#1a1a16]'}`}>
-                Start free trial
-              </Link>
-              <ul className="space-y-2">
-                {p.features.map(f => (
-                  <li key={f} className="flex items-start gap-2 text-sm text-[rgba(26,26,22,0.6)]">
-                    <span className="text-[#1D9E75] flex-shrink-0 mt-px">✓</span>{f}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
+      {/* Integrations */}
+      <section id="integrations" className="relative z-10 px-6 py-16 bg-white border-y border-[rgba(0,0,0,0.06)]">
+        <div className="max-w-4xl mx-auto text-center">
+          <h2 className="text-2xl font-medium mb-2">Works with what you already use</h2>
+          <p className="text-sm text-[rgba(26,26,22,0.45)] mb-10">Already on Square? Connect in 60 seconds. No migration needed.</p>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            {INTEGRATIONS.map(int => (
+              <div key={int.name} className="rounded-2xl border border-[rgba(0,0,0,0.08)] p-5 text-left hover:border-[rgba(29,158,117,0.3)] transition-colors">
+                <p className="font-semibold text-[#1a1a16] mb-0.5">{int.name}</p>
+                <p className="text-xs text-[rgba(26,26,22,0.4)]">{int.sub}</p>
+              </div>
+            ))}
+          </div>
         </div>
       </section>
 
-      {/* CTA */}
+      {/* Two paths */}
+      <section className="relative z-10 px-6 py-20 max-w-4xl mx-auto">
+        <div className="text-center mb-10">
+          <h2 className="text-3xl font-medium">Two ways to use Aria</h2>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <div className="bg-white rounded-2xl border border-[rgba(0,0,0,0.08)] p-8">
+            <div className="w-10 h-10 rounded-xl bg-[rgba(29,158,117,0.1)] flex items-center justify-center text-xl mb-5">⬛</div>
+            <h3 className="text-base font-semibold text-[#1a1a16] mb-2">Already on Square or Shopfront?</h3>
+            <p className="text-sm text-[rgba(26,26,22,0.5)] leading-relaxed mb-6">Connect your existing POS. Aria reads your data and adds the AI intelligence layer Square doesn&apos;t have. Keep using Square for checkout.</p>
+            <Link href="/onboarding/industry?source=square" className="inline-flex items-center gap-2 bg-[#1D9E75] text-white rounded-full px-5 py-2.5 text-sm font-medium hover:bg-[#179968] transition-colors">
+              Connect my POS →
+            </Link>
+          </div>
+          <div className="bg-[#1a1a16] rounded-2xl p-8 relative overflow-hidden">
+            <div className="absolute inset-0 opacity-30" style={{background:'radial-gradient(ellipse at 100% 0%,rgba(29,158,117,0.4) 0%,transparent 60%)'}} />
+            <div className="relative z-10">
+              <div className="w-10 h-10 rounded-xl bg-[rgba(29,158,117,0.2)] flex items-center justify-center text-xl mb-5">🏪</div>
+              <h3 className="text-base font-semibold text-white mb-2">Starting fresh or want everything in one place?</h3>
+              <p className="text-sm text-[rgba(255,255,255,0.5)] leading-relaxed mb-6">Use Aria&apos;s built-in POS — inventory, checkout, customers, suppliers, all AI-powered from day one.</p>
+              <Link href="/onboarding/industry" className="inline-flex items-center gap-2 bg-white text-[#1a1a16] rounded-full px-5 py-2.5 text-sm font-medium hover:bg-[#f5f4ef] transition-colors">
+                Use Aria POS →
+              </Link>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Industries */}
+      <section className="relative z-10 px-6 py-16 bg-white border-y border-[rgba(0,0,0,0.06)]">
+        <div className="max-w-3xl mx-auto text-center">
+          <h2 className="text-2xl font-medium mb-2">Built for Australian retail and hospitality</h2>
+          <p className="text-sm text-[rgba(26,26,22,0.45)] mb-8">Purpose-built for the businesses that keep Australian communities running.</p>
+          <div className="flex flex-wrap justify-center gap-2">
+            {INDUSTRIES.map(ind => (
+              <span key={ind} className="border border-[rgba(0,0,0,0.1)] rounded-full px-4 py-2 text-sm text-[rgba(26,26,22,0.6)]">{ind}</span>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Pricing */}
+      <section id="pricing" className="relative z-10 px-6 py-20 max-w-3xl mx-auto">
+        <div className="text-center mb-10">
+          <h2 className="text-3xl font-medium mb-2">Founding customer pricing</h2>
+          <p className="text-sm text-[rgba(26,26,22,0.45)]">We&apos;re onboarding our first customers now. Founding customer pricing is locked in for 12 months.</p>
+        </div>
+        <div className="bg-white rounded-2xl border-[2px] border-[#1D9E75] shadow-[0_0_40px_rgba(29,158,117,0.1)] p-8 mb-4">
+          <div className="flex items-start justify-between mb-6">
+            <div>
+              <div className="text-xs bg-[rgba(29,158,117,0.1)] text-[#1D9E75] border border-[rgba(29,158,117,0.2)] rounded-full px-3 py-1 inline-block mb-3">14-day free trial · No lock-in</div>
+              <div className="text-4xl font-bold text-[#1a1a16]">A$99<span className="text-base font-normal text-[rgba(26,26,22,0.4)]">/month per business</span></div>
+            </div>
+          </div>
+          <ul className="space-y-2 mb-8">
+            {[
+              'All 10 AI features listed above',
+              'Square / Shopfront connection OR Aria POS',
+              'Website chatbot embed',
+              'Unlimited Ask Aria queries',
+              'SMS winback campaigns (Twilio costs at cost)',
+              '14-day free trial',
+              'No lock-in contract',
+            ].map(f => (
+              <li key={f} className="flex items-center gap-2 text-sm text-[rgba(26,26,22,0.7)]">
+                <span className="text-[#1D9E75] font-bold flex-shrink-0">✓</span>{f}
+              </li>
+            ))}
+          </ul>
+          <Link href="/onboarding/industry" className="block text-center bg-[#1a1a16] text-white rounded-full py-3.5 text-sm font-medium hover:bg-[#2d2d25] transition-colors">
+            Start 14-day free trial →
+          </Link>
+        </div>
+        <div className="bg-[rgba(29,158,117,0.06)] border border-[rgba(29,158,117,0.15)] rounded-2xl p-5 text-center">
+          <p className="text-sm font-semibold text-[#1a1a16]">Additional business on same account: <span className="text-[#1D9E75]">+A$50/month</span></p>
+          <p className="text-xs text-[rgba(26,26,22,0.5)] mt-1">Own a café and a bottle shop? Manage both from one login.</p>
+        </div>
+      </section>
+
+      {/* Final CTA */}
       <section className="relative z-10 px-6 pb-20 max-w-3xl mx-auto">
         <div className="bg-[#1a1a16] rounded-2xl p-12 text-center relative overflow-hidden">
           <div className="absolute inset-0" style={{background:'radial-gradient(ellipse at 50% 0%,rgba(29,158,117,0.2) 0%,transparent 60%)'}} />
           <div className="relative z-10">
-            <h2 className="text-3xl font-medium text-white mb-3">Your business deserves to run smarter</h2>
+            <h2 className="text-3xl font-medium text-white mb-3">Your shop deserves better data</h2>
             <p className="text-sm text-[rgba(255,255,255,0.45)] mb-8">14-day free trial. No credit card. No setup fees.</p>
             <div className="flex flex-col sm:flex-row gap-3 justify-center">
-              <Link href="/onboarding/industry" className="bg-white text-[#1a1a16] rounded-full px-7 py-3.5 text-sm font-medium hover:bg-[#f5f4ef] transition-colors">
-                Start free trial →
+              <Link href="/onboarding/industry?source=square" className="bg-[#1D9E75] text-white rounded-full px-7 py-3.5 text-sm font-medium hover:bg-[#179968] transition-colors">
+                Connect Square free →
               </Link>
-              <button className="border border-[rgba(255,255,255,0.2)] text-white rounded-full px-7 py-3.5 text-sm font-medium hover:border-white transition-colors">
-                Book a demo
-              </button>
+              <Link href="/onboarding/industry" className="bg-white text-[#1a1a16] rounded-full px-7 py-3.5 text-sm font-medium hover:bg-[#f5f4ef] transition-colors">
+                Start with Aria POS
+              </Link>
             </div>
           </div>
         </div>
@@ -226,13 +242,13 @@ export default function LandingPage() {
 
       {/* Footer */}
       <footer className="relative z-10 border-t border-[rgba(0,0,0,0.07)] px-8 py-8 flex flex-col md:flex-row items-center justify-between gap-4">
-        <div className="text-xl font-medium tracking-tight">aria<span className="text-[#1D9E75]">OS</span></div>
-        <div className="flex items-center gap-6 text-sm text-[rgba(26,26,22,0.38)]">
-          {['Features','Industries','Pricing','About'].map(l => (
-            <a key={l} href={`#${l.toLowerCase()}`} className="hover:text-[#1a1a16] transition-colors">{l}</a>
-          ))}
+        <div className="text-xl font-medium tracking-tight text-[#1a1a16]">aria</div>
+        <div className="flex items-center gap-6 text-sm text-[rgba(26,26,22,0.4)]">
+          <a href="/privacy" className="hover:text-[#1a1a16] transition-colors">Privacy Policy</a>
+          <a href="/terms" className="hover:text-[#1a1a16] transition-colors">Terms of Service</a>
+          <a href="mailto:hello@aria.com.au" className="hover:text-[#1a1a16] transition-colors">Contact</a>
         </div>
-        <p className="text-xs text-[rgba(26,26,22,0.35)]">© 2026 Aria OS. All rights reserved.</p>
+        <p className="text-xs text-[rgba(26,26,22,0.35)]">© 2026 Aria. Built in Australia for Australian small businesses.</p>
       </footer>
     </main>
   );

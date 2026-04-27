@@ -1,17 +1,13 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { publishedIndustries } from '@/lib/industry-config';
 
-const INDUSTRIES = [
-  { id: 'retail',       name: 'Retail shop',          sub: 'Products, inventory, walk-ins' },
-  { id: 'cafe',         name: 'Café + restaurant',     sub: 'Food, tables, service' },
-  { id: 'tradie',       name: 'Tradie',                sub: 'Plumber, electrician, builder' },
-  { id: 'realestate',   name: 'Real estate',           sub: 'Agents, property management' },
-  { id: 'salon',        name: 'Salon + beauty',        sub: 'Hair, nails, skin, body' },
-  { id: 'visa',         name: 'Visa + migration',      sub: 'Immigration, education agents' },
-  { id: 'gym',          name: 'Gym + fitness',         sub: 'Personal training, studios' },
-  { id: 'professional', name: 'Professional services', sub: 'Accounting, legal, consulting' },
-];
+const INDUSTRY_SUBS: Record<string, string> = {
+  retail: 'Liquor, convenience, specialty retail',
+  cafe: 'Coffee shops, tea rooms, juice bars',
+  restaurant: 'Restaurants, takeaway, food service',
+};
 
 export default function IndustryPage() {
   const router = useRouter();
@@ -32,9 +28,7 @@ export default function IndustryPage() {
 
   return (
     <div className="min-h-screen bg-[#f5f4ef] flex flex-col items-center px-4 py-12">
-      <div className="text-2xl font-medium tracking-tight mb-10">
-        aria<span className="text-[#1D9E75]">OS</span>
-      </div>
+      <div className="text-2xl font-medium tracking-tight mb-10 text-[#1a1a16]">aria</div>
 
       <ProgressBar step={1} />
 
@@ -48,11 +42,11 @@ export default function IndustryPage() {
 
         <h1 className="text-xl font-medium text-[#1a1a16] mb-1">What type of business are you?</h1>
         <p className="text-sm text-[rgba(26,26,22,0.45)] mb-6">
-          Aria OS customises every feature specifically for your industry
+          Aria customises every feature specifically for your industry
         </p>
 
-        <div className="grid grid-cols-2 gap-2 mb-6">
-          {INDUSTRIES.map(ind => (
+        <div className="grid grid-cols-1 gap-2 mb-6">
+          {publishedIndustries.map(ind => (
             <button
               key={ind.id}
               onClick={() => setSelected(ind.id)}
@@ -63,9 +57,11 @@ export default function IndustryPage() {
               }`}
             >
               <div className={`text-sm font-medium mb-0.5 ${selected === ind.id ? 'text-[#1D9E75]' : 'text-[#1a1a16]'}`}>
-                {ind.name}
+                {ind.label}
               </div>
-              <div className="text-[11px] text-[rgba(26,26,22,0.4)]">{ind.sub}</div>
+              {INDUSTRY_SUBS[ind.id] && (
+                <div className="text-[11px] text-[rgba(26,26,22,0.4)]">{INDUSTRY_SUBS[ind.id]}</div>
+              )}
             </button>
           ))}
         </div>
@@ -80,7 +76,7 @@ export default function IndustryPage() {
 
         <button
           onClick={() => {
-            localStorage.setItem('aria_industry', 'professional');
+            localStorage.setItem('aria_industry', 'retail');
             router.push(isNew ? '/onboarding/details?new=true' : '/onboarding/details');
           }}
           className="block w-full text-center text-xs text-[rgba(26,26,22,0.35)] hover:text-[rgba(26,26,22,0.6)] mt-4 transition-colors"

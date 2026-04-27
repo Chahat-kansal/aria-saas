@@ -1,16 +1,16 @@
 {
   "functions": {
-    "src/app/api/builder/route.ts": {
-      "maxDuration": 120
-    },
-    "src/app/api/chat/route.ts": {
-      "maxDuration": 120
-    },
-    "src/app/api/plugins/route.ts": {
-      "maxDuration": 120
-    },
-    "src/app/api/research/route.ts": {
-      "maxDuration": 120
+    "src/app/api/builder/route.ts": { "maxDuration": 120 },
+    "src/app/api/chat/route.ts": { "maxDuration": 120 },
+    "src/app/api/plugins/route.ts": { "maxDuration": 120 },
+    "src/app/api/research/route.ts": { "maxDuration": 120 },
+    "src/app/api/integrations/square/sync/route.ts": { "maxDuration": 300 },
+    "src/app/api/cron/nightly-sync/route.ts": { "maxDuration": 300 }
+  },
+  "crons": [
+    {
+      "path": "/api/cron/nightly-sync",
+      "schedule": "0 2 * * *"
     }
-  }
+  ]
 }
