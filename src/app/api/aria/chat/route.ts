@@ -38,6 +38,7 @@ export async function POST(req: Request) {
       if (business) {
         const today = new Date().toISOString().slice(0, 10);
         const sixtyDaysAgo = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString();
+        const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
 
         const [
           { data: todaySales },
@@ -45,23 +46,34 @@ export async function POST(req: Request) {
           { count: atRiskCount },
           { count: totalCustomers },
           { data: recentLeaks },
+          { data: weekSales },
         ] = await Promise.all([
-          supabase.from('pos_sales').select('total_amount, payment_method')
-            .eq('business_id', business_id).eq('status', 'completed').gte('created_at', today),
+          supabase.from('pos_sales').select('total_amount, discount_amount, payment_method')
+            .eq('business_id', business_id).eq('status', 'completed').gte('created_at', `${today}T00:00:00`),
           supabase.from('pos_products').select('name, stock_quantity, low_stock_threshold')
             .eq('business_id', business_id).eq('is_active', true)
             .not('stock_quantity', 'is', null)
-            .lte('stock_quantity', 5).order('stock_quantity').limit(10),
+            .lte('stock_quantity', 10).order('stock_quantity').limit(10),
           supabase.from('customers').select('id', { count: 'exact', head: true })
             .eq('business_id', business_id).lt('last_visit', sixtyDaysAgo),
           supabase.from('customers').select('id', { count: 'exact', head: true })
             .eq('business_id', business_id),
           supabase.from('profit_leaks').select('category, description, monthly_loss')
             .eq('business_id', business_id).neq('status', 'fixed').limit(3),
+          supabase.from('pos_sales').select('total_amount')
+            .eq('business_id', business_id).eq('status', 'completed').gte('created_at', sevenDaysAgo),
         ]);
 
-        const todayRevenue = (todaySales ?? []).reduce((s: number, r: { total_amount: number }) => s + (r.total_amount || 0), 0);
-        const todayCount   = (todaySales ?? []).length;
+        const todayRevenue   = (todaySales ?? []).reduce((s: number, r: { total_amount: number }) => s + (r.total_amount || 0), 0);
+        const todayCount     = (todaySales ?? []).length;
+        const todayDiscounts = (todaySales ?? []).reduce((s: number, r: { discount_amount: number }) => s + (r.discount_amount || 0), 0);
+        const avgSale        = todayCount > 0 ? todayRevenue / todayCount : 0;
+        const weekRevenue    = (weekSales ?? []).reduce((s: number, r: { total_amount: number }) => s + (r.total_amount || 0), 0);
+
+        const lowStockLines = (lowStock ?? []).length === 0
+          ? '- No low stock alerts'
+          : (lowStock ?? []).map((p: { name: string; stock_quantity: number; low_stock_threshold: number }) =>
+              `  • ${p.name}: ${p.stock_quantity} units left (threshold: ${p.low_stock_threshold ?? 5})`).join('\n');
 
         systemPrompt = `You are Aria, an expert AI business advisor for ${business.name}, a ${business.industry} business in ${business.city || 'Australia'}.
 
@@ -73,13 +85,22 @@ Business profile:
 - Staff: ${business.staff_count || 'not specified'}
 - Biggest challenge: ${business.biggest_challenge || 'growing the business'}
 
-LIVE BUSINESS DATA (right now):
-- Revenue today: $${todayRevenue.toFixed(2)} from ${todayCount} transaction${todayCount !== 1 ? 's' : ''}
-- Low stock alerts: ${(lowStock ?? []).length} product${(lowStock ?? []).length !== 1 ? 's' : ''} below threshold${(lowStock ?? []).length > 0 ? '\n' + (lowStock ?? []).map((p: { name: string; stock_quantity: number }) => `  • ${p.name}: ${p.stock_quantity} left`).join('\n') : ''}
-- Total customers: ${totalCustomers ?? 0}
-- Customers at churn risk (60+ days inactive): ${atRiskCount ?? 0}${(recentLeaks ?? []).length > 0 ? `\n- Active profit leaks: ${(recentLeaks ?? []).map((l: { category: string; monthly_loss: number }) => `${l.category} (-$${l.monthly_loss}/mo)`).join(', ')}` : ''}
+LIVE BUSINESS DATA (use these exact numbers in your answers):
 
-Your role: help ${business.owner_name || 'the owner'} make more money and run a better business. Reference the real numbers above when relevant. Be direct, specific, and actionable. Never be vague.`;
+TODAY:
+- Revenue: $${todayRevenue.toFixed(2)} from ${todayCount} sale${todayCount !== 1 ? 's' : ''}
+- Average sale: $${avgSale.toFixed(2)}
+- Discounts given today: $${todayDiscounts.toFixed(2)}
+- This week total: $${weekRevenue.toFixed(2)}
+
+INVENTORY:
+${lowStockLines}
+
+CUSTOMERS:
+- Total customers: ${totalCustomers ?? 0}
+- At churn risk (60+ days inactive): ${atRiskCount ?? 0}${(recentLeaks ?? []).length > 0 ? `\n\nACTIVE PROFIT LEAKS:\n${(recentLeaks ?? []).map((l: { category: string; description: string; monthly_loss: number }) => `  • ${l.category}: -$${l.monthly_loss}/mo — ${l.description}`).join('\n')}` : ''}
+
+Your role: help ${business.owner_name || 'the owner'} make more money and run a better business. Reference the exact numbers above when answering. Never say "I don't have access to your data." Be direct and actionable.`;
       }
     }
 

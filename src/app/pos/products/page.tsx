@@ -31,6 +31,7 @@ export default function ProductsPage() {
   const [modal, setModal] = useState<{ open: boolean; mode: 'add' | 'edit'; product?: Product }>({ open: false, mode: 'add' });
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
   const [deleting, setDeleting] = useState<string | null>(null);
   const [bulkAction, setBulkAction] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
@@ -80,6 +81,7 @@ export default function ProductsPage() {
   async function saveProduct() {
     if (!form.name.trim() || !form.price) return;
     setSaving(true);
+    setSaveError('');
     const payload = {
       name: form.name.trim(), sku: form.sku || null, barcode: form.barcode || null,
       description: form.description || null, price: parseFloat(form.price),
@@ -98,16 +100,31 @@ export default function ProductsPage() {
         body: JSON.stringify(payload),
       });
       const d = await res.json();
-      if (d.product) setProducts(ps => [...ps, d.product]);
+      if (d.product) {
+        setProducts(ps => [...ps, d.product]);
+        setModal({ open: false, mode: 'add' });
+      } else {
+        console.error('Product save failed:', d.error);
+        setSaveError(d.error || 'Failed to save product. Please try again.');
+        setSaving(false);
+        return;
+      }
     } else if (modal.product) {
-      await fetch(`/api/pos/products?id=${modal.product.id}`, {
+      const res = await fetch(`/api/pos/products?id=${modal.product.id}`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
+      const d = await res.json();
+      if (d.ok !== undefined && !d.ok) {
+        console.error('Product update failed:', d.error);
+        setSaveError(d.error || 'Failed to update product. Please try again.');
+        setSaving(false);
+        return;
+      }
       setProducts(ps => ps.map(p => p.id === modal.product!.id ? { ...p, ...payload, pos_categories: categories.find(c => c.id === payload.category_id) ?? null } : p));
+      setModal({ open: false, mode: 'add' });
     }
     setSaving(false);
-    setModal({ open: false, mode: 'add' });
   }
 
   async function deleteProduct(id: string) {
@@ -487,6 +504,9 @@ export default function ProductsPage() {
                   {saving ? 'Saving…' : modal.mode === 'add' ? 'Add Product' : 'Save Changes'}
                 </button>
               </div>
+              {saveError && (
+                <p className="text-xs mt-2 text-right" style={{ color: '#ef4444' }}>{saveError}</p>
+              )}
             </div>
           </div>
         </div>
