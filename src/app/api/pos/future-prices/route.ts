@@ -1,0 +1,60 @@
+import { createServerSupabaseClient } from '@/lib/supabase-server';
+import { NextResponse } from 'next/server';
+
+async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
+  const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle();
+  if (active?.business_id) return active.business_id as string;
+  const { data } = await supabase.from('businesses').select('id').eq('user_id', userId).eq('is_active', true).order('created_at', { ascending: true }).limit(1).maybeSingle();
+  return data?.id ?? null;
+}
+
+export async function GET() {
+  const supabase = createServerSupabaseClient();
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const bid = await getBid(supabase, user.id);
+  if (!bid) return NextResponse.json({ future_prices: [] });
+
+  // Auto-apply any due prices
+  const today = new Date().toISOString().slice(0, 10);
+  const { data: due } = await supabase.from('pos_future_prices')
+    .select('*').eq('business_id', bid).eq('applied', false).lte('effective_date', today);
+  if (due?.length) {
+    for (const fp of due) {
+      await supabase.from('pos_products').update({ price: fp.new_price }).eq('id', fp.product_id);
+      await supabase.from('pos_future_prices').update({ applied: true, applied_at: new Date().toISOString() }).eq('id', fp.id);
+    }
+  }
+
+  const { data } = await supabase.from('pos_future_prices')
+    .select('*, pos_products(id, name, price)').eq('business_id', bid).order('effective_date');
+  return NextResponse.json({ future_prices: data ?? [] });
+}
+
+export async function POST(req: Request) {
+  const supabase = createServerSupabaseClient();
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const bid = await getBid(supabase, user.id);
+  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 });
+  const { product_id, new_price, effective_date } = await req.json();
+  if (!product_id || !new_price || !effective_date) return NextResponse.json({ error: 'product_id, new_price, effective_date required' }, { status: 400 });
+  const { data: product } = await supabase.from('pos_products').select('price').eq('id', product_id).single();
+  const { data, error } = await supabase.from('pos_future_prices').insert({
+    business_id: bid, product_id, new_price, effective_date,
+    current_price: product?.price ?? null, applied: false,
+  }).select().single();
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ future_price: data });
+}
+
+export async function DELETE(req: Request) {
+  const supabase = createServerSupabaseClient();
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const { searchParams } = new URL(req.url);
+  const id = searchParams.get('id');
+  if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
+  await supabase.from('pos_future_prices').delete().eq('id', id);
+  return NextResponse.json({ ok: true });
+}
