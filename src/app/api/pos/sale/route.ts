@@ -43,7 +43,7 @@ export async function POST(req: Request) {
     const p = productMap[item.product_id];
     if (!p) return NextResponse.json({ error: `Product not found: ${item.product_id}` }, { status: 400 });
     if (!p.is_active) return NextResponse.json({ error: `Product inactive: ${p.name}` }, { status: 400 });
-    if (p.track_stock && p.stock_quantity < item.quantity) {
+    if (p.track_stock && p.stock_quantity != null && p.stock_quantity < item.quantity) {
       return NextResponse.json({ error: `Insufficient stock for: ${p.name}` }, { status: 400 });
     }
   }
@@ -113,9 +113,9 @@ export async function POST(req: Request) {
 
   // Decrement stock for tracked products
   const stockUpdates = items
-    .filter((i: any) => productMap[i.product_id]?.track_stock)
+    .filter((i: any) => productMap[i.product_id]?.track_stock && productMap[i.product_id]?.stock_quantity != null)
     .map((i: any) => {
-      const current = productMap[i.product_id].stock_quantity;
+      const current = productMap[i.product_id].stock_quantity as number;
       return supabase
         .from('pos_products')
         .update({ stock_quantity: current - i.quantity })
