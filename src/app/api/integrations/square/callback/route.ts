@@ -2,6 +2,7 @@ import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { encryptField } from '@/lib/encryption';
 import { NextResponse } from 'next/server';
 
+// Token exchange uses the environment-specific API base
 const SQUARE_BASE = process.env.SQUARE_ENVIRONMENT === 'production'
   ? 'https://connect.squareup.com'
   : 'https://connect.squareupsandbox.com';
