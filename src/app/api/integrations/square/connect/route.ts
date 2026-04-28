@@ -39,7 +39,7 @@ export async function GET(req: Request) {
 
   const redirectUri = `${process.env.NEXT_PUBLIC_APP_URL}/api/integrations/square/callback`;
 
-  const url = `${SQUARE_BASE}/oauth2/authorize?client_id=${process.env.SQUARE_APPLICATION_ID}&scope=${SCOPES}&session=false&state=${state}&redirect_uri=${encodeURIComponent(redirectUri)}`;
+  const url = `${SQUARE_BASE}/oauth2/authorize?client_id=${process.env.SQUARE_APPLICATION_ID}&scope=${SCOPES}&state=${state}&redirect_uri=${encodeURIComponent(redirectUri)}`;
 
   return NextResponse.redirect(url);
 }
