@@ -29,6 +29,8 @@ export interface Business {
   website: string | null;
   is_active: boolean | null;
   subscription_status: string | null;
+  data_source: string | null;
+  square_connected: boolean | null;
 }
 
 interface BusinessContextType {

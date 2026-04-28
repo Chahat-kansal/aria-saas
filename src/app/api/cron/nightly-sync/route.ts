@@ -43,6 +43,13 @@ export async function GET(req: Request) {
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         errors.push({ business_id: biz.id, error: err.error ?? 'Sync failed' });
+      } else {
+        // Pre-generate tomorrow's briefing so it loads instantly at 8am
+        fetch(`${appUrl}/api/aria/daily-briefing`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ business_id: biz.id, force_refresh: true }),
+        }).catch(() => { /* non-critical */ });
       }
       processed++;
     } catch (err: any) {
