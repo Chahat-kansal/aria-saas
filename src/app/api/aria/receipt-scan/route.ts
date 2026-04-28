@@ -75,7 +75,7 @@ export async function POST(req: Request) {
   try {
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: 2000,
+      max_tokens: 4096,
       messages: [{
         role: 'user',
         content: [
@@ -107,15 +107,40 @@ Be precise — these numbers update real inventory.`,
     });
 
     const text = response.content[0].type === 'text' ? response.content[0].text : '';
+    console.log('[receipt-scan] Claude raw response (first 500 chars):', text.slice(0, 500));
 
-    // Strip markdown code fences, then find the outermost JSON object
-    const cleaned = text.replace(/```(?:json)?\s*/gi, '').replace(/```\s*/g, '');
-    const parsed = extractJson(cleaned);
+    // Strategy 1: strip markdown fences, find balanced JSON object
+    const cleaned = text.replace(/```(?:json)?\s*/gi, '').replace(/```\s*/g, '').trim();
+    let parsed = extractJson(cleaned);
+
+    // Strategy 2: try parsing the entire cleaned string directly
+    if (!parsed) {
+      try { parsed = JSON.parse(cleaned); } catch { /* continue */ }
+    }
+
+    // Strategy 3: Claude sometimes returns the lines array directly
+    if (!parsed) {
+      const arrMatch = cleaned.match(/\[[\s\S]*\]/);
+      if (arrMatch) {
+        try {
+          const arr = JSON.parse(arrMatch[0]);
+          if (Array.isArray(arr)) parsed = { lines: arr, supplier_name: null, invoice_date: null, invoice_total_aud: null };
+        } catch { /* continue */ }
+      }
+    }
+
     if (parsed) {
-      extractedLines = parsed.lines ?? [];
+      extractedLines = Array.isArray(parsed.lines) ? parsed.lines : [];
       supplierName = parsed.supplier_name ?? null;
       invoiceDate = parsed.invoice_date ?? null;
       invoiceTotal = parsed.invoice_total_aud ?? null;
+    } else {
+      // All parsing strategies failed — return error so user knows something went wrong
+      console.error('[receipt-scan] Failed to parse Claude response:', text.slice(0, 1000));
+      return NextResponse.json({
+        error: 'Aria could not read the invoice format. Try a clearer photo or a different angle.',
+        debug_hint: 'Claude returned unparseable content',
+      }, { status: 422 });
     }
   } catch (err: any) {
     return NextResponse.json({ error: `Vision processing failed: ${err.message}` }, { status: 500 });
