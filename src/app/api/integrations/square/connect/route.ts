@@ -1,11 +1,9 @@
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
 
-// Both OAuth authorize and API calls use the same base per environment
 const OAUTH_BASE = process.env.SQUARE_ENVIRONMENT === 'production'
   ? 'https://connect.squareup.com'
   : 'https://connect.squareupsandbox.com';
-
 
 const SCOPES = [
   'MERCHANT_PROFILE_READ',
@@ -35,8 +33,14 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'No business found. Complete onboarding first.' }, { status: 400 });
   }
 
+  // Derive origin from the incoming request — guaranteed to match what Square sees
+  const reqUrl = new URL(req.url);
+  const origin = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, '')
+    ?? `${reqUrl.protocol}//${reqUrl.host}`;
+
+  const redirectUri = `${origin}/api/integrations/square/callback`;
+
   const state = Buffer.from(JSON.stringify({ bid, uid: user.id, ts: Date.now() })).toString('base64url');
-  const redirectUri = `${process.env.NEXT_PUBLIC_APP_URL}/api/integrations/square/callback`;
 
   const params = new URLSearchParams({
     client_id: process.env.SQUARE_APPLICATION_ID,
@@ -45,8 +49,10 @@ export async function GET(req: Request) {
     redirect_uri: redirectUri,
   });
 
-  const url = `${OAUTH_BASE}/oauth2/authorize?${params.toString()}`;
-  console.log('[Square OAuth] Redirecting to:', url);
+  const authorizeUrl = `${OAUTH_BASE}/oauth2/authorize?${params.toString()}`;
 
-  return NextResponse.redirect(url);
+  // Log so you can verify the exact redirect_uri being sent
+  console.log('[Square connect] redirect_uri:', redirectUri);
+
+  return NextResponse.redirect(authorizeUrl);
 }
