@@ -10,7 +10,6 @@ const API_BASE = process.env.SQUARE_ENVIRONMENT === 'production'
   ? 'https://connect.squareup.com'
   : 'https://connect.squareupsandbox.com';
 
-export { API_BASE as SQUARE_API_BASE };
 
 const SCOPES = [
   'MERCHANT_PROFILE_READ',
