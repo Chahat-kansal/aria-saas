@@ -11,6 +11,23 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const ALLOWED_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/heic', 'image/heif', 'application/pdf'];
 const MAX_SIZE = 10 * 1024 * 1024; // 10MB
 
+// Finds the outermost balanced JSON object in a string (handles nested braces)
+function extractJson(text: string): any | null {
+  const start = text.indexOf('{');
+  if (start === -1) return null;
+  let depth = 0;
+  for (let i = start; i < text.length; i++) {
+    if (text[i] === '{') depth++;
+    else if (text[i] === '}') {
+      depth--;
+      if (depth === 0) {
+        try { return JSON.parse(text.slice(start, i + 1)); } catch { return null; }
+      }
+    }
+  }
+  return null;
+}
+
 function fuzzyScore(a: string, b: string): number {
   const A = a.toLowerCase().replace(/[^a-z0-9 ]/g, '');
   const B = b.toLowerCase().replace(/[^a-z0-9 ]/g, '');
@@ -90,9 +107,11 @@ Be precise — these numbers update real inventory.`,
     });
 
     const text = response.content[0].type === 'text' ? response.content[0].text : '';
-    const match = text.match(/\{[\s\S]*\}/);
-    if (match) {
-      const parsed = JSON.parse(match[0]);
+
+    // Strip markdown code fences, then find the outermost JSON object
+    const cleaned = text.replace(/```(?:json)?\s*/gi, '').replace(/```\s*/g, '');
+    const parsed = extractJson(cleaned);
+    if (parsed) {
       extractedLines = parsed.lines ?? [];
       supplierName = parsed.supplier_name ?? null;
       invoiceDate = parsed.invoice_date ?? null;
