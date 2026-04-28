@@ -19,7 +19,15 @@
     "src/app/api/staff/[id]/route.ts": { "maxDuration": 15 },
     "src/app/api/staff/documents/route.ts": { "maxDuration": 15 },
     "src/app/api/staff/leave/route.ts": { "maxDuration": 15 },
-    "src/app/api/aria/staff-visa-insight/route.ts": { "maxDuration": 30 }
+    "src/app/api/aria/staff-visa-insight/route.ts": { "maxDuration": 30 },
+    "src/app/api/aria/profit-analysis/route.ts": { "maxDuration": 60 },
+    "src/app/api/aria/winback/route.ts": { "maxDuration": 60 },
+    "src/app/api/aria/winback-message/route.ts": { "maxDuration": 20 },
+    "src/app/api/aria/draft-review-reply/route.ts": { "maxDuration": 20 },
+    "src/app/api/aria/generate-promotion/route.ts": { "maxDuration": 20 },
+    "src/app/api/aria/competitors/route.ts": { "maxDuration": 30 },
+    "src/app/api/aria/slow-day-analysis/route.ts": { "maxDuration": 15 },
+    "src/app/api/aria/daily-briefing/route.ts": { "maxDuration": 60 }
   },
   "crons": [
     {

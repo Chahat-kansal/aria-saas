@@ -115,7 +115,7 @@ Your role: help ${business.owner_name || 'the owner'} make more money and run a 
       }));
 
     const stream = await anthropic.messages.stream({
-      model: 'claude-sonnet-4-5-20250929',
+      model: 'claude-sonnet-4-6',
       max_tokens: 2048,
       system: systemPrompt,
       messages: formattedMessages,
