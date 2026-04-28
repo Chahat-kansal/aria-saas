@@ -18,10 +18,16 @@
 
   // ── Visitor ID (persisted for session) ──────────────────────────
   var VISITOR_KEY = 'aria_widget_visitor_' + API_KEY;
-  var visitorId = sessionStorage.getItem(VISITOR_KEY);
-  if (!visitorId) {
+  var visitorId;
+  try {
+    visitorId = sessionStorage.getItem(VISITOR_KEY);
+    if (!visitorId) {
+      visitorId = 'v_' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+      sessionStorage.setItem(VISITOR_KEY, visitorId);
+    }
+  } catch (e) {
+    // sessionStorage unavailable (about:blank, sandboxed iframe, etc.) — use in-memory ID
     visitorId = 'v_' + Math.random().toString(36).slice(2) + Date.now().toString(36);
-    sessionStorage.setItem(VISITOR_KEY, visitorId);
   }
 
   // ── State ────────────────────────────────────────────────────────
