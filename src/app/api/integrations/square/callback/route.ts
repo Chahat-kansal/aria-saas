@@ -1,3 +1,6 @@
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { encryptField } from '@/lib/encryption';
 import { NextResponse } from 'next/server';

@@ -11,11 +11,13 @@ const FEATURES = [
   { icon: '🌐', name: "Your website's AI assistant", desc: 'Embed Aria on your website. It answers customer questions using your live inventory, menu, and hours — 24/7.' },
   { icon: '📊', name: 'Cross-business benchmarking', desc: 'See how businesses like yours are performing — anonymised, aggregated, privacy-safe — so you always know where you stand.' },
   { icon: '📋', name: 'Rostering assistant', desc: 'Aria forecasts how many staff you need based on expected demand, flags Fair Work compliance risks, and helps you build the roster.' },
+  { icon: '👥', name: 'Team management', desc: "Track your team's employment details, visa status, right to work, pay rates, and compliance in one secure place." },
 ];
 
 const INDUSTRIES = [
   'Liquor stores', 'Bottle shops', 'Convenience stores', 'Specialty retail',
   'Cafés', 'Restaurants', 'Bakeries', 'Butchers',
+  'Importers', 'Wholesalers', 'Distributors', 'Warehouse & Wholesale',
 ];
 
 const INTEGRATIONS = [

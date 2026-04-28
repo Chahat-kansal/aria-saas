@@ -4,6 +4,7 @@ import { getBusinessSales, getBusinessCustomers, getBusinessItems } from '@/lib/
 import { NextResponse } from 'next/server';
 
 export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -61,6 +62,8 @@ export async function POST(req: Request) {
 
   const dataSource = (business.data_source ?? 'aria_pos') as 'square' | 'aria_pos';
 
+  const in30Days = new Date(Date.now() + 30 * 86400000).toISOString();
+
   const [
     sales7,
     salesPrev7,
@@ -70,6 +73,8 @@ export async function POST(req: Request) {
     unansweredReviews,
     recentWinbacks,
     unreadAlerts,
+    staffVisaExpiring,
+    staffRtwUnverified,
   ] = await Promise.all([
     getBusinessSales(business_id, sevenDaysAgo, dataSource),
     getBusinessSales(business_id, prevSevenStart, dataSource).then(s => s.filter(x => x.soldAt <= prevSevenEnd)),
@@ -84,6 +89,18 @@ export async function POST(req: Request) {
       .gt('created_at', thirtyDaysAgo.toISOString()),
     supabase.from('competitor_alerts').select('id', { count: 'exact', head: true })
       .eq('business_id', business_id).eq('read', false),
+    supabase.from('staff_members')
+      .select('first_name, last_name, visa_expiry_date, visa_type')
+      .eq('business_id', business_id)
+      .eq('status', 'active')
+      .lte('visa_expiry_date', in30Days)
+      .not('visa_type', 'in', '("Australian Citizen","Permanent Resident")')
+      .not('visa_expiry_date', 'is', null),
+    supabase.from('staff_members')
+      .select('id', { count: 'exact', head: true })
+      .eq('business_id', business_id)
+      .eq('status', 'active')
+      .eq('right_to_work_verified', false),
   ]);
 
   // Revenue calculations
@@ -152,6 +169,9 @@ export async function POST(req: Request) {
     winback_sent_recently: (recentWinbacks.count ?? 0) > 0,
     unread_competitor_alerts: unreadAlerts.count ?? 0,
     biggest_challenge: business.biggest_challenge,
+    visa_alerts: (staffVisaExpiring.data ?? []).length,
+    visa_alert_names: (staffVisaExpiring.data ?? []).map((s: any) => `${s.first_name} ${s.last_name}`),
+    unverified_rtw: staffRtwUnverified.count ?? 0,
     ...warehouseCtx,
   };
 
@@ -164,6 +184,7 @@ Rules:
 - Priority 'high' = act today, 'medium' = this week, 'low' = this month
 - Never fabricate numbers not in the data
 - Return ONLY a valid JSON array, no markdown, no preamble, no explanation
+- IMPORTANT: If visa_alerts > 0, this is HIGH PRIORITY — visa expiry for staff is a legal compliance issue. Include a specific recommendation naming the staff member(s) with their expiry date.
 Each item must match this exact type:
 {
   "id": "short-slug-001",

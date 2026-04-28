@@ -46,10 +46,8 @@ const ACTION_ROUTES: Record<string, string> = {
 };
 
 function greeting(): string {
-  const h = new Date().getHours();
-  if (h < 12) return 'Good morning';
-  if (h < 17) return 'Good afternoon';
-  return 'Good evening';
+  const hour = new Date().getHours();
+  return hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
 }
 
 function SkeletonCard() {
@@ -96,13 +94,14 @@ export function DailyBriefingModal() {
       if (!res.ok) { setError(true); setLoading(false); return; }
       const data = await res.json();
 
-      if (!data.recommendations?.length) { setLoading(false); return; }
+      const validRecs = (data.recommendations ?? []).filter((r: Recommendation) => r.title?.trim() && r.description?.trim());
+      if (!validRecs.length) { setLoading(false); return; }
 
       // Check dismiss/remind state
       if (data.dismissed_at) { setLoading(false); return; }
       if (data.remind_at && new Date(data.remind_at) > new Date()) { setLoading(false); return; }
 
-      setRecs(data.recommendations);
+      setRecs(validRecs);
       setTimeout(() => setVisible(true), 1500);
     } catch {
       setError(true);

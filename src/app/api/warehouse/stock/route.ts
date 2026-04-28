@@ -1,3 +1,6 @@
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { getBusinessItems, getBusinessSales } from '@/lib/business-data';
 import { NextResponse } from 'next/server';

@@ -38,6 +38,7 @@ export default function ReceiptScanPage() {
   const [confirming, setConfirming] = useState(false);
   const [updatedCount, setUpdatedCount] = useState(0);
   const [error, setError] = useState('');
+  const [dragOver, setDragOver] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const processFile = useCallback(async (file: File) => {
@@ -92,16 +93,14 @@ export default function ReceiptScanPage() {
   // Sample invoice demo — shows the feature without a real photo
   function loadSampleInvoice() {
     const sample: ScanResult = {
-      supplier_name: 'Metro Wholesale Beverages',
+      supplier_name: 'ALM Australia',
       invoice_date: new Date().toISOString().split('T')[0],
-      invoice_total_aud: 847.50,
-      line_count: 5,
+      invoice_total_aud: 991.50,
+      line_count: 3,
       extracted_lines: [
-        { description: 'Coopers Pale Ale 375ml Case 24', quantity: 4, unit: 'case', unit_price_aud: 52.00, total_price_aud: 208.00, matched_item: null, match_confidence: 'none', suggested_new_stock: 4 },
-        { description: 'Jim Beam White Label 700ml', quantity: 12, unit: 'each', unit_price_aud: 38.50, total_price_aud: 462.00, matched_item: null, match_confidence: 'none', suggested_new_stock: 12 },
-        { description: 'Penfolds Koonunga Hill Shiraz 750ml', quantity: 6, unit: 'each', unit_price_aud: 18.50, total_price_aud: 111.00, matched_item: null, match_confidence: 'none', suggested_new_stock: 6 },
-        { description: 'Corona Extra 355ml Case 24', quantity: 2, unit: 'case', unit_price_aud: 58.00, total_price_aud: 116.00, matched_item: null, match_confidence: 'none', suggested_new_stock: 2 },
-        { description: 'Vodka Cruiser Mixed Case 275ml', quantity: 3, unit: 'case', unit_price_aud: 42.50, total_price_aud: 127.50, matched_item: null, match_confidence: 'none', suggested_new_stock: 3 },
+        { description: 'Crown Lager Bottles 375ml 24pk', quantity: 10, unit: 'carton', unit_price_aud: 52.80, total_price_aud: 528.00, matched_item: null, match_confidence: 'none', suggested_new_stock: 10 },
+        { description: 'Heineken Premium Lager 330ml 24pk', quantity: 5, unit: 'carton', unit_price_aud: 49.50, total_price_aud: 247.50, matched_item: null, match_confidence: 'fuzzy', suggested_new_stock: 47 },
+        { description: 'Penfolds Koonunga Hill Shiraz 750ml', quantity: 12, unit: 'each', unit_price_aud: 18.00, total_price_aud: 216.00, matched_item: null, match_confidence: 'none', suggested_new_stock: 12 },
       ],
     };
     setScanResult(sample);
@@ -174,11 +173,12 @@ export default function ReceiptScanPage() {
             <div className="mb-4 px-4 py-3 rounded-xl text-sm bg-red-900/20 text-red-400 border border-red-900/30">{error}</div>
           )}
           <div
-            className="border-2 border-dashed rounded-2xl p-16 text-center cursor-pointer transition-all hover:border-[#1D9E75] hover:bg-[rgba(29,158,117,0.04)]"
-            style={{ borderColor: 'rgba(255,255,255,0.1)', background: '#13131a' }}
+            className="border-2 border-dashed rounded-2xl p-16 text-center cursor-pointer transition-all"
+            style={{ borderColor: dragOver ? '#1D9E75' : 'rgba(255,255,255,0.1)', background: dragOver ? 'rgba(29,158,117,0.05)' : '#13131a' }}
             onClick={() => inputRef.current?.click()}
-            onDragOver={e => e.preventDefault()}
-            onDrop={e => { e.preventDefault(); handleFiles(e.dataTransfer.files); }}
+            onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={e => { e.preventDefault(); setDragOver(false); handleFiles(e.dataTransfer.files); }}
           >
             <div className="text-5xl mb-4">📸</div>
             <p className="text-white font-semibold text-lg mb-2">Take a photo or upload your supplier invoice</p>

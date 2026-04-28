@@ -44,9 +44,10 @@ function downloadCSV(items: ForecastItem[]) {
   }));
   const headers = Object.keys(rows[0]).join(',');
   const csv = [headers, ...rows.map(r => Object.values(r).join(','))].join('\n');
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
-  a.download = 'reorder-list.csv'; a.click();
+  a.href = url; a.download = 'reorder-list.csv'; a.click();
+  URL.revokeObjectURL(url);
 }
 
 export default function ReorderPage() {
@@ -97,10 +98,11 @@ export default function ReorderPage() {
 
       {/* No data state */}
       {forecast?.no_data && (
-        <div className="rounded-xl p-10 text-center" style={{ background: '#13131a', border: '1px solid rgba(255,255,255,0.07)' }}>
-          <div className="text-3xl mb-3">📊</div>
-          <p className="text-white font-semibold mb-1">Not enough data yet</p>
-          <p className="text-sm" style={{ color: '#6b7280' }}>{forecast.no_data_message}</p>
+        <div className="rounded-xl p-12 text-center" style={{ background: '#13131a', border: '1px solid rgba(255,255,255,0.07)' }}>
+          <div className="text-3xl mb-3">📦</div>
+          <p className="font-semibold text-white mb-1">Not enough data yet</p>
+          <p className="text-sm mb-2" style={{ color: '#6b7280' }}>{forecast.no_data_message}</p>
+          <p className="text-xs" style={{ color: '#4b5563' }}>Start recording sales in AriaPOS or connect Square to generate your first reorder forecast.</p>
         </div>
       )}
 

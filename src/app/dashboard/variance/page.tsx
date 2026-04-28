@@ -122,37 +122,40 @@ export default function VariancePage() {
                   const isLoss = item.variance < 0;
                   const insight = insights.find(i => i.item_id === item.item_id);
                   return (
-                    <>
-                      <tr key={item.item_id}
-                        className="cursor-pointer hover:bg-[rgba(255,255,255,0.02)]"
-                        style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', background: isLoss ? 'rgba(239,68,68,0.04)' : 'rgba(16,185,129,0.04)' }}
-                        onClick={() => setExpanded(expanded === item.item_id ? null : item.item_id)}>
-                        <td className="px-3 py-3 text-white font-medium">{item.item_name}</td>
-                        <td className="px-3 py-3" style={{ color: '#9ca3af' }}>{item.theoretical_stock}</td>
-                        <td className="px-3 py-3" style={{ color: '#9ca3af' }}>{item.actual_stock}</td>
-                        <td className="px-3 py-3">
-                          <span className={isLoss ? 'text-red-400 font-semibold' : 'text-emerald-400 font-semibold'}>
-                            {isLoss ? '' : '+'}{item.variance} ({item.variance_pct}%)
-                          </span>
-                        </td>
-                        <td className="px-3 py-3">
-                          <span className={isLoss ? 'text-red-400' : 'text-emerald-400'}>
-                            {isLoss ? '-' : '+'}A${(item.variance_value_cents / 100).toFixed(2)}
-                          </span>
-                        </td>
-                        <td className="px-3 py-3 text-xs" style={{ color: '#6b7280' }}>
-                          {insight ? insight.insight.slice(0, 50) + (insight.insight.length > 50 ? '…' : '') : '—'}
-                        </td>
-                      </tr>
-                      {expanded === item.item_id && insight && (
-                        <tr style={{ background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                          <td colSpan={6} className="px-4 py-3 text-xs" style={{ color: '#d1d5db' }}>
-                            💡 {insight.insight}
-                          </td>
-                        </tr>
-                      )}
-                    </>
+                    <tr key={`${item.item_id}-main`}
+                      className="cursor-pointer hover:bg-[rgba(255,255,255,0.02)]"
+                      style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', background: isLoss ? 'rgba(239,68,68,0.04)' : 'rgba(16,185,129,0.04)' }}
+                      onClick={() => setExpanded(expanded === item.item_id ? null : item.item_id)}>
+                      <td className="px-3 py-3 text-white font-medium">{item.item_name}</td>
+                      <td className="px-3 py-3" style={{ color: '#9ca3af' }}>{item.theoretical_stock}</td>
+                      <td className="px-3 py-3" style={{ color: '#9ca3af' }}>{item.actual_stock}</td>
+                      <td className="px-3 py-3">
+                        <span className={isLoss ? 'text-red-400 font-semibold' : 'text-emerald-400 font-semibold'}>
+                          {isLoss ? '' : '+'}{item.variance} ({item.variance_pct}%)
+                        </span>
+                      </td>
+                      <td className="px-3 py-3">
+                        <span className={isLoss ? 'text-red-400' : 'text-emerald-400'}>
+                          {isLoss ? '-' : '+'}A${(item.variance_value_cents / 100).toFixed(2)}
+                        </span>
+                      </td>
+                      <td className="px-3 py-3 text-xs" style={{ color: '#6b7280' }}>
+                        {insight ? insight.insight.slice(0, 50) + (insight.insight.length > 50 ? '…' : '') : '—'}
+                      </td>
+                    </tr>
                   );
+                })}
+              </tbody>
+              <tbody style={{ background: '#0d0d14' }}>
+                {items.filter(i => expanded === i.item_id).map(item => {
+                  const insight = insights.find(ins => ins.item_id === item.item_id);
+                  return insight ? (
+                    <tr key={`${item.item_id}-expanded`} style={{ background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                      <td colSpan={6} className="px-4 py-3 text-xs" style={{ color: '#d1d5db' }}>
+                        💡 {insight.insight}
+                      </td>
+                    </tr>
+                  ) : null;
                 })}
               </tbody>
             </table>

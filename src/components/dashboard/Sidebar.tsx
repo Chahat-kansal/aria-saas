@@ -17,6 +17,7 @@ type NavItemDef = {
 
 const ALL_ITEMS: Record<string, NavItemDef> = {
   'dashboard':                  { href: '/dashboard',                          label: 'Dashboard',         icon: GridIcon,           section: 'Overview'     },
+  'staff':                      { href: '/dashboard/staff',                    label: 'Team',              icon: TeamIcon,           section: 'Overview'     },
   'pos':                        { href: '/pos',                                label: 'AriaPOS',           icon: RegisterIcon,       badge: 'New', section: 'Modules' },
   'winback':                    { href: '/dashboard/winback',                  label: 'Customer winback',  icon: UsersIcon,          section: 'Revenue'      },
   'slow-day':                   { href: '/dashboard/churn',                    label: 'Slow day filler',   icon: DollarIcon,         badge: '⚡', section: 'Revenue' },
@@ -50,7 +51,7 @@ const ALL_ITEMS: Record<string, NavItemDef> = {
 const SECTION_ORDER = ['Overview', 'Warehouse', 'Revenue', 'Reputation', 'Intelligence', 'Pro tools', 'VisaAI', 'Modules'];
 
 /* ─── Component ─────────────────────────────────────────────────── */
-export function Sidebar() {
+export function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
   const { business: b, allBusinesses, switchBusiness } = useBusinessContext();
   const business = b!;
   const pathname = usePathname();
@@ -214,11 +215,12 @@ export function Sidebar() {
               {items.map(item => {
                 const isActive = item.href === '/dashboard'
                   ? pathname === '/dashboard'
-                  : pathname.startsWith(item.href);
+                  : pathname === item.href || pathname.startsWith(item.href + '/');
                 return (
                   <Link
                     key={item.href + item.label}
                     href={item.href}
+                    onClick={onNavigate}
                     className={`flex items-center gap-2.5 px-3 py-2 mx-1 rounded-lg text-[12.5px] transition-colors mb-0.5 ${
                       isActive
                         ? 'bg-[rgba(29,158,117,0.15)] text-[#1D9E75]'
@@ -353,6 +355,9 @@ function TruckIcon({ className }: { className?: string }) {
 }
 function Spinner() {
   return <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>;
+}
+function TeamIcon({ className }: { className?: string }) {
+  return <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z"/></svg>;
 }
 function InboxIcon({ className }: { className?: string }) {
   return <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 13.5h3.86a2.25 2.25 0 012.012 1.244l.256.512a2.25 2.25 0 002.013 1.244h3.218a2.25 2.25 0 002.013-1.244l.256-.512a2.25 2.25 0 012.013-1.244h3.859m-19.5.338V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18v-4.162c0-.224-.034-.447-.1-.661L19.24 5.338a2.25 2.25 0 00-2.15-1.588H6.911a2.25 2.25 0 00-2.15 1.588L2.35 13.177a2.25 2.25 0 00-.1.661z"/></svg>;

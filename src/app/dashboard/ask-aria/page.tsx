@@ -61,8 +61,12 @@ export default function AskAriaPage() {
 
     setInput('');
     const userMsg: Message = { role: 'user', content: msg, timestamp: new Date() };
-    const history = messages.slice(-10);
-    setMessages(prev => [...prev, userMsg, { role: 'assistant', content: '', streaming: true, timestamp: new Date() }]);
+    const trimmedMessages = messages.length > 20 ? messages.slice(-20) : messages;
+    const history = trimmedMessages.slice(-10);
+    setMessages(prev => {
+      const trimmed = prev.length > 20 ? prev.slice(-20) : prev;
+      return [...trimmed, userMsg, { role: 'assistant', content: '', streaming: true, timestamp: new Date() }];
+    });
     setSending(true);
 
     const include_data = DATA_QUERY_RE.test(msg);
@@ -176,7 +180,7 @@ export default function AskAriaPage() {
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-6 py-6 space-y-5">
-        {messages.length === 0 && (
+        {messages.length === 0 && input.length === 0 && (
           <div className="max-w-2xl mx-auto">
             <div className="text-center mb-8">
               <div className="w-12 h-12 rounded-full bg-[rgba(29,158,117,0.15)] flex items-center justify-center mx-auto mb-3">
@@ -213,7 +217,7 @@ export default function AskAriaPage() {
                   : null)}
               </div>
               {m.role === 'assistant' && !m.streaming && m.content && <CopyButton text={m.content} />}
-              {m.role === 'assistant' && !m.streaming && m.chart && (
+              {m.role === 'assistant' && !m.streaming && m.chart && m.chart.data && m.chart.data.length > 0 && (
                 <div className="mt-3">
                   <ChartBlock chart={m.chart} />
                 </div>
