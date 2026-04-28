@@ -5,6 +5,16 @@ import { NextResponse } from 'next/server';
 export const runtime = 'nodejs';
 export const maxDuration = 30;
 
+const CORS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, x-widget-key',
+};
+
+export async function OPTIONS() {
+  return new Response(null, { status: 204, headers: CORS });
+}
+
 interface ConvMessage {
   role: 'user' | 'assistant';
   content: string;
@@ -14,7 +24,7 @@ export async function POST(req: Request) {
   try {
     const apiKey = req.headers.get('x-widget-key');
     if (!apiKey) {
-      return NextResponse.json({ error: 'Missing widget key' }, { status: 401 });
+      return NextResponse.json({ error: 'Missing widget key' }, { status: 401 , headers: CORS });
     }
 
     // Look up widget config
@@ -25,12 +35,12 @@ export async function POST(req: Request) {
       .single();
 
     if (!config || !config.enabled) {
-      return NextResponse.json({ error: 'Widget not found or disabled' }, { status: 403 });
+      return NextResponse.json({ error: 'Widget not found or disabled' }, { status: 403 , headers: CORS });
     }
 
     const { message, conversation_history = [], visitor_id } = await req.json();
     if (!message?.trim()) {
-      return NextResponse.json({ error: 'Message required' }, { status: 400 });
+      return NextResponse.json({ error: 'Message required' }, { status: 400 , headers: CORS });
     }
 
     // Fetch business for context
@@ -41,7 +51,7 @@ export async function POST(req: Request) {
       .single();
 
     if (!business) {
-      return NextResponse.json({ error: 'Business not found' }, { status: 404 });
+      return NextResponse.json({ error: 'Business not found' }, { status: 404 , headers: CORS });
     }
 
     // For retail/cafe, pull top products for inventory context
@@ -83,7 +93,7 @@ ${config.guardrails ? `- ${config.guardrails}` : ''}
 
     const anthropicKey = process.env.ANTHROPIC_API_KEY;
     if (!anthropicKey) {
-      return NextResponse.json({ error: 'AI not configured' }, { status: 500 });
+      return NextResponse.json({ error: 'AI not configured' }, { status: 500 , headers: CORS });
     }
 
     const anthropic = new Anthropic({ apiKey: anthropicKey });
@@ -136,9 +146,9 @@ ${config.guardrails ? `- ${config.guardrails}` : ''}
         .catch(() => null); // never fail the response due to logging
     }
 
-    return NextResponse.json({ reply, suggested_questions: suggestedQuestions });
+    return NextResponse.json({ reply, suggested_questions: suggestedQuestions }, { headers: CORS });
   } catch (err) {
     console.error('Widget chat error:', err);
-    return NextResponse.json({ error: 'Chat failed' }, { status: 500 });
+    return NextResponse.json({ error: 'Chat failed' }, { status: 500 , headers: CORS });
   }
 }
