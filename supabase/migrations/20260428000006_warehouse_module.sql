@@ -1,3 +1,12 @@
+-- Fix industry check constraint to include warehouse and restaurant
+ALTER TABLE businesses DROP CONSTRAINT IF EXISTS businesses_industry_check;
+ALTER TABLE businesses ADD CONSTRAINT businesses_industry_check
+CHECK (industry = ANY (ARRAY[
+  'retail'::text, 'cafe'::text, 'restaurant'::text, 'tradie'::text,
+  'realestate'::text, 'salon'::text, 'visa'::text, 'gym'::text,
+  'professional'::text, 'warehouse'::text
+]));
+
 -- Warehouse Module: Lot tracking, bin locations, GRNs, cycle counts, supplier performance, slotting
 
 -- Lot and batch tracking
@@ -142,4 +151,25 @@ CREATE TABLE IF NOT EXISTS warehouse_slotting (
 ALTER TABLE warehouse_slotting ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "own_slotting" ON warehouse_slotting;
 CREATE POLICY "own_slotting" ON warehouse_slotting FOR ALL
+  USING (business_id IN (SELECT id FROM businesses WHERE user_id = auth.uid()));
+
+-- Purchase orders
+CREATE TABLE IF NOT EXISTS warehouse_purchase_orders (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  business_id uuid REFERENCES businesses(id) ON DELETE CASCADE,
+  po_number text NOT NULL,
+  supplier_name text,
+  supplier_id uuid,
+  status text DEFAULT 'draft' CHECK (status IN ('draft','sent','confirmed','received','cancelled')),
+  line_items jsonb DEFAULT '[]',
+  total_cost_cents integer DEFAULT 0,
+  expected_delivery date,
+  notes text,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now(),
+  UNIQUE(business_id, po_number)
+);
+ALTER TABLE warehouse_purchase_orders ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "own_purchase_orders" ON warehouse_purchase_orders;
+CREATE POLICY "own_purchase_orders" ON warehouse_purchase_orders FOR ALL
   USING (business_id IN (SELECT id FROM businesses WHERE user_id = auth.uid()));
