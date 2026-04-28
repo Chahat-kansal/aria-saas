@@ -27,7 +27,12 @@
     "src/app/api/aria/generate-promotion/route.ts": { "maxDuration": 20 },
     "src/app/api/aria/competitors/route.ts": { "maxDuration": 30 },
     "src/app/api/aria/slow-day-analysis/route.ts": { "maxDuration": 15 },
-    "src/app/api/aria/daily-briefing/route.ts": { "maxDuration": 60 }
+    "src/app/api/aria/daily-briefing/route.ts": { "maxDuration": 60 },
+    "src/app/api/warehouse/grn/[id]/route.ts": { "maxDuration": 15 },
+    "src/app/api/warehouse/locations/bulk/route.ts": { "maxDuration": 30 },
+    "src/app/api/warehouse/stock/adjust/route.ts": { "maxDuration": 15 },
+    "src/app/api/warehouse/purchase-orders/create/route.ts": { "maxDuration": 15 },
+    "src/app/api/warehouse/suppliers/[id]/route.ts": { "maxDuration": 15 }
   },
   "crons": [
     {
