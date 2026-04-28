@@ -5,7 +5,10 @@
     "src/app/api/plugins/route.ts": { "maxDuration": 120 },
     "src/app/api/research/route.ts": { "maxDuration": 120 },
     "src/app/api/integrations/square/sync/route.ts": { "maxDuration": 300 },
-    "src/app/api/cron/nightly-sync/route.ts": { "maxDuration": 300 }
+    "src/app/api/cron/nightly-sync/route.ts": { "maxDuration": 300 },
+    "src/app/api/aria/receipt-scan/route.ts": { "maxDuration": 60 },
+    "src/app/api/aria/reorder-forecast/route.ts": { "maxDuration": 60 },
+    "src/app/api/widget/chat/route.ts": { "maxDuration": 30 }
   },
   "crons": [
     {
