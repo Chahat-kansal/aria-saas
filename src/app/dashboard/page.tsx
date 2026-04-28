@@ -1,6 +1,7 @@
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
+import { WarehouseDashboard } from '@/components/dashboard/WarehouseDashboard';
 
 export default async function DashboardPage() {
   const supabase = createServerSupabaseClient();
@@ -33,6 +34,7 @@ export default async function DashboardPage() {
   const industry = business.industry ?? 'professional';
 
   if (industry === 'visa') return <VisaDashboard business={business} />;
+  if (industry === 'warehouse') return <WarehouseDashboard business={business} />;
   if (industry === 'retail' || industry === 'cafe') return <RetailCafeDashboard business={business} />;
   if (industry === 'tradie' || industry === 'professional') return <TradieProfessionalDashboard business={business} />;
   if (industry === 'salon' || industry === 'gym') return <SalonGymDashboard business={business} />;

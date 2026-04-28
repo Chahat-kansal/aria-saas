@@ -7,6 +7,7 @@ const INDUSTRY_SUBS: Record<string, string> = {
   retail: 'Liquor, convenience, specialty retail',
   cafe: 'Coffee shops, tea rooms, juice bars',
   restaurant: 'Restaurants, takeaway, food service',
+  warehouse: 'Importer, wholesaler, distributor',
 };
 
 export default function IndustryPage() {

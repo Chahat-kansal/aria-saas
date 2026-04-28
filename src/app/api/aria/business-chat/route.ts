@@ -65,13 +65,34 @@ export async function POST(req: Request) {
     const lapsed = customers.filter(c => !c.lastVisitAt || c.lastVisitAt < sixtyDaysAgo);
     const highChurn = customers.filter(c => c.churnRisk === 'high' || c.churnRisk === 'churned');
 
+    let warehouseLines = '';
+    if (business.industry === 'warehouse') {
+      const today30 = new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0];
+      const todayStr = new Date().toISOString().split('T')[0];
+      const [expLots, pendingPOs, grnsThisWeek] = await Promise.all([
+        supabase.from('warehouse_lots').select('item_name, quantity_remaining, expiry_date, unit_cost_cents')
+          .eq('business_id', business_id).eq('status', 'active')
+          .lte('expiry_date', today30).gte('expiry_date', todayStr),
+        supabase.from('warehouse_purchase_orders').select('po_number, status, total_cost_cents')
+          .eq('business_id', business_id).in('status', ['draft', 'sent']).limit(5),
+        supabase.from('warehouse_grns').select('grn_number, supplier_name, total_lines')
+          .eq('business_id', business_id).gte('created_at', thirtyDaysAgo.toISOString()).limit(5),
+      ]);
+      const expiryVal = (expLots.data ?? []).reduce((s: number, l: any) => s + l.quantity_remaining * (l.unit_cost_cents ?? 0), 0);
+      warehouseLines = `
+Expiring lots (30 days): ${(expLots.data ?? []).length} lots, value at risk A$${(expiryVal / 100).toFixed(0)}
+Expiring items: ${(expLots.data ?? []).slice(0, 5).map((l: any) => `${l.item_name} (${l.expiry_date})`).join('; ') || 'None'}
+Open POs: ${(pendingPOs.data ?? []).length} (${(pendingPOs.data ?? []).map((p: any) => p.po_number).join(', ') || 'none'})
+Recent GRNs (30d): ${(grnsThisWeek.data ?? []).length}`;
+    }
+
     businessContext = `
 Business: ${business.name}, Industry: ${business.industry}, Location: ${business.city ?? 'Australia'}
 Revenue this month: A$${(revThisMonth / 100).toFixed(0)} (${revChangePct > 0 ? '+' : ''}${revChangePct}% vs last month)
 Top products by revenue (last 30 days): ${topProducts.join('; ') || 'No sales data'}
 Low stock items: ${lowStock.length === 0 ? 'None' : lowStock.map(i => `${i.name} (${i.currentStock} left, reorder at ${i.reorderPoint})`).join('; ')}
 Total customers: ${customers.length}, Lapsed 60+ days: ${lapsed.length}, High churn risk: ${highChurn.length}
-Total products in catalogue: ${items.length}`.trim();
+Total products in catalogue: ${items.length}${warehouseLines}`.trim();
   }
 
   const systemPrompt = `You are Aria, the AI advisor for ${business.name}, a ${business.industry} business in Australia.

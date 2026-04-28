@@ -9,7 +9,12 @@
     "src/app/api/aria/receipt-scan/route.ts": { "maxDuration": 60 },
     "src/app/api/aria/reorder-forecast/route.ts": { "maxDuration": 60 },
     "src/app/api/aria/variance/route.ts": { "maxDuration": 30 },
-    "src/app/api/widget/chat/route.ts": { "maxDuration": 30 }
+    "src/app/api/widget/chat/route.ts": { "maxDuration": 30 },
+    "src/app/api/aria/warehouse-slotting/route.ts": { "maxDuration": 30 },
+    "src/app/api/aria/generate-purchase-orders/route.ts": { "maxDuration": 30 },
+    "src/app/api/aria/supplier-insights/route.ts": { "maxDuration": 20 },
+    "src/app/api/warehouse/grn/route.ts": { "maxDuration": 30 },
+    "src/app/api/warehouse/cycle-count/generate/route.ts": { "maxDuration": 30 }
   },
   "crons": [
     {

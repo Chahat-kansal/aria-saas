@@ -80,6 +80,30 @@ export const industryConfig = {
     show_visa: false,
     show_bookings: true,
   },
+  warehouse: {
+    label: 'Warehouse / Wholesale',
+    published: true,
+    sidebar: [
+      'dashboard',
+      'warehouse/inbound',
+      'warehouse/stock',
+      'warehouse/locations',
+      'warehouse/purchase-orders',
+      'warehouse/cycle-count',
+      'warehouse/lots',
+      'warehouse/suppliers',
+      'warehouse/transfers',
+      'reorder',
+      'variance',
+      'ask-aria',
+      'integrations',
+    ],
+    dashboard_modules: ['stock_value', 'low_stock_count', 'pending_pos', 'expiring_lots', 'todays_receipts', 'variance_alerts'],
+    show_pos: false,
+    show_visa: false,
+    show_bookings: false,
+    show_warehouse: true,
+  },
 } as const;
 
 export type Industry = keyof typeof industryConfig;

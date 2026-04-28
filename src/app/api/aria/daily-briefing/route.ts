@@ -111,6 +111,30 @@ export async function POST(req: Request) {
   // Low stock items
   const lowStockItems = items.filter(i => i.reorderPoint > 0 && i.currentStock <= i.reorderPoint);
 
+  // Warehouse-specific context
+  let warehouseCtx: Record<string, unknown> = {};
+  if (business.industry === 'warehouse') {
+    const today30 = new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0];
+    const todayStr = new Date().toISOString().split('T')[0];
+    const [expLots, pendingPOs, recentGRNs] = await Promise.all([
+      supabase.from('warehouse_lots').select('id, item_name, quantity_remaining, expiry_date, unit_cost_cents')
+        .eq('business_id', business_id).eq('status', 'active')
+        .lte('expiry_date', today30).gte('expiry_date', todayStr).gt('quantity_remaining', 0),
+      supabase.from('warehouse_purchase_orders').select('id', { count: 'exact', head: true })
+        .eq('business_id', business_id).in('status', ['draft', 'sent']),
+      supabase.from('warehouse_grns').select('grn_number, total_lines')
+        .eq('business_id', business_id).gte('created_at', sevenDaysAgo.toISOString()).limit(5),
+    ]);
+    const expiryValueCents = (expLots.data ?? []).reduce((s: number, l: any) => s + l.quantity_remaining * (l.unit_cost_cents ?? 0), 0);
+    warehouseCtx = {
+      expiring_lots_30d: (expLots.data ?? []).length,
+      expiring_lot_names: (expLots.data ?? []).slice(0, 3).map((l: any) => l.item_name),
+      expiry_value_at_risk_aud: (expiryValueCents / 100).toFixed(2),
+      pending_pos: pendingPOs.count ?? 0,
+      grns_this_week: (recentGRNs.data ?? []).length,
+    };
+  }
+
   const context = {
     business_name: business.name,
     industry: business.industry,
@@ -128,6 +152,7 @@ export async function POST(req: Request) {
     winback_sent_recently: (recentWinbacks.count ?? 0) > 0,
     unread_competitor_alerts: unreadAlerts.count ?? 0,
     biggest_challenge: business.biggest_challenge,
+    ...warehouseCtx,
   };
 
   // Claude — haiku for speed and cost
