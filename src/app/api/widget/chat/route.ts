@@ -15,140 +15,159 @@ export async function OPTIONS() {
   return new Response(null, { status: 204, headers: CORS });
 }
 
-interface ConvMessage {
-  role: 'user' | 'assistant';
-  content: string;
+interface ConvMessage { role: 'user' | 'assistant'; content: string; }
+
+function err(msg: string, status = 500) {
+  return NextResponse.json({ error: msg }, { status, headers: CORS });
 }
 
 export async function POST(req: Request) {
+  // Guard: service role key required for widget (bypasses RLS for public endpoint)
+  if (!supabaseAdmin) {
+    console.error('[widget/chat] supabaseAdmin is null — SUPABASE_SERVICE_ROLE_KEY not set in Vercel env vars');
+    return err('Service not configured. Contact the business owner.', 503);
+  }
+
+  const anthropicKey = process.env.ANTHROPIC_API_KEY;
+  if (!anthropicKey) return err('AI not configured', 503);
+
   try {
     const apiKey = req.headers.get('x-widget-key');
-    if (!apiKey) {
-      return NextResponse.json({ error: 'Missing widget key' }, { status: 401 , headers: CORS });
-    }
+    if (!apiKey) return err('Missing widget key', 401);
 
-    // Look up widget config
-    const { data: config } = await supabaseAdmin
+    // Look up widget config + business in one go
+    const { data: config, error: cfgErr } = await supabaseAdmin
       .from('widget_configs')
-      .select('*')
+      .select('*, businesses!inner(id, name, industry, address, city, phone, email, data_source)')
       .eq('api_key', apiKey)
       .single();
 
-    if (!config || !config.enabled) {
-      return NextResponse.json({ error: 'Widget not found or disabled' }, { status: 403 , headers: CORS });
+    if (cfgErr || !config?.enabled) {
+      return err('Widget not found or disabled', 403);
     }
+
+    const business = (config as any).businesses;
+    const businessId = config.business_id;
 
     const { message, conversation_history = [], visitor_id } = await req.json();
-    if (!message?.trim()) {
-      return NextResponse.json({ error: 'Message required' }, { status: 400 , headers: CORS });
+    if (!message?.trim()) return err('Message required', 400);
+
+    // ── Live inventory context ───────────────────────────────────────
+    let inventoryContext = '';
+    const dataSource = business?.data_source ?? 'aria_pos';
+    const productTable = dataSource === 'square' ? 'square_items' : 'pos_products';
+    const stockCol = dataSource === 'square' ? 'current_stock' : 'stock_quantity';
+
+    const { data: products } = await supabaseAdmin
+      .from(productTable)
+      .select(`name, ${stockCol}, price${dataSource === 'aria_pos' ? ', cost_price' : ''}`)
+      .eq('business_id', businessId)
+      .eq(dataSource === 'square' ? 'track_inventory' : 'is_active', true)
+      .order(stockCol, { ascending: false })
+      .limit(30);
+
+    if (products && products.length > 0) {
+      const inStock = products.filter((p: any) => (p[stockCol] ?? 0) > 0);
+      inventoryContext = `\n\nLIVE INVENTORY (in stock right now):\n${
+        inStock.slice(0, 20).map((p: any) =>
+          `• ${p.name}${p.price ? ` — A$${p.price}` : ''} (${p[stockCol]} in stock)`
+        ).join('\n')
+      }${inStock.length === 0 ? 'No items currently in stock.' : ''}`;
     }
 
-    // Fetch business for context
-    const { data: business } = await supabaseAdmin
-      .from('businesses')
-      .select('name, industry, address, city, phone, email')
-      .eq('id', config.business_id)
-      .single();
-
-    if (!business) {
-      return NextResponse.json({ error: 'Business not found' }, { status: 404 , headers: CORS });
+    // ── Opening hours ────────────────────────────────────────────────
+    let hoursContext = '';
+    if (config.opening_hours && Object.keys(config.opening_hours).length > 0) {
+      const days = Object.entries(config.opening_hours as Record<string, string>)
+        .map(([day, hours]) => `${day}: ${hours}`).join(', ');
+      hoursContext = `\n\nOPENING HOURS: ${days}`;
     }
 
-    // For retail/cafe, pull top products for inventory context
-    let productContext = '';
-    if (['retail', 'cafe'].includes(business.industry ?? '')) {
-      const { data: products } = await supabaseAdmin
-        .from('pos_products')
-        .select('name, stock_quantity')
-        .eq('business_id', config.business_id)
-        .order('stock_quantity', { ascending: false })
-        .limit(20);
-
-      if (products && products.length > 0) {
-        productContext = `\nCurrent products (top by stock): ${products.map((p: { name: string; stock_quantity: number }) => `${p.name} (${p.stock_quantity} in stock)`).join(', ')}.`;
-      }
+    // ── FAQs ─────────────────────────────────────────────────────────
+    let faqContext = '';
+    if (Array.isArray(config.faqs) && config.faqs.length > 0) {
+      faqContext = `\n\nFREQUENTLY ASKED QUESTIONS:\n${
+        (config.faqs as { q: string; a: string }[])
+          .map(f => `Q: ${f.q}\nA: ${f.a}`).join('\n\n')
+      }`;
     }
 
-    // Build FAQs string
-    const faqs = Array.isArray(config.faqs) && config.faqs.length > 0
-      ? `\nFAQs:\n${(config.faqs as { q: string; a: string }[]).map((f) => `Q: ${f.q}\nA: ${f.a}`).join('\n')}`
-      : '';
+    // ── System prompt ────────────────────────────────────────────────
+    const systemPrompt = `You are ${config.bot_name ?? 'Aria'}, the friendly and knowledgeable AI assistant for ${business?.name}, a ${business?.industry} business${business?.city ? ` in ${business.city}, Australia` : ' in Australia'}.
 
-    // Build opening hours string
-    const hours = config.opening_hours && Object.keys(config.opening_hours).length > 0
-      ? `\nOpening hours: ${JSON.stringify(config.opening_hours)}`
-      : '';
+Your job is to help customers with questions about this specific business. You have access to live data about what's in stock right now.${hoursContext}${inventoryContext}${config.services ? `\n\nSERVICES & PRODUCTS:\n${config.services}` : ''}${faqContext}
 
-    const systemPrompt = `You are ${config.bot_name}, the AI assistant for ${business.name}, a ${business.industry} business located at ${[business.address, business.city].filter(Boolean).join(', ') || 'Australia'}.${hours}${config.services ? `\nServices/products: ${config.services}` : ''}${productContext}${faqs}
+PERSONALITY:
+- Warm, helpful, and professional — like a knowledgeable staff member
+- Concise: 1-3 sentences unless the question genuinely needs more
+- Use Australian English (e.g. "colour", "organise", "cheers")
+- Be enthusiastic about the business's products and services
 
 RULES:
-- Never make up information you don't have.
-- If you cannot confidently answer, say: "${config.escalation_message || 'Please contact us directly for more information.'}"
-- Never discuss competitor businesses.
-- Never give pricing you are not certain of.
-${config.guardrails ? `- ${config.guardrails}` : ''}
-- Keep responses under 3 sentences unless a longer answer is clearly needed.
-- Be friendly, helpful, and professional.
-- After your reply, on a new line write: SUGGESTED: followed by exactly 3 comma-separated follow-up questions the visitor might ask, in quotes, e.g. SUGGESTED: "What are your prices?","Do you offer delivery?","How can I book?"`;
+- Only answer questions about ${business?.name} and its products/services
+- If asked about stock, ONLY confirm items you can see in the inventory above
+- Never give prices you're not certain of — say "please ask us in store for the latest pricing"
+- Never discuss competitors
+- If you genuinely can't help: "${config.escalation_message ?? `Please call us or visit us in store — we'd love to help!`}"
+${config.guardrails ? `- Additional rules: ${config.guardrails}` : ''}
 
-    const anthropicKey = process.env.ANTHROPIC_API_KEY;
-    if (!anthropicKey) {
-      return NextResponse.json({ error: 'AI not configured' }, { status: 500 , headers: CORS });
-    }
+After your main reply, on a NEW LINE write exactly:
+FOLLOWUP: "question 1"|"question 2"|"question 3"
+These should be the 3 most natural follow-up questions a customer would ask next, based on the conversation so far.`;
 
     const anthropic = new Anthropic({ apiKey: anthropicKey });
 
     const messages: ConvMessage[] = [
-      ...((conversation_history as ConvMessage[]).slice(-10)), // last 10 turns only
+      ...((conversation_history as ConvMessage[]).slice(-12)),
       { role: 'user', content: message },
     ];
 
     const response = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 512,
+      max_tokens: 600,
       system: systemPrompt,
       messages,
     });
 
     const rawReply = response.content[0].type === 'text' ? response.content[0].text : '';
 
-    // Parse SUGGESTED questions out of reply
-    const suggestedMatch = rawReply.match(/SUGGESTED:\s*(.+)$/m);
-    let suggestedQuestions: string[] = [];
+    // Parse follow-up questions
+    const followupMatch = rawReply.match(/\nFOLLOWUP:\s*(.+)$/m);
     let reply = rawReply;
+    let suggestedQuestions: string[] = [];
 
-    if (suggestedMatch) {
-      reply = rawReply.replace(/\nSUGGESTED:.*$/m, '').trim();
-      suggestedQuestions = suggestedMatch[1]
-        .match(/"([^"]+)"/g)
-        ?.map(s => s.replace(/"/g, '')) ?? [];
+    if (followupMatch) {
+      reply = rawReply.replace(/\nFOLLOWUP:.*$/m, '').trim();
+      suggestedQuestions = followupMatch[1]
+        .split('|')
+        .map(q => q.trim().replace(/^"|"$/g, ''))
+        .filter(Boolean)
+        .slice(0, 3);
     }
 
-    // Log conversation (fire-and-forget, use service role to bypass RLS)
-    if (visitor_id) {
-      const updatedMessages = [
-        ...((conversation_history as ConvMessage[]).slice(-20)),
-        { role: 'user', content: message },
-        { role: 'assistant', content: reply },
-      ];
+    // Fallback suggestions if Claude didn't provide them
+    if (suggestedQuestions.length === 0) {
+      suggestedQuestions = ['What are your opening hours?', 'What products do you have?', 'How can I contact you?'];
+    }
 
-      await supabaseAdmin
-        .from('widget_conversations')
-        .upsert(
-          {
-            business_id: config.business_id,
-            visitor_id,
-            messages: updatedMessages,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: 'business_id,visitor_id' }
-        )
-        .catch(() => null); // never fail the response due to logging
+    // Log conversation (fire-and-forget)
+    if (visitor_id) {
+      supabaseAdmin.from('widget_conversations').upsert({
+        business_id: businessId,
+        visitor_id,
+        messages: [
+          ...((conversation_history as ConvMessage[]).slice(-20)),
+          { role: 'user', content: message },
+          { role: 'assistant', content: reply },
+        ],
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'business_id,visitor_id' }).then(() => null, () => null);
     }
 
     return NextResponse.json({ reply, suggested_questions: suggestedQuestions }, { headers: CORS });
-  } catch (err) {
-    console.error('Widget chat error:', err);
-    return NextResponse.json({ error: 'Chat failed' }, { status: 500 , headers: CORS });
+
+  } catch (e: any) {
+    console.error('[widget/chat] Error:', e?.message ?? e);
+    return err(`Chat failed: ${e?.message ?? 'Unknown error'}`, 500);
   }
 }
