@@ -1,12 +1,8 @@
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
 
-// Authorization page always uses connect.squareup.com (even for sandbox).
-// The squareupsandbox.com domain is for API calls only, not OAuth browser redirects.
-const OAUTH_BASE = 'https://connect.squareup.com';
-
-// API base differs by environment
-const API_BASE = process.env.SQUARE_ENVIRONMENT === 'production'
+// Both OAuth authorize and API calls use the same base per environment
+const OAUTH_BASE = process.env.SQUARE_ENVIRONMENT === 'production'
   ? 'https://connect.squareup.com'
   : 'https://connect.squareupsandbox.com';
 
@@ -50,6 +46,7 @@ export async function GET(req: Request) {
   });
 
   const url = `${OAUTH_BASE}/oauth2/authorize?${params.toString()}`;
+  console.log('[Square OAuth] Redirecting to:', url);
 
   return NextResponse.redirect(url);
 }
