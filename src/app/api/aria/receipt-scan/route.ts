@@ -11,19 +11,46 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const ALLOWED_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/heic', 'image/heif', 'application/pdf'];
 const MAX_SIZE = 10 * 1024 * 1024; // 10MB
 
-// Finds the outermost balanced JSON object in a string (handles nested braces)
-function extractJson(text: string): any | null {
-  const start = text.indexOf('{');
-  if (start === -1) return null;
-  let depth = 0;
-  for (let i = start; i < text.length; i++) {
-    if (text[i] === '{') depth++;
-    else if (text[i] === '}') {
+// Robust JSON array extractor — handles nested structures, escaped strings
+function extractJsonArray(text: string): any[] {
+  const clean = text.replace(/```(?:json)?\s*/gi, '').replace(/```\s*/g, '').trim();
+  try { const d = JSON.parse(clean); if (Array.isArray(d)) return d; } catch {}
+  let start = -1, depth = 0;
+  let inStr = false, esc = false;
+  for (let i = 0; i < clean.length; i++) {
+    const ch = clean[i];
+    if (esc) { esc = false; continue; }
+    if (ch === '\\' && inStr) { esc = true; continue; }
+    if (ch === '"') { inStr = !inStr; continue; }
+    if (inStr) continue;
+    if (ch === '[') { if (depth === 0) start = i; depth++; }
+    else if (ch === ']') {
       depth--;
-      if (depth === 0) {
-        try { return JSON.parse(text.slice(start, i + 1)); } catch { return null; }
+      if (depth === 0 && start !== -1) {
+        try { const p = JSON.parse(clean.slice(start, i + 1)); if (Array.isArray(p)) return p; } catch {}
+        start = -1;
       }
     }
+  }
+  return [];
+}
+
+// Finds the outermost balanced JSON object
+function extractJson(text: string): any | null {
+  const clean = text.replace(/```(?:json)?\s*/gi, '').replace(/```\s*/g, '').trim();
+  try { const d = JSON.parse(clean); if (d && typeof d === 'object') return d; } catch {}
+  let depth = 0;
+  const start = clean.indexOf('{');
+  if (start === -1) return null;
+  let inStr = false, esc = false;
+  for (let i = start; i < clean.length; i++) {
+    const ch = clean[i];
+    if (esc) { esc = false; continue; }
+    if (ch === '\\' && inStr) { esc = true; continue; }
+    if (ch === '"') { inStr = !inStr; continue; }
+    if (inStr) continue;
+    if (ch === '{') depth++;
+    else if (ch === '}') { depth--; if (depth === 0) { try { return JSON.parse(clean.slice(start, i + 1)); } catch { return null; } } }
   }
   return null;
 }
@@ -84,22 +111,23 @@ export async function POST(req: Request) {
             type: 'text',
             text: `You are processing a supplier invoice for an Australian retail/hospitality business.
 Extract ALL line items. Also extract supplier name, invoice date, and invoice total if visible.
+Limit to 20 most significant line items. Ensure the JSON is complete and valid.
 
-Return ONLY this JSON structure, no markdown:
+Return ONLY this JSON structure, no markdown, no explanation:
 {
   "supplier_name": "string or null",
   "invoice_date": "YYYY-MM-DD or null",
   "invoice_total_aud": number or null,
   "lines": [{
     "supplier_code": "string or null",
-    "description": "full product name as shown",
+    "description": "full product name as shown on invoice",
     "quantity": number,
     "unit": "each|carton|case|kg|litre|dozen or as shown",
     "unit_price_aud": number or null,
     "total_price_aud": number or null
   }]
 }
-If this is not an invoice/receipt, return { "supplier_name": null, "invoice_date": null, "invoice_total_aud": null, "lines": [] }.
+If this is not an invoice/receipt, return: {"supplier_name":null,"invoice_date":null,"invoice_total_aud":null,"lines":[]}
 Be precise — these numbers update real inventory.`,
           },
         ],
@@ -107,40 +135,28 @@ Be precise — these numbers update real inventory.`,
     });
 
     const text = response.content[0].type === 'text' ? response.content[0].text : '';
-    console.log('[receipt-scan] Claude raw response (first 500 chars):', text.slice(0, 500));
+    console.log('[receipt-scan] Claude response (first 400 chars):', text.slice(0, 400));
 
-    // Strategy 1: strip markdown fences, find balanced JSON object
-    const cleaned = text.replace(/```(?:json)?\s*/gi, '').replace(/```\s*/g, '').trim();
-    let parsed = extractJson(cleaned);
+    // Strategy 1: extract full JSON object (supplier_name + lines)
+    let parsed = extractJson(text);
 
-    // Strategy 2: try parsing the entire cleaned string directly
+    // Strategy 2: Claude returned lines array directly
     if (!parsed) {
-      try { parsed = JSON.parse(cleaned); } catch { /* continue */ }
-    }
-
-    // Strategy 3: Claude sometimes returns the lines array directly
-    if (!parsed) {
-      const arrMatch = cleaned.match(/\[[\s\S]*\]/);
-      if (arrMatch) {
-        try {
-          const arr = JSON.parse(arrMatch[0]);
-          if (Array.isArray(arr)) parsed = { lines: arr, supplier_name: null, invoice_date: null, invoice_total_aud: null };
-        } catch { /* continue */ }
-      }
+      const arr = extractJsonArray(text);
+      if (arr.length > 0) parsed = { lines: arr, supplier_name: null, invoice_date: null, invoice_total_aud: null };
     }
 
     if (parsed) {
-      extractedLines = Array.isArray(parsed.lines) ? parsed.lines : [];
+      extractedLines = Array.isArray(parsed.lines) ? parsed.lines : extractJsonArray(JSON.stringify(parsed));
       supplierName = parsed.supplier_name ?? null;
       invoiceDate = parsed.invoice_date ?? null;
       invoiceTotal = parsed.invoice_total_aud ?? null;
     } else {
-      // All parsing strategies failed — return error so user knows something went wrong
-      console.error('[receipt-scan] Failed to parse Claude response:', text.slice(0, 1000));
+      console.error('[receipt-scan] Parse failed:', text.slice(0, 800));
       return NextResponse.json({
-        error: 'Aria could not read the invoice format. Try a clearer photo or a different angle.',
-        debug_hint: 'Claude returned unparseable content',
-      }, { status: 422 });
+        extracted_lines: [], supplier_name: null, invoice_date: null, invoice_total_aud: null, line_count: 0,
+        error: 'Aria could not read this invoice clearly. Try a photo with better lighting, or ensure the invoice text is clearly visible.',
+      });
     }
   } catch (err: any) {
     return NextResponse.json({ error: `Vision processing failed: ${err.message}` }, { status: 500 });

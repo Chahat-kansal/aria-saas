@@ -16,6 +16,7 @@ interface AiSummary {
 interface Forecast {
   items: ForecastItem[]; upcoming_holidays: Holiday[];
   ai_summary: AiSummary | null; generated_at: string; cached?: boolean;
+  no_data?: boolean; no_data_message?: string;
 }
 
 const URGENCY = {
@@ -35,11 +36,25 @@ function Skeleton() {
   );
 }
 
+function downloadCSV(items: ForecastItem[]) {
+  const rows = items.map(i => ({
+    Product: i.item_name, 'Current Stock': i.current_stock,
+    'Daily Sales': i.velocity_per_day.toFixed(2), 'Days Left': i.adjusted_days_remaining.toFixed(0),
+    'Suggested Order': i.suggested_order, Unit: i.unit, 'Order By': i.recommended_order_date, Urgency: i.urgency,
+  }));
+  const headers = Object.keys(rows[0]).join(',');
+  const csv = [headers, ...rows.map(r => Object.values(r).join(','))].join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+  a.download = 'reorder-list.csv'; a.click();
+}
+
 export default function ReorderPage() {
   const { business } = useBusinessContext();
   const [forecast, setForecast] = useState<Forecast | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [christmasMode, setChristmasMode] = useState(false);
 
   const load = useCallback(async (force = false) => {
     if (!business?.id) return;
@@ -79,6 +94,15 @@ export default function ReorderPage() {
       </div>
 
       {error && <div className="mb-4 px-4 py-3 rounded-xl text-sm bg-red-900/20 text-red-400">{error}</div>}
+
+      {/* No data state */}
+      {forecast?.no_data && (
+        <div className="rounded-xl p-10 text-center" style={{ background: '#13131a', border: '1px solid rgba(255,255,255,0.07)' }}>
+          <div className="text-3xl mb-3">📊</div>
+          <p className="text-white font-semibold mb-1">Not enough data yet</p>
+          <p className="text-sm" style={{ color: '#6b7280' }}>{forecast.no_data_message}</p>
+        </div>
+      )}
 
       {loading && !forecast && (
         <div>
@@ -145,14 +169,31 @@ export default function ReorderPage() {
             </div>
           ) : (
             <div>
-              <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
                 <h2 className="text-sm font-semibold text-white">{forecast.items.length} item{forecast.items.length !== 1 ? 's' : ''} to reorder</h2>
-                <button onClick={() => window.print()}
-                  className="text-xs px-3 py-1.5 rounded-lg transition-colors"
-                  style={{ color: 'rgba(255,255,255,0.4)', border: '1px solid rgba(255,255,255,0.08)' }}>
-                  Print order list
-                </button>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => setChristmasMode(m => !m)}
+                    className={`text-xs px-3 py-1.5 rounded-lg transition-colors ${christmasMode ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'border border-[rgba(255,255,255,0.08)]'}`}
+                    style={christmasMode ? {} : { color: 'rgba(255,255,255,0.4)' }}>
+                    🎄 Christmas scenario
+                  </button>
+                  <button onClick={() => downloadCSV(forecast.items)}
+                    className="text-xs px-3 py-1.5 rounded-lg transition-colors"
+                    style={{ color: 'rgba(255,255,255,0.4)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                    ↓ Download CSV
+                  </button>
+                  <button onClick={() => window.print()}
+                    className="text-xs px-3 py-1.5 rounded-lg transition-colors"
+                    style={{ color: 'rgba(255,255,255,0.4)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                    Print
+                  </button>
+                </div>
               </div>
+              {christmasMode && (
+                <div className="mb-3 px-4 py-2 rounded-xl text-xs" style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', color: '#fca5a5' }}>
+                  🎄 Christmas scenario: showing order quantities with ×2.0 holiday uplift applied to all items
+                </div>
+              )}
               <div className="rounded-xl overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.07)' }}>
                 <table className="w-full text-sm">
                   <thead>
@@ -165,6 +206,7 @@ export default function ReorderPage() {
                   <tbody style={{ background: '#0d0d14' }}>
                     {forecast.items.map(item => {
                       const u = URGENCY[item.urgency];
+                      const xmasOrder = christmasMode ? Math.ceil(item.velocity_per_day * 2.0 * 14 - item.current_stock) : null;
                       return (
                         <tr key={item.item_id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
                           <td className="px-3 py-3 text-white font-medium max-w-[160px] truncate">{item.item_name}</td>
@@ -173,13 +215,17 @@ export default function ReorderPage() {
                           <td className="px-3 py-3" style={{ color: item.adjusted_days_remaining <= 3 ? '#ef4444' : item.adjusted_days_remaining <= 7 ? '#f59e0b' : '#9ca3af' }}>
                             {item.adjusted_days_remaining.toFixed(0)}d
                           </td>
-                          <td className="px-3 py-3 text-xs" style={{ color: item.holiday_uplift > 1 ? '#f59e0b' : '#4b5563' }}>
-                            {item.holiday_uplift > 1 ? `×${item.holiday_uplift.toFixed(1)}` : '—'}
+                          <td className="px-3 py-3 text-xs" style={{ color: christmasMode ? '#ef4444' : item.holiday_uplift > 1 ? '#f59e0b' : '#4b5563' }}>
+                            {christmasMode ? '×2.0 🎄' : item.holiday_uplift > 1 ? `×${item.holiday_uplift.toFixed(1)}` : '—'}
                           </td>
                           <td className="px-3 py-3">
-                            <span className={`font-bold ${item.urgency === 'critical' ? 'text-red-400' : item.urgency === 'high' ? 'text-amber-400' : 'text-white'}`}>
-                              {item.suggested_order} {item.unit}
-                            </span>
+                            {christmasMode && xmasOrder !== null ? (
+                              <span className="font-bold text-red-400">{Math.max(0, xmasOrder)} {item.unit} <span className="text-xs text-red-400/60">(was {item.suggested_order})</span></span>
+                            ) : (
+                              <span className={`font-bold ${item.urgency === 'critical' ? 'text-red-400' : item.urgency === 'high' ? 'text-amber-400' : 'text-white'}`}>
+                                {item.suggested_order} {item.unit}
+                              </span>
+                            )}
                           </td>
                           <td className="px-3 py-3 text-xs" style={{ color: '#9ca3af' }}>{item.recommended_order_date}</td>
                           <td className="px-3 py-3">

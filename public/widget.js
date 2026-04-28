@@ -1,23 +1,22 @@
 (function () {
   'use strict';
 
-  // ── Read config from script tag ──────────────────────────────────
   var currentScript = document.currentScript || (function () {
-    var scripts = document.getElementsByTagName('script');
-    return scripts[scripts.length - 1];
+    var s = document.getElementsByTagName('script');
+    return s[s.length - 1];
   })();
 
   var API_KEY = currentScript.getAttribute('data-key');
   var BASE_URL = (function () {
     var src = currentScript.getAttribute('src') || '';
-    var match = src.match(/^(https?:\/\/[^/]+)/);
-    return match ? match[1] : '';
+    var m = src.match(/^(https?:\/\/[^/]+)/);
+    return m ? m[1] : '';
   })();
 
   if (!API_KEY || !BASE_URL) return;
 
-  // ── Visitor ID (persisted for session) ──────────────────────────
-  var VISITOR_KEY = 'aria_widget_visitor_' + API_KEY;
+  // ── Visitor ID ───────────────────────────────────────────────────
+  var VISITOR_KEY = 'aria_widget_v_' + API_KEY;
   var visitorId;
   try {
     visitorId = sessionStorage.getItem(VISITOR_KEY);
@@ -26,7 +25,6 @@
       sessionStorage.setItem(VISITOR_KEY, visitorId);
     }
   } catch (e) {
-    // sessionStorage unavailable (about:blank, sandboxed iframe, etc.) — use in-memory ID
     visitorId = 'v_' + Math.random().toString(36).slice(2) + Date.now().toString(36);
   }
 
@@ -34,319 +32,276 @@
   var config = null;
   var isOpen = false;
   var isLoading = false;
-  var conversationHistory = [];
+  var history = [];
+  var shadow = null;
 
-  // ── Fetch config ─────────────────────────────────────────────────
+  // ── Load config ──────────────────────────────────────────────────
   fetch(BASE_URL + '/api/widget/config?key=' + encodeURIComponent(API_KEY))
     .then(function (r) { return r.json(); })
-    .then(function (data) {
-      if (!data.enabled) return;
-      config = data;
-      injectWidget();
+    .then(function (d) {
+      if (!d || !d.enabled) return;
+      config = d;
+      inject();
+      setTimeout(showBubbleHint, 5000);
     })
     .catch(function () {});
 
-  // ── Inject Shadow DOM ────────────────────────────────────────────
-  function injectWidget() {
+  // ── Shadow DOM inject ────────────────────────────────────────────
+  function inject() {
     var host = document.createElement('div');
     host.id = 'aria-widget-host';
-    host.style.cssText = 'position:fixed;bottom:24px;right:24px;z-index:2147483647;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;';
+    host.style.cssText = 'position:fixed;bottom:0;right:0;z-index:2147483647;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;';
     document.body.appendChild(host);
+    shadow = host.attachShadow({ mode: 'open' });
 
-    var shadow = host.attachShadow({ mode: 'open' });
+    var color = config.primary_color || '#1D9E75';
+    var botName = config.bot_name || 'Aria';
+    var greeting = config.greeting || 'Hi! How can I help you today?';
 
-    var style = document.createElement('style');
-    style.textContent = getStyles();
-    shadow.appendChild(style);
+    shadow.innerHTML = '<style>' + css(color) + '</style>' + html(color, botName, greeting);
 
-    var container = document.createElement('div');
-    container.id = 'container';
-    shadow.appendChild(container);
-
-    renderBubble(shadow);
+    shadow.getElementById('aria-btn').addEventListener('click', togglePanel);
+    shadow.getElementById('aria-close').addEventListener('click', closePanel);
+    shadow.getElementById('aria-send').addEventListener('click', sendMessage);
+    shadow.getElementById('aria-input').addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+    });
+    shadow.getElementById('aria-hint-close').addEventListener('click', function (e) {
+      e.stopPropagation();
+      hideHint();
+    });
+    shadow.getElementById('aria-hint').addEventListener('click', function () {
+      hideHint();
+      openPanel();
+    });
   }
 
-  // ── Render chat bubble ───────────────────────────────────────────
-  function renderBubble(shadow) {
-    var container = shadow.getElementById('container');
-    container.innerHTML = '';
-
-    var bubble = document.createElement('button');
-    bubble.id = 'bubble';
-    bubble.setAttribute('aria-label', 'Open chat');
-    bubble.style.background = config.primary_color;
-    bubble.innerHTML = CHAT_ICON;
-    bubble.addEventListener('click', function () { openPanel(shadow); });
-    container.appendChild(bubble);
+  function css(color) {
+    return '*{box-sizing:border-box;margin:0;padding:0}' +
+      '.btn{position:fixed;bottom:24px;right:24px;width:56px;height:56px;border-radius:50%;background:' + color + ';border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 20px rgba(0,0,0,.25);transition:transform .2s,box-shadow .2s}' +
+      '.btn:hover{transform:scale(1.08);box-shadow:0 6px 28px rgba(0,0,0,.3)}' +
+      '.btn svg{width:24px;height:24px;fill:none;stroke:#fff;stroke-width:2}' +
+      '.badge{position:absolute;top:-2px;right:-2px;width:18px;height:18px;border-radius:50%;background:#ef4444;color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;display:none}' +
+      '.hint{position:fixed;bottom:90px;right:24px;background:#fff;border-radius:12px;padding:10px 14px 10px 12px;box-shadow:0 4px 20px rgba(0,0,0,.15);max-width:220px;font-size:13px;color:#111;display:none;cursor:pointer;animation:hintin .3s ease}' +
+      '.hint span{display:block;line-height:1.4}' +
+      '.hint-x{position:absolute;top:6px;right:8px;background:none;border:none;cursor:pointer;color:#999;font-size:16px;line-height:1;padding:0}' +
+      '@keyframes hintin{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}' +
+      '.panel{position:fixed;bottom:90px;right:24px;width:380px;height:560px;background:#fff;border-radius:16px;box-shadow:0 8px 40px rgba(0,0,0,.18);display:none;flex-direction:column;overflow:hidden;animation:panelin .25s ease}' +
+      '@keyframes panelin{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}' +
+      '@media(max-width:640px){.panel{width:100vw;height:70vh;bottom:0;right:0;border-radius:16px 16px 0 0}}' +
+      '.head{background:' + color + ';padding:14px 16px;display:flex;align-items:center;gap:10px;flex-shrink:0}' +
+      '.avatar{width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.25);display:flex;align-items:center;justify-content:center;color:#fff;font-size:15px;font-weight:700;flex-shrink:0}' +
+      '.head-info{flex:1;min-width:0}' +
+      '.head-name{color:#fff;font-size:14px;font-weight:600;line-height:1.2}' +
+      '.head-status{display:flex;align-items:center;gap:4px;margin-top:2px}' +
+      '.status-dot{width:7px;height:7px;border-radius:50%;background:#86efac}' +
+      '.head-status span{color:rgba(255,255,255,.75);font-size:11px}' +
+      '.close-btn{background:rgba(255,255,255,.2);border:none;border-radius:8px;padding:6px;cursor:pointer;color:#fff;display:flex;align-items:center;justify-content:center}' +
+      '.close-btn:hover{background:rgba(255,255,255,.3)}' +
+      '.msgs{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:10px;scroll-behavior:smooth}' +
+      '.msgs::-webkit-scrollbar{width:4px}.msgs::-webkit-scrollbar-thumb{background:#e5e7eb;border-radius:2px}' +
+      '.msg{display:flex;gap:8px;max-width:88%}' +
+      '.msg.user{align-self:flex-end;flex-direction:row-reverse}' +
+      '.bubble{padding:10px 13px;border-radius:16px;font-size:13px;line-height:1.5;color:#111}' +
+      '.msg.bot .bubble{background:#f3f4f6;border-radius:4px 16px 16px 16px}' +
+      '.msg.user .bubble{background:' + color + ';color:#fff;border-radius:16px 4px 16px 16px}' +
+      '.typing{display:flex;align-items:center;gap:4px;padding:12px 14px;background:#f3f4f6;border-radius:4px 16px 16px 16px}' +
+      '.dot{width:7px;height:7px;border-radius:50%;background:#9ca3af;animation:bounce 1.2s infinite}' +
+      '.dot:nth-child(2){animation-delay:.2s}.dot:nth-child(3){animation-delay:.4s}' +
+      '@keyframes bounce{0%,80%,100%{transform:scale(.8);opacity:.5}40%{transform:scale(1.1);opacity:1}}' +
+      '.suggestions{display:flex;flex-wrap:wrap;gap:6px;padding:0 16px 12px}' +
+      '.sug{background:#f3f4f6;border:1px solid #e5e7eb;border-radius:20px;padding:6px 12px;font-size:12px;color:#374151;cursor:pointer;white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis;transition:background .15s}' +
+      '.sug:hover{background:' + color + '20;border-color:' + color + ';color:' + color + '}' +
+      '.footer-input{padding:12px 16px;border-top:1px solid #f0f0f0;display:flex;gap:8px;align-items:flex-end;flex-shrink:0}' +
+      '.input-wrap{flex:1;background:#f9fafb;border:1.5px solid #e5e7eb;border-radius:12px;display:flex;align-items:center;padding:8px 12px;gap:8px;transition:border-color .15s}' +
+      '.input-wrap:focus-within{border-color:' + color + '}' +
+      '.input{flex:1;border:none;background:none;font-size:13px;color:#111;outline:none;resize:none;max-height:80px;min-height:20px;line-height:1.4}' +
+      '.input::placeholder{color:#9ca3af}' +
+      '.send{width:34px;height:34px;border-radius:10px;background:' + color + ';border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:opacity .15s}' +
+      '.send:hover{opacity:.85}.send:disabled{opacity:.4;cursor:not-allowed}' +
+      '.send svg{width:15px;height:15px;fill:none;stroke:#fff;stroke-width:2}' +
+      '.powered{text-align:center;padding:4px 0 8px;font-size:10px;color:#c4c4c4}' +
+      '.powered a{color:#c4c4c4;text-decoration:none}';
   }
 
-  // ── Open chat panel ──────────────────────────────────────────────
-  function openPanel(shadow) {
-    if (isOpen) return;
-    isOpen = true;
-
-    var container = shadow.getElementById('container');
-    container.innerHTML = '';
-
-    // Panel
-    var panel = document.createElement('div');
-    panel.id = 'panel';
-
-    // Header
-    var header = document.createElement('div');
-    header.id = 'header';
-    header.style.background = config.primary_color;
-    header.innerHTML =
-      '<div class="header-inner">' +
-        '<div class="avatar" style="background:rgba(255,255,255,0.2)">' +
-          escapeHtml((config.bot_name || 'A').charAt(0).toUpperCase()) +
+  function html(color, botName, greeting) {
+    var initials = botName.charAt(0).toUpperCase();
+    return '<div class="hint" id="aria-hint"><button class="hint-x" id="aria-hint-close">×</button><span>👋 Hi! Ask me anything about us</span></div>' +
+      '<button class="btn" id="aria-btn" aria-label="Open chat">' +
+        '<div class="badge" id="aria-badge">1</div>' +
+        '<svg viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/></svg>' +
+      '</button>' +
+      '<div class="panel" id="aria-panel">' +
+        '<div class="head">' +
+          '<div class="avatar">' + initials + '</div>' +
+          '<div class="head-info"><div class="head-name">' + esc(botName) + '</div><div class="head-status"><div class="status-dot"></div><span>Online</span></div></div>' +
+          '<button class="close-btn" id="aria-close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path stroke-linecap="round" d="M18 6L6 18M6 6l12 12"/></svg></button>' +
         '</div>' +
-        '<div class="header-text">' +
-          '<div class="bot-name">' + escapeHtml(config.bot_name || 'Aria') + '</div>' +
-          '<div class="bot-status">● Online</div>' +
+        '<div class="msgs" id="aria-msgs"></div>' +
+        '<div class="suggestions" id="aria-suggestions"></div>' +
+        '<div class="footer-input">' +
+          '<div class="input-wrap"><textarea class="input" id="aria-input" placeholder="Ask a question…" rows="1"></textarea></div>' +
+          '<button class="send" id="aria-send" aria-label="Send"><svg viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg></button>' +
         '</div>' +
-        '<button id="close-btn" aria-label="Close chat">' + CLOSE_ICON + '</button>' +
+        '<div class="powered">Powered by <a href="https://aria.com.au" target="_blank">Aria</a></div>' +
       '</div>';
-    panel.appendChild(header);
-
-    // Messages
-    var messages = document.createElement('div');
-    messages.id = 'messages';
-    panel.appendChild(messages);
-
-    // Input area
-    var inputArea = document.createElement('div');
-    inputArea.id = 'input-area';
-    inputArea.innerHTML =
-      '<input id="msg-input" type="text" placeholder="Type a message…" autocomplete="off" />' +
-      '<button id="send-btn" style="background:' + config.primary_color + '">' + SEND_ICON + '</button>';
-    panel.appendChild(inputArea);
-
-    // Powered by
-    var footer = document.createElement('div');
-    footer.id = 'powered';
-    footer.innerHTML = 'Powered by <a href="https://getaria.com.au" target="_blank" rel="noopener">Aria</a>';
-    panel.appendChild(footer);
-
-    container.appendChild(panel);
-
-    // Events
-    shadow.getElementById('close-btn').addEventListener('click', function () {
-      closePanel(shadow);
-    });
-
-    var input = shadow.getElementById('msg-input');
-    shadow.getElementById('send-btn').addEventListener('click', function () {
-      sendMessage(shadow);
-    });
-    input.addEventListener('keydown', function (e) {
-      if (e.key === 'Enter') sendMessage(shadow);
-    });
-
-    // Show greeting
-    if (conversationHistory.length === 0) {
-      appendMessage(shadow, 'assistant', config.greeting || 'Hi! How can I help you today?');
-    } else {
-      // Re-render existing history
-      conversationHistory.forEach(function (m) {
-        appendMessage(shadow, m.role, m.content, true);
-      });
-    }
-
-    input.focus();
-
-    // Animate in
-    requestAnimationFrame(function () {
-      panel.classList.add('open');
-    });
   }
 
-  // ── Close panel ──────────────────────────────────────────────────
-  function closePanel(shadow) {
-    isOpen = false;
-    var container = shadow.getElementById('container');
-    var panel = shadow.getElementById('panel');
-    if (panel) {
-      panel.classList.remove('open');
-      setTimeout(function () { renderBubble(shadow); }, 250);
-    } else {
-      renderBubble(shadow);
+  // ── UI helpers ───────────────────────────────────────────────────
+  function esc(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  function showBubbleHint() {
+    var hint = shadow && shadow.getElementById('aria-hint');
+    if (hint && !isOpen) {
+      hint.style.display = 'block';
+      setTimeout(hideHint, 8000);
     }
+  }
+  function hideHint() {
+    var hint = shadow && shadow.getElementById('aria-hint');
+    if (hint) hint.style.display = 'none';
+  }
+
+  function togglePanel() { isOpen ? closePanel() : openPanel(); }
+
+  function openPanel() {
+    isOpen = true;
+    hideHint();
+    var panel = shadow.getElementById('aria-panel');
+    panel.style.display = 'flex';
+    var input = shadow.getElementById('aria-input');
+    setTimeout(function () { input && input.focus(); }, 100);
+    if (shadow.getElementById('aria-msgs').children.length === 0) {
+      addBotMessage(config.greeting || 'Hi! How can I help you today?');
+      showSuggestions(['What are your opening hours?', 'What products do you have?', 'How can I contact you?']);
+    }
+    scrollToBottom();
+  }
+
+  function closePanel() {
+    isOpen = false;
+    var panel = shadow.getElementById('aria-panel');
+    panel.style.display = 'none';
+  }
+
+  function scrollToBottom() {
+    var msgs = shadow.getElementById('aria-msgs');
+    if (msgs) setTimeout(function () { msgs.scrollTop = msgs.scrollHeight; }, 50);
+  }
+
+  function addBotMessage(text) {
+    var msgs = shadow.getElementById('aria-msgs');
+    var div = document.createElement('div');
+    div.className = 'msg bot';
+    div.innerHTML = '<div class="bubble">' + esc(text).replace(/\n/g, '<br>') + '</div>';
+    msgs.appendChild(div);
+    scrollToBottom();
+  }
+
+  function addUserMessage(text) {
+    var msgs = shadow.getElementById('aria-msgs');
+    var div = document.createElement('div');
+    div.className = 'msg user';
+    div.innerHTML = '<div class="bubble">' + esc(text) + '</div>';
+    msgs.appendChild(div);
+    scrollToBottom();
+  }
+
+  function showTyping() {
+    var msgs = shadow.getElementById('aria-msgs');
+    var div = document.createElement('div');
+    div.className = 'msg bot';
+    div.id = 'aria-typing';
+    div.innerHTML = '<div class="typing"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>';
+    msgs.appendChild(div);
+    scrollToBottom();
+    return div;
+  }
+
+  function removeTyping() {
+    var t = shadow.getElementById('aria-typing');
+    if (t) t.remove();
+  }
+
+  function showSuggestions(questions) {
+    var sug = shadow.getElementById('aria-suggestions');
+    sug.innerHTML = '';
+    (questions || []).slice(0, 3).forEach(function (q) {
+      var btn = document.createElement('button');
+      btn.className = 'sug';
+      btn.textContent = q;
+      btn.addEventListener('click', function () {
+        sug.innerHTML = '';
+        handleSend(q);
+      });
+      sug.appendChild(btn);
+    });
   }
 
   // ── Send message ─────────────────────────────────────────────────
-  function sendMessage(shadow) {
-    if (isLoading) return;
-    var input = shadow.getElementById('msg-input');
+  function sendMessage() {
+    var input = shadow.getElementById('aria-input');
     var text = (input.value || '').trim();
-    if (!text) return;
-
+    if (!text || isLoading) return;
     input.value = '';
-    appendMessage(shadow, 'user', text);
+    input.style.height = '';
+    shadow.getElementById('aria-suggestions').innerHTML = '';
+    handleSend(text);
+  }
 
-    // Remove suggested chips
-    var chips = shadow.getElementById('chips');
-    if (chips) chips.remove();
-
-    conversationHistory.push({ role: 'user', content: text });
-
-    showTyping(shadow);
+  function handleSend(text) {
+    addUserMessage(text);
+    history.push({ role: 'user', content: text });
     isLoading = true;
+    shadow.getElementById('aria-send').disabled = true;
+    var typingEl = showTyping();
 
     fetch(BASE_URL + '/api/widget/chat', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-widget-key': API_KEY,
-      },
+      headers: { 'Content-Type': 'application/json', 'x-widget-key': API_KEY },
       body: JSON.stringify({
         message: text,
-        conversation_history: conversationHistory.slice(-10),
+        conversation_history: history.slice(-12),
         visitor_id: visitorId,
       }),
     })
       .then(function (r) { return r.json(); })
-      .then(function (data) {
-        hideTyping(shadow);
-        isLoading = false;
-        var reply = data.reply || 'Sorry, something went wrong.';
-        appendMessage(shadow, 'assistant', reply);
-        conversationHistory.push({ role: 'assistant', content: reply });
-
-        if (data.suggested_questions && data.suggested_questions.length > 0) {
-          showSuggestions(shadow, data.suggested_questions);
+      .then(function (d) {
+        removeTyping();
+        if (d.error) {
+          addBotMessage('Sorry, I\'m having trouble right now. Please call us directly.');
+        } else {
+          var reply = d.reply || '';
+          addBotMessage(reply);
+          history.push({ role: 'assistant', content: reply });
+          if (d.suggested_questions && d.suggested_questions.length > 0) {
+            showSuggestions(d.suggested_questions);
+          }
         }
       })
       .catch(function () {
-        hideTyping(shadow);
+        removeTyping();
+        addBotMessage('Sorry, I\'m having trouble connecting. Please call us or visit us in store.');
+      })
+      .finally(function () {
         isLoading = false;
-        appendMessage(shadow, 'assistant', 'Sorry, I\'m having trouble connecting. Please try again.');
+        shadow.getElementById('aria-send').disabled = false;
+        scrollToBottom();
       });
   }
 
-  // ── Append message bubble ────────────────────────────────────────
-  function appendMessage(shadow, role, text, noScroll) {
-    var messages = shadow.getElementById('messages');
-    if (!messages) return;
-
-    var row = document.createElement('div');
-    row.className = 'msg-row ' + (role === 'user' ? 'msg-user' : 'msg-bot');
-
-    var bubble = document.createElement('div');
-    bubble.className = 'msg-bubble';
-    if (role === 'user') {
-      bubble.style.background = config.primary_color;
-    }
-    bubble.textContent = text;
-
-    row.appendChild(bubble);
-    messages.appendChild(row);
-
-    if (!noScroll) {
-      messages.scrollTop = messages.scrollHeight;
-    }
-  }
-
-  // ── Typing indicator ─────────────────────────────────────────────
-  function showTyping(shadow) {
-    var messages = shadow.getElementById('messages');
-    if (!messages) return;
-    var row = document.createElement('div');
-    row.className = 'msg-row msg-bot';
-    row.id = 'typing-indicator';
-    row.innerHTML = '<div class="msg-bubble typing"><span></span><span></span><span></span></div>';
-    messages.appendChild(row);
-    messages.scrollTop = messages.scrollHeight;
-  }
-
-  function hideTyping(shadow) {
-    var el = shadow.getElementById('typing-indicator');
-    if (el) el.remove();
-  }
-
-  // ── Suggested follow-up chips ────────────────────────────────────
-  function showSuggestions(shadow, questions) {
-    var messages = shadow.getElementById('messages');
-    if (!messages) return;
-
-    var chips = document.createElement('div');
-    chips.id = 'chips';
-    chips.className = 'chips';
-
-    questions.slice(0, 3).forEach(function (q) {
-      var chip = document.createElement('button');
-      chip.className = 'chip';
-      chip.style.borderColor = config.primary_color;
-      chip.style.color = config.primary_color;
-      chip.textContent = q;
-      chip.addEventListener('click', function () {
-        shadow.getElementById('msg-input').value = q;
-        sendMessage(shadow);
-      });
-      chips.appendChild(chip);
+  // Auto-resize textarea
+  document.addEventListener('DOMContentLoaded', function () {});
+  // Use event delegation after shadow DOM ready
+  setTimeout(function () {
+    var input = shadow && shadow.getElementById('aria-input');
+    if (!input) return;
+    input.addEventListener('input', function () {
+      this.style.height = 'auto';
+      this.style.height = Math.min(this.scrollHeight, 80) + 'px';
     });
+  }, 500);
 
-    messages.appendChild(chips);
-    messages.scrollTop = messages.scrollHeight;
-  }
-
-  // ── Escape HTML ──────────────────────────────────────────────────
-  function escapeHtml(str) {
-    return String(str)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
-  }
-
-  // ── SVG Icons ────────────────────────────────────────────────────
-  var CHAT_ICON = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" stroke="white" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/></svg>';
-  var CLOSE_ICON = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" stroke="white" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
-  var SEND_ICON = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="white" viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>';
-
-  // ── Styles ───────────────────────────────────────────────────────
-  function getStyles() {
-    return [
-      '#bubble{width:56px;height:56px;border-radius:50%;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 20px rgba(0,0,0,0.25);transition:transform .2s,box-shadow .2s;}',
-      '#bubble:hover{transform:scale(1.08);box-shadow:0 6px 28px rgba(0,0,0,0.3);}',
-      '#panel{position:absolute;bottom:70px;right:0;width:380px;height:520px;background:#fff;border-radius:16px;box-shadow:0 8px 40px rgba(0,0,0,0.18);display:flex;flex-direction:column;overflow:hidden;opacity:0;transform:translateY(16px) scale(0.97);transition:opacity .22s ease,transform .22s ease;pointer-events:none;}',
-      '#panel.open{opacity:1;transform:translateY(0) scale(1);pointer-events:all;}',
-      '#header{flex-shrink:0;padding:14px 16px;}',
-      '.header-inner{display:flex;align-items:center;gap:10px;}',
-      '.avatar{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:#fff;flex-shrink:0;}',
-      '.header-text{flex:1;min-width:0;}',
-      '.bot-name{font-size:14px;font-weight:600;color:#fff;line-height:1.2;}',
-      '.bot-status{font-size:11px;color:rgba(255,255,255,0.75);margin-top:1px;}',
-      '#close-btn{background:rgba(255,255,255,0.15);border:none;border-radius:8px;width:30px;height:30px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background .15s;}',
-      '#close-btn:hover{background:rgba(255,255,255,0.25);}',
-      '#messages{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:10px;scroll-behavior:smooth;}',
-      '#messages::-webkit-scrollbar{width:4px;}',
-      '#messages::-webkit-scrollbar-track{background:transparent;}',
-      '#messages::-webkit-scrollbar-thumb{background:#e0e0e0;border-radius:4px;}',
-      '.msg-row{display:flex;}',
-      '.msg-user{justify-content:flex-end;}',
-      '.msg-bot{justify-content:flex-start;}',
-      '.msg-bubble{max-width:78%;padding:9px 13px;border-radius:16px;font-size:13px;line-height:1.5;color:#1a1a1a;background:#f0f0f0;word-wrap:break-word;}',
-      '.msg-user .msg-bubble{color:#fff;border-radius:16px 16px 4px 16px;}',
-      '.msg-bot .msg-bubble{border-radius:16px 16px 16px 4px;}',
-      '.typing{display:flex;align-items:center;gap:4px;padding:12px 14px;}',
-      '.typing span{width:7px;height:7px;border-radius:50%;background:#bbb;animation:bounce 1.2s infinite;}',
-      '.typing span:nth-child(2){animation-delay:.2s;}',
-      '.typing span:nth-child(3){animation-delay:.4s;}',
-      '@keyframes bounce{0%,60%,100%{transform:translateY(0);}30%{transform:translateY(-6px);}}',
-      '.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px;}',
-      '.chip{background:#fff;border:1px solid;border-radius:20px;padding:5px 12px;font-size:12px;cursor:pointer;transition:background .15s,color .15s;white-space:nowrap;}',
-      '.chip:hover{opacity:0.8;}',
-      '#input-area{flex-shrink:0;padding:10px 12px;border-top:1px solid #f0f0f0;display:flex;align-items:center;gap:8px;}',
-      '#msg-input{flex:1;border:1px solid #e8e8e8;border-radius:10px;padding:8px 12px;font-size:13px;outline:none;color:#1a1a1a;transition:border-color .15s;font-family:inherit;}',
-      '#msg-input:focus{border-color:#999;}',
-      '#msg-input::placeholder{color:#aaa;}',
-      '#send-btn{width:34px;height:34px;border:none;border-radius:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:opacity .15s;}',
-      '#send-btn:hover{opacity:0.85;}',
-      '#powered{flex-shrink:0;text-align:center;padding:6px;font-size:10px;color:#bbb;}',
-      '#powered a{color:#bbb;text-decoration:none;}',
-      '#powered a:hover{color:#888;}',
-      '@media(max-width:480px){#panel{width:calc(100vw - 24px);bottom:76px;right:0;height:480px;}}',
-    ].join('');
-  }
 })();

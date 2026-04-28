@@ -18,6 +18,7 @@ interface WidgetConfig {
   faqs: FAQ[];
   guardrails: string;
   escalation_message: string;
+  allowed_domain?: string;
 }
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -32,6 +33,7 @@ const DEFAULT_CONFIG: WidgetConfig = {
   faqs: [],
   guardrails: '',
   escalation_message: 'Please contact us directly for more information.',
+  allowed_domain: '',
 };
 
 export default function WebsiteChatPage() {
@@ -63,6 +65,7 @@ export default function WebsiteChatPage() {
         faqs: (data.faqs as FAQ[]) ?? [],
         guardrails: data.guardrails ?? '',
         escalation_message: data.escalation_message ?? DEFAULT_CONFIG.escalation_message,
+        allowed_domain: data.allowed_domain ?? '',
       });
     }
   }, [business?.id]);
@@ -83,6 +86,7 @@ export default function WebsiteChatPage() {
       faqs: config.faqs,
       guardrails: config.guardrails,
       escalation_message: config.escalation_message,
+      allowed_domain: config.allowed_domain || null,
       updated_at: new Date().toISOString(),
     };
 
@@ -301,6 +305,21 @@ export default function WebsiteChatPage() {
               placeholder="Please call us on 0400 000 000"
             />
           </Field>
+        </Section>
+
+        {/* Domain whitelist */}
+        <Section title="Security">
+          <Field label="Allowed domain (optional)">
+            <input
+              value={config.allowed_domain ?? ''}
+              onChange={e => setConfig(c => ({ ...c, allowed_domain: e.target.value }))}
+              className="input-dark"
+              placeholder="e.g. mybottleshop.com.au"
+            />
+          </Field>
+          <p className="text-[11px] text-[rgba(255,255,255,0.3)] mt-1">
+            If set, the chatbot will only respond to requests from this domain. Leave blank to allow all origins.
+          </p>
         </Section>
 
         {/* Save */}

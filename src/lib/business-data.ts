@@ -232,3 +232,67 @@ export async function getBusinessCustomers(
     };
   });
 }
+
+export interface VarianceItem {
+  item_id: string;
+  item_name: string;
+  theoretical_stock: number;
+  actual_stock: number;
+  variance: number;
+  variance_value_cents: number;
+  variance_pct: number;
+}
+
+export async function calculateVariance(
+  businessId: string,
+  dataSource: DataSource
+): Promise<VarianceItem[]> {
+  const supabase = createServerSupabaseClient();
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+  const [items, sales, movements] = await Promise.all([
+    getBusinessItems(businessId, dataSource),
+    getBusinessSales(businessId, thirtyDaysAgo, dataSource),
+    supabase.from('stock_movements')
+      .select('item_id, quantity_added')
+      .eq('business_id', businessId)
+      .eq('movement_type', 'receipt_scan')
+      .gte('scanned_at', thirtyDaysAgo.toISOString()),
+  ]);
+
+  // Units received per item (last 30 days)
+  const received: Record<string, number> = {};
+  for (const mv of movements.data ?? []) {
+    received[mv.item_id] = (received[mv.item_id] ?? 0) + mv.quantity_added;
+  }
+
+  // Units sold per item (last 30 days)
+  const sold: Record<string, number> = {};
+  for (const sale of sales) {
+    for (const li of sale.lineItems) {
+      sold[li.itemId] = (sold[li.itemId] ?? 0) + li.quantity;
+    }
+  }
+
+  return items
+    .map(item => {
+      const recv = received[item.id] ?? 0;
+      const soldQty = sold[item.id] ?? sold[item.externalId] ?? 0;
+      // Derive opening stock: current + sold - received
+      const openingStock = item.currentStock + soldQty - recv;
+      const theoretical = openingStock + recv - soldQty;
+      const variance = theoretical - item.currentStock;
+      if (Math.abs(variance) < 1) return null;
+      return {
+        item_id: item.id,
+        item_name: item.name,
+        theoretical_stock: theoretical,
+        actual_stock: item.currentStock,
+        variance,
+        variance_value_cents: Math.abs(variance) * item.costCents,
+        variance_pct: theoretical > 0 ? Math.round((variance / theoretical) * 100) : 0,
+      };
+    })
+    .filter((v): v is VarianceItem => v !== null)
+    .sort((a, b) => b.variance_value_cents - a.variance_value_cents);
+}
