@@ -1,19 +1,103 @@
+'use client';
+import { useState, useEffect, useCallback } from 'react';
+
+interface Group { id: string; name: string; description: string | null; discount_percent: number | null; customer_count: number; }
+
 export default function CustomerGroupsPage() {
+  const [groups, setGroups] = useState<Group[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showAdd, setShowAdd] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [form, setForm] = useState({ name: '', description: '', discount_percent: '' });
+
+  const load = useCallback(() => {
+    fetch('/api/pos/customer-groups').then(r => r.json()).then(d => { setGroups(d.groups ?? []); setLoading(false); }).catch(() => setLoading(false));
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  async function save() {
+    if (!form.name) return;
+    setSaving(true);
+    const body = { name: form.name, description: form.description || null, discount_percent: form.discount_percent ? parseFloat(form.discount_percent) : null };
+    if (editId) {
+      await fetch(`/api/pos/customer-groups?id=${editId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    } else {
+      await fetch('/api/pos/customer-groups', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    }
+    setSaving(false); setShowAdd(false); setEditId(null);
+    setForm({ name: '', description: '', discount_percent: '' });
+    load();
+  }
+
+  async function deleteGroup(id: string) {
+    if (!confirm('Delete this customer group?')) return;
+    await fetch(`/api/pos/customer-groups?id=${id}`, { method: 'DELETE' });
+    load();
+  }
+
+  function startEdit(g: Group) {
+    setEditId(g.id);
+    setForm({ name: g.name, description: g.description ?? '', discount_percent: g.discount_percent ? String(g.discount_percent) : '' });
+    setShowAdd(true);
+  }
+
+  const inputCls = 'w-full px-3 py-2.5 rounded-xl text-sm border border-[rgba(0,0,0,.12)] outline-none';
+
   return (
-    <div className="p-6 max-w-2xl mx-auto">
-      <div className="mb-8">
-        <h1 className="text-xl font-semibold text-[#1a1a16]">Customer Groups</h1>
-        <p className="text-xs text-[rgba(26,26,22,.45)] mt-0.5">Segment customers into groups for targeted pricing and promotions</p>
+    <div className="p-6 max-w-4xl mx-auto">
+      <div className="mb-6 flex items-start justify-between gap-4">
+        <div><h1 className="text-xl font-semibold text-[#1a1a16]">Customer Groups</h1><p className="text-xs text-[rgba(26,26,22,.45)] mt-0.5">Segment customers and apply group discounts</p></div>
+        <button onClick={() => { setShowAdd(true); setEditId(null); setForm({ name: '', description: '', discount_percent: '' }); }} className="px-4 py-2 rounded-xl text-sm font-semibold text-white" style={{ background: '#1D9E75' }}>+ New Group</button>
       </div>
-      <div className="bg-white rounded-2xl border border-[rgba(0,0,0,.08)] shadow-sm p-12 text-center">
-        <div className="w-12 h-12 rounded-xl mx-auto mb-4 flex items-center justify-center" style={{ background: 'rgba(37,99,235,.08)' }}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-6 h-6 text-[#2563eb]">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 00-6.23-.693L5 14.5m14.8.8l1.402 1.402c1.232 1.232.65 3.318-1.067 3.611A48.309 48.309 0 0112 21c-2.773 0-5.491-.235-8.135-.687-1.718-.293-2.3-2.379-1.067-3.61L5 14.5"/>
-          </svg>
+
+      {loading ? (
+        <div className="space-y-2">{[...Array(3)].map((_, i) => <div key={i} className="h-16 bg-gray-100 rounded-xl animate-pulse" />)}</div>
+      ) : groups.length === 0 ? (
+        <div className="bg-white rounded-2xl border border-[rgba(0,0,0,.08)] p-12 text-center shadow-sm">
+          <p className="text-sm font-medium text-[#1a1a16] mb-1">No customer groups</p>
+          <p className="text-xs text-[rgba(26,26,22,.4)] mb-4">Create groups to segment customers and apply automatic discounts.</p>
+          <button onClick={() => setShowAdd(true)} className="px-4 py-2 rounded-xl text-sm font-semibold text-white" style={{ background: '#1D9E75' }}>Create first group</button>
         </div>
-        <p className="text-sm font-medium text-[#1a1a16] mb-1">Customer Groups</p>
-        <p className="text-xs text-[rgba(26,26,22,.4)]">This feature is coming soon</p>
-      </div>
+      ) : (
+        <div className="space-y-3">
+          {groups.map(g => (
+            <div key={g.id} className="bg-white rounded-2xl border border-[rgba(0,0,0,.08)] px-5 py-4 shadow-sm flex items-center gap-4">
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-[#1a1a16]">{g.name}</p>
+                {g.description && <p className="text-xs text-[rgba(26,26,22,.4)] mt-0.5">{g.description}</p>}
+              </div>
+              {g.discount_percent ? (
+                <span className="text-sm font-semibold px-3 py-1 rounded-full bg-green-100 text-green-700">{g.discount_percent}% off</span>
+              ) : (
+                <span className="text-xs text-[rgba(26,26,22,.3)]">No discount</span>
+              )}
+              <span className="text-xs text-[rgba(26,26,22,.35)]">{g.customer_count} customers</span>
+              <div className="flex items-center gap-2">
+                <button onClick={() => startEdit(g)} className="text-xs px-3 py-1.5 rounded-lg border border-[rgba(0,0,0,.1)] text-[rgba(26,26,22,.5)] hover:border-[rgba(0,0,0,.2)]">Edit</button>
+                <button onClick={() => deleteGroup(g.id)} className="text-xs px-3 py-1.5 rounded-lg text-red-500 hover:bg-red-50">Delete</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {showAdd && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-xl border border-[rgba(0,0,0,.08)]">
+            <div className="flex items-center justify-between mb-4"><h3 className="font-semibold text-[#1a1a16]">{editId ? 'Edit Group' : 'New Group'}</h3><button onClick={() => { setShowAdd(false); setEditId(null); }} className="text-gray-400">×</button></div>
+            <div className="space-y-3">
+              <div><label className="text-xs font-medium text-[rgba(26,26,22,.5)] mb-1 block">Name *</label><input value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} className={inputCls} placeholder="e.g. Wholesale Customers" /></div>
+              <div><label className="text-xs font-medium text-[rgba(26,26,22,.5)] mb-1 block">Description</label><input value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} className={inputCls} placeholder="Optional description" /></div>
+              <div><label className="text-xs font-medium text-[rgba(26,26,22,.5)] mb-1 block">Auto-discount % (applied at POS)</label><input type="number" min={0} max={100} value={form.discount_percent} onChange={e => setForm(p => ({ ...p, discount_percent: e.target.value }))} className={inputCls} placeholder="e.g. 10" /></div>
+            </div>
+            <div className="flex gap-2 mt-5">
+              <button onClick={() => { setShowAdd(false); setEditId(null); }} className="flex-1 py-2.5 rounded-xl text-sm border border-[rgba(0,0,0,.12)] text-[rgba(26,26,22,.5)]">Cancel</button>
+              <button onClick={save} disabled={saving || !form.name} className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-40" style={{ background: '#1D9E75' }}>{saving ? 'Saving…' : (editId ? 'Save' : 'Create')}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

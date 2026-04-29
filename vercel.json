@@ -32,7 +32,16 @@
     "src/app/api/warehouse/locations/bulk/route.ts": { "maxDuration": 30 },
     "src/app/api/warehouse/stock/adjust/route.ts": { "maxDuration": 15 },
     "src/app/api/warehouse/purchase-orders/create/route.ts": { "maxDuration": 15 },
-    "src/app/api/warehouse/suppliers/[id]/route.ts": { "maxDuration": 15 }
+    "src/app/api/warehouse/suppliers/[id]/route.ts": { "maxDuration": 15 },
+    "src/app/api/aria/pos-insight/route.ts": { "maxDuration": 30 },
+    "src/app/api/aria/pos-suggestions/route.ts": { "maxDuration": 15 },
+    "src/app/api/pos/sessions/route.ts": { "maxDuration": 15 },
+    "src/app/api/pos/reports/route.ts": { "maxDuration": 30 },
+    "src/app/api/pos/products/route.ts": { "maxDuration": 15 },
+    "src/app/api/pos/customers/route.ts": { "maxDuration": 15 },
+    "src/app/api/pos/gift-cards/route.ts": { "maxDuration": 15 },
+    "src/app/api/pos/promotions/route.ts": { "maxDuration": 15 },
+    "src/app/api/pos/settings/route.ts": { "maxDuration": 15 }
   },
   "crons": [
     {
