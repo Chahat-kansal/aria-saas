@@ -81,6 +81,21 @@ export default function TerminalPage() {
     }).catch(() => setLoading(false));
   }, []);
 
+  /* ── Sync cart to customer display (localStorage) ─────────── */
+  useEffect(() => {
+    try {
+      const displayState = {
+        business_name: 'AriaPOS',
+        cart: cart.map(i => ({ name: i.product.name, qty: i.qty, price: i.product.price })),
+        total: cart.reduce((s, i) => s + i.product.price * i.qty, 0),
+        customer_name: customer?.name ?? null,
+        status: showReceipt ? 'complete' : cart.length > 0 ? 'sale_in_progress' : 'idle',
+        complete_message: showReceipt ? `Thank you${customer ? `, ${customer.name}` : ''}!` : null,
+      };
+      localStorage.setItem('aria_pos_display_state', JSON.stringify(displayState));
+    } catch { /* ignore */ }
+  }, [cart, customer, showReceipt]);
+
   /* ── Barcode scanner (rapid keystrokes < 100ms) ────────────── */
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -471,6 +486,9 @@ export default function TerminalPage() {
             )}
           </div>
 
+          {/* AI Suggestions */}
+          <SuggestionsBar cart={cart} onAdd={addToCart} />
+
           {/* Totals */}
           <div className="border-t border-[rgba(0,0,0,0.07)] px-4 py-3 flex-shrink-0 space-y-1.5">
             <div className="flex justify-between text-xs text-[rgba(26,26,22,0.5)]">
@@ -620,6 +638,43 @@ export default function TerminalPage() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/* ─── AI suggestions bar ────────────────────────────────────────── */
+function SuggestionsBar({ cart, onAdd }: { cart: CartItem[]; onAdd: (p: Product) => void }) {
+  const [suggestions, setSuggestions] = useState<{ id: string; name: string; price: number }[]>([]);
+  const timerRef = useRef<ReturnType<typeof setTimeout>>();
+
+  useEffect(() => {
+    if (cart.length === 0) { setSuggestions([]); return; }
+    clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(async () => {
+      try {
+        const res = await fetch('/api/aria/pos-suggestions', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ cart_item_ids: cart.map(i => i.product.id) }),
+        }).then(r => r.json());
+        setSuggestions(res.suggestions ?? []);
+      } catch { /* silent */ }
+    }, 800);
+    return () => clearTimeout(timerRef.current);
+  }, [cart.map(i => i.product.id).join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (suggestions.length === 0) return null;
+
+  return (
+    <div className="px-4 py-2 border-t border-[rgba(0,0,0,0.05)] bg-[rgba(37,99,235,0.02)]">
+      <p className="text-[10px] text-[rgba(26,26,22,0.4)] mb-1.5">Often bought together</p>
+      <div className="flex gap-2 overflow-x-auto pb-1">
+        {suggestions.map(s => (
+          <button key={s.id} onClick={() => onAdd(s as unknown as Product)}
+            className="flex-shrink-0 px-2.5 py-1.5 rounded-lg border border-[rgba(0,0,0,.1)] bg-white text-xs font-medium text-[#1a1a16] hover:border-[#2563eb] transition-colors whitespace-nowrap">
+            + {s.name} <span className="text-[rgba(26,26,22,.4)] ml-1">A${s.price?.toFixed(2)}</span>
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
