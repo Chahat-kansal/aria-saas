@@ -90,28 +90,6 @@ export default function ReceiptScanPage() {
     }
   }, [business?.id]);
 
-  // Sample invoice demo — shows the feature without a real photo
-  function loadSampleInvoice() {
-    const sample: ScanResult = {
-      supplier_name: 'ALM Australia',
-      invoice_date: new Date().toISOString().split('T')[0],
-      invoice_total_aud: 991.50,
-      line_count: 3,
-      extracted_lines: [
-        { description: 'Crown Lager Bottles 375ml 24pk', quantity: 10, unit: 'carton', unit_price_aud: 52.80, total_price_aud: 528.00, matched_item: null, match_confidence: 'none', suggested_new_stock: 10 },
-        { description: 'Heineken Premium Lager 330ml 24pk', quantity: 5, unit: 'carton', unit_price_aud: 49.50, total_price_aud: 247.50, matched_item: null, match_confidence: 'fuzzy', suggested_new_stock: 47 },
-        { description: 'Penfolds Koonunga Hill Shiraz 750ml', quantity: 12, unit: 'each', unit_price_aud: 18.00, total_price_aud: 216.00, matched_item: null, match_confidence: 'none', suggested_new_stock: 12 },
-      ],
-    };
-    setScanResult(sample);
-    const initChecked: Record<number, boolean> = {};
-    const initStocks: Record<number, number> = {};
-    sample.extracted_lines.forEach((_, i) => { initChecked[i] = true; initStocks[i] = _.suggested_new_stock; });
-    setCheckedRows(initChecked);
-    setNewStocks(initStocks);
-    setState('review');
-  }
-
   function handleFiles(files: FileList | null) {
     if (!files?.length) return;
     const file = files[0];
@@ -185,13 +163,6 @@ export default function ReceiptScanPage() {
             <p className="text-sm mb-6" style={{ color: '#6b7280' }}>JPEG, PNG, WebP, HEIC, or PDF · Max 10MB</p>
             <button className="px-6 py-2.5 rounded-full text-sm font-medium text-white" style={{ background: '#1D9E75' }}>
               Choose file
-            </button>
-          </div>
-          <div className="mt-4 text-center">
-            <button onClick={loadSampleInvoice}
-              className="text-xs px-4 py-2 rounded-xl transition-colors"
-              style={{ color: 'rgba(255,255,255,0.35)', border: '1px solid rgba(255,255,255,0.08)' }}>
-              Try with sample invoice →
             </button>
           </div>
           <input ref={inputRef} type="file" accept="image/*,.pdf" className="hidden"

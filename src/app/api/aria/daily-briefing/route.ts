@@ -20,7 +20,7 @@ export async function POST(req: Request) {
   // Verify ownership + get business details
   const { data: business } = await supabase
     .from('businesses')
-    .select('id, name, owner_name, industry, city, monthly_revenue, staff_count, biggest_challenge, data_source')
+    .select('id, name, owner_name, industry, city, monthly_revenue, staff_count, biggest_challenge, data_source, square_connected')
     .eq('id', business_id)
     .eq('user_id', user.id)
     .single();
@@ -28,6 +28,10 @@ export async function POST(req: Request) {
   if (!business) return NextResponse.json({ error: 'Business not found' }, { status: 404 });
 
   const today = new Date().toISOString().split('T')[0];
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const yesterdayStart = new Date(todayStart);
+  yesterdayStart.setDate(yesterdayStart.getDate() - 1);
   const sixHoursAgo = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString();
 
   // Cache check — skip Claude if fresh enough
@@ -107,6 +111,18 @@ export async function POST(req: Request) {
   const rev7     = sales7.reduce((s, x) => s + x.totalCents, 0);
   const revPrev7 = salesPrev7.reduce((s, x) => s + x.totalCents, 0);
   const revTrendPct = revPrev7 > 0 ? Math.round(((rev7 - revPrev7) / revPrev7) * 100) : 0;
+  const salesToday = sales14daily.filter(s => s.soldAt >= todayStart);
+  const salesYesterday = sales14daily.filter(s => s.soldAt >= yesterdayStart && s.soldAt < todayStart);
+  const revToday = salesToday.reduce((s, x) => s + x.totalCents, 0);
+  const revYesterday = salesYesterday.reduce((s, x) => s + x.totalCents, 0);
+  const costByItemId = new Map(items.map(i => [i.id, i.costCents]));
+  const grossProfitTodayCents = salesToday.reduce((sum, sale) => {
+    return sum + sale.lineItems.reduce((lineSum, li) => {
+      const costCents = li.costCents || costByItemId.get(li.itemId) || 0;
+      if (!costCents) return lineSum;
+      return lineSum + (li.priceCents - costCents) * li.quantity;
+    }, 0);
+  }, 0);
 
   // Day-of-week revenue for slow day detection
   const dowRevenue: Record<number, number> = {};
@@ -156,6 +172,16 @@ export async function POST(req: Request) {
     business_name: business.name,
     industry: business.industry,
     city: business.city,
+    data_source: dataSource,
+    pos_connected: Boolean(business.square_connected || dataSource === 'aria_pos' || dataSource === 'square'),
+    sales_count_7_days: sales7.length,
+    sales_count_14_days: sales14daily.length,
+    product_count: items.length,
+    inventory_item_count: items.filter(i => i.currentStock > 0 || i.reorderPoint > 0).length,
+    latest_sale_at: sales14daily[0]?.soldAt?.toISOString() ?? null,
+    sales_today_aud: (revToday / 100).toFixed(2),
+    sales_yesterday_aud: (revYesterday / 100).toFixed(2),
+    gross_profit_today_aud: grossProfitTodayCents > 0 ? (grossProfitTodayCents / 100).toFixed(2) : null,
     lapsed_customers: lapsedCustomers.length,
     total_customers: customers.length,
     high_churn_count: highChurnCustomers.length,
@@ -173,6 +199,39 @@ export async function POST(req: Request) {
     visa_alert_names: (staffVisaExpiring.data ?? []).map((s: any) => `${s.first_name} ${s.last_name}`),
     unverified_rtw: staffRtwUnverified.count ?? 0,
     ...warehouseCtx,
+  };
+
+  const hasActionableData =
+    sales14daily.length > 0 ||
+    items.length > 0 ||
+    customers.length > 0 ||
+    lowStockItems.length > 0 ||
+    (unansweredReviews.count ?? 0) > 0 ||
+    (unreadAlerts.count ?? 0) > 0 ||
+    (staffVisaExpiring.data ?? []).length > 0 ||
+    (staffRtwUnverified.count ?? 0) > 0 ||
+    Number(warehouseCtx.expiring_lots_30d ?? 0) > 0 ||
+    Number(warehouseCtx.pending_pos ?? 0) > 0;
+
+  if (!hasActionableData) {
+    await supabase.from('daily_briefings').upsert({
+      business_id,
+      date: today,
+      recommendations: [],
+      data_snapshot: context,
+      generated_at: new Date().toISOString(),
+      dismissed_at: null,
+      remind_at: null,
+    }, { onConflict: 'business_id,date' });
+
+    return NextResponse.json({
+      recommendations: [],
+      generated_at: new Date().toISOString(),
+      data_snapshot: context,
+      cached: false,
+      no_data: true,
+      no_data_message: 'No connected sales, product, inventory, customer, supplier, or compliance data found yet.',
+    });
   };
 
   // Claude — haiku for speed and cost

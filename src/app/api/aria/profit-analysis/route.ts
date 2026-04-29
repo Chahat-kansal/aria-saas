@@ -100,18 +100,17 @@ export async function POST(req: Request) {
   const totalDiscountCents = discountSales.reduce((s: number, sale: any) => s + Math.round((sale.discount_amount ?? 0) * 100), 0);
 
   // ANALYSIS 3 — Stockout revenue loss
-  const outOfStockProducts = (productsRes.data ?? []).filter((p: any) => p.stock_quantity === 0 && p.is_active);
+  const outOfStockProducts = (belowCostRes.data ?? []).filter((p: any) => p.stock_quantity === 0 && p.is_active);
   const velocityMap: Record<string, number> = {};
   for (const si of saleItems) {
     const id = (si as any).product_id;
     velocityMap[id] = (velocityMap[id] ?? 0) + ((si as any).quantity ?? 1);
   }
-  const stockoutItems = outOfStockProducts.map((p: any) => {
-    const sales30 = (velocityMap[p.id] ?? 0) / 2; // 60-day window / 2 = 30-day velocity
-    const estLostSalesCents = Math.round(sales30 * (p.price ?? 0) * 100 * 0.3); // assume 30% margin
-    return { name: p.name, est_lost_sales_cents: estLostSalesCents };
-  }).filter((i: any) => i.est_lost_sales_cents > 0);
-  const stockoutTotal = stockoutItems.reduce((s: number, i: any) => s + i.est_lost_sales_cents, 0);
+  const stockoutItems = outOfStockProducts.map((p: any) => ({
+    name: p.name,
+    units_sold_60d: velocityMap[p.id] ?? 0,
+  })).filter((i: any) => i.units_sold_60d > 0);
+  const stockoutTotal = 0;
 
   // ANALYSIS 4 — Expiry risk (warehouse)
   const expiryItems = expiringLots.map((l: any) => ({
@@ -212,8 +211,8 @@ Only include leaks where there is actual data (non-zero amounts). Skip analyses 
       }
     } catch {
       // Build basic leaks from raw data without AI
-      if (deadStockTotal > 0) leaks.push({ id: 'dead-stock-1', type: 'dead_stock', title: `${deadStockItems.length} products with no sales (60d)`, description: `A$${(deadStockTotal / 100).toFixed(0)} tied up in unsold inventory.`, estimated_monthly_impact_cents: Math.round(deadStockTotal / 3), priority: 'high', action: 'Run a clearance promotion on these items.', action_type: 'promote', action_href: '/pos/products' });
-      if (belowCostItems.length > 0) leaks.push({ id: 'below-cost-1', type: 'below_cost', title: `${belowCostItems.length} products priced below cost`, description: `Items selling below cost price — guaranteed losses.`, estimated_monthly_impact_cents: 5000, priority: 'critical', action: 'Review and correct pricing immediately.', action_type: 'reprice', action_href: '/pos/products' });
+      if (deadStockTotal > 0) leaks.push({ id: 'dead-stock-1', type: 'dead_stock', title: `${deadStockItems.length} products with no sales (60d)`, description: `A$${(deadStockTotal / 100).toFixed(0)} tied up in unsold inventory.`, estimated_monthly_impact_cents: 0, priority: 'high', action: 'Review these real dead-stock products and decide whether to clear them.', action_type: 'promote', action_href: '/pos/products', stock_value_cents: deadStockTotal });
+      if (belowCostItems.length > 0) leaks.push({ id: 'below-cost-1', type: 'below_cost', title: `${belowCostItems.length} products priced below cost`, description: 'Items selling below recorded cost price.', estimated_monthly_impact_cents: 0, priority: 'critical', action: 'Review and correct pricing immediately.', action_type: 'reprice', action_href: '/pos/products' });
       aiSummary = 'AI analysis temporarily unavailable. Raw data shown below.';
       totalMonthlyCents = leaks.reduce((s: number, l: any) => s + l.estimated_monthly_impact_cents, 0);
     }

@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import { useBusinessContext } from '@/components/providers/BusinessProvider';
+import { AriaIntelligencePanel } from '@/components/dashboard/AriaIntelligencePanel';
 
 const TOPICS_BY_INDUSTRY: Record<string, { title: string; items: string[] }[]> = {
   cafe: [
@@ -96,6 +97,8 @@ export default function CompliancePage() {
         </div>
         {saving && <span className="text-xs shrink-0" style={{ color: '#6b7280' }}>Saving…</span>}
       </div>
+
+      <AriaIntelligencePanel mode="health" title="Aria Compliance Context" />
 
       {/* Progress */}
       <div className="rounded-xl p-5 mb-6 flex items-center gap-5" style={{ background: '#13131a', border: '1px solid rgba(255,255,255,0.07)' }}>

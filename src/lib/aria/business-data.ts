@@ -1,0 +1,283 @@
+import { createServerSupabaseClient } from '@/lib/supabase-server';
+
+type SupabaseServerClient = ReturnType<typeof createServerSupabaseClient>;
+type Row = Record<string, any>;
+
+export type AriaDataStatus = {
+  has_pos_connection: boolean;
+  has_sales_data: boolean;
+  has_product_data: boolean;
+  has_inventory_data: boolean;
+  has_supplier_data: boolean;
+  has_customer_data: boolean;
+  has_staff_data: boolean;
+  has_uploaded_data: boolean;
+  has_previous_actions: boolean;
+  last_sync_at: string | null;
+  missing_required_data: string[];
+};
+
+export type AriaBusinessData = {
+  business: Row | null;
+  data_status: AriaDataStatus;
+  sales: Row[];
+  products: Row[];
+  sale_items: Row[];
+  inventory: Row[];
+  suppliers: Row[];
+  supplier_costs: Row[];
+  customers: Row[];
+  staff: Row[];
+  imports: Row[];
+  previous_actions: Row[];
+  raw_counts: {
+    sales: number;
+    products: number;
+    inventory: number;
+    suppliers: number;
+    customers: number;
+    staff: number;
+    imports: number;
+    actions: number;
+  };
+};
+
+const RECENT_LIMIT = 500;
+const DETAIL_LIMIT = 1000;
+
+function daysAgo(days: number) {
+  return new Date(Date.now() - days * 86400000).toISOString();
+}
+
+function asArray<T = Row>(value: T[] | null | undefined): T[] {
+  return Array.isArray(value) ? value : [];
+}
+
+function timestampOf(row: Row) {
+  return row.updated_at ?? row.created_at ?? row.sold_at ?? row.last_sync_at ?? row.last_import_at ?? null;
+}
+
+function latestTimestamp(rows: Row[]) {
+  let latest: string | null = null;
+  for (const row of rows) {
+    const value = timestampOf(row);
+    if (!value) continue;
+    if (!latest || new Date(value).getTime() > new Date(latest).getTime()) latest = value;
+  }
+  return latest;
+}
+
+async function safeSelect(
+  supabase: SupabaseServerClient,
+  table: string,
+  build: (query: any) => any
+): Promise<Row[]> {
+  try {
+    const { data, error } = await build(supabase.from(table).select('*'));
+    if (error) {
+      console.warn(`[aria/business-data] ${table} skipped: ${error.message}`);
+      return [];
+    }
+    return asArray(data);
+  } catch (error) {
+    console.warn(`[aria/business-data] ${table} unavailable`, error);
+    return [];
+  }
+}
+
+async function safeBusiness(supabase: SupabaseServerClient, businessId: string, userId?: string) {
+  let query = supabase
+    .from('businesses')
+    .select('*')
+    .eq('id', businessId);
+
+  if (userId) query = query.eq('user_id', userId);
+
+  const { data, error } = await query.maybeSingle();
+  if (error) {
+    console.error('[aria/business-data] business lookup failed', error.message);
+    return null;
+  }
+  return data ?? null;
+}
+
+function uploadTypes(imports: Row[]) {
+  return new Set(imports.map(file => String(file.upload_type ?? '').toLowerCase()));
+}
+
+export async function collectBusinessData(
+  businessId: string,
+  options: { userId?: string; supabase?: SupabaseServerClient } = {}
+): Promise<AriaBusinessData> {
+  const supabase = options.supabase ?? createServerSupabaseClient();
+  const business = await safeBusiness(supabase, businessId, options.userId);
+
+  if (!business) {
+    return emptyBusinessData(null);
+  }
+
+  const since90 = daysAgo(90);
+  const since30 = daysAgo(30);
+
+  const [
+    squareConnections,
+    squareSales,
+    posSales,
+    squareItems,
+    posProducts,
+    posSaleItems,
+    stockMovements,
+    warehouseLots,
+    warehouseItemLocations,
+    posSuppliers,
+    supplierPerformance,
+    purchaseOrders,
+    posCustomers,
+    squareCustomers,
+    customers,
+    staffMembers,
+    posStaff,
+    imports,
+    previousActions,
+  ] = await Promise.all([
+    safeSelect(supabase, 'square_connections', q => q.eq('business_id', businessId).limit(5)),
+    safeSelect(supabase, 'square_sales', q => q.eq('business_id', businessId).gte('sold_at', since90).order('sold_at', { ascending: false }).limit(RECENT_LIMIT)),
+    safeSelect(supabase, 'pos_sales', q => q.eq('business_id', businessId).gte('created_at', since90).order('created_at', { ascending: false }).limit(RECENT_LIMIT)),
+    safeSelect(supabase, 'square_items', q => q.eq('business_id', businessId).order('name').limit(RECENT_LIMIT)),
+    safeSelect(supabase, 'pos_products', q => q.eq('business_id', businessId).order('name').limit(RECENT_LIMIT)),
+    safeSelect(supabase, 'pos_sale_items', q => q.eq('business_id', businessId).gte('created_at', since90).limit(DETAIL_LIMIT)),
+    safeSelect(supabase, 'stock_movements', q => q.eq('business_id', businessId).gte('created_at', since90).limit(DETAIL_LIMIT)),
+    safeSelect(supabase, 'warehouse_lots', q => q.eq('business_id', businessId).limit(RECENT_LIMIT)),
+    safeSelect(supabase, 'warehouse_item_locations', q => q.eq('business_id', businessId).limit(RECENT_LIMIT)),
+    safeSelect(supabase, 'pos_suppliers', q => q.eq('business_id', businessId).limit(RECENT_LIMIT)),
+    safeSelect(supabase, 'warehouse_supplier_performance', q => q.eq('business_id', businessId).gte('created_at', since90).limit(RECENT_LIMIT)),
+    safeSelect(supabase, 'warehouse_purchase_orders', q => q.eq('business_id', businessId).gte('created_at', since90).limit(RECENT_LIMIT)),
+    safeSelect(supabase, 'pos_customers', q => q.eq('business_id', businessId).order('updated_at', { ascending: false }).limit(RECENT_LIMIT)),
+    safeSelect(supabase, 'square_customers', q => q.eq('business_id', businessId).limit(RECENT_LIMIT)),
+    safeSelect(supabase, 'customers', q => q.eq('business_id', businessId).limit(RECENT_LIMIT)),
+    safeSelect(supabase, 'staff_members', q => q.eq('business_id', businessId).limit(RECENT_LIMIT)),
+    safeSelect(supabase, 'pos_staff', q => q.eq('business_id', businessId).limit(RECENT_LIMIT)),
+    safeSelect(supabase, 'imported_files', q => q.eq('business_id', businessId).order('created_at', { ascending: false }).limit(50)),
+    safeSelect(supabase, 'aria_actions', q => q.eq('business_id', businessId).order('created_at', { ascending: false }).limit(100)),
+  ]);
+
+  const sales = [...squareSales, ...posSales];
+  const products = [...squareItems, ...posProducts];
+  const saleItems = posSaleItems;
+  const inventory = [...stockMovements, ...warehouseLots, ...warehouseItemLocations];
+  const suppliers = posSuppliers;
+  const supplierCosts = [...supplierPerformance, ...purchaseOrders];
+  const allCustomers = [...posCustomers, ...squareCustomers, ...customers];
+  const staff = [...staffMembers, ...posStaff];
+  const importTypes = uploadTypes(imports);
+
+  const hasUploadedData = imports.length > 0;
+  const hasSalesData = sales.length > 0 || importTypes.has('sales');
+  const hasProductData = products.length > 0 || importTypes.has('products');
+  const hasInventoryData =
+    inventory.length > 0 ||
+    products.some(product => product.stock_quantity != null || product.current_stock != null || product.low_stock_threshold != null) ||
+    importTypes.has('inventory');
+  const hasSupplierData = suppliers.length > 0 || supplierCosts.length > 0 || importTypes.has('supplier_costs');
+  const hasCustomerData = allCustomers.length > 0;
+  const hasStaffData = staff.length > 0;
+  const hasPosConnection = Boolean(
+    squareConnections.length > 0 ||
+    business.square_connected ||
+    business.data_source === 'square' ||
+    business.data_source === 'aria_pos'
+  );
+
+  const missingRequiredData = [
+    !hasSalesData ? 'sales data' : null,
+    !hasProductData ? 'product catalogue' : null,
+    !hasInventoryData ? 'inventory or stock levels' : null,
+    !hasSupplierData ? 'supplier cost history' : null,
+    !hasCustomerData ? 'customer activity' : null,
+  ].filter((item): item is string => Boolean(item));
+
+  const lastSyncAt = latestTimestamp([
+    ...squareConnections,
+    ...sales,
+    ...products,
+    ...inventory,
+    ...supplierCosts,
+    ...imports,
+  ]);
+
+  return {
+    business,
+    data_status: {
+      has_pos_connection: hasPosConnection,
+      has_sales_data: hasSalesData,
+      has_product_data: hasProductData,
+      has_inventory_data: hasInventoryData,
+      has_supplier_data: hasSupplierData,
+      has_customer_data: hasCustomerData,
+      has_staff_data: hasStaffData,
+      has_uploaded_data: hasUploadedData,
+      has_previous_actions: previousActions.length > 0,
+      last_sync_at: lastSyncAt,
+      missing_required_data: missingRequiredData,
+    },
+    sales,
+    products,
+    sale_items: saleItems,
+    inventory,
+    suppliers,
+    supplier_costs: supplierCosts,
+    customers: allCustomers,
+    staff,
+    imports,
+    previous_actions: previousActions,
+    raw_counts: {
+      sales: sales.length,
+      products: products.length,
+      inventory: inventory.length,
+      suppliers: suppliers.length + supplierCosts.length,
+      customers: allCustomers.length,
+      staff: staff.length,
+      imports: imports.length,
+      actions: previousActions.length,
+    },
+  };
+}
+
+export function emptyBusinessData(business: Row | null): AriaBusinessData {
+  return {
+    business,
+    data_status: {
+      has_pos_connection: false,
+      has_sales_data: false,
+      has_product_data: false,
+      has_inventory_data: false,
+      has_supplier_data: false,
+      has_customer_data: false,
+      has_staff_data: false,
+      has_uploaded_data: false,
+      has_previous_actions: false,
+      last_sync_at: null,
+      missing_required_data: ['sales data', 'product catalogue', 'inventory or stock levels'],
+    },
+    sales: [],
+    products: [],
+    sale_items: [],
+    inventory: [],
+    suppliers: [],
+    supplier_costs: [],
+    customers: [],
+    staff: [],
+    imports: [],
+    previous_actions: [],
+    raw_counts: {
+      sales: 0,
+      products: 0,
+      inventory: 0,
+      suppliers: 0,
+      customers: 0,
+      staff: 0,
+      imports: 0,
+      actions: 0,
+    },
+  };
+}

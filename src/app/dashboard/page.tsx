@@ -2,6 +2,7 @@ import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { WarehouseDashboard } from '@/components/dashboard/WarehouseDashboard';
+import { MorningCommandCentre } from '@/components/dashboard/MorningCommandCentre';
 
 export default async function DashboardPage() {
   const supabase = createServerSupabaseClient();
@@ -79,10 +80,11 @@ async function RetailCafeDashboard({ business }: { business: any }) {
       <Blobs />
       <div className="relative z-10 max-w-6xl mx-auto space-y-6">
         <DashHeader greeting={greeting} ownerName={business.owner_name || 'there'} subtitle="Aria is monitoring your store" />
+        <MorningCommandCentre />
 
         {/* Stats */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard label="Revenue this month"    value={`$${revenueThisMonth.toLocaleString()}`} change="+12% vs last month"        gradient="linear-gradient(135deg,rgba(29,158,117,0.2),rgba(29,158,117,0.05))"  border="rgba(29,158,117,0.3)" />
+          <StatCard label="Revenue this month"    value={`$${revenueThisMonth.toLocaleString()}`} change="from connected records"        gradient="linear-gradient(135deg,rgba(29,158,117,0.2),rgba(29,158,117,0.05))"  border="rgba(29,158,117,0.3)" />
           <StatCard label="POS sales today"       value={`$${posSalesToday.toFixed(2)}`}          change={`${(posToday ?? []).length} transactions`} gradient="linear-gradient(135deg,rgba(37,99,235,0.2),rgba(37,99,235,0.05))"   border="rgba(37,99,235,0.3)" />
           <StatCard label="Google rating"         value={business.google_rating ? `${business.google_rating}★` : '—'} change={`${business.google_review_count || 0} reviews`} gradient="linear-gradient(135deg,rgba(245,158,11,0.2),rgba(245,158,11,0.05))" border="rgba(245,158,11,0.3)" />
           <StatCard label="Recoverable leaks"     value={`$${totalLeakSavings.toLocaleString()}/mo`} change="from profit leak fixes"  gradient="linear-gradient(135deg,rgba(239,68,68,0.15),rgba(239,68,68,0.03))"  border="rgba(239,68,68,0.2)" />
@@ -153,6 +155,7 @@ async function VisaDashboard({ business }: { business: any }) {
       <Blobs color1="rgba(37,99,235,0.15)" color2="rgba(124,58,237,0.12)" />
       <div className="relative z-10 max-w-6xl mx-auto space-y-6">
         <DashHeader greeting={greeting} ownerName={business.owner_name || 'there'} subtitle="VisaAI is monitoring immigration updates" />
+        <MorningCommandCentre />
 
         {/* Stats */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -293,10 +296,11 @@ async function TradieProfessionalDashboard({ business }: { business: any }) {
       <Blobs color1="rgba(124,58,237,0.15)" color2="rgba(29,158,117,0.12)" />
       <div className="relative z-10 max-w-6xl mx-auto space-y-6">
         <DashHeader greeting={greeting} ownerName={business.owner_name || 'there'} subtitle="Aria is managing your pipeline" />
+        <MorningCommandCentre />
 
         {/* Stats */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard label="Revenue this month"  value={`$${revenue.toLocaleString()}`}               change="+12% vs last month"         gradient="linear-gradient(135deg,rgba(29,158,117,0.2),rgba(29,158,117,0.05))"  border="rgba(29,158,117,0.3)" />
+          <StatCard label="Revenue this month"  value={`$${revenue.toLocaleString()}`}               change="from connected records"         gradient="linear-gradient(135deg,rgba(29,158,117,0.2),rgba(29,158,117,0.05))"  border="rgba(29,158,117,0.3)" />
           <StatCard label="Bookings today"       value={String(todayBookings?.length ?? 0)}           change="scheduled jobs"             gradient="linear-gradient(135deg,rgba(124,58,237,0.2),rgba(124,58,237,0.05))" border="rgba(124,58,237,0.3)" />
           <StatCard label="Quotes pending"       value={String(quotes?.length ?? 0)}                  change="need follow-up"             gradient="linear-gradient(135deg,rgba(245,158,11,0.2),rgba(245,158,11,0.05))" border="rgba(245,158,11,0.3)" />
           <StatCard label="Google rating"        value={business.google_rating ? `${business.google_rating}★` : '—'} change={`${business.google_review_count || 0} reviews`} gradient="linear-gradient(135deg,rgba(37,99,235,0.2),rgba(37,99,235,0.05))" border="rgba(37,99,235,0.3)" />
@@ -402,10 +406,11 @@ async function SalonGymDashboard({ business }: { business: any }) {
       <Blobs color1="rgba(236,72,153,0.12)" color2="rgba(124,58,237,0.1)" />
       <div className="relative z-10 max-w-6xl mx-auto space-y-6">
         <DashHeader greeting={greeting} ownerName={business.owner_name || 'there'} subtitle="Aria is watching your bookings and clients" />
+        <MorningCommandCentre />
 
         {/* Stats */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard label="Revenue this month"   value={`$${revenue.toLocaleString()}`}           change="+12% vs last month"         gradient="linear-gradient(135deg,rgba(29,158,117,0.2),rgba(29,158,117,0.05))"  border="rgba(29,158,117,0.3)" />
+          <StatCard label="Revenue this month"   value={`$${revenue.toLocaleString()}`}           change="from connected records"         gradient="linear-gradient(135deg,rgba(29,158,117,0.2),rgba(29,158,117,0.05))"  border="rgba(29,158,117,0.3)" />
           <StatCard label="Bookings today"        value={String(todayBookings?.length ?? 0)}       change="appointments"               gradient="linear-gradient(135deg,rgba(236,72,153,0.2),rgba(236,72,153,0.05))"  border="rgba(236,72,153,0.3)" />
           <StatCard label="Clients at risk"       value={String(churnCustomers?.length ?? 0)}      change="medium or high churn risk"  gradient="linear-gradient(135deg,rgba(239,68,68,0.15),rgba(239,68,68,0.03))"  border="rgba(239,68,68,0.2)" />
           <StatCard label="Google rating"         value={business.google_rating ? `${business.google_rating}★` : '—'} change={`${business.google_review_count || 0} reviews`} gradient="linear-gradient(135deg,rgba(245,158,11,0.2),rgba(245,158,11,0.05))" border="rgba(245,158,11,0.3)" />
@@ -441,8 +446,8 @@ async function SalonGymDashboard({ business }: { business: any }) {
               <EmptyState text="No slow day data available" />
             ) : (
               <div className="space-y-2">
-                {slowDays.map((d: any, i: number) => {
-                  const count = typeof d.count === 'number' ? d.count : Math.floor(Math.random() * 8 + 1);
+                {slowDays.filter((d: any) => typeof d.count === 'number').map((d: any, i: number) => {
+                  const count = d.count;
                   const pct = Math.min(100, (count / 10) * 100);
                   return (
                     <div key={i} className="flex items-center gap-3">
@@ -525,10 +530,11 @@ async function RealEstateDashboard({ business }: { business: any }) {
       <Blobs color1="rgba(37,99,235,0.12)" color2="rgba(29,158,117,0.1)" />
       <div className="relative z-10 max-w-6xl mx-auto space-y-6">
         <DashHeader greeting={greeting} ownerName={business.owner_name || 'there'} subtitle="Aria is monitoring your listings and leads" />
+        <MorningCommandCentre />
 
         {/* Stats */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard label="Revenue this month"   value={`$${revenue.toLocaleString()}`}             change="+12% vs last month"      gradient="linear-gradient(135deg,rgba(29,158,117,0.2),rgba(29,158,117,0.05))"  border="rgba(29,158,117,0.3)" />
+          <StatCard label="Revenue this month"   value={`$${revenue.toLocaleString()}`}             change="from connected records"      gradient="linear-gradient(135deg,rgba(29,158,117,0.2),rgba(29,158,117,0.05))"  border="rgba(29,158,117,0.3)" />
           <StatCard label="Inspections today"     value={String(todayInspections?.length ?? 0)}      change="scheduled today"         gradient="linear-gradient(135deg,rgba(37,99,235,0.2),rgba(37,99,235,0.05))"   border="rgba(37,99,235,0.3)" />
           <StatCard label="New leads this week"   value={String(recentLeads?.length ?? 0)}           change="potential buyers"        gradient="linear-gradient(135deg,rgba(124,58,237,0.2),rgba(124,58,237,0.05))" border="rgba(124,58,237,0.3)" />
           <StatCard label="Google rating"         value={business.google_rating ? `${business.google_rating}★` : '—'} change={`${business.google_review_count || 0} reviews`} gradient="linear-gradient(135deg,rgba(245,158,11,0.2),rgba(245,158,11,0.05))" border="rgba(245,158,11,0.3)" />

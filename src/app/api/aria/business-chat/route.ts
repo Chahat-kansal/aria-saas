@@ -1,12 +1,36 @@
-import Anthropic from '@anthropic-ai/sdk';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
-import { getBusinessSales, getBusinessCustomers, getBusinessItems } from '@/lib/business-data';
+import { collectBusinessData } from '@/lib/aria/business-data';
+import { chatWithBusinessBrain } from '@/lib/aria/business-brain';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+function formatAnswer(output: Awaited<ReturnType<typeof chatWithBusinessBrain>>) {
+  const parts = [output.summary];
+
+  if (output.missing_data.length > 0) {
+    parts.push(`Missing data: ${output.missing_data.join(', ')}.`);
+    if (output.onboarding_guidance) parts.push(output.onboarding_guidance);
+    return parts.filter(Boolean).join('\n\n');
+  }
+
+  if (output.observations.length > 0) {
+    parts.push(output.observations.slice(0, 3).map(obs => {
+      const evidence = obs.evidence.length ? ` Evidence: ${obs.evidence.join(' ')}` : '';
+      return `${obs.title}: ${obs.what_happened} ${obs.what_it_means}${evidence}`;
+    }).join('\n\n'));
+  }
+
+  if (output.recommendations.length > 0) {
+    parts.push(output.recommendations.slice(0, 4).map(rec => {
+      const evidence = rec.evidence.length ? ` Evidence: ${rec.evidence.join(' ')}` : '';
+      return `Recommended action: ${rec.recommendation}\nWhy: ${rec.reason}\nExpected impact: ${rec.expected_impact}\nRisk if ignored: ${rec.risk_if_ignored}\nConfidence: ${rec.confidence}.${evidence}`;
+    }).join('\n\n'));
+  }
+
+  return parts.filter(Boolean).join('\n\n');
+}
 
 export async function POST(req: Request) {
   const supabase = createServerSupabaseClient();
@@ -15,151 +39,33 @@ export async function POST(req: Request) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
   }
 
-  const { message, conversation_history = [], business_id, include_data } = await req.json();
+  const { message, conversation_history = [], business_id } = await req.json().catch(() => ({}));
   if (!message?.trim()) return new Response(JSON.stringify({ error: 'message required' }), { status: 400 });
-
-  // Verify ownership
-  const { data: business } = await supabase
-    .from('businesses')
-    .select('id, name, owner_name, industry, city, data_source')
-    .eq('id', business_id)
-    .eq('user_id', user.id)
-    .single();
-
-  if (!business) return new Response(JSON.stringify({ error: 'Business not found' }), { status: 404 });
-
-  const dataSource = (business.data_source ?? 'aria_pos') as 'square' | 'aria_pos';
-
-  let businessContext = '';
-
-  if (include_data && business_id) {
-    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-    const sixtyDaysAgo  = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000);
-    const thisMonthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
-    const lastMonthStart = new Date(new Date().getFullYear(), new Date().getMonth() - 1, 1);
-
-    const [sales30, salesThisMonth, salesLastMonth, customers, items] = await Promise.all([
-      getBusinessSales(business_id, thirtyDaysAgo, dataSource),
-      getBusinessSales(business_id, thisMonthStart, dataSource),
-      getBusinessSales(business_id, lastMonthStart, dataSource).then(s => s.filter(x => x.soldAt < thisMonthStart)),
-      getBusinessCustomers(business_id, dataSource),
-      getBusinessItems(business_id, dataSource),
-    ]);
-
-    const revThisMonth = salesThisMonth.reduce((s, x) => s + x.totalCents, 0);
-    const revLastMonth = salesLastMonth.reduce((s, x) => s + x.totalCents, 0);
-    const revChangePct = revLastMonth > 0 ? Math.round(((revThisMonth - revLastMonth) / revLastMonth) * 100) : 0;
-
-    // Top products by revenue
-    const productRevenue: Record<string, number> = {};
-    for (const sale of sales30) {
-      for (const li of sale.lineItems) {
-        productRevenue[li.itemName] = (productRevenue[li.itemName] ?? 0) + li.priceCents * li.quantity;
-      }
-    }
-    const topProducts = Object.entries(productRevenue)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5)
-      .map(([name, cents]) => `${name}: A$${(cents / 100).toFixed(0)}`);
-
-    const lowStock = items.filter(i => i.reorderPoint > 0 && i.currentStock <= i.reorderPoint);
-    const lapsed = customers.filter(c => !c.lastVisitAt || c.lastVisitAt < sixtyDaysAgo);
-    const highChurn = customers.filter(c => c.churnRisk === 'high' || c.churnRisk === 'churned');
-
-    let warehouseLines = '';
-    if (business.industry === 'warehouse') {
-      const today30 = new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0];
-      const todayStr = new Date().toISOString().split('T')[0];
-      const [expLots, pendingPOs, grnsThisWeek] = await Promise.all([
-        supabase.from('warehouse_lots').select('item_name, quantity_remaining, expiry_date, unit_cost_cents')
-          .eq('business_id', business_id).eq('status', 'active')
-          .lte('expiry_date', today30).gte('expiry_date', todayStr),
-        supabase.from('warehouse_purchase_orders').select('po_number, status, total_cost_cents')
-          .eq('business_id', business_id).in('status', ['draft', 'sent']).limit(5),
-        supabase.from('warehouse_grns').select('grn_number, supplier_name, total_lines')
-          .eq('business_id', business_id).gte('created_at', thirtyDaysAgo.toISOString()).limit(5),
-      ]);
-      const expiryVal = (expLots.data ?? []).reduce((s: number, l: any) => s + l.quantity_remaining * (l.unit_cost_cents ?? 0), 0);
-      warehouseLines = `
-Expiring lots (30 days): ${(expLots.data ?? []).length} lots, value at risk A$${(expiryVal / 100).toFixed(0)}
-Expiring items: ${(expLots.data ?? []).slice(0, 5).map((l: any) => `${l.item_name} (${l.expiry_date})`).join('; ') || 'None'}
-Open POs: ${(pendingPOs.data ?? []).length} (${(pendingPOs.data ?? []).map((p: any) => p.po_number).join(', ') || 'none'})
-Recent GRNs (30d): ${(grnsThisWeek.data ?? []).length}`;
-    }
-
-    businessContext = `
-Business: ${business.name}, Industry: ${business.industry}, Location: ${business.city ?? 'Australia'}
-Revenue this month: A$${(revThisMonth / 100).toFixed(0)} (${revChangePct > 0 ? '+' : ''}${revChangePct}% vs last month)
-Top products by revenue (last 30 days): ${topProducts.join('; ') || 'No sales data'}
-Low stock items: ${lowStock.length === 0 ? 'None' : lowStock.map(i => `${i.name} (${i.currentStock} left, reorder at ${i.reorderPoint})`).join('; ')}
-Total customers: ${customers.length}, Lapsed 60+ days: ${lapsed.length}, High churn risk: ${highChurn.length}
-Total products in catalogue: ${items.length}${warehouseLines}`.trim();
-  }
-
-  const systemPrompt = `You are Aria, the AI advisor for ${business.name}, a ${business.industry} business in Australia.
-${businessContext ? `\nLIVE BUSINESS DATA:\n${businessContext}` : ''}
-
-CAPABILITIES:
-- Answer questions about sales, inventory, customers, and performance using the real data above
-- Suggest specific actions based on actual numbers
-- When a chart would help, include it at the END of your response in this exact format:
-
-<chart>
-{"type":"bar","title":"string","data":[{"label":"string","value":number,"color":"optional hex"}],"unit":"currency|count|percentage"}
-</chart>
-
-RULES:
-- Only reference numbers from the business data above
-- Use Australian English and A$ for currency
-- Be specific and actionable, not generic
-- If you don't have data to answer precisely, say so
-- Keep responses concise — business owners are busy
-- Never fabricate product names, customer names, or financial figures`;
-
-  const messages: Anthropic.MessageParam[] = [
-    ...conversation_history.slice(-10).map((m: { role: string; content: string }) => ({
-      role: m.role as 'user' | 'assistant',
-      content: m.content,
-    })),
-    { role: 'user', content: message },
-  ];
+  if (!business_id) return new Response(JSON.stringify({ error: 'business_id required' }), { status: 400 });
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {
-      const send = (obj: object) =>
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`));
+      const send = (obj: object) => controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`));
 
       try {
-        const claudeStream = anthropic.messages.stream({
-          model: 'claude-sonnet-4-6',
-          max_tokens: 2048,
-          system: systemPrompt,
-          messages,
+        const businessData = await collectBusinessData(business_id, { userId: user.id, supabase });
+        if (!businessData.business) {
+          send({ error: 'Business not found' });
+          send({ done: true });
+          return;
+        }
+
+        const output = await chatWithBusinessBrain(businessData, {
+          message,
+          conversation_history: Array.isArray(conversation_history) ? conversation_history.slice(-10) : [],
         });
 
-        let fullText = '';
-        for await (const chunk of claudeStream) {
-          if (chunk.type === 'content_block_delta' && chunk.delta.type === 'text_delta') {
-            fullText += chunk.delta.text;
-            // Stream text but strip chart blocks from display
-            const displayText = chunk.delta.text;
-            if (displayText) send({ text: displayText });
-          }
-        }
-
-        // Extract chart after full response
-        const chartMatch = fullText.match(/<chart>([\s\S]*?)<\/chart>/);
-        if (chartMatch) {
-          try {
-            const chartData = JSON.parse(chartMatch[1].trim());
-            send({ chart: chartData });
-          } catch { /* invalid chart JSON — skip */ }
-        }
-
+        send({ text: formatAnswer(output) });
         send({ done: true });
-      } catch (err: any) {
-        send({ error: err.message });
+      } catch (error) {
+        console.error('[aria/business-chat] failed', error);
+        send({ error: 'Aria could not answer from business data right now.' });
       } finally {
         controller.close();
       }
@@ -170,7 +76,7 @@ RULES:
     headers: {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache, no-transform',
-      'Connection': 'keep-alive',
+      Connection: 'keep-alive',
     },
   });
 }

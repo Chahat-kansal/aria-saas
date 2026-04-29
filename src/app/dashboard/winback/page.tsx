@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import { useBusinessContext } from '@/components/providers/BusinessProvider';
+import { AriaIntelligencePanel } from '@/components/dashboard/AriaIntelligencePanel';
 
 interface LapsedCustomer { id: string; name: string; phone: string | null; last_visit: string | null; total_spend: number | null; }
 interface Campaign { id: string; name: string | null; type: string; message: string | null; status: string | null; sms_sent: boolean | null; created_at: string; error: string | null; }
@@ -114,6 +115,8 @@ export default function WinbackPage() {
         <h1 className="text-2xl font-semibold text-white mb-1">Customer Winback</h1>
         <p style={{ color: '#6b7280' }}>Re-engage customers who haven't visited in 60+ days</p>
       </div>
+
+      <AriaIntelligencePanel mode="customer" />
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
