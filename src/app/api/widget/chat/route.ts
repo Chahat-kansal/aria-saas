@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { supabaseAdmin } from '@/lib/supabase';
 import { getBusinessItems, getBusinessSales, type Item } from '@/lib/business-data';
+import { buildWebsiteAssistantContext, buildProductContext } from '@/lib/aria/website-assistant-data';
 import { NextResponse } from 'next/server';
 
 export const runtime = 'nodejs';
@@ -24,10 +25,11 @@ function err(msg: string, status = 500) {
 // ── Intent classification ────────────────────────────────────────
 function classifyIntent(message: string): string {
   const m = message.toLowerCase();
+  if (/\b(menu|what.*(eat|drink|food|coffee|serve)|do you do|what.*(have|offer|sell))\b/.test(m)) return 'MENU_QUERY';
   if (/\b(have|got|stock|available|in stock|carry|sell|do you)\b/.test(m)) return 'STOCK_QUERY';
-  if (/\b(what|show|list|range|selection|types?|kinds?|varieties|menu|products?|items?)\b/.test(m)) return 'PRODUCT_SEARCH';
+  if (/\b(what|show|list|range|selection|types?|kinds?|varieties|products?|items?)\b/.test(m)) return 'PRODUCT_SEARCH';
   if (/\b(price|cost|how much|charge|expensive|cheap|afford|dollar|\$)\b/.test(m)) return 'PRICE_QUERY';
-  if (/\b(recommend|suggest|popular|best|favourite|good|like|enjoy|try|love)\b/.test(m)) return 'RECOMMENDATION';
+  if (/\b(recommend|suggest|popular|best|favourite|good|like|enjoy|try|love|what.*should)\b/.test(m)) return 'RECOMMENDATION';
   if (/\b(open|close|hours|time|when|today|sunday|monday|tuesday|wednesday|thursday|friday|saturday|weekend|holiday)\b/.test(m)) return 'HOURS_INFO';
   if (/\b(order|deliver|delivery|pickup|collect|online|click|ship|post)\b/.test(m)) return 'ORDER_HELP';
   return 'GENERAL';
@@ -165,14 +167,20 @@ export async function POST(req: Request) {
     const dataSource = (business.data_source ?? 'aria_pos') as 'square' | 'aria_pos';
     const intent = classifyIntent(message);
 
+    // Build enriched context (includes recipes/menu for cafes/restaurants)
+    const assistantCtx = await buildWebsiteAssistantContext(businessId, config);
+    const enrichedIntentContext = buildProductContext(intent, message, assistantCtx);
+
+    // Fall back to legacy item-based context if enriched context is empty
     let items: Item[] = [];
     let salesContext = '';
+    let intentContext = enrichedIntentContext;
 
-    if (['STOCK_QUERY', 'PRICE_QUERY', 'PRODUCT_SEARCH', 'RECOMMENDATION'].includes(intent)) {
+    if (!enrichedIntentContext && ['STOCK_QUERY', 'PRICE_QUERY', 'PRODUCT_SEARCH', 'RECOMMENDATION'].includes(intent)) {
       items = await getBusinessItems(businessId, dataSource);
     }
 
-    if (intent === 'RECOMMENDATION') {
+    if (intent === 'RECOMMENDATION' && !enrichedIntentContext) {
       try {
         const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
         const sales = await getBusinessSales(businessId, sevenDaysAgo, dataSource);
@@ -180,8 +188,10 @@ export async function POST(req: Request) {
       } catch { /* non-critical */ }
     }
 
-    const hours = (config.opening_hours as Record<string, string>) ?? {};
-    const intentContext = buildIntentContext(intent, message, items, hours);
+    if (!intentContext) {
+      const hours = (config.opening_hours as Record<string, string>) ?? {};
+      intentContext = buildIntentContext(intent, message, items, hours);
+    }
 
     // ── FAQs ────────────────────────────────────────────────────
     const faqContext = Array.isArray(config.faqs) && config.faqs.length > 0

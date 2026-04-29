@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  Activity,
   AlertTriangle,
   Check,
   ChevronRight,
@@ -12,7 +13,8 @@ import {
   HelpCircle,
   ShieldCheck,
   Sparkles,
-  Upload,
+  TrendingDown,
+  TrendingUp,
   X,
 } from 'lucide-react';
 import { useBusinessContext } from '@/components/providers/BusinessProvider';
@@ -74,6 +76,37 @@ type BrainOutput = {
   onboarding_guidance?: string;
   error?: string;
   raw_counts?: Record<string, number>;
+};
+
+type LiveAlert = {
+  type: string;
+  severity: 'info' | 'warning' | 'critical';
+  title: string;
+  detail: string;
+};
+
+type LiveResult = {
+  data_status: {
+    has_pos_data: boolean;
+    has_inventory: boolean;
+    has_staff: boolean;
+    last_sale_at: string | null;
+    freshness: 'live' | 'stale' | 'empty';
+  };
+  live_summary: {
+    today_revenue_cents: number;
+    today_transaction_count: number;
+    today_vs_yesterday_pct: number | null;
+    today_vs_last_week_pct: number | null;
+    top_products_today: Array<{ name: string; qty: number; revenue_cents: number }>;
+    low_stock_count: number;
+    out_of_stock_count: number;
+    active_staff_count: number;
+  };
+  alerts: LiveAlert[];
+  recommendations: Array<{ action: string; reason: string; category: string; urgency: string }>;
+  aria_commentary: string | null;
+  generated_at: string;
 };
 
 const EMPTY_STATUS: DataStatus = {
@@ -176,11 +209,29 @@ export function MorningCommandCentre() {
   const { business } = useBusinessContext();
   const [data, setData] = useState<BrainOutput>(EMPTY_OUTPUT);
   const [loading, setLoading] = useState(true);
+  const [live, setLive] = useState<LiveResult | null>(null);
+  const [liveLoading, setLiveLoading] = useState(false);
   const [why, setWhy] = useState<BrainOutput | null>(null);
   const [whyLoading, setWhyLoading] = useState(false);
   const [editing, setEditing] = useState<BrainRecommendation | null>(null);
   const [actionState, setActionState] = useState<Record<string, ActionStatus>>({});
   const [working, setWorking] = useState<string | null>(null);
+
+  const loadLive = useCallback(async (businessId: string) => {
+    setLiveLoading(true);
+    try {
+      const res = await fetch('/api/aria/live-intelligence', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ business_id: businessId }),
+      });
+      if (res.ok) setLive(await res.json());
+    } catch {
+      // silent — live panel is optional
+    } finally {
+      setLiveLoading(false);
+    }
+  }, []);
 
   const load = useCallback(async () => {
     if (!business?.id) {
@@ -190,6 +241,8 @@ export function MorningCommandCentre() {
     }
 
     setLoading(true);
+    // Load live monitor in parallel — don't block main brain
+    loadLive(business.id);
     try {
       const result = await postBrain(business.id, 'daily');
       setData({ ...EMPTY_OUTPUT, ...result, data_status: result.data_status ?? EMPTY_STATUS });
@@ -203,7 +256,7 @@ export function MorningCommandCentre() {
     } finally {
       setLoading(false);
     }
-  }, [business?.id]);
+  }, [business?.id, loadLive]);
 
   useEffect(() => {
     load();
@@ -266,10 +319,6 @@ export function MorningCommandCentre() {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Link href="/dashboard/import-data" className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-medium text-white/80 hover:bg-white/10">
-              <Upload className="h-3.5 w-3.5" />
-              Upload sales data
-            </Link>
             <Link href="/dashboard/ask-aria" className="inline-flex items-center gap-2 rounded-xl bg-[#1D9E75] px-3 py-2 text-xs font-semibold text-white hover:bg-[#188765]">
               Ask Aria
               <ChevronRight className="h-3.5 w-3.5" />
@@ -279,6 +328,107 @@ export function MorningCommandCentre() {
       </div>
 
       <div className="space-y-5 p-4 md:p-5">
+        {/* Live Now panel — only shown when POS data exists */}
+        {(liveLoading || (live && live.data_status.freshness !== 'empty')) && (
+          <Panel>
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 text-white">
+                <span className="text-[#8ff1c9]"><Activity className="h-4 w-4" /></span>
+                <h3 className="text-sm font-semibold">Live Now</h3>
+                {live && live.data_status.freshness === 'live' && (
+                  <span className="flex items-center gap-1 rounded-full bg-[#1D9E75]/20 px-2 py-0.5 text-[10px] font-semibold text-[#8ff1c9]">
+                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#1D9E75]" />LIVE
+                  </span>
+                )}
+                {live && live.data_status.freshness === 'stale' && (
+                  <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-300">STALE</span>
+                )}
+              </div>
+              {live?.data_status.last_sale_at && (
+                <p className="text-[10px] text-white/30">Last sale: {new Date(live.data_status.last_sale_at).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}</p>
+              )}
+            </div>
+
+            {liveLoading && !live ? (
+              <div className="grid gap-2 sm:grid-cols-3">
+                {[1,2,3].map(i => <div key={i} className="h-16 animate-pulse rounded-xl bg-white/5" />)}
+              </div>
+            ) : live ? (
+              <>
+                <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-4">
+                  <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                    <p className="text-[10px] uppercase tracking-[.12em] text-white/35">Today&apos;s revenue</p>
+                    <p className="mt-1 text-xl font-semibold text-white">A${(live.live_summary.today_revenue_cents / 100).toFixed(0)}</p>
+                  </div>
+                  <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                    <p className="text-[10px] uppercase tracking-[.12em] text-white/35">Transactions</p>
+                    <p className="mt-1 text-xl font-semibold text-white">{live.live_summary.today_transaction_count}</p>
+                  </div>
+                  <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                    <p className="text-[10px] uppercase tracking-[.12em] text-white/35">vs Yesterday</p>
+                    {live.live_summary.today_vs_yesterday_pct !== null ? (
+                      <p className={`mt-1 flex items-center gap-1 text-xl font-semibold ${live.live_summary.today_vs_yesterday_pct >= 0 ? 'text-[#8ff1c9]' : 'text-red-300'}`}>
+                        {live.live_summary.today_vs_yesterday_pct >= 0 ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
+                        {live.live_summary.today_vs_yesterday_pct > 0 ? '+' : ''}{live.live_summary.today_vs_yesterday_pct}%
+                      </p>
+                    ) : <p className="mt-1 text-sm text-white/35">No prior data</p>}
+                  </div>
+                  <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                    <p className="text-[10px] uppercase tracking-[.12em] text-white/35">vs Last week</p>
+                    {live.live_summary.today_vs_last_week_pct !== null ? (
+                      <p className={`mt-1 flex items-center gap-1 text-xl font-semibold ${live.live_summary.today_vs_last_week_pct >= 0 ? 'text-[#8ff1c9]' : 'text-red-300'}`}>
+                        {live.live_summary.today_vs_last_week_pct >= 0 ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
+                        {live.live_summary.today_vs_last_week_pct > 0 ? '+' : ''}{live.live_summary.today_vs_last_week_pct}%
+                      </p>
+                    ) : <p className="mt-1 text-sm text-white/35">No prior data</p>}
+                  </div>
+                </div>
+
+                {live.alerts.length > 0 && (
+                  <div className="mt-3 space-y-2">
+                    {live.alerts.slice(0, 4).map((alert, i) => (
+                      <div key={i} className={`flex items-start gap-3 rounded-xl border p-3 ${
+                        alert.severity === 'critical' ? 'border-red-400/20 bg-red-500/10' :
+                        alert.severity === 'warning' ? 'border-amber-400/20 bg-amber-500/10' :
+                        'border-white/10 bg-white/5'
+                      }`}>
+                        <AlertTriangle className={`mt-0.5 h-3.5 w-3.5 flex-shrink-0 ${
+                          alert.severity === 'critical' ? 'text-red-400' :
+                          alert.severity === 'warning' ? 'text-amber-400' : 'text-white/40'
+                        }`} />
+                        <div>
+                          <p className="text-xs font-semibold text-white">{alert.title}</p>
+                          <p className="text-[11px] text-white/50">{alert.detail}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {live.aria_commentary && (
+                  <div className="mt-3 rounded-xl border border-[#1D9E75]/20 bg-[#1D9E75]/10 p-3">
+                    <p className="text-[10px] font-semibold uppercase tracking-[.12em] text-[#8ff1c9]">✦ Aria on your business right now</p>
+                    <p className="mt-1.5 text-sm leading-relaxed text-white/70">{live.aria_commentary}</p>
+                  </div>
+                )}
+
+                {live.live_summary.top_products_today.length > 0 && (
+                  <div className="mt-3">
+                    <p className="mb-2 text-[10px] uppercase tracking-[.12em] text-white/30">Top sellers today</p>
+                    <div className="flex flex-wrap gap-2">
+                      {live.live_summary.top_products_today.slice(0, 5).map(p => (
+                        <span key={p.name} className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-xs text-white/60">
+                          {p.name} <span className="text-white/30">×{p.qty}</span>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : null}
+          </Panel>
+        )}
+
         <Panel>
           <SectionTitle icon={<Database className="h-4 w-4" />} title="Data Status" />
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
@@ -302,10 +452,10 @@ export function MorningCommandCentre() {
                 Connect Square, use Aria POS, or upload sales/product/inventory data to generate your first real briefing.
               </p>
               <div className="mt-3 flex flex-wrap gap-2">
-                <OnboardingLink href="/dashboard/integrations" label="Connect Square" />
-                <OnboardingLink href="/pos" label="Use Aria POS" />
-                <OnboardingLink href="/dashboard/import-data" label="Upload sales CSV" />
+                <Link href="/pos" className="inline-flex items-center gap-1.5 rounded-xl bg-[#1D9E75] px-3 py-2 text-xs font-semibold text-white hover:bg-[#188765]">Open Aria POS</Link>
+                <OnboardingLink href="/dashboard/integrations" label="Connect existing POS" />
                 <OnboardingLink href="/pos/products" label="Add products" />
+                <Link href="/dashboard/import-data" className="text-xs text-white/35 hover:text-white/60 underline px-1">Import historical data</Link>
               </div>
             </div>
           )}

@@ -31,6 +31,7 @@ const ALL_ITEMS: Record<string, NavItemDef> = {
   'website-chat':               { href: '/dashboard/website-chat',             label: 'Website chat',      icon: GlobeIcon,          badge: 'New', section: 'Modules' },
   'receipt-scan':               { href: '/dashboard/receipt-scan',             label: 'Receipt scan',      icon: CameraIcon,         badge: 'New', section: 'Modules' },
   'reorder':                    { href: '/dashboard/reorder',                  label: 'Smart reorder',     icon: TruckIcon,          badge: 'AI',  section: 'Intelligence' },
+  'recipes':                    { href: '/dashboard/recipes',                  label: 'Recipes & training', icon: GridIcon,            section: 'Pro tools'    },
   'variance':                   { href: '/dashboard/variance',                 label: 'Variance & shrinkage', icon: AlertTriangleIcon, badge: 'AI', section: 'Intelligence' },
   'visa/clients':               { href: '/visa/clients',                       label: 'Clients',           icon: UsersIcon,          section: 'VisaAI'       },
   'visa/applications':          { href: '/visa/applications',                  label: 'Applications',      icon: FileTextIcon,       section: 'VisaAI'       },

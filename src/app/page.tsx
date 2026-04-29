@@ -26,16 +26,17 @@ const LEAKS = [
 ];
 
 const SETUP = [
+  ['Aria POS', 'Live'],
   ['Square', 'Beta'],
   ['Shopfront', 'Coming soon'],
-  ['CSV upload', 'Live'],
-  ['Aria POS', 'Live'],
+  ['Historical import', 'Optional'],
 ];
 
 const LABEL_CLASS: Record<string, string> = {
   Live: 'bg-[#1D9E75]/10 text-[#137b5b] border-[#1D9E75]/20',
   Beta: 'bg-amber-500/10 text-amber-700 border-amber-500/20',
   'Coming soon': 'bg-slate-500/10 text-slate-600 border-slate-500/20',
+  Optional: 'bg-slate-500/10 text-slate-600 border-slate-500/20',
 };
 
 export default function LandingPage() {
@@ -62,10 +63,10 @@ export default function LandingPage() {
             Built for Australian shops, cafes, bottle shops and convenience stores
           </span>
           <h1 className="mt-6 max-w-3xl text-5xl font-semibold leading-tight tracking-tight md:text-6xl">
-            Wake up to today&apos;s business plan.
+            Run your shop on Aria POS. Let Aria AI watch the business for you.
           </h1>
           <p className="mt-6 max-w-2xl text-lg leading-relaxed text-black/58">
-            Aria checks your sales, stock, suppliers, margins, staff, weather and customers - then tells you what to order, what to discount, and where your profit is leaking.
+            Aria POS handles every sale. Aria AI watches your data live — stock, margins, customers, suppliers — and tells you what to order, what to discount, and where your profit is going.
           </p>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
             <Link href="/onboarding/industry" className="rounded-full bg-[#1D9E75] px-7 py-3 text-center text-sm font-semibold text-white hover:bg-[#188765]">
@@ -75,7 +76,7 @@ export default function LandingPage() {
               See how it works
             </a>
           </div>
-          <p className="mt-4 text-sm text-black/40">A$99/month founding customer pricing. No corporate fluff, no mystery dashboard.</p>
+          <p className="mt-4 text-sm text-black/40">A$99/month founding customer pricing. No lock-in. No mystery dashboards.</p>
         </div>
 
         <div id="briefing" className="rounded-2xl border border-black/10 bg-[#11131a] p-4 shadow-2xl shadow-black/15">
@@ -192,7 +193,7 @@ export default function LandingPage() {
           <div id="pricing" className="rounded-2xl border-2 border-[#1D9E75] bg-[#fbfaf7] p-6">
             <p className="text-sm font-semibold text-[#137b5b]">Founding customer pricing</p>
             <p className="mt-3 text-4xl font-bold">A$99<span className="text-base font-normal text-black/45">/month</span></p>
-            <p className="mt-3 text-sm leading-relaxed text-black/55">Daily briefing, profit leak detection, CSV import, Ask Aria, and Aria POS access while founding customer pricing is available.</p>
+            <p className="mt-3 text-sm leading-relaxed text-black/55">Daily AI briefing, profit leak detection, Aria POS, Ask Aria, and live business intelligence while founding customer pricing is available.</p>
           </div>
         </div>
       </section>
@@ -200,7 +201,7 @@ export default function LandingPage() {
       <section className="mx-auto max-w-6xl px-5 py-16 md:px-8">
         <h2 className="text-3xl font-semibold tracking-tight">What is live, beta, and coming soon</h2>
         <div className="mt-8 grid gap-4 md:grid-cols-3">
-          <FeatureColumn label="Live" items={['Daily AI briefing', 'Profit leak detection', 'Aria POS', 'CSV import']} />
+          <FeatureColumn label="Live" items={['Daily AI briefing', 'Profit leak detection', 'Aria POS', 'Ask Aria', 'Team management']} />
           <FeatureColumn label="Beta" items={['Square sync', 'Smart reordering', 'Supplier watchdog', 'Winback SMS']} />
           <FeatureColumn label="Coming soon" items={['Shopfront sync', 'Full rostering compliance', 'Cross-business benchmarking', 'Voice stocktake', 'Website AI assistant']} />
         </div>
@@ -208,9 +209,9 @@ export default function LandingPage() {
 
       <section className="px-5 pb-16 md:px-8">
         <div className="mx-auto max-w-4xl rounded-2xl bg-[#191a16] p-8 text-center text-white md:p-12">
-          <h2 className="text-3xl font-semibold tracking-tight">Get your first Aria briefing</h2>
+          <h2 className="text-3xl font-semibold tracking-tight">Start with Aria POS. Get your first AI briefing tomorrow.</h2>
           <p className="mx-auto mt-3 max-w-xl text-sm leading-relaxed text-white/55">
-            Start with Aria POS, connect Square beta, or upload a CSV. The point is simple: tomorrow morning, open Aria and know what to do.
+            Open Aria POS today. Tomorrow morning, Aria AI will have watched your sales overnight and will tell you exactly what to do.
           </p>
           <Link href="/onboarding/industry" className="mt-7 inline-flex rounded-full bg-[#1D9E75] px-7 py-3 text-sm font-semibold text-white hover:bg-[#188765]">
             Get your first Aria briefing

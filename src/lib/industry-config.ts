@@ -11,7 +11,7 @@ export const industryConfig = {
   cafe: {
     label: 'Café or coffee shop',
     published: true,
-    sidebar: ['dashboard', 'staff', 'pos', 'winback', 'slow-day', 'reviews', 'profit-leaks', 'competitors', 'churn', 'reorder', 'variance', 'receipt-scan', 'website-chat'],
+    sidebar: ['dashboard', 'staff', 'pos', 'recipes', 'winback', 'slow-day', 'reviews', 'profit-leaks', 'competitors', 'churn', 'reorder', 'variance', 'receipt-scan', 'website-chat'],
     dashboard_modules: ['revenue', 'pos_today', 'winback', 'slow_day', 'reviews', 'waste_alerts'],
     show_pos: true,
     show_visa: false,
@@ -20,7 +20,7 @@ export const industryConfig = {
   restaurant: {
     label: 'Restaurant or food service',
     published: true,
-    sidebar: ['dashboard', 'staff', 'pos', 'winback', 'slow-day', 'reviews', 'profit-leaks', 'competitors', 'churn', 'reorder', 'variance', 'receipt-scan', 'website-chat'],
+    sidebar: ['dashboard', 'staff', 'pos', 'recipes', 'winback', 'slow-day', 'reviews', 'profit-leaks', 'competitors', 'churn', 'reorder', 'variance', 'receipt-scan', 'website-chat'],
     dashboard_modules: ['revenue', 'pos_today', 'winback', 'slow_day', 'reviews', 'waste_alerts'],
     show_pos: true,
     show_visa: false,
