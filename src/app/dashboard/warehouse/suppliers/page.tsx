@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import { useBusinessContext } from '@/components/providers/BusinessProvider';
+import { AriaIntelligencePanel } from '@/components/dashboard/AriaIntelligencePanel';
 
 interface Supplier { name: string; id?: string; total_orders: number; on_time_pct: number | null; fill_rate_pct: number | null; discrepancies: number; avg_lead_days: number | null; last_order: string; }
 interface Insight { supplier: string; insight: string; rating: string; }
@@ -111,6 +112,8 @@ export default function SuppliersPage() {
           </button>
         </div>
       </div>
+
+      <AriaIntelligencePanel mode="supplier" />
 
       {loading ? (
         <div className="space-y-3">

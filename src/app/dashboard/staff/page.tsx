@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useBusinessContext } from '@/components/providers/BusinessProvider';
+import { AriaIntelligencePanel } from '@/components/dashboard/AriaIntelligencePanel';
 
 interface StaffMember {
   id: string; first_name: string; last_name: string; preferred_name: string | null;
@@ -181,6 +182,8 @@ export default function StaffPage() {
           + Add team member
         </button>
       </div>
+
+      <AriaIntelligencePanel mode="staff" />
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">

@@ -55,6 +55,11 @@ export default function AskAriaPage() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search).get('q');
+    if (q && !input && messages.length === 0) setInput(q);
+  }, [input, messages.length]);
+
   const send = useCallback(async (text?: string) => {
     const msg = (text ?? input).trim();
     if (!msg || sending) return;
@@ -190,7 +195,7 @@ export default function AskAriaPage() {
                 Hi {business?.owner_name?.split(' ')[0] ?? 'there'} — what can I help you with?
               </p>
               <p className="text-sm text-[rgba(255,255,255,0.35)]">
-                I have access to your live business data and can answer questions with real numbers.
+                I use connected business data when it exists, and I will say exactly what is missing when it does not.
               </p>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
@@ -251,7 +256,7 @@ export default function AskAriaPage() {
           </button>
         </div>
         <p className="text-center text-[10px] mt-2" style={{ color: 'rgba(255,255,255,0.2)' }}>
-          Aria reads your live {business?.data_source === 'square' ? 'Square' : 'Aria POS'} data. Verify important decisions.
+          Aria uses connected records only. It will not invent missing sales, stock, customer, supplier or margin data.
         </p>
       </div>
     </div>

@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback, useRef, Fragment } from 'react';
 import { useBusinessContext } from '@/components/providers/BusinessProvider';
+import { AriaIntelligencePanel } from '@/components/dashboard/AriaIntelligencePanel';
 
 interface StockItem {
   id: string; name: string; sku: string | null; stock: number; cost: number;
@@ -137,6 +138,8 @@ export default function StockPage() {
           Export CSV
         </button>
       </div>
+
+      <AriaIntelligencePanel mode="inventory" />
 
       {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">

@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import { useBusinessContext } from '@/components/providers/BusinessProvider';
+import { AriaIntelligencePanel } from '@/components/dashboard/AriaIntelligencePanel';
 
 interface Leak {
   id: string; type: string; title: string; description: string;
@@ -86,6 +87,8 @@ export default function ProfitLeaksPage() {
           {loading ? <><span className="inline-block w-3 h-3 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />Analysing…</> : '↻ Refresh'}
         </button>
       </div>
+
+      <AriaIntelligencePanel mode="profit" />
 
       {error && (
         <div className="mb-4 rounded-xl px-5 py-4" style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)' }}>
