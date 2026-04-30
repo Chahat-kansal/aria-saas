@@ -12,88 +12,76 @@ type NavSection =
   | { type: 'spacer' };
 
 const NAV: NavSection[] = [
-  { type: 'link',  id: 'sell',      label: 'Sell',        icon: <BagIcon />,   href: '/pos/terminal'  },
-  { type: 'link',  id: 'dashboard', label: 'Dashboard',   icon: <ChartIcon />, href: '/pos/dashboard' },
+  { type: 'link',  id: 'sell',      label: 'Sell',      icon: <BagIcon />,   href: '/pos/terminal'  },
+  { type: 'link',  id: 'dashboard', label: 'Dashboard', icon: <ChartIcon />, href: '/pos/dashboard' },
+  { type: 'link',  id: 'tables',    label: 'Tables',    icon: <TableIcon />, href: '/pos/tables'    },
+  { type: 'link',  id: 'kitchen',   label: 'Kitchen',   icon: <ChefIcon />,  href: '/pos/kitchen'   },
   {
     type: 'group', id: 'register', label: 'Register', icon: <CashIcon />,
     items: [
+      { label: 'Sessions',               href: '/pos/sessions' },
       { label: 'Manage Cash',            href: '/pos/cash'     },
       { label: 'Close Register',         href: '/pos/close'    },
       { label: 'Sales History',          href: '/pos/sales'    },
+      { label: 'Timesheets',             href: '/pos/timesheets' },
       { label: 'Open Customer Display',  href: '/pos/display'  },
     ],
   },
   {
     type: 'group', id: 'stock', label: 'Stock Management', icon: <BoxIcon />,
     items: [
-      { label: 'Products',          href: '/pos/products'   },
-      { label: 'Classifications',   href: '/pos/categories' },
-      { label: 'Suppliers',         href: '/pos/suppliers'  },
-      { label: 'Orders & Invoices', href: '/pos/orders'     },
-      { label: 'Stocktake',         href: '/pos/stocktake'  },
+      { label: 'Products',              href: '/pos/products'   },
+      { label: 'Classifications',       href: '/pos/categories' },
+      { label: 'Variants & Modifiers',  href: '/pos/modifiers'  },
+      { label: 'Suppliers',             href: '/pos/suppliers'  },
+      { label: 'Purchase Orders',       href: '/pos/orders'     },
+      { label: 'Stocktake',             href: '/pos/stocktake'  },
+      { label: 'Barcodes',              href: '/pos/barcodes'   },
     ],
   },
   {
-    type: 'group', id: 'customers', label: 'Customer Management', icon: <UsersIcon />,
+    type: 'group', id: 'customers', label: 'Customers', icon: <UsersIcon />,
     items: [
       { label: 'Customers',       href: '/pos/customers'       },
       { label: 'Customer Groups', href: '/pos/customer-groups' },
-      { label: 'Price Lists',     href: '/pos/price-lists'    },
-      { label: 'Balances',        href: '/pos/balances'       },
-      { label: 'Gift Cards',      href: '/pos/gift-cards'     },
+      { label: 'Gift Cards',      href: '/pos/gift-cards'      },
+      { label: 'Loyalty',         href: '/pos/settings/loyalty' },
     ],
   },
   {
     type: 'group', id: 'marketing', label: 'Marketing', icon: <MegaphoneIcon />,
     items: [
-      { label: 'Promotions',    href: '/pos/promotions'    },
-      { label: 'Shelf Tickets', href: '/pos/shelf-tickets' },
-      { label: 'Media Centre',  href: '/pos/media'         },
+      { label: 'Promotions', href: '/pos/promotions' },
     ],
   },
   {
     type: 'group', id: 'reporting', label: 'Reporting', icon: <ReportIcon />,
     items: [
-      { label: 'Reporting Dashboard', href: '/pos/reports'              },
-      { label: 'Sales Reports',       href: '/pos/reports/sales'        },
-      { label: 'Inventory Reports',   href: '/pos/reports/inventory'    },
-      { label: 'Purchase Reports',    href: '/pos/reports/purchases'   },
-      { label: 'Transfer Reports',    href: '/pos/reports/transfers'   },
-      { label: 'Register Closures',   href: '/pos/reports/closures'     },
+      { label: 'Overview',            href: '/pos/reports'           },
+      { label: 'Sales',               href: '/pos/reports/sales'     },
+      { label: 'Inventory',           href: '/pos/reports/inventory' },
+      { label: 'Customers',           href: '/pos/reports/customers' },
+      { label: 'Purchase Orders',     href: '/pos/reports/purchases' },
+      { label: 'End of Day / Z-Report', href: '/pos/reports/closures' },
     ],
   },
   {
     type: 'group', id: 'setup', label: 'Setup', icon: <GearIcon />,
     items: [
-      { label: 'General',              href: '/pos/settings'                          },
-      { label: 'Payment Methods',      href: '/pos/settings/payments'                 },
-      { label: 'Tax Rates',            href: '/pos/settings/tax'                      },
-      { label: 'Sale Keys',            href: '/pos/sale-keys'                         },
-      { label: 'Receipts',             href: '/pos/settings/receipts'                 },
-      { label: 'Users',                href: '/pos/settings/users'        },
-      { label: 'Loyalty',              href: '/pos/settings/loyalty'      },
-      { label: 'Surcharging',          href: '/pos/settings/surcharging'  },
-      { label: 'Registers & Outlets',  href: '/pos/outlets'               },
-      { label: 'Integrations',         href: '/pos/settings/integrations' },
-      { label: 'Barcode Templates',    href: '/pos/barcodes'              },
-      { label: 'Price Sets',           href: '/pos/price-lists'           },
-      { label: 'Transfer List',        href: '/pos/transfers'             },
-      { label: 'Enterprise Policies',  href: '/pos/settings/enterprise'   },
-    ],
-  },
-  {
-    type: 'group', id: 'utilities', label: 'Utilities', icon: <WrenchIcon />,
-    items: [
-      { label: 'Future Prices',      href: '/pos/future-prices'         },
-      { label: 'Future Costs',       href: '/pos/settings/future-costs' },
-      { label: 'Mail Log',           href: '/pos/utilities/mail-log'    },
-      { label: 'Vendor Connections', href: '/pos/settings/vendors'      },
-      { label: 'Trashed Items',      href: '/pos/utilities/trash'       },
-      { label: 'Barcodes',           href: '/pos/utilities/barcodes'    },
+      { label: 'General Settings',   href: '/pos/settings'                },
+      { label: 'Payments',           href: '/pos/settings/payments'       },
+      { label: 'Tax',                href: '/pos/settings/tax'            },
+      { label: 'Receipts',           href: '/pos/settings/receipts'       },
+      { label: 'Loyalty',            href: '/pos/settings/loyalty'        },
+      { label: 'Surcharging',        href: '/pos/settings/surcharging'    },
+      { label: 'Staff & Users',      href: '/pos/settings/users'          },
+      { label: 'Outlets',            href: '/pos/outlets'                 },
+      { label: 'Integrations',       href: '/pos/settings/integrations'   },
+      { label: 'Enterprise',         href: '/pos/settings/enterprise'     },
     ],
   },
   { type: 'spacer' },
-  { type: 'link', id: 'online', label: 'Online Store', icon: <GlobeIcon />, href: '/pos/online' },
+  { type: 'link', id: 'ariaos', label: '← Aria OS', icon: <HomeIcon />, href: '/dashboard' },
 ];
 
 const LS_KEY = 'pos_nav_expanded';
@@ -392,6 +380,9 @@ function HeaderBtn({ label, icon }: { label: string; icon: React.ReactNode }) {
 
 /* ─── Sidebar icons ──────────────────────────────────────────────── */
 function BagIcon()       { return <svg viewBox="0 0 20 20" fill="currentColor" className="w-[15px] h-[15px]"><path fillRule="evenodd" d="M10 2a4 4 0 00-4 4v1H5a1 1 0 00-.994.89l-1 9A1 1 0 004 18h12a1 1 0 00.994-1.11l-1-9A1 1 0 0015 7h-1V6a4 4 0 00-4-4zm2 5V6a2 2 0 10-4 0v1h4zm-6 3a1 1 0 112 0 1 1 0 01-2 0zm7-1a1 1 0 100 2 1 1 0 000-2z" clipRule="evenodd"/></svg>; }
+function TableIcon()     { return <svg viewBox="0 0 20 20" fill="currentColor" className="w-[15px] h-[15px]"><path fillRule="evenodd" d="M5 4a1 1 0 011-1h8a1 1 0 011 1v2H5V4zm-2 3h14v2H3V7zm0 3h14v3H3v-3zm0 4h14v2H3v-2z" clipRule="evenodd"/></svg>; }
+function ChefIcon()      { return <svg viewBox="0 0 20 20" fill="currentColor" className="w-[15px] h-[15px]"><path d="M9 6a3 3 0 00-3 3H4a4 4 0 108 0H9zm2 0a3 3 0 013 3h2a4 4 0 10-8 0h3zM3 14h14v2H3v-2z"/></svg>; }
+function HomeIcon()      { return <svg viewBox="0 0 20 20" fill="currentColor" className="w-[15px] h-[15px]"><path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z"/></svg>; }
 function ChartIcon()     { return <svg viewBox="0 0 20 20" fill="currentColor" className="w-[15px] h-[15px]"><path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zm6-4a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zm6-3a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z"/></svg>; }
 function CashIcon()      { return <svg viewBox="0 0 20 20" fill="currentColor" className="w-[15px] h-[15px]"><path d="M4 4a2 2 0 00-2 2v1h16V6a2 2 0 00-2-2H4z"/><path fillRule="evenodd" d="M18 9H2v5a2 2 0 002 2h12a2 2 0 002-2V9zM4 13a1 1 0 011-1h1a1 1 0 110 2H5a1 1 0 01-1-1zm5-1a1 1 0 100 2h1a1 1 0 100-2H9z" clipRule="evenodd"/></svg>; }
 function BoxIcon()       { return <svg viewBox="0 0 20 20" fill="currentColor" className="w-[15px] h-[15px]"><path d="M4 3a2 2 0 100 4h12a2 2 0 100-4H4z"/><path fillRule="evenodd" d="M3 8h14v7a2 2 0 01-2 2H5a2 2 0 01-2-2V8zm5 3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z" clipRule="evenodd"/></svg>; }

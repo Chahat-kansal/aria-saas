@@ -41,7 +41,17 @@
     "src/app/api/pos/customers/route.ts": { "maxDuration": 15 },
     "src/app/api/pos/gift-cards/route.ts": { "maxDuration": 15 },
     "src/app/api/pos/promotions/route.ts": { "maxDuration": 15 },
-    "src/app/api/pos/settings/route.ts": { "maxDuration": 15 }
+    "src/app/api/pos/settings/route.ts": { "maxDuration": 15 },
+    "src/app/api/pos/tables/route.ts": { "maxDuration": 15 },
+    "src/app/api/pos/tables/[id]/route.ts": { "maxDuration": 15 },
+    "src/app/api/pos/kds/route.ts": { "maxDuration": 15 },
+    "src/app/api/pos/kds/[id]/route.ts": { "maxDuration": 15 },
+    "src/app/api/pos/timesheets/route.ts": { "maxDuration": 15 },
+    "src/app/api/pos/variants/route.ts": { "maxDuration": 15 },
+    "src/app/api/pos/modifiers/route.ts": { "maxDuration": 15 },
+    "src/app/api/aria/pos-chat/route.ts": { "maxDuration": 20 },
+    "src/app/api/aria/pos-end-of-day/route.ts": { "maxDuration": 30 },
+    "src/app/api/aria/price-check/route.ts": { "maxDuration": 30 }
   },
   "crons": [
     {
