@@ -111,28 +111,45 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: itemsErr.message }, { status: 500 });
   }
 
-  // Decrement stock for tracked products
-  const stockUpdates = items
-    .filter((i: any) => productMap[i.product_id]?.track_stock && productMap[i.product_id]?.stock_quantity != null)
-    .map((i: any) => {
-      const current = productMap[i.product_id].stock_quantity as number;
-      return supabase
-        .from('pos_products')
-        .update({ stock_quantity: current - i.quantity })
-        .eq('id', i.product_id);
-    });
-  await Promise.all(stockUpdates);
+  // Decrement stock + log stock movements
+  const stockOps: Promise<any>[] = [];
+  for (const i of items) {
+    const p = productMap[i.product_id];
+    if (!p?.track_stock || p.stock_quantity == null) continue;
+    const current = p.stock_quantity as number;
+    const newStock = Math.max(0, current - i.quantity);
+    stockOps.push(
+      Promise.resolve(supabase.from('pos_products').update({ stock_quantity: newStock }).eq('id', i.product_id))
+    );
+    // Log stock movement — non-fatal if table missing
+    stockOps.push(
+      (async () => {
+        try {
+          await supabase.from('stock_movements').insert({
+            business_id: business.id,
+            item_id: i.product_id,
+            movement_type: 'sale',
+            quantity_added: -i.quantity,
+            new_stock: newStock,
+            notes: `Sale ${saleNumber}`,
+            scanned_at: new Date().toISOString(),
+          });
+        } catch { /* non-fatal */ }
+      })()
+    );
+  }
+  await Promise.all(stockOps);
 
-  // Update session totals
+  // Update session totals (fix: eftpos not 'card')
   if (openSession) {
     const cashAmt = payment_method === 'cash' ? total_amount
       : payment_method === 'split' ? (split_cash ?? 0) : 0;
-    const cardAmt = payment_method === 'card' ? total_amount
+    const cardAmt = payment_method === 'eftpos' ? total_amount  // fixed: was 'card'
       : payment_method === 'split' ? (split_card ?? 0) : 0;
-    await supabase.from('pos_cash_sessions').update({
+    await Promise.resolve(supabase.from('pos_cash_sessions').update({
       cash_sales: (openSession.cash_sales ?? 0) + cashAmt,
       card_sales: (openSession.card_sales ?? 0) + cardAmt,
-    }).eq('id', openSession.id);
+    }).eq('id', openSession.id));
   }
 
   // Update customer loyalty + stats

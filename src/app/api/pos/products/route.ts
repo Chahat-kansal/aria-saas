@@ -46,6 +46,7 @@ export async function GET() {
   ]);
 
   return NextResponse.json({
+    business_id: bid,
     products:   products   || [],
     categories: categories || [],
     sale_keys:  saleKeys   || [],

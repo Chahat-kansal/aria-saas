@@ -135,13 +135,13 @@ export default function ImportDataPage() {
               <ArrowLeft className="h-3.5 w-3.5" />
               Back to dashboard
             </Link>
-            <h1 className="text-2xl font-semibold text-white">Upload sales data</h1>
+            <h1 className="text-2xl font-semibold text-white">Import historical data</h1>
             <p className="mt-1 max-w-2xl text-sm text-white/45">
-              Import CSV files so Aria can build a useful Morning Briefing before your POS integration is connected.
+              Import CSV files to migrate historical data from a previous POS system. For live intelligence, use Aria POS or connect your existing POS.
             </p>
           </div>
-          <Link href="/dashboard" className="inline-flex items-center justify-center rounded-xl bg-[#1D9E75] px-4 py-2 text-sm font-semibold text-white hover:bg-[#188765]">
-            Generate Morning Briefing
+          <Link href="/pos" className="inline-flex items-center justify-center rounded-xl bg-[#1D9E75] px-4 py-2 text-sm font-semibold text-white hover:bg-[#188765]">
+            Open Aria POS
           </Link>
         </div>
 
@@ -255,7 +255,7 @@ export default function ImportDataPage() {
                 <div>
                   <p className="text-sm font-semibold text-white">{status.type === 'success' ? 'Import complete' : 'Import failed'}</p>
                   <p className="mt-1 text-sm text-white/55">{status.message}</p>
-                  {status.type === 'success' && <Link href="/dashboard" className="mt-3 inline-flex text-sm font-semibold text-[#8ff1c9] hover:underline">Generate Morning Briefing</Link>}
+                  {status.type === 'success' && <Link href="/dashboard" className="mt-3 inline-flex text-sm font-semibold text-[#8ff1c9] hover:underline">Go to dashboard →</Link>}
                 </div>
               </div>
             )}

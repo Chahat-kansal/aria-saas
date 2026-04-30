@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
+import { AriaSellAssistant } from '@/components/pos/AriaSellAssistant';
 
 /* ─── Types ─────────────────────────────────────────────────────── */
 interface Product {
@@ -11,11 +12,12 @@ interface Product {
   category_id: string | null;
   pos_categories?: { name: string; color: string } | null;
 }
-interface CartItem { product: Product; qty: number; }
+interface CartItem { product: Product; qty: number; discount_percent?: number; }
 interface Customer { id: string; name: string; email: string | null; phone: string | null; loyalty_points: number; total_spent: number; }
 interface Category { id: string; name: string; color: string; }
 interface ParkedSale { id: string; label: string | null; items: CartItem[]; total: number; customer_id: string | null; created_at: string; }
 interface SaleKey { id: string; label: string; color: string; icon: string | null; type: string; function_name: string | null; product_id: string | null; position: number; }
+interface RegisterSession { id: string; status: string; opening_float: number; opened_at: string; opened_by: string | null; }
 
 /* ─── Default sale keys ─────────────────────────────────────────── */
 const DEFAULT_KEYS: Omit<SaleKey, 'id'>[] = [
@@ -62,24 +64,105 @@ export default function TerminalPage() {
   const [splitCash,       setSplitCash]       = useState('');
   const [processing,      setProcessing]      = useState(false);
   const [loading,         setLoading]         = useState(true);
+  const [lastAddedId,     setLastAddedId]     = useState<string | null>(null);
+  const [businessId,      setBusinessId]      = useState<string | null>(null);
+
+  // ── Register session state ──────────────────────────────────
+  const [registerSession,   setRegisterSession]   = useState<RegisterSession | null>(null);
+  const [registerLoading,   setRegisterLoading]   = useState(true);
+  const [showRegisterModal, setShowRegisterModal] = useState(false);
+  const [openingFloat,      setOpeningFloat]      = useState('200');
+  const [openingRegister,   setOpeningRegister]   = useState(false);
+  const [closingRegister,   setClosingRegister]   = useState(false);
+  const [showCloseModal,    setShowCloseModal]    = useState(false);
+  const [closingFloat,      setClosingFloat]      = useState('');
+  const [registerError,     setRegisterError]     = useState<string | null>(null);
 
   const searchRef     = useRef<HTMLInputElement>(null);
   const barcodeBuffer = useRef('');
   const barcodeTimer  = useRef<ReturnType<typeof setTimeout> | null>(null);
   const barcodeTs     = useRef<number>(0);
 
+  /* ── Register session load ─────────────────────────────────── */
+  const loadRegister = useCallback(async () => {
+    setRegisterLoading(true);
+    try {
+      const res = await fetch('/api/pos/sessions');
+      if (res.ok) {
+        const d = await res.json();
+        setRegisterSession(d.openSession ?? null);
+      }
+    } catch { /* silent */ }
+    setRegisterLoading(false);
+  }, []);
+
   /* ── Initial data load ─────────────────────────────────────── */
   useEffect(() => {
+    loadRegister();
     Promise.all([
       fetch('/api/pos/products').then(r => r.json()),
       fetch('/api/pos/park').then(r => r.json()),
     ]).then(([prod, park]) => {
+      if (prod.business_id) setBusinessId(prod.business_id);
       setProducts(prod.products || []);
       setSaleKeys(prod.sale_keys || []);
       setParkedSales(park.parked_sales || []);
       setLoading(false);
     }).catch(() => setLoading(false));
-  }, []);
+  }, [loadRegister]);
+
+  /* ── Open Register ──────────────────────────────────────────── */
+  async function openRegister() {
+    setOpeningRegister(true);
+    setRegisterError(null);
+    try {
+      const res = await fetch('/api/pos/sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ opening_float: parseFloat(openingFloat) || 0 }),
+      });
+      const d = await res.json();
+      if (!res.ok) {
+        setRegisterError(d.error ?? 'Failed to open register');
+        setOpeningRegister(false);
+        return;
+      }
+      await loadRegister();
+      setShowRegisterModal(false);
+    } catch {
+      setRegisterError('Failed to open register — check connection');
+    }
+    setOpeningRegister(false);
+  }
+
+  /* ── Close Register ─────────────────────────────────────────── */
+  async function closeRegister() {
+    if (!registerSession) return;
+    setClosingRegister(true);
+    setRegisterError(null);
+    try {
+      const res = await fetch('/api/pos/sessions', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          session_id: registerSession.id,
+          closing_float: parseFloat(closingFloat) || 0,
+        }),
+      });
+      if (!res.ok) {
+        const d = await res.json();
+        setRegisterError(d.error ?? 'Failed to close register');
+        setClosingRegister(false);
+        return;
+      }
+      await loadRegister();
+      setShowCloseModal(false);
+      setClosingFloat('');
+    } catch {
+      setRegisterError('Failed to close register — check connection');
+    }
+    setClosingRegister(false);
+  }
 
   /* ── Sync cart to customer display (localStorage) ─────────── */
   useEffect(() => {
@@ -160,6 +243,7 @@ export default function TerminalPage() {
       return [...c, { product: p, qty: 1 }];
     });
     setSelectedItem(p.id);
+    setLastAddedId(p.id);
     setSearch(''); setSearchResults([]);
   }
 
@@ -242,7 +326,7 @@ export default function TerminalPage() {
             quantity:         i.qty,
             unit_price:       i.product.price,
             tax_rate:         i.product.tax_rate ?? 10,
-            discount_percent: 0,
+            discount_percent: i.discount_percent ?? 0,
             line_total:       +(i.product.price * i.qty).toFixed(2),
           })),
           customer_id:     customer?.id ?? null,
@@ -256,10 +340,12 @@ export default function TerminalPage() {
           split_cash:      payMethod === 'split' ? parseFloat(splitCash) || 0 : null,
           split_card:      payMethod === 'split' ? +splitCardAmt.toFixed(2) : null,
           outlet_id:       outletId,
+          session_id:      registerSession?.id ?? null,
         }),
       });
       const d = await r.json();
       if (d.error) { alert(d.error); return; }
+      // Optimistically update local stock
       setProducts(ps => ps.map(p => {
         const item = cart.find(i => i.product.id === p.id);
         if (!item || !p.track_stock) return p;
@@ -278,18 +364,34 @@ export default function TerminalPage() {
     ? saleKeys
     : DEFAULT_KEYS.map((k, i) => ({ ...k, id: `default-${i}` }));
 
+  const registerIsOpen = !!registerSession;
+
   return (
     <div className="flex flex-col h-full overflow-hidden bg-[#f5f4ef]">
 
-      {/* Top search bar */}
+      {/* Top bar: search + register status */}
       <div className="bg-[#1a1a1a] px-4 py-2.5 flex items-center gap-3 flex-shrink-0 relative z-30">
+        {/* Register status pill */}
+        <button
+          onClick={() => registerIsOpen ? setShowCloseModal(true) : setShowRegisterModal(true)}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors flex-shrink-0 ${
+            registerLoading ? 'bg-[rgba(255,255,255,0.08)] text-[rgba(255,255,255,0.4)]' :
+            registerIsOpen ? 'bg-[rgba(29,158,117,0.15)] text-[#1D9E75] hover:bg-[rgba(29,158,117,0.25)]' :
+            'bg-[rgba(239,68,68,0.15)] text-red-400 hover:bg-[rgba(239,68,68,0.25)]'
+          }`}
+        >
+          <span className={`w-1.5 h-1.5 rounded-full ${registerLoading ? 'bg-[rgba(255,255,255,0.3)]' : registerIsOpen ? 'bg-[#1D9E75]' : 'bg-red-400'}`} />
+          {registerLoading ? 'Loading…' : registerIsOpen ? 'Register Open' : 'Register Closed'}
+        </button>
+
+        {/* Product search */}
         <div className="flex-1 relative">
           <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[rgba(255,255,255,0.3)]" />
           <input
             ref={searchRef}
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Search for Products and Customers…  (F1)"
+            placeholder="Search products…  (F1)"
             className="w-full bg-[rgba(255,255,255,0.08)] border border-[rgba(255,255,255,0.1)] rounded-lg pl-9 pr-4 py-2 text-sm text-white placeholder:text-[rgba(255,255,255,0.3)] outline-none focus:border-[rgba(255,255,255,0.25)] transition-colors"
           />
           {searchResults.length > 0 && (
@@ -299,18 +401,23 @@ export default function TerminalPage() {
                   className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-[rgba(37,99,235,0.05)] transition-colors text-left border-b border-[rgba(0,0,0,0.05)] last:border-0">
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-[#1a1a16] truncate">{p.name}</p>
-                    <p className="text-[11px] text-[rgba(26,26,22,0.4)]">{p.sku ?? ''}{p.barcode ? ` · ${p.barcode}` : ''}</p>
+                    <p className="text-[11px] text-[rgba(26,26,22,0.4)]">
+                      {p.sku ?? ''}{p.barcode ? ` · ${p.barcode}` : ''}
+                      {p.track_stock && (
+                        <span className={`ml-2 ${p.stock_quantity === 0 ? 'text-red-500' : p.stock_quantity <= p.low_stock_threshold ? 'text-amber-500' : 'text-[rgba(26,26,22,0.3)]'}`}>
+                          {p.stock_quantity === 0 ? '⚠ Out of stock' : p.stock_quantity <= p.low_stock_threshold ? `⚡ Low: ${p.stock_quantity}` : `${p.stock_quantity} in stock`}
+                        </span>
+                      )}
+                    </p>
                   </div>
-                  <div className="text-right flex-shrink-0">
-                    <p className="text-sm font-semibold text-[#1a1a16]">${p.price.toFixed(2)}</p>
-                    {p.track_stock && (
-                      <p className={`text-[10px] ${p.stock_quantity === 0 ? 'text-red-500' : p.stock_quantity <= p.low_stock_threshold ? 'text-amber-500' : 'text-[rgba(26,26,22,0.3)]'}`}>
-                        {p.stock_quantity} in stock
-                      </p>
-                    )}
-                  </div>
+                  <p className="text-sm font-semibold text-[#1a1a16] flex-shrink-0">${p.price.toFixed(2)}</p>
                 </button>
               ))}
+            </div>
+          )}
+          {search.trim() && searchResults.length === 0 && !loading && (
+            <div className="absolute top-full mt-1 left-0 right-0 bg-white rounded-xl border border-[rgba(0,0,0,0.1)] shadow-xl z-50 px-4 py-3 text-sm text-[rgba(26,26,22,0.4)]">
+              No products matching &ldquo;{search}&rdquo;
             </div>
           )}
         </div>
@@ -323,7 +430,6 @@ export default function TerminalPage() {
 
         {/* LEFT PANEL — Sale keys (70%) */}
         <div className="flex flex-col flex-[7] overflow-hidden bg-white border-r border-[rgba(0,0,0,0.07)]">
-          {/* Tabs */}
           <div className="flex border-b border-[rgba(0,0,0,0.07)] flex-shrink-0">
             {(['keys', 'parked'] as const).map(tab => (
               <button key={tab} onClick={() => setActiveTab(tab)}
@@ -339,42 +445,51 @@ export default function TerminalPage() {
 
           {activeTab === 'keys' ? (
             <div className="flex-1 overflow-y-auto p-3">
-              <div className="flex gap-3 h-full min-h-0">
-                {/* Main key grid */}
-                <div className="flex-1 grid grid-cols-3 gap-2 auto-rows-[minmax(100px,auto)] content-start">
-                  {displayKeys.map(k => (
-                    <KeyTile key={k.id} label={k.label} color={k.color} icon={k.icon}
-                      onClick={() => {
-                        if (k.type === 'function') handleKeyTile(k.function_name);
-                        else if (k.type === 'product' && k.product_id) {
-                          const p = products.find(p => p.id === k.product_id);
-                          if (p) addToCart(p);
-                        }
-                      }}
-                    />
-                  ))}
-                  {/* EFTPOS large tile */}
-                  <button
-                    onClick={() => { if (cart.length) { setPayMethod('eftpos'); setShowPayModal(true); } }}
-                    className="col-span-1 row-span-2 rounded-xl flex flex-col items-center justify-center gap-2 text-white font-bold text-sm transition-all hover:opacity-90 active:scale-[0.97] shadow-sm"
-                    style={{ background: 'linear-gradient(135deg,#7B0000,#B71C1C)', minHeight: '208px' }}>
-                    <CardIcon className="w-8 h-8" />
-                    <span>EFTPOS</span>
-                  </button>
+              {loading ? (
+                <div className="flex items-center justify-center h-full text-[rgba(26,26,22,0.3)] text-sm">Loading products…</div>
+              ) : products.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full text-center gap-2 py-12 px-6">
+                  <p className="text-4xl mb-2">📦</p>
+                  <p className="text-sm font-medium text-[rgba(26,26,22,0.6)]">No products yet</p>
+                  <p className="text-xs text-[rgba(26,26,22,0.35)] mb-4">Add products to start selling through Aria POS.</p>
+                  <a href="/pos/products" className="px-4 py-2 rounded-xl bg-[#1D9E75] text-white text-xs font-semibold hover:bg-[#179968] transition-colors">
+                    Add products →
+                  </a>
                 </div>
-
-                {/* Cash denomination column */}
-                <div className="w-[80px] flex flex-col gap-2">
-                  {DENOM_KEYS.map(d => (
-                    <button key={d.label}
-                      onClick={() => setCashTendered(prev => ((parseFloat(prev) || 0) + d.amount).toFixed(2))}
-                      className="flex-1 min-h-[48px] rounded-xl flex items-center justify-center text-white font-bold text-sm transition-all hover:opacity-90 active:scale-[0.97] shadow-sm"
-                      style={{ backgroundColor: d.color }}>
-                      {d.label}
+              ) : (
+                <div className="flex gap-3 h-full min-h-0">
+                  <div className="flex-1 grid grid-cols-3 gap-2 auto-rows-[minmax(100px,auto)] content-start">
+                    {displayKeys.map(k => (
+                      <KeyTile key={k.id} label={k.label} color={k.color} icon={k.icon}
+                        onClick={() => {
+                          if (k.type === 'function') handleKeyTile(k.function_name);
+                          else if (k.type === 'product' && k.product_id) {
+                            const p = products.find(p => p.id === k.product_id);
+                            if (p) addToCart(p);
+                          }
+                        }}
+                      />
+                    ))}
+                    <button
+                      onClick={() => { if (cart.length) { setPayMethod('eftpos'); setShowPayModal(true); } }}
+                      className="col-span-1 row-span-2 rounded-xl flex flex-col items-center justify-center gap-2 text-white font-bold text-sm transition-all hover:opacity-90 active:scale-[0.97] shadow-sm"
+                      style={{ background: 'linear-gradient(135deg,#7B0000,#B71C1C)', minHeight: '208px' }}>
+                      <CardIcon className="w-8 h-8" />
+                      <span>EFTPOS</span>
                     </button>
-                  ))}
+                  </div>
+                  <div className="w-[80px] flex flex-col gap-2">
+                    {DENOM_KEYS.map(d => (
+                      <button key={d.label}
+                        onClick={() => setCashTendered(prev => ((parseFloat(prev) || 0) + d.amount).toFixed(2))}
+                        className="flex-1 min-h-[48px] rounded-xl flex items-center justify-center text-white font-bold text-sm transition-all hover:opacity-90 active:scale-[0.97] shadow-sm"
+                        style={{ backgroundColor: d.color }}>
+                        {d.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           ) : (
             <div className="flex-1 overflow-y-auto p-4">
@@ -412,7 +527,6 @@ export default function TerminalPage() {
 
         {/* RIGHT PANEL — Cart (30%) */}
         <div className="flex flex-col flex-[3] overflow-hidden bg-white">
-
           {/* Customer selector */}
           <div className="px-4 pt-4 pb-3 border-b border-[rgba(0,0,0,0.07)] flex-shrink-0">
             {customer ? (
@@ -486,7 +600,17 @@ export default function TerminalPage() {
             )}
           </div>
 
-          {/* AI Suggestions */}
+          {/* Aria Staff Assist — real-time prompts based on cart */}
+          {businessId && (
+            <AriaSellAssistant
+              businessId={businessId}
+              cart={cart}
+              lastAddedProductId={lastAddedId}
+              customerId={customer?.id ?? null}
+            />
+          )}
+
+          {/* Often bought together suggestions */}
           <SuggestionsBar cart={cart} onAdd={addToCart} />
 
           {/* Totals */}
@@ -508,15 +632,98 @@ export default function TerminalPage() {
 
           {/* Finalize */}
           <div className="px-3 pb-3 flex-shrink-0">
+            {!registerIsOpen && !registerLoading && (
+              <button
+                onClick={() => setShowRegisterModal(true)}
+                className="w-full h-14 rounded-xl bg-[#1D9E75] hover:bg-[#179968] text-white font-bold text-sm tracking-widest uppercase transition-colors mb-2">
+                OPEN REGISTER
+              </button>
+            )}
             <button
-              onClick={() => { if (cart.length) setShowPayModal(true); }}
-              disabled={!cart.length}
+              onClick={() => { if (cart.length && registerIsOpen) setShowPayModal(true); }}
+              disabled={!cart.length || !registerIsOpen}
+              title={!registerIsOpen ? 'Open the register first' : ''}
               className="w-full h-14 rounded-xl bg-[#2563eb] hover:bg-[#1d4ed8] disabled:bg-[rgba(0,0,0,0.08)] disabled:text-[rgba(26,26,22,0.3)] text-white font-bold text-sm tracking-widest uppercase transition-colors">
-              FINALIZE
+              {!registerIsOpen && !registerLoading ? 'REGISTER CLOSED' : 'FINALIZE'}
             </button>
           </div>
         </div>
       </div>
+
+      {/* ── Open Register Modal ──────────────────────────────────── */}
+      {showRegisterModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(0,0,0,0.5)] p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
+            <div className="px-6 py-5 border-b border-[rgba(0,0,0,0.08)]">
+              <h2 className="text-base font-bold text-[#1a1a16]">Open Register</h2>
+              <p className="text-xs text-[rgba(26,26,22,0.45)] mt-0.5">Enter your opening float to start trading.</p>
+            </div>
+            <div className="px-6 py-5 space-y-4">
+              <div>
+                <label className="text-xs font-medium text-[rgba(26,26,22,0.5)] block mb-1.5">Opening float (A$)</label>
+                <input
+                  type="number" min="0" step="0.01" value={openingFloat}
+                  onChange={e => setOpeningFloat(e.target.value)}
+                  className="w-full border border-[rgba(0,0,0,0.1)] rounded-xl px-4 py-2.5 text-lg font-bold text-[#1a1a16] outline-none focus:border-[#1D9E75] transition-colors"
+                  autoFocus
+                />
+              </div>
+              {registerError && (
+                <p className="text-xs text-red-500 bg-red-50 rounded-lg px-3 py-2">{registerError}</p>
+              )}
+            </div>
+            <div className="px-6 pb-6 flex gap-2">
+              <button onClick={() => { setShowRegisterModal(false); setRegisterError(null); }}
+                className="flex-1 py-2.5 rounded-xl border border-[rgba(0,0,0,0.1)] text-sm text-[rgba(26,26,22,0.5)] hover:bg-[rgba(0,0,0,0.03)] transition-colors">
+                Cancel
+              </button>
+              <button onClick={openRegister} disabled={openingRegister}
+                className="flex-1 py-2.5 rounded-xl bg-[#1D9E75] hover:bg-[#179968] text-white text-sm font-bold transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
+                {openingRegister ? <><Spinner /> Opening…</> : 'Open Register'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Close Register Modal ─────────────────────────────────── */}
+      {showCloseModal && registerSession && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(0,0,0,0.5)] p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
+            <div className="px-6 py-5 border-b border-[rgba(0,0,0,0.08)]">
+              <h2 className="text-base font-bold text-[#1a1a16]">Close Register</h2>
+              <p className="text-xs text-[rgba(26,26,22,0.45)] mt-0.5">
+                Opened at {new Date(registerSession.opened_at).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })} · Float: A${(registerSession.opening_float || 0).toFixed(2)}
+              </p>
+            </div>
+            <div className="px-6 py-5 space-y-4">
+              <div>
+                <label className="text-xs font-medium text-[rgba(26,26,22,0.5)] block mb-1.5">Closing float counted (A$)</label>
+                <input
+                  type="number" min="0" step="0.01" value={closingFloat}
+                  onChange={e => setClosingFloat(e.target.value)}
+                  placeholder="0.00"
+                  className="w-full border border-[rgba(0,0,0,0.1)] rounded-xl px-4 py-2.5 text-lg font-bold text-[#1a1a16] outline-none focus:border-[#2563eb] transition-colors"
+                  autoFocus
+                />
+              </div>
+              {registerError && (
+                <p className="text-xs text-red-500 bg-red-50 rounded-lg px-3 py-2">{registerError}</p>
+              )}
+            </div>
+            <div className="px-6 pb-6 flex gap-2">
+              <button onClick={() => { setShowCloseModal(false); setRegisterError(null); }}
+                className="flex-1 py-2.5 rounded-xl border border-[rgba(0,0,0,0.1)] text-sm text-[rgba(26,26,22,0.5)] hover:bg-[rgba(0,0,0,0.03)] transition-colors">
+                Cancel
+              </button>
+              <button onClick={closeRegister} disabled={closingRegister}
+                className="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-bold transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
+                {closingRegister ? <><Spinner /> Closing…</> : 'Close Register'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Payment Modal */}
       {showPayModal && (
@@ -532,7 +739,6 @@ export default function TerminalPage() {
             </div>
 
             <div className="px-6 py-5 space-y-4">
-              {/* Method tabs */}
               <div className="flex gap-2">
                 {(['eftpos', 'cash', 'split'] as const).map(m => (
                   <button key={m} onClick={() => setPayMethod(m)}
@@ -544,7 +750,6 @@ export default function TerminalPage() {
                 ))}
               </div>
 
-              {/* Amount due */}
               <div className="bg-[#f5f4ef] rounded-xl px-4 py-3 flex justify-between items-center">
                 <span className="text-xs text-[rgba(26,26,22,0.5)]">Amount due</span>
                 <span className="text-xl font-bold text-[#1a1a16]">${total.toFixed(2)}</span>

@@ -449,7 +449,7 @@ export function MorningCommandCentre() {
             <div className="mt-4 rounded-xl border border-amber-300/20 bg-amber-500/10 p-4">
               <p className="text-sm font-medium text-amber-100">Aria is ready, but live business data is not connected yet.</p>
               <p className="mt-1 text-xs leading-relaxed text-amber-100/70">
-                Connect Square, use Aria POS, or upload sales/product/inventory data to generate your first real briefing.
+                Start using Aria POS or connect your existing POS to unlock live intelligence.
               </p>
               <div className="mt-3 flex flex-wrap gap-2">
                 <Link href="/pos" className="inline-flex items-center gap-1.5 rounded-xl bg-[#1D9E75] px-3 py-2 text-xs font-semibold text-white hover:bg-[#188765]">Open Aria POS</Link>
@@ -490,7 +490,7 @@ export function MorningCommandCentre() {
                 ))}
               </div>
             ) : (
-              <EmptyMessage text={status.missing_required_data.length ? `Not enough live data to generate intelligence yet. Missing: ${status.missing_required_data.join(', ')}.` : 'No urgent changes found in connected records.'} />
+              <EmptyMessage text={status.missing_required_data.length ? `Start using Aria POS to generate live intelligence. Missing: ${status.missing_required_data.join(', ')}.` : 'No urgent changes found in connected records.'} />
             )}
           </Panel>
         </div>
@@ -538,7 +538,7 @@ export function MorningCommandCentre() {
               })}
             </div>
           ) : (
-            <EmptyMessage text="No real recommendations yet. Connect POS, use Aria POS, or upload sales/product/inventory data." />
+            <EmptyMessage text="No recommendations yet. Start using Aria POS to generate live intelligence." />
           )}
         </Panel>
 
