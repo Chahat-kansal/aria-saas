@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
-interface Session { id: string; opened_at: string; closed_at: string | null; opening_float: number | null; closing_float: number | null; cash_sales: number | null; card_sales: number | null; status: string; }
+interface Session { id: string; opened_at: string; closed_at: string | null; opening_float: number | null; closing_float: number | null; total_cash_sales: number | null; total_card_sales: number | null; status: string; }
 export default function RegisterClosuresPage() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
@@ -12,7 +12,7 @@ export default function RegisterClosuresPage() {
   }, []);
 
   function variance(s: Session) {
-    const expected = (s.opening_float??0) + (s.cash_sales??0);
+    const expected = (s.opening_float??0) + (s.total_cash_sales??0);
     return (s.closing_float??0) - expected;
   }
 
@@ -24,7 +24,7 @@ export default function RegisterClosuresPage() {
         s.opened_at ? new Date(s.opened_at).toLocaleDateString() : '',
         s.opened_at ? new Date(s.opened_at).toLocaleTimeString() : '',
         s.closed_at ? new Date(s.closed_at).toLocaleTimeString() : '',
-        String(s.opening_float??0), String(s.cash_sales??0), String(s.card_sales??0),
+        String(s.opening_float??0), String(s.total_cash_sales??0), String(s.total_card_sales??0),
         String(s.closing_float??0), v.toFixed(2),
       ]);
     });
@@ -54,8 +54,8 @@ export default function RegisterClosuresPage() {
                     <td className="px-4 py-3 text-[rgba(26,26,22,.6)]">{s.opened_at?new Date(s.opened_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}):'-'}</td>
                     <td className="px-4 py-3 text-[rgba(26,26,22,.6)]">{s.closed_at?new Date(s.closed_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}):'-'}</td>
                     <td className="px-4 py-3 text-[rgba(26,26,22,.6)]">${(s.opening_float??0).toFixed(2)}</td>
-                    <td className="px-4 py-3 text-[rgba(26,26,22,.6)]">${(s.cash_sales??0).toFixed(2)}</td>
-                    <td className="px-4 py-3 text-[rgba(26,26,22,.6)]">${(s.card_sales??0).toFixed(2)}</td>
+                    <td className="px-4 py-3 text-[rgba(26,26,22,.6)]">${(s.total_cash_sales??0).toFixed(2)}</td>
+                    <td className="px-4 py-3 text-[rgba(26,26,22,.6)]">${(s.total_card_sales??0).toFixed(2)}</td>
                     <td className="px-4 py-3 text-[rgba(26,26,22,.6)]">${(s.closing_float??0).toFixed(2)}</td>
                     <td className="px-4 py-3">
                       <span className={`font-semibold ${Math.abs(v)<5?'text-green-600':Math.abs(v)<20?'text-amber-600':'text-red-600'}`}>

@@ -59,7 +59,7 @@ export async function POST(req: Request) {
   // Get open session
   const { data: openSession } = await supabase
     .from('pos_cash_sessions')
-    .select('id, cash_sales, card_sales')
+    .select('id, total_cash_sales, total_card_sales')
     .eq('business_id', business.id)
     .eq('status', 'open')
     .maybeSingle();
@@ -147,8 +147,8 @@ export async function POST(req: Request) {
     const cardAmt = payment_method === 'eftpos' ? total_amount  // fixed: was 'card'
       : payment_method === 'split' ? (split_card ?? 0) : 0;
     await Promise.resolve(supabase.from('pos_cash_sessions').update({
-      cash_sales: (openSession.cash_sales ?? 0) + cashAmt,
-      card_sales: (openSession.card_sales ?? 0) + cardAmt,
+      total_cash_sales: (openSession.total_cash_sales ?? 0) + cashAmt,
+      total_card_sales: (openSession.total_card_sales ?? 0) + cardAmt,
     }).eq('id', openSession.id));
   }
 

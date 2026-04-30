@@ -74,8 +74,8 @@ export async function POST(req: Request) {
       opened_by: user.id,
       opening_float: opening_float ?? 0,
       status: 'open',
-      cash_sales: 0,
-      card_sales: 0,
+      total_cash_sales: 0,
+      total_card_sales: 0,
     })
     .select()
     .single();

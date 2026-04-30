@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 
 interface Session {
   id: string; opened_at: string; status: string;
-  opening_float: number; cash_sales: number; card_sales: number;
+  opening_float: number; total_cash_sales: number; total_card_sales: number;
   closing_float?: number | null;
 }
 
@@ -30,7 +30,7 @@ export default function ClosePage() {
   }, []);
 
   const closingFloat = DENOMS.reduce((s, d) => s + (parseFloat(counts[d.value] || '0') || 0) * d.value, 0);
-  const expectedCash = (session?.opening_float ?? 0) + (session?.cash_sales ?? 0);
+  const expectedCash = (session?.opening_float ?? 0) + (session?.total_cash_sales ?? 0);
   const variance = closingFloat - expectedCash;
 
   async function closeSession() {
@@ -78,8 +78,8 @@ export default function ClosePage() {
       {/* Summary */}
       <div className="grid grid-cols-3 gap-4 mb-6">
         {[
-          { label: 'Cash Sales', value: session.cash_sales ?? 0, color: '#16a34a' },
-          { label: 'Card Sales', value: session.card_sales ?? 0, color: '#2563eb' },
+          { label: 'Cash Sales', value: session.total_cash_sales ?? 0, color: '#16a34a' },
+          { label: 'Card Sales', value: session.total_card_sales ?? 0, color: '#2563eb' },
           { label: 'Expected Cash', value: expectedCash, color: '#1a1a16' },
         ].map(({ label, value, color }) => (
           <div key={label} className="bg-white rounded-2xl border border-[rgba(0,0,0,.08)] p-4 shadow-sm">

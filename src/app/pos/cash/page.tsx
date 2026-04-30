@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 
 interface CashEntry { id: string; type: 'float_in' | 'float_out' | 'sale' | 'refund'; amount: number; note: string | null; created_at: string; }
-interface Session { id: string; opened_at: string; status: string; opening_float: number; cash_sales: number; card_sales: number; }
+interface Session { id: string; opened_at: string; status: string; opening_float: number; total_cash_sales: number; total_card_sales: number; }
 
 export default function CashPage() {
   const [session, setSession] = useState<Session | null>(null);
@@ -39,7 +39,7 @@ export default function CashPage() {
 
   const cashIn = entries.filter(e => e.type === 'float_in').reduce((s, e) => s + e.amount, 0);
   const cashOut = entries.filter(e => e.type === 'float_out').reduce((s, e) => s + e.amount, 0);
-  const cashBalance = (session?.opening_float ?? 0) + (session?.cash_sales ?? 0) + cashIn - cashOut;
+  const cashBalance = (session?.opening_float ?? 0) + (session?.total_cash_sales ?? 0) + cashIn - cashOut;
 
   return (
     <div className="p-6 max-w-3xl mx-auto">
@@ -65,7 +65,7 @@ export default function CashPage() {
       <div className="grid grid-cols-3 gap-4 mb-6">
         {[
           { label: 'Opening Float', value: session?.opening_float ?? 0, color: '#2563eb' },
-          { label: 'Cash Sales', value: session?.cash_sales ?? 0, color: '#16a34a' },
+          { label: 'Cash Sales', value: session?.total_cash_sales ?? 0, color: '#16a34a' },
           { label: 'Current Balance', value: cashBalance, color: '#1a1a16' },
         ].map(({ label, value, color }) => (
           <div key={label} className="bg-white rounded-2xl border border-[rgba(0,0,0,.08)] p-4 shadow-sm">
