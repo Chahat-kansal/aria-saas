@@ -2,6 +2,17 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 
+interface EODDebrief {
+  debrief: string | null;
+  stats: {
+    today_revenue: number;
+    today_count: number;
+    avg_basket: number;
+    top_product: string | null;
+    vs_avg_pct: number | null;
+  } | null;
+}
+
 interface Session {
   id: string; opened_at: string; status: string;
   opening_float: number; total_cash_sales: number; total_card_sales: number;
@@ -22,6 +33,9 @@ export default function ClosePage() {
   const [counts, setCounts] = useState<Record<number, string>>({});
   const [closing, setClosing] = useState(false);
   const [done, setDone] = useState(false);
+  const [debrief, setDebrief] = useState<EODDebrief | null>(null);
+  const [debriefLoading, setDebriefLoading] = useState(false);
+  const [closedSessionId, setClosedSessionId] = useState<string | null>(null);
 
   useEffect(() => {
     fetch('/api/pos/sessions')
@@ -41,24 +55,118 @@ export default function ClosePage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ session_id: session.id, closing_float: closingFloat }),
     });
+    setClosedSessionId(session.id);
     setDone(true);
     setClosing(false);
+    // Fetch EOD debrief non-blocking
+    fetchDebrief(session.id);
+  }
+
+  async function fetchDebrief(sessionId: string) {
+    setDebriefLoading(true);
+    try {
+      const res = await fetch('/api/aria/pos-end-of-day', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: sessionId }),
+      });
+      if (res.ok) setDebrief(await res.json());
+    } catch { /* non-blocking — EOD is a nice-to-have */ }
+    setDebriefLoading(false);
+  }
+
+  function shareReport() {
+    if (!debrief?.stats) return;
+    const s = debrief.stats;
+    const text = [
+      `Aria POS — End of Day Report`,
+      `Revenue: A$${s.today_revenue.toFixed(2)}`,
+      `Transactions: ${s.today_count}`,
+      `Avg basket: A$${s.avg_basket.toFixed(2)}`,
+      s.top_product ? `Top product: ${s.top_product}` : '',
+      s.vs_avg_pct != null ? `vs 7-day avg: ${s.vs_avg_pct > 0 ? '+' : ''}${s.vs_avg_pct.toFixed(0)}%` : '',
+      debrief.debrief ? `\n${debrief.debrief}` : '',
+    ].filter(Boolean).join('\n');
+    navigator.clipboard?.writeText(text).catch(() => null);
+    alert('Report copied to clipboard!');
   }
 
   if (loading) return <div className="p-6 text-sm text-[rgba(26,26,22,.4)]">Loading…</div>;
 
   if (done) return (
-    <div className="p-6 max-w-md mx-auto text-center pt-20">
-      <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-4">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-8 h-8 text-emerald-600"><polyline points="20 6 9 17 4 12"/></svg>
+    <div className="p-6 max-w-2xl mx-auto">
+      {/* Success header */}
+      <div className="text-center mb-8">
+        <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-4">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-8 h-8 text-emerald-600"><polyline points="20 6 9 17 4 12"/></svg>
+        </div>
+        <h2 className="text-lg font-semibold text-[#1a1a16] mb-1">Register Closed</h2>
+        <p className="text-sm text-[rgba(26,26,22,.5)]">Closing float: <strong>A${closingFloat.toFixed(2)}</strong> · Variance: <strong className={Math.abs(variance) < 1 ? 'text-emerald-600' : 'text-red-600'}>{variance >= 0 ? '+' : ''}A${variance.toFixed(2)}</strong></p>
       </div>
-      <h2 className="text-lg font-semibold text-[#1a1a16] mb-2">Register Closed</h2>
-      <p className="text-sm text-[rgba(26,26,22,.5)] mb-6">End of day closure complete. Closing float: <strong>${closingFloat.toFixed(2)}</strong></p>
-      <button onClick={() => router.push('/pos/terminal')}
-        className="px-6 py-2.5 rounded-lg text-sm font-medium text-white"
-        style={{ background: 'linear-gradient(135deg,#2563eb,#1d4ed8)' }}>
-        Back to Register
-      </button>
+
+      {/* EOD Debrief card */}
+      {(debriefLoading || debrief) && (
+        <div className="bg-[#13131a] rounded-2xl p-6 mb-6 border border-[rgba(29,158,117,0.25)]">
+          <div className="flex items-center gap-2 mb-4">
+            <span className="text-[#1D9E75] font-bold text-sm">✦ Aria&apos;s End-of-Day Debrief</span>
+            {debriefLoading && <span className="text-xs text-[rgba(255,255,255,0.3)] animate-pulse">Analysing…</span>}
+          </div>
+
+          {debrief?.stats && (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
+              {[
+                { label: 'Revenue', value: `A$${debrief.stats.today_revenue.toFixed(2)}`, color: '#22c55e' },
+                { label: 'Transactions', value: String(debrief.stats.today_count), color: '#60a5fa' },
+                { label: 'Avg basket', value: `A$${debrief.stats.avg_basket.toFixed(2)}`, color: '#a78bfa' },
+                {
+                  label: 'vs 7-day avg',
+                  value: debrief.stats.vs_avg_pct != null ? `${debrief.stats.vs_avg_pct > 0 ? '+' : ''}${debrief.stats.vs_avg_pct.toFixed(0)}%` : '—',
+                  color: (debrief.stats.vs_avg_pct ?? 0) >= 0 ? '#22c55e' : '#f87171',
+                },
+              ].map(s => (
+                <div key={s.label} className="bg-[rgba(255,255,255,0.05)] rounded-xl p-3 text-center">
+                  <p className="text-[10px] text-[rgba(255,255,255,0.4)] uppercase tracking-wider mb-1">{s.label}</p>
+                  <p className="text-xl font-bold" style={{ color: s.color }}>{s.value}</p>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {debrief?.stats?.top_product && (
+            <p className="text-xs text-[rgba(255,255,255,0.4)] mb-3">
+              Top seller: <span className="text-white font-medium">{debrief.stats.top_product}</span>
+            </p>
+          )}
+
+          {debrief?.debrief && (
+            <div className="bg-[rgba(29,158,117,0.08)] border border-[rgba(29,158,117,0.2)] rounded-xl p-4">
+              <p className="text-sm text-[rgba(255,255,255,0.75)] leading-relaxed">{debrief.debrief}</p>
+            </div>
+          )}
+
+          {!debriefLoading && !debrief?.debrief && (
+            <p className="text-xs text-[rgba(255,255,255,0.3)]">Debrief not available — add your Anthropic API key to enable AI analysis.</p>
+          )}
+        </div>
+      )}
+
+      <div className="flex flex-wrap gap-3 justify-center">
+        {debrief?.stats && (
+          <button onClick={shareReport}
+            className="px-5 py-2.5 rounded-xl text-sm font-medium border border-[rgba(0,0,0,0.1)] text-[rgba(26,26,22,0.7)] hover:bg-[rgba(0,0,0,0.04)] transition-colors">
+            Copy report
+          </button>
+        )}
+        <button onClick={() => window.print()}
+          className="px-5 py-2.5 rounded-xl text-sm font-medium border border-[rgba(0,0,0,0.1)] text-[rgba(26,26,22,0.7)] hover:bg-[rgba(0,0,0,0.04)] transition-colors">
+          Print Z-report
+        </button>
+        <button onClick={() => router.push('/pos/terminal')}
+          className="px-5 py-2.5 rounded-xl text-sm font-medium text-white"
+          style={{ background: 'linear-gradient(135deg,#2563eb,#1d4ed8)' }}>
+          Back to Register
+        </button>
+      </div>
     </div>
   );
 

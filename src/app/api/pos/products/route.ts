@@ -27,6 +27,7 @@ export async function GET() {
   const bid = await getBid(supabase, user.id);
   if (!bid) return NextResponse.json({ products: [], categories: [], sale_keys: [] });
 
+  const { data: biz } = await supabase.from('businesses').select('name').eq('id', bid).maybeSingle();
   const [{ data: products }, { data: categories }, { data: saleKeys }] = await Promise.all([
     supabase
       .from('pos_products')
@@ -46,10 +47,11 @@ export async function GET() {
   ]);
 
   return NextResponse.json({
-    business_id: bid,
-    products:   products   || [],
-    categories: categories || [],
-    sale_keys:  saleKeys   || [],
+    business_id:   bid,
+    business_name: biz?.name ?? 'AriaPOS',
+    products:      products   || [],
+    categories:    categories || [],
+    sale_keys:     saleKeys   || [],
   });
 }
 
