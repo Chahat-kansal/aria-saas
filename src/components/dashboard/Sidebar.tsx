@@ -49,6 +49,9 @@ const ALL_ITEMS: Record<string, NavItemDef> = {
   'warehouse/lots':             { href: '/dashboard/warehouse/lots',           label: 'Lots & batches',    icon: TagIcon,            section: 'Warehouse'    },
   'warehouse/suppliers':        { href: '/dashboard/warehouse/suppliers',      label: 'Suppliers',         icon: BuildingIcon,       section: 'Warehouse'    },
   'warehouse/transfers':        { href: '/dashboard/warehouse/transfers',      label: 'Transfers',         icon: ArrowsIcon,         section: 'Warehouse'    },
+  'warehouse/analytics':        { href: '/dashboard/warehouse/analytics',      label: 'Analytics',         icon: TrendingUpIcon,     badge: 'AI',  section: 'Warehouse' },
+  'warehouse/health':           { href: '/dashboard/warehouse/health',         label: 'Health score',      icon: HeartIcon,          badge: 'AI',  section: 'Warehouse' },
+  'warehouse/abc':              { href: '/dashboard/warehouse/abc',            label: 'ABC analysis',      icon: BarChartIcon,       badge: 'AI',  section: 'Warehouse' },
 };
 
 const SECTION_ORDER = ['Overview', 'Warehouse', 'Revenue', 'Reputation', 'Intelligence', 'Pro tools', 'VisaAI', 'Modules'];
@@ -453,4 +456,13 @@ function ShoppingBagIcon({ className }: { className?: string }) {
 }
 function BrainIcon({ className }: { className?: string }) {
   return <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 00-6.23-.693L5 14.5m14.8.8l1.402 1.402c1.232 1.232.65 3.318-1.067 3.611A48.309 48.309 0 0112 21c-2.773 0-5.491-.235-8.135-.687-1.718-.293-2.3-2.379-1.067-3.61L5 14.5"/></svg>;
+}
+function TrendingUpIcon({ className }: { className?: string }) {
+  return <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18L9 11.25l4.306 4.307a11.95 11.95 0 015.814-5.519l2.74-1.22m0 0l-5.94-2.28m5.94 2.28l-2.28 5.941"/></svg>;
+}
+function HeartIcon({ className }: { className?: string }) {
+  return <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z"/></svg>;
+}
+function BarChartIcon({ className }: { className?: string }) {
+  return <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zm9.75-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.625c0 .621-.504 1.125-1.125 1.125h-2.25A1.125 1.125 0 0112.75 19.875V8.25zm-4.875 6a1.125 1.125 0 00-1.125 1.125v4.5c0 .621.504 1.125 1.125 1.125h2.25c.621 0 1.125-.504 1.125-1.125v-4.5A1.125 1.125 0 0012.375 14.25H10.5z"/></svg>;
 }

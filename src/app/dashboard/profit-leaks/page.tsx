@@ -188,6 +188,18 @@ export default function ProfitLeaksPage() {
                       </p>
                       {leak.action_href && (
                         <a href={leak.action_href}
+                          onClick={() => {
+                            fetch('/api/aria/outcomes', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({
+                                recommendation_type: 'profit_leak_action',
+                                recommendation_detail: `${leak.title}: ${leak.action}`,
+                                acted_on: true,
+                                outcome_value_cents: leak.estimated_monthly_impact_cents,
+                              }),
+                            }).catch(() => null);
+                          }}
                           className="text-xs px-3 py-1.5 rounded-lg shrink-0 transition-colors hover:opacity-80"
                           style={{ background: '#1D9E75', color: '#fff' }}>
                           Fix it →

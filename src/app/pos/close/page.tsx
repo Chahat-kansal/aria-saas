@@ -70,7 +70,29 @@ export default function ClosePage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ session_id: sessionId }),
       });
-      if (res.ok) setDebrief(await res.json());
+      if (res.ok) {
+        const data = await res.json();
+        setDebrief(data);
+        // Send EOD email non-blocking (server handles RESEND_API_KEY check)
+        fetch('/api/aria/pos-end-of-day/email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ session_id: sessionId, debrief: data }),
+        }).catch(() => null);
+        // Log to aria_outcomes
+        if (data?.stats?.today_revenue > 0) {
+          fetch('/api/aria/outcomes', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              recommendation_type: 'eod_summary',
+              recommendation_detail: `Session closed. Revenue: A$${data.stats.today_revenue.toFixed(2)}, ${data.stats.today_count} transactions`,
+              acted_on: true,
+              outcome_value_cents: Math.round(data.stats.today_revenue * 100),
+            }),
+          }).catch(() => null);
+        }
+      }
     } catch { /* non-blocking — EOD is a nice-to-have */ }
     setDebriefLoading(false);
   }
