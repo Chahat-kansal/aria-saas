@@ -22,14 +22,29 @@ interface Message {
 
 const DATA_QUERY_RE = /stock|inventory|sales|revenue|customer|margin|profit|product|sell|order|reorder|slow|best|worst|trend|compare|last (week|month)|how many|how much|top|bottom|lapsed/i;
 
-const SUGGESTIONS = [
-  "What's my best margin product this month?",
-  "Which customers haven't visited in 60+ days?",
-  "What should I reorder this week?",
+const BASE_SUGGESTIONS = [
+  "Where am I losing the most money right now?",
+  "Which customers should I win back this week?",
+  "What should I reorder before the weekend?",
   "How does this week compare to last week?",
   "What's my slowest day and how can I fill it?",
   "Show me my top 10 products by revenue",
 ];
+
+const INDUSTRY_SUGGESTIONS: Record<string, string[]> = {
+  cafe:        ["How was yesterday compared to the same day last week?", "Which menu item has the best margin?", "What's our busiest hour today?", "Which customers usually come on weekdays?"],
+  restaurant:  ["How are covers tracking vs last month?", "Which dishes are we selling the most?", "What should I 86 based on slow movement?", "Who are our most valuable regulars?"],
+  retail:      ["Which products are dragging down my margins?", "What stock should I order before the long weekend?", "Which customers haven't been back in 60 days?", "What's my cash vs card split today?"],
+  warehouse:   ["What's expiring in the next 30 days?", "Which supplier has the worst fill rate?", "What items are below reorder point?", "Show me variance for the past month"],
+  tradie:      ["Which quotes haven't had a follow-up?", "Who are my most profitable clients?", "What jobs do I have this week?", "How much revenue is outstanding?"],
+  salon:       ["Which services generate the most revenue?", "Who are my regulars that haven't booked recently?", "What's my busiest day of the week?", "How does this month compare to last month?"],
+};
+
+function getSuggestions(industry?: string): string[] {
+  const specific = industry ? (INDUSTRY_SUGGESTIONS[industry] ?? []) : [];
+  const combined = [...specific, ...BASE_SUGGESTIONS];
+  return combined.slice(0, 6);
+}
 
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
@@ -199,7 +214,7 @@ export default function AskAriaPage() {
               </p>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-              {SUGGESTIONS.map(s => (
+              {getSuggestions(business?.industry ?? undefined).map((s: string) => (
                 <button key={s} onClick={() => send(s)}
                   className="text-left px-4 py-3 rounded-xl text-sm transition-all hover:border-[#1D9E75] hover:text-white"
                   style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', color: '#d1d5db' }}>

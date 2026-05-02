@@ -60,6 +60,8 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
   const [signingOut, setSigningOut] = useState(false);
   const [switcherOpen, setSwitcherOpen] = useState(false);
   const [switching, setSwitching] = useState<string | null>(null);
+  const [badgeCounts, setBadgeCounts] = useState<Record<string, number>>({});
+  const [health, setHealth] = useState<{ score: number; grade: string } | null>(null);
   const switcherRef = useRef<HTMLDivElement>(null);
   const industry = (business.industry ?? 'professional') as Industry;
   const config = industryConfig[industry] ?? industryConfig.professional;
@@ -74,6 +76,30 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
   }, []);
+
+  // Load live badge counts + health score
+  useEffect(() => {
+    if (!business?.id) return;
+    const bid = business.id;
+    Promise.all([
+      fetch(`/api/aria/badge-counts?business_id=${bid}`).then(r => r.json()).catch(() => ({})),
+      fetch(`/api/aria/business-health-quick?business_id=${bid}`).then(r => r.json()).catch(() => null),
+    ]).then(([badges, h]) => {
+      if (badges) setBadgeCounts(badges);
+      if (h?.grade) setHealth({ score: h.score as number, grade: h.grade as string });
+    });
+  }, [business?.id]);
+
+  // Map hrefs to badge count keys
+  const BADGE_MAP: Record<string, string> = {
+    '/dashboard/reviews':      'reviews',
+    '/dashboard/winback':      'winback',
+    '/dashboard/profit-leaks': 'profit_leaks',
+    '/dashboard/staff':        'staff_alerts',
+    '/pos':                    'low_stock',
+  };
+
+  const HEALTH_COLOR: Record<string, string> = { A: '#1D9E75', B: '#22c55e', C: '#f59e0b', D: '#ef4444' };
 
   async function handleSwitch(id: string) {
     if (id === business.id) { setSwitcherOpen(false); return; }
@@ -195,12 +221,26 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
         )}
       </div>
 
-      {/* Plan badge */}
-      <div className="px-4 mb-4">
+      {/* Plan badge + health */}
+      <div className="px-4 mb-4 space-y-2">
         <div className="bg-[rgba(29,158,117,0.12)] border border-[rgba(29,158,117,0.25)] rounded-lg px-3 py-2">
           <div className="text-[11px] font-medium text-[#1D9E75] capitalize">{business.plan} plan</div>
           <div className="text-[10px] text-[rgba(255,255,255,0.4)] mt-0.5">All features unlocked</div>
         </div>
+        {health && (
+          <div className="px-1">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[10px] text-[rgba(255,255,255,0.3)]">Business health</span>
+              <span className="text-[10px] font-bold" style={{ color: HEALTH_COLOR[health.grade] ?? '#9ca3af' }}>
+                {health.grade}
+              </span>
+            </div>
+            <div className="w-full h-1 rounded-full bg-[rgba(255,255,255,0.06)] overflow-hidden">
+              <div className="h-full rounded-full transition-all duration-700"
+                style={{ width: `${health.score}%`, background: HEALTH_COLOR[health.grade] ?? '#9ca3af' }} />
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Nav */}
@@ -230,15 +270,24 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
                   >
                     <item.icon className="w-[13px] h-[13px] flex-shrink-0" />
                     <span className="flex-1">{item.label}</span>
-                    {item.badge && (
-                      <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-medium ${
-                        item.badge === 'AI'  ? 'bg-[rgba(29,158,117,0.2)] text-[#1D9E75]' :
-                        item.badge === 'New' ? 'bg-[rgba(249,115,22,0.2)] text-orange-400' :
-                        'bg-[rgba(245,158,11,0.2)] text-amber-400'
-                      }`}>
-                        {item.badge}
-                      </span>
-                    )}
+                    {/* Live count badge */}
+                    {(() => {
+                      const countKey = BADGE_MAP[item.href];
+                      const liveCount = countKey ? (badgeCounts[countKey] ?? 0) : 0;
+                      if (liveCount > 0) return (
+                        <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold bg-red-500/20 text-red-400 min-w-[18px] text-center">
+                          {liveCount > 99 ? '99+' : liveCount}
+                        </span>
+                      );
+                      if (item.badge) return (
+                        <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-medium ${
+                          item.badge === 'AI'  ? 'bg-[rgba(29,158,117,0.2)] text-[#1D9E75]' :
+                          item.badge === 'New' ? 'bg-[rgba(249,115,22,0.2)] text-orange-400' :
+                          'bg-[rgba(245,158,11,0.2)] text-amber-400'
+                        }`}>{item.badge}</span>
+                      );
+                      return null;
+                    })()}
                   </Link>
                 );
               })}
@@ -246,6 +295,17 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
           );
         })}
       </nav>
+
+      {/* Ask Aria — featured action */}
+      <div className="px-3 pb-3 flex-shrink-0">
+        <Link href="/dashboard/ask-aria"
+          className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl text-sm font-semibold text-white transition-colors hover:opacity-90"
+          style={{ background: 'linear-gradient(135deg,#1D9E75,#15875f)' }}>
+          <span className="text-base">✦</span>
+          Ask Aria
+        </Link>
+        <p className="text-[9px] text-center text-[rgba(255,255,255,0.25)] mt-1">⌘K anywhere</p>
+      </div>
 
       {/* User footer — always visible */}
       <div className="px-3 py-3 border-t border-[rgba(255,255,255,0.05)] flex-shrink-0">

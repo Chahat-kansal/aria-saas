@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { WarehouseDashboard } from '@/components/dashboard/WarehouseDashboard';
 import { MorningCommandCentre } from '@/components/dashboard/MorningCommandCentre';
+import { RetailDashboard } from '@/components/dashboard/RetailDashboard';
 
 export default async function DashboardPage() {
   const supabase = createServerSupabaseClient();
@@ -36,11 +37,14 @@ export default async function DashboardPage() {
 
   if (industry === 'visa') return <VisaDashboard business={business} />;
   if (industry === 'warehouse') return <WarehouseDashboard business={business} />;
-  if (industry === 'retail' || industry === 'cafe') return <RetailCafeDashboard business={business} />;
+  // Retail, café, restaurant — full command centre
+  if (industry === 'retail' || industry === 'cafe' || industry === 'restaurant')
+    return <RetailDashboard business={business} />;
   if (industry === 'tradie' || industry === 'professional') return <TradieProfessionalDashboard business={business} />;
   if (industry === 'salon' || industry === 'gym') return <SalonGymDashboard business={business} />;
   if (industry === 'realestate') return <RealEstateDashboard business={business} />;
-  return <TradieProfessionalDashboard business={business} />;
+  // Default: use RetailDashboard for any other industry
+  return <RetailDashboard business={business} />;
 }
 
 /* ═══════════════════════════════════════════════════════════
