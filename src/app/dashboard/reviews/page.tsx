@@ -75,8 +75,11 @@ export default function ReviewsPage() {
 
   async function sendReviewRequests() {
     if (!business?.id) return;
-    setSending(true);
     const targets = customers.filter(c => selectedCustomers[c.id] && c.phone);
+    if (targets.length === 0) return;
+    const confirmed = window.confirm(`Send review request SMS to ${targets.length} customer${targets.length > 1 ? 's' : ''}? This will send real messages that cannot be undone.`);
+    if (!confirmed) return;
+    setSending(true);
     let sent = 0;
     for (const c of targets) {
       await fetch('/api/aria/review-request', {

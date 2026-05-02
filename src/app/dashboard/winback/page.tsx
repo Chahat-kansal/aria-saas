@@ -73,9 +73,12 @@ export default function WinbackPage() {
 
   async function sendCampaign() {
     if (!business?.id || !message.trim()) return;
+    const targets = customers.filter(c => selected[c.id] && c.phone);
+    if (targets.length === 0) return;
+    const confirmed = window.confirm(`Send this SMS to ${targets.length} customer${targets.length > 1 ? 's' : ''}?\n\n"${message.slice(0, 100)}${message.length > 100 ? '…' : ''}"\n\nThis will send real SMS messages that cannot be undone.`);
+    if (!confirmed) return;
     setSending(true);
     setSendResult(null);
-    const targets = customers.filter(c => selected[c.id] && c.phone);
     const res = await fetch('/api/aria/winback', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

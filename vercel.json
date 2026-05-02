@@ -18,8 +18,8 @@
     "src/app/api/aria/widget-insights/route.ts":               { "maxDuration": 30 },
     "src/app/api/aria/warehouse-slotting/route.ts":            { "maxDuration": 30 },
     "src/app/api/aria/supplier-insights/route.ts":             { "maxDuration": 30 },
-    "src/app/api/aria/pos-insight/route.ts":                   { "maxDuration": 30 },
-    "src/app/api/aria/staff-visa-insight/route.ts":            { "maxDuration": 30 },
+    "src/app/api/aria/profit-analysis/route.ts":               { "maxDuration": 60 },
+    "src/app/api/aria/missed-demand-analysis/route.ts":        { "maxDuration": 30 },
     "src/app/api/warehouse/grn/route.ts":                      { "maxDuration": 30 },
     "src/app/api/warehouse/cycle-count/generate/route.ts":     { "maxDuration": 30 },
     "src/app/api/pos/reports/route.ts":                        { "maxDuration": 30 }
