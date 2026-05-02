@@ -4,6 +4,7 @@ export const maxDuration = 60;
 
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import Anthropic from '@anthropic-ai/sdk';
+import { ARIA_VOICE } from '@/lib/aria-voice-guide';
 import { NextResponse } from 'next/server';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -120,7 +121,8 @@ export async function POST(req: Request) {
   if (!messageText) {
     const response = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001', max_tokens: 200,
-      messages: [{ role: 'user', content: `Write a short, friendly winback SMS (max 160 chars) for customer: ${customer.name}, business: ${business.name} (${business.industry}), days since last visit: ${daysSince ?? 'unknown'}. Include a personalised offer. Return ONLY the SMS text.` }],
+      system: `${ARIA_VOICE}\n\nWrite concise, personalised SMS messages. Return ONLY the SMS text, no explanation.`,
+      messages: [{ role: 'user', content: `Write a short, friendly winback SMS (max 160 chars) for customer: ${customer.name}, business: ${business.name} (${business.industry}), days since last visit: ${daysSince ?? 'unknown'}. Include a personalised offer.` }],
     });
     messageText = response.content.filter(b => b.type === 'text').map(b => b.text).join('').trim();
   }

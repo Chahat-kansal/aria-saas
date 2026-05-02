@@ -5,6 +5,8 @@ export const maxDuration = 60;
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import Anthropic from '@anthropic-ai/sdk';
 import { NextResponse } from 'next/server';
+import { ARIA_VOICE } from '@/lib/aria-voice-guide';
+import { getRBAData, getABSRetailBenchmarks } from '@/lib/external-apis';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -29,6 +31,11 @@ export async function POST(req: Request) {
   const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString();
   const ninetyDaysAgo = new Date(Date.now() - 90 * 86400000).toISOString();
   const twoWeeksOut = new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0];
+
+  const [rbaData, absData] = await Promise.all([
+    getRBAData().catch(() => null),
+    getABSRetailBenchmarks().catch(() => null),
+  ]);
 
   // Run all 6 analyses in parallel
   const [
@@ -167,13 +174,22 @@ export async function POST(req: Request) {
 
   if (hasAnyData) {
     try {
+      const economicContext = rbaData || absData ? `
+Economic context:
+- RBA cash rate: ${rbaData?.cash_rate_pct ?? 'N/A'}% (${rbaData?.economic_outlook ?? ''})
+- ABS retail growth: ${absData?.monthly_retail_turnover_growth_pct ?? 'N/A'}% monthly
+- CPI: ${absData?.cpi_annual_pct ?? 'N/A'}% annual
+Dead stock opportunity cost: capital locked at ${rbaData?.cash_rate_pct ?? 4.1}% cost of money.` : '';
+
       const msg = await anthropic.messages.create({
         model: 'claude-sonnet-4-6',
         max_tokens: 2000,
-        system: `You are Aria, an AI profit analyst for Australian small businesses.
+        system: `${ARIA_VOICE}
+
 Identify and explain profit leaks based on real business data.
-Be specific — name actual products, cite actual dollar amounts.
+Be specific — name actual products, cite actual A$ amounts.
 Be direct — business owners need to know exactly where they're losing money.
+${economicContext}
 Return ONLY valid JSON.`,
         messages: [{
           role: 'user',

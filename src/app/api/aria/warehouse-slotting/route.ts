@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
+import { ARIA_VOICE } from '@/lib/aria-voice-guide';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { getBusinessSales, getBusinessItems } from '@/lib/business-data';
 import { NextResponse } from 'next/server';
@@ -56,7 +57,9 @@ export async function POST(req: Request) {
     const msg = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 1000,
-      system: 'You are a warehouse optimization AI. Return ONLY valid JSON array, no markdown.',
+      system: `${ARIA_VOICE}
+
+You are a warehouse optimization expert. Return ONLY valid JSON array, no markdown.`,
       messages: [{
         role: 'user',
         content: `Suggest optimal bin locations. High-velocity items should be in Zone A, low bay numbers (near dispatch). Low-velocity items can be in back zones.

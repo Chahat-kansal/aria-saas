@@ -2,6 +2,8 @@ import Anthropic from '@anthropic-ai/sdk';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { getBusinessSales, getBusinessCustomers, getBusinessItems } from '@/lib/business-data';
 import { NextResponse } from 'next/server';
+import { ARIA_VOICE } from '@/lib/aria-voice-guide';
+import { getWeatherForecast, getUpcomingHolidays, getABSRetailBenchmarks, getRBAData } from '@/lib/external-apis';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -67,6 +69,20 @@ export async function POST(req: Request) {
   const dataSource = (business.data_source ?? 'aria_pos') as 'square' | 'aria_pos';
 
   const in30Days = new Date(Date.now() + 30 * 86400000).toISOString();
+
+  // Fetch external context in parallel with business data
+  const city = (business.city as string | null) ?? 'Melbourne';
+  const [
+    weatherForecast,
+    upcomingHolidays,
+    absData,
+    rbaData,
+  ] = await Promise.all([
+    getWeatherForecast(city).catch(() => []),
+    Promise.resolve(getUpcomingHolidays(60, 'VIC')),
+    getABSRetailBenchmarks().catch(() => null),
+    getRBAData().catch(() => null),
+  ]);
 
   const [
     sales7,
@@ -199,6 +215,23 @@ export async function POST(req: Request) {
     visa_alert_names: (staffVisaExpiring.data ?? []).map((s: any) => `${s.first_name} ${s.last_name}`),
     unverified_rtw: staffRtwUnverified.count ?? 0,
     ...warehouseCtx,
+    external_context: {
+      weather_next_3_days: weatherForecast.slice(0, 3).map(d => ({
+        date: d.date,
+        weather: d.weather,
+        temp_max: d.temp_max,
+        stock_uplift_categories: d.stock_uplift_categories,
+      })),
+      upcoming_holidays: upcomingHolidays.slice(0, 3).map(h => ({
+        name: h.name,
+        days_away: h.days_away,
+        impact_multiplier: h.impact,
+      })),
+      abs_retail_growth_pct: absData?.monthly_retail_turnover_growth_pct ?? null,
+      abs_cpi_pct: absData?.cpi_annual_pct ?? null,
+      rba_cash_rate_pct: rbaData?.cash_rate_pct ?? null,
+      rba_outlook: rbaData?.economic_outlook ?? null,
+    },
   };
 
   const hasActionableData =
@@ -235,7 +268,8 @@ export async function POST(req: Request) {
   };
 
   // Claude — haiku for speed and cost
-  const systemPrompt = `You are Aria, an AI business advisor for Australian small businesses.
+  const systemPrompt = `${ARIA_VOICE}
+
 Generate exactly 5 specific, actionable recommendations based on the business data provided.
 Rules:
 - Every recommendation MUST reference actual numbers from the data
@@ -243,7 +277,9 @@ Rules:
 - Priority 'high' = act today, 'medium' = this week, 'low' = this month
 - Never fabricate numbers not in the data
 - Return ONLY a valid JSON array, no markdown, no preamble, no explanation
-- IMPORTANT: If visa_alerts > 0, this is HIGH PRIORITY — visa expiry for staff is a legal compliance issue. Include a specific recommendation naming the staff member(s) with their expiry date.
+- If external_context.upcoming_holidays has items, factor holiday uplift into stock/revenue recs
+- If external_context.weather_next_3_days shows hot weather, mention beer/cold drink stock opportunity
+- If visa_alerts > 0, this is HIGH PRIORITY — visa expiry for staff is a legal compliance issue. Name the staff member(s) with expiry date.
 Each item must match this exact type:
 {
   "id": "short-slug-001",

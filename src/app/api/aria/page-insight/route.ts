@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import Anthropic from '@anthropic-ai/sdk';
 import { NextResponse } from 'next/server';
+import { ARIA_VOICE } from '@/lib/aria-voice-guide';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -40,6 +41,7 @@ async function callClaude(prompt: string): Promise<string> {
   const msg = await anthropic.messages.create({
     model: 'claude-haiku-4-5-20251001',
     max_tokens: 80,
+    system: `${ARIA_VOICE}\n\nRespond in ONE sentence only. Be specific with numbers. Australian business context.`,
     messages: [{ role: 'user', content: prompt }],
   });
   return msg.content[0].type === 'text' ? msg.content[0].text.trim() : '';
@@ -113,7 +115,7 @@ export async function POST(req: Request): Promise<Response> {
         .join(', ')}`;
 
       const insight = await callClaude(
-        `You are Aria. In ONE sentence, give the most important insight about stock for ${bizName} based on this data: ${context}. Be specific with numbers. Australian business context.`
+        `In ONE sentence, give the most important insight about stock for ${bizName} based on this data: ${context}. Be specific with numbers. Australian business context.`
       );
 
       const priority: Priority =
@@ -132,7 +134,7 @@ export async function POST(req: Request): Promise<Response> {
       const context = `${count} customers have not visited in over 60 days.`;
 
       const insight = await callClaude(
-        `You are Aria. In ONE sentence, give the most important insight about winback for ${bizName} based on this data: ${context}. Be specific with numbers. Australian business context.`
+        `In ONE sentence, give the most important insight about winback for ${bizName} based on this data: ${context}. Be specific with numbers. Australian business context.`
       );
 
       const priority: Priority = count > 20 ? 'warning' : 'info';
@@ -158,7 +160,7 @@ export async function POST(req: Request): Promise<Response> {
       const context = `${count} unanswered reviews. Average rating of unanswered: ${avgRating.toFixed(1)}.`;
 
       const insight = await callClaude(
-        `You are Aria. In ONE sentence, give the most important insight about reviews for ${bizName} based on this data: ${context}. Be specific with numbers. Australian business context.`
+        `In ONE sentence, give the most important insight about reviews for ${bizName} based on this data: ${context}. Be specific with numbers. Australian business context.`
       );
 
       const priority: Priority = count > 5 ? 'warning' : 'info';
@@ -183,7 +185,7 @@ export async function POST(req: Request): Promise<Response> {
         .join(', ')}`;
 
       const insight = await callClaude(
-        `You are Aria. In ONE sentence, give the most important insight about staff compliance for ${bizName} based on this data: ${context}. Be specific with numbers. Australian business context.`
+        `In ONE sentence, give the most important insight about staff compliance for ${bizName} based on this data: ${context}. Be specific with numbers. Australian business context.`
       );
 
       const priority: Priority = count > 0 ? 'critical' : 'info';
@@ -223,7 +225,7 @@ export async function POST(req: Request): Promise<Response> {
       const context = `Last 30 days: A$${totalSales.toFixed(2)} in sales, ${adjustments.length} stock adjustments worth ~A$${varianceValue.toFixed(2)} in variance.`;
 
       const insight = await callClaude(
-        `You are Aria. In ONE sentence, give the most important insight about variance for ${bizName} based on this data: ${context}. Be specific with numbers. Australian business context.`
+        `In ONE sentence, give the most important insight about variance for ${bizName} based on this data: ${context}. Be specific with numbers. Australian business context.`
       );
 
       const priority: Priority = varianceValue > 500 ? 'critical' : varianceValue > 100 ? 'warning' : 'info';
@@ -269,7 +271,7 @@ export async function POST(req: Request): Promise<Response> {
       const context = `${items.length} discounted line items in last 30 days, total discount value A$${totalDiscountValue.toFixed(2)}. Biggest leak: ${topLeak ? `${topLeak[0]} (A$${topLeak[1].toFixed(2)})` : 'none identified'}.`;
 
       const insight = await callClaude(
-        `You are Aria. In ONE sentence, give the most important insight about profit leaks for ${bizName} based on this data: ${context}. Be specific with numbers. Australian business context.`
+        `In ONE sentence, give the most important insight about profit leaks for ${bizName} based on this data: ${context}. Be specific with numbers. Australian business context.`
       );
 
       const priority: Priority = totalDiscountValue > 500 ? 'critical' : totalDiscountValue > 100 ? 'warning' : 'info';
@@ -300,7 +302,7 @@ export async function POST(req: Request): Promise<Response> {
         .join(', ')}`;
 
       const insight = await callClaude(
-        `You are Aria. In ONE sentence, give the most important insight about reorder for ${bizName} based on this data: ${context}. Be specific with numbers. Australian business context.`
+        `In ONE sentence, give the most important insight about reorder for ${bizName} based on this data: ${context}. Be specific with numbers. Australian business context.`
       );
 
       const outOfStock = belowReorder.filter(
@@ -336,7 +338,7 @@ export async function POST(req: Request): Promise<Response> {
       const context = `Upcoming busy hour: ${upcomingBusy?.hour ?? 'unknown'}:00 with avg ${upcomingBusy?.count ?? 0} transactions (based on last 30 days).`;
 
       const insight = await callClaude(
-        `You are Aria. In ONE sentence, give the most important insight about pos/terminal for ${bizName} based on this data: ${context}. Be specific with numbers. Australian business context.`
+        `In ONE sentence, give the most important insight about pos/terminal for ${bizName} based on this data: ${context}. Be specific with numbers. Australian business context.`
       );
 
       return NextResponse.json({
@@ -372,7 +374,7 @@ export async function POST(req: Request): Promise<Response> {
       const context = `Today: A$${todayRevenue.toFixed(2)} from ${todayTx} transactions. Out-of-stock items: ${outOfStockCount}.`;
 
       const insight = await callClaude(
-        `You are Aria. In ONE sentence, give the most important insight about dashboard for ${bizName} based on this data: ${context}. Be specific with numbers. Australian business context.`
+        `In ONE sentence, give the most important insight about dashboard for ${bizName} based on this data: ${context}. Be specific with numbers. Australian business context.`
       );
 
       const priority: Priority = outOfStockCount > 0 ? 'warning' : 'info';

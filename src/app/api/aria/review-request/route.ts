@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import Anthropic from '@anthropic-ai/sdk';
+import { ARIA_VOICE } from '@/lib/aria-voice-guide';
 import { NextResponse } from 'next/server';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -53,6 +54,7 @@ Keep it warm and personal. Ask them to share their experience. Return ONLY the S
   const response = await anthropic.messages.create({
     model: 'claude-haiku-4-5-20251001',
     max_tokens: 200,
+    system: `${ARIA_VOICE}\n\nWrite concise, warm review request SMS messages. Return ONLY the SMS text, no explanation.`,
     messages: [{ role: 'user', content: prompt }],
   });
 

@@ -33,6 +33,8 @@ const ALL_ITEMS: Record<string, NavItemDef> = {
   'reorder':                    { href: '/dashboard/reorder',                  label: 'Smart reorder',     icon: TruckIcon,          badge: 'AI',  section: 'Intelligence' },
   'recipes':                    { href: '/dashboard/recipes',                  label: 'Recipes & training', icon: GridIcon,            section: 'Pro tools'    },
   'variance':                   { href: '/dashboard/variance',                 label: 'Variance & shrinkage', icon: AlertTriangleIcon, badge: 'AI', section: 'Intelligence' },
+  'missed-demand':              { href: '/dashboard/missed-demand',            label: 'Missed demand',     icon: ShoppingBagIcon,    badge: 'New', section: 'Intelligence' },
+  'intelligence':               { href: '/dashboard/intelligence',             label: 'Intelligence centre', icon: BrainIcon,          section: 'Intelligence' },
   'visa/clients':               { href: '/visa/clients',                       label: 'Clients',           icon: UsersIcon,          section: 'VisaAI'       },
   'visa/applications':          { href: '/visa/applications',                  label: 'Applications',      icon: FileTextIcon,       section: 'VisaAI'       },
   'visa/documents':             { href: '/visa/documents',                     label: 'Documents',         icon: FolderIcon,         section: 'VisaAI'       },
@@ -92,11 +94,13 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
 
   // Map hrefs to badge count keys
   const BADGE_MAP: Record<string, string> = {
-    '/dashboard/reviews':      'reviews',
-    '/dashboard/winback':      'winback',
-    '/dashboard/profit-leaks': 'profit_leaks',
-    '/dashboard/staff':        'staff_alerts',
-    '/pos':                    'low_stock',
+    '/dashboard/reviews':        'reviews',
+    '/dashboard/winback':        'winback',
+    '/dashboard/profit-leaks':   'profit_leaks',
+    '/dashboard/staff':          'staff_alerts',
+    '/pos':                      'low_stock',
+    '/dashboard/missed-demand':  'missed_demand',
+    '/dashboard/intelligence':   'intelligence',
   };
 
   const HEALTH_COLOR: Record<string, string> = { A: '#1D9E75', B: '#22c55e', C: '#f59e0b', D: '#ef4444' };
@@ -443,4 +447,10 @@ function BuildingIcon({ className }: { className?: string }) {
 }
 function ArrowsIcon({ className }: { className?: string }) {
   return <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5"/></svg>;
+}
+function ShoppingBagIcon({ className }: { className?: string }) {
+  return <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5V6a3.75 3.75 0 10-7.5 0v4.5m11.356-1.993l1.263 12c.07.665-.45 1.243-1.119 1.243H4.25a1.125 1.125 0 01-1.12-1.243l1.264-12A1.125 1.125 0 015.513 7.5h12.974c.576 0 1.059.435 1.119 1.007z"/></svg>;
+}
+function BrainIcon({ className }: { className?: string }) {
+  return <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 00-6.23-.693L5 14.5m14.8.8l1.402 1.402c1.232 1.232.65 3.318-1.067 3.611A48.309 48.309 0 0112 21c-2.773 0-5.491-.235-8.135-.687-1.718-.293-2.3-2.379-1.067-3.61L5 14.5"/></svg>;
 }

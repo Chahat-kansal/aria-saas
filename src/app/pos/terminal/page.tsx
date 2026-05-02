@@ -105,6 +105,13 @@ export default function TerminalPage() {
   const [variantQty,       setVariantQty]       = useState(1);
   const [variantLoading,   setVariantLoading]   = useState(false);
 
+  // Missed sale modal
+  const [showMissedModal,  setShowMissedModal]  = useState(false);
+  const [missedName,       setMissedName]       = useState('');
+  const [missedQty,        setMissedQty]        = useState('1');
+  const [missedNote,       setMissedNote]       = useState('');
+  const [savingMissed,     setSavingMissed]     = useState(false);
+
   // Aria chat panel
   const [showAriaChat,    setShowAriaChat]    = useState(false);
   const [chatInput,       setChatInput]       = useState('');
@@ -528,6 +535,14 @@ export default function TerminalPage() {
             </div>
           )}
         </div>
+
+        {/* Missed sale button */}
+        <button onClick={() => setShowMissedModal(true)}
+          className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex-shrink-0"
+          style={{ background: 'rgba(251,191,36,0.1)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.2)' }}
+          title="Log a product customer asked for">
+          Missed sale
+        </button>
 
         {/* Aria chat toggle */}
         <button onClick={() => setShowAriaChat(v => !v)}
@@ -1040,6 +1055,73 @@ export default function TerminalPage() {
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-[rgba(0,0,0,0.2)]">
           <div className="bg-white rounded-xl px-6 py-4 flex items-center gap-3 shadow-xl">
             <Spinner /><span className="text-sm text-[#1a1a16]">Loading options…</span>
+          </div>
+        </div>
+      )}
+
+      {/* Missed sale modal */}
+      {showMissedModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.6)' }}>
+          <div className="rounded-2xl p-6 w-full max-w-sm shadow-2xl" style={{ background: '#1a1a25', border: '1px solid rgba(255,255,255,0.1)' }}>
+            <h2 className="text-white font-semibold mb-1">Log Missed Sale</h2>
+            <p className="text-xs mb-4" style={{ color: 'rgba(255,255,255,0.4)' }}>Record what a customer asked for that you didn't stock</p>
+            <div className="space-y-3">
+              <input
+                value={missedName}
+                onChange={e => setMissedName(e.target.value)}
+                className="w-full px-3 py-2.5 rounded-lg text-sm text-white outline-none"
+                style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)' }}
+                placeholder="Product name e.g. Oat Milk 1L" autoFocus />
+              <div className="flex gap-2">
+                <div className="flex-1">
+                  <p className="text-xs mb-1" style={{ color: 'rgba(255,255,255,0.4)' }}>Qty wanted</p>
+                  <input type="number" min="1"
+                    value={missedQty}
+                    onChange={e => setMissedQty(e.target.value)}
+                    className="w-full px-3 py-2.5 rounded-lg text-sm text-white outline-none"
+                    style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)' }} />
+                </div>
+              </div>
+              <input
+                value={missedNote}
+                onChange={e => setMissedNote(e.target.value)}
+                className="w-full px-3 py-2.5 rounded-lg text-sm text-white outline-none"
+                style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)' }}
+                placeholder="Customer note (optional)" />
+            </div>
+            <div className="flex gap-2 mt-4">
+              <button onClick={() => { setShowMissedModal(false); setMissedName(''); setMissedQty('1'); setMissedNote(''); }}
+                className="flex-1 py-2.5 rounded-lg text-sm" style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.5)' }}>
+                Cancel
+              </button>
+              <button
+                disabled={savingMissed || !missedName.trim()}
+                onClick={async () => {
+                  if (!businessId || !missedName.trim()) return;
+                  setSavingMissed(true);
+                  try {
+                    await fetch('/api/pos/missed-demand', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        business_id: businessId,
+                        product_name: missedName.trim(),
+                        estimated_quantity_wanted: parseInt(missedQty) || 1,
+                        customer_note: missedNote || undefined,
+                        logged_by: 'pos_terminal',
+                      }),
+                    });
+                    setShowMissedModal(false);
+                    setMissedName(''); setMissedQty('1'); setMissedNote('');
+                  } finally {
+                    setSavingMissed(false);
+                  }
+                }}
+                className="flex-1 py-2.5 rounded-lg text-sm font-medium disabled:opacity-40"
+                style={{ background: '#fbbf24', color: '#1a1208' }}>
+                {savingMissed ? 'Saving…' : 'Log it'}
+              </button>
+            </div>
           </div>
         </div>
       )}

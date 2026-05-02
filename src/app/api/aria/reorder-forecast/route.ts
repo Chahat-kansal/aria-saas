@@ -2,37 +2,14 @@ import Anthropic from '@anthropic-ai/sdk';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { getBusinessItems, getBusinessSales } from '@/lib/business-data';
 import { NextResponse } from 'next/server';
+import { ARIA_VOICE } from '@/lib/aria-voice-guide';
+import { getWeatherForecast, getUpcomingHolidays, getHolidayUplift, getWeatherUplift } from '@/lib/external-apis';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-
-// Upcoming Australian public holidays 2026 (national + key state)
-const AU_HOLIDAYS_2026 = [
-  { name: "Queen's Birthday (VIC)", date: '2026-06-08', impact: 1.3 },
-  { name: 'EOFY', date: '2026-06-30', impact: 1.5 },
-  { name: 'Christmas Day', date: '2026-12-25', impact: 2.0 },
-  { name: 'Boxing Day', date: '2026-12-26', impact: 1.8 },
-  { name: "New Year's Day", date: '2027-01-01', impact: 1.6 },
-];
-
-function getUpcomingHolidays(days = 60) {
-  const now = Date.now();
-  return AU_HOLIDAYS_2026
-    .map(h => {
-      const daysAway = Math.ceil((new Date(h.date).getTime() - now) / 86400000);
-      return { ...h, days_away: daysAway };
-    })
-    .filter(h => h.days_away > 0 && h.days_away <= days)
-    .sort((a, b) => a.days_away - b.days_away);
-}
-
-function getMaxHolidayImpact(daysWithin: number, holidays: ReturnType<typeof getUpcomingHolidays>) {
-  const relevant = holidays.filter(h => h.days_away <= daysWithin);
-  return relevant.length > 0 ? Math.max(...relevant.map(h => h.impact)) : 1.0;
-}
 
 export async function POST(req: Request) {
   const supabase = createServerSupabaseClient();
@@ -43,7 +20,7 @@ export async function POST(req: Request) {
   if (!business_id) return NextResponse.json({ error: 'business_id required' }, { status: 400 });
 
   const { data: business } = await supabase.from('businesses')
-    .select('id, name, industry, data_source').eq('id', business_id).eq('user_id', user.id).single();
+    .select('id, name, industry, city, data_source').eq('id', business_id).eq('user_id', user.id).single();
   if (!business) return NextResponse.json({ error: 'Business not found' }, { status: 404 });
 
   const today = new Date().toISOString().split('T')[0];
@@ -61,16 +38,20 @@ export async function POST(req: Request) {
   const dataSource = (business.data_source ?? 'aria_pos') as 'square' | 'aria_pos';
   const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  const city = (business.city as string | null) ?? 'Melbourne';
 
-  const [allItems, sales90] = await Promise.all([
+  const [allItems, sales90, weatherForecast] = await Promise.all([
     getBusinessItems(business_id, dataSource),
     getBusinessSales(business_id, ninetyDaysAgo, dataSource),
+    getWeatherForecast(city).catch(() => []),
   ]);
+
+  const upcomingHolidays = getUpcomingHolidays(60, 'VIC');
 
   // Guard: no sales data yet
   if (sales90.length === 0) {
     return NextResponse.json({
-      items: [], upcoming_holidays: getUpcomingHolidays(60).map(({ name, date, days_away }) => ({ name, date, days_away })),
+      items: [], upcoming_holidays: upcomingHolidays.map(({ name, date, days_away }) => ({ name, date, days_away })),
       ai_summary: null, generated_at: new Date().toISOString(), cached: false,
       no_data: true, no_data_message: 'No sales data yet — add some sales first and Aria will start building your reorder forecast.',
     });
@@ -93,8 +74,6 @@ export async function POST(req: Request) {
     }
   }
 
-  const upcomingHolidays = getUpcomingHolidays(60);
-
   type ForecastItem = {
     item_id: string; item_name: string; current_stock: number;
     velocity_per_day: number; days_remaining: number; adjusted_days_remaining: number;
@@ -109,8 +88,10 @@ export async function POST(req: Request) {
 
         if (velocityPerDay === 0) return null; // no sales data — skip
 
-      const holidayUplift = getMaxHolidayImpact(14, upcomingHolidays);
-      const adjustedVelocity = velocityPerDay * holidayUplift;
+      const holidayUplift = getHolidayUplift(14, item.name, 'VIC');
+      const weatherUpliftForItem = getWeatherUplift(weatherForecast, item.name);
+      const combinedUplift = Math.max(holidayUplift, weatherUpliftForItem);
+      const adjustedVelocity = velocityPerDay * combinedUplift;
 
       const daysRemaining = item.currentStock / velocityPerDay;
       const adjustedDaysRemaining = item.currentStock / adjustedVelocity;
@@ -134,7 +115,7 @@ export async function POST(req: Request) {
         velocity_per_day: Math.round(velocityPerDay * 100) / 100,
         days_remaining: Math.round(daysRemaining * 10) / 10,
         adjusted_days_remaining: Math.round(adjustedDaysRemaining * 10) / 10,
-        holiday_uplift: holidayUplift,
+        holiday_uplift: combinedUplift,
         suggested_order: suggestedOrder,
         recommended_order_date: orderDate,
         urgency,
@@ -168,7 +149,7 @@ export async function POST(req: Request) {
       const msg = await anthropic.messages.create({
         model: 'claude-haiku-4-5-20251001',
         max_tokens: 600,
-        system: 'You are Aria. Return ONLY valid JSON, no markdown.',
+        system: `${ARIA_VOICE}\n\nReturn ONLY valid JSON, no markdown, no preamble.`,
         messages: [{
           role: 'user',
           content: `Reorder data: ${JSON.stringify(context)}

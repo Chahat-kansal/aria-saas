@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
+import { ARIA_VOICE } from '@/lib/aria-voice-guide';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
 
@@ -23,7 +24,9 @@ export async function POST(req: Request) {
     const msg = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 800,
-      system: 'You are a procurement analyst. Return ONLY valid JSON array, no markdown.',
+      system: `${ARIA_VOICE}
+
+You are a procurement and supplier expert. Return ONLY valid JSON array, no markdown.`,
       messages: [{
         role: 'user',
         content: `Analyse these supplier performance metrics and provide one actionable insight per supplier.

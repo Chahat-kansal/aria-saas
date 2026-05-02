@@ -60,13 +60,15 @@ export async function GET(req: Request) {
   const sixtyDaysAgo = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000).toISOString();
   const sixtyDaysFromNow = new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000).toISOString();
 
-  // Run all 5 fetches in parallel — each wrapped in async IIFE so .catch works
-  const [reviews, winback, lowStockRaw, staff_alerts, profit_leaks] = await Promise.all([
+  // Run all fetches in parallel — each wrapped in async IIFE so .catch works
+  const [reviews, winback, lowStockRaw, staff_alerts, profit_leaks, missed_demand, intelligence] = await Promise.all([
     (async () => { try { const r = await supabase.from('reviews').select('id', { count: 'exact', head: true }).eq('business_id', businessId).is('response', null).gte('created_at', thirtyDaysAgo); return r.count ?? 0; } catch { return 0; } })(),
     (async () => { try { const r = await supabase.from('pos_customers').select('id', { count: 'exact', head: true }).eq('business_id', businessId).lt('last_visit', sixtyDaysAgo); return r.count ?? 0; } catch { return 0; } })(),
     (async () => { try { const r = await supabase.from('pos_products').select('stock_quantity, low_stock_threshold').eq('business_id', businessId).eq('track_stock', true).eq('is_active', true); return { data: r.data as Array<{ stock_quantity: number | null; low_stock_threshold: number | null }> | null, error: r.error }; } catch { return { data: null, error: new Error('failed') }; } })(),
     (async () => { try { const r = await supabase.from('staff_members').select('id', { count: 'exact', head: true }).eq('business_id', businessId).eq('status', 'active').lte('visa_expiry_date', sixtyDaysFromNow); return r.count ?? 0; } catch { return 0; } })(),
     (async () => { try { const r = await supabase.from('profit_leaks').select('id', { count: 'exact', head: true }).eq('business_id', businessId).eq('status', 'detected'); return r.count ?? 0; } catch { return 0; } })(),
+    (async () => { try { const r = await supabase.from('missed_demand').select('id', { count: 'exact', head: true }).eq('business_id', businessId).eq('status', 'pending'); return r.count ?? 0; } catch { return 0; } })(),
+    (async () => { try { const r = await supabase.from('intelligence_events').select('id', { count: 'exact', head: true }).eq('business_id', businessId).eq('acknowledged', false); return r.count ?? 0; } catch { return 0; } })(),
   ]);
 
   // Compute low_stock from the raw product rows
@@ -84,5 +86,7 @@ export async function GET(req: Request) {
     low_stock,
     staff_alerts,
     profit_leaks,
+    missed_demand,
+    intelligence,
   });
 }

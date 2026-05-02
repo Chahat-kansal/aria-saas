@@ -4,6 +4,7 @@ export const maxDuration = 20;
 
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import Anthropic from '@anthropic-ai/sdk';
+import { ARIA_VOICE } from '@/lib/aria-voice-guide';
 import { NextResponse } from 'next/server';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -23,7 +24,9 @@ export async function POST(req: Request) {
     const msg = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 500,
-      system: 'You are a marketing expert for Australian small businesses. Return ONLY valid JSON.',
+      system: `${ARIA_VOICE}
+
+You are a marketing expert for Australian small businesses. Return ONLY valid JSON.`,
       messages: [{
         role: 'user',
         content: `Create a targeted promotion for ${biz.name} (${biz.industry} in ${biz.city ?? 'Australia'}).
