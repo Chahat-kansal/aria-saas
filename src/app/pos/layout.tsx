@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
-import { POSLayout } from '@/components/pos/POSLayout';
+import { POSTopNav } from '@/components/pos/POSTopNav';
 
 export const metadata = { title: 'AriaPOS — Point of Sale' };
 
@@ -18,19 +18,5 @@ export default async function PosLayout({ children }: { children: React.ReactNod
 
   if (!allBusinesses || allBusinesses.length === 0) redirect('/onboarding/industry');
 
-  const { data: activeRecord } = await supabase
-    .from('user_active_business')
-    .select('business_id')
-    .eq('user_id', user.id)
-    .maybeSingle();
-
-  const activeBusiness =
-    (activeRecord?.business_id && allBusinesses.find(b => b.id === activeRecord.business_id)) ||
-    allBusinesses[0];
-
-  return (
-    <POSLayout userName={activeBusiness.owner_name || activeBusiness.name}>
-      {children}
-    </POSLayout>
-  );
+  return <POSTopNav>{children}</POSTopNav>;
 }
