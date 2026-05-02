@@ -231,10 +231,14 @@ export default function POSHomePage() {
                 <Bar dataKey="revenue" fill="#059669" radius={[3, 3, 0, 0]} />
                 <Tooltip
                   contentStyle={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 12 }}
-                  formatter={(v: number) => [`A$${v.toFixed(2)}`, 'Revenue']}
-                  labelFormatter={(l: string) => {
-                    const item = chartData.find(d => d.label === l || d.date === l);
-                    return item?.label ?? l;
+                  formatter={(v: unknown) => {
+                    const num = typeof v === 'number' ? v : 0;
+                    return [`A$${num.toFixed(2)}`, 'Revenue'];
+                  }}
+                  labelFormatter={(l: unknown) => {
+                    const key = typeof l === 'string' ? l : '';
+                    const item = chartData.find(d => d.label === key || d.date === key);
+                    return item?.label ?? key;
                   }}
                 />
               </BarChart>
