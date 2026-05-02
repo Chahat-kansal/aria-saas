@@ -23,6 +23,7 @@ export default function ProfitLeaksPage() {
   const { business } = useBusinessContext();
   const [leaks, setLeaks] = useState<Leak[]>([]);
   const [aiSummary, setAiSummary] = useState('');
+  const [discovery, setDiscovery] = useState('');
   const [totalCents, setTotalCents] = useState(0);
   const [loading, setLoading] = useState(false);
   const [lastRun, setLastRun] = useState<string | null>(null);
@@ -41,6 +42,7 @@ export default function ProfitLeaksPage() {
       if (!res.ok) throw new Error(data.error ?? 'Analysis failed');
       setLeaks(data.leaks ?? []);
       setAiSummary(data.ai_summary ?? '');
+      setDiscovery(data.discovery ?? '');
       setTotalCents(data.total_monthly_impact_cents ?? 0);
       setLastRun(new Date().toISOString());
     } catch (e: any) {
@@ -87,6 +89,22 @@ export default function ProfitLeaksPage() {
           {loading ? <><span className="inline-block w-3 h-3 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />Analysing…</> : '↻ Refresh'}
         </button>
       </div>
+
+      {/* Discovery moment — Aria's key finding */}
+      {discovery && !loading && (
+        <div className="mb-6 rounded-2xl p-5 relative overflow-hidden"
+          style={{ background: 'linear-gradient(135deg,rgba(29,158,117,0.12),rgba(29,158,117,0.05))', border: '1px solid rgba(29,158,117,0.25)' }}>
+          <div className="flex items-start gap-3">
+            <div className="w-9 h-9 rounded-full bg-[#1D9E75] flex items-center justify-center flex-shrink-0 mt-0.5">
+              <span className="text-white text-sm font-bold">A</span>
+            </div>
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[.15em] text-[#1D9E75] mb-2">Aria found something</p>
+              <p className="text-sm leading-relaxed text-white/80">{discovery}</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       <AriaIntelligencePanel mode="profit" />
 

@@ -248,5 +248,25 @@ Only include leaks where there is actual data (non-zero amounts). Skip analyses 
       : 'Aria ran profit analysis — no significant leaks found',
   }).then(() => null, () => null);
 
-  return NextResponse.json({ leaks, total_monthly_impact_cents: totalMonthlyCents, ai_summary: aiSummary, analyses });
+  // Generate a discovery moment — the single most surprising finding
+  let discovery = '';
+  if (leaks.length > 0 && process.env.ANTHROPIC_API_KEY) {
+    try {
+      const topLeak = leaks.sort((a: any, b: any) => b.estimated_monthly_impact_cents - a.estimated_monthly_impact_cents)[0] as any;
+      const discoveryMsg = await anthropic.messages.create({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 100,
+        messages: [{
+          role: 'user',
+          content: `You are Aria, a sharp business analyst. Write 2 sentences that sound like you JUST discovered something surprising while analysing this business's data. Reference the specific finding: "${topLeak.title}" — ${topLeak.description}. Total monthly impact: A$${(totalMonthlyCents / 100).toFixed(0)}. Sound like a CFO who just spotted something the owner didn't know. Be specific with numbers. Australian context.`,
+        }],
+      });
+      discovery = discoveryMsg.content[0].type === 'text' ? discoveryMsg.content[0].text.trim() : '';
+    } catch { /* non-fatal — return without discovery */ }
+  } else if (leaks.length > 0) {
+    const top = leaks.sort((a: any, b: any) => b.estimated_monthly_impact_cents - a.estimated_monthly_impact_cents)[0] as any;
+    discovery = `I found ${leaks.length} profit leak${leaks.length > 1 ? 's' : ''} costing an estimated A$${(totalMonthlyCents / 100).toFixed(0)}/month. The biggest: ${top.title}.`;
+  }
+
+  return NextResponse.json({ leaks, total_monthly_impact_cents: totalMonthlyCents, ai_summary: aiSummary, discovery, analyses });
 }

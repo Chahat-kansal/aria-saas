@@ -2,6 +2,8 @@
 import { useState } from 'react';
 import { useBusinessContext } from '@/components/providers/BusinessProvider';
 import { Sidebar } from '@/components/dashboard/Sidebar';
+import { AriaAwarenessBar } from '@/components/aria/AriaAwarenessBar';
+import { AriaCommandBar } from '@/components/aria/AriaCommandBar';
 
 export function DashboardShell({ children }: { children: React.ReactNode }) {
   const { business, loading } = useBusinessContext();
@@ -55,7 +57,9 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
             </svg>
           </button>
         </div>
+        <AriaAwarenessBar />
         <main className="flex-1 overflow-y-auto">{children}</main>
+        <AriaCommandBar />
       </div>
     </div>
   );
