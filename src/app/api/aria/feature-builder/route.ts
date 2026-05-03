@@ -8,58 +8,73 @@ import { ARIA_VOICE } from '@/lib/aria-voice-guide';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-const POS_CAPABILITIES = `The POS system (AriaPOS) already has:
-- Products with categories, variants, modifiers, images, age restriction
-- Sales with served_by (cashier), customer attachment, multiple payment methods
-- Staff PIN login (pos_users table with roles and permissions)
-- Commission tracking (pos_commissions, pos_commission_rules tables)
-- Customer loyalty points, gift cards, promotions, discounts
-- Timesheets
-- Full reporting (sales, inventory, cashier, commission, register closures)
-- KDS (kitchen display) and table management for cafes/restaurants
-- Warehouse receiving, lot tracking, bin locations, purchase orders
-- Barcode scanning with Open Food Facts lookup
-- Customer display (second screen via localStorage sync)`;
+const GENERATE_SYSTEM = `${ARIA_VOICE}
 
-const ANALYSE_SYSTEM = `${ARIA_VOICE}
+You are Aria's feature generator. Your job is to generate a JSON config that a FeatureRenderer component will render live in the dashboard — NO CODE is generated, NO deployment happens.
 
-You are Aria's product manager AI. You understand POS systems and what's technically feasible.
+Available feature_type values and when to use them:
+- "metric_card"   — a single aggregated number (total sales, avg order, etc.)
+- "leaderboard"   — ranked list of staff/products/customers by a metric
+- "tracker"       — progress bar per customer/employee toward a goal (e.g. punch card)
+- "calculator"    — interactive inputs + formula result (e.g. commission estimator)
+- "data_table"    — a table of recent records
 
-${POS_CAPABILITIES}
+Available tables (ONLY these — never invent others):
+- pos_sales        — fields: id, business_id, created_at, total, subtotal, payment_method, served_by, customer_id, customer_name, status
+- pos_sale_items   — fields: id, business_id, sale_id, product_name, quantity, unit_price, total, category, created_at
+- pos_commissions  — fields: id, business_id, sale_id, user_id, user_name, amount, rate, created_at, paid_at
+- pos_customers    — fields: id, business_id, name, email, phone, loyalty_points, created_at
+- pos_products     — fields: id, business_id, name, category, price, cost, stock_qty
+- pos_timesheets   — fields: id, business_id, user_id, user_name, clock_in, clock_out, hours_worked
+- staff_members    — fields: id, business_id, name, role, hourly_rate
 
-Analyse this feature request. Return JSON only:
+Date range options: "today" | "this_week" | "this_month" | "last_month" | "last_7_days" | "last_30_days" | "all_time"
+
+IMPORTANT: Return ONLY valid JSON with this exact shape:
 {
-  "feasible": boolean,
-  "complexity": "simple"|"medium"|"complex",
-  "summary": "2 sentences: what Aria will build",
-  "questions": [],
-  "requires_db_change": boolean,
-  "requires_ui_change": boolean,
-  "existing_features_used": []
-}`;
+  "feature_name": "short display name",
+  "feature_type": "metric_card|leaderboard|tracker|calculator|data_table",
+  "description": "one sentence describing what this shows",
+  "location": "dashboard",
+  "display_order": 0,
+  "config": {
+    /* fields depend on feature_type — see below */
+  },
+  "preview_description": "Plain English: 'This will show you X updated in real time'"
+}
 
-const BUILD_SYSTEM = `${ARIA_VOICE}
+Config shapes by type:
 
-You are Aria's feature builder. Generate a complete implementation plan.
+metric_card:
+  query: { table, type: "sum"|"count", field?, date_field?, date_range?, filters? }
+  format: "currency"|"number"|"percent"
+  prefix: "$" or ""
+  icon: emoji
+  compare: { same as query but for previous period }
 
-${POS_CAPABILITIES}
+leaderboard:
+  rows: { table, type: "group_sum"|"count_per_customer", field?, group_field?, date_range?, limit? }
+  value_label: "Sales" etc
+  value_format: "currency"|"number"
+  limit: 5
 
-The codebase uses Next.js 14, Supabase, Tailwind CSS, light theme in POS (bg-white, bg-gray-50).
+tracker:
+  trackers: { table, type: "count_per_customer", date_range: "all_time" }
+  goal: 10
+  goal_label: "coffees"
+  limit: 20
+  empty_message: "No customers tracked yet"
 
-Keep it simple. Prefer extending existing tables. Prefer extending existing pages.
+calculator:
+  inputs: [{ key: "sales", label: "Total Sales ($)", default: 1000, min: 0, step: 100 }]
+  formula: "sales * rate / 100"  (JS expression using input keys only)
+  result_label: "Commission Earned"
+  result_format: "currency"
 
-Return JSON only:
-{
-  "feature_name": "string",
-  "sql_migration": "string or null",
-  "api_route": { "path": "string", "method": "string", "code": "string" } | null,
-  "ui_changes": [{
-    "file": "string",
-    "description": "string",
-    "code_snippet": "string (key parts only)"
-  }],
-  "success_message": "string"
-}`;
+data_table:
+  query: { table, type: "rows", field: "column1,column2,...", date_range?, filters?, limit? }
+  columns: [{ field, label, format }]
+  empty_message: "No records yet"`;
 
 export async function POST(req: Request) {
   const supabase = createServerSupabaseClient();
@@ -67,86 +82,76 @@ export async function POST(req: Request) {
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const body = await req.json().catch(() => ({}));
-  const { business_id, feature_request, phase = 'analyse', answers } = body;
-  if (!business_id || !feature_request) {
-    return NextResponse.json({ error: 'business_id and feature_request required' }, { status: 400 });
-  }
+  const { business_id, feature_request, phase = 'generate', feature_config } = body;
 
-  const { data: biz } = await supabase.from('businesses').select('id, name, industry').eq('id', business_id).eq('user_id', user.id).single();
+  if (!business_id) return NextResponse.json({ error: 'business_id required' }, { status: 400 });
+
+  const { data: biz } = await supabase.from('businesses').select('id, name, industry').eq('id', business_id).eq('user_id', user.id).maybeSingle();
   if (!biz) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-  if (!process.env.ANTHROPIC_API_KEY) {
-    return NextResponse.json({
-      phase, feasible: true, complexity: 'medium',
-      summary: 'AI analysis requires ANTHROPIC_API_KEY to be configured.',
-      questions: [], requires_db_change: false, requires_ui_change: true,
-      existing_features_used: [],
-    });
-  }
+  // ── phase: generate — ask Claude Sonnet to produce a feature config ──────────
+  if (phase === 'generate') {
+    if (!feature_request?.trim()) return NextResponse.json({ error: 'feature_request required' }, { status: 400 });
 
-  const bizCtx = `Business: ${(biz as any).name} (${(biz as any).industry ?? 'retail'}, Australia)`;
+    if (!process.env.ANTHROPIC_API_KEY) {
+      return NextResponse.json({ error: 'ANTHROPIC_API_KEY not configured' }, { status: 500 });
+    }
 
-  if (phase === 'analyse') {
-    try {
-      const msg = await anthropic.messages.create({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 500,
-        system: ANALYSE_SYSTEM,
-        messages: [{ role: 'user', content: `${bizCtx}\n\nFeature request: "${feature_request}"` }],
-      });
-      const raw = msg.content[0].type === 'text' ? msg.content[0].text : '';
-      const match = raw.match(/\{[\s\S]*\}/);
-      if (match) {
-        const analysis = JSON.parse(match[0]);
-        return NextResponse.json({ phase: 'analyse', ...analysis });
-      }
-    } catch { /* fall through */ }
-    return NextResponse.json({ phase: 'analyse', feasible: true, complexity: 'medium', summary: 'Analysis in progress.', questions: [], requires_db_change: false, requires_ui_change: true, existing_features_used: [] });
-  }
+    const bizCtx = `Business: ${(biz as Record<string,unknown>).name} (${(biz as Record<string,unknown>).industry ?? 'retail'}, Australia, currency: A$)`;
 
-  if (phase === 'build') {
-    const fullRequest = answers ? `${feature_request}\n\nClarifications: ${answers}` : feature_request;
     try {
       const msg = await anthropic.messages.create({
         model: 'claude-sonnet-4-6',
-        max_tokens: 2000,
-        system: BUILD_SYSTEM,
-        messages: [{ role: 'user', content: `${bizCtx}\n\nBuild this feature: "${fullRequest}"` }],
+        max_tokens: 1200,
+        system: GENERATE_SYSTEM,
+        messages: [{ role: 'user', content: `${bizCtx}\n\nFeature request: "${feature_request}"` }],
       });
+
       const raw = msg.content[0].type === 'text' ? msg.content[0].text : '';
       const match = raw.match(/\{[\s\S]*\}/);
-      if (match) {
-        const plan = JSON.parse(match[0]);
-        // Save to aria_custom_features
-        await supabase.from('aria_custom_features').insert({
-          business_id, feature_name: plan.feature_name ?? feature_request.slice(0, 60),
-          feature_request, status: 'planned', feature_plan: plan,
-        }).then(() => null, () => null);
-        return NextResponse.json({ phase: 'build', plan, copy_prompt: buildClaudeCodePrompt(feature_request, plan) });
-      }
-    } catch { /* fall through */ }
-    return NextResponse.json({ phase: 'build', plan: null, error: 'Build planning failed.' });
+      if (!match) return NextResponse.json({ error: 'Config generation failed — no JSON returned' }, { status: 500 });
+
+      const config = JSON.parse(match[0]);
+      return NextResponse.json({ phase: 'generate', feature_config: config, preview_description: config.preview_description ?? `This will show you ${config.feature_name} updated in real time.` });
+    } catch (e) {
+      console.error('[feature-builder/generate]', e);
+      return NextResponse.json({ error: 'Feature generation failed' }, { status: 500 });
+    }
+  }
+
+  // ── phase: confirm — save the approved config to business_features ────────────
+  if (phase === 'confirm') {
+    if (!feature_config) return NextResponse.json({ error: 'feature_config required' }, { status: 400 });
+
+    const { feature_name, feature_type, description, location, display_order, config } = feature_config;
+
+    // Count existing features for display_order
+    const { count } = await supabase.from('business_features').select('id', { count: 'exact', head: true }).eq('business_id', business_id);
+
+    const { data: inserted, error: insertErr } = await supabase.from('business_features').insert({
+      business_id,
+      name:          feature_name ?? 'Custom Feature',
+      description:   description  ?? null,
+      feature_type:  feature_type ?? 'metric_card',
+      location:      location     ?? 'dashboard',
+      display_order: display_order ?? (count ?? 0),
+      config:        config        ?? {},
+      is_active:     true,
+      created_by:    'aria',
+    }).select('id').single();
+
+    if (insertErr) {
+      console.error('[feature-builder/confirm]', insertErr);
+      return NextResponse.json({ error: 'Failed to save feature' }, { status: 500 });
+    }
+
+    return NextResponse.json({
+      phase: 'confirm',
+      ok: true,
+      feature_id: inserted.id,
+      message: `✦ **${feature_name}** has been added to your dashboard. It's live now — go to your dashboard to see it.`,
+    });
   }
 
   return NextResponse.json({ error: 'Unknown phase' }, { status: 400 });
-}
-
-function buildClaudeCodePrompt(request: string, plan: Record<string, unknown>): string {
-  return `# Aria Feature Request: ${request}
-
-Aria has designed this feature. Please implement it:
-
-## Summary
-${(plan.success_message as string) ?? ''}
-
-## SQL Migration
-${(plan.sql_migration as string) ?? 'None needed'}
-
-## API Route
-${plan.api_route ? `File: ${(plan.api_route as any).path}\nMethod: ${(plan.api_route as any).method}\n\`\`\`typescript\n${(plan.api_route as any).code}\n\`\`\`` : 'None needed'}
-
-## UI Changes
-${((plan.ui_changes as any[]) ?? []).map((c: any) => `### ${c.file}\n${c.description}\n\`\`\`tsx\n${c.code_snippet}\n\`\`\``).join('\n\n')}
-
-Requirements: Zero TypeScript errors. Follow existing patterns (createServerSupabaseClient, Tailwind light theme, font-mono for prices).`;
 }
