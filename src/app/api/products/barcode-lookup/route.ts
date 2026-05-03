@@ -17,6 +17,9 @@ export async function GET(req: Request) {
   const barcode = searchParams.get('barcode')?.trim();
   if (!barcode) return NextResponse.json({ error: 'barcode required' }, { status: 400 });
 
+  // GS1_AU_API_KEY: add env var when available for official GS1 Australia registry lookup
+  // Cascade: 1) local global_products → 2) Open Food Facts (free, no key) → not_found
+
   // 1. Check local global_products table first
   const { data: existing } = await supabase
     .from('global_products')
