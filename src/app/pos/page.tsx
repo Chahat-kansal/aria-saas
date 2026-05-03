@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
+import { POSUserLogin } from '@/components/pos/POSUserLogin';
 
 const BarChart = dynamic(() => import('recharts').then(m => m.BarChart), { ssr: false });
 const Bar      = dynamic(() => import('recharts').then(m => m.Bar),      { ssr: false });
@@ -25,6 +26,27 @@ export default function POSHomePage() {
   const router = useRouter();
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const [posUser, setPosUser] = useState<Record<string, unknown> | null>(null);
+  const [userChecked, setUserChecked] = useState(false);
+  const [businessId, setBusinessId] = useState<string | null>(null);
+  const [businessName, setBusinessName] = useState<string>('AriaPOS');
+
+  // Check for existing POS user in localStorage
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('aria_pos_user');
+      if (stored) setPosUser(JSON.parse(stored));
+    } catch { /* ignore */ }
+    setUserChecked(true);
+  }, []);
+
+  // Get business info for user login screen
+  useEffect(() => {
+    fetch('/api/pos/products').then(r => r.json()).then(d => {
+      if (d.business_id) setBusinessId(d.business_id);
+      if (d.business_name) setBusinessName(d.business_name);
+    }).catch(() => null);
+  }, []);
   const [openingFloat, setOpeningFloat] = useState('200');
   const [opening, setOpening] = useState(false);
   const [openError, setOpenError] = useState<string | null>(null);
@@ -109,6 +131,21 @@ export default function POSHomePage() {
   const estCash = session ? (session.opening_float ?? 0) + (session.total_cash_sales ?? 0) : 0;
   const openSince = session ? new Date(session.opened_at).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' }) : '';
 
+  // Show user login if not authenticated and business is known
+  if (userChecked && !posUser && businessId) {
+    return (
+      <POSUserLogin
+        businessId={businessId}
+        businessName={businessName}
+        onLogin={user => setPosUser(user as unknown as Record<string, unknown>)}
+        onSkip={() => {
+          localStorage.setItem('aria_pos_user', JSON.stringify({ id: 'owner', name: 'Owner', role: 'owner', permissions: { can_apply_discount: true, can_refund: true, max_discount_pct: 100, can_close_register: true, can_override_price: true } }));
+          setPosUser({ id: 'owner', name: 'Owner', role: 'owner' });
+        }}
+      />
+    );
+  }
+
   if (loading) {
     return (
       <div className="h-full flex items-center justify-center bg-gray-50">
@@ -166,6 +203,15 @@ export default function POSHomePage() {
         <p className="text-sm text-gray-500">
           Register open since <span className="font-medium text-gray-700">{openSince}</span>
           {session.opened_by && <> · {session.opened_by}</>}
+          {posUser && (
+            <span className="ml-3 text-gray-400">
+              · 👤 {(posUser as any).name}
+              <button onClick={() => { localStorage.removeItem('aria_pos_user'); setPosUser(null); }}
+                className="ml-1.5 text-gray-400 hover:text-gray-600 underline text-xs">
+                switch
+              </button>
+            </span>
+          )}
         </p>
         <button onClick={() => router.push('/pos/close')}
           className="text-sm px-4 py-2 border border-gray-200 text-gray-700 rounded-xl hover:bg-red-50 hover:border-red-200 hover:text-red-600 transition-colors">
