@@ -2,7 +2,7 @@ export const industryConfig = {
   retail: {
     label: 'Retail shop (liquor, convenience, specialty)',
     published: true,
-    sidebar: ['dashboard', 'staff', 'pos', 'winback', 'slow-day', 'reviews', 'profit-leaks', 'missed-demand', 'intelligence', 'competitors', 'churn', 'reorder', 'variance', 'receipt-scan', 'website-chat'],
+    sidebar: ['dashboard', 'custom-features', 'staff', 'pos', 'winback', 'slow-day', 'reviews', 'profit-leaks', 'missed-demand', 'intelligence', 'competitors', 'churn', 'reorder', 'variance', 'receipt-scan', 'website-chat'],
     dashboard_modules: ['revenue', 'pos_today', 'winback', 'reviews', 'profit_leaks', 'inventory_alerts'],
     show_pos: true,
     show_visa: false,
@@ -11,7 +11,7 @@ export const industryConfig = {
   cafe: {
     label: 'Café or coffee shop',
     published: true,
-    sidebar: ['dashboard', 'staff', 'pos', 'recipes', 'winback', 'slow-day', 'reviews', 'profit-leaks', 'missed-demand', 'intelligence', 'competitors', 'churn', 'reorder', 'variance', 'receipt-scan', 'website-chat'],
+    sidebar: ['dashboard', 'custom-features', 'staff', 'pos', 'recipes', 'winback', 'slow-day', 'reviews', 'profit-leaks', 'missed-demand', 'intelligence', 'competitors', 'churn', 'reorder', 'variance', 'receipt-scan', 'website-chat'],
     dashboard_modules: ['revenue', 'pos_today', 'winback', 'slow_day', 'reviews', 'waste_alerts'],
     show_pos: true,
     show_visa: false,
@@ -20,7 +20,7 @@ export const industryConfig = {
   restaurant: {
     label: 'Restaurant or food service',
     published: true,
-    sidebar: ['dashboard', 'staff', 'pos', 'recipes', 'winback', 'slow-day', 'reviews', 'profit-leaks', 'missed-demand', 'intelligence', 'competitors', 'churn', 'reorder', 'variance', 'receipt-scan', 'website-chat'],
+    sidebar: ['dashboard', 'custom-features', 'staff', 'pos', 'recipes', 'winback', 'slow-day', 'reviews', 'profit-leaks', 'missed-demand', 'intelligence', 'competitors', 'churn', 'reorder', 'variance', 'receipt-scan', 'website-chat'],
     dashboard_modules: ['revenue', 'pos_today', 'winback', 'slow_day', 'reviews', 'waste_alerts'],
     show_pos: true,
     show_visa: false,
@@ -29,7 +29,7 @@ export const industryConfig = {
   tradie: {
     label: 'Tradie',
     published: false,
-    sidebar: ['dashboard', 'staff', 'bookings', 'quote-builder', 'winback', 'reviews', 'compliance', 'churn', 'website-chat'],
+    sidebar: ['dashboard', 'custom-features', 'staff', 'bookings', 'quote-builder', 'winback', 'reviews', 'compliance', 'churn', 'website-chat'],
     dashboard_modules: ['revenue', 'bookings_today', 'quotes_pending', 'reviews', 'upcoming_jobs'],
     show_pos: false,
     show_visa: false,
@@ -38,7 +38,7 @@ export const industryConfig = {
   realestate: {
     label: 'Real Estate',
     published: false,
-    sidebar: ['dashboard', 'staff', 'bookings', 'winback', 'reviews', 'competitors', 'churn', 'compliance', 'website-chat'],
+    sidebar: ['dashboard', 'custom-features', 'staff', 'bookings', 'winback', 'reviews', 'competitors', 'churn', 'compliance', 'website-chat'],
     dashboard_modules: ['revenue', 'listings_active', 'inspections_today', 'leads', 'reviews'],
     show_pos: false,
     show_visa: false,
@@ -47,7 +47,7 @@ export const industryConfig = {
   salon: {
     label: 'Salon / Beauty',
     published: false,
-    sidebar: ['dashboard', 'staff', 'bookings', 'winback', 'slow-day', 'reviews', 'churn', 'profit-leaks', 'website-chat'],
+    sidebar: ['dashboard', 'custom-features', 'staff', 'bookings', 'winback', 'slow-day', 'reviews', 'churn', 'profit-leaks', 'website-chat'],
     dashboard_modules: ['revenue', 'bookings_today', 'winback', 'slow_day', 'reviews', 'top_services'],
     show_pos: false,
     show_visa: false,
@@ -56,7 +56,7 @@ export const industryConfig = {
   visa: {
     label: 'Visa / Migration Agent',
     published: false,
-    sidebar: ['dashboard', 'staff', 'visa/clients', 'visa/applications', 'visa/documents', 'visa/alerts', 'visa/news', 'visa/ask', 'website-chat'],
+    sidebar: ['dashboard', 'custom-features', 'staff', 'visa/clients', 'visa/applications', 'visa/documents', 'visa/alerts', 'visa/news', 'visa/ask', 'website-chat'],
     dashboard_modules: ['active_clients', 'applications_pending', 'alerts', 'expiring_visas', 'news'],
     show_pos: false,
     show_visa: true,
@@ -65,7 +65,7 @@ export const industryConfig = {
   gym: {
     label: 'Gym / Fitness',
     published: false,
-    sidebar: ['dashboard', 'staff', 'bookings', 'winback', 'slow-day', 'reviews', 'churn', 'profit-leaks', 'website-chat'],
+    sidebar: ['dashboard', 'custom-features', 'staff', 'bookings', 'winback', 'slow-day', 'reviews', 'churn', 'profit-leaks', 'website-chat'],
     dashboard_modules: ['revenue', 'members_active', 'classes_today', 'winback', 'churn_risk'],
     show_pos: false,
     show_visa: false,
@@ -74,7 +74,7 @@ export const industryConfig = {
   professional: {
     label: 'Professional Services',
     published: false,
-    sidebar: ['dashboard', 'staff', 'bookings', 'quote-builder', 'winback', 'reviews', 'compliance', 'churn', 'website-chat'],
+    sidebar: ['dashboard', 'custom-features', 'staff', 'bookings', 'quote-builder', 'winback', 'reviews', 'compliance', 'churn', 'website-chat'],
     dashboard_modules: ['revenue', 'clients_active', 'appointments_today', 'quotes_pending', 'reviews'],
     show_pos: false,
     show_visa: false,
@@ -85,6 +85,7 @@ export const industryConfig = {
     published: true,
     sidebar: [
       'dashboard',
+      'custom-features',
       'staff',
       'warehouse/inbound',
       'warehouse/stock',

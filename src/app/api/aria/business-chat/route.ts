@@ -43,7 +43,46 @@ export async function POST(req: Request) {
   if (!message?.trim()) return new Response(JSON.stringify({ error: 'message required' }), { status: 400 });
   if (!business_id) return new Response(JSON.stringify({ error: 'business_id required' }), { status: 400 });
 
+  // Detect feature requests — route to feature-builder
+  const FEATURE_REQUEST_PATTERNS = [
+    /add a feature/i, /can you add/i, /i want to track/i, /i want to add/i,
+    /create a feature/i, /build a feature/i, /i need a way to/i,
+    /is there a way to add/i, /can aria add/i, /add.*to.*pos/i,
+    /build.*for me/i, /add.*feature/i, /custom.*feature/i,
+  ];
+  const isFeatureRequest = FEATURE_REQUEST_PATTERNS.some(p => p.test(message));
+
   const encoder = new TextEncoder();
+
+  if (isFeatureRequest) {
+    const stream = new ReadableStream({
+      async start(controller) {
+        const send = (obj: object) => controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`));
+        try {
+          const origin = (req.headers.get('origin') ?? process.env.NEXT_PUBLIC_APP_URL ?? '');
+          const analyseRes = await fetch(`${origin}/api/aria/feature-builder`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json', 'Cookie': req.headers.get('cookie') ?? '' },
+            body: JSON.stringify({ business_id, feature_request: message, phase: 'analyse' }),
+          });
+          const analysis = await analyseRes.json().catch(() => null);
+          if (analysis?.feasible !== undefined) {
+            const responseText = analysis.feasible
+              ? `✦ **Custom Feature Request Detected**\n\n${analysis.summary}\n\n**Complexity:** ${analysis.complexity}\n\n${analysis.questions?.length > 0 ? `Before I build this, I need to ask:\n${analysis.questions.map((q: string) => `• ${q}`).join('\n')}\n\n` : ''}${analysis.feasible ? '**Ready to build?** Go to [Custom Features](/dashboard/custom-features) and ask me to build: _"' + message + '"_' : 'This feature would require significant changes. Let me suggest alternatives...'}`
+              : `I can help with that concept, but it would need custom development. ${analysis.summary}`;
+            send({ text: responseText, feature_request: true, analysis });
+          } else {
+            send({ text: `✦ I can build custom features for your POS! Go to [Custom Features](/dashboard/custom-features) to get started, or tell me more about what you want.` });
+          }
+        } catch {
+          send({ text: `✦ That sounds like a custom feature request. Visit [Custom Features](/dashboard/custom-features) to have Aria design and build it for you.` });
+        }
+        send({ done: true });
+        controller.close();
+      },
+    });
+    return new Response(stream, { headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache, no-transform', Connection: 'keep-alive' } });
+  }
+
   const stream = new ReadableStream({
     async start(controller) {
       const send = (obj: object) => controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`));
