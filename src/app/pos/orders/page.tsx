@@ -1,4 +1,5 @@
 'use client';
+import { POSAriaInsight } from '@/components/pos/POSAriaInsight';
 import { useState, useEffect } from 'react';
 
 interface Supplier { id: string; name: string; }
@@ -46,7 +47,9 @@ export default function OrdersPage() {
   };
 
   return (
-    <div className="p-6">
+    <div className="min-h-full">
+      <POSAriaInsight page="pos/orders" />
+      <div className="p-6">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-xl font-semibold text-[#1a1a16]">Orders &amp; Invoices</h1>
@@ -125,6 +128,7 @@ export default function OrdersPage() {
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 }

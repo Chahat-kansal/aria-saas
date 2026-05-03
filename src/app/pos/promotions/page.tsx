@@ -1,4 +1,5 @@
 'use client';
+import { POSAriaInsight } from '@/components/pos/POSAriaInsight';
 import { useState, useEffect, useCallback } from 'react';
 
 interface Promo { id: string; name: string; type: string; discount_value: number; start_date: string | null; end_date: string | null; is_active: boolean; usage_count: number; }
@@ -38,7 +39,9 @@ export default function PromotionsPage() {
   const inputCls = 'w-full px-3 py-2.5 rounded-xl text-sm border border-[rgba(0,0,0,.12)] outline-none';
 
   return (
-    <div className="p-6 max-w-5xl mx-auto">
+    <div className="min-h-full">
+      <POSAriaInsight page="pos/promotions" />
+      <div className="p-6 max-w-5xl mx-auto">
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
           <h1 className="text-xl font-semibold text-[#1a1a16]">Promotions</h1>
@@ -102,6 +105,7 @@ export default function PromotionsPage() {
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 }

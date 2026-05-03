@@ -1,4 +1,5 @@
 'use client';
+import { POSAriaInsight } from '@/components/pos/POSAriaInsight';
 import { useState, useEffect } from 'react';
 
 interface GiftCard { id: string; code: string; initial_balance: number; current_balance: number; status: string; created_at: string; expires_at: string | null; }
@@ -29,7 +30,9 @@ export default function GiftCardsPage() {
   const totalBalance = cards.filter(c => c.status === 'active').reduce((s, c) => s + c.current_balance, 0);
 
   return (
-    <div className="p-6 max-w-5xl mx-auto">
+    <div className="min-h-full">
+      <POSAriaInsight page="pos/gift-cards" />
+      <div className="p-6 max-w-5xl mx-auto">
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
           <h1 className="text-xl font-semibold text-[#1a1a16]">Gift Cards</h1>
@@ -92,6 +95,7 @@ export default function GiftCardsPage() {
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 }

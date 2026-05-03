@@ -1,4 +1,5 @@
 'use client';
+import { POSAriaInsight } from '@/components/pos/POSAriaInsight';
 import { useState, useEffect } from 'react';
 
 interface Sale {
@@ -23,7 +24,9 @@ export default function SalesReportPage() {
   const total = sales.reduce((s, r) => s + r.total_amount, 0);
 
   return (
-    <div className="p-6">
+    <div className="min-h-full">
+      <POSAriaInsight page="pos/reports/sales" />
+      <div className="p-6">
       <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
         <div>
           <h1 className="text-xl font-semibold text-[#1a1a16]">Sales Reports</h1>
@@ -74,6 +77,7 @@ export default function SalesReportPage() {
             ))}
           </tbody>
         </table>
+      </div>
       </div>
     </div>
   );

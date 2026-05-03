@@ -113,11 +113,42 @@ export default function TerminalPage() {
   const [barcodeLookupHit,  setBarcodeLookupHit]  = useState<GlobalProductHit | null>(null);
   const [barcodeScanning,   setBarcodeScanning]   = useState(false);
 
+  /* ── Quick access panel ───────────────────────────────────────── */
+  const [showQuickPanel,   setShowQuickPanel]   = useState(false);
+
+  /* ── Custom item / Note ───────────────────────────────────────── */
+  const [showCustomItem,   setShowCustomItem]   = useState(false);
+  const [customItemForm,   setCustomItemForm]   = useState({ desc: '', price: '', qty: '1', taxable: true, isNote: false });
+
+  /* ── Price check mode ─────────────────────────────────────────── */
+  const [priceCheckMode,   setPriceCheckMode]   = useState(false);
+  const [priceCheckProd,   setPriceCheckProd]   = useState<Product | null>(null);
+
+  /* ── Refund ───────────────────────────────────────────────────── */
+  const [showRefundModal,  setShowRefundModal]  = useState(false);
+  const [refundSearch,     setRefundSearch]     = useState('');
+  const [refundResults,    setRefundResults]    = useState<any[]>([]);
+  const [refundSale,       setRefundSale]       = useState<any>(null);
+  const [refundItems,      setRefundItems]      = useState<Record<string, boolean>>({});
+  const [processingRefund, setProcessingRefund] = useState(false);
+
+  /* ── Cashier switch ───────────────────────────────────────────── */
+  const [showCashierModal, setShowCashierModal] = useState(false);
+  const [cashierName,      setCashierName]      = useState('');
+  const [switchingCashier, setSwitchingCashier] = useState(false);
+
+  /* ── Receipt reprint ──────────────────────────────────────────── */
+  const [reprintSale,      setReprintSale]      = useState<any>(null);
+
+  /* ── Context menu ─────────────────────────────────────────────── */
+  const [contextMenu,      setContextMenu]      = useState<{ product: Product; x: number; y: number } | null>(null);
+
   const searchRef  = useRef<HTMLInputElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const barcodeBuffer = useRef('');
   const barcodeTimer  = useRef<ReturnType<typeof setTimeout> | null>(null);
   const barcodeTs     = useRef<number>(0);
+  const quickPanelRef = useRef<HTMLDivElement>(null);
 
   /* ── sessionStorage cart persistence ─────────────────────────── */
   useEffect(() => {
@@ -204,8 +235,12 @@ export default function TerminalPage() {
         }
         return;
       }
-      if (e.key === 'F1') { e.preventDefault(); searchRef.current?.focus(); return; }
-      if (e.key === 'F8') { e.preventDefault(); parkSale(); return; }
+      if (e.key === 'F1')  { e.preventDefault(); searchRef.current?.focus(); return; }
+      if (e.key === 'F2')  { e.preventDefault(); setShowCustomItem(true); return; }
+      if (e.key === 'F3')  { e.preventDefault(); parkSale(); return; }
+      if (e.key === 'F8')  { e.preventDefault(); setPayMethod('cash'); return; }
+      if (e.key === 'F9')  { e.preventDefault(); setPayMethod('card'); return; }
+      if (e.key === 'F10') { e.preventDefault(); processSale(); return; }
       if (e.key === 'Escape') { if (!variantModal) confirmClear(); return; }
       if (e.key.length === 1) {
         if (now - barcodeTs.current > 100) barcodeBuffer.current = '';
@@ -230,6 +265,14 @@ export default function TerminalPage() {
 
   /* ── Aria chat scroll ─────────────────────────────────────────── */
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [chatMessages]);
+
+  /* ── Close context menu on outside click ──────────────────────── */
+  useEffect(() => {
+    if (!contextMenu) return;
+    const close = () => setContextMenu(null);
+    document.addEventListener('click', close);
+    return () => document.removeEventListener('click', close);
+  }, [contextMenu]);
 
   /* ── Product suggestions — debounced on cart change ───────────── */
   useEffect(() => {
@@ -385,6 +428,83 @@ export default function TerminalPage() {
     setChatLoading(false);
   }
 
+  /* ─── Custom item / Note ────────────────────────────────────── */
+  function addCustomItemToCart() {
+    const price = parseFloat(customItemForm.price) || 0;
+    const qty   = parseInt(customItemForm.qty) || 1;
+    if (!customItemForm.desc.trim()) return;
+    if (!customItemForm.isNote && price <= 0) return;
+    const fakeProduct: Product = {
+      id: `custom-${Date.now()}`,
+      name: customItemForm.isNote ? `📝 ${customItemForm.desc}` : customItemForm.desc,
+      sku: null, barcode: null,
+      price: customItemForm.isNote ? 0 : price,
+      cost_price: 0,
+      tax_rate: customItemForm.taxable ? 10 : 0,
+      stock_quantity: 999, low_stock_threshold: 0,
+      track_stock: false, is_active: true,
+      category_id: null,
+    };
+    addToCartDirect(fakeProduct, qty);
+    setCustomItemForm({ desc: '', price: '', qty: '1', taxable: true, isNote: false });
+    setShowCustomItem(false);
+  }
+
+  /* ─── Refund search & process ────────────────────────────────── */
+  async function searchRefundSales(q: string) {
+    if (q.length < 2) { setRefundResults([]); return; }
+    try {
+      const res = await fetch(`/api/pos/sales?q=${encodeURIComponent(q)}&limit=10`);
+      const d = await res.json();
+      setRefundResults(d.sales ?? []);
+    } catch { setRefundResults([]); }
+  }
+  async function processRefund() {
+    if (!refundSale || processingRefund) return;
+    const selectedItems = refundSale.items?.filter((item: any) => refundItems[item.id]) ?? [];
+    if (selectedItems.length === 0) return;
+    setProcessingRefund(true);
+    try {
+      const refundTotal = selectedItems.reduce((s: number, i: any) => s + (i.line_total ?? 0), 0);
+      await fetch('/api/pos/sale', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          items: selectedItems.map((i: any) => ({
+            product_id: i.product_id, product_name: i.product_name,
+            quantity: -Math.abs(i.quantity), unit_price: i.unit_price,
+            tax_rate: i.tax_rate ?? 10, discount_percent: 0,
+            line_total: -Math.abs(i.line_total ?? 0),
+          })),
+          payment_method: refundSale.payment_method ?? 'card',
+          subtotal: -refundTotal, tax_amount: -(refundTotal - refundTotal / 1.1),
+          discount_amount: 0, total_amount: -refundTotal,
+          session_id: registerSession?.id ?? null,
+          original_sale_id: refundSale.id,
+          notes: `Refund for sale ${refundSale.sale_number ?? refundSale.id}`,
+        }),
+      });
+      setShowRefundModal(false);
+      setRefundSale(null); setRefundItems({}); setRefundSearch(''); setRefundResults([]);
+      alert(`Refund of A$${refundTotal.toFixed(2)} processed.`);
+    } catch { alert('Refund failed — try again.'); }
+    setProcessingRefund(false);
+  }
+
+  /* ─── Cashier switch ─────────────────────────────────────────── */
+  async function switchCashier() {
+    if (!cashierName.trim() || !registerSession) return;
+    setSwitchingCashier(true);
+    try {
+      await fetch('/api/pos/sessions', {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: registerSession.id, cashier_name: cashierName.trim() }),
+      });
+      setRegisterSession({ ...registerSession, opened_by: cashierName.trim() });
+      setShowCashierModal(false); setCashierName('');
+    } catch { /* silent */ }
+    setSwitchingCashier(false);
+  }
+
   /* ─── Park sale ──────────────────────────────────────────────── */
   async function parkSale() {
     if (!cart.length) return;
@@ -513,11 +633,21 @@ export default function TerminalPage() {
                 : 'Register closed'}
             </span>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-1.5 flex-wrap">
             {parkedSales.length > 0 && (
               <button onClick={() => setShowParked(true)}
                 className="text-gray-500 hover:text-gray-700 px-2 py-0.5 rounded border border-gray-200 bg-white">
                 Parked ({parkedSales.length})
+              </button>
+            )}
+            <button onClick={() => setShowRefundModal(true)}
+              className="text-gray-500 hover:text-gray-700 px-2 py-0.5 rounded border border-gray-200 bg-white">
+              ⟳ Refund
+            </button>
+            {registerIsOpen && (
+              <button onClick={() => setShowCashierModal(true)}
+                className="text-gray-500 hover:text-gray-700 px-2 py-0.5 rounded border border-gray-200 bg-white">
+                {registerSession?.opened_by ? `👤 ${registerSession.opened_by}` : 'Switch cashier'}
               </button>
             )}
             {registerIsOpen
@@ -533,19 +663,70 @@ export default function TerminalPage() {
         style={{ gridTemplateColumns: '280px 1fr 320px' }}>
 
         {/* ── LEFT: Product browser ──────────────────────────────── */}
-        <div className={`flex flex-col border-r border-gray-200 bg-white overflow-hidden
+        <div className={`relative flex flex-col border-r border-gray-200 bg-white overflow-hidden
           ${mobileTab !== 'products' ? 'hidden md:flex' : 'flex'}`}>
 
-          {/* Search */}
-          <div className="px-3 py-3 border-b border-gray-100">
-            <div className="relative">
+          {/* Quick panel slide-out */}
+          {showQuickPanel && (
+            <div ref={quickPanelRef} className="absolute inset-0 bg-white z-20 flex flex-col shadow-xl">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+                <div>
+                  <p className="text-sm font-semibold text-gray-900">{businessName}</p>
+                  <p className="text-xs text-gray-400">{new Date().toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })}</p>
+                </div>
+                <button onClick={() => setShowQuickPanel(false)} className="text-gray-400 hover:text-gray-600 text-xl">×</button>
+              </div>
+              <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
+                {[
+                  { icon: '🏠', label: 'Dashboard',      href: '/dashboard' },
+                  { icon: '📦', label: 'Products',       href: '/pos/products' },
+                  { icon: '👥', label: 'Customers',      href: '/pos/customers' },
+                  { icon: '🎁', label: 'Gift Cards',     href: '/pos/gift-cards' },
+                  { icon: '🏷️', label: 'Promotions',    href: '/pos/promotions' },
+                  { icon: '📊', label: 'Reports',        href: '/pos/reports' },
+                  { icon: '⏰', label: 'Timesheets',     href: '/pos/timesheets' },
+                  { icon: '💰', label: 'Cash Management',href: '/pos/cash' },
+                ].map(link => (
+                  <a key={link.href} href={link.href}
+                    className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-gray-700 hover:bg-gray-50 transition-colors">
+                    <span className="text-base w-6 text-center">{link.icon}</span>
+                    <span>{link.label}</span>
+                  </a>
+                ))}
+              </div>
+              {lowStockItems.length > 0 && (
+                <div className="border-t border-gray-100 p-3">
+                  <p className="text-[10px] text-gray-400 uppercase tracking-wider mb-1.5">Low stock</p>
+                  {lowStockItems.slice(0, 3).map(p => (
+                    <p key={p.id} className="text-xs text-amber-600 py-0.5">⚠ {p.name} ({p.stock_quantity} left)</p>
+                  ))}
+                </div>
+              )}
+              {registerIsOpen && (
+                <div className="p-3 border-t border-gray-100">
+                  <button onClick={() => { setShowCloseModal(true); setShowQuickPanel(false); }}
+                    className="w-full py-2.5 rounded-xl bg-red-50 border border-red-200 text-red-600 text-sm font-medium hover:bg-red-100">
+                    Close Register
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Search + menu button row */}
+          <div className="px-3 py-3 border-b border-gray-100 flex gap-2">
+            <button onClick={() => setShowQuickPanel(v => !v)}
+              className="flex-shrink-0 w-9 h-9 flex items-center justify-center border border-gray-200 rounded-lg text-gray-500 hover:bg-gray-50 text-base">
+              ≡
+            </button>
+            <div className="relative flex-1">
               <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               <input
                 ref={searchRef}
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 placeholder="Search or scan barcode…"
-                className="w-full bg-gray-50 border border-gray-200 rounded-lg pl-9 pr-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-[#059669] focus:border-transparent"
+                className="w-full bg-gray-50 border border-gray-200 rounded-lg pl-9 pr-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#059669] focus:border-transparent"
               />
             </div>
           </div>
@@ -570,6 +751,31 @@ export default function TerminalPage() {
               ))}
             </div>
           </div>
+
+          {/* Quick sale row */}
+          <div className="px-3 py-1.5 border-b border-gray-100 flex gap-1.5">
+            <button onClick={() => { setCustomItemForm(f => ({ ...f, isNote: false })); setShowCustomItem(true); }}
+              className="flex-1 text-xs border border-dashed border-gray-300 rounded-lg py-1.5 text-gray-500 hover:border-gray-400 hover:text-gray-700 transition-colors">
+              + Custom item
+            </button>
+            <button onClick={() => { setCustomItemForm(f => ({ ...f, isNote: true, price: '0' })); setShowCustomItem(true); }}
+              className="flex-1 text-xs border border-dashed border-gray-300 rounded-lg py-1.5 text-gray-500 hover:border-gray-400 hover:text-gray-700 transition-colors">
+              + Note
+            </button>
+            <button onClick={() => setPriceCheckMode(v => !v)}
+              className={`px-2.5 text-xs rounded-lg py-1.5 border transition-colors ${
+                priceCheckMode ? 'bg-blue-50 border-blue-200 text-blue-600' : 'border-gray-200 text-gray-500 hover:bg-gray-50'
+              }`}
+              title="Price check mode">
+              🔍
+            </button>
+          </div>
+
+          {priceCheckMode && (
+            <div className="px-3 py-1.5 bg-blue-50 border-b border-blue-100">
+              <p className="text-xs text-blue-600 font-medium">Price check mode — tap product to check price, not add to cart</p>
+            </div>
+          )}
 
           {/* Barcode lookup result */}
           {(barcodeScanning || barcodeLookupHit) && (
@@ -616,7 +822,12 @@ export default function TerminalPage() {
                   const catColor = p.pos_categories?.color || '#e5e7eb';
                   return (
                     <button key={p.id}
-                      onClick={() => !isOut && checkAndAddToCart(p)}
+                      onClick={() => {
+                        if (isOut) return;
+                        if (priceCheckMode) { setPriceCheckProd(p); return; }
+                        checkAndAddToCart(p);
+                      }}
+                      onContextMenu={e => { e.preventDefault(); setContextMenu({ product: p, x: e.clientX, y: e.clientY }); }}
                       disabled={isOut}
                       className={`relative text-left rounded-xl border transition-all overflow-hidden group
                         ${isOut ? 'opacity-50 cursor-not-allowed border-gray-100 bg-white' : 'border-gray-100 bg-white hover:border-gray-300 hover:shadow-sm active:scale-[0.98] cursor-pointer'}`}>
@@ -973,21 +1184,30 @@ export default function TerminalPage() {
                   </div>
                 )}
 
-                {/* Complete Sale button */}
+                {/* Complete Sale + Hold buttons */}
                 {!registerIsOpen && !registerLoading ? (
                   <button onClick={() => setShowRegisterModal(true)}
                     className="w-full h-14 bg-[#059669] hover:bg-emerald-700 text-white font-semibold text-base rounded-xl transition-colors">
                     Open Register to Sell
                   </button>
                 ) : (
-                  <button
-                    onClick={processSale}
-                    disabled={!cart.length || !registerIsOpen || processing || (payMethod === 'cash' && cashTendered !== '' && tendered < roundedTotal)}
-                    className="w-full h-14 bg-[#111827] hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold text-base rounded-xl transition-colors flex items-center justify-center gap-2">
-                    {processing
-                      ? <><Spinner /> Processing…</>
-                      : <>Complete Sale · <span className="font-mono">A${roundedTotal.toFixed(2)}</span></>}
-                  </button>
+                  <div className="flex gap-2">
+                    {cart.length > 0 && (
+                      <button onClick={parkSale}
+                        className="h-14 px-4 border border-gray-200 rounded-xl text-gray-600 text-sm font-medium hover:bg-gray-50 flex-shrink-0 flex flex-col items-center justify-center gap-0.5">
+                        <span>⏸</span>
+                        <span className="text-[10px]">Hold</span>
+                      </button>
+                    )}
+                    <button
+                      onClick={processSale}
+                      disabled={!cart.length || !registerIsOpen || processing || (payMethod === 'cash' && cashTendered !== '' && tendered < roundedTotal)}
+                      className="flex-1 h-14 bg-[#111827] hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold text-base rounded-xl transition-colors flex items-center justify-center gap-2">
+                      {processing
+                        ? <><Spinner /> Processing…</>
+                        : <>Complete Sale · <span className="font-mono">A${roundedTotal.toFixed(2)}</span></>}
+                    </button>
+                  </div>
                 )}
               </div>
             </>
@@ -1095,6 +1315,22 @@ export default function TerminalPage() {
             </button>
           </div>
 
+          {/* Parked sales in Aria panel */}
+          {parkedSales.length > 0 && (
+            <div className="flex-shrink-0 border-t border-gray-100 px-3 py-2">
+              <p className="text-[10px] text-gray-400 uppercase tracking-wider mb-1.5">Held sales ({parkedSales.length})</p>
+              <div className="space-y-1">
+                {parkedSales.slice(0, 3).map(p => (
+                  <button key={p.id} onClick={() => restoreParked(p)}
+                    className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-gray-50 hover:bg-gray-100 text-left transition-colors">
+                    <span className="text-xs text-gray-700 truncate">{p.label || 'Sale'} · {Array.isArray(p.items) ? p.items.length : 0} items</span>
+                    <span className="text-xs font-mono font-medium text-gray-900 flex-shrink-0 ml-2">A${(p.total || 0).toFixed(2)}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Recent sales */}
           <div className="flex-shrink-0 border-t border-gray-100">
             <div className="px-4 py-2">
@@ -1107,21 +1343,41 @@ export default function TerminalPage() {
             ) : (
               <div>
                 {recentSales.map(s => (
-                  <div key={s.id} className="py-2.5 border-b border-gray-50 last:border-0">
-                    <div className="flex justify-between text-[10px] text-gray-400 mb-0.5">
-                      <span>#{s.id.slice(-6).toUpperCase()}</span>
-                      <span>{s.time.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}</span>
+                  <div key={s.id} className="py-2 border-b border-gray-50 last:border-0 group flex items-center gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex justify-between text-[10px] text-gray-400 mb-0.5">
+                        <span>#{s.id.slice(-6).toUpperCase()}</span>
+                        <span>{s.time.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-xs text-gray-600">{s.items} item{s.items !== 1 ? 's' : ''}</span>
+                        <span className="text-xs font-semibold font-mono text-gray-900">A${s.total.toFixed(2)}</span>
+                      </div>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-xs text-gray-600">{s.items} item{s.items !== 1 ? 's' : ''}</span>
-                      <span className="text-xs font-semibold font-mono text-gray-900">A${s.total.toFixed(2)}</span>
-                    </div>
+                    <button onClick={() => setReprintSale(s)}
+                      className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-300 hover:text-gray-600 flex-shrink-0 text-base"
+                      title="Reprint receipt">
+                      🖨️
+                    </button>
                   </div>
                 ))}
               </div>
             )}
           </div>
         </div>
+      </div>
+
+      {/* Keyboard shortcuts bar — desktop only */}
+      <div className="hidden md:flex flex-shrink-0 bg-gray-50 border-t border-gray-200 h-8 items-center px-4 gap-4 overflow-hidden">
+        {[
+          ['F1','Search'], ['F2','Custom item'], ['F3','Hold'], ['F8','Cash'],
+          ['F9','Card'], ['F10','Complete'], ['Esc','Clear'],
+        ].map(([key, label]) => (
+          <span key={key} className="flex items-center gap-1 text-[10px] text-gray-400 whitespace-nowrap">
+            <kbd className="bg-white border border-gray-200 rounded px-1 py-0.5 text-gray-500 font-mono text-[10px]">{key}</kbd>
+            {label}
+          </span>
+        ))}
       </div>
 
       {/* Mobile bottom tab bar */}
@@ -1348,6 +1604,253 @@ export default function TerminalPage() {
                 {savingMissed ? 'Saving…' : 'Log it'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Custom item / Note modal */}
+      {showCustomItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
+            <div className="px-6 py-5 border-b border-gray-100">
+              <h2 className="text-base font-bold text-gray-900">
+                {customItemForm.isNote ? 'Add Note to Cart' : 'Custom Item'}
+              </h2>
+              <p className="text-xs text-gray-400 mt-0.5">
+                {customItemForm.isNote ? 'Non-priced note — appears on receipt' : 'One-time item, not saved to products'}
+              </p>
+            </div>
+            <div className="px-6 py-5 space-y-3">
+              <div>
+                <label className="text-xs text-gray-500 mb-1 block">{customItemForm.isNote ? 'Note text' : 'Description'}</label>
+                <input value={customItemForm.desc} onChange={e => setCustomItemForm(f => ({ ...f, desc: e.target.value }))}
+                  className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-gray-900"
+                  placeholder={customItemForm.isNote ? 'e.g. Gift wrap requested' : 'e.g. Custom engraving'} autoFocus />
+              </div>
+              {!customItemForm.isNote && (
+                <>
+                  <div className="flex gap-3">
+                    <div className="flex-1">
+                      <label className="text-xs text-gray-500 mb-1 block">Price (A$)</label>
+                      <input type="number" min="0" step="0.01" value={customItemForm.price}
+                        onChange={e => setCustomItemForm(f => ({ ...f, price: e.target.value }))}
+                        className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-gray-900" />
+                    </div>
+                    <div className="w-20">
+                      <label className="text-xs text-gray-500 mb-1 block">Qty</label>
+                      <input type="number" min="1" value={customItemForm.qty}
+                        onChange={e => setCustomItemForm(f => ({ ...f, qty: e.target.value }))}
+                        className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-gray-900" />
+                    </div>
+                  </div>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={customItemForm.taxable}
+                      onChange={e => setCustomItemForm(f => ({ ...f, taxable: e.target.checked }))}
+                      className="w-4 h-4 accent-gray-900" />
+                    <span className="text-sm text-gray-700">GST inclusive (10%)</span>
+                  </label>
+                </>
+              )}
+            </div>
+            <div className="px-6 pb-6 flex gap-2">
+              <button onClick={() => { setShowCustomItem(false); setCustomItemForm({ desc: '', price: '', qty: '1', taxable: true, isNote: false }); }}
+                className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-500 hover:bg-gray-50">Cancel</button>
+              <button onClick={addCustomItemToCart}
+                disabled={!customItemForm.desc.trim() || (!customItemForm.isNote && !customItemForm.price)}
+                className="flex-1 py-2.5 rounded-xl bg-gray-900 text-white text-sm font-semibold disabled:opacity-40 hover:bg-gray-800">
+                Add to cart
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Price check overlay */}
+      {priceCheckProd && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xs overflow-hidden">
+            <div className="bg-blue-50 px-6 py-4 border-b border-blue-100 text-center">
+              <p className="text-xs text-blue-500 font-medium uppercase tracking-wider mb-1">Price Check</p>
+              <h2 className="text-lg font-bold text-gray-900">{priceCheckProd.name}</h2>
+              {priceCheckProd.pos_categories && <p className="text-sm text-gray-500">{priceCheckProd.pos_categories.name}</p>}
+            </div>
+            <div className="px-6 py-5 text-center">
+              <p className="text-4xl font-bold font-mono text-gray-900 mb-1">A${priceCheckProd.price.toFixed(2)}</p>
+              <p className="text-xs text-gray-400">Includes GST: A${(priceCheckProd.price - priceCheckProd.price / 1.1).toFixed(2)}</p>
+              {priceCheckProd.track_stock && (
+                <p className={`mt-3 text-sm font-medium ${priceCheckProd.stock_quantity <= 0 ? 'text-red-500' : priceCheckProd.stock_quantity <= priceCheckProd.low_stock_threshold ? 'text-amber-500' : 'text-emerald-600'}`}>
+                  {priceCheckProd.stock_quantity <= 0 ? 'Out of stock' : `${priceCheckProd.stock_quantity} in stock`}
+                </p>
+              )}
+            </div>
+            <div className="px-6 pb-5 flex gap-2">
+              <button onClick={() => setPriceCheckProd(null)}
+                className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-500 hover:bg-gray-50">Close</button>
+              <button onClick={() => { checkAndAddToCart(priceCheckProd); setPriceCheckProd(null); setPriceCheckMode(false); }}
+                disabled={priceCheckProd.track_stock && priceCheckProd.stock_quantity <= 0}
+                className="flex-1 py-2.5 rounded-xl bg-gray-900 text-white text-sm font-semibold disabled:opacity-40 hover:bg-gray-800">
+                Add to cart
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Refund modal */}
+      {showRefundModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
+            <div className="px-6 py-5 border-b border-gray-100 flex items-center justify-between">
+              <div>
+                <h2 className="text-base font-bold text-gray-900">Process Refund</h2>
+                <p className="text-xs text-gray-400 mt-0.5">Search by receipt number or customer name</p>
+              </div>
+              <button onClick={() => { setShowRefundModal(false); setRefundSale(null); setRefundSearch(''); setRefundResults([]); }}
+                className="text-gray-400 hover:text-gray-600 text-xl">×</button>
+            </div>
+            <div className="px-6 py-4 space-y-4 max-h-[60vh] overflow-y-auto">
+              {!refundSale ? (
+                <>
+                  <input value={refundSearch} onChange={e => { setRefundSearch(e.target.value); searchRefundSales(e.target.value); }}
+                    className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-gray-900"
+                    placeholder="Search receipt # or customer name…" autoFocus />
+                  <div className="space-y-2">
+                    {refundResults.map((sale: any) => (
+                      <button key={sale.id} onClick={() => { setRefundSale(sale); setRefundItems({}); }}
+                        className="w-full flex items-center gap-3 p-3 border border-gray-100 rounded-xl hover:border-gray-300 text-left transition-all">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-gray-900">#{sale.sale_number ?? sale.id?.slice(-6).toUpperCase()}</p>
+                          <p className="text-xs text-gray-400">{new Date(sale.created_at).toLocaleDateString('en-AU')} · {sale.customer_name ?? 'Walk-in'}</p>
+                        </div>
+                        <span className="font-mono font-semibold text-sm text-gray-900">A${(sale.total_amount ?? 0).toFixed(2)}</span>
+                      </button>
+                    ))}
+                    {refundSearch.length >= 2 && refundResults.length === 0 && (
+                      <p className="text-sm text-gray-400 text-center py-4">No sales found</p>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-semibold text-gray-900">#{refundSale.sale_number ?? refundSale.id?.slice(-6).toUpperCase()}</p>
+                      <p className="text-xs text-gray-400">{new Date(refundSale.created_at).toLocaleDateString('en-AU')} · A${(refundSale.total_amount ?? 0).toFixed(2)}</p>
+                    </div>
+                    <button onClick={() => setRefundSale(null)} className="text-xs text-gray-400 hover:text-gray-600">← Back</button>
+                  </div>
+                  <p className="text-xs text-gray-500">Select items to refund:</p>
+                  <div className="space-y-1.5">
+                    {(refundSale.items ?? []).map((item: any) => (
+                      <label key={item.id} className="flex items-center gap-3 p-2.5 rounded-lg border border-gray-100 cursor-pointer hover:bg-gray-50">
+                        <input type="checkbox" checked={!!refundItems[item.id]}
+                          onChange={e => setRefundItems(r => ({ ...r, [item.id]: e.target.checked }))}
+                          className="w-4 h-4 accent-gray-900" />
+                        <div className="flex-1">
+                          <p className="text-sm text-gray-900">{item.product_name ?? item.name}</p>
+                          <p className="text-xs text-gray-400">qty {item.quantity} × A${(item.unit_price ?? 0).toFixed(2)}</p>
+                        </div>
+                        <span className="font-mono text-sm text-gray-900">A${(item.line_total ?? 0).toFixed(2)}</span>
+                      </label>
+                    ))}
+                  </div>
+                  <div className="pt-2">
+                    <p className="text-sm font-medium text-gray-900">
+                      Refund total: A${(refundSale.items ?? []).filter((i: any) => refundItems[i.id]).reduce((s: number, i: any) => s + (i.line_total ?? 0), 0).toFixed(2)}
+                    </p>
+                  </div>
+                </>
+              )}
+            </div>
+            {refundSale && (
+              <div className="px-6 pb-6 flex gap-2">
+                <button onClick={() => { setShowRefundModal(false); setRefundSale(null); }}
+                  className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-500 hover:bg-gray-50">Cancel</button>
+                <button onClick={processRefund} disabled={processingRefund || Object.values(refundItems).every(v => !v)}
+                  className="flex-1 py-2.5 rounded-xl bg-red-600 text-white text-sm font-semibold disabled:opacity-40 hover:bg-red-700 flex items-center justify-center gap-2">
+                  {processingRefund ? <><Spinner /> Processing…</> : 'Process Refund'}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Cashier switch modal */}
+      {showCashierModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
+            <div className="px-6 py-5 border-b border-gray-100">
+              <h2 className="text-base font-bold text-gray-900">Switch Cashier</h2>
+              <p className="text-xs text-gray-400 mt-0.5">Current: {registerSession?.opened_by ?? 'Unknown'}</p>
+            </div>
+            <div className="px-6 py-5">
+              <label className="text-xs text-gray-500 mb-1.5 block">New cashier name</label>
+              <input value={cashierName} onChange={e => setCashierName(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') switchCashier(); }}
+                className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-gray-900"
+                placeholder="Enter name…" autoFocus />
+            </div>
+            <div className="px-6 pb-6 flex gap-2">
+              <button onClick={() => { setShowCashierModal(false); setCashierName(''); }}
+                className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-500 hover:bg-gray-50">Cancel</button>
+              <button onClick={switchCashier} disabled={!cashierName.trim() || switchingCashier}
+                className="flex-1 py-2.5 rounded-xl bg-gray-900 text-white text-sm font-semibold disabled:opacity-40 flex items-center justify-center gap-2">
+                {switchingCashier ? <><Spinner /> Switching…</> : 'Switch'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Receipt reprint modal */}
+      {reprintSale && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xs overflow-hidden">
+            <div className="bg-emerald-50 px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+              <p className="font-semibold text-gray-900 text-sm">#{reprintSale.id.slice(-6).toUpperCase()}</p>
+              <button onClick={() => setReprintSale(null)} className="text-gray-400 hover:text-gray-600">×</button>
+            </div>
+            <div className="px-5 py-4 font-mono text-xs text-gray-700 space-y-0.5">
+              <div className="flex justify-between"><span className="text-gray-400">Time</span><span>{reprintSale.time.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}</span></div>
+              <div className="flex justify-between"><span className="text-gray-400">Items</span><span>{reprintSale.items}</span></div>
+              <div className="flex justify-between font-bold text-sm text-gray-900 mt-2"><span>TOTAL</span><span>A${reprintSale.total.toFixed(2)}</span></div>
+            </div>
+            <div className="px-5 pb-5 flex gap-2">
+              <button onClick={() => setReprintSale(null)} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-500">Close</button>
+              <button onClick={() => window.print()} className="flex-1 py-2.5 rounded-xl bg-gray-900 text-white text-sm font-medium">🖨️ Print</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Product context menu */}
+      {contextMenu && (
+        <div className="fixed z-50" style={{ top: contextMenu.y, left: contextMenu.x }}
+          onClick={() => setContextMenu(null)}>
+          <div className="bg-white rounded-xl border border-gray-200 shadow-xl py-1 min-w-44"
+            onClick={e => e.stopPropagation()}>
+            {[
+              { label: 'View price & stock', action: () => { setPriceCheckProd(contextMenu.product); setContextMenu(null); } },
+              { label: 'Edit price', action: async () => {
+                const newPrice = prompt(`New price for ${contextMenu.product.name}:`, contextMenu.product.price.toFixed(2));
+                if (newPrice && !isNaN(parseFloat(newPrice))) {
+                  await fetch('/api/pos/products', { method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: contextMenu.product.id, price: parseFloat(newPrice) }) });
+                  setProducts(ps => ps.map(p => p.id === contextMenu.product.id ? { ...p, price: parseFloat(newPrice!) } : p));
+                }
+                setContextMenu(null);
+              }},
+              { label: 'Reorder product', action: () => { window.location.href = `/pos/orders?product=${contextMenu.product.id}`; setContextMenu(null); } },
+              { label: 'View in products', action: () => { window.location.href = `/pos/products?q=${encodeURIComponent(contextMenu.product.name)}`; setContextMenu(null); } },
+            ].map(item => (
+              <button key={item.label} onClick={item.action}
+                className="block w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors">
+                {item.label}
+              </button>
+            ))}
+            <div className="border-t border-gray-100 my-1" />
+            <button onClick={() => setContextMenu(null)} className="block w-full text-left px-4 py-2.5 text-xs text-gray-400 hover:bg-gray-50">Cancel</button>
           </div>
         </div>
       )}

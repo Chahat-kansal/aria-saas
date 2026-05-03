@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
+import { POSAriaInsight } from '@/components/pos/POSAriaInsight';
 
 interface Category { id: string; name: string; color: string; }
 interface Product {
@@ -212,7 +213,9 @@ export default function ProductsPage() {
   });
 
   return (
-    <div className="p-6">
+    <div className="min-h-full bg-gray-50">
+      <POSAriaInsight page="pos/products" />
+      <div className="p-6">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
@@ -511,6 +514,7 @@ export default function ProductsPage() {
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 }
