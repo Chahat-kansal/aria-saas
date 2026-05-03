@@ -221,17 +221,24 @@ export default function TerminalPage() {
 
   /* ── Customer display sync ────────────────────────────────────── */
   useEffect(() => {
+    if (showReceipt) return; // handled by processSale
     try {
+      const sub = cart.reduce((s, i) => s + i.unitPrice * i.qty * (1 - (i.discount_percent ?? 0) / 100), 0);
+      const tax = sub - sub / 1.1;
+      const tot = sub;
       localStorage.setItem('aria_pos_display_state', JSON.stringify({
+        status: cart.length > 0 ? 'active' : 'idle',
         business_name: businessName,
         cart: cart.map(i => ({ name: i.label ?? i.product.name, qty: i.qty, price: i.unitPrice })),
-        total: cart.reduce((s, i) => s + i.unitPrice * i.qty, 0),
+        subtotal_cents: Math.round(sub * 100),
+        discount_cents: 0,
+        tax_cents: Math.round(tax * 100),
+        total_cents: Math.round(tot * 100),
         customer_name: customer?.name ?? null,
-        status: showReceipt ? 'complete' : cart.length > 0 ? 'sale_in_progress' : 'idle',
-        complete_message: showReceipt ? `Thank you${customer ? `, ${customer.name}` : ''}!` : null,
+        timestamp: Date.now(),
       }));
     } catch { /* ignore */ }
-  }, [cart, customer, showReceipt, businessName]);
+  }, [cart, customer, businessName, showReceipt]);
 
   /* ── Barcode scanner ──────────────────────────────────────────── */
   useEffect(() => {
@@ -623,6 +630,19 @@ export default function TerminalPage() {
         items: cartSnapshot.reduce((s, i) => s + i.qty, 0),
         time: new Date(),
       }, ...prev].slice(0, 5));
+      // Signal customer display: complete state
+      try {
+        const changeCents = payMethod === 'cash' ? Math.round(change * 100) : 0;
+        localStorage.setItem('aria_pos_display_state', JSON.stringify({
+          status: 'complete',
+          business_name: businessName,
+          change_cents: changeCents,
+          customer_name: customerSnapshot?.name ?? null,
+          loyalty_earned: Math.floor(roundedTotal),
+          timestamp: Date.now(),
+        }));
+      } catch { /* ignore */ }
+
       setShowReceipt({ ...d.sale, cartSnapshot, customerSnapshot, businessName });
       clearSale();
     } finally { setProcessing(false); }
@@ -705,14 +725,14 @@ export default function TerminalPage() {
               </div>
               <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
                 {[
-                  { icon: '🏠', label: 'Dashboard',      href: '/dashboard' },
-                  { icon: '📦', label: 'Products',       href: '/pos/products' },
-                  { icon: '👥', label: 'Customers',      href: '/pos/customers' },
-                  { icon: '🎁', label: 'Gift Cards',     href: '/pos/gift-cards' },
-                  { icon: '🏷️', label: 'Promotions',    href: '/pos/promotions' },
-                  { icon: '📊', label: 'Reports',        href: '/pos/reports' },
-                  { icon: '⏰', label: 'Timesheets',     href: '/pos/timesheets' },
-                  { icon: '💰', label: 'Cash Management',href: '/pos/cash' },
+                  { icon: '🏠', label: 'Dashboard',        href: '/dashboard' },
+                  { icon: '📦', label: 'Products',         href: '/pos/products' },
+                  { icon: '👥', label: 'Customers',        href: '/pos/customers' },
+                  { icon: '🎁', label: 'Gift Cards',       href: '/pos/gift-cards' },
+                  { icon: '🏷️', label: 'Promotions',      href: '/pos/promotions' },
+                  { icon: '📊', label: 'Reports',          href: '/pos/reports' },
+                  { icon: '⏰', label: 'Timesheets',       href: '/pos/timesheets' },
+                  { icon: '💰', label: 'Cash Management',  href: '/pos/cash' },
                 ].map(link => (
                   <a key={link.href} href={link.href}
                     className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-gray-700 hover:bg-gray-50 transition-colors">
@@ -720,6 +740,17 @@ export default function TerminalPage() {
                     <span>{link.label}</span>
                   </a>
                 ))}
+                <button
+                  onClick={() => {
+                    const w = window.open('/pos/display', 'AriaCustomerDisplay',
+                      'width=1280,height=720,menubar=no,toolbar=no,location=no,status=no');
+                    if (w) w.focus();
+                    setShowQuickPanel(false);
+                  }}
+                  className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-gray-700 hover:bg-gray-50 transition-colors w-full text-left">
+                  <span className="text-base w-6 text-center">📺</span>
+                  <span>Customer Display ↗</span>
+                </button>
               </div>
               {lowStockItems.length > 0 && (
                 <div className="border-t border-gray-100 p-3">

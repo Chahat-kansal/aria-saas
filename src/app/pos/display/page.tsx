@@ -1,112 +1,249 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+
+interface CartItem { name: string; qty: number; price: number; }
 
 interface DisplayState {
-  business_name: string;
-  cart: { name: string; qty: number; price: number }[];
-  total: number;
-  customer_name: string | null;
-  status: 'idle' | 'sale_in_progress' | 'complete';
-  complete_message: string | null;
+  status: 'idle' | 'active' | 'complete';
+  business_name?: string;
+  cart?: CartItem[];
+  subtotal_cents?: number;
+  discount_cents?: number;
+  tax_cents?: number;
+  total_cents?: number;
+  customer_name?: string | null;
+  change_cents?: number;
+  loyalty_earned?: number;
+  timestamp?: number;
+  // Legacy keys from old terminal
+  total?: number;
+  complete_message?: string | null;
 }
 
-const DEFAULT_STATE: DisplayState = {
-  business_name: 'AriaPOS',
-  cart: [],
-  total: 0,
-  customer_name: null,
-  status: 'idle',
-  complete_message: null,
-};
+const POLL_MS = 500;
+const COMPLETE_DURATION_MS = 4000;
+const SLIDE_INTERVAL_MS = 5000;
+
+const PROMO_SLIDES = [
+  { emoji: '⭐', text: 'Earn loyalty points with every purchase' },
+  { emoji: '💳', text: 'We accept cash and card' },
+  { emoji: '🙏', text: 'Thank you for shopping with us' },
+];
+
+function formatCents(cents: number): string {
+  return `A$${(cents / 100).toFixed(2)}`;
+}
+
+function Clock() {
+  const [time, setTime] = useState('');
+  useEffect(() => {
+    const update = () => setTime(new Date().toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' }));
+    update();
+    const t = setInterval(update, 1000);
+    return () => clearInterval(t);
+  }, []);
+  return <span>{time}</span>;
+}
 
 export default function CustomerDisplayPage() {
-  const [state, setState] = useState<DisplayState>(DEFAULT_STATE);
+  const [state, setDisplayState] = useState<DisplayState>({ status: 'idle' });
+  const [slideIdx, setSlideIdx] = useState(0);
+  const [completeVisible, setCompleteVisible] = useState(false);
+  const completeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Poll localStorage every 500ms for updates from the terminal
+  // Poll localStorage every 500ms
   useEffect(() => {
     const interval = setInterval(() => {
       try {
         const raw = localStorage.getItem('aria_pos_display_state');
-        if (raw) setState(JSON.parse(raw));
+        if (!raw) return;
+        const parsed: DisplayState = JSON.parse(raw);
+        setDisplayState(prev => {
+          // Only update if timestamp changed
+          if (parsed.timestamp === prev.timestamp) return prev;
+          return parsed;
+        });
       } catch { /* ignore */ }
-    }, 500);
+    }, POLL_MS);
     return () => clearInterval(interval);
   }, []);
 
-  const subtotal = state.cart.reduce((s, i) => s + i.price * i.qty, 0);
+  // Handle complete state animation
+  useEffect(() => {
+    if (state.status === 'complete') {
+      setCompleteVisible(true);
+      if (completeTimer.current) clearTimeout(completeTimer.current);
+      completeTimer.current = setTimeout(() => {
+        setCompleteVisible(false);
+        setDisplayState({ status: 'idle' });
+      }, COMPLETE_DURATION_MS);
+    }
+    return () => { if (completeTimer.current) clearTimeout(completeTimer.current); };
+  }, [state.status, state.timestamp]);
 
-  if (state.status === 'complete') {
+  // Promo slide rotation
+  useEffect(() => {
+    const t = setInterval(() => setSlideIdx(i => (i + 1) % PROMO_SLIDES.length), SLIDE_INTERVAL_MS);
+    return () => clearInterval(t);
+  }, []);
+
+  const businessName = state.business_name ?? 'AriaPOS';
+
+  // ── COMPLETE STATE ─────────────────────────────────────────────
+  if (state.status === 'complete' && completeVisible) {
+    const change = state.change_cents ?? 0;
+    const loyalty = state.loyalty_earned ?? 0;
     return (
-      <div className="min-h-screen bg-white flex flex-col items-center justify-center p-8 text-center">
-        <div className="w-20 h-20 rounded-full bg-green-100 flex items-center justify-center mb-6">
-          <svg className="w-10 h-10 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-          </svg>
+      <div className="min-h-screen flex flex-col items-center justify-center text-center p-8 transition-all"
+        style={{ background: 'linear-gradient(135deg, #059669 0%, #047857 100%)' }}>
+        <div className="animate-bounce mb-6">
+          <div className="w-28 h-28 rounded-full bg-white/20 flex items-center justify-center mx-auto">
+            <svg className="w-16 h-16 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+          </div>
         </div>
-        <h1 className="text-3xl font-bold text-[#1a1a16] mb-2">
-          {state.complete_message ?? (state.customer_name ? `Thank you, ${state.customer_name}!` : 'Thank you!')}
+        <h1 className="text-7xl font-black text-white mb-3">
+          {state.customer_name ? `Thanks, ${state.customer_name.split(' ')[0]}!` : 'Thank you!'}
         </h1>
-        <p className="text-lg text-[rgba(26,26,22,.5)]">{state.business_name}</p>
-        <p className="mt-4 text-sm text-[rgba(26,26,22,.3)]">Sale total: A${state.total.toFixed(2)}</p>
+        {change > 0 && (
+          <div className="mt-4 bg-white/20 rounded-3xl px-10 py-4">
+            <p className="text-xl text-white/80 font-medium mb-1">Change</p>
+            <p className="text-5xl font-black font-mono text-white">{formatCents(change)}</p>
+          </div>
+        )}
+        {loyalty > 0 && (
+          <p className="mt-5 text-2xl text-white/90 font-semibold">
+            ⭐ You earned {loyalty} loyalty points!
+          </p>
+        )}
+        <p className="mt-6 text-lg text-white/60">{businessName}</p>
       </div>
     );
   }
 
-  if (state.status === 'sale_in_progress' && state.cart.length > 0) {
+  // ── ACTIVE SALE ────────────────────────────────────────────────
+  const cartItems = state.cart ?? [];
+  const isActive = state.status === 'active' && cartItems.length > 0;
+
+  if (isActive) {
+    const totalCents = state.total_cents ?? 0;
+    const subtotalCents = state.subtotal_cents ?? totalCents;
+    const discountCents = state.discount_cents ?? 0;
+    const taxCents = state.tax_cents ?? 0;
+    const exclGst = totalCents - taxCents;
+
     return (
-      <div className="min-h-screen bg-[#f5f4ef] flex flex-col">
-        <div className="px-8 py-5 bg-white border-b border-[rgba(0,0,0,.06)]">
-          <div className="flex items-center justify-between max-w-2xl mx-auto">
-            <p className="text-xl font-bold text-[#1a1a16]">{state.business_name}</p>
-            {state.customer_name && <p className="text-sm text-[rgba(26,26,22,.5)]">Welcome, {state.customer_name}</p>}
+      <div className="min-h-screen bg-gray-50 flex flex-col" style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+        {/* Header */}
+        <div className="flex-shrink-0 px-8 py-4 flex items-center justify-between"
+          style={{ background: '#111827' }}>
+          <p className="text-xl font-bold text-white tracking-tight">{businessName}</p>
+          <div className="flex items-center gap-4">
+            {state.customer_name && (
+              <div className="flex items-center gap-2 bg-white/10 rounded-full px-4 py-1.5">
+                <span className="text-white/70 text-sm">Welcome back,</span>
+                <span className="text-white font-semibold text-sm">{state.customer_name}</span>
+              </div>
+            )}
+            <p className="text-gray-400 text-sm font-mono"><Clock /></p>
           </div>
         </div>
-        <div className="flex-1 px-8 py-6 max-w-2xl mx-auto w-full">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b-2 border-[rgba(0,0,0,.08)]">
-                <th className="pb-3 text-left text-sm font-medium text-[rgba(26,26,22,.4)]">Item</th>
-                <th className="pb-3 text-center text-sm font-medium text-[rgba(26,26,22,.4)]">Qty</th>
-                <th className="pb-3 text-right text-sm font-medium text-[rgba(26,26,22,.4)]">Price</th>
-                <th className="pb-3 text-right text-sm font-medium text-[rgba(26,26,22,.4)]">Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {state.cart.map((item, i) => (
-                <tr key={i} className="border-b border-[rgba(0,0,0,.04)]">
-                  <td className="py-3 text-base font-medium text-[#1a1a16]">{item.name}</td>
-                  <td className="py-3 text-center text-base text-[rgba(26,26,22,.6)]">{item.qty}</td>
-                  <td className="py-3 text-right text-base text-[rgba(26,26,22,.6)]">A${item.price.toFixed(2)}</td>
-                  <td className="py-3 text-right text-base font-semibold text-[#1a1a16]">A${(item.price * item.qty).toFixed(2)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <div className="px-8 py-6 bg-white border-t-2 border-[rgba(0,0,0,.08)]">
-          <div className="max-w-2xl mx-auto flex items-center justify-between">
-            <p className="text-lg font-medium text-[rgba(26,26,22,.5)]">{state.cart.length} item{state.cart.length !== 1 ? 's' : ''}</p>
-            <div className="text-right">
-              <p className="text-sm text-[rgba(26,26,22,.4)]">Total</p>
-              <p className="text-4xl font-bold text-[#1a1a16]">A${subtotal.toFixed(2)}</p>
+
+        {/* Items */}
+        <div className="flex-1 overflow-hidden px-8 py-6">
+          <div className="max-w-3xl mx-auto">
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+              <div className="grid grid-cols-12 gap-4 px-6 py-3 bg-gray-50 border-b border-gray-100">
+                <span className="col-span-7 text-xs font-semibold text-gray-400 uppercase tracking-wider">Item</span>
+                <span className="col-span-2 text-xs font-semibold text-gray-400 uppercase tracking-wider text-center">Qty</span>
+                <span className="col-span-3 text-xs font-semibold text-gray-400 uppercase tracking-wider text-right">Amount</span>
+              </div>
+              <div className="divide-y divide-gray-50">
+                {cartItems.map((item, i) => (
+                  <div key={i} className="grid grid-cols-12 gap-4 px-6 py-4 items-center">
+                    <p className="col-span-7 text-lg font-semibold text-gray-900">{item.name}</p>
+                    <p className="col-span-2 text-lg text-gray-500 text-center">{item.qty}</p>
+                    <p className="col-span-3 text-lg font-mono font-bold text-gray-900 text-right">
+                      A${(item.price * item.qty).toFixed(2)}
+                    </p>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </div>
-        <p className="text-center text-xs text-[rgba(26,26,22,.2)] py-2">Powered by AriaPOS</p>
+
+        {/* Totals */}
+        <div className="flex-shrink-0 bg-white border-t-2 border-gray-100 px-8 py-5">
+          <div className="max-w-3xl mx-auto">
+            <div className="flex items-end justify-between">
+              <div className="space-y-1">
+                <div className="flex items-center gap-8">
+                  <span className="text-sm text-gray-500 w-24">Subtotal</span>
+                  <span className="text-sm font-mono text-gray-700">A${(exclGst / 100).toFixed(2)}</span>
+                </div>
+                {discountCents > 0 && (
+                  <div className="flex items-center gap-8">
+                    <span className="text-sm text-green-600 w-24">Discount</span>
+                    <span className="text-sm font-mono text-green-600">−A${(discountCents / 100).toFixed(2)}</span>
+                  </div>
+                )}
+                <div className="flex items-center gap-8">
+                  <span className="text-sm text-gray-400 w-24">GST (10%)</span>
+                  <span className="text-sm font-mono text-gray-400">A${(taxCents / 100).toFixed(2)}</span>
+                </div>
+              </div>
+              <div className="text-right">
+                <p className="text-sm text-gray-400 mb-1">Total</p>
+                <p className="text-6xl font-black font-mono text-gray-900 leading-none">
+                  A${(totalCents / 100).toFixed(2)}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <p className="text-center text-[10px] text-gray-300 py-1.5">Powered by AriaPOS</p>
       </div>
     );
   }
 
-  // Idle state
+  // ── IDLE STATE ─────────────────────────────────────────────────
+  const slide = PROMO_SLIDES[slideIdx];
   return (
-    <div className="min-h-screen bg-[#f5f4ef] flex flex-col items-center justify-center p-8 text-center">
-      <div className="mb-8">
-        <p className="text-4xl font-bold text-[#1a1a16] mb-2">{state.business_name}</p>
-        <p className="text-lg text-[rgba(26,26,22,.4)]">Welcome</p>
+    <div className="min-h-screen flex flex-col" style={{ background: '#111827' }}>
+      {/* Business name */}
+      <div className="flex-shrink-0 px-8 py-4 flex items-center justify-between border-b border-white/10">
+        <p className="text-xl font-bold text-white">{businessName}</p>
+        <p className="text-gray-500 text-sm font-mono"><Clock /></p>
       </div>
-      <div className="w-32 h-1 rounded-full bg-[rgba(0,0,0,.08)] mb-8" />
-      <p className="text-sm text-[rgba(26,26,22,.3)]">Waiting for next customer…</p>
-      <p className="mt-12 text-xs text-[rgba(26,26,22,.15)]">AriaPOS Customer Display</p>
+
+      {/* Centre content */}
+      <div className="flex-1 flex flex-col items-center justify-center text-center px-8">
+        <div className="mb-8">
+          <div className="w-24 h-24 rounded-full bg-white/10 flex items-center justify-center mx-auto mb-6">
+            <span className="text-5xl font-black text-white">{businessName[0]}</span>
+          </div>
+          <h1 className="text-5xl font-black text-white mb-2 tracking-tight">{businessName}</h1>
+          <p className="text-xl text-gray-400">Welcome</p>
+        </div>
+
+        {/* Promo slide */}
+        <div className="bg-white/10 rounded-2xl px-8 py-5 max-w-lg transition-all duration-500">
+          <p className="text-4xl mb-3">{slide.emoji}</p>
+          <p className="text-lg text-white/80 font-medium">{slide.text}</p>
+        </div>
+
+        {/* Slide dots */}
+        <div className="flex gap-2 mt-5">
+          {PROMO_SLIDES.map((_, i) => (
+            <div key={i} className={`w-2 h-2 rounded-full transition-all ${i === slideIdx ? 'bg-white w-4' : 'bg-white/30'}`} />
+          ))}
+        </div>
+      </div>
+
+      <p className="text-center text-xs text-white/10 py-3">AriaPOS Customer Display</p>
     </div>
   );
 }
