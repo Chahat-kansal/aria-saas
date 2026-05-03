@@ -90,7 +90,7 @@ export async function POST(req: Request) {
     const { data, error } = await q;
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-    const result = aggregate(query, data ?? []);
+    const result = aggregate(query, (data ?? []) as Record<string, unknown>[]);
     return NextResponse.json({ result });
   } catch (e) {
     console.error('[features/query]', e);
