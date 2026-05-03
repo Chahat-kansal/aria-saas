@@ -1031,84 +1031,59 @@ export default function TerminalPage() {
         </div>
 
         {/* ── CENTRE: Cart + Payment (or Receipt) ───────────────── */}
-        <div className={`flex flex-col bg-gray-50 border-r border-gray-200 overflow-hidden
-          ${mobileTab !== 'cart' ? 'hidden md:flex' : 'flex'}`}>
+        <div className={`flex flex-col overflow-hidden ${mobileTab !== 'cart' ? 'hidden md:flex' : 'flex'}`}
+          style={{ background: 'rgba(8,6,16,0.5)', borderRight: '1px solid #1C1928' }}>
 
           {showReceipt ? (
             /* ── RECEIPT VIEW ─────────────────────────────────── */
             <div className="flex-1 overflow-y-auto flex flex-col items-center justify-center p-4">
-              <div className="w-full max-w-sm bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
+              <div className="w-full max-w-sm rounded-2xl overflow-hidden" style={{ background: '#1A1728', border: '1px solid #2A2540' }}>
                 {/* Success */}
-                <div className="bg-emerald-50 px-6 py-4 flex items-center gap-3 border-b border-gray-100">
-                  <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth={2.5} className="w-4 h-4"><polyline points="20 6 9 17 4 12" /></svg>
+                <div className="px-6 py-4 flex items-center gap-3" style={{ background: 'rgba(34,197,94,0.08)', borderBottom: '1px solid rgba(34,197,94,0.15)' }}>
+                  <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(34,197,94,0.15)' }}>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="#22C55E" strokeWidth={2.5} className="w-4 h-4"><polyline points="20 6 9 17 4 12" /></svg>
                   </div>
                   <div>
-                    <p className="font-semibold text-gray-900 text-sm">Sale complete</p>
-                    <p className="text-xs text-gray-500">{showReceipt.businessName ?? businessName}</p>
+                    <p className="font-semibold text-sm" style={{ color: '#EDE8FF' }}>Sale complete</p>
+                    <p className="text-xs" style={{ color: '#4A4565' }}>{showReceipt.businessName ?? businessName}</p>
                   </div>
                 </div>
                 {/* Receipt body */}
-                <div className="px-5 py-4 font-mono text-xs text-gray-700 space-y-1">
-                  <div className="flex justify-between">
-                    <span className="text-gray-400">Receipt</span><span>{showReceipt.sale_number}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-400">Date</span>
-                    <span>{new Date(showReceipt.created_at ?? Date.now()).toLocaleDateString('en-AU')}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-400">Time</span>
-                    <span>{new Date(showReceipt.created_at ?? Date.now()).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}</span>
-                  </div>
+                <div className="px-5 py-4 text-xs space-y-1" style={{ fontFamily: "'JetBrains Mono', monospace", color: '#8B85A8' }}>
+                  <div className="flex justify-between"><span style={{ color: '#4A4565' }}>Receipt</span><span style={{ color: '#EDE8FF' }}>{showReceipt.sale_number}</span></div>
+                  <div className="flex justify-between"><span style={{ color: '#4A4565' }}>Date</span><span>{new Date(showReceipt.created_at ?? Date.now()).toLocaleDateString('en-AU')}</span></div>
+                  <div className="flex justify-between"><span style={{ color: '#4A4565' }}>Time</span><span>{new Date(showReceipt.created_at ?? Date.now()).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}</span></div>
                   {showReceipt.customerSnapshot && (
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">Customer</span><span>{showReceipt.customerSnapshot.name}</span>
-                    </div>
+                    <div className="flex justify-between"><span style={{ color: '#4A4565' }}>Customer</span><span style={{ color: '#EDE8FF' }}>{showReceipt.customerSnapshot.name}</span></div>
                   )}
-                  <div className="border-t border-dashed border-gray-200 my-2 pt-2 space-y-1">
+                  <div className="my-2 pt-2 space-y-1" style={{ borderTop: '1px dashed #2A2540' }}>
                     {(showReceipt.cartSnapshot ?? []).map((item: CartItem, i: number) => (
                       <div key={i} className="flex justify-between gap-2">
-                        <span className="flex-1 truncate">{item.qty}× {item.label ?? item.product.name}</span>
+                        <span className="flex-1 truncate" style={{ color: '#EDE8FF' }}>{item.qty}× {item.label ?? item.product.name}</span>
                         <span>A${(item.unitPrice * item.qty).toFixed(2)}</span>
                       </div>
                     ))}
                   </div>
-                  <div className="border-t border-dashed border-gray-200 pt-2 space-y-0.5">
-                    <div className="flex justify-between text-gray-400 text-[10px]">
-                      <span>Excl. GST</span><span>A${(showReceipt.total_amount / 1.1).toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between text-gray-400 text-[10px]">
-                      <span>GST (10%)</span><span>A${(showReceipt.total_amount - showReceipt.total_amount / 1.1).toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between font-bold text-sm text-gray-900 mt-1">
-                      <span>TOTAL</span><span>A${showReceipt.total_amount?.toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between text-gray-400 text-[10px]">
-                      <span>Payment</span><span className="capitalize">{showReceipt.payment_method}</span>
-                    </div>
-                    {showReceipt.cash_tendered != null && (
-                      <div className="flex justify-between text-gray-400 text-[10px]">
-                        <span>Tendered</span><span>A${showReceipt.cash_tendered?.toFixed(2)}</span>
-                      </div>
-                    )}
-                    {showReceipt.change_given != null && showReceipt.change_given > 0 && (
-                      <div className="flex justify-between text-gray-400 text-[10px]">
-                        <span>Change</span><span>A${showReceipt.change_given?.toFixed(2)}</span>
-                      </div>
-                    )}
+                  <div className="pt-2 space-y-0.5" style={{ borderTop: '1px dashed #2A2540' }}>
+                    <div className="flex justify-between text-[10px]"><span style={{ color: '#4A4565' }}>Excl. GST</span><span>A${(showReceipt.total_amount / 1.1).toFixed(2)}</span></div>
+                    <div className="flex justify-between text-[10px]"><span style={{ color: '#4A4565' }}>GST (10%)</span><span>A${(showReceipt.total_amount - showReceipt.total_amount / 1.1).toFixed(2)}</span></div>
+                    <div className="flex justify-between font-bold text-sm mt-1"><span style={{ color: '#EDE8FF' }}>TOTAL</span><span style={{ color: '#EDE8FF' }}>A${showReceipt.total_amount?.toFixed(2)}</span></div>
+                    <div className="flex justify-between text-[10px]"><span style={{ color: '#4A4565' }}>Payment</span><span className="capitalize">{showReceipt.payment_method}</span></div>
+                    {showReceipt.cash_tendered != null && <div className="flex justify-between text-[10px]"><span style={{ color: '#4A4565' }}>Tendered</span><span>A${showReceipt.cash_tendered?.toFixed(2)}</span></div>}
+                    {showReceipt.change_given != null && showReceipt.change_given > 0 && <div className="flex justify-between text-[10px]"><span style={{ color: '#4A4565' }}>Change</span><span>A${showReceipt.change_given?.toFixed(2)}</span></div>}
                   </div>
-                  <p className="text-center text-gray-400 text-[10px] pt-2">Thank you for shopping with us!</p>
-                  <p className="text-center text-gray-300 text-[9px]">Powered by Aria</p>
+                  <p className="text-center text-[10px] pt-2" style={{ color: '#4A4565' }}>Thank you for shopping with us!</p>
                 </div>
               </div>
               <div className="flex gap-3 mt-4">
                 <button onClick={() => window.print()}
-                  className="px-5 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 bg-white hover:bg-gray-50">
+                  className="px-5 py-2.5 rounded-xl text-sm font-medium"
+                  style={{ border: '1px solid #2A2540', color: '#8B85A8', background: 'rgba(255,255,255,0.02)' }}>
                   🖨️ Print
                 </button>
                 <button onClick={() => { setShowReceipt(null); if (window.innerWidth < 768) setMobileTab('products'); }}
-                  className="px-5 py-2.5 rounded-xl bg-[#111827] text-white text-sm font-medium hover:bg-gray-800">
+                  className="px-5 py-2.5 rounded-xl text-sm font-medium text-white"
+                  style={{ background: '#8B5CF6' }}>
                   New Sale
                 </button>
               </div>
@@ -1117,55 +1092,57 @@ export default function TerminalPage() {
             /* ── CART VIEW ────────────────────────────────────── */
             <>
               {/* Cart header */}
-              <div className="flex-shrink-0 px-4 py-3 bg-white border-b border-gray-100 flex items-center gap-2">
-                <span className="text-sm font-semibold text-gray-900">Current sale</span>
+              <div className="flex-shrink-0 px-4 py-3 flex items-center gap-2" style={{ borderBottom: '1px solid #1C1928' }}>
+                <span className="text-sm font-semibold" style={{ color: '#EDE8FF' }}>Order</span>
                 {cart.length > 0 && (
-                  <span className="text-[10px] font-semibold bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full">
+                  <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(139,92,246,0.12)', border: '1px solid rgba(139,92,246,0.25)', color: '#8B5CF6' }}>
                     {cart.reduce((s, i) => s + i.qty, 0)} item{cart.reduce((s, i) => s + i.qty, 0) !== 1 ? 's' : ''}
                   </span>
                 )}
                 <span className="flex-1" />
                 {cart.length > 0 && (
                   <button onClick={() => parkSale()}
-                    className="text-xs px-2.5 py-1.5 border border-gray-200 rounded-lg text-gray-500 hover:bg-gray-50 transition-colors">
+                    className="text-xs px-2.5 py-1.5 rounded-lg transition-colors"
+                    style={{ border: '1px solid #2A2540', color: '#8B85A8' }}>
                     Park
                   </button>
                 )}
                 {cart.length > 0 && (
                   <button onClick={confirmClear}
-                    className="text-xs px-2.5 py-1.5 border border-gray-200 rounded-lg text-gray-500 hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors">
+                    className="text-xs px-2.5 py-1.5 rounded-lg transition-colors"
+                    style={{ border: '1px solid #2A2540', color: '#8B85A8' }}>
                     Clear
                   </button>
                 )}
                 {/* Customer selector */}
                 {customer ? (
-                  <div className="flex items-center gap-1.5 border border-gray-200 rounded-lg px-2.5 py-1.5">
-                    <div className="w-5 h-5 rounded-full bg-blue-100 flex items-center justify-center text-[9px] font-bold text-blue-600 flex-shrink-0">
+                  <div className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5" style={{ border: '1px solid rgba(139,92,246,0.3)', background: 'rgba(139,92,246,0.08)' }}>
+                    <div className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold flex-shrink-0" style={{ background: 'rgba(139,92,246,0.2)', color: '#8B5CF6' }}>
                       {customer.name[0]}
                     </div>
-                    <span className="text-xs text-gray-700 max-w-[80px] truncate">{customer.name}</span>
+                    <span className="text-xs max-w-[80px] truncate" style={{ color: '#EDE8FF' }}>{customer.name}</span>
                     {customer.loyalty_points > 0 && (
-                      <span className="text-[10px] text-blue-500">{customer.loyalty_points}pts</span>
+                      <span className="text-[10px]" style={{ color: '#8B5CF6' }}>{customer.loyalty_points}pts</span>
                     )}
-                    <button onClick={() => { setCustomer(null); setCustomerSearch(''); }}
-                      className="text-gray-300 hover:text-gray-500 text-base leading-none ml-0.5">×</button>
+                    <button onClick={() => { setCustomer(null); setCustomerSearch(''); }} className="text-base leading-none ml-0.5" style={{ color: 'rgba(139,92,246,0.5)' }}>×</button>
                   </div>
                 ) : (
                   <div className="relative">
                     <input value={customerSearch} onChange={e => setCustomerSearch(e.target.value)}
                       placeholder="+ Customer"
-                      className="text-xs border border-dashed border-gray-300 rounded-lg px-2.5 py-1.5 outline-none focus:border-gray-400 w-28 text-gray-500" />
+                      className="text-xs rounded-lg px-2.5 py-1.5 outline-none w-28"
+                      style={{ border: '1px dashed #2A2540', color: '#8B85A8', background: 'transparent' }} />
                     {customerResults.length > 0 && (
-                      <div className="absolute top-full mt-1 right-0 bg-white border border-gray-200 rounded-xl shadow-xl z-30 overflow-hidden w-48">
+                      <div className="absolute top-full mt-1 right-0 rounded-xl shadow-xl z-30 overflow-hidden w-48" style={{ background: '#1A1728', border: '1px solid #2A2540' }}>
                         {customerResults.map(c => (
                           <button key={c.id}
                             onClick={() => { setCustomer(c); setCustomerSearch(''); setCustomerResults([]); }}
-                            className="w-full flex items-center gap-2 px-3 py-2 hover:bg-gray-50 text-left border-b border-gray-50 last:border-0">
+                            className="w-full flex items-center gap-2 px-3 py-2 text-left" style={{ borderBottom: '1px solid #1C1928' }}>
                             <div className="flex-1 min-w-0">
-                              <p className="text-xs font-medium text-gray-900 truncate">{c.name}</p>
-                              <p className="text-[10px] text-gray-400">{c.phone ?? c.email ?? ''}</p>
+                              <p className="text-xs font-medium truncate" style={{ color: '#EDE8FF' }}>{c.name}</p>
+                              <p className="text-[10px]" style={{ color: '#4A4565' }}>{c.phone ?? c.email ?? ''}</p>
                             </div>
-                            <span className="text-[10px] text-gray-400">{c.loyalty_points}pts</span>
+                            <span className="text-[10px]" style={{ color: '#8B5CF6' }}>{c.loyalty_points}pts</span>
                           </button>
                         ))}
                       </div>
@@ -1175,19 +1152,20 @@ export default function TerminalPage() {
               </div>
 
               {/* Sale attribution (commission) */}
-              <div className="flex-shrink-0 px-4 py-1.5 bg-gray-50 border-b border-gray-100 flex items-center gap-2">
-                <span className="text-[10px] text-gray-400 font-medium uppercase tracking-wider flex-shrink-0">Sale by</span>
+              <div className="flex-shrink-0 px-4 py-1.5 flex items-center gap-2" style={{ borderBottom: '1px solid #1C1928' }}>
+                <span className="text-[10px] font-medium uppercase tracking-wider flex-shrink-0" style={{ color: '#4A4565' }}>Sale by</span>
                 <input value={servedBy} onChange={e => setServedBy(e.target.value)}
                   placeholder="Cashier name…"
-                  className="flex-1 text-xs text-gray-700 bg-transparent outline-none placeholder-gray-300" />
+                  className="flex-1 text-xs bg-transparent outline-none"
+                  style={{ color: '#8B85A8' }} />
               </div>
 
               {/* Cart items */}
-              <div className="flex-1 overflow-y-auto bg-white">
+              <div className="flex-1 overflow-y-auto" style={{ background: 'rgba(8,6,16,0.3)' }}>
                 {cart.length === 0 ? (
                   <div className="flex flex-col items-center justify-center h-full text-center px-6 py-12">
-                    <BagOutlineIcon className="w-10 h-10 text-gray-200 mb-3" />
-                    <p className="text-sm text-gray-400">Add items to start a sale</p>
+                    <BagOutlineIcon className="w-12 h-12 mb-3" style={{ color: 'rgba(74,69,101,0.4)' } as React.CSSProperties} />
+                    <p className="text-sm" style={{ color: '#4A4565' }}>Add items to begin</p>
                   </div>
                 ) : (
                   <div>
@@ -1197,45 +1175,47 @@ export default function TerminalPage() {
                       return (
                         <div key={key}
                           onClick={() => setSelectedItem(item.product.id)}
-                          className={`group px-4 py-2.5 border-b border-gray-50 last:border-0 cursor-pointer transition-colors
-                            ${selectedItem === item.product.id ? 'bg-gray-50' : 'hover:bg-gray-50/80'}`}>
+                          className="group px-4 py-2.5 cursor-pointer transition-colors"
+                          style={{ borderBottom: '1px solid #1C1928', background: selectedItem === item.product.id ? 'rgba(139,92,246,0.05)' : undefined }}>
                           {/* Row 1: name + total */}
                           <div className="flex items-start justify-between gap-2 mb-1.5">
                             <div className="flex-1 min-w-0">
-                              <p className="text-sm font-semibold text-gray-900 leading-snug">
+                              <p className="text-sm font-semibold leading-snug" style={{ color: '#EDE8FF' }}>
                                 {item.label ?? item.product.name}
                               </p>
                               {item.modifierDetails && item.modifierDetails.length > 0 && (
-                                <p className="text-xs text-gray-400 italic mt-0.5">· {item.modifierDetails.map(m => m.name).join(', ')}</p>
+                                <p className="text-xs italic mt-0.5" style={{ color: '#8B85A8' }}>· {item.modifierDetails.map(m => m.name).join(', ')}</p>
                               )}
                             </div>
                             <div className="text-right flex-shrink-0">
                               {(item.discount_percent ?? 0) > 0 && (
-                                <p className="text-[10px] text-gray-400 line-through font-mono">A${(item.unitPrice * item.qty).toFixed(2)}</p>
+                                <p className="text-[10px] line-through" style={{ fontFamily: "'JetBrains Mono',monospace", color: '#4A4565' }}>A${(item.unitPrice * item.qty).toFixed(2)}</p>
                               )}
-                              <p className="text-sm font-semibold font-mono text-gray-900">A${lineTotal.toFixed(2)}</p>
+                              <p className="text-sm font-bold" style={{ fontFamily: "'JetBrains Mono',monospace", color: '#EDE8FF' }}>A${lineTotal.toFixed(2)}</p>
                             </div>
                           </div>
                           {/* Row 2: qty pill + remove */}
                           <div className="flex items-center justify-between">
-                            {/* Connected pill qty control */}
-                            <div className="flex rounded-full border border-gray-200 overflow-hidden shadow-sm">
+                            <div className="flex rounded-full overflow-hidden" style={{ border: '1px solid #2A2540', background: 'rgba(255,255,255,0.05)' }}>
                               <button
                                 onClick={e => { e.stopPropagation(); updateQty(key, item.qty - 1); }}
-                                className="px-2.5 py-1 text-gray-500 hover:bg-gray-50 text-sm font-bold leading-none transition-colors">
+                                className="px-2.5 py-1 text-sm font-bold leading-none transition-colors"
+                                style={{ color: '#8B85A8' }}>
                                 −
                               </button>
-                              <span className="px-3 py-1 font-mono text-sm font-bold text-gray-900 bg-white border-l border-r border-gray-200 min-w-[28px] text-center">
+                              <span className="px-3 py-1 text-sm font-bold min-w-[28px] text-center" style={{ fontFamily: "'JetBrains Mono',monospace", color: '#EDE8FF', borderLeft: '1px solid #2A2540', borderRight: '1px solid #2A2540' }}>
                                 {item.qty}
                               </span>
                               <button
                                 onClick={e => { e.stopPropagation(); updateQty(key, item.qty + 1); }}
-                                className="px-2.5 py-1 text-gray-500 hover:bg-gray-50 text-sm font-bold leading-none transition-colors">
+                                className="px-2.5 py-1 text-sm font-bold leading-none transition-colors"
+                                style={{ color: '#8B5CF6' }}>
                                 +
                               </button>
                             </div>
                             <button onClick={e => { e.stopPropagation(); updateQty(key, 0); }}
-                              className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-300 hover:text-red-400 text-base leading-none px-1">×</button>
+                              className="opacity-0 group-hover:opacity-100 transition-opacity text-base leading-none px-1"
+                              style={{ color: 'rgba(139,133,168,0.3)' }}>×</button>
                           </div>
                         </div>
                       );
@@ -1246,90 +1226,73 @@ export default function TerminalPage() {
 
               {/* Discount row */}
               {cart.length > 0 && (
-                <div className="flex-shrink-0 px-4 py-2 border-t border-gray-100 bg-white flex items-center gap-2">
+                <div className="flex-shrink-0 px-4 py-2 flex items-center gap-2" style={{ borderTop: '1px solid #1C1928' }}>
                   {discountMode === null ? (
                     <>
-                      <button onClick={() => setDiscountMode('pct')}
-                        className="text-xs border border-gray-200 rounded-lg px-3 py-1.5 text-gray-600 bg-white hover:bg-gray-50">
-                        % Discount
-                      </button>
-                      <button onClick={() => setDiscountMode('amt')}
-                        className="text-xs border border-gray-200 rounded-lg px-3 py-1.5 text-gray-600 bg-white hover:bg-gray-50">
-                        A$ Discount
-                      </button>
+                      <button onClick={() => setDiscountMode('pct')} className="text-xs rounded-lg px-3 py-1.5" style={{ border: '1px solid #2A2540', color: '#8B85A8' }}>% Discount</button>
+                      <button onClick={() => setDiscountMode('amt')} className="text-xs rounded-lg px-3 py-1.5" style={{ border: '1px solid #2A2540', color: '#8B85A8' }}>A$ Discount</button>
                     </>
                   ) : (
                     <>
-                      <input
-                        type="number" min="0" max={discountMode === 'pct' ? 100 : undefined}
-                        value={discountVal}
-                        onChange={e => setDiscountVal(e.target.value)}
+                      <input type="number" min="0" max={discountMode === 'pct' ? 100 : undefined}
+                        value={discountVal} onChange={e => setDiscountVal(e.target.value)}
                         placeholder={discountMode === 'pct' ? '10' : '5.00'}
-                        className="w-20 text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-gray-300"
+                        className="w-20 text-xs rounded-lg px-2.5 py-1.5 outline-none"
+                        style={{ border: '1px solid #2A2540', background: 'rgba(255,255,255,0.03)', color: '#EDE8FF' }}
                         autoFocus />
-                      <span className="text-xs text-gray-400">{discountMode === 'pct' ? '%' : 'A$'}</span>
+                      <span className="text-xs" style={{ color: '#4A4565' }}>{discountMode === 'pct' ? '%' : 'A$'}</span>
                       <button onClick={() => {
                         const val = parseFloat(discountVal);
                         if (isNaN(val) || val <= 0) { setDiscountMode(null); setDiscountVal(''); return; }
-                        if (selectedItem) {
-                          setCart(c => c.map(i => {
-                            if (i.product.id !== selectedItem) return i;
-                            const pct = discountMode === 'pct' ? Math.min(100, val) : Math.min(100, (val / i.unitPrice) * 100);
-                            return { ...i, discount_percent: pct };
-                          }));
-                        } else {
-                          setCart(c => c.map(i => {
-                            const pct = discountMode === 'pct' ? Math.min(100, val) : Math.min(100, (val / i.unitPrice) * 100);
-                            return { ...i, discount_percent: pct };
-                          }));
-                        }
+                        if (selectedItem) { setCart(c => c.map(i => { if (i.product.id !== selectedItem) return i; const pct = discountMode === 'pct' ? Math.min(100, val) : Math.min(100, (val / i.unitPrice) * 100); return { ...i, discount_percent: pct }; })); }
+                        else { setCart(c => c.map(i => { const pct = discountMode === 'pct' ? Math.min(100, val) : Math.min(100, (val / i.unitPrice) * 100); return { ...i, discount_percent: pct }; })); }
                         setDiscountMode(null); setDiscountVal('');
-                      }} className="text-xs bg-gray-900 text-white rounded-lg px-3 py-1.5">Apply</button>
-                      <button onClick={() => { setDiscountMode(null); setDiscountVal(''); }} className="text-xs text-gray-400 hover:text-gray-600">Cancel</button>
+                      }} className="text-xs rounded-lg px-3 py-1.5 text-white" style={{ background: '#8B5CF6' }}>Apply</button>
+                      <button onClick={() => { setDiscountMode(null); setDiscountVal(''); }} className="text-xs" style={{ color: '#4A4565' }}>Cancel</button>
                     </>
                   )}
                   {cart.some(i => (i.discount_percent ?? 0) > 0) && (
-                    <span className="text-xs text-[#059669] ml-auto">
-                      Discount applied ·{' '}
-                      <button onClick={() => setCart(c => c.map(i => ({ ...i, discount_percent: 0 })))} className="text-red-400 hover:underline">Remove</button>
+                    <span className="text-xs ml-auto" style={{ color: '#22C55E' }}>
+                      Applied ·{' '}
+                      <button onClick={() => setCart(c => c.map(i => ({ ...i, discount_percent: 0 })))} style={{ color: '#EF4444' }}>Remove</button>
                     </span>
                   )}
                 </div>
               )}
 
               {/* Summary */}
-              <div className="flex-shrink-0 px-3 py-3 bg-white border-t border-gray-200">
-                <div className="bg-gray-50 rounded-2xl px-3 py-2.5 space-y-1">
-                  <div className="flex justify-between text-sm py-0.5">
-                    <span className="text-gray-600">Subtotal</span>
-                    <span className="font-mono text-gray-900">A${netAmount.toFixed(2)}</span>
+              <div className="flex-shrink-0 px-3 py-3" style={{ borderTop: '1px solid #2A2540' }}>
+                <div className="rounded-xl px-3 py-2.5 space-y-1" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid #1C1928' }}>
+                  <div className="flex justify-between text-xs py-0.5">
+                    <span style={{ color: '#8B85A8' }}>Subtotal</span>
+                    <span style={{ fontFamily: "'JetBrains Mono',monospace", color: '#EDE8FF' }}>A${netAmount.toFixed(2)}</span>
                   </div>
                   {cart.some(i => (i.discount_percent ?? 0) > 0) && (
-                    <div className="flex justify-between text-sm py-0.5">
-                      <span className="text-gray-600">Discount</span>
-                      <span className="font-mono text-green-600">-A${(subtotal / 1.1 - netAmount < 0 ? 0 : (cart.reduce((s,i)=>s+i.unitPrice*i.qty,0)/1.1 - netAmount)).toFixed(2)}</span>
+                    <div className="flex justify-between text-xs py-0.5">
+                      <span style={{ color: '#22C55E' }}>Discount</span>
+                      <span style={{ fontFamily: "'JetBrains Mono',monospace", color: '#22C55E' }}>-A${(subtotal / 1.1 - netAmount < 0 ? 0 : (cart.reduce((s,i)=>s+i.unitPrice*i.qty,0)/1.1 - netAmount)).toFixed(2)}</span>
                     </div>
                   )}
-                  <div className="flex justify-between text-xs py-0.5">
-                    <span className="text-gray-400">GST (10%)</span>
-                    <span className="font-mono text-gray-500">A${taxAmount.toFixed(2)}</span>
+                  <div className="flex justify-between text-[10px] py-0.5">
+                    <span style={{ color: '#4A4565' }}>GST (10%)</span>
+                    <span style={{ fontFamily: "'JetBrains Mono',monospace", color: '#4A4565' }}>A${taxAmount.toFixed(2)}</span>
                   </div>
                   {payMethod === 'cash' && Math.abs(roundedTotal - total) > 0.001 && (
-                    <div className="flex justify-between text-xs py-0.5">
-                      <span className="text-gray-400">Cash rounding</span>
-                      <span className="font-mono text-gray-500">{(roundedTotal - total) > 0 ? '+' : ''}A${(roundedTotal - total).toFixed(2)}</span>
+                    <div className="flex justify-between text-[10px] py-0.5">
+                      <span style={{ color: '#4A4565' }}>Cash rounding</span>
+                      <span style={{ fontFamily: "'JetBrains Mono',monospace", color: '#4A4565' }}>{(roundedTotal - total) > 0 ? '+' : ''}A${(roundedTotal - total).toFixed(2)}</span>
                     </div>
                   )}
-                  <div className="border-t border-dashed border-gray-200 pt-2 mt-1 flex justify-between items-baseline">
-                    <span className="text-base font-bold text-gray-900">Total</span>
-                    <span className="text-2xl font-black font-mono text-gray-900">A${roundedTotal.toFixed(2)}</span>
+                  <div className="pt-2 mt-1 flex justify-between items-baseline" style={{ borderTop: '1px dashed #2A2540' }}>
+                    <span className="text-[9px] uppercase tracking-[0.1em]" style={{ color: '#4A4565' }}>TOTAL</span>
+                    <span className="font-black" style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 26, color: '#EDE8FF' }}>A${roundedTotal.toFixed(2)}</span>
                   </div>
                 </div>
               </div>
 
               {/* Payment section */}
-              <div className="flex-shrink-0 px-4 py-3 bg-white border-t border-gray-300">
-                <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wider mb-2">Payment method</p>
+              <div className="flex-shrink-0 px-4 py-3" style={{ borderTop: '1px solid #2A2540' }}>
+                <p className="text-[9px] font-medium uppercase tracking-wider mb-2" style={{ color: '#4A4565' }}>Payment method</p>
                 <div className="grid grid-cols-3 gap-2 mb-3">
                   {([
                     { id: 'card', label: 'Card', emoji: '💳' },
@@ -1337,61 +1300,67 @@ export default function TerminalPage() {
                     { id: 'split', label: 'Split', emoji: '✂️' },
                   ] as const).map(m => (
                     <button key={m.id} onClick={() => setPayMethod(m.id)}
-                      className={`border-2 rounded-2xl min-h-[64px] flex flex-col items-center justify-center gap-1 transition-all font-medium ${
-                        payMethod === m.id
-                          ? 'border-gray-900 bg-gray-900 text-white shadow-md'
-                          : 'border-gray-200 bg-white text-gray-600 hover:border-gray-400 hover:shadow-sm'
-                      }`}>
-                      <span className="text-2xl">{m.emoji}</span>
-                      <span className="text-xs font-semibold">{m.label}</span>
+                      className="rounded-xl flex flex-col items-center justify-center gap-1 transition-all"
+                      style={{
+                        minHeight: 64, borderRadius: 12,
+                        border: payMethod === m.id ? '1.5px solid rgba(139,92,246,0.4)' : '1.5px solid #2A2540',
+                        background: payMethod === m.id ? 'rgba(139,92,246,0.12)' : 'rgba(255,255,255,0.02)',
+                        boxShadow: payMethod === m.id ? '0 0 20px rgba(139,92,246,0.2)' : 'none',
+                        color: payMethod === m.id ? '#8B5CF6' : '#8B85A8',
+                      }}>
+                      <span className="text-xl">{m.emoji}</span>
+                      <span className="text-[11px] font-bold">{m.label}</span>
                     </button>
                   ))}
                 </div>
 
                 {payMethod === 'cash' && (
                   <div className="space-y-2 mb-3">
-                    <p className="text-xs text-gray-400">Amount tendered</p>
-                    <div className="relative">
-                      <span className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-400 font-semibold text-sm">A$</span>
+                    <p className="text-[9px] uppercase tracking-wider" style={{ color: '#4A4565' }}>Amount Tendered</p>
+                    <div className="flex items-center rounded-[10px] overflow-hidden" style={{ border: '1px solid #2A2540' }}>
+                      <span className="pl-4 pr-1 text-sm" style={{ color: '#4A4565', fontFamily: "'JetBrains Mono',monospace" }}>A$</span>
                       <input type="number" value={cashTendered} onChange={e => setCashTendered(e.target.value)}
                         placeholder="0.00"
-                        className="w-full border-2 border-gray-200 rounded-full pl-12 pr-5 py-3 text-2xl font-mono font-bold text-center bg-white outline-none focus:border-gray-900 transition-colors shadow-sm"
+                        className="flex-1 py-2.5 pr-4 outline-none bg-transparent text-center"
+                        style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 22, fontWeight: 800, color: '#EDE8FF' }}
                         autoFocus />
                     </div>
                     <div className="flex gap-1.5 flex-wrap">
                       {[...new Set([roundedTotal, Math.ceil(roundedTotal/5)*5, Math.ceil(roundedTotal/10)*10, 50])].filter(v=>v>=roundedTotal).slice(0,4).map(v => (
                         <button key={v} onClick={() => setCashTendered(v.toFixed(2))}
-                          className="text-xs border border-gray-200 rounded-full px-3 py-1.5 bg-white hover:bg-gray-50 font-mono shadow-sm">
+                          className="text-xs rounded-full px-3 py-1.5"
+                          style={{ border: '1px solid #2A2540', fontFamily: "'JetBrains Mono',monospace", color: '#8B85A8', background: 'rgba(255,255,255,0.02)' }}>
                           A${v.toFixed(0)}
                         </button>
                       ))}
                     </div>
                     {tendered >= roundedTotal && (
-                      <div className="bg-green-50 border-2 border-green-200 rounded-2xl px-5 py-3 text-center">
-                        <p className="text-xs text-green-600 uppercase tracking-wider font-medium mb-0.5">Change</p>
-                        <p className="text-3xl font-black font-mono text-green-700">A${change.toFixed(2)}</p>
+                      <div className="rounded-[10px] px-5 py-3 text-center" style={{ background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.2)' }}>
+                        <p className="text-[9px] uppercase tracking-wider font-medium mb-0.5" style={{ color: '#22C55E' }}>CHANGE</p>
+                        <p className="font-black" style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 28, color: '#22C55E' }}>A${change.toFixed(2)}</p>
                       </div>
                     )}
                   </div>
                 )}
                 {payMethod === 'card' && (
-                  <div className="bg-gray-50 border border-gray-200 rounded-2xl px-4 py-4 text-center mb-3">
-                    <p className="text-2xl mb-1">💳</p>
-                    <p className="text-sm text-gray-500">Process on EFTPOS</p>
-                    <p className="text-xl font-black font-mono text-gray-900 mt-0.5">A${roundedTotal.toFixed(2)}</p>
+                  <div className="rounded-2xl px-4 py-3 text-center mb-3" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid #2A2540' }}>
+                    <p className="text-xl mb-1">💳</p>
+                    <p className="text-sm" style={{ color: '#8B85A8' }}>Process on EFTPOS</p>
+                    <p className="font-black mt-0.5" style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 20, color: '#EDE8FF' }}>A${roundedTotal.toFixed(2)}</p>
                   </div>
                 )}
                 {payMethod === 'split' && (
                   <div className="space-y-2 mb-3">
-                    <p className="text-xs text-gray-400">Cash portion</p>
-                    <div className="relative">
-                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 font-medium text-sm">A$</span>
+                    <p className="text-xs" style={{ color: '#4A4565' }}>Cash portion</p>
+                    <div className="flex items-center rounded-[10px]" style={{ border: '1px solid #2A2540' }}>
+                      <span className="pl-4 text-sm" style={{ color: '#4A4565', fontFamily: "'JetBrains Mono',monospace" }}>A$</span>
                       <input type="number" value={splitCash} onChange={e => setSplitCash(e.target.value)} placeholder="0.00"
-                        className="w-full border border-gray-200 rounded-xl pl-9 pr-4 py-3 text-xl font-mono bg-gray-50 outline-none focus:ring-2 focus:ring-gray-900" />
+                        className="flex-1 py-3 pr-4 pl-2 text-xl outline-none bg-transparent"
+                        style={{ fontFamily: "'JetBrains Mono',monospace", color: '#EDE8FF' }} />
                     </div>
-                    <div className="flex justify-between items-center bg-gray-50 rounded-xl px-4 py-2.5">
-                      <span className="text-xs text-gray-500">Card remainder</span>
-                      <span className="font-bold font-mono text-gray-900">A${splitCardAmt.toFixed(2)}</span>
+                    <div className="flex justify-between items-center rounded-xl px-4 py-2.5" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid #1C1928' }}>
+                      <span className="text-xs" style={{ color: '#8B85A8' }}>Card remainder</span>
+                      <span className="font-bold" style={{ fontFamily: "'JetBrains Mono',monospace", color: '#EDE8FF' }}>A${splitCardAmt.toFixed(2)}</span>
                     </div>
                   </div>
                 )}
@@ -1399,14 +1368,16 @@ export default function TerminalPage() {
                 {/* Complete Sale + Hold buttons */}
                 {!registerIsOpen && !registerLoading ? (
                   <button onClick={() => setShowRegisterModal(true)}
-                    className="w-full h-14 bg-[#059669] hover:bg-emerald-700 text-white font-semibold text-base rounded-xl transition-colors">
+                    className="w-full h-14 text-white font-bold text-sm rounded-xl transition-all"
+                    style={{ background: '#8B5CF6', boxShadow: '0 4px 0 rgba(124,58,237,0.4), 0 6px 20px rgba(139,92,246,0.33)' }}>
                     Open Register to Sell
                   </button>
                 ) : (
                   <div className="flex gap-2">
                     {cart.length > 0 && (
                       <button onClick={parkSale}
-                        className="h-14 px-4 border border-gray-200 rounded-xl text-gray-600 text-sm font-medium hover:bg-gray-50 flex-shrink-0 flex flex-col items-center justify-center gap-0.5">
+                        className="h-14 px-4 rounded-xl text-sm font-medium flex-shrink-0 flex flex-col items-center justify-center gap-0.5 transition-all"
+                        style={{ border: '1px solid #2A2540', color: '#8B85A8', background: 'rgba(255,255,255,0.02)' }}>
                         <span>⏸</span>
                         <span className="text-[10px]">Hold</span>
                       </button>
@@ -1414,15 +1385,25 @@ export default function TerminalPage() {
                     <button
                       onClick={processSale}
                       disabled={!cart.length || !registerIsOpen || processing || (payMethod === 'cash' && cashTendered !== '' && tendered < roundedTotal)}
-                      className="flex-1 h-16 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:scale-100 text-white font-bold rounded-2xl shadow-lg hover:shadow-xl hover:scale-[1.01] active:scale-[0.99] transition-all duration-150 flex items-center justify-center gap-3"
-                      style={{ background: processing ? '#374151' : 'linear-gradient(135deg, #111827 0%, #1f2937 100%)' }}>
+                      className="flex-1 h-14 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold rounded-[14px] flex items-center justify-center gap-2 transition-all"
+                      style={{
+                        background: '#8B5CF6',
+                        boxShadow: processing ? 'none' : '0 4px 0 rgba(124,58,237,0.4), 0 6px 20px rgba(139,92,246,0.33)',
+                        fontFamily: "'Manrope', sans-serif",
+                      }}
+                      onMouseEnter={e => { const el = e.currentTarget as HTMLButtonElement; if (!el.disabled) el.style.boxShadow = '0 6px 0 rgba(124,58,237,0.4),0 8px 28px rgba(139,92,246,0.4)'; el.style.transform = 'translateY(-1px)'; }}
+                      onMouseLeave={e => { const el = e.currentTarget as HTMLButtonElement; el.style.boxShadow = '0 4px 0 rgba(124,58,237,0.4),0 6px 20px rgba(139,92,246,0.33)'; el.style.transform = ''; }}
+                      onMouseDown={e => { const el = e.currentTarget as HTMLButtonElement; el.style.transform = 'translateY(2px) scale(0.98)'; el.style.boxShadow = '0 1px 0 rgba(124,58,237,0.5),0 2px 8px rgba(139,92,246,0.44)'; }}
+                      onMouseUp={e => { const el = e.currentTarget as HTMLButtonElement; el.style.transform = 'translateY(-1px)'; el.style.boxShadow = '0 6px 0 rgba(124,58,237,0.4),0 8px 28px rgba(139,92,246,0.4)'; }}>
                       {processing ? (
-                        <><Spinner /> <span className="text-base">Processing…</span></>
+                        <span className="flex items-center gap-2">
+                          <span className="w-4 h-4 rounded-full border-2 flex-shrink-0" style={{ borderColor: 'rgba(255,255,255,0.3)', borderTopColor: 'white', animation: 'processing 0.7s linear infinite' }} />
+                          <span className="text-sm">Processing...</span>
+                        </span>
                       ) : (
                         <>
-                          <span className="text-lg font-bold">Complete Sale</span>
-                          <span className="text-gray-400">·</span>
-                          <span className="text-xl font-black font-mono">A${roundedTotal.toFixed(2)}</span>
+                          <span className="text-[15px] font-extrabold">Complete Sale</span>
+                          <span style={{ color: 'rgba(255,255,255,0.5)', fontFamily: "'JetBrains Mono',monospace", fontSize: 14, fontWeight: 700 }}>A${roundedTotal.toFixed(2)}</span>
                         </>
                       )}
                     </button>
