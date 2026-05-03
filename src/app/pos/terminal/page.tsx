@@ -793,8 +793,16 @@ export default function TerminalPage() {
                 ))}
                 <button
                   onClick={() => {
-                    const w = window.open('/pos/display', 'AriaCustomerDisplay',
-                      'width=1280,height=720,menubar=no,toolbar=no,location=no,status=no');
+                    try {
+                      localStorage.setItem('aria_display_state', JSON.stringify({
+                        status: 'idle', business_name: businessName, timestamp: Date.now(),
+                      }));
+                    } catch { /* ignore */ }
+                    const w = window.open(
+                      '/pos/display',
+                      'AriaCustomerDisplay',
+                      ['width=1280','height=800','menubar=no','toolbar=no','location=no','status=no','scrollbars=no','resizable=yes'].join(',')
+                    );
                     if (w) w.focus();
                     setShowQuickPanel(false);
                   }}
