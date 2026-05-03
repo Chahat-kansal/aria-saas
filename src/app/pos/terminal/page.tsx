@@ -32,30 +32,52 @@ interface RecentSale { id: string; total: number; items: number; time: Date; }
 function roundCash(amount: number): number { return Math.round(amount * 20) / 20; }
 
 /* ─── Product card visual constants ─────────────────────────────── */
-const CATEGORY_EMOJI: Record<string, string> = {
-  'Beer & Cider': '🍺', 'Wine': '🍷', 'Spirits': '🥃', 'RTD': '🍹',
-  'Soft Drinks': '🥤', 'Water': '💧', 'Energy Drinks': '⚡', 'Sports Drinks': '🏃',
-  'Snacks': '🍿', 'Confectionery': '🍬', 'Food': '🍔', 'Dairy': '🥛',
-  'Frozen': '🧊', 'Tobacco': '🚬', 'Ice Cream': '🍦', 'Bakery': '🥐',
+interface CatStyle { bg: string; text: string; emoji: string; }
+const CATEGORY_STYLES: Record<string, CatStyle> = {
+  'Beer & Cider':  { bg: '#FEF3C7', text: '#92400E', emoji: '🍺' },
+  'Wine':          { bg: '#FDF2F8', text: '#9D174D', emoji: '🍷' },
+  'Spirits':       { bg: '#EFF6FF', text: '#1E40AF', emoji: '🥃' },
+  'RTD':           { bg: '#ECFDF5', text: '#065F46', emoji: '🍹' },
+  'Soft Drinks':   { bg: '#F0FDF4', text: '#166534', emoji: '🥤' },
+  'Water':         { bg: '#E0F2FE', text: '#0369A1', emoji: '💧' },
+  'Energy Drinks': { bg: '#FFFBEB', text: '#92400E', emoji: '⚡' },
+  'Sports Drinks': { bg: '#F0FDF4', text: '#166534', emoji: '🏃' },
+  'Snacks':        { bg: '#FFF7ED', text: '#9A3412', emoji: '🍿' },
+  'Confectionery': { bg: '#FDF4FF', text: '#7E22CE', emoji: '🍬' },
+  'Coffee':        { bg: '#FEF3C7', text: '#78350F', emoji: '☕' },
+  'Food':          { bg: '#FFF7ED', text: '#C2410C', emoji: '🍔' },
+  'Dairy':         { bg: '#F0F9FF', text: '#0369A1', emoji: '🥛' },
+  'Frozen':        { bg: '#EFF6FF', text: '#1D4ED8', emoji: '🧊' },
+  'Tobacco':       { bg: '#F8FAFC', text: '#374151', emoji: '🚬' },
+  'Ice Cream':     { bg: '#FDF4FF', text: '#7E22CE', emoji: '🍦' },
+  'Bakery':        { bg: '#FFFBEB', text: '#92400E', emoji: '🥐' },
 };
-const CATEGORY_BG: Record<string, string> = {
-  'Beer & Cider': '#FEF3C7', 'Wine': '#FDF2F8', 'Spirits': '#EFF6FF', 'RTD': '#FDF4FF',
-  'Soft Drinks': '#F0FDF4', 'Water': '#EFF6FF', 'Energy Drinks': '#FFFBEB', 'Sports Drinks': '#F0FDF4',
-  'Snacks': '#FFF7ED', 'Confectionery': '#FFF1F2', 'Food': '#FFF7ED', 'Dairy': '#F0F9FF',
-  'Tobacco': '#F8FAFC', 'Ice Cream': '#FDF4FF', 'Bakery': '#FFFBEB',
-};
-function getInitials(name: string): string {
-  const words = name.trim().split(/\s+/);
-  if (words.length === 1) return (words[0][0] ?? '').toUpperCase();
-  return ((words[0][0] ?? '') + (words[1][0] ?? '')).toUpperCase();
+const DEFAULT_CAT_STYLE: CatStyle = { bg: '#F9FAFB', text: '#374151', emoji: '📦' };
+
+function getCatStyle(catName: string | null | undefined): CatStyle {
+  if (!catName) return DEFAULT_CAT_STYLE;
+  if (CATEGORY_STYLES[catName]) return CATEGORY_STYLES[catName];
+  // Map unknown categories by first char to a colour slot
+  const code = catName.charCodeAt(0) % 8;
+  const fallbacks: CatStyle[] = [
+    { bg: '#FEF3C7', text: '#92400E', emoji: '📦' },
+    { bg: '#F0FDF4', text: '#166534', emoji: '📦' },
+    { bg: '#EFF6FF', text: '#1E40AF', emoji: '📦' },
+    { bg: '#FDF4FF', text: '#7E22CE', emoji: '📦' },
+    { bg: '#FFF7ED', text: '#9A3412', emoji: '📦' },
+    { bg: '#FDF2F8', text: '#9D174D', emoji: '📦' },
+    { bg: '#ECFDF5', text: '#065F46', emoji: '📦' },
+    { bg: '#F9FAFB', text: '#374151', emoji: '📦' },
+  ];
+  return fallbacks[code] ?? DEFAULT_CAT_STYLE;
 }
+
+// Keep legacy helpers for category tabs
 function getCategoryEmoji(catName: string | null | undefined): string {
-  if (!catName) return '📦';
-  return CATEGORY_EMOJI[catName] ?? '📦';
+  return getCatStyle(catName).emoji;
 }
 function getCategoryBg(catName: string | null | undefined): string {
-  if (!catName) return '#F9FAFB';
-  return CATEGORY_BG[catName] ?? '#F9FAFB';
+  return getCatStyle(catName).bg;
 }
 
 const CART_SESSION_KEY = 'aria_pos_cart_v1';
@@ -882,13 +904,11 @@ export default function TerminalPage() {
                 {!search && <a href="/pos/products" className="mt-3 text-xs text-[#059669] font-medium hover:underline">Add products →</a>}
               </div>
             ) : (
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-2 gap-2.5">
                 {displayedProducts.map(p => {
                   const isOut = p.track_stock && p.stock_quantity <= 0;
                   const isLow = p.track_stock && p.stock_quantity > 0 && p.stock_quantity <= (p.low_stock_threshold ?? 5);
-                  const catName = p.pos_categories?.name ?? null;
-                  const cardBg = getCategoryBg(catName);
-                  const initials = getInitials(p.name);
+                  const catStyle = getCatStyle(p.pos_categories?.name ?? null);
                   return (
                     <button key={p.id}
                       onClick={() => {
@@ -898,36 +918,47 @@ export default function TerminalPage() {
                       }}
                       onContextMenu={e => { e.preventDefault(); setContextMenu({ product: p, x: e.clientX, y: e.clientY }); }}
                       disabled={isOut}
-                      className={`relative text-left rounded-2xl border shadow-sm transition-all overflow-hidden
+                      className={`relative text-left rounded-2xl border shadow-sm transition-all duration-150 overflow-hidden
                         ${isOut
-                          ? 'opacity-40 cursor-not-allowed border-gray-100 bg-white grayscale'
-                          : 'border-gray-100 bg-white hover:shadow-md hover:scale-[1.02] active:scale-[0.98] cursor-pointer'
+                          ? 'opacity-60 cursor-not-allowed border-gray-100 bg-white grayscale'
+                          : 'border-gray-100 bg-white hover:shadow-md hover:scale-[1.03] hover:border-gray-300 active:scale-[0.97] cursor-pointer'
                         }`}>
-                      {/* Coloured header block */}
-                      <div className="h-16 flex items-center justify-center relative overflow-hidden"
-                        style={{ backgroundColor: cardBg }}>
+                      {/* Coloured header block — 45% of card */}
+                      <div className="flex flex-col items-center justify-center py-3 relative overflow-hidden"
+                        style={{ backgroundColor: catStyle.bg, minHeight: '64px' }}>
                         {(p as any).image_url ? (
                           <img src={(p as any).image_url} alt={p.name}
                             className="h-12 w-12 object-contain" />
                         ) : (
-                          <span className="text-2xl font-black text-gray-600/40 select-none">{initials}</span>
+                          <>
+                            <span className="text-2xl leading-none">{catStyle.emoji}</span>
+                            <span className="text-[9px] font-bold mt-0.5 opacity-60 tracking-wide"
+                              style={{ color: catStyle.text }}>
+                              {p.name.slice(0, 8).toUpperCase()}
+                            </span>
+                          </>
                         )}
                         {isOut && (
-                          <div className="absolute inset-0 flex items-center justify-center">
-                            <span className="text-[10px] font-bold text-red-600 bg-red-50 border border-red-200 px-2 py-0.5 rounded-full">Out of stock</span>
+                          <div className="absolute inset-0 flex items-center justify-center bg-white/60">
+                            <span className="text-[10px] font-bold text-red-600 bg-red-50 border border-red-200 px-2 py-0.5 rounded-full">Out</span>
                           </div>
                         )}
                       </div>
-                      {/* Content */}
+                      {/* Bottom info */}
                       <div className="px-2.5 py-2">
-                        <p className="text-xs font-semibold text-gray-900 leading-snug line-clamp-2 min-h-[32px]">
+                        <p className="text-xs font-semibold text-gray-900 leading-tight line-clamp-2 min-h-[32px]">
                           {p.name}
                         </p>
-                        <div className="flex items-center justify-between mt-1">
+                        <div className="flex items-center justify-between mt-1.5">
                           <span className="text-sm font-bold font-mono text-gray-900">A${p.price.toFixed(2)}</span>
+                          {isOut && (
+                            <span className="flex items-center gap-0.5 text-xs text-red-500 font-medium">
+                              <span className="w-1.5 h-1.5 rounded-full bg-red-400" />Out
+                            </span>
+                          )}
                           {isLow && !isOut && (
-                            <span className="text-[9px] font-medium text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-full">
-                              {p.stock_quantity} left
+                            <span className="flex items-center gap-0.5 text-xs text-amber-500 font-medium">
+                              <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />Low
                             </span>
                           )}
                         </div>
@@ -1028,7 +1059,13 @@ export default function TerminalPage() {
             <>
               {/* Cart header */}
               <div className="flex-shrink-0 px-4 py-3 bg-white border-b border-gray-100 flex items-center gap-2">
-                <span className="text-sm font-semibold text-gray-900 flex-1">Current sale</span>
+                <span className="text-sm font-semibold text-gray-900">Current sale</span>
+                {cart.length > 0 && (
+                  <span className="text-[10px] font-semibold bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full">
+                    {cart.reduce((s, i) => s + i.qty, 0)} item{cart.reduce((s, i) => s + i.qty, 0) !== 1 ? 's' : ''}
+                  </span>
+                )}
+                <span className="flex-1" />
                 {cart.length > 0 && (
                   <button onClick={() => parkSale()}
                     className="text-xs px-2.5 py-1.5 border border-gray-200 rounded-lg text-gray-500 hover:bg-gray-50 transition-colors">
@@ -1093,29 +1130,17 @@ export default function TerminalPage() {
                       return (
                         <div key={key}
                           onClick={() => setSelectedItem(item.product.id)}
-                          className={`px-4 py-3 border-b border-gray-50 cursor-pointer transition-colors
-                            ${selectedItem === item.product.id ? 'bg-blue-50/50' : 'hover:bg-gray-50'}`}>
-                          <div className="flex items-start gap-2">
+                          className={`group px-4 py-2.5 border-b border-gray-50 last:border-0 cursor-pointer transition-colors
+                            ${selectedItem === item.product.id ? 'bg-gray-50' : 'hover:bg-gray-50/80'}`}>
+                          {/* Row 1: name + total */}
+                          <div className="flex items-start justify-between gap-2 mb-1.5">
                             <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium text-gray-900 leading-snug">
+                              <p className="text-sm font-semibold text-gray-900 leading-snug">
                                 {item.label ?? item.product.name}
                               </p>
                               {item.modifierDetails && item.modifierDetails.length > 0 && (
-                                <p className="text-xs text-gray-400 mt-0.5">· {item.modifierDetails.map(m => m.name).join(', ')}</p>
+                                <p className="text-xs text-gray-400 italic mt-0.5">· {item.modifierDetails.map(m => m.name).join(', ')}</p>
                               )}
-                            </div>
-                            <div className="flex items-center gap-1 flex-shrink-0">
-                              <button
-                                onClick={e => { e.stopPropagation(); updateQty(key, item.qty - 1); }}
-                                className="w-7 h-7 border border-gray-200 rounded-l-lg bg-white hover:bg-gray-50 text-gray-600 text-sm flex items-center justify-center">
-                                −
-                              </button>
-                              <span className="w-8 text-center text-sm font-mono text-gray-900 border-t border-b border-gray-200 bg-white h-7 flex items-center justify-center">{item.qty}</span>
-                              <button
-                                onClick={e => { e.stopPropagation(); updateQty(key, item.qty + 1); }}
-                                className="w-7 h-7 border border-gray-200 rounded-r-lg bg-white hover:bg-gray-50 text-gray-600 text-sm flex items-center justify-center">
-                                +
-                              </button>
                             </div>
                             <div className="text-right flex-shrink-0">
                               {(item.discount_percent ?? 0) > 0 && (
@@ -1123,8 +1148,27 @@ export default function TerminalPage() {
                               )}
                               <p className="text-sm font-semibold font-mono text-gray-900">A${lineTotal.toFixed(2)}</p>
                             </div>
+                          </div>
+                          {/* Row 2: qty pill + remove */}
+                          <div className="flex items-center justify-between">
+                            {/* Connected pill qty control */}
+                            <div className="flex rounded-full border border-gray-200 overflow-hidden shadow-sm">
+                              <button
+                                onClick={e => { e.stopPropagation(); updateQty(key, item.qty - 1); }}
+                                className="px-2.5 py-1 text-gray-500 hover:bg-gray-50 text-sm font-bold leading-none transition-colors">
+                                −
+                              </button>
+                              <span className="px-3 py-1 font-mono text-sm font-bold text-gray-900 bg-white border-l border-r border-gray-200 min-w-[28px] text-center">
+                                {item.qty}
+                              </span>
+                              <button
+                                onClick={e => { e.stopPropagation(); updateQty(key, item.qty + 1); }}
+                                className="px-2.5 py-1 text-gray-500 hover:bg-gray-50 text-sm font-bold leading-none transition-colors">
+                                +
+                              </button>
+                            </div>
                             <button onClick={e => { e.stopPropagation(); updateQty(key, 0); }}
-                              className="text-gray-300 hover:text-red-400 text-lg leading-none ml-1 flex-shrink-0">×</button>
+                              className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-300 hover:text-red-400 text-base leading-none px-1">×</button>
                           </div>
                         </div>
                       );
@@ -1187,28 +1231,32 @@ export default function TerminalPage() {
               )}
 
               {/* Summary */}
-              <div className="flex-shrink-0 px-4 py-3 bg-white border-t border-gray-200 space-y-1">
-                <div className="flex justify-between text-sm text-gray-500">
-                  <span>Subtotal</span><span className="font-mono">A${netAmount.toFixed(2)}</span>
-                </div>
-                {cart.some(i => (i.discount_percent ?? 0) > 0) && (
-                  <div className="flex justify-between text-sm text-[#059669]">
-                    <span>Discount</span>
-                    <span className="font-mono">-A${(subtotal / 1.1 - netAmount < 0 ? 0 : (cart.reduce((s,i)=>s+i.unitPrice*i.qty,0)/1.1 - netAmount)).toFixed(2)}</span>
+              <div className="flex-shrink-0 px-3 py-3 bg-white border-t border-gray-200">
+                <div className="bg-gray-50 rounded-2xl px-3 py-2.5 space-y-1">
+                  <div className="flex justify-between text-sm py-0.5">
+                    <span className="text-gray-600">Subtotal</span>
+                    <span className="font-mono text-gray-900">A${netAmount.toFixed(2)}</span>
                   </div>
-                )}
-                <div className="flex justify-between text-xs text-gray-400">
-                  <span>GST (10%)</span><span className="font-mono">A${taxAmount.toFixed(2)}</span>
-                </div>
-                {payMethod === 'cash' && Math.abs(roundedTotal - total) > 0.001 && (
-                  <div className="flex justify-between text-xs text-gray-400">
-                    <span>Cash rounding</span>
-                    <span className="font-mono">{(roundedTotal - total) > 0 ? '+' : ''}A${(roundedTotal - total).toFixed(2)}</span>
+                  {cart.some(i => (i.discount_percent ?? 0) > 0) && (
+                    <div className="flex justify-between text-sm py-0.5">
+                      <span className="text-gray-600">Discount</span>
+                      <span className="font-mono text-green-600">-A${(subtotal / 1.1 - netAmount < 0 ? 0 : (cart.reduce((s,i)=>s+i.unitPrice*i.qty,0)/1.1 - netAmount)).toFixed(2)}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between text-xs py-0.5">
+                    <span className="text-gray-400">GST (10%)</span>
+                    <span className="font-mono text-gray-500">A${taxAmount.toFixed(2)}</span>
                   </div>
-                )}
-                <div className="border-t border-gray-200 pt-1.5 mt-1 flex justify-between">
-                  <span className="text-base font-semibold text-gray-900">Total</span>
-                  <span className="text-xl font-bold font-mono text-gray-900">A${roundedTotal.toFixed(2)}</span>
+                  {payMethod === 'cash' && Math.abs(roundedTotal - total) > 0.001 && (
+                    <div className="flex justify-between text-xs py-0.5">
+                      <span className="text-gray-400">Cash rounding</span>
+                      <span className="font-mono text-gray-500">{(roundedTotal - total) > 0 ? '+' : ''}A${(roundedTotal - total).toFixed(2)}</span>
+                    </div>
+                  )}
+                  <div className="border-t border-dashed border-gray-200 pt-2 mt-1 flex justify-between items-baseline">
+                    <span className="text-base font-bold text-gray-900">Total</span>
+                    <span className="text-2xl font-black font-mono text-gray-900">A${roundedTotal.toFixed(2)}</span>
+                  </div>
                 </div>
               </div>
 
@@ -1252,16 +1300,18 @@ export default function TerminalPage() {
                       ))}
                     </div>
                     {tendered >= roundedTotal && (
-                      <div className="bg-green-50 rounded-2xl px-5 py-3 text-center border border-green-100">
-                        <p className="text-xs text-green-600 font-medium mb-0.5">Change</p>
-                        <p className="text-2xl font-black font-mono text-green-700">A${change.toFixed(2)}</p>
+                      <div className="bg-green-50 border-2 border-green-200 rounded-2xl px-5 py-3 text-center">
+                        <p className="text-xs text-green-600 uppercase tracking-wider font-medium mb-0.5">Change</p>
+                        <p className="text-3xl font-black font-mono text-green-700">A${change.toFixed(2)}</p>
                       </div>
                     )}
                   </div>
                 )}
                 {payMethod === 'card' && (
-                  <div className="bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-center mb-3">
-                    <p className="text-sm text-gray-500">Process <span className="font-semibold font-mono text-gray-900">A${roundedTotal.toFixed(2)}</span> on EFTPOS terminal</p>
+                  <div className="bg-gray-50 border border-gray-200 rounded-2xl px-4 py-4 text-center mb-3">
+                    <p className="text-2xl mb-1">💳</p>
+                    <p className="text-sm text-gray-500">Process on EFTPOS</p>
+                    <p className="text-xl font-black font-mono text-gray-900 mt-0.5">A${roundedTotal.toFixed(2)}</p>
                   </div>
                 )}
                 {payMethod === 'split' && (
@@ -1297,11 +1347,17 @@ export default function TerminalPage() {
                     <button
                       onClick={processSale}
                       disabled={!cart.length || !registerIsOpen || processing || (payMethod === 'cash' && cashTendered !== '' && tendered < roundedTotal)}
-                      className="flex-1 h-[60px] disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold text-base rounded-2xl shadow-lg hover:shadow-xl hover:brightness-110 active:scale-[0.99] transition-all flex items-center justify-center gap-2"
-                      style={{ background: processing ? '#374151' : 'linear-gradient(135deg, #111827 0%, #374151 100%)' }}>
-                      {processing
-                        ? <><Spinner /> Processing…</>
-                        : <>Complete Sale · <span className="font-mono">A${roundedTotal.toFixed(2)}</span></>}
+                      className="flex-1 h-16 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:scale-100 text-white font-bold rounded-2xl shadow-lg hover:shadow-xl hover:scale-[1.01] active:scale-[0.99] transition-all duration-150 flex items-center justify-center gap-3"
+                      style={{ background: processing ? '#374151' : 'linear-gradient(135deg, #111827 0%, #1f2937 100%)' }}>
+                      {processing ? (
+                        <><Spinner /> <span className="text-base">Processing…</span></>
+                      ) : (
+                        <>
+                          <span className="text-lg font-bold">Complete Sale</span>
+                          <span className="text-gray-400">·</span>
+                          <span className="text-xl font-black font-mono">A${roundedTotal.toFixed(2)}</span>
+                        </>
+                      )}
                     </button>
                   </div>
                 )}
