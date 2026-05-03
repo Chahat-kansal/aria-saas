@@ -336,6 +336,34 @@ function DataTable({ feature, businessId }: { feature: BusinessFeature; business
   );
 }
 
+// ── CustomFeaturesSection — drop into any dashboard page ─────────────────────
+
+export function CustomFeaturesSection({ businessId, location = 'dashboard' }: { businessId: string; location?: string }) {
+  const [features, setFeatures] = useState<BusinessFeature[]>([]);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    fetch(`/api/business-features?business_id=${businessId}&location=${location}`)
+      .then(r => r.json())
+      .then(d => { setFeatures(d.features ?? []); setLoaded(true); })
+      .catch(() => setLoaded(true));
+  }, [businessId, location]);
+
+  if (!loaded || features.length === 0) return null;
+
+  return (
+    <div>
+      <h2 className="text-sm font-medium text-white mb-3">
+        ✦ Custom Features
+        <span className="ml-2 text-[10px] text-gray-500 font-normal">built by Aria</span>
+      </h2>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {features.map(f => <FeatureRenderer key={f.id} feature={f} businessId={businessId} />)}
+      </div>
+    </div>
+  );
+}
+
 // ── Main dispatcher ───────────────────────────────────────────────────────────
 
 export default function FeatureRenderer({ feature, businessId }: { feature: BusinessFeature; businessId: string }) {

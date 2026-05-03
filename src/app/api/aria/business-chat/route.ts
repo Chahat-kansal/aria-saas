@@ -60,18 +60,16 @@ export async function POST(req: Request) {
         const send = (obj: object) => controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`));
         try {
           const origin = (req.headers.get('origin') ?? process.env.NEXT_PUBLIC_APP_URL ?? '');
-          const analyseRes = await fetch(`${origin}/api/aria/feature-builder`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json', 'Cookie': req.headers.get('cookie') ?? '' },
-            body: JSON.stringify({ business_id, feature_request: message, phase: 'analyse' }),
+          const genRes = await fetch(`${origin}/api/aria/feature-builder`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Cookie': req.headers.get('cookie') ?? '' },
+            body: JSON.stringify({ business_id, feature_request: message, phase: 'generate' }),
           });
-          const analysis = await analyseRes.json().catch(() => null);
-          if (analysis?.feasible !== undefined) {
-            const responseText = analysis.feasible
-              ? `✦ **Custom Feature Request Detected**\n\n${analysis.summary}\n\n**Complexity:** ${analysis.complexity}\n\n${analysis.questions?.length > 0 ? `Before I build this, I need to ask:\n${analysis.questions.map((q: string) => `• ${q}`).join('\n')}\n\n` : ''}${analysis.feasible ? '**Ready to build?** Go to [Custom Features](/dashboard/custom-features) and ask me to build: _"' + message + '"_' : 'This feature would require significant changes. Let me suggest alternatives...'}`
-              : `I can help with that concept, but it would need custom development. ${analysis.summary}`;
-            send({ text: responseText, feature_request: true, analysis });
+          const gen = await genRes.json().catch(() => null);
+          if (gen?.feature_config) {
+            send({ type: 'feature_preview', feature_config: gen.feature_config, preview_description: gen.preview_description ?? '' });
           } else {
-            send({ text: `✦ I can build custom features for your POS! Go to [Custom Features](/dashboard/custom-features) to get started, or tell me more about what you want.` });
+            send({ text: `✦ I can build custom features for your dashboard — go to [Custom Features](/dashboard/custom-features) and describe what you need.` });
           }
         } catch {
           send({ text: `✦ That sounds like a custom feature request. Visit [Custom Features](/dashboard/custom-features) to have Aria design and build it for you.` });

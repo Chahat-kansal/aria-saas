@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { WarehouseDashboard } from '@/components/dashboard/WarehouseDashboard';
 import { MorningCommandCentre } from '@/components/dashboard/MorningCommandCentre';
 import { RetailDashboard } from '@/components/dashboard/RetailDashboard';
+import { CustomFeaturesSection } from '@/components/features/FeatureRenderer';
 
 export default async function DashboardPage() {
   const supabase = createServerSupabaseClient();
@@ -124,6 +125,7 @@ async function RetailCafeDashboard({ business }: { business: any }) {
           <ChurnRisk customers={churnCustomers} />
         </div>
 
+        <CustomFeaturesSection businessId={business.id} />
         <AriaChat ownerName={business.owner_name || 'there'} />
       </div>
     </div>
@@ -372,6 +374,7 @@ async function TradieProfessionalDashboard({ business }: { business: any }) {
           </DarkCard>
         </div>
 
+        <CustomFeaturesSection businessId={business.id} />
         <AriaChat ownerName={business.owner_name || 'there'} />
       </div>
     </div>
@@ -496,6 +499,7 @@ async function SalonGymDashboard({ business }: { business: any }) {
           <ChurnRisk customers={churnCustomers} />
         </div>
 
+        <CustomFeaturesSection businessId={business.id} />
         <AriaChat ownerName={business.owner_name || 'there'} />
       </div>
     </div>
@@ -591,6 +595,7 @@ async function RealEstateDashboard({ business }: { business: any }) {
           <CompetitorWatch competitors={competitors} />
         </div>
 
+        <CustomFeaturesSection businessId={business.id} />
         <AriaChat ownerName={business.owner_name || 'there'} />
       </div>
     </div>

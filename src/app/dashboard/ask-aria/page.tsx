@@ -2,6 +2,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useBusinessContext } from '@/components/providers/BusinessProvider';
 import dynamic from 'next/dynamic';
+import FeatureRenderer, { type BusinessFeature } from '@/components/features/FeatureRenderer';
 
 const ChartBlock = dynamic(() => import('@/components/dashboard/ChartBlock'), { ssr: false });
 
@@ -12,11 +13,18 @@ interface ChartData {
   unit: 'currency' | 'count' | 'percentage';
 }
 
+interface FeaturePreview {
+  feature_config: Record<string, unknown>;
+  preview_description: string;
+}
+
 interface Message {
   role: 'user' | 'assistant';
   content: string;
   streaming?: boolean;
   chart?: ChartData;
+  feature_preview?: FeaturePreview;
+  confirm_state?: 'idle' | 'confirming' | 'done' | 'error';
   timestamp: Date;
 }
 
@@ -42,8 +50,7 @@ const INDUSTRY_SUGGESTIONS: Record<string, string[]> = {
 
 function getSuggestions(industry?: string): string[] {
   const specific = industry ? (INDUSTRY_SUGGESTIONS[industry] ?? []) : [];
-  const combined = [...specific, ...BASE_SUGGESTIONS];
-  return combined.slice(0, 6);
+  return [...specific, ...BASE_SUGGESTIONS].slice(0, 6);
 }
 
 function CopyButton({ text }: { text: string }) {
@@ -55,6 +62,59 @@ function CopyButton({ text }: { text: string }) {
     >
       {copied ? '✓ Copied' : 'Copy'}
     </button>
+  );
+}
+
+function FeaturePreviewBubble({
+  preview, businessId, msgIdx,
+  onConfirm, onDismiss,
+}: {
+  preview: FeaturePreview;
+  businessId: string;
+  msgIdx: number;
+  onConfirm: (idx: number) => void;
+  onDismiss: (idx: number) => void;
+}) {
+  const cfg = preview.feature_config as Record<string, unknown>;
+  const demoFeature: BusinessFeature = {
+    id: '__preview__',
+    name: (cfg.feature_name as string) ?? 'Custom Feature',
+    description: (cfg.description as string) ?? undefined,
+    feature_type: (cfg.feature_type as string) ?? 'metric_card',
+    config: (cfg.config as Record<string, unknown>) ?? {},
+    is_active: true,
+  };
+
+  return (
+    <div className="rounded-2xl overflow-hidden" style={{ border: '1px solid rgba(29,158,117,0.3)', background: 'rgba(29,158,117,0.05)' }}>
+      <div className="px-4 py-3 flex items-center gap-2" style={{ borderBottom: '1px solid rgba(29,158,117,0.15)' }}>
+        <span className="text-[#1D9E75] text-sm font-medium">✦ Feature Preview</span>
+      </div>
+      <div className="p-4">
+        <p className="text-sm text-white mb-1 font-medium">{demoFeature.name}</p>
+        <p className="text-xs mb-4" style={{ color: 'rgba(255,255,255,0.5)' }}>{preview.preview_description}</p>
+        {/* Live demo */}
+        <div className="mb-4">
+          <FeatureRenderer feature={demoFeature} businessId={businessId} />
+        </div>
+        <div className="flex gap-2">
+          <button
+            onClick={() => onConfirm(msgIdx)}
+            className="flex-1 py-2 rounded-xl text-sm font-medium text-white transition-opacity hover:opacity-90"
+            style={{ background: '#1D9E75' }}
+          >
+            Add to my dashboard
+          </button>
+          <button
+            onClick={() => onDismiss(msgIdx)}
+            className="px-4 py-2 rounded-xl text-sm transition-colors"
+            style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.5)' }}
+          >
+            Not this
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -74,6 +134,45 @@ export default function AskAriaPage() {
     const q = new URLSearchParams(window.location.search).get('q');
     if (q && !input && messages.length === 0) setInput(q);
   }, [input, messages.length]);
+
+  const confirmFeature = useCallback(async (msgIdx: number) => {
+    const msg = messages[msgIdx];
+    if (!msg?.feature_preview || !business?.id) return;
+
+    setMessages(prev => {
+      const u = [...prev];
+      u[msgIdx] = { ...u[msgIdx], confirm_state: 'confirming' };
+      return u;
+    });
+
+    try {
+      const res = await fetch('/api/aria/feature-builder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ business_id: business.id, phase: 'confirm', feature_config: msg.feature_preview.feature_config }),
+      });
+      const data = await res.json();
+      setMessages(prev => {
+        const u = [...prev];
+        u[msgIdx] = { ...u[msgIdx], confirm_state: 'done', content: data.message ?? '✦ Feature added to your dashboard.' };
+        return u;
+      });
+    } catch {
+      setMessages(prev => {
+        const u = [...prev];
+        u[msgIdx] = { ...u[msgIdx], confirm_state: 'error', content: 'Something went wrong saving the feature.' };
+        return u;
+      });
+    }
+  }, [messages, business?.id]);
+
+  const dismissFeature = useCallback((msgIdx: number) => {
+    setMessages(prev => {
+      const u = [...prev];
+      u[msgIdx] = { ...u[msgIdx], feature_preview: undefined, content: 'No problem — let me know if you want to try a different version.' };
+      return u;
+    });
+  }, []);
 
   const send = useCallback(async (text?: string) => {
     const msg = (text ?? input).trim();
@@ -111,6 +210,7 @@ export default function AskAriaPage() {
       const decoder = new TextDecoder();
       let assistantText = '';
       let chart: ChartData | undefined;
+      let featurePreview: FeaturePreview | undefined;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -122,8 +222,10 @@ export default function AskAriaPage() {
           if (!raw) continue;
           try {
             const parsed = JSON.parse(raw);
+            if (parsed.type === 'feature_preview') {
+              featurePreview = { feature_config: parsed.feature_config, preview_description: parsed.preview_description ?? '' };
+            }
             if (parsed.text) {
-              // Strip chart tags from display text
               const clean = parsed.text.replace(/<chart>[\s\S]*?<\/chart>/g, '');
               assistantText += clean;
               setMessages(prev => {
@@ -143,18 +245,25 @@ export default function AskAriaPage() {
         const updated = [...prev];
         const last = updated[updated.length - 1];
         if (last?.role === 'assistant') {
-          // Clean chart tags from final content
           const cleanContent = assistantText.replace(/<chart>[\s\S]*?<\/chart>/g, '').trim();
-          updated[updated.length - 1] = { ...last, content: cleanContent, streaming: false, chart };
+          updated[updated.length - 1] = {
+            ...last,
+            content: cleanContent,
+            streaming: false,
+            chart,
+            feature_preview: featurePreview,
+            confirm_state: featurePreview ? 'idle' : undefined,
+          };
         }
         return updated;
       });
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : 'Unknown error';
       setMessages(prev => {
         const updated = [...prev];
         const last = updated[updated.length - 1];
         if (last?.role === 'assistant') {
-          updated[updated.length - 1] = { ...last, content: `Sorry, something went wrong: ${err.message}`, streaming: false };
+          updated[updated.length - 1] = { ...last, content: `Sorry, something went wrong: ${errMsg}`, streaming: false };
         }
         return updated;
       });
@@ -228,15 +337,39 @@ export default function AskAriaPage() {
         {messages.map((m, i) => (
           <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'} group`}>
             <div className="max-w-2xl w-full">
-              <div className="px-4 py-3 rounded-2xl text-sm whitespace-pre-wrap leading-relaxed"
-                style={m.role === 'user'
-                  ? { background: '#1D9E75', color: '#fff', borderRadius: '18px 18px 4px 18px' }
-                  : { background: 'rgba(255,255,255,0.05)', color: '#e5e7eb', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '18px 18px 18px 4px' }}>
-                {m.content || (m.streaming
-                  ? <span className="inline-flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-[#1D9E75] animate-pulse" /><span className="opacity-60">Thinking…</span></span>
-                  : null)}
-              </div>
-              {m.role === 'assistant' && !m.streaming && m.content && <CopyButton text={m.content} />}
+              {/* Feature preview bubble */}
+              {m.role === 'assistant' && m.feature_preview && m.confirm_state === 'idle' && business?.id && (
+                <FeaturePreviewBubble
+                  preview={m.feature_preview}
+                  businessId={business.id}
+                  msgIdx={i}
+                  onConfirm={confirmFeature}
+                  onDismiss={dismissFeature}
+                />
+              )}
+
+              {/* Confirming spinner */}
+              {m.role === 'assistant' && m.confirm_state === 'confirming' && (
+                <div className="flex items-center gap-2 px-4 py-3 rounded-2xl text-sm"
+                  style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                  <div className="w-4 h-4 rounded-full border-2 border-[#1D9E75] border-t-transparent animate-spin" />
+                  <span style={{ color: 'rgba(255,255,255,0.6)' }}>Adding to your dashboard…</span>
+                </div>
+              )}
+
+              {/* Normal text or done/error state */}
+              {(!m.feature_preview || m.confirm_state === 'done' || m.confirm_state === 'error') && (
+                <div className="px-4 py-3 rounded-2xl text-sm whitespace-pre-wrap leading-relaxed"
+                  style={m.role === 'user'
+                    ? { background: '#1D9E75', color: '#fff', borderRadius: '18px 18px 4px 18px' }
+                    : { background: 'rgba(255,255,255,0.05)', color: '#e5e7eb', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '18px 18px 18px 4px' }}>
+                  {m.content || (m.streaming
+                    ? <span className="inline-flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-[#1D9E75] animate-pulse" /><span className="opacity-60">Thinking…</span></span>
+                    : null)}
+                </div>
+              )}
+
+              {m.role === 'assistant' && !m.streaming && m.content && !m.feature_preview && <CopyButton text={m.content} />}
               {m.role === 'assistant' && !m.streaming && m.chart && m.chart.data && m.chart.data.length > 0 && (
                 <div className="mt-3">
                   <ChartBlock chart={m.chart} />
