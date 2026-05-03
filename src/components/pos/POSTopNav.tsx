@@ -1,87 +1,83 @@
 'use client';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 
-type NavItem = { label: string; href: string };
-type NavGroup = { label: string; href?: string; items?: NavItem[] };
+/* ─── Icon SVGs ────────────────────────────────────────────────── */
+function IconHome({ active }: { active: boolean }) {
+  return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={active ? '#8B5CF6' : 'rgba(139,133,168,0.45)'} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>;
+}
+function IconRotateCcw({ active }: { active: boolean }) {
+  return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={active ? '#8B5CF6' : 'rgba(139,133,168,0.45)'} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 101.85-5.28L1 10"/></svg>;
+}
+function IconBarChart({ active }: { active: boolean }) {
+  return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={active ? '#8B5CF6' : 'rgba(139,133,168,0.45)'} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>;
+}
+function IconMonitor({ active }: { active: boolean }) {
+  return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={active ? '#8B5CF6' : 'rgba(139,133,168,0.45)'} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>;
+}
+function IconGrid({ active }: { active: boolean }) {
+  return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={active ? '#8B5CF6' : 'rgba(139,133,168,0.45)'} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>;
+}
+function IconClock({ active }: { active: boolean }) {
+  return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={active ? '#8B5CF6' : 'rgba(139,133,168,0.45)'} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>;
+}
+function IconTrendingUp({ active }: { active: boolean }) {
+  return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={active ? '#8B5CF6' : 'rgba(139,133,168,0.45)'} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>;
+}
+function IconSparkles() {
+  return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8B5CF6" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5z"/><path d="M19 3l.5 1.5L21 5l-1.5.5L19 7l-.5-1.5L17 5l1.5-.5z"/><path d="M5 17l.5 1.5L7 19l-1.5.5L5 21l-.5-1.5L3 19l1.5-.5z"/></svg>;
+}
+function IconBell({ muted }: { muted?: boolean }) {
+  return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={muted ? 'rgba(139,133,168,0.4)' : 'rgba(237,232,255,0.7)'} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>;
+}
 
-const NAV_GROUPS: NavGroup[] = [
-  { label: 'Terminal', href: '/pos/terminal' },
-  {
-    label: 'Inventory',
-    items: [
-      { label: 'Products', href: '/pos/products' },
-      { label: 'Categories', href: '/pos/categories' },
-      { label: 'Variants & Modifiers', href: '/pos/modifiers' },
-      { label: 'Suppliers', href: '/pos/suppliers' },
-      { label: 'Purchase Orders', href: '/pos/orders' },
-      { label: 'Stocktake', href: '/pos/stocktake' },
-      { label: 'Transfers', href: '/pos/transfers' },
-      { label: 'Price Lists', href: '/pos/price-lists' },
-      { label: 'Barcodes', href: '/pos/barcodes' },
-    ],
-  },
-  {
-    label: 'Customers',
-    items: [
-      { label: 'All Customers', href: '/pos/customers' },
-      { label: 'Customer Groups', href: '/pos/customer-groups' },
-      { label: 'Loyalty Program', href: '/pos/settings/loyalty' },
-      { label: 'Gift Cards', href: '/pos/gift-cards' },
-      { label: 'Promotions', href: '/pos/promotions' },
-      { label: 'Winback', href: '/dashboard/winback' },
-    ],
-  },
-  {
-    label: 'Reports',
-    items: [
-      { label: 'Sales Report', href: '/pos/reports/sales' },
-      { label: 'Inventory Report', href: '/pos/reports/inventory' },
-      { label: 'Purchase Report', href: '/pos/reports/purchases' },
-      { label: 'Cashier Report', href: '/pos/reports/cashier' },
-      { label: 'Commission Report', href: '/pos/reports/commission' },
-      { label: 'Register Closures', href: '/pos/reports/closures' },
-    ],
-  },
-  {
-    label: 'Settings',
-    items: [
-      { label: 'General', href: '/pos/settings' },
-      { label: 'Receipt', href: '/pos/settings/receipts' },
-      { label: 'Payments', href: '/pos/settings/payments' },
-      { label: 'Tax', href: '/pos/settings/tax' },
-      { label: 'Loyalty', href: '/pos/settings/loyalty' },
-      { label: 'Surcharging', href: '/pos/settings/surcharging' },
-      { label: 'Staff & Users', href: '/pos/settings/users' },
-      { label: 'Integrations', href: '/pos/settings/integrations' },
-    ],
-  },
-  {
-    label: 'Operations',
-    items: [
-      { label: 'Kitchen Display', href: '/pos/kitchen' },
-      { label: 'Table Management', href: '/pos/tables' },
-      { label: 'Timesheets', href: '/pos/timesheets' },
-      { label: 'Customer Display', href: '/pos/display' },
-      { label: 'Cash Management', href: '/pos/cash' },
-      { label: 'Sessions', href: '/pos/sessions' },
-      { label: 'Open/Close Register', href: '/pos' },
-    ],
-  },
-];
+/* ─── LogoMark ─────────────────────────────────────────────────── */
+function LogoMark({ size = 24 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 32 32" fill="none">
+      <path d="M16 2L28 9v14L16 30 4 23V9z" fill="rgba(139,92,246,0.15)" stroke="#8B5CF6" strokeWidth="1.5"/>
+      <path d="M16 8l7 4v8l-7 4-7-4V12z" fill="rgba(139,92,246,0.25)" stroke="#8B5CF6" strokeWidth="1"/>
+      <circle cx="16" cy="16" r="2.5" fill="#8B5CF6"/>
+    </svg>
+  );
+}
 
-// Mobile accordion sections mirror desktop groups
-const MOBILE_SECTIONS = NAV_GROUPS;
+/* ─── Clock ────────────────────────────────────────────────────── */
+function LiveClock() {
+  const [time, setTime] = useState('');
+  useEffect(() => {
+    const tick = () => setTime(new Date().toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' }));
+    tick();
+    const t = setInterval(tick, 1000);
+    return () => clearInterval(t);
+  }, []);
+  return <span>{time}</span>;
+}
 
+/* ─── NavItem ──────────────────────────────────────────────────── */
+function NavItem({ href, active, children, onClick, title }: { href?: string; active: boolean; children: React.ReactNode; onClick?: () => void; title?: string }) {
+  const style: React.CSSProperties = active
+    ? { background: 'rgba(139,92,246,0.13)', border: '1px solid rgba(139,92,246,0.28)', animation: 'nav-glow 2s ease-in-out infinite' }
+    : { background: 'transparent', border: '1px solid transparent' };
+
+  const cls = 'w-10 h-10 rounded-[11px] flex items-center justify-center cursor-pointer transition-all duration-150 hover:bg-[rgba(255,255,255,0.04)] hover:border-[rgba(255,255,255,0.06)]';
+
+  if (onClick) return (
+    <button onClick={onClick} title={title} className={cls} style={style}>{children}</button>
+  );
+  return (
+    <Link href={href ?? '/'} title={title} className={cls} style={style}>{children}</Link>
+  );
+}
+
+/* ─── POSTopNav (new: sidebar + topbar layout) ─────────────────── */
 export function POSTopNav({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [sessionOpen, setSessionOpen] = useState<boolean | null>(null);
   const [sessionRevenue, setSessionRevenue] = useState(0);
-  const [mobileOpen, setMobileOpen] = useState(false);
-  const [openMenu, setOpenMenu] = useState<string | null>(null);
-  const [mobileExpanded, setMobileExpanded] = useState<string | null>(null);
-  const navRef = useRef<HTMLDivElement>(null);
+  const [posUser, setPosUser] = useState<{ name: string } | null>(null);
+  const [ariaActive, setAriaActive] = useState(false);
 
   useEffect(() => {
     fetch('/api/pos/sessions')
@@ -94,169 +90,186 @@ export function POSTopNav({ children }: { children: React.ReactNode }) {
       .catch(() => setSessionOpen(false));
   }, [pathname]);
 
-  // Close dropdown on outside click
   useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (navRef.current && !navRef.current.contains(e.target as Node)) {
-        setOpenMenu(null);
-      }
-    }
-    document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, []);
+    try {
+      const u = localStorage.getItem('aria_pos_user');
+      if (u) setPosUser(JSON.parse(u));
+    } catch { /* ignore */ }
+  }, [pathname]);
 
-  // Close dropdown on route change
-  useEffect(() => { setOpenMenu(null); setMobileOpen(false); }, [pathname]);
-
-  function isGroupActive(group: NavGroup): boolean {
-    if (group.href) return pathname === group.href;
-    return group.items?.some(item => pathname === item.href || pathname.startsWith(item.href + '/')) ?? false;
+  function openCustomerDisplay() {
+    try {
+      localStorage.setItem('aria_pos_display_state', JSON.stringify({ status: 'idle', timestamp: Date.now() }));
+    } catch { /* ignore */ }
+    const w = window.open('/pos/display', 'AriaCustomerDisplay', 'width=1280,height=800,menubar=no,toolbar=no,location=no');
+    if (w) w.focus();
   }
 
+  function toggleAria() {
+    setAriaActive(v => !v);
+    window.dispatchEvent(new CustomEvent('pos-aria-toggle'));
+  }
+
+  const navItems = [
+    { href: '/pos/terminal', icon: (a: boolean) => <IconHome active={a} />, title: 'Terminal' },
+    { href: '/pos/close', icon: (a: boolean) => <IconBarChart active={a} />, title: 'End of Day' },
+    { href: undefined, icon: (a: boolean) => <IconMonitor active={a} />, title: 'Customer Display', onClick: openCustomerDisplay },
+    { href: '/pos/kitchen', icon: (a: boolean) => <IconGrid active={a} />, title: 'Kitchen' },
+    { href: '/pos/tables', icon: (a: boolean) => <IconGrid active={false} />, title: 'Tables' },
+    { href: '/pos/timesheets', icon: (a: boolean) => <IconClock active={a} />, title: 'Timesheets' },
+    { href: '/pos/reports', icon: (a: boolean) => <IconTrendingUp active={a} />, title: 'Reports' },
+  ];
+
+  const isActive = (href?: string) => !!href && (pathname === href || pathname.startsWith(href + '/'));
+
+  const screenLabel: Record<string, string> = {
+    '/pos/terminal': 'Terminal',
+    '/pos/close': 'End of Day',
+    '/pos/products': 'Products',
+    '/pos/customers': 'Customers',
+    '/pos/reports': 'Reports',
+    '/pos/settings': 'Settings',
+    '/pos/kitchen': 'Kitchen Display',
+    '/pos/tables': 'Table Management',
+    '/pos/timesheets': 'Timesheets',
+    '/pos': 'Register',
+  };
+  const currentLabel = Object.entries(screenLabel).find(([k]) => pathname === k || pathname.startsWith(k + '/'))?.[1] ?? 'POS';
+
+  const initials = posUser?.name?.slice(0, 2).toUpperCase() ?? 'ME';
+
   return (
-    <div className="min-h-screen bg-gray-50">
-      <nav ref={navRef} className="h-14 bg-[#111827] flex items-center justify-between px-4 fixed top-0 left-0 right-0 z-40">
-        {/* Left: wordmark + desktop nav */}
-        <div className="flex items-center gap-4">
-          <Link href="/pos" className="font-semibold text-white text-lg tracking-tight flex-shrink-0">AriaPOS</Link>
+    <div style={{ display: 'flex', height: '100dvh', background: '#0A0910', fontFamily: "'Manrope', system-ui, sans-serif" }}>
 
-          {/* Desktop dropdown nav */}
-          <div className="hidden md:flex items-center">
-            {NAV_GROUPS.map(group => {
-              const active = isGroupActive(group);
-              const isOpen = openMenu === group.label;
+      {/* ── Sidebar ─────────────────────────────────────────────── */}
+      <div style={{ width: 60, flexShrink: 0, height: '100%', background: '#0A0910', borderRight: '1px solid rgba(255,255,255,0.04)', display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: 14, paddingBottom: 14, gap: 0, zIndex: 40 }}>
 
-              if (!group.items) {
-                // Direct link (Terminal)
-                return (
-                  <Link key={group.label} href={group.href!}
-                    className={`px-3 py-2 text-sm rounded-md transition-colors ${
-                      active ? 'text-white bg-white/10' : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'
-                    }`}>
-                    {group.label}
-                  </Link>
-                );
-              }
-
-              return (
-                <div key={group.label} className="relative">
-                  <button
-                    onClick={() => setOpenMenu(isOpen ? null : group.label)}
-                    className={`px-3 py-2 text-sm rounded-md transition-colors flex items-center gap-1 ${
-                      active || isOpen ? 'text-white bg-white/10' : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'
-                    }`}>
-                    {group.label}
-                    <svg className={`w-3 h-3 transition-transform ${isOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </button>
-
-                  {isOpen && (
-                    <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-50 min-w-48 py-1 overflow-hidden">
-                      {group.items.map((item, idx) => {
-                        const itemActive = pathname === item.href || pathname.startsWith(item.href + '/');
-                        return (
-                          <Link key={item.href} href={item.href}
-                            className={`block px-4 py-2.5 text-sm transition-colors ${
-                              itemActive
-                                ? 'text-[#059669] font-medium bg-emerald-50'
-                                : 'text-gray-700 hover:bg-gray-50'
-                            } ${idx === 0 ? 'rounded-t-xl' : ''} ${idx === group.items!.length - 1 ? 'rounded-b-xl' : ''}`}>
-                            {item.label}
-                          </Link>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+        {/* Logo */}
+        <div style={{ marginBottom: 16 }}>
+          <Link href="/pos"><LogoMark size={28} /></Link>
         </div>
 
-        {/* Right: session + dashboard + hamburger */}
-        <div className="flex items-center gap-3">
-          {sessionOpen !== null && (
-            <div className="hidden sm:flex items-center gap-2">
-              <span className={`w-2 h-2 rounded-full flex-shrink-0 ${sessionOpen ? 'bg-emerald-400' : 'bg-red-400'}`} />
-              <span className="text-gray-300 text-sm">
-                {sessionOpen ? `Open · A$${sessionRevenue.toFixed(2)} today` : 'Register closed'}
+        {/* Nav items */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1, alignItems: 'center', width: '100%', paddingLeft: 10, paddingRight: 10, paddingTop: 4 }}>
+          {navItems.map((item, i) => {
+            const active = isActive(item.href);
+            return (
+              <NavItem key={i} href={item.href} active={active} onClick={item.onClick} title={item.title}>
+                {item.icon(active)}
+              </NavItem>
+            );
+          })}
+          {/* Void / Refund */}
+          <NavItem href={undefined} active={false} title="Refund / Void" onClick={() => window.dispatchEvent(new CustomEvent('pos-refund-toggle'))}>
+            <IconRotateCcw active={false} />
+          </NavItem>
+        </div>
+
+        {/* Bottom: Aria, time, user */}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+          {/* Aria button */}
+          <button
+            onClick={toggleAria}
+            title="Aria AI (⌘K)"
+            style={{
+              width: 40, height: 40, borderRadius: 11,
+              background: ariaActive ? 'rgba(139,92,246,0.16)' : 'rgba(139,92,246,0.07)',
+              border: ariaActive ? '1px solid rgba(139,92,246,0.38)' : '1px solid rgba(139,92,246,0.14)',
+              boxShadow: ariaActive ? '0 0 24px rgba(139,92,246,0.3)' : '0 0 10px rgba(139,92,246,0.1)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+              transition: 'all 200ms ease',
+            }}
+            onMouseEnter={e => { if (!ariaActive) (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 0 20px rgba(139,92,246,0.22)'; }}
+            onMouseLeave={e => { if (!ariaActive) (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 0 10px rgba(139,92,246,0.1)'; }}
+          >
+            <IconSparkles />
+          </button>
+
+          {/* Time */}
+          <span style={{ fontSize: 8, fontFamily: "'JetBrains Mono', monospace", color: 'rgba(139,133,168,0.25)', letterSpacing: '0.02em' }}>
+            <LiveClock />
+          </span>
+
+          {/* User avatar */}
+          <button
+            onClick={() => { localStorage.removeItem('aria_pos_user'); setPosUser(null); window.location.reload(); }}
+            title={posUser?.name ?? 'Switch user'}
+            style={{
+              width: 28, height: 28, borderRadius: '50%',
+              background: 'rgba(139,92,246,0.1)',
+              border: '1.5px solid rgba(139,92,246,0.22)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              cursor: 'pointer', color: '#8B5CF6', fontSize: 9, fontWeight: 800,
+            }}
+          >
+            {initials}
+          </button>
+
+          {/* Back to Dashboard */}
+          <Link href="/dashboard" title="Dashboard" style={{ opacity: 0.25, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#8B85A8" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="15 18 9 12 15 6"/>
+            </svg>
+          </Link>
+        </div>
+      </div>
+
+      {/* ── Right section ────────────────────────────────────────── */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
+
+        {/* Top bar */}
+        <div style={{
+          height: 46, flexShrink: 0,
+          background: 'rgba(8,6,16,0.92)',
+          backdropFilter: 'blur(16px)',
+          borderBottom: '1px solid rgba(255,255,255,0.04)',
+          display: 'flex', alignItems: 'center',
+          paddingLeft: 20, paddingRight: 16,
+          gap: 10,
+          zIndex: 30,
+        }}>
+          {/* Left: screen label + business name */}
+          <span style={{ fontSize: 13, fontWeight: 700, color: 'rgba(237,232,255,0.88)', letterSpacing: '-0.02em' }}>
+            {currentLabel}
+          </span>
+
+          <span style={{ flex: 1 }} />
+
+          {/* LIVE badge */}
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 5,
+            background: 'rgba(34,197,94,0.07)', border: '1px solid rgba(34,197,94,0.15)',
+            borderRadius: 20, padding: '3px 9px',
+          }}>
+            <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#22C55E', display: 'block', animation: 'pulse-ring 2s ease-in-out infinite' }} />
+            <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.04em', color: '#22C55E' }}>LIVE</span>
+          </div>
+
+          {/* Revenue */}
+          {sessionOpen && (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)',
+              borderRadius: 8, padding: '3px 10px',
+            }}>
+              <span style={{ fontSize: 9, letterSpacing: '0.06em', color: '#4A4565' }}>TODAY</span>
+              <span style={{ fontSize: 12, fontFamily: "'JetBrains Mono', monospace", fontWeight: 700, color: 'rgba(237,232,255,0.75)' }}>
+                A${sessionRevenue.toFixed(2)}
               </span>
             </div>
           )}
-          <span className="hidden sm:block text-gray-600">|</span>
-          <Link href="/dashboard" className="text-sm text-gray-400 hover:text-gray-200 transition-colors whitespace-nowrap hidden sm:block">
-            ← Dashboard
-          </Link>
-          <button onClick={() => setMobileOpen(v => !v)} className="md:hidden text-gray-400 hover:text-white p-1">
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
-            </svg>
+
+          {/* Bell */}
+          <button style={{ width: 27, height: 27, borderRadius: 7, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+            <IconBell muted />
           </button>
         </div>
-      </nav>
 
-      {/* Mobile bottom sheet with accordion */}
-      {mobileOpen && (
-        <div className="fixed inset-0 z-50 md:hidden" onClick={() => setMobileOpen(false)}>
-          <div className="absolute bottom-0 left-0 right-0 bg-white rounded-t-2xl shadow-2xl max-h-[80vh] overflow-y-auto"
-            onClick={e => e.stopPropagation()}>
-            <div className="w-10 h-1 bg-gray-200 rounded-full mx-auto my-3" />
-            <div className="pb-8 px-3">
-              {MOBILE_SECTIONS.map(group => {
-                if (!group.items) {
-                  return (
-                    <Link key={group.label} href={group.href!} onClick={() => setMobileOpen(false)}
-                      className={`block px-4 py-3 rounded-xl text-sm font-medium mb-1 ${
-                        pathname === group.href ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:bg-gray-50'
-                      }`}>
-                      {group.label}
-                    </Link>
-                  );
-                }
-                const expanded = mobileExpanded === group.label;
-                return (
-                  <div key={group.label} className="mb-1">
-                    <button
-                      onClick={() => setMobileExpanded(expanded ? null : group.label)}
-                      className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium transition-colors ${
-                        isGroupActive(group) ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:bg-gray-50'
-                      }`}>
-                      <span>{group.label}</span>
-                      <svg className={`w-4 h-4 transition-transform ${expanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                      </svg>
-                    </button>
-                    {expanded && (
-                      <div className="ml-4 mt-1 space-y-0.5">
-                        {group.items.map(item => {
-                          const active = pathname === item.href;
-                          return (
-                            <Link key={item.href} href={item.href} onClick={() => setMobileOpen(false)}
-                              className={`block px-4 py-2.5 rounded-lg text-sm ${
-                                active ? 'text-[#059669] font-medium bg-emerald-50' : 'text-gray-600 hover:bg-gray-50'
-                              }`}>
-                              {item.label}
-                            </Link>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-              <Link href="/dashboard" onClick={() => setMobileOpen(false)}
-                className="block px-4 py-3 rounded-xl text-sm text-gray-500 hover:bg-gray-50 mt-2 border-t border-gray-100 pt-4">
-                ← Dashboard
-              </Link>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <main className="pt-14" style={{ height: '100dvh', overflowY: 'hidden' }}>
-        {children}
-      </main>
+        {/* Content */}
+        <main style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
+          {children}
+        </main>
+      </div>
     </div>
   );
 }

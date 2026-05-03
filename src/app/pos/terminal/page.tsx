@@ -705,7 +705,7 @@ export default function TerminalPage() {
      RENDER
   ══════════════════════════════════════════════════════════════ */
   return (
-    <div className="flex flex-col bg-gray-50 overflow-hidden" style={{ height: 'calc(100dvh - 56px)' }}>
+    <div className="flex flex-col overflow-hidden" style={{ height: '100%', background: '#0A0910' }}>
 
       {/* Low stock alert bar */}
       {lowStockItems.length > 0 && !lowStockDismissed && (
