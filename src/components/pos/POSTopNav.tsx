@@ -40,6 +40,7 @@ const NAV_GROUPS: NavGroup[] = [
       { label: 'Inventory Report', href: '/pos/reports/inventory' },
       { label: 'Purchase Report', href: '/pos/reports/purchases' },
       { label: 'Cashier Report', href: '/pos/reports/cashier' },
+      { label: 'Commission Report', href: '/pos/reports/commission' },
       { label: 'Register Closures', href: '/pos/reports/closures' },
     ],
   },

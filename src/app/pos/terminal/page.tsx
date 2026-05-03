@@ -107,6 +107,9 @@ export default function TerminalPage() {
   const [discountMode,   setDiscountMode]   = useState<'pct' | 'amt' | null>(null);
   const [discountVal,    setDiscountVal]    = useState('');
 
+  /* ── Commission / sale attribution ───────────────────────────── */
+  const [servedBy,       setServedBy]       = useState<string>('');
+
   /* ── Payment ──────────────────────────────────────────────────── */
   const [payMethod,      setPayMethod]      = useState<PayMethod>('card');
   const [cashTendered,   setCashTendered]   = useState('');
@@ -202,6 +205,11 @@ export default function TerminalPage() {
   /* ── sessionStorage cart persistence ─────────────────────────── */
   useEffect(() => {
     try { const saved = sessionStorage.getItem(CART_SESSION_KEY); if (saved) setCart(JSON.parse(saved)); } catch { /* ignore */ }
+    // Pre-fill served_by from logged-in POS user
+    try {
+      const posUser = localStorage.getItem('aria_pos_user');
+      if (posUser) { const u = JSON.parse(posUser); if (u.name) setServedBy(u.name); }
+    } catch { /* ignore */ }
   }, []);
   useEffect(() => {
     try { sessionStorage.setItem(CART_SESSION_KEY, JSON.stringify(cart)); } catch { /* ignore */ }
@@ -627,6 +635,7 @@ export default function TerminalPage() {
             modifiers: i.modifierDetails?.map(m => ({ id: m.id, name: m.name, price_cents: Math.round(m.price_adjustment * 100) })) ?? [],
           })),
           customer_id: customer?.id ?? null, payment_method: payMethod,
+          served_by: servedBy || null,
           subtotal: +subtotal.toFixed(2), tax_amount: +taxAmount.toFixed(2),
           discount_amount: 0, total_amount: +roundedTotal.toFixed(2),
           cash_tendered: payMethod === 'cash' ? tendered : null,
@@ -652,6 +661,26 @@ export default function TerminalPage() {
         items: cartSnapshot.reduce((s, i) => s + i.qty, 0),
         time: new Date(),
       }, ...prev].slice(0, 5));
+      // Calculate commission (non-blocking)
+      if (servedBy && businessId) {
+        fetch('/api/pos/commission-rules?business_id=' + businessId).then(r => r.json()).then(async data => {
+          const rules = data.rules ?? [];
+          const activeRule = rules[0]; // Use first active rule
+          if (!activeRule) return;
+          const saleCents = Math.round(roundedTotal * 100);
+          if (saleCents < (activeRule.min_sale_cents ?? 0)) return;
+          const commissionCents = Math.round(saleCents * (activeRule.rate / 100));
+          await fetch('/api/pos/commissions', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              business_id: businessId, sale_id: d.sale?.id, pos_user_name: servedBy,
+              rule_id: activeRule.id, sale_total_cents: saleCents,
+              commission_rate: activeRule.rate, commission_cents: commissionCents,
+            }),
+          }).catch(() => null);
+        }).catch(() => null);
+      }
+
       // Signal customer display: complete state
       try {
         const changeCents = payMethod === 'cash' ? Math.round(change * 100) : 0;
@@ -1113,6 +1142,14 @@ export default function TerminalPage() {
                     )}
                   </div>
                 )}
+              </div>
+
+              {/* Sale attribution (commission) */}
+              <div className="flex-shrink-0 px-4 py-1.5 bg-gray-50 border-b border-gray-100 flex items-center gap-2">
+                <span className="text-[10px] text-gray-400 font-medium uppercase tracking-wider flex-shrink-0">Sale by</span>
+                <input value={servedBy} onChange={e => setServedBy(e.target.value)}
+                  placeholder="Cashier name…"
+                  className="flex-1 text-xs text-gray-700 bg-transparent outline-none placeholder-gray-300" />
               </div>
 
               {/* Cart items */}
