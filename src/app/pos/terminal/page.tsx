@@ -838,7 +838,7 @@ export default function TerminalPage() {
               ≡
             </button>
             <div className="relative flex-1">
-              <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5" style={{ color: 'rgba(139,133,168,0.4)' } as React.CSSProperties} />
+              <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5" />
               <input
                 ref={searchRef}
                 value={search}
@@ -1164,7 +1164,7 @@ export default function TerminalPage() {
               <div className="flex-1 overflow-y-auto" style={{ background: 'rgba(8,6,16,0.3)' }}>
                 {cart.length === 0 ? (
                   <div className="flex flex-col items-center justify-center h-full text-center px-6 py-12">
-                    <BagOutlineIcon className="w-12 h-12 mb-3" style={{ color: 'rgba(74,69,101,0.4)' } as React.CSSProperties} />
+                    <BagOutlineIcon className="w-12 h-12 mb-3" />
                     <p className="text-sm" style={{ color: '#4A4565' }}>Add items to begin</p>
                   </div>
                 ) : (
@@ -2123,8 +2123,8 @@ function Spinner() {
   return <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>;
 }
 function SearchIcon({ className }: { className?: string }) {
-  return <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>;
+  return <svg className={className} fill="none" viewBox="0 0 24 24" stroke="rgba(139,133,168,0.4)" strokeWidth={2}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>;
 }
 function BagOutlineIcon({ className }: { className?: string }) {
-  return <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"/></svg>;
+  return <svg className={className} fill="none" viewBox="0 0 24 24" stroke="rgba(74,69,101,0.4)" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"/></svg>;
 }

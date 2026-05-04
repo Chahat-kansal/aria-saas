@@ -159,6 +159,14 @@ html, body { height: 100%; }
 .pos-float-in   { animation: float-in  0.3s cubic-bezier(0.16,1,0.3,1) both; }
 .pos-idle-float { animation: idle-float 3s ease-in-out infinite; }
 
+@keyframes shake {
+  0%,100% { transform: translateX(0)   }
+  20%     { transform: translateX(-8px) }
+  40%     { transform: translateX(8px)  }
+  60%     { transform: translateX(-5px) }
+  80%     { transform: translateX(5px)  }
+}
+
 .font-ui      { font-family: 'Manrope', system-ui, sans-serif; }
 .font-display { font-family: 'Instrument Serif', Georgia, serif; }
 .font-pos     { font-family: 'JetBrains Mono', monospace; }
