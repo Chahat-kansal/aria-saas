@@ -1414,40 +1414,40 @@ export default function TerminalPage() {
           )}
         </div>
 
-        {/* ── RIGHT: Aria + Recent sales ────────────────────────── */}
-        <div className={`flex flex-col bg-white overflow-hidden
-          ${mobileTab !== 'aria' ? 'hidden md:flex' : 'flex'}`}>
+        {/* ── RIGHT: Aria panel ─────────────────────────────────── */}
+        <div className={`flex flex-col overflow-hidden ${mobileTab !== 'aria' ? 'hidden md:flex' : 'flex'}`}
+          style={{ background: 'rgba(17,15,26,0.95)', backdropFilter: 'blur(24px)', borderLeft: '1px solid rgba(139,92,246,0.1)' }}>
 
           {/* Aria header */}
-          <div className="flex-shrink-0 px-4 py-3 border-b border-gray-100 flex items-center justify-between"
-            style={{ background: 'linear-gradient(135deg, #f0fdf4 0%, #fafafa 100%)' }}>
-            <div className="flex items-center gap-2">
+          <div className="flex-shrink-0 px-4 py-3.5 flex items-center justify-between relative overflow-hidden"
+            style={{ borderBottom: '1px solid rgba(139,92,246,0.1)' }}>
+            {/* Background orbs */}
+            <div style={{ position: 'absolute', top: -30, right: -20, width: 80, height: 80, borderRadius: '50%', background: 'radial-gradient(circle,rgba(139,92,246,0.3),transparent 70%)', filter: 'blur(20px)', animation: 'orb-breathe 4s ease-in-out infinite', pointerEvents: 'none' }} />
+            <div style={{ position: 'absolute', bottom: -20, left: 20, width: 60, height: 60, borderRadius: '50%', background: 'radial-gradient(circle,rgba(99,102,241,0.2),transparent 70%)', filter: 'blur(16px)', animation: 'orb-breathe 5s ease-in-out infinite 1s', pointerEvents: 'none' }} />
+            <div className="flex items-center gap-2 relative z-10">
+              <span style={{ fontSize: 13, fontFamily: "'Instrument Serif',serif", fontStyle: 'italic', color: '#8B5CF6' }}>Aria</span>
               <div className="relative">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 block" />
-                <span className="absolute inset-0 w-2 h-2 rounded-full bg-emerald-400 animate-ping opacity-75" />
-              </div>
-              <div>
-                <span className="text-sm font-bold text-gray-900">Aria</span>
-                <span className="text-[10px] text-gray-400 ml-1.5">AI co-pilot</span>
+                <span className="w-1.5 h-1.5 rounded-full block" style={{ background: '#22C55E' }} />
+                <span className="absolute inset-0 w-1.5 h-1.5 rounded-full animate-ping" style={{ background: '#22C55E', opacity: 0.75 }} />
               </div>
             </div>
-            <kbd className="text-[10px] bg-white border border-gray-200 text-gray-500 rounded px-1.5 py-0.5 shadow-sm">⌘K</kbd>
+            <kbd className="text-[10px] rounded px-1.5 py-0.5 relative z-10" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', fontFamily: "'JetBrains Mono',monospace", color: '#4A4565' }}>⌘K</kbd>
           </div>
 
           {/* Proactive alerts */}
           <div className="flex-shrink-0 px-3 py-2 space-y-1.5">
             {ageRestrictedInCart && (
-              <div className="bg-red-50 rounded-lg px-2.5 py-1.5 text-xs text-red-700 flex items-center gap-1.5">
+              <div className="rounded-[10px] px-2.5 py-1.5 text-xs flex items-center gap-1.5 font-semibold" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.15)', color: '#EF4444' }}>
                 🔞 ID check required
               </div>
             )}
             {loyaltyCustomer && (
-              <div className="bg-blue-50 rounded-lg px-2.5 py-1.5 text-xs text-blue-700 flex items-center gap-1.5">
+              <div className="rounded-[10px] px-2.5 py-1.5 text-xs flex items-center gap-1.5 font-semibold" style={{ background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.15)', color: '#8B5CF6' }}>
                 ⭐ {customer!.name} has {customer!.loyalty_points} loyalty points
               </div>
             )}
             {lowStockItems.slice(0, 2).map(p => (
-              <div key={p.id} className="bg-amber-50 rounded-lg px-2.5 py-1.5 text-xs text-amber-700 flex items-center gap-1.5">
+              <div key={p.id} className="rounded-[10px] px-2.5 py-1.5 text-xs flex items-center gap-1.5 font-semibold" style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.15)', color: '#F59E0B' }}>
                 ⚠️ {p.name} at {p.stock_quantity} units
               </div>
             ))}
@@ -1456,20 +1456,22 @@ export default function TerminalPage() {
           {/* Product suggestions */}
           {(suggestions.length > 0 || suggestionsLoading) && (
             <div className="flex-shrink-0 px-3 pb-2">
-              <p className="text-[10px] text-gray-400 uppercase tracking-wider mb-1.5">Often bought together</p>
+              <p className="text-[10px] uppercase tracking-wider mb-1.5" style={{ color: '#4A4565' }}>Often bought together</p>
               {suggestionsLoading ? (
-                <div className="h-6 bg-gray-100 rounded animate-pulse w-2/3" />
+                <div className="h-6 rounded animate-pulse w-2/3" style={{ background: 'rgba(255,255,255,0.04)' }} />
               ) : (
-                <div className="flex flex-col gap-1">
+                <div className="flex flex-wrap gap-1.5">
                   {suggestions.map(s => {
                     const prod = products.find(p => p.id === s.id);
                     return (
                       <button key={s.id}
                         onClick={() => prod && checkAndAddToCart(prod)}
                         disabled={!prod}
-                        className="text-left px-2.5 py-1.5 rounded-lg border border-gray-100 bg-gray-50 hover:border-gray-300 hover:bg-white transition-colors text-xs disabled:opacity-40">
-                        <span className="font-medium text-gray-900">{s.name}</span>
-                        <span className="text-gray-400 ml-1.5 font-mono">A${s.price?.toFixed(2)}</span>
+                        className="text-xs rounded-lg px-2.5 py-1.5 disabled:opacity-40 transition-all"
+                        style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid #2A2540', color: '#8B85A8' }}
+                        onMouseEnter={e => { const el = e.currentTarget as HTMLButtonElement; el.style.border = '1px solid rgba(139,92,246,0.3)'; el.style.background = 'rgba(139,92,246,0.06)'; }}
+                        onMouseLeave={e => { const el = e.currentTarget as HTMLButtonElement; el.style.border = '1px solid #2A2540'; el.style.background = 'rgba(255,255,255,0.04)'; }}>
+                        {s.name} <span style={{ color: '#8B5CF6', fontFamily: "'JetBrains Mono',monospace" }}>+A${s.price?.toFixed(2)}</span>
                       </button>
                     );
                   })}
@@ -1481,22 +1483,27 @@ export default function TerminalPage() {
           {/* Aria chat */}
           <div className="flex-1 overflow-y-auto px-3 pb-2 space-y-2 min-h-0">
             {chatMessages.length === 0 && (
-              <p className="text-xs text-gray-400 text-center pt-4 px-2">
+              <p className="text-xs text-center pt-4 px-2" style={{ color: '#4A4565' }}>
                 Ask about products, GST, stock levels, or today's sales.
               </p>
             )}
             {chatMessages.slice(-4).map((m, i) => (
               <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div className={`max-w-[90%] rounded-xl px-3 py-2 text-xs leading-snug ${
-                  m.role === 'user' ? 'bg-gray-900 text-white' : 'bg-emerald-50 text-emerald-900'
-                }`}>
+                <div className="max-w-[90%] rounded-[10px] px-3 py-2 text-xs leading-snug"
+                  style={m.role === 'user'
+                    ? { background: 'rgba(139,92,246,0.12)', border: '1px solid rgba(139,92,246,0.2)', color: '#EDE8FF' }
+                    : { background: 'rgba(255,255,255,0.03)', border: '1px solid #1C1928', color: '#8B85A8' }}>
                   {m.text}
                 </div>
               </div>
             ))}
             {chatLoading && (
               <div className="flex justify-start">
-                <div className="bg-emerald-50 rounded-xl px-3 py-2 text-xs text-emerald-700 animate-pulse">Thinking…</div>
+                <div className="rounded-[10px] px-3 py-2 flex items-center gap-1" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid #1C1928' }}>
+                  {[0,1,2].map(i => (
+                    <span key={i} className="w-1 h-1 rounded-full" style={{ background: '#8B5CF6', display: 'block', animation: `dot-pulse 1.4s ease-in-out infinite ${i * 0.16}s` }} />
+                  ))}
+                </div>
               </div>
             )}
             <div ref={chatEndRef} />
@@ -1504,34 +1511,38 @@ export default function TerminalPage() {
 
           {/* Aria input */}
           <div className="flex-shrink-0 px-3 pb-2">
-            <div className="flex gap-1.5 items-center bg-white border border-gray-200 rounded-full shadow-sm px-3 py-1.5">
+            <div className="flex gap-1.5 items-center rounded-[10px] px-3 py-2.5" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid #2A2540' }}>
               <input value={chatInput} onChange={e => setChatInput(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendAriaChat(); } }}
                 placeholder="Ask Aria…"
-                className="flex-1 text-xs bg-transparent outline-none placeholder-gray-400" />
+                className="flex-1 text-xs bg-transparent outline-none"
+                style={{ color: '#EDE8FF' }} />
               <button onClick={sendAriaChat} disabled={!chatInput.trim() || chatLoading}
-                className="w-6 h-6 rounded-full bg-gray-900 text-white text-xs disabled:opacity-40 flex items-center justify-center flex-shrink-0">↑</button>
+                className="w-7 h-7 rounded-lg text-xs disabled:opacity-40 flex items-center justify-center flex-shrink-0 text-white"
+                style={{ background: '#8B5CF6' }}>↑</button>
             </div>
           </div>
 
           {/* Log missed sale */}
-          <div className="flex-shrink-0 px-3 pb-3">
+          <div className="flex-shrink-0 px-3 pb-2">
             <button onClick={() => setShowMissedModal(true)}
-              className="w-full border border-dashed border-gray-200 rounded-lg py-2 text-xs text-gray-400 hover:text-gray-600 hover:border-gray-300 transition-colors">
+              className="w-full rounded-[10px] py-2 text-xs transition-all"
+              style={{ border: '1px dashed #2A2540', color: '#4A4565' }}>
               Log missed sale
             </button>
           </div>
 
-          {/* Parked sales in Aria panel */}
+          {/* Parked sales */}
           {parkedSales.length > 0 && (
-            <div className="flex-shrink-0 border-t border-gray-100 px-3 py-2">
-              <p className="text-[10px] text-gray-400 uppercase tracking-wider mb-1.5">Held sales ({parkedSales.length})</p>
+            <div className="flex-shrink-0 px-3 py-2" style={{ borderTop: '1px solid #1C1928' }}>
+              <p className="text-[10px] uppercase tracking-wider mb-1.5" style={{ color: '#4A4565' }}>Held sales ({parkedSales.length})</p>
               <div className="space-y-1">
                 {parkedSales.slice(0, 3).map(p => (
                   <button key={p.id} onClick={() => restoreParked(p)}
-                    className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-gray-50 hover:bg-gray-100 text-left transition-colors">
-                    <span className="text-xs text-gray-700 truncate">{p.label || 'Sale'} · {Array.isArray(p.items) ? p.items.length : 0} items</span>
-                    <span className="text-xs font-mono font-medium text-gray-900 flex-shrink-0 ml-2">A${(p.total || 0).toFixed(2)}</span>
+                    className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-left transition-colors"
+                    style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid #1C1928' }}>
+                    <span className="text-xs truncate" style={{ color: '#8B85A8' }}>{p.label || 'Sale'} · {Array.isArray(p.items) ? p.items.length : 0} items</span>
+                    <span className="text-xs font-medium flex-shrink-0 ml-2" style={{ fontFamily: "'JetBrains Mono',monospace", color: '#EDE8FF' }}>A${(p.total || 0).toFixed(2)}</span>
                   </button>
                 ))}
               </div>
@@ -1539,30 +1550,30 @@ export default function TerminalPage() {
           )}
 
           {/* Recent sales */}
-          <div className="flex-shrink-0 border-t border-gray-100">
+          <div className="flex-shrink-0" style={{ borderTop: '1px solid #1C1928' }}>
             <div className="px-4 py-2">
-              <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wider">Recent sales</p>
+              <p className="text-[10px] font-medium uppercase tracking-wider" style={{ color: '#4A4565' }}>Recent sales</p>
             </div>
           </div>
-          <div className="flex-1 overflow-y-auto px-3 min-h-0" style={{ maxHeight: '160px' }}>
+          <div className="flex-1 overflow-y-auto px-3 min-h-0" style={{ maxHeight: '140px' }}>
             {recentSales.length === 0 ? (
-              <p className="text-xs text-gray-400 text-center py-4">No sales yet this session</p>
+              <p className="text-xs text-center py-4" style={{ color: '#4A4565' }}>No sales yet this session</p>
             ) : (
               <div>
                 {recentSales.map(s => (
-                  <div key={s.id} className="py-2 border-b border-gray-50 last:border-0 group flex items-center gap-2">
+                  <div key={s.id} className="py-2 group flex items-center gap-2" style={{ borderBottom: '1px solid #1C1928' }}>
                     <div className="flex-1 min-w-0">
-                      <div className="flex justify-between text-[10px] text-gray-400 mb-0.5">
+                      <div className="flex justify-between text-[10px] mb-0.5" style={{ color: '#4A4565' }}>
                         <span>#{s.id.slice(-6).toUpperCase()}</span>
                         <span>{s.time.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-xs text-gray-600">{s.items} item{s.items !== 1 ? 's' : ''}</span>
-                        <span className="text-xs font-semibold font-mono text-gray-900">A${s.total.toFixed(2)}</span>
+                        <span className="text-xs" style={{ color: '#8B85A8' }}>{s.items} item{s.items !== 1 ? 's' : ''}</span>
+                        <span className="text-xs font-semibold" style={{ fontFamily: "'JetBrains Mono',monospace", color: '#EDE8FF' }}>A${s.total.toFixed(2)}</span>
                       </div>
                     </div>
                     <button onClick={() => setReprintSale(s)}
-                      className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-300 hover:text-gray-600 flex-shrink-0 text-base"
+                      className="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 text-base"
                       title="Reprint receipt">
                       🖨️
                     </button>
@@ -1575,29 +1586,28 @@ export default function TerminalPage() {
       </div>
 
       {/* Keyboard shortcuts bar — desktop only */}
-      <div className="hidden md:flex flex-shrink-0 bg-gray-50 border-t border-gray-200 h-8 items-center px-4 gap-4 overflow-hidden">
+      <div className="hidden md:flex flex-shrink-0 h-8 items-center px-4 gap-4 overflow-hidden" style={{ background: 'rgba(8,6,16,0.8)', borderTop: '1px solid #1C1928' }}>
         {[
           ['F1','Search'], ['F2','Custom item'], ['F3','Hold'], ['F8','Cash'],
           ['F9','Card'], ['F10','Complete'], ['Esc','Clear'],
         ].map(([key, label]) => (
-          <span key={key} className="flex items-center gap-1 text-[10px] text-gray-400 whitespace-nowrap">
-            <kbd className="bg-white border border-gray-200 rounded px-1 py-0.5 text-gray-500 font-mono text-[10px]">{key}</kbd>
+          <span key={key} className="flex items-center gap-1 text-[10px] whitespace-nowrap" style={{ color: '#4A4565' }}>
+            <kbd className="rounded px-1 py-0.5 text-[10px]" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid #2A2540', fontFamily: "'JetBrains Mono',monospace", color: '#8B85A8' }}>{key}</kbd>
             {label}
           </span>
         ))}
       </div>
 
       {/* Mobile bottom tab bar */}
-      <div className="md:hidden flex-shrink-0 bg-white border-t border-gray-200 h-16 grid grid-cols-3">
+      <div className="md:hidden flex-shrink-0 h-16 grid grid-cols-3" style={{ background: '#0A0910', borderTop: '1px solid #1C1928' }}>
         {([
           { tab: 'products' as const, label: 'Products', icon: '🛍️' },
           { tab: 'cart' as const, label: `Cart${cart.length > 0 ? ` (${cart.reduce((s,i)=>s+i.qty,0)})` : ''}`, icon: '🛒' },
           { tab: 'aria' as const, label: 'Aria', icon: '✦' },
         ]).map(t => (
           <button key={t.tab} onClick={() => setMobileTab(t.tab)}
-            className={`flex flex-col items-center justify-center gap-0.5 text-xs font-medium transition-colors ${
-              mobileTab === t.tab ? 'text-gray-900' : 'text-gray-400'
-            }`}>
+            className="flex flex-col items-center justify-center gap-0.5 text-xs font-medium transition-colors"
+            style={{ color: mobileTab === t.tab ? '#8B5CF6' : '#4A4565' }}>
             <span className="text-lg">{t.icon}</span>
             <span>{t.label}</span>
           </button>
@@ -1608,25 +1618,25 @@ export default function TerminalPage() {
 
       {/* Variant / Modifier modal */}
       {variantModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
-            <div className="px-6 py-5 border-b border-gray-100">
-              <h2 className="text-base font-bold text-gray-900">{variantModal.product.name}</h2>
-              <p className="text-xs text-gray-400 mt-0.5">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(8,6,16,0.88)' }}>
+          <div className="rounded-2xl w-full max-w-sm overflow-hidden" style={{ background: '#1A1728', border: '1px solid #2A2540', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
+            <div className="px-6 py-5" style={{ borderBottom: '1px solid #1C1928' }}>
+              <h2 className="text-base font-bold" style={{ color: '#EDE8FF' }}>{variantModal.product.name}</h2>
+              <p className="text-xs mt-0.5" style={{ color: '#4A4565' }}>
                 Base A${variantModal.product.price.toFixed(2)} — select options below
               </p>
             </div>
-            <div className="px-6 py-4 space-y-5 max-h-[60vh] overflow-y-auto">
+            <div className="px-6 py-4 space-y-5 max-h-[60vh] overflow-y-auto" style={{ borderBottom: '1px solid #1C1928' }}>
               {variantModal.variantGroups.map(g => (
                 <div key={g.id}>
-                  <p className="text-xs font-semibold text-gray-600 mb-2">{g.name}</p>
+                  <p className="text-xs font-semibold mb-2" style={{ color: '#8B85A8' }}>{g.name}</p>
                   <div className="flex flex-wrap gap-2">
                     {(g.values as string[]).map(v => {
                       const priceNote = g.affects_price && g.price_map[v] != null ? ` · A$${g.price_map[v].toFixed(2)}` : '';
                       return (
                         <button key={v} onClick={() => setSelectedVariants(p => ({ ...p, [g.id]: v }))}
                           className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
-                            selectedVariants[g.id] === v ? 'border-gray-900 bg-gray-900 text-white' : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'
+                            selectedVariants[g.id] === v ? '' : ''} style={selectedVariants[g.id] === v ? { background: '#8B5CF6', border: '1px solid rgba(139,92,246,0.6)', color: '#fff' } : { background: 'rgba(255,255,255,0.03)', border: '1px solid #2A2540', color: '#8B85A8' }
                           }`}>
                           {v}{priceNote}
                         </button>
@@ -1637,16 +1647,16 @@ export default function TerminalPage() {
               ))}
               {variantModal.modifiers.length > 0 && (
                 <div>
-                  <p className="text-xs font-semibold text-gray-600 mb-2">Extras</p>
+                  <p className="text-xs font-semibold mb-2" style={{ color: '#8B85A8' }}>Extras</p>
                   <div className="space-y-2">
                     {variantModal.modifiers.map(m => (
                       <label key={m.id} className="flex items-center gap-3 cursor-pointer">
                         <input type="checkbox" checked={!!selectedMods[m.id]}
                           onChange={e => setSelectedMods(p => ({ ...p, [m.id]: e.target.checked }))}
                           className="w-4 h-4 accent-gray-900" />
-                        <span className="text-xs text-gray-900 flex-1">{m.name}</span>
+                        <span className="text-xs flex-1" style={{ color: '#EDE8FF' }}>{m.name}</span>
                         {m.price_adjustment !== 0 && (
-                          <span className="text-xs text-gray-400 font-mono">
+                          <span className="text-xs" style={{ color: '#4A4565', fontFamily: "'JetBrains Mono',monospace" }}>
                             {m.price_adjustment > 0 ? '+' : ''}A${m.price_adjustment.toFixed(2)}
                           </span>
                         )}
@@ -1656,21 +1666,21 @@ export default function TerminalPage() {
                 </div>
               )}
               <div>
-                <p className="text-xs font-semibold text-gray-600 mb-2">Quantity</p>
+                <p className="text-xs font-semibold mb-2" style={{ color: '#8B85A8' }}>Quantity</p>
                 <div className="flex items-center gap-3">
                   <button onClick={() => setVariantQty(q => Math.max(1, q - 1))}
-                    className="w-8 h-8 rounded-full border border-gray-200 flex items-center justify-center text-gray-600 hover:bg-gray-50">−</button>
-                  <span className="text-base font-bold text-gray-900 w-6 text-center">{variantQty}</span>
+                    className="w-8 h-8 rounded-full flex items-center justify-center" style={{ border: '1px solid #2A2540', color: '#8B85A8' }}>−</button>
+                  <span className="text-base font-bold w-6 text-center" style={{ color: '#EDE8FF' }}>{variantQty}</span>
                   <button onClick={() => setVariantQty(q => q + 1)}
-                    className="w-8 h-8 rounded-full border border-gray-200 flex items-center justify-center text-gray-600 hover:bg-gray-50">+</button>
+                    className="w-8 h-8 rounded-full flex items-center justify-center" style={{ border: '1px solid #2A2540', color: '#8B85A8' }}>+</button>
                 </div>
               </div>
             </div>
-            <div className="px-6 pb-6 flex gap-2">
+            <div className="px-6 pb-5 flex gap-2">
               <button onClick={() => setVariantModal(null)}
-                className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-500 hover:bg-gray-50">Cancel</button>
+                className="flex-1 py-2.5 rounded-xl text-sm" style={{ border: '1px solid #2A2540', color: '#8B85A8', background: 'rgba(255,255,255,0.02)' }}>Cancel</button>
               <button onClick={confirmVariantSelection}
-                className="flex-1 py-2.5 rounded-xl bg-gray-900 text-white text-sm font-semibold hover:bg-gray-800">
+                className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold" style={{ background: '#8B5CF6' }}>
                 Add to cart
               </button>
             </div>
@@ -1680,26 +1690,26 @@ export default function TerminalPage() {
 
       {/* Open Register modal */}
       {showRegisterModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
-            <div className="px-6 py-5 border-b border-gray-100">
-              <h2 className="text-base font-bold text-gray-900">Open Register</h2>
-              <p className="text-xs text-gray-400 mt-0.5">Enter opening float to start trading.</p>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(8,6,16,0.88)' }}>
+          <div className="rounded-2xl w-full max-w-sm overflow-hidden" style={{ background: '#1A1728', border: '1px solid #2A2540', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
+            <div className="px-6 py-5" style={{ borderBottom: '1px solid #1C1928' }}>
+              <h2 className="text-base font-bold" style={{ color: '#EDE8FF' }}>Open Register</h2>
+              <p className="text-xs mt-0.5" style={{ color: '#4A4565' }}>Enter opening float to start trading.</p>
             </div>
             <div className="px-6 py-5 space-y-4">
               <div>
                 <label className="text-xs font-medium text-gray-500 block mb-1.5">Opening float (A$)</label>
                 <input type="number" min="0" step="0.01" value={openingFloat}
                   onChange={e => setOpeningFloat(e.target.value)}
-                  className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-lg font-bold font-mono text-gray-900 outline-none focus:ring-2 focus:ring-[#059669]" autoFocus />
+                  className="w-full rounded-xl px-4 py-2.5 text-lg font-bold outline-none" style={{ border: '1px solid #2A2540', background: 'rgba(255,255,255,0.03)', fontFamily: "'JetBrains Mono',monospace", color: '#EDE8FF' }} autoFocus />
               </div>
-              {registerError && <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">{registerError}</p>}
+              {registerError && <p className="text-xs rounded-lg px-3 py-2" style={{ color: '#EF4444', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.15)' }}>{registerError}</p>}
             </div>
-            <div className="px-6 pb-6 flex gap-2">
+            <div className="px-6 pb-5 flex gap-2">
               <button onClick={() => { setShowRegisterModal(false); setRegisterError(null); }}
-                className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-500 hover:bg-gray-50">Cancel</button>
+                className="flex-1 py-2.5 rounded-xl text-sm" style={{ border: '1px solid #2A2540', color: '#8B85A8', background: 'rgba(255,255,255,0.02)' }}>Cancel</button>
               <button onClick={openRegister} disabled={openingRegister}
-                className="flex-1 py-2.5 rounded-xl bg-[#059669] text-white text-sm font-semibold disabled:opacity-50 flex items-center justify-center gap-2 hover:bg-emerald-700">
+                className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-50 flex items-center justify-center gap-2" style={{ background: '#8B5CF6' }}>
                 {openingRegister ? <><Spinner /> Opening…</> : 'Open Register'}
               </button>
             </div>
@@ -1709,11 +1719,11 @@ export default function TerminalPage() {
 
       {/* Close Register modal */}
       {showCloseModal && registerSession && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
-            <div className="px-6 py-5 border-b border-gray-100">
-              <h2 className="text-base font-bold text-gray-900">Close Register</h2>
-              <p className="text-xs text-gray-400 mt-0.5">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(8,6,16,0.88)' }}>
+          <div className="rounded-2xl w-full max-w-sm overflow-hidden" style={{ background: '#1A1728', border: '1px solid #2A2540', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
+            <div className="px-6 py-5" style={{ borderBottom: '1px solid #1C1928' }}>
+              <h2 className="text-base font-bold" style={{ color: '#EDE8FF' }}>Close Register</h2>
+              <p className="text-xs mt-0.5" style={{ color: '#4A4565' }}>
                 Opened {new Date(registerSession.opened_at).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })} · Float A${(registerSession.opening_float || 0).toFixed(2)}
               </p>
             </div>
@@ -1724,13 +1734,13 @@ export default function TerminalPage() {
                   onChange={e => setClosingFloat(e.target.value)} placeholder="0.00"
                   className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-lg font-bold font-mono text-gray-900 outline-none focus:ring-2 focus:ring-red-500" autoFocus />
               </div>
-              {registerError && <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">{registerError}</p>}
+              {registerError && <p className="text-xs rounded-lg px-3 py-2" style={{ color: '#EF4444', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.15)' }}>{registerError}</p>}
             </div>
-            <div className="px-6 pb-6 flex gap-2">
+            <div className="px-6 pb-5 flex gap-2">
               <button onClick={() => { setShowCloseModal(false); setRegisterError(null); }}
-                className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-500 hover:bg-gray-50">Cancel</button>
+                className="flex-1 py-2.5 rounded-xl text-sm" style={{ border: '1px solid #2A2540', color: '#8B85A8', background: 'rgba(255,255,255,0.02)' }}>Cancel</button>
               <button onClick={closeRegister} disabled={closingRegister}
-                className="flex-1 py-2.5 rounded-xl bg-red-600 text-white text-sm font-semibold disabled:opacity-50 flex items-center justify-center gap-2 hover:bg-red-700">
+                className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-50 flex items-center justify-center gap-2" style={{ background: '#EF4444' }}>
                 {closingRegister ? <><Spinner /> Closing…</> : 'Close Register'}
               </button>
             </div>
@@ -1740,27 +1750,27 @@ export default function TerminalPage() {
 
       {/* Parked sales drawer */}
       {showParked && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-4 md:items-center">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
-            <div className="px-6 py-5 border-b border-gray-100 flex items-center justify-between">
-              <h2 className="text-base font-bold text-gray-900">Parked Sales</h2>
-              <button onClick={() => setShowParked(false)} className="text-gray-400 hover:text-gray-600 text-xl leading-none">×</button>
+        <div className="fixed inset-0 z-50 flex items-end justify-center p-4 md:items-center" style={{ background: 'rgba(8,6,16,0.88)' }}>
+          <div className="rounded-2xl w-full max-w-md overflow-hidden" style={{ background: '#1A1728', border: '1px solid #2A2540', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
+            <div className="px-6 py-5 flex items-center justify-between" style={{ borderBottom: '1px solid #1C1928' }}>
+              <h2 className="text-base font-bold" style={{ color: '#EDE8FF' }}>Parked Sales</h2>
+              <button onClick={() => setShowParked(false)} className="text-xl leading-none" style={{ color: '#4A4565' }}>×</button>
             </div>
             <div className="p-4 space-y-2 max-h-[60vh] overflow-y-auto">
               {parkedSales.length === 0 ? (
                 <p className="text-sm text-gray-400 text-center py-4">No parked sales. Press F8 to park.</p>
               ) : parkedSales.map(p => (
                 <button key={p.id} onClick={() => restoreParked(p)}
-                  className="w-full flex items-center gap-3 p-4 bg-white border border-gray-100 rounded-xl hover:border-gray-300 transition-all text-left">
+                  className="w-full flex items-center gap-3 p-4 rounded-xl transition-all text-left" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid #2A2540' }}>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900">{p.label || 'Parked Sale'}</p>
-                    <p className="text-[11px] text-gray-400 mt-0.5">
+                    <p className="text-sm font-medium" style={{ color: '#EDE8FF' }}>{p.label || 'Parked Sale'}</p>
+                    <p className="text-[11px] mt-0.5" style={{ color: '#4A4565' }}>
                       {Array.isArray(p.items) ? p.items.length : 0} items · {new Date(p.created_at).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}
                     </p>
                   </div>
                   <div className="text-right flex-shrink-0">
-                    <p className="text-sm font-bold font-mono text-gray-900">A${(p.total || 0).toFixed(2)}</p>
-                    <p className="text-[10px] text-[#059669] mt-0.5">Restore →</p>
+                    <p className="text-sm font-bold" style={{ fontFamily: "'JetBrains Mono',monospace", color: '#EDE8FF' }}>A${(p.total || 0).toFixed(2)}</p>
+                    <p className="text-[10px] mt-0.5" style={{ color: '#8B5CF6' }}>Restore →</p>
                   </div>
                 </button>
               ))}
@@ -1772,27 +1782,27 @@ export default function TerminalPage() {
       {/* Missed sale modal */}
       {showMissedModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
-            <div className="px-6 py-5 border-b border-gray-100">
-              <h2 className="text-base font-bold text-gray-900">Log Missed Sale</h2>
-              <p className="text-xs text-gray-400 mt-0.5">Record what a customer asked for that you didn't stock</p>
+          <div className="rounded-2xl w-full max-w-sm overflow-hidden" style={{ background: '#1A1728', border: '1px solid #2A2540', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
+            <div className="px-6 py-5" style={{ borderBottom: '1px solid #1C1928' }}>
+              <h2 className="text-base font-bold" style={{ color: '#EDE8FF' }}>Log Missed Sale</h2>
+              <p className="text-xs mt-0.5" style={{ color: '#4A4565' }}>Record what a customer asked for that you didn't stock</p>
             </div>
             <div className="px-6 py-5 space-y-3">
               <input value={missedName} onChange={e => setMissedName(e.target.value)}
-                className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-gray-900"
+                className="w-full rounded-xl px-4 py-2.5 text-sm outline-none" style={{ border: '1px solid #2A2540', background: 'rgba(255,255,255,0.03)', color: '#EDE8FF' }}
                 placeholder="Product name e.g. Oat Milk 1L" autoFocus />
               <div>
-                <label className="text-xs text-gray-500 mb-1 block">Qty wanted</label>
+                <label className="text-xs mb-1 block" style={{ color: '#4A4565' }}>Qty wanted</label>
                 <input type="number" min="1" value={missedQty} onChange={e => setMissedQty(e.target.value)}
-                  className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-gray-900" />
+                  className="w-full rounded-xl px-4 py-2.5 text-sm outline-none" style={{ border: '1px solid #2A2540', background: 'rgba(255,255,255,0.03)', color: '#EDE8FF' }} />
               </div>
               <input value={missedNote} onChange={e => setMissedNote(e.target.value)}
-                className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-gray-900"
+                className="w-full rounded-xl px-4 py-2.5 text-sm outline-none" style={{ border: '1px solid #2A2540', background: 'rgba(255,255,255,0.03)', color: '#EDE8FF' }}
                 placeholder="Customer note (optional)" />
             </div>
-            <div className="px-6 pb-6 flex gap-2">
+            <div className="px-6 pb-5 flex gap-2">
               <button onClick={() => { setShowMissedModal(false); setMissedName(''); setMissedQty('1'); setMissedNote(''); }}
-                className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-500 hover:bg-gray-50">Cancel</button>
+                className="flex-1 py-2.5 rounded-xl text-sm" style={{ border: '1px solid #2A2540', color: '#8B85A8', background: 'rgba(255,255,255,0.02)' }}>Cancel</button>
               <button disabled={savingMissed || !missedName.trim()}
                 onClick={async () => {
                   if (!businessId || !missedName.trim()) return;
@@ -1807,7 +1817,7 @@ export default function TerminalPage() {
                     setMissedName(''); setMissedQty('1'); setMissedNote('');
                   } finally { setSavingMissed(false); }
                 }}
-                className="flex-1 py-2.5 rounded-xl bg-amber-400 text-gray-900 text-sm font-semibold disabled:opacity-40 hover:bg-amber-500">
+                className="flex-1 py-2.5 rounded-xl text-sm font-semibold disabled:opacity-40" style={{ background: '#F59E0B', color: '#0A0910' }}>
                 {savingMissed ? 'Saving…' : 'Log it'}
               </button>
             </div>
@@ -1817,54 +1827,54 @@ export default function TerminalPage() {
 
       {/* Custom item / Note modal */}
       {showCustomItem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
-            <div className="px-6 py-5 border-b border-gray-100">
-              <h2 className="text-base font-bold text-gray-900">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(8,6,16,0.88)' }}>
+          <div className="rounded-2xl w-full max-w-sm overflow-hidden" style={{ background: '#1A1728', border: '1px solid #2A2540', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
+            <div className="px-6 py-5" style={{ borderBottom: '1px solid #1C1928' }}>
+              <h2 className="text-base font-bold" style={{ color: '#EDE8FF' }}>
                 {customItemForm.isNote ? 'Add Note to Cart' : 'Custom Item'}
               </h2>
-              <p className="text-xs text-gray-400 mt-0.5">
+              <p className="text-xs mt-0.5" style={{ color: '#4A4565' }}>
                 {customItemForm.isNote ? 'Non-priced note — appears on receipt' : 'One-time item, not saved to products'}
               </p>
             </div>
             <div className="px-6 py-5 space-y-3">
               <div>
-                <label className="text-xs text-gray-500 mb-1 block">{customItemForm.isNote ? 'Note text' : 'Description'}</label>
+                <label className="text-xs mb-1 block" style={{ color: '#4A4565' }}>{customItemForm.isNote ? 'Note text' : 'Description'}</label>
                 <input value={customItemForm.desc} onChange={e => setCustomItemForm(f => ({ ...f, desc: e.target.value }))}
-                  className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-gray-900"
+                  className="w-full rounded-xl px-4 py-2.5 text-sm outline-none" style={{ border: '1px solid #2A2540', background: 'rgba(255,255,255,0.03)', color: '#EDE8FF' }}
                   placeholder={customItemForm.isNote ? 'e.g. Gift wrap requested' : 'e.g. Custom engraving'} autoFocus />
               </div>
               {!customItemForm.isNote && (
                 <>
                   <div className="flex gap-3">
                     <div className="flex-1">
-                      <label className="text-xs text-gray-500 mb-1 block">Price (A$)</label>
+                      <label className="text-xs mb-1 block" style={{ color: '#4A4565' }}>Price (A$)</label>
                       <input type="number" min="0" step="0.01" value={customItemForm.price}
                         onChange={e => setCustomItemForm(f => ({ ...f, price: e.target.value }))}
-                        className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-gray-900" />
+                        className="w-full rounded-xl px-4 py-2.5 text-sm outline-none" style={{ border: '1px solid #2A2540', background: 'rgba(255,255,255,0.03)', color: '#EDE8FF' }} />
                     </div>
                     <div className="w-20">
-                      <label className="text-xs text-gray-500 mb-1 block">Qty</label>
+                      <label className="text-xs mb-1 block" style={{ color: '#4A4565' }}>Qty</label>
                       <input type="number" min="1" value={customItemForm.qty}
                         onChange={e => setCustomItemForm(f => ({ ...f, qty: e.target.value }))}
-                        className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-gray-900" />
+                        className="w-full rounded-xl px-4 py-2.5 text-sm outline-none" style={{ border: '1px solid #2A2540', background: 'rgba(255,255,255,0.03)', color: '#EDE8FF' }} />
                     </div>
                   </div>
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input type="checkbox" checked={customItemForm.taxable}
                       onChange={e => setCustomItemForm(f => ({ ...f, taxable: e.target.checked }))}
                       className="w-4 h-4 accent-gray-900" />
-                    <span className="text-sm text-gray-700">GST inclusive (10%)</span>
+                    <span className="text-sm" style={{ color: '#8B85A8' }}>GST inclusive (10%)</span>
                   </label>
                 </>
               )}
             </div>
-            <div className="px-6 pb-6 flex gap-2">
+            <div className="px-6 pb-5 flex gap-2">
               <button onClick={() => { setShowCustomItem(false); setCustomItemForm({ desc: '', price: '', qty: '1', taxable: true, isNote: false }); }}
-                className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-500 hover:bg-gray-50">Cancel</button>
+                className="flex-1 py-2.5 rounded-xl text-sm" style={{ border: '1px solid #2A2540', color: '#8B85A8', background: 'rgba(255,255,255,0.02)' }}>Cancel</button>
               <button onClick={addCustomItemToCart}
                 disabled={!customItemForm.desc.trim() || (!customItemForm.isNote && !customItemForm.price)}
-                className="flex-1 py-2.5 rounded-xl bg-gray-900 text-white text-sm font-semibold disabled:opacity-40 hover:bg-gray-800">
+                className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-40" style={{ background: '#8B5CF6' }}>
                 Add to cart
               </button>
             </div>
@@ -1874,28 +1884,28 @@ export default function TerminalPage() {
 
       {/* Price check overlay */}
       {priceCheckProd && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xs overflow-hidden">
-            <div className="bg-blue-50 px-6 py-4 border-b border-blue-100 text-center">
-              <p className="text-xs text-blue-500 font-medium uppercase tracking-wider mb-1">Price Check</p>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(8,6,16,0.88)' }}>
+          <div className="rounded-2xl w-full max-w-xs overflow-hidden" style={{ background: '#1A1728', border: '1px solid #2A2540', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
+            <div className="px-6 py-4 text-center" style={{ background: 'rgba(139,92,246,0.08)', borderBottom: '1px solid rgba(139,92,246,0.15)' }}>
+              <p className="text-xs font-medium uppercase tracking-wider mb-1" style={{ color: '#8B5CF6' }}>Price Check</p>
               <h2 className="text-lg font-bold text-gray-900">{priceCheckProd.name}</h2>
               {priceCheckProd.pos_categories && <p className="text-sm text-gray-500">{priceCheckProd.pos_categories.name}</p>}
             </div>
             <div className="px-6 py-5 text-center">
-              <p className="text-4xl font-bold font-mono text-gray-900 mb-1">A${priceCheckProd.price.toFixed(2)}</p>
-              <p className="text-xs text-gray-400">Includes GST: A${(priceCheckProd.price - priceCheckProd.price / 1.1).toFixed(2)}</p>
+              <p className="text-4xl font-bold mb-1" style={{ fontFamily: "'JetBrains Mono',monospace", color: '#EDE8FF' }}>A${priceCheckProd.price.toFixed(2)}</p>
+              <p className="text-xs" style={{ color: '#4A4565' }}>Includes GST: A${(priceCheckProd.price - priceCheckProd.price / 1.1).toFixed(2)}</p>
               {priceCheckProd.track_stock && (
-                <p className={`mt-3 text-sm font-medium ${priceCheckProd.stock_quantity <= 0 ? 'text-red-500' : priceCheckProd.stock_quantity <= priceCheckProd.low_stock_threshold ? 'text-amber-500' : 'text-emerald-600'}`}>
+                <p className="mt-3 text-sm font-medium" style={{ color: priceCheckProd.stock_quantity <= 0 ? '#EF4444' : priceCheckProd.stock_quantity <= priceCheckProd.low_stock_threshold ? '#F59E0B' : '#22C55E' }}>
                   {priceCheckProd.stock_quantity <= 0 ? 'Out of stock' : `${priceCheckProd.stock_quantity} in stock`}
                 </p>
               )}
             </div>
             <div className="px-6 pb-5 flex gap-2">
               <button onClick={() => setPriceCheckProd(null)}
-                className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-500 hover:bg-gray-50">Close</button>
+                className="flex-1 py-2.5 rounded-xl text-sm" style={{ border: '1px solid #2A2540', color: '#8B85A8', background: 'rgba(255,255,255,0.02)' }}>Close</button>
               <button onClick={() => { checkAndAddToCart(priceCheckProd); setPriceCheckProd(null); setPriceCheckMode(false); }}
                 disabled={priceCheckProd.track_stock && priceCheckProd.stock_quantity <= 0}
-                className="flex-1 py-2.5 rounded-xl bg-gray-900 text-white text-sm font-semibold disabled:opacity-40 hover:bg-gray-800">
+                className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-40" style={{ background: '#8B5CF6' }}>
                 Add to cart
               </button>
             </div>
@@ -1905,29 +1915,29 @@ export default function TerminalPage() {
 
       {/* Refund modal */}
       {showRefundModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
-            <div className="px-6 py-5 border-b border-gray-100 flex items-center justify-between">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(8,6,16,0.88)' }}>
+          <div className="rounded-2xl w-full max-w-lg overflow-hidden" style={{ background: '#1A1728', border: '1px solid #2A2540', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
+            <div className="px-6 py-5 flex items-center justify-between" style={{ borderBottom: '1px solid #1C1928' }}>
               <div>
-                <h2 className="text-base font-bold text-gray-900">Process Refund</h2>
-                <p className="text-xs text-gray-400 mt-0.5">Search by receipt number or customer name</p>
+                <h2 className="text-base font-bold" style={{ color: '#EDE8FF' }}>Process Refund</h2>
+                <p className="text-xs mt-0.5" style={{ color: '#4A4565' }}>Search by receipt number or customer name</p>
               </div>
               <button onClick={() => { setShowRefundModal(false); setRefundSale(null); setRefundSearch(''); setRefundResults([]); }}
-                className="text-gray-400 hover:text-gray-600 text-xl">×</button>
+                className="text-xl" style={{ color: '#4A4565' }}>×</button>
             </div>
             <div className="px-6 py-4 space-y-4 max-h-[60vh] overflow-y-auto">
               {!refundSale ? (
                 <>
                   <input value={refundSearch} onChange={e => { setRefundSearch(e.target.value); searchRefundSales(e.target.value); }}
-                    className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-gray-900"
+                    className="w-full rounded-xl px-4 py-2.5 text-sm outline-none" style={{ border: '1px solid #2A2540', background: 'rgba(255,255,255,0.03)', color: '#EDE8FF' }}
                     placeholder="Search receipt # or customer name…" autoFocus />
                   <div className="space-y-2">
                     {refundResults.map((sale: any) => (
                       <button key={sale.id} onClick={() => { setRefundSale(sale); setRefundItems({}); }}
-                        className="w-full flex items-center gap-3 p-3 border border-gray-100 rounded-xl hover:border-gray-300 text-left transition-all">
+                        className="w-full flex items-center gap-3 p-3 rounded-xl text-left transition-all" style={{ border: '1px solid #2A2540', background: 'rgba(255,255,255,0.02)' }}>
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-gray-900">#{sale.sale_number ?? sale.id?.slice(-6).toUpperCase()}</p>
-                          <p className="text-xs text-gray-400">{new Date(sale.created_at).toLocaleDateString('en-AU')} · {sale.customer_name ?? 'Walk-in'}</p>
+                          <p className="text-sm font-medium" style={{ color: '#EDE8FF' }}>#{sale.sale_number ?? sale.id?.slice(-6).toUpperCase()}</p>
+                          <p className="text-xs" style={{ color: '#4A4565' }}>{new Date(sale.created_at).toLocaleDateString('en-AU')} · {sale.customer_name ?? 'Walk-in'}</p>
                         </div>
                         <span className="font-mono font-semibold text-sm text-gray-900">A${(sale.total_amount ?? 0).toFixed(2)}</span>
                       </button>
@@ -1942,27 +1952,27 @@ export default function TerminalPage() {
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-sm font-semibold text-gray-900">#{refundSale.sale_number ?? refundSale.id?.slice(-6).toUpperCase()}</p>
-                      <p className="text-xs text-gray-400">{new Date(refundSale.created_at).toLocaleDateString('en-AU')} · A${(refundSale.total_amount ?? 0).toFixed(2)}</p>
+                      <p className="text-xs" style={{ color: '#4A4565' }}>{new Date(refundSale.created_at).toLocaleDateString('en-AU')} · A${(refundSale.total_amount ?? 0).toFixed(2)}</p>
                     </div>
                     <button onClick={() => setRefundSale(null)} className="text-xs text-gray-400 hover:text-gray-600">← Back</button>
                   </div>
-                  <p className="text-xs text-gray-500">Select items to refund:</p>
+                  <p className="text-xs" style={{ color: '#8B85A8' }}>Select items to refund:</p>
                   <div className="space-y-1.5">
                     {(refundSale.items ?? []).map((item: any) => (
-                      <label key={item.id} className="flex items-center gap-3 p-2.5 rounded-lg border border-gray-100 cursor-pointer hover:bg-gray-50">
+                      <label key={item.id} className="flex items-center gap-3 p-2.5 rounded-lg cursor-pointer" style={{ border: '1px solid #2A2540', background: 'rgba(255,255,255,0.02)' }}>
                         <input type="checkbox" checked={!!refundItems[item.id]}
                           onChange={e => setRefundItems(r => ({ ...r, [item.id]: e.target.checked }))}
                           className="w-4 h-4 accent-gray-900" />
                         <div className="flex-1">
-                          <p className="text-sm text-gray-900">{item.product_name ?? item.name}</p>
-                          <p className="text-xs text-gray-400">qty {item.quantity} × A${(item.unit_price ?? 0).toFixed(2)}</p>
+                          <p className="text-sm" style={{ color: '#EDE8FF' }}>{item.product_name ?? item.name}</p>
+                          <p className="text-xs" style={{ color: '#4A4565' }}>qty {item.quantity} × A${(item.unit_price ?? 0).toFixed(2)}</p>
                         </div>
                         <span className="font-mono text-sm text-gray-900">A${(item.line_total ?? 0).toFixed(2)}</span>
                       </label>
                     ))}
                   </div>
                   <div className="pt-2">
-                    <p className="text-sm font-medium text-gray-900">
+                    <p className="text-sm font-medium" style={{ color: '#EDE8FF' }}>
                       Refund total: A${(refundSale.items ?? []).filter((i: any) => refundItems[i.id]).reduce((s: number, i: any) => s + (i.line_total ?? 0), 0).toFixed(2)}
                     </p>
                   </div>
@@ -1970,11 +1980,11 @@ export default function TerminalPage() {
               )}
             </div>
             {refundSale && (
-              <div className="px-6 pb-6 flex gap-2">
+              <div className="px-6 pb-5 flex gap-2">
                 <button onClick={() => { setShowRefundModal(false); setRefundSale(null); }}
-                  className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-500 hover:bg-gray-50">Cancel</button>
+                  className="flex-1 py-2.5 rounded-xl text-sm" style={{ border: '1px solid #2A2540', color: '#8B85A8', background: 'rgba(255,255,255,0.02)' }}>Cancel</button>
                 <button onClick={processRefund} disabled={processingRefund || Object.values(refundItems).every(v => !v)}
-                  className="flex-1 py-2.5 rounded-xl bg-red-600 text-white text-sm font-semibold disabled:opacity-40 hover:bg-red-700 flex items-center justify-center gap-2">
+                  className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-40 flex items-center justify-center gap-2" style={{ background: '#EF4444' }}>
                   {processingRefund ? <><Spinner /> Processing…</> : 'Process Refund'}
                 </button>
               </div>
@@ -1985,24 +1995,24 @@ export default function TerminalPage() {
 
       {/* Cashier switch modal */}
       {showCashierModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
-            <div className="px-6 py-5 border-b border-gray-100">
-              <h2 className="text-base font-bold text-gray-900">Switch Cashier</h2>
-              <p className="text-xs text-gray-400 mt-0.5">Current: {registerSession?.opened_by ?? 'Unknown'}</p>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(8,6,16,0.88)' }}>
+          <div className="rounded-2xl w-full max-w-sm overflow-hidden" style={{ background: '#1A1728', border: '1px solid #2A2540', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
+            <div className="px-6 py-5" style={{ borderBottom: '1px solid #1C1928' }}>
+              <h2 className="text-base font-bold" style={{ color: '#EDE8FF' }}>Switch Cashier</h2>
+              <p className="text-xs mt-0.5" style={{ color: '#4A4565' }}>Current: {registerSession?.opened_by ?? 'Unknown'}</p>
             </div>
             <div className="px-6 py-5">
-              <label className="text-xs text-gray-500 mb-1.5 block">New cashier name</label>
+              <label className="text-xs mb-1.5 block" style={{ color: '#4A4565' }}>New cashier name</label>
               <input value={cashierName} onChange={e => setCashierName(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') switchCashier(); }}
-                className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-gray-900"
+                className="w-full rounded-xl px-4 py-2.5 text-sm outline-none" style={{ border: '1px solid #2A2540', background: 'rgba(255,255,255,0.03)', color: '#EDE8FF' }}
                 placeholder="Enter name…" autoFocus />
             </div>
-            <div className="px-6 pb-6 flex gap-2">
+            <div className="px-6 pb-5 flex gap-2">
               <button onClick={() => { setShowCashierModal(false); setCashierName(''); }}
-                className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-500 hover:bg-gray-50">Cancel</button>
+                className="flex-1 py-2.5 rounded-xl text-sm" style={{ border: '1px solid #2A2540', color: '#8B85A8', background: 'rgba(255,255,255,0.02)' }}>Cancel</button>
               <button onClick={switchCashier} disabled={!cashierName.trim() || switchingCashier}
-                className="flex-1 py-2.5 rounded-xl bg-gray-900 text-white text-sm font-semibold disabled:opacity-40 flex items-center justify-center gap-2">
+                className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-40 flex items-center justify-center gap-2" style={{ background: '#8B5CF6' }}>
                 {switchingCashier ? <><Spinner /> Switching…</> : 'Switch'}
               </button>
             </div>
@@ -2012,9 +2022,9 @@ export default function TerminalPage() {
 
       {/* Receipt reprint modal */}
       {reprintSale && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xs overflow-hidden">
-            <div className="bg-emerald-50 px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(8,6,16,0.88)' }}>
+          <div className="rounded-2xl w-full max-w-xs overflow-hidden" style={{ background: '#1A1728', border: '1px solid #2A2540', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
+            <div className="px-5 py-4 flex items-center justify-between" style={{ background: 'rgba(34,197,94,0.08)', borderBottom: '1px solid rgba(34,197,94,0.15)' }}>
               <p className="font-semibold text-gray-900 text-sm">#{reprintSale.id.slice(-6).toUpperCase()}</p>
               <button onClick={() => setReprintSale(null)} className="text-gray-400 hover:text-gray-600">×</button>
             </div>
@@ -2035,7 +2045,7 @@ export default function TerminalPage() {
       {contextMenu && (
         <div className="fixed z-50" style={{ top: contextMenu.y, left: contextMenu.x }}
           onClick={() => setContextMenu(null)}>
-          <div className="bg-white rounded-xl border border-gray-200 shadow-xl py-1 min-w-44"
+          <div className="rounded-xl py-1 min-w-44" style={{ background: '#1A1728', border: '1px solid #2A2540', boxShadow: '0 12px 32px rgba(0,0,0,0.6)' }}
             onClick={e => e.stopPropagation()}>
             {[
               { label: 'View price & stock', action: () => { setPriceCheckProd(contextMenu.product); setContextMenu(null); } },
@@ -2052,43 +2062,43 @@ export default function TerminalPage() {
               { label: 'View in products', action: () => { window.location.href = `/pos/products?q=${encodeURIComponent(contextMenu.product.name)}`; setContextMenu(null); } },
             ].map(item => (
               <button key={item.label} onClick={item.action}
-                className="block w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors">
+                className="block w-full text-left px-4 py-2.5 text-sm transition-colors" style={{ color: '#8B85A8' }} onMouseEnter={e=>{(e.currentTarget as HTMLButtonElement).style.background='rgba(255,255,255,0.04)';}} onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.background='';}}>
                 {item.label}
               </button>
             ))}
-            <div className="border-t border-gray-100 my-1" />
-            <button onClick={() => setContextMenu(null)} className="block w-full text-left px-4 py-2.5 text-xs text-gray-400 hover:bg-gray-50">Cancel</button>
+            <div className="my-1" style={{ borderTop: '1px solid #1C1928' }} />
+            <button onClick={() => setContextMenu(null)} className="block w-full text-left px-4 py-2.5 text-xs" style={{ color: '#4A4565' }}>Cancel</button>
           </div>
         </div>
       )}
 
       {/* Age verification modal */}
       {showAgeModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
-            <div className="bg-red-50 px-6 py-5 border-b border-red-100">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(8,6,16,0.92)' }}>
+          <div className="rounded-2xl w-full max-w-sm overflow-hidden" style={{ background: '#1A1728', border: '1px solid #2A2540', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
+            <div className="px-6 py-5" style={{ background: 'rgba(239,68,68,0.08)', borderBottom: '1px solid rgba(239,68,68,0.15)' }}>
               <div className="flex items-center gap-3">
                 <span className="text-3xl">🔞</span>
                 <div>
-                  <h2 className="text-base font-bold text-gray-900">Age verification required</h2>
+                  <h2 className="text-base font-bold" style={{ color: '#EDE8FF' }}>Age verification required</h2>
                   <p className="text-xs text-red-600 mt-0.5">This sale contains age-restricted items</p>
                 </div>
               </div>
             </div>
             <div className="px-6 py-5">
-              <p className="text-sm text-gray-700">
+              <p className="text-sm" style={{ color: '#8B85A8' }}>
                 You must verify the customer is <span className="font-semibold">18 years or older</span> before completing this sale.
               </p>
               <p className="text-xs text-gray-400 mt-2">Check photo ID (driver's licence, passport, or Proof of Age card).</p>
             </div>
-            <div className="px-6 pb-6 flex gap-2">
+            <div className="px-6 pb-5 flex gap-2">
               <button onClick={() => setShowAgeModal(false)}
-                className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-500 hover:bg-gray-50">
+                className="flex-1 py-2.5 rounded-xl text-sm" style={{ border: '1px solid #2A2540', color: '#8B85A8', background: 'rgba(255,255,255,0.02)' }}>
                 Cancel sale
               </button>
               <button
                 onClick={() => { setAgeVerified(true); setShowAgeModal(false); processSale(); }}
-                className="flex-1 py-2.5 rounded-xl bg-gray-900 text-white text-sm font-semibold hover:bg-gray-800">
+                className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold" style={{ background: '#8B5CF6' }}>
                 ✓ ID verified — complete sale
               </button>
             </div>
@@ -2098,9 +2108,9 @@ export default function TerminalPage() {
 
       {/* Variant loading overlay */}
       {variantLoading && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/20">
-          <div className="bg-white rounded-xl px-6 py-4 flex items-center gap-3 shadow-xl">
-            <Spinner /><span className="text-sm text-gray-700">Loading options…</span>
+        <div className="fixed inset-0 z-40 flex items-center justify-center" style={{ background: 'rgba(8,6,16,0.5)' }}>
+          <div className="rounded-xl px-6 py-4 flex items-center gap-3" style={{ background: '#1A1728', border: '1px solid #2A2540' }}>
+            <Spinner /><span className="text-sm" style={{ color: '#8B85A8' }}>Loading options…</span>
           </div>
         </div>
       )}
