@@ -1,247 +1,383 @@
 'use client';
-import { useState, useEffect, useRef } from 'react';
+import { useRef, useEffect, useState } from 'react';
+import ConfettiCanvas from '@/components/pos/ConfettiCanvas';
+import LogoMark from '@/components/pos/LogoMark';
+import { CAT_META, fmt } from '@/lib/pos-utils';
 
-interface DisplayItem { name: string; quantity: number; price_cents: number; modifiers?: string | null; }
+interface CartItem {
+  id?: string | number;
+  name: string;
+  cat?: string;
+  category?: string;
+  price?: number;
+  price_cents?: number;
+  quantity?: number;
+  qty?: number;
+}
+
 interface DisplayState {
   status: 'idle' | 'active' | 'complete';
   business_name?: string;
-  items?: DisplayItem[];
-  subtotal_cents?: number; discount_cents?: number; tax_cents?: number; total_cents?: number;
-  customer_name?: string | null; loyalty_points?: number;
-  change_cents?: number; loyalty_earned?: number; timestamp?: number;
-  // Legacy support
+  items?: CartItem[];
+  // legacy keys
   cart?: Array<{ name: string; qty: number; price: number }>;
+  subtotal_cents?: number;
+  discount_cents?: number;
+  tax_cents?: number;
+  total_cents?: number;
   total?: number;
-}
-
-const POLL_MS    = 500;
-const COMPLETE_MS = 4500;
-const SLIDE_MS   = 6000;
-
-const PROMO_SLIDES = [
-  { emoji: '⭐', text: 'Earn loyalty points with every purchase' },
-  { emoji: '💳', text: 'We accept cash and all major cards' },
-  { emoji: '🙏', text: 'Thank you for shopping with us' },
-];
-
-function cents(n: number | undefined) { return n ? (n / 100).toFixed(2) : '0.00'; }
-
-function Clock() {
-  const [t, setT] = useState('');
-  useEffect(() => {
-    const up = () => setT(new Date().toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
-    up(); const id = setInterval(up, 1000); return () => clearInterval(id);
-  }, []);
-  return <span>{t}</span>;
-}
-
-function Orb({ style }: { style: React.CSSProperties }) {
-  return <div style={{ position: 'absolute', borderRadius: '50%', pointerEvents: 'none', ...style }} />;
-}
-
-function LogoMark({ size = 48 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 32 32" fill="none">
-      <path d="M16 2L28 9v14L16 30 4 23V9z" fill="rgba(139,92,246,0.15)" stroke="#8B5CF6" strokeWidth="1.5"/>
-      <path d="M16 8l7 4v8l-7 4-7-4V12z" fill="rgba(139,92,246,0.25)" stroke="#8B5CF6" strokeWidth="1"/>
-      <circle cx="16" cy="16" r="2.5" fill="#8B5CF6"/>
-    </svg>
-  );
+  customer_name?: string | null;
+  loyalty_points?: number;
+  change_cents?: number;
+  loyalty_earned?: number;
+  timestamp?: number;
 }
 
 export default function CustomerDisplayPage() {
-  const [state, setState]     = useState<DisplayState>({ status: 'idle' });
-  const [slideIdx, setSlideIdx] = useState(0);
-  const [completeVisible, setCompleteVisible] = useState(false);
-  const [flash, setFlash]     = useState(false);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const frameRef  = useRef<number | null>(null);
+  const phaseRef  = useRef<'idle' | 'order' | 'paid'>('idle');
 
+  const [phase, setPhase]   = useState<'idle' | 'order' | 'paid'>('idle');
+  const [state, setState]   = useState<DisplayState>({ status: 'idle' });
+  const [time, setTime]     = useState(
+    new Date().toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })
+  );
+
+  // Keep phaseRef in sync (canvas draw loop reads it without re-creating the loop)
+  useEffect(() => { phaseRef.current = phase; }, [phase]);
+
+  // Poll localStorage
+  useEffect(() => {
+    const poll = setInterval(() => {
+      try {
+        const raw = localStorage.getItem('aria_display_state')
+          ?? localStorage.getItem('aria_pos_display_state');
+        if (!raw) return;
+        const s: DisplayState = JSON.parse(raw);
+        setState(prev => s.timestamp === prev.timestamp ? prev : s);
+        if (s.status === 'complete') setPhase('paid');
+        else if (s.status === 'active' && (s.items?.length ?? (s.cart?.length ?? 0)) > 0) setPhase('order');
+        else setPhase('idle');
+      } catch { /* ignore */ }
+    }, 500);
+    return () => clearInterval(poll);
+  }, []);
+
+  // Clock
   useEffect(() => {
     const id = setInterval(() => {
-      try {
-        const raw = localStorage.getItem('aria_display_state') ?? localStorage.getItem('aria_pos_display_state');
-        if (!raw) return;
-        const p: DisplayState = JSON.parse(raw);
-        setState(prev => p.timestamp === prev.timestamp ? prev : p);
-      } catch { /* ignore */ }
-    }, POLL_MS);
+      setTime(new Date().toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' }));
+    }, 15000);
     return () => clearInterval(id);
   }, []);
 
+  // Auto-reset paid → idle after 5 s
   useEffect(() => {
-    if (state.status === 'complete') {
-      setFlash(true); setTimeout(() => setFlash(false), 250);
-      setCompleteVisible(true);
-      if (timer.current) clearTimeout(timer.current);
-      timer.current = setTimeout(() => {
-        setCompleteVisible(false);
-        setState({ status: 'idle', business_name: state.business_name });
-      }, COMPLETE_MS);
-    }
-    return () => { if (timer.current) clearTimeout(timer.current); };
-  }, [state.status, state.timestamp]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (phase !== 'paid') return;
+    const t = setTimeout(() => setPhase('idle'), 5000);
+    return () => clearTimeout(t);
+  }, [phase]);
 
+  // ── CANVAS ANIMATION ENGINE ─────────────────────────────────────────
   useEffect(() => {
-    const id = setInterval(() => setSlideIdx(i => (i + 1) % PROMO_SLIDES.length), SLIDE_MS);
-    return () => clearInterval(id);
-  }, []);
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d')!;
+    let t = 0;
 
-  const bizName = state.business_name ?? 'AriaPOS';
+    const resize = () => {
+      const dpr = Math.min(window.devicePixelRatio, 2);
+      canvas.width  = canvas.offsetWidth  * dpr;
+      canvas.height = canvas.offsetHeight * dpr;
+      ctx.scale(dpr, dpr);
+    };
+    resize();
+    window.addEventListener('resize', resize);
 
-  /* ── normalise legacy cart ─────────────────────────────────────── */
-  const items: DisplayItem[] = state.items ?? (state.cart ?? []).map(c => ({
-    name: c.name, quantity: c.qty, price_cents: Math.round(c.price * 100),
-  }));
-  const totalCents = state.total_cents ?? Math.round((state.total ?? 0) * 100);
-  const taxCents   = state.tax_cents ?? 0;
-  const discCents  = state.discount_cents ?? 0;
-  const exclGst    = totalCents - taxCents;
+    // Floating particles
+    const pts = Array.from({ length: 80 }, () => ({
+      x:     Math.random() * 1400,
+      y:     Math.random() * 900,
+      vx:    (Math.random() - 0.5) * 0.4,
+      vy:    (Math.random() - 0.5) * 0.4,
+      r:     1 + Math.random() * 2.5,
+      hue:   240 + Math.random() * 80,
+      phase: Math.random() * Math.PI * 2,
+      speed: 0.3 + Math.random() * 0.7,
+    }));
 
-  const TEAL = '#8B5CF6';
-  const BG   = '#0A0910';
-  const TEXT  = '#E8F4F8';
-  const TEXT2 = '#7A9BB5';
+    const draw = () => {
+      const W = canvas.offsetWidth;
+      const H = canvas.offsetHeight;
 
-  /* ── COMPLETE ─────────────────────────────────────────────────── */
-  if (state.status === 'complete' && completeVisible) {
-    const change  = state.change_cents ?? 0;
-    const loyalty = state.loyalty_earned ?? 0;
-    return (
-      <div style={{ width: '100vw', height: '100vh', background: BG, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: 40, position: 'relative', overflow: 'hidden', fontFamily: "'Manrope',system-ui,sans-serif" }}>
-        {flash && <div style={{ position: 'fixed', inset: 0, background: '#fff', opacity: 0.12, pointerEvents: 'none', zIndex: 100 }} />}
-        <Orb style={{ width: 300, height: 300, borderRadius: '50%', border: '2px solid rgba(139,92,246,0.4)', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', animation: 'pos-paid-ring 0.8s ease-out forwards', pointerEvents: 'none', position: 'absolute' }} />
-        <Orb style={{ width: 300, height: 300, borderRadius: '50%', border: '2px solid rgba(16,185,129,0.3)', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', animation: 'pos-paid-ring 0.8s ease-out 0.2s forwards', position: 'absolute' }} />
-        <Orb style={{ width: 600, height: 600, top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: 'radial-gradient(circle,rgba(16,185,129,0.08),transparent 70%)', filter: 'blur(60px)', position: 'absolute' }} />
+      // Deep space background
+      const bg = ctx.createRadialGradient(W * 0.5, H * 0.5, 0, W * 0.5, H * 0.5, Math.max(W, H) * 0.8);
+      bg.addColorStop(0, 'rgba(14,10,28,1)');
+      bg.addColorStop(1, 'rgba(4,3,10,1)');
+      ctx.fillStyle = bg;
+      ctx.fillRect(0, 0, W, H);
 
-        <div style={{ position: 'relative', zIndex: 2 }}>
-          <div className="pos-scale-in" style={{ fontSize: 'clamp(80px,14vw,120px)', lineHeight: 1, color: '#10B981', marginBottom: 24, fontWeight: 700, animationDelay: '0.2s' }}>✓</div>
-          <h1 className="pos-slide-up" style={{ fontFamily: "'Instrument Serif',serif", fontStyle: 'italic', fontSize: 'clamp(36px,5vw,64px)', color: TEXT, marginBottom: 16, animationDelay: '0.4s' }}>
-            {state.customer_name ? `Thanks, ${state.customer_name.split(' ')[0]}!` : 'Thank you!'}
-          </h1>
-          {change > 0 && (
-            <div className="pos-slide-up" style={{ marginTop: 20, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 20, padding: '20px 48px', display: 'inline-block', animationDelay: '0.6s' }}>
-              <p style={{ fontSize: 14, color: TEXT2, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.08em', fontFamily: "'JetBrains Mono',monospace" }}>CHANGE</p>
-              <p style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 'clamp(28px,5vw,52px)', fontWeight: 800, color: '#10B981' }}>A${(change / 100).toFixed(2)}</p>
-            </div>
-          )}
-          {loyalty > 0 && (
-            <p className="pos-slide-up" style={{ marginTop: 20, fontSize: 18, color: TEAL, fontWeight: 500, animationDelay: '0.8s' }}>✨ You earned {loyalty} loyalty points!</p>
-          )}
-          <p style={{ marginTop: 32, fontSize: 13, color: 'rgba(122,155,181,0.3)' }}>Powered by Aria</p>
-        </div>
-      </div>
-    );
-  }
+      // Aurora ribbons
+      const auroraColors = [
+        { h: 260, s: 80, l: 55 },
+        { h: 200, s: 90, l: 60 },
+        { h: 300, s: 70, l: 50 },
+        { h: 180, s: 85, l: 55 },
+      ];
+      for (let i = 0; i < 4; i++) {
+        const col   = auroraColors[i];
+        const amp   = 60 + i * 20;
+        const freq  = 0.004 + i * 0.002;
+        const speed = 0.3 + i * 0.15;
+        const yBase = H * (0.2 + i * 0.18);
+        ctx.beginPath();
+        for (let x = 0; x <= W; x += 3) {
+          const y = yBase
+            + Math.sin(x * freq + t * speed + i) * amp
+            + Math.sin(x * freq * 2.3 + t * speed * 1.7 + i * 2) * amp * 0.4;
+          x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+        }
+        ctx.strokeStyle = `hsla(${col.h},${col.s}%,${col.l}%,${0.12 + i * 0.03})`;
+        ctx.lineWidth = 2 + i;
+        ctx.stroke();
+        const grad = ctx.createLinearGradient(0, yBase - amp, 0, yBase + amp);
+        grad.addColorStop(0, `hsla(${col.h},${col.s}%,${col.l}%,0)`);
+        grad.addColorStop(0.5, `hsla(${col.h},${col.s}%,${col.l}%,${0.08 + i * 0.02})`);
+        grad.addColorStop(1, `hsla(${col.h},${col.s}%,${col.l}%,0)`);
+        ctx.save();
+        ctx.globalAlpha = 0.03 + i * 0.01;
+        ctx.fillStyle = grad;
+        ctx.lineTo(W, H); ctx.lineTo(0, H); ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      }
 
-  /* ── ACTIVE ──────────────────────────────────────────────────── */
-  const isActive = state.status === 'active' && items.length > 0;
-  if (isActive) {
-    return (
-      <div style={{ width: '100vw', height: '100vh', background: BG, display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden', fontFamily: "'Manrope',system-ui,sans-serif" }}>
-        <Orb style={{ width: 350, height: 350, top: '-80px', right: '-80px', background: `radial-gradient(circle,rgba(139,92,246,0.1),transparent 70%)`, filter: 'blur(80px)', animation: 'pos-orb-breathe 5s ease-in-out infinite' }} />
+      // Nebula blobs
+      for (let i = 0; i < 3; i++) {
+        const bx = W * (0.2 + i * 0.3) + Math.sin(t * 0.2 + i * 2) * 60;
+        const by = H * (0.3 + i * 0.2) + Math.cos(t * 0.15 + i) * 40;
+        const nb = ctx.createRadialGradient(bx, by, 0, bx, by, W * 0.28);
+        const hues = [260, 200, 290];
+        nb.addColorStop(0, `hsla(${hues[i]},80%,60%,0.05)`);
+        nb.addColorStop(0.5, `hsla(${hues[i]},70%,50%,0.03)`);
+        nb.addColorStop(1, 'transparent');
+        ctx.fillStyle = nb;
+        ctx.fillRect(0, 0, W, H);
+      }
 
-        {/* Top bar */}
-        <div style={{ flexShrink: 0, height: 48, padding: '0 32px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(8,12,16,0.9)', borderBottom: '1px solid #1A2535' }}>
-          <p style={{ fontSize: 12, fontWeight: 600, color: 'rgba(232,244,248,0.6)', fontFamily: "'Manrope',sans-serif" }}>{bizName}</p>
-          <p style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 12, color: 'rgba(122,155,181,0.4)' }}><Clock /></p>
-        </div>
+      // Star field — 120 twinkling stars
+      for (let s = 0; s < 120; s++) {
+        const sx = ((s * 137.5 + t * 0.05) % W + W) % W;
+        const sy = (s * 97.3) % H;
+        const al = 0.2 + 0.3 * Math.sin(t * (0.5 + s * 0.03) + s);
+        const r  = 0.5 + (s % 3) * 0.4;
+        ctx.beginPath();
+        ctx.arc(sx, sy, r, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(200,190,255,${al})`;
+        ctx.fill();
+      }
 
-        {/* Customer greeting */}
-        {state.customer_name && (
-          <div style={{ flexShrink: 0, padding: '12px 32px', background: 'rgba(139,92,246,0.06)', borderBottom: '1px solid rgba(139,92,246,0.12)' }}>
-            <p style={{ fontFamily: "'Instrument Serif',serif", fontStyle: 'italic', fontSize: 'clamp(16px,2vw,22px)', color: TEAL }}>Welcome back, {state.customer_name}! ✨</p>
-            {(state.loyalty_points ?? 0) > 0 && <p style={{ fontSize: 13, color: 'rgba(139,92,246,0.7)', marginTop: 2 }}>{state.loyalty_points} loyalty points available</p>}
-          </div>
-        )}
+      // Floating particles with glow
+      for (const pt of pts) {
+        pt.x += pt.vx;
+        pt.y += pt.vy + Math.sin(t * pt.speed + pt.phase) * 0.15;
+        if (pt.x < -20) pt.x = W + 20;
+        if (pt.x > W + 20) pt.x = -20;
+        if (pt.y < -20) pt.y = H + 20;
+        if (pt.y > H + 20) pt.y = -20;
+        const al = 0.3 + 0.3 * Math.sin(t * pt.speed + pt.phase);
+        ctx.beginPath();
+        ctx.arc(pt.x, pt.y, pt.r, 0, Math.PI * 2);
+        ctx.fillStyle = `hsla(${pt.hue},80%,70%,${al})`;
+        ctx.fill();
+        const grd = ctx.createRadialGradient(pt.x, pt.y, 0, pt.x, pt.y, pt.r * 4);
+        grd.addColorStop(0, `hsla(${pt.hue},80%,70%,0.12)`);
+        grd.addColorStop(1, 'transparent');
+        ctx.fillStyle = grd;
+        ctx.beginPath();
+        ctx.arc(pt.x, pt.y, pt.r * 4, 0, Math.PI * 2);
+        ctx.fill();
+      }
 
-        {/* Items */}
-        <div style={{ flex: 1, overflow: 'auto', padding: '0 32px' }}>
-          {items.map((item, i) => (
-            <div key={i} className="pos-float-in" style={{ padding: '18px 0', borderBottom: '1px solid #1A2535', display: 'flex', justifyContent: 'space-between', alignItems: 'center', animationDelay: `${i * 40}ms` }}>
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <p style={{ fontSize: 'clamp(16px,2vw,24px)', fontWeight: 600, color: TEXT }}>{item.name}</p>
-                  {item.quantity > 1 && <span style={{ background: 'rgba(139,92,246,0.1)', borderRadius: 6, padding: '2px 7px', fontSize: 13, color: TEAL, fontFamily: "'JetBrains Mono',monospace" }}>×{item.quantity}</span>}
-                </div>
-                {item.modifiers && <p style={{ fontSize: 13, color: TEXT2, fontStyle: 'italic', marginTop: 3 }}>{item.modifiers}</p>}
-              </div>
-              <p style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 'clamp(16px,2vw,24px)', fontWeight: 700, color: TEXT }}>A${cents(item.price_cents * item.quantity)}</p>
-            </div>
-          ))}
-        </div>
+      // Perspective grid
+      ctx.save();
+      ctx.globalAlpha = 0.025;
+      ctx.strokeStyle = '#8B5CF6';
+      ctx.lineWidth = 1;
+      const gS = 60;
+      for (let x = 0; x < W; x += gS) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
+      for (let y = 0; y < H; y += gS) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+      ctx.restore();
 
-        {/* Totals */}
-        <div style={{ flexShrink: 0, background: 'rgba(8,12,16,0.95)', borderTop: '2px solid #243347', padding: '16px 32px', backdropFilter: 'blur(12px)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-              <div style={{ display: 'flex', gap: 24, alignItems: 'center' }}>
-                <span style={{ fontSize: 14, color: TEXT2, width: 80 }}>Subtotal</span>
-                <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 14, color: TEXT2 }}>A${cents(exclGst)}</span>
-              </div>
-              {discCents > 0 && (
-                <div style={{ display: 'flex', gap: 24 }}>
-                  <span style={{ fontSize: 14, color: '#10B981', width: 80 }}>Discount</span>
-                  <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 14, color: '#10B981' }}>−A${cents(discCents)}</span>
-                </div>
-              )}
-              {taxCents > 0 && (
-                <div style={{ display: 'flex', gap: 24 }}>
-                  <span style={{ fontSize: 14, color: 'rgba(122,155,181,0.5)', width: 80 }}>GST (10%)</span>
-                  <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 14, color: 'rgba(122,155,181,0.5)' }}>A${cents(taxCents)}</span>
-                </div>
-              )}
-            </div>
-            <div style={{ textAlign: 'right' }}>
-              <p style={{ fontFamily: "'Manrope',sans-serif", fontSize: 11, fontWeight: 800, color: 'rgba(122,155,181,0.5)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 4 }}>TOTAL</p>
-              <p style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 'clamp(40px,6vw,72px)', fontWeight: 800, color: TEXT, lineHeight: 1, letterSpacing: '-0.02em' }}>A${cents(totalCents)}</p>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
+      // Paid burst rings
+      if (phaseRef.current === 'paid') {
+        for (let ring = 0; ring < 4; ring++) {
+          const ringT = (t * 0.8 + ring * 0.4) % 3;
+          const ringR = ringT * Math.min(W, H) * 0.5;
+          const ringA = Math.max(0, 0.3 - ringT * 0.1);
+          ctx.beginPath();
+          ctx.arc(W / 2, H / 2, ringR, 0, Math.PI * 2);
+          ctx.strokeStyle = `rgba(34,197,94,${ringA})`;
+          ctx.lineWidth = 2;
+          ctx.stroke();
+        }
+      }
 
-  /* ── IDLE ────────────────────────────────────────────────────── */
-  const slide = PROMO_SLIDES[slideIdx];
+      t += 0.016;
+      frameRef.current = requestAnimationFrame(draw);
+    };
+
+    frameRef.current = requestAnimationFrame(draw);
+    return () => {
+      window.removeEventListener('resize', resize);
+      if (frameRef.current) cancelAnimationFrame(frameRef.current);
+    };
+  }, []); // run once — phaseRef keeps it updated without restarting
+
+  // Normalise items from both legacy and new format
+  const rawItems: CartItem[] = state.items
+    ?? (state.cart ?? []).map(c => ({ name: c.name, price: c.price, quantity: c.qty }));
+
+  const total        = state.total_cents ? state.total_cents / 100 : (state.total ?? 0);
+  const change       = state.change_cents ? state.change_cents / 100 : null;
+  const loyaltyEarned = state.loyalty_earned ?? 0;
+  const customerName  = state.customer_name;
+  const bizName       = state.business_name ?? 'AriaPOS';
+
   return (
-    <div style={{ width: '100vw', height: '100vh', background: BG, display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden', fontFamily: "'Manrope',system-ui,sans-serif" }}>
-      <Orb style={{ width: 500, height: 500, top: '-150px', left: '-150px', background: `radial-gradient(circle,rgba(139,92,246,0.12),transparent 70%)`, filter: 'blur(120px)', animation: 'pos-orb-breathe 4s ease-in-out infinite' }} />
-      <Orb style={{ width: 400, height: 400, top: '35%', left: '30%', background: `radial-gradient(circle,rgba(99,102,241,0.15),transparent 70%)`, filter: 'blur(100px)', animation: 'pos-orb-breathe 5s ease-in-out infinite 1s' }} />
-      <Orb style={{ width: 600, height: 600, bottom: '-200px', right: '-150px', background: `radial-gradient(circle,rgba(139,92,246,0.08),transparent 70%)`, filter: 'blur(150px)', animation: 'pos-orb-breathe 6s ease-in-out infinite 2s' }} />
-      <Orb style={{ width: 300, height: 300, top: '-50px', right: '10%', background: `radial-gradient(circle,rgba(139,92,246,0.06),transparent 70%)`, filter: 'blur(80px)' }} />
+    <div style={{
+      width: '100%', height: '100%',
+      position: 'relative', overflow: 'hidden',
+      fontFamily: "'Manrope', system-ui, sans-serif",
+      background: '#050308',
+    }}>
+      {/* Canvas background */}
+      <canvas ref={canvasRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} />
 
-      {/* Top bar */}
-      <div style={{ flexShrink: 0, padding: '12px 32px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(8,12,16,0.5)', borderBottom: '1px solid rgba(255,255,255,0.04)', position: 'relative', zIndex: 1 }}>
-        <p style={{ fontSize: 14, fontWeight: 600, color: 'rgba(232,244,248,0.5)' }}>{bizName}</p>
-        <p style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 13, color: 'rgba(122,155,181,0.3)' }}><Clock /></p>
+      {/* Logo */}
+      <div style={{ position: 'absolute', top: 20, left: 24, display: 'flex', alignItems: 'center', gap: 9, zIndex: 2 }}>
+        <LogoMark size={28} />
+        <span style={{ fontSize: 15, fontWeight: 800, color: 'rgba(237,232,255,0.7)', letterSpacing: '-0.03em', fontFamily: "'Manrope', sans-serif" }}>
+          aria<span style={{ fontSize: 10, color: '#8B5CF6', marginLeft: 2, letterSpacing: '0.06em' }}>POS</span>
+        </span>
       </div>
 
-      {/* Centre */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: 40, position: 'relative', zIndex: 1 }}>
-        <div className="pos-idle-float">
-          <LogoMark size={64} />
-        </div>
-        <h1 style={{ fontFamily: "'Instrument Serif',serif", fontStyle: 'italic', fontSize: 'clamp(36px,6vw,80px)', color: TEXT, marginTop: 24, lineHeight: 1, letterSpacing: '-0.02em' }}>
-          {bizName}
-        </h1>
-        <p style={{ fontSize: 16, color: 'rgba(122,155,181,0.6)', marginTop: 10 }}>Welcome</p>
-        <p style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 14, color: 'rgba(122,155,181,0.35)', marginTop: 32 }}><Clock /></p>
-
-        {/* Promo slide */}
-        <div style={{ marginTop: 48, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 20, padding: '24px 48px', maxWidth: 500, width: '100%', transition: 'opacity 0.5s ease' }}>
-          <p style={{ fontSize: 40, marginBottom: 12 }}>{slide.emoji}</p>
-          <p style={{ fontSize: 18, color: 'rgba(232,244,248,0.7)', fontWeight: 500, lineHeight: 1.5 }}>{slide.text}</p>
-        </div>
-
-        {/* Dots */}
-        <div style={{ display: 'flex', gap: 8, marginTop: 20 }}>
-          {PROMO_SLIDES.map((_, i) => (
-            <div key={i} style={{ height: 8, borderRadius: 4, background: i === slideIdx ? TEAL : 'rgba(255,255,255,0.12)', width: i === slideIdx ? 20 : 8, transition: 'all 0.3s ease' }} />
-          ))}
-        </div>
+      {/* Time */}
+      <div style={{ position: 'absolute', top: 22, right: 24, fontFamily: "'JetBrains Mono', monospace", fontSize: 13, color: 'rgba(139,133,168,0.35)', zIndex: 2 }}>
+        {time}
       </div>
 
-      <p style={{ textAlign: 'center', fontSize: 11, color: 'rgba(122,155,181,0.15)', padding: '10px 0', position: 'relative', zIndex: 1 }}>Powered by Aria</p>
+      {/* ── IDLE ─────────────────────────────────────────────────── */}
+      {phase === 'idle' && (
+        <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, zIndex: 2 }}>
+          <div style={{ fontFamily: "'Instrument Serif', Georgia, serif", fontSize: 44, fontStyle: 'italic', color: 'rgba(237,232,255,0.12)', letterSpacing: '-0.02em', textAlign: 'center', lineHeight: 1.1, animation: 'idle-float 4s ease-in-out infinite' }}>
+            Welcome
+          </div>
+          <div style={{ width: 80, height: 80, borderRadius: '50%', background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 60px rgba(139,92,246,0.15)', animation: 'orb-breathe 3s ease-in-out infinite' }}>
+            <LogoMark size={38} />
+          </div>
+          <div style={{ fontSize: 13, color: 'rgba(139,133,168,0.3)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+            Ready for your order
+          </div>
+          <div style={{ fontSize: 15, color: 'rgba(237,232,255,0.4)', fontWeight: 600, marginTop: 8 }}>
+            {bizName}
+          </div>
+        </div>
+      )}
+
+      {/* ── ORDER ────────────────────────────────────────────────── */}
+      {phase === 'order' && rawItems.length > 0 && (
+        <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 20, zIndex: 2, padding: 32 }}>
+          {customerName && (
+            <div style={{ fontFamily: "'Instrument Serif', serif", fontSize: 18, fontStyle: 'italic', color: '#8B5CF6', animation: 'fade-up 0.3s ease' }}>
+              Welcome back, {customerName}! ✨
+            </div>
+          )}
+          <div style={{ fontFamily: "'Instrument Serif', serif", fontSize: 16, fontStyle: 'italic', color: 'rgba(139,133,168,0.5)', letterSpacing: '-0.01em' }}>
+            Your order
+          </div>
+
+          {/* Glass order card */}
+          <div style={{ width: '100%', maxWidth: 420, background: 'rgba(20,17,32,0.7)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 22, padding: '16px 20px', backdropFilter: 'blur(30px)', boxShadow: '0 20px 80px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06)', animation: 'slide-up 0.4s cubic-bezier(0.16,1,0.3,1)' }}>
+            {rawItems.slice(0, 6).map((item, i) => {
+              const cat   = (item.cat || item.category || 'other').toLowerCase();
+              const colA  = CAT_META[cat]?.a ?? CAT_META.other.a;
+              const price = item.price ?? (item.price_cents ? item.price_cents / 100 : 0);
+              const qty   = item.quantity ?? item.qty ?? 1;
+              return (
+                <div key={item.id ?? i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '7px 0', borderBottom: i < Math.min(rawItems.length, 6) - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none', animation: `fade-up 0.3s ${i * 60}ms cubic-bezier(0.16,1,0.3,1) both` }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div style={{ width: 6, height: 6, borderRadius: '50%', background: colA, boxShadow: `0 0 8px ${colA}` }} />
+                    <span style={{ fontSize: 14, color: 'rgba(237,232,255,0.85)', fontWeight: 500 }}>{item.name}</span>
+                    <span style={{ fontSize: 12, color: 'rgba(139,133,168,0.4)' }}>×{qty}</span>
+                  </div>
+                  <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 14, fontWeight: 700, color: 'rgba(237,232,255,0.85)' }}>
+                    {fmt(price * qty)}
+                  </span>
+                </div>
+              );
+            })}
+            {rawItems.length > 6 && (
+              <div style={{ fontSize: 11, color: 'rgba(139,133,168,0.3)', textAlign: 'center', paddingTop: 8 }}>
+                +{rawItems.length - 6} more
+              </div>
+            )}
+          </div>
+
+          {/* Total */}
+          <div style={{ textAlign: 'center', animation: 'fade-up 0.4s 0.2s cubic-bezier(0.16,1,0.3,1) both' }}>
+            <div style={{ fontSize: 11, color: 'rgba(139,133,168,0.35)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 6 }}>Total</div>
+            <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 'clamp(48px, 8vw, 80px)', fontWeight: 800, color: 'rgba(237,232,255,0.95)', letterSpacing: '-0.05em', lineHeight: 1, textShadow: '0 0 40px rgba(139,92,246,0.3)' }}>
+              {fmt(total)}
+            </div>
+            <div style={{ fontSize: 11, color: 'rgba(139,133,168,0.3)', marginTop: 4 }}>GST included · AUD</div>
+          </div>
+        </div>
+      )}
+
+      {/* ── PAID ─────────────────────────────────────────────────── */}
+      {phase === 'paid' && (
+        <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 20, zIndex: 2 }}>
+          {/* Check with pulsing rings */}
+          <div style={{ position: 'relative', width: 140, height: 140, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            {[0, 1, 2].map(i => (
+              <div key={i} style={{ position: 'absolute', width: 80 + i * 30, height: 80 + i * 30, borderRadius: '50%', border: `1.5px solid rgba(34,197,94,${0.5 - i * 0.15})`, animation: `paid-ring 1.5s ${i * 0.3}s ease-out infinite` }} />
+            ))}
+            <div style={{ width: 90, height: 90, borderRadius: '50%', background: 'rgba(34,197,94,0.12)', border: '2px solid rgba(34,197,94,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 60px rgba(34,197,94,0.3)', animation: 'scale-in 0.5s cubic-bezier(0.16,1,0.3,1)', position: 'relative', zIndex: 1 }}>
+              <svg width={44} height={44} viewBox="0 0 24 24" fill="none" stroke="#22C55E" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+            </div>
+          </div>
+
+          <div style={{ textAlign: 'center', animation: 'fade-up 0.4s 0.15s cubic-bezier(0.16,1,0.3,1) both' }}>
+            <div style={{ fontSize: 'clamp(36px, 6vw, 52px)', fontWeight: 800, color: 'rgba(237,232,255,0.95)', letterSpacing: '-0.04em', lineHeight: 1 }}>Thank you!</div>
+            <div style={{ fontSize: 15, color: 'rgba(34,197,94,0.7)', marginTop: 8, fontWeight: 600 }}>Payment approved</div>
+            {change !== null && change > 0 && (
+              <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 'clamp(20px, 3vw, 32px)', fontWeight: 800, color: '#22C55E', marginTop: 12, animation: 'fade-up 0.4s 0.3s both' }}>
+                Change: {fmt(change)}
+              </div>
+            )}
+            {loyaltyEarned > 0 && (
+              <div style={{ fontSize: 15, color: 'rgba(139,92,246,0.7)', marginTop: 8, animation: 'fade-up 0.4s 0.45s both' }}>
+                +{loyaltyEarned} loyalty points earned ✨
+              </div>
+            )}
+          </div>
+
+          <ConfettiCanvas />
+        </div>
+      )}
+
+      {/* Bottom status bar */}
+      <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '12px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'linear-gradient(transparent, rgba(4,3,10,0.8))', zIndex: 2 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#22C55E', boxShadow: '0 0 6px #22C55E', display: 'inline-block' }} />
+          <span style={{ fontSize: 10, color: 'rgba(139,133,168,0.3)', letterSpacing: '0.06em' }}>ARIA POS · SECURE TRANSACTION</span>
+        </div>
+        <span style={{ fontSize: 10, color: 'rgba(139,133,168,0.2)' }}>Prices incl. GST · AUD</span>
+      </div>
     </div>
   );
 }
