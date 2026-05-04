@@ -1,7 +1,7 @@
 import '@/styles/pos-design-system.css';
 import { redirect } from 'next/navigation';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
-import { POSTopNav } from '@/components/pos/POSTopNav';
+import POSShell from '@/components/pos/POSShell';
 
 export const metadata = { title: 'AriaPOS — Point of Sale' };
 
@@ -10,14 +10,20 @@ export default async function PosLayout({ children }: { children: React.ReactNod
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) redirect('/login');
 
-  const { data: allBusinesses } = await supabase
+  const { data: biz } = await supabase
     .from('businesses')
-    .select('id, name, owner_name, industry, plan, is_active')
+    .select('id, name')
     .eq('user_id', user.id)
     .eq('is_active', true)
-    .order('created_at', { ascending: true });
+    .order('created_at', { ascending: true })
+    .limit(1)
+    .maybeSingle();
 
-  if (!allBusinesses || allBusinesses.length === 0) redirect('/onboarding/industry');
+  if (!biz) redirect('/onboarding/industry');
 
-  return <POSTopNav>{children}</POSTopNav>;
+  return (
+    <POSShell businessId={biz.id} businessName={biz.name ?? 'AriaPOS'}>
+      {children}
+    </POSShell>
+  );
 }
