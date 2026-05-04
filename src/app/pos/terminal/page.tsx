@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { isMobileDevice, hasCameraSupport } from '@/lib/mobile-detect';
 
 /* ─── Types ─────────────────────────────────────────────────────── */
 interface Product {
@@ -96,6 +97,7 @@ export default function TerminalPage() {
   const [lowStockItems,  setLowStockItems]  = useState<Product[]>([]);
   const [lowStockDismissed, setLowStockDismissed] = useState(false);
   const [recentSales,    setRecentSales]    = useState<RecentSale[]>([]);
+  const [showMobileBanner, setShowMobileBanner] = useState(false);
 
   /* ── Cart ─────────────────────────────────────────────────────── */
   const [cart,           setCart]           = useState<CartItem[]>([]);
@@ -239,6 +241,11 @@ export default function TerminalPage() {
       setLoading(false);
     }).catch(() => setLoading(false));
   }, [loadRegister]);
+
+  /* ── Mobile detection ────────────────────────────────────────── */
+  useEffect(() => {
+    if (isMobileDevice() && hasCameraSupport()) setShowMobileBanner(true);
+  }, []);
 
   /* ── Keyboard shortcuts ───────────────────────────────────────── */
   useEffect(() => {
@@ -745,6 +752,29 @@ export default function TerminalPage() {
   ══════════════════════════════════════════════════════════════ */
   return (
     <div className="flex flex-col overflow-hidden" style={{ height: '100%', background: '#0A0910' }}>
+
+      {/* Mobile mode banner */}
+      {showMobileBanner && (
+        <div className="fixed top-0 left-0 right-0 z-40 flex items-center justify-between px-4 py-3 flex-shrink-0"
+          style={{ background: '#1D9E75' }}>
+          <div>
+            <p className="text-white text-sm font-semibold leading-tight">Mobile device detected</p>
+            <p className="text-green-100 text-xs">Switch to mobile mode for camera barcode scanning</p>
+          </div>
+          <div className="flex gap-2 ml-3 flex-shrink-0">
+            <button onClick={() => setShowMobileBanner(false)}
+              className="px-3 py-1.5 rounded-lg text-white/70 text-xs font-medium"
+              style={{ background: 'rgba(255,255,255,0.15)' }}>
+              Stay
+            </button>
+            <a href="/pos/mobile"
+              className="px-3 py-1.5 rounded-lg text-[#1D9E75] text-xs font-bold"
+              style={{ background: '#fff' }}>
+              Switch →
+            </a>
+          </div>
+        </div>
+      )}
 
       {/* Low stock alert bar */}
       {lowStockItems.length > 0 && !lowStockDismissed && (

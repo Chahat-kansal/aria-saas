@@ -9,6 +9,21 @@
 
 * { box-sizing: border-box; }
 
+/* ── MOBILE SAFE AREA ── */
+.pt-safe-top  { padding-top:    env(safe-area-inset-top,    0px); }
+.pb-safe-bottom { padding-bottom: env(safe-area-inset-bottom, 0px); }
+
+/* ── BARCODE SCANNER ── */
+@keyframes scan-line {
+  0%   { top: 6px; }
+  50%  { top: calc(100% - 6px); }
+  100% { top: 6px; }
+}
+.animate-scan-line {
+  animation: scan-line 2s ease-in-out infinite;
+  position: absolute;
+}
+
 /* ── MOBILE VIEWPORT FIX ── */
 /* Fixes the 100vh = address bar issue on mobile Chrome/Safari */
 html, body { height: 100%; }

@@ -22,7 +22,10 @@
     "src/app/api/aria/missed-demand-analysis/route.ts":        { "maxDuration": 30 },
     "src/app/api/warehouse/grn/route.ts":                      { "maxDuration": 30 },
     "src/app/api/warehouse/cycle-count/generate/route.ts":     { "maxDuration": 30 },
-    "src/app/api/aria/warehouse-intelligence/route.ts":        { "maxDuration": 30 }
+    "src/app/api/aria/warehouse-intelligence/route.ts":        { "maxDuration": 30 },
+
+    "src/app/api/pos/products/scan/route.ts":                  { "maxDuration": 10 },
+    "src/app/api/pos/sync-offline/route.ts":                   { "maxDuration": 30 }
   },
   "crons": [
     {

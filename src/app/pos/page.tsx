@@ -274,6 +274,23 @@ export default function POSHomePage() {
           </button>
         </div>
 
+        {/* Mobile selling card */}
+        <a href="/pos/mobile" style={{ display: 'block', background: '#1A1728', border: '1px solid #2A2540', borderRadius: 20, padding: '16px 20px', marginBottom: 16, textDecoration: 'none', transition: 'border 150ms ease' }}
+          onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.border = '1px solid rgba(20,184,166,0.3)'; }}
+          onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.border = '1px solid #2A2540'; }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 8 }}>
+            <div style={{ width: 44, height: 44, borderRadius: 12, background: 'rgba(20,184,166,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>📱</div>
+            <div>
+              <p style={{ fontSize: 14, fontWeight: 600, color: '#E8F4F8' }}>Mobile selling</p>
+              <p style={{ fontSize: 12, color: '#3D5A73' }}>Camera barcode scanning · Works offline</p>
+            </div>
+            <span style={{ marginLeft: 'auto', fontSize: 13, color: '#14B8A6', fontWeight: 600 }}>Open →</span>
+          </div>
+          <p style={{ fontSize: 12, color: '#3D5A73', lineHeight: 1.5 }}>
+            Point your phone camera at any product barcode to add it to a sale instantly. Sales are queued offline when there&apos;s no internet.
+          </p>
+        </a>
+
         {/* Aria insight */}
         <div style={{ background: 'rgba(139,92,246,0.06)', border: '1px solid rgba(139,92,246,0.15)', borderRadius: 16, padding: '16px 20px', marginBottom: 16 }}>
           {insightText ? (

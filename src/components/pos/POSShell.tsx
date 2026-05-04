@@ -5,7 +5,7 @@ import POSSidebar from './POSSidebar';
 
 const POS_USER_KEY  = 'aria_pos_user';
 const SESSION_TTL   = 12 * 3600 * 1000; // 12 hours
-const BYPASS_PATHS  = ['/pos/display'];
+const BYPASS_PATHS  = ['/pos/display', '/pos/mobile'];
 
 interface PosUser {
   id: string; name: string; role: string;
