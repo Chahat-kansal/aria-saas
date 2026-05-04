@@ -736,7 +736,7 @@ export default function TerminalPage() {
   /* ── Session gate — must open register before using terminal ─── */
   if (!registerLoading && !registerIsOpen) {
     return (
-      <div style={{ height: '100%', background: 'var(--pos-base,#080C10)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, position: 'relative', overflow: 'hidden' }}>
+      <div style={{ height: '100%', background: 'var(--bg-base)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, position: 'relative', overflow: 'hidden' }}>
         <div style={{ position: 'absolute', width: 400, height: 400, top: '-100px', left: '-100px', borderRadius: '50%', background: 'radial-gradient(circle,rgba(20,184,166,0.12),transparent 70%)', filter: 'blur(80px)', animation: 'pos-orb-breathe 4s ease-in-out infinite', pointerEvents: 'none' }} />
         <div style={{ background: 'var(--pos-elevated,#162030)', backdropFilter: 'blur(20px)', border: '1px solid rgba(20,184,166,0.2)', borderRadius: 24, padding: '40px 32px', maxWidth: 420, width: '100%', textAlign: 'center', boxShadow: '0 24px 64px rgba(0,0,0,0.6)', animation: 'pos-scale-in 0.4s var(--pos-ease,cubic-bezier(0.16,1,0.3,1))' }}>
           <svg width={36} height={36} viewBox="0 0 32 32" fill="none" style={{ margin: '0 auto 12px' }}>
@@ -776,7 +776,7 @@ export default function TerminalPage() {
      RENDER
   ══════════════════════════════════════════════════════════════ */
   return (
-    <div className="flex flex-col overflow-hidden" style={{ height: '100%', background: '#0A0910' }}>
+    <div className="flex flex-col overflow-hidden" style={{ height: '100%', background: 'var(--bg-base)' }}>
 
       {/* Mobile mode banner */}
       {showMobileBanner && (
@@ -899,7 +899,7 @@ export default function TerminalPage() {
                     if (w) w.focus();
                     setShowQuickPanel(false);
                   }}
-                  className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors w-full text-left" style={{ color: 'var(--pos-text-2)' }} onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background='var(--pos-hover)';}} onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background='';}}>
+                  className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors w-full text-left" style={{ color: 'var(--text-secondary)' }} onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background='var(--bg-hover)';}} onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background='';}}>
                   <span className="text-base w-6 text-center">📺</span>
                   <span>Customer Display ↗</span>
                 </button>
@@ -1693,7 +1693,7 @@ export default function TerminalPage() {
       </div>
 
       {/* Mobile bottom tab bar */}
-      <div className="md:hidden flex-shrink-0 h-16 grid grid-cols-3" style={{ background: '#0A0910', borderTop: '1px solid #1C1928' }}>
+      <div className="md:hidden flex-shrink-0 h-16 grid grid-cols-3" style={{ background: 'var(--bg-base)', borderTop: '1px solid #1C1928' }}>
         {([
           { tab: 'products' as const, label: 'Products', icon: '🛍️' },
           { tab: 'cart' as const, label: `Cart${cart.length > 0 ? ` (${cart.reduce((s,i)=>s+i.qty,0)})` : ''}`, icon: '🛒' },
@@ -2122,14 +2122,14 @@ export default function TerminalPage() {
               <p className="font-semibold text-gray-900 text-sm">#{reprintSale.id.slice(-6).toUpperCase()}</p>
               <button onClick={() => setReprintSale(null)} className="text-gray-400 hover:text-gray-600">×</button>
             </div>
-            <div className="px-5 py-4 font-mono text-xs space-y-0.5" style={{ color: 'var(--pos-text-2)' }}>
+            <div className="px-5 py-4 font-mono text-xs space-y-0.5" style={{ color: 'var(--text-secondary)' }}>
               <div className="flex justify-between"><span className="text-gray-400">Time</span><span>{reprintSale.time.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}</span></div>
               <div className="flex justify-between"><span className="text-gray-400">Items</span><span>{reprintSale.items}</span></div>
               <div className="flex justify-between font-bold text-sm text-gray-900 mt-2"><span>TOTAL</span><span>A${reprintSale.total.toFixed(2)}</span></div>
             </div>
             <div className="px-5 pb-5 flex gap-2">
               <button onClick={() => setReprintSale(null)} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-500">Close</button>
-              <button onClick={() => window.print()} className="flex-1 py-2.5 rounded-xl text-sm font-medium" style={{ background: 'var(--pos-elevated)', border: '1px solid var(--pos-border-default)', color: 'var(--pos-text-2)' }}>🖨️ Print</button>
+              <button onClick={() => window.print()} className="flex-1 py-2.5 rounded-xl text-sm font-medium" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', color: 'var(--text-secondary)' }}>🖨️ Print</button>
             </div>
           </div>
         </div>
