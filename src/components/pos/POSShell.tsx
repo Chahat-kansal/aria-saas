@@ -111,7 +111,9 @@ function PINEntry({
       {/* Number pad */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8, marginBottom: 16 }}>
         {PAD.map((k, i) => (
-          <button key={i} onClick={() => k && tap(k)}
+          <button key={i}
+            type="button"
+            onClick={() => k && tap(k)}
             disabled={verifying || !k || localAttempts >= 3}
             style={{
               height: 56, borderRadius: 14, fontSize: 20, fontWeight: 700, cursor: k ? 'pointer' : 'default',
@@ -120,11 +122,12 @@ function PINEntry({
               border: k ? '1px solid var(--border-default)' : 'none',
               color: 'var(--text-primary)', opacity: (!k || localAttempts >= 3) ? 0.3 : 1,
               transition: 'all 100ms ease',
+              WebkitTapHighlightColor: 'transparent',
+              userSelect: 'none',
             }}
-            onMouseEnter={e => { if (k && localAttempts < 3) { const el = e.currentTarget; el.style.border = '1px solid var(--border-violet)'; el.style.background = 'var(--bg-hover)'; }}}
-            onMouseLeave={e => { if (k) { const el = e.currentTarget; el.style.border = '1px solid var(--border-default)'; el.style.background = 'var(--bg-surface)'; }}}
-            onMouseDown={e => { if (k) { const el = e.currentTarget; el.style.transform = 'translateY(2px) scale(0.95)'; }}}
-            onMouseUp={e => { const el = e.currentTarget; el.style.transform = ''; }}
+            onPointerDown={e => { if (k && localAttempts < 3) { const el = e.currentTarget; el.style.transform = 'translateY(2px) scale(0.95)'; el.style.background = 'var(--bg-hover)'; el.style.border = '1px solid var(--border-violet)'; }}}
+            onPointerUp={e => { const el = e.currentTarget; el.style.transform = ''; el.style.background = k ? 'var(--bg-surface)' : 'transparent'; el.style.border = k ? '1px solid var(--border-default)' : 'none'; }}
+            onPointerLeave={e => { const el = e.currentTarget; el.style.transform = ''; el.style.background = k ? 'var(--bg-surface)' : 'transparent'; el.style.border = k ? '1px solid var(--border-default)' : 'none'; }}
           >{k}</button>
         ))}
       </div>
@@ -141,19 +144,24 @@ function POSUserSelect({ businessId, businessName, onLogin }: {
   businessId: string; businessName: string;
   onLogin: (user: PosUser) => void;
 }) {
-  const [users, setUsers]     = useState<PosUser[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [users,    setUsers]    = useState<PosUser[]>([]);
+  const [loading,  setLoading]  = useState(true);
+  const [loadErr,  setLoadErr]  = useState(false);
   const [selected, setSelected] = useState<PosUser | null>(null);
   const [attempts, setAttempts] = useState(0);
 
-  useEffect(() => {
+  const loadUsers = useCallback(() => {
     if (!businessId) { setLoading(false); return; }
+    setLoading(true);
+    setLoadErr(false);
     fetch(`/api/pos/users?business_id=${businessId}`)
-      .then(r => r.json())
-      .then(d => { setUsers(d.users ?? []); })
-      .catch(() => null)
+      .then(r => { if (!r.ok) throw new Error('Failed'); return r.json(); })
+      .then(d => setUsers(d.users ?? []))
+      .catch(() => setLoadErr(true))
       .finally(() => setLoading(false));
   }, [businessId]);
+
+  useEffect(() => { loadUsers(); }, [loadUsers]);
 
   function bypassAsOwner() {
     const owner: PosUser = {
@@ -177,7 +185,7 @@ function POSUserSelect({ businessId, businessName, onLogin }: {
       <Orb style={{ width: 400, height: 400, top: '40%', left: '40%', background: 'radial-gradient(circle,rgba(8,145,178,0.1),transparent 70%)', filter: 'blur(100px)', animation: 'orb-breathe 5s ease-in-out infinite 1s' }} />
       <Orb style={{ width: 450, height: 450, bottom: '-120px', right: '-120px', background: 'radial-gradient(circle,rgba(139,92,246,0.08),transparent 70%)', filter: 'blur(80px)', animation: 'orb-breathe 6s ease-in-out infinite 2s' }} />
 
-      <div className="scale-in" style={{ width: '100%', maxWidth: 500, position: 'relative', zIndex: 1, background: 'var(--bg-elevated)', backdropFilter: 'blur(24px)', border: '1px solid rgba(139,92,246,0.2)', borderRadius: 24, padding: '40px 32px', boxShadow: '0 24px 64px rgba(0,0,0,0.6)' }}>
+      <div style={{ width: '100%', maxWidth: 500, position: 'relative', zIndex: 1, background: 'var(--bg-elevated)', backdropFilter: 'blur(24px)', border: '1px solid rgba(139,92,246,0.2)', borderRadius: 24, padding: '40px 32px', boxShadow: '0 24px 64px rgba(0,0,0,0.6)', animation: 'scale-in 0.35s cubic-bezier(0.16,1,0.3,1)' }}>
 
         <div style={{ textAlign: 'center', marginBottom: 32 }}>
           <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}><LogoMark size={36} /></div>
@@ -190,34 +198,81 @@ function POSUserSelect({ businessId, businessName, onLogin }: {
             <div style={{ width: 24, height: 24, borderRadius: '50%', border: '2px solid rgba(139,92,246,0.3)', borderTopColor: 'var(--violet)', animation: 'pos-processing 0.7s linear infinite' }} />
           </div>
         ) : selected ? (
-          <PINEntry user={selected} businessId={businessId} attempts={attempts} onVerify={handleVerified} onBack={() => { setSelected(null); setAttempts(0); }} />
+          <PINEntry
+            user={selected}
+            businessId={businessId}
+            attempts={attempts}
+            onVerify={handleVerified}
+            onBack={() => { setSelected(null); setAttempts(0); }}
+          />
         ) : (
           <>
             <p style={{ fontFamily: 'var(--font-display)', fontStyle: 'italic', fontSize: 18, color: 'var(--text-secondary)', textAlign: 'center', marginBottom: 20 }}>
               Who&apos;s working today?
             </p>
 
-            {users.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '24px 0' }}>
-                <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 8 }}>No staff set up yet</p>
-                <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginBottom: 20 }}>Add your first cashier to get started</p>
-                <a href="/pos/settings/users" style={{ display: 'inline-block', padding: '10px 20px', borderRadius: 10, background: 'var(--violet)', color: '#fff', fontSize: 13, fontWeight: 600, textDecoration: 'none' }}>Set up staff →</a>
+            {/* Error state — network/API failure */}
+            {loadErr && (
+              <div style={{ textAlign: 'center', padding: '20px 0 16px', marginBottom: 8 }}>
+                <p style={{ fontSize: 13, color: 'var(--destructive)', marginBottom: 12 }}>
+                  Couldn&apos;t load staff list — check your connection.
+                </p>
+                <button onClick={loadUsers}
+                  style={{ padding: '9px 20px', borderRadius: 10, background: 'var(--bg-surface)', border: '1px solid var(--border-default)', color: 'var(--text-primary)', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font-ui)' }}>
+                  Retry
+                </button>
               </div>
-            ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10, marginBottom: 20 }}>
-                {users.map((u, idx) => {
+            )}
+
+            {/* User grid — show even during/after load error if we have cached users */}
+            {users.length > 0 && (
+              <div style={{ display: 'grid', gridTemplateColumns: users.length <= 2 ? `repeat(${users.length},1fr)` : 'repeat(3,1fr)', gap: 10, marginBottom: 20 }}>
+                {users.map(u => {
                   const initials = makeInitials(u.name);
                   return (
-                    <button key={u.id} onClick={() => setSelected(u)}
-                      className="pos-card-enter"
-                      style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: 16, padding: '20px 10px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, cursor: 'pointer', animationDelay: `${idx * 50}ms`, transition: 'all 150ms ease' }}
-                      onMouseEnter={e => { const el = e.currentTarget; el.style.border = '1px solid rgba(139,92,246,0.35)'; el.style.background = 'var(--bg-hover)'; }}
-                      onMouseLeave={e => { const el = e.currentTarget; el.style.border = '1px solid var(--border-default)'; el.style.background = 'var(--bg-surface)'; }}
+                    <button
+                      key={u.id}
+                      type="button"
+                      onClick={() => setSelected(u)}
+                      style={{
+                        background: 'var(--bg-surface)',
+                        border: '1px solid var(--border-default)',
+                        borderRadius: 16,
+                        padding: '20px 10px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        gap: 10,
+                        cursor: 'pointer',
+                        transition: 'all 150ms ease',
+                        WebkitTapHighlightColor: 'transparent',
+                      }}
+                      onPointerDown={e => {
+                        const el = e.currentTarget;
+                        el.style.background = 'var(--bg-hover)';
+                        el.style.border = '1px solid rgba(139,92,246,0.35)';
+                        el.style.transform = 'scale(0.97)';
+                      }}
+                      onPointerUp={e => {
+                        const el = e.currentTarget;
+                        el.style.transform = '';
+                        // click fires after pointerUp, keep highlight briefly
+                        setTimeout(() => {
+                          el.style.background = 'var(--bg-surface)';
+                          el.style.border = '1px solid var(--border-default)';
+                        }, 150);
+                      }}
+                      onPointerLeave={e => {
+                        const el = e.currentTarget;
+                        el.style.background = 'var(--bg-surface)';
+                        el.style.border = '1px solid var(--border-default)';
+                        el.style.transform = '';
+                      }}
                     >
-                      <div style={{ width: 52, height: 52, borderRadius: '50%', background: 'rgba(139,92,246,0.1)', border: '2px solid rgba(139,92,246,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 800, color: 'var(--violet)', fontFamily: 'var(--font-ui)' }}>
+                      <div style={{ width: 52, height: 52, borderRadius: '50%', background: 'rgba(139,92,246,0.1)', border: '2px solid rgba(139,92,246,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 800, color: 'var(--violet)', fontFamily: 'var(--font-ui)', flexShrink: 0 }}>
                         {initials}
                       </div>
-                      <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', fontFamily: 'var(--font-ui)' }}>{u.name}</p>
+                      <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', fontFamily: 'var(--font-ui)', textAlign: 'center', wordBreak: 'break-word' }}>{u.name}</p>
                       <span style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-tertiary)', fontFamily: 'var(--font-ui)' }}>{u.role}</span>
                     </button>
                   );
@@ -225,8 +280,23 @@ function POSUserSelect({ businessId, businessName, onLogin }: {
               </div>
             )}
 
-            <div style={{ textAlign: 'center' }}>
-              <button onClick={bypassAsOwner} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: 'var(--text-tertiary)', fontFamily: 'var(--font-ui)' }}>
+            {/* No users + no error */}
+            {users.length === 0 && !loadErr && (
+              <div style={{ textAlign: 'center', padding: '20px 0 16px' }}>
+                <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 4 }}>No staff set up yet</p>
+                <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginBottom: 16 }}>Add cashiers in Settings, or continue as owner below.</p>
+                <a href="/pos/settings/users" style={{ display: 'inline-block', padding: '10px 20px', borderRadius: 10, background: 'var(--violet)', color: '#fff', fontSize: 13, fontWeight: 600, textDecoration: 'none' }}>
+                  Set up staff →
+                </a>
+              </div>
+            )}
+
+            {/* Always-visible owner bypass */}
+            <div style={{ textAlign: 'center', paddingTop: users.length > 0 ? 0 : 8 }}>
+              <button
+                type="button"
+                onClick={bypassAsOwner}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: 'var(--text-tertiary)', fontFamily: 'var(--font-ui)', padding: '8px 16px', WebkitTapHighlightColor: 'transparent' }}>
                 Continue as owner (bypass PIN)
               </button>
             </div>

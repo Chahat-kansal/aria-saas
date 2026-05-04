@@ -152,6 +152,12 @@
 }
 .pos-shell tr:hover td { background: var(--bg-hover); }
 
+/* ── Animation utility classes ────────────────────────────────────── */
+.card-enter     { animation: card-enter 320ms cubic-bezier(0.16,1,0.3,1) both; }
+.pos-card-enter { animation: pos-card-enter 320ms cubic-bezier(0.16,1,0.3,1) both; }
+.scale-in       { animation: scale-in 350ms cubic-bezier(0.16,1,0.3,1) both; }
+.fade-in        { animation: fade-in 250ms ease both; }
+
 /* ── Animations ───────────────────────────────────────────────────── */
 @keyframes card-enter {
   from { opacity:0; transform:translateY(18px) scale(0.93) }
@@ -251,6 +257,23 @@
 @keyframes pos-orb-pulse-0 { 0%,100%{opacity:0.15;transform:scale(1)} 50%{opacity:0.4;transform:scale(1.05)} }
 @keyframes pos-orb-pulse-1 { 0%,100%{opacity:0.2;transform:scale(1)} 50%{opacity:0.5;transform:scale(1.08)} }
 @keyframes pos-orb-pulse-2 { 0%,100%{opacity:0.1;transform:scale(1)} 50%{opacity:0.35;transform:scale(1.06)} }
+
+@keyframes foil-shift {
+  0%   { background-position: 0% 50% }
+  50%  { background-position: 100% 50% }
+  100% { background-position: 0% 50% }
+}
+@keyframes fade-in {
+  from { opacity: 0 }
+  to   { opacity: 1 }
+}
+@keyframes fly-orb {
+  0%   { transform: scale(0); opacity: 0 }
+  10%  { transform: scale(1); opacity: 1 }
+  90%  { transform: scale(1); opacity: 1 }
+  100% { transform: scale(0); opacity: 0 }
+}
+.card-3d { transform-style: preserve-3d; transition: transform 80ms linear; }
 
 /* ── Scan line ────────────────────────────────────────────────────── */
 @keyframes scan-line {

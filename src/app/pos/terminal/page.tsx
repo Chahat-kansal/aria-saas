@@ -2,6 +2,12 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { isMobileDevice, hasCameraSupport } from '@/lib/mobile-detect';
 import { SFX } from '@/lib/pos-utils';
+import dynamic from 'next/dynamic';
+import type { FlyToCartHandle } from '@/components/pos/FlyToCart';
+
+const CursorGlow = dynamic(() => import('@/components/pos/CursorGlow'), { ssr: false });
+const AnimatedBg = dynamic(() => import('@/components/pos/AnimatedBg'), { ssr: false });
+const FlyToCart  = dynamic(() => import('@/components/pos/FlyToCart'),  { ssr: false });
 
 /* ─── Types ─────────────────────────────────────────────────────── */
 interface Product {
@@ -198,8 +204,10 @@ export default function TerminalPage() {
   /* ── Context menu ─────────────────────────────────────────────── */
   const [contextMenu,      setContextMenu]      = useState<{ product: Product; x: number; y: number } | null>(null);
 
-  const searchRef  = useRef<HTMLInputElement>(null);
-  const chatEndRef = useRef<HTMLDivElement>(null);
+  const searchRef   = useRef<HTMLInputElement>(null);
+  const chatEndRef  = useRef<HTMLDivElement>(null);
+  const flyRef      = useRef<FlyToCartHandle>(null);
+  const cartAnchor  = useRef<HTMLDivElement>(null);
   const barcodeBuffer = useRef('');
   const barcodeTimer  = useRef<ReturnType<typeof setTimeout> | null>(null);
   const barcodeTs     = useRef<number>(0);
@@ -432,7 +440,13 @@ export default function TerminalPage() {
     searchRef.current?.focus();
   }
 
-  function addToCartDirect(p: Product, qty: number, variantLabel?: string, label?: string, mods: Modifier[] = []) {
+  function triggerFly(fromEl: HTMLElement | null) {
+    if (!fromEl || !cartAnchor.current || !flyRef.current) return;
+    flyRef.current.fly(fromEl.getBoundingClientRect(), cartAnchor.current.getBoundingClientRect());
+  }
+
+  function addToCartDirect(p: Product, qty: number, variantLabel?: string, label?: string, mods: Modifier[] = [], fromEl?: HTMLElement | null) {
+    if (fromEl) triggerFly(fromEl);
     const modPrice = mods.reduce((s, m) => s + (m.price_adjustment ?? 0), 0);
     const unitPrice = p.price + modPrice;
     const fullLabel = label ?? (variantLabel ? `${p.name} · ${variantLabel}` : p.name);
@@ -449,7 +463,7 @@ export default function TerminalPage() {
     if (window.innerWidth < 768) setMobileTab('cart');
   }
 
-  async function checkAndAddToCart(p: Product) {
+  async function checkAndAddToCart(p: Product, fromEl?: HTMLElement | null) {
     if (!p.is_active) return;
     setVariantLoading(true);
     try {
@@ -467,7 +481,7 @@ export default function TerminalPage() {
       }
     } catch { /* fall through */ }
     setVariantLoading(false);
-    addToCartDirect(p, 1, undefined, undefined, []);
+    addToCartDirect(p, 1, undefined, undefined, [], fromEl);
   }
 
   function confirmVariantSelection() {
@@ -776,7 +790,9 @@ export default function TerminalPage() {
      RENDER
   ══════════════════════════════════════════════════════════════ */
   return (
-    <div className="flex flex-col overflow-hidden" style={{ height: '100%', background: 'var(--bg-base)' }}>
+    <div className="flex flex-col overflow-hidden" style={{ height: '100%', background: 'var(--bg-base)', position: 'relative' }}>
+      <CursorGlow />
+      <FlyToCart ref={flyRef} />
 
       {/* Mobile mode banner */}
       {showMobileBanner && (
@@ -853,6 +869,7 @@ export default function TerminalPage() {
         {/* ── LEFT: Product browser ──────────────────────────────── */}
         <div className={`relative flex flex-col overflow-hidden ${mobileTab !== 'products' ? 'hidden md:flex' : 'flex'}`}
           style={{ borderRight: '1px solid #1C1928', background: '#110F1A' }}>
+          <AnimatedBg />
 
           {/* Quick panel slide-out */}
           {showQuickPanel && (
@@ -1040,83 +1057,114 @@ export default function TerminalPage() {
                 {!search && <a href="/pos/products" className="mt-3 text-xs font-medium hover:underline" style={{ color: '#8B5CF6' }}>Add products →</a>}
               </div>
             ) : (
-              <div className="grid grid-cols-2 gap-2.5">
+              <div className="grid grid-cols-2 gap-2.5" style={{ perspective: '800px' }}>
                 {displayedProducts.map((p, idx) => {
                   const isOut = p.track_stock && p.stock_quantity <= 0;
                   const isLow = p.track_stock && p.stock_quantity > 0 && p.stock_quantity <= (p.low_stock_threshold ?? 5);
                   const catName = (p.pos_categories?.name ?? '').toLowerCase();
-                  // Category gradient map
                   const catGrad: Record<string, { grad: string; border: string; color: string }> = {
-                    'beer': { grad: 'linear-gradient(135deg,rgba(245,158,11,0.2),rgba(146,64,14,0.4))', border: 'rgba(245,158,11,0.27)', color: '#F59E0B' },
-                    'beer & cider': { grad: 'linear-gradient(135deg,rgba(245,158,11,0.2),rgba(146,64,14,0.4))', border: 'rgba(245,158,11,0.27)', color: '#F59E0B' },
-                    'wine': { grad: 'linear-gradient(135deg,rgba(147,51,234,0.2),rgba(76,29,149,0.4))', border: 'rgba(147,51,234,0.27)', color: '#9333EA' },
-                    'spirits': { grad: 'linear-gradient(135deg,rgba(59,130,246,0.2),rgba(30,58,95,0.4))', border: 'rgba(59,130,246,0.27)', color: '#3B82F6' },
-                    'coffee': { grad: 'linear-gradient(135deg,rgba(161,98,7,0.2),rgba(69,26,3,0.4))', border: 'rgba(161,98,7,0.27)', color: '#A16207' },
-                    'food': { grad: 'linear-gradient(135deg,rgba(239,68,68,0.2),rgba(127,29,29,0.4))', border: 'rgba(239,68,68,0.27)', color: '#EF4444' },
-                    'soft drinks': { grad: 'linear-gradient(135deg,rgba(16,185,129,0.2),rgba(6,78,59,0.4))', border: 'rgba(16,185,129,0.27)', color: '#10B981' },
-                    'snacks': { grad: 'linear-gradient(135deg,rgba(249,115,22,0.2),rgba(124,45,18,0.4))', border: 'rgba(249,115,22,0.27)', color: '#F97316' },
+                    'beer':         { grad: 'linear-gradient(135deg,rgba(245,158,11,0.22),rgba(146,64,14,0.44))',   border: 'rgba(245,158,11,0.3)',  color: '#F59E0B' },
+                    'beer & cider': { grad: 'linear-gradient(135deg,rgba(245,158,11,0.22),rgba(146,64,14,0.44))',   border: 'rgba(245,158,11,0.3)',  color: '#F59E0B' },
+                    'wine':         { grad: 'linear-gradient(135deg,rgba(147,51,234,0.22),rgba(76,29,149,0.44))',   border: 'rgba(147,51,234,0.3)',  color: '#9333EA' },
+                    'spirits':      { grad: 'linear-gradient(135deg,rgba(59,130,246,0.22),rgba(30,58,95,0.44))',    border: 'rgba(59,130,246,0.3)',  color: '#3B82F6' },
+                    'coffee':       { grad: 'linear-gradient(135deg,rgba(161,98,7,0.22),rgba(69,26,3,0.44))',       border: 'rgba(161,98,7,0.3)',    color: '#A16207' },
+                    'food':         { grad: 'linear-gradient(135deg,rgba(239,68,68,0.22),rgba(127,29,29,0.44))',    border: 'rgba(239,68,68,0.3)',   color: '#EF4444' },
+                    'soft drinks':  { grad: 'linear-gradient(135deg,rgba(16,185,129,0.22),rgba(6,78,59,0.44))',     border: 'rgba(16,185,129,0.3)', color: '#10B981' },
+                    'snacks':       { grad: 'linear-gradient(135deg,rgba(249,115,22,0.22),rgba(124,45,18,0.44))',   border: 'rgba(249,115,22,0.3)', color: '#F97316' },
+                    'rtd':          { grad: 'linear-gradient(135deg,rgba(16,185,129,0.22),rgba(6,78,59,0.44))',     border: 'rgba(16,185,129,0.3)', color: '#10B981' },
+                    'water':        { grad: 'linear-gradient(135deg,rgba(56,189,248,0.22),rgba(12,74,110,0.44))',   border: 'rgba(56,189,248,0.3)', color: '#38BDF8' },
                   };
-                  const cg = catGrad[catName] ?? { grad: 'linear-gradient(135deg,rgba(99,102,241,0.2),rgba(49,46,129,0.4))', border: 'rgba(99,102,241,0.27)', color: '#6366F1' };
+                  const cg = catGrad[catName] ?? { grad: 'linear-gradient(135deg,rgba(99,102,241,0.22),rgba(49,46,129,0.44))', border: 'rgba(99,102,241,0.3)', color: '#6366F1' };
+
                   return (
-                    <button key={p.id}
-                      onClick={() => {
+                    <div key={p.id}
+                      className="pos-card-enter"
+                      style={{ animationDelay: `${idx * 30}ms`, perspective: '600px' }}
+                      onMouseMove={e => {
                         if (isOut) return;
-                        if (priceCheckMode) { setPriceCheckProd(p); return; }
-                        checkAndAddToCart(p);
+                        const el = e.currentTarget as HTMLDivElement;
+                        const card = el.querySelector('.card-inner') as HTMLElement;
+                        if (!card) return;
+                        const r = el.getBoundingClientRect();
+                        const x = (e.clientX - r.left) / r.width  - 0.5;
+                        const y = (e.clientY - r.top)  / r.height - 0.5;
+                        card.style.transform = `rotateY(${x * 14}deg) rotateX(${-y * 10}deg) translateZ(6px)`;
+                        const foil = card.querySelector('.card-foil') as HTMLElement;
+                        if (foil) {
+                          foil.style.opacity = '0.18';
+                          foil.style.backgroundPosition = `${(x + 0.5) * 100}% ${(y + 0.5) * 100}%`;
+                        }
                       }}
-                      onContextMenu={e => { e.preventDefault(); setContextMenu({ product: p, x: e.clientX, y: e.clientY }); }}
-                      disabled={isOut}
-                      className="relative text-left rounded-2xl overflow-hidden pos-card-enter"
-                      style={{
-                        background: 'rgba(26,23,40,0.9)',
-                        border: '1px solid #2A2540',
-                        boxShadow: '0 1px 3px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.04)',
-                        cursor: isOut ? 'not-allowed' : 'pointer',
-                        transition: 'all 150ms cubic-bezier(0.16,1,0.3,1)',
-                        filter: isOut ? 'grayscale(0.7)' : 'none',
-                        opacity: isOut ? 0.5 : 1,
-                        animationDelay: `${idx * 30}ms`,
-                      }}
-                      onMouseEnter={e => { if (!isOut) { const el = e.currentTarget as HTMLButtonElement; el.style.transform = 'translateY(-2px) scale(1.02)'; el.style.border = '1px solid rgba(139,92,246,0.3)'; el.style.boxShadow = '0 8px 24px rgba(0,0,0,0.5),0 0 0 1px rgba(139,92,246,0.2),inset 0 1px 0 rgba(255,255,255,0.06)'; }}}
-                      onMouseLeave={e => { const el = e.currentTarget as HTMLButtonElement; el.style.transform = ''; el.style.border = '1px solid #2A2540'; el.style.boxShadow = '0 1px 3px rgba(0,0,0,0.5),inset 0 1px 0 rgba(255,255,255,0.04)'; }}
-                      onMouseDown={e => { const el = e.currentTarget as HTMLButtonElement; el.style.transform = 'translateY(0) scale(0.97)'; el.style.boxShadow = '0 2px 8px rgba(0,0,0,0.4)'; }}
-                      onMouseUp={e => { const el = e.currentTarget as HTMLButtonElement; el.style.transform = 'translateY(-2px) scale(1.02)'; }}>
-                      {/* Card top — category gradient */}
-                      <div className="flex flex-col items-center justify-center py-3.5 relative overflow-hidden"
-                        style={{ background: cg.grad, minHeight: 68, borderBottom: `1px solid ${cg.border}` }}>
-                        <div className="absolute inset-0" style={{ background: `radial-gradient(circle at 30% 30%, ${cg.color}26, transparent 60%)`, opacity: 0.15 }} />
-                        {(p as any).image_url ? (
-                          <img src={(p as any).image_url} alt={p.name} className="h-12 w-12 object-contain relative z-10" />
-                        ) : (
-                          <div className="relative z-10 flex flex-col items-center">
-                            <span className="text-2xl leading-none">{getCatStyle(p.pos_categories?.name).emoji}</span>
-                            <span className="text-[9px] font-bold mt-0.5 tracking-wide" style={{ color: cg.color, opacity: 0.8 }}>
-                              {p.name.slice(0, 6).toUpperCase()}
-                            </span>
-                          </div>
-                        )}
-                        {isOut && (
-                          <div className="absolute inset-0 flex items-center justify-center" style={{ background: 'rgba(10,9,16,0.5)' }}>
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: 'rgba(239,68,68,0.2)', border: '1px solid rgba(239,68,68,0.4)', color: '#EF4444' }}>Out</span>
-                          </div>
-                        )}
-                      </div>
-                      {/* Card bottom */}
-                      <div className="px-2.5 py-2">
-                        <p className="text-xs font-semibold leading-tight line-clamp-2 min-h-[32px]" style={{ color: '#EDE8FF' }}>
-                          {p.name}
-                        </p>
-                        <div className="flex items-center justify-between mt-1.5">
-                          <span className="text-sm font-bold" style={{ fontFamily: "'JetBrains Mono', monospace", color: '#EDE8FF' }}>A${p.price.toFixed(2)}</span>
-                          {isOut && (
-                            <span className="text-[9px] font-medium px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(239,68,68,0.15)', color: '#EF4444' }}>Out</span>
+                      onMouseLeave={e => {
+                        const el = e.currentTarget as HTMLDivElement;
+                        const card = el.querySelector('.card-inner') as HTMLElement;
+                        if (!card) return;
+                        card.style.transform = 'rotateY(0deg) rotateX(0deg) translateZ(0)';
+                        const foil = card.querySelector('.card-foil') as HTMLElement;
+                        if (foil) foil.style.opacity = '0';
+                      }}>
+                      <button
+                        onClick={e => {
+                          if (isOut) return;
+                          if (priceCheckMode) { setPriceCheckProd(p); return; }
+                          checkAndAddToCart(p, e.currentTarget as HTMLElement);
+                        }}
+                        onContextMenu={e => { e.preventDefault(); setContextMenu({ product: p, x: e.clientX, y: e.clientY }); }}
+                        disabled={isOut}
+                        className="card-inner relative text-left rounded-2xl overflow-hidden w-full"
+                        style={{
+                          background: 'rgba(26,23,40,0.95)',
+                          border: `1px solid ${cg.border}`,
+                          boxShadow: `0 2px 12px rgba(0,0,0,0.6), 0 0 0 0.5px rgba(255,255,255,0.04) inset`,
+                          cursor: isOut ? 'not-allowed' : 'pointer',
+                          transformStyle: 'preserve-3d',
+                          transition: 'transform 120ms cubic-bezier(0.16,1,0.3,1), box-shadow 120ms',
+                          filter: isOut ? 'grayscale(0.7)' : 'none',
+                          opacity: isOut ? 0.5 : 1,
+                        }}
+                        onMouseDown={e => { const el = e.currentTarget as HTMLElement; el.style.transform = 'scale(0.95)'; el.style.boxShadow = '0 1px 4px rgba(0,0,0,0.5)'; }}
+                        onMouseUp={e => { const el = e.currentTarget as HTMLElement; el.style.transform = ''; el.style.boxShadow = ''; }}>
+
+                        {/* Holographic foil overlay */}
+                        <div className="card-foil absolute inset-0 rounded-2xl pointer-events-none z-20 transition-opacity duration-200"
+                          style={{
+                            opacity: 0,
+                            background: 'linear-gradient(105deg,transparent 20%,rgba(255,255,255,0.06) 40%,rgba(139,92,246,0.12) 50%,rgba(255,255,255,0.06) 60%,transparent 80%)',
+                            backgroundSize: '200% 200%',
+                            mixBlendMode: 'screen',
+                          }} />
+
+                        {/* Card top — category gradient */}
+                        <div className="flex flex-col items-center justify-center py-4 relative overflow-hidden"
+                          style={{ background: cg.grad, minHeight: 72, borderBottom: `1px solid ${cg.border}` }}>
+                          <div className="absolute inset-0" style={{ background: `radial-gradient(circle at 30% 30%, ${cg.color}44, transparent 65%)` }} />
+                          {(p as any).image_url ? (
+                            <img src={(p as any).image_url} alt={p.name} className="h-12 w-12 object-contain relative z-10" />
+                          ) : (
+                            <div className="relative z-10 flex flex-col items-center gap-0.5">
+                              <span className="text-2xl leading-none">{getCatStyle(p.pos_categories?.name).emoji}</span>
+                              <span className="text-[9px] font-bold tracking-widest uppercase" style={{ color: cg.color }}>{p.name.slice(0, 6)}</span>
+                            </div>
                           )}
-                          {isLow && !isOut && (
-                            <span className="text-[9px] font-medium px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(245,158,11,0.15)', color: '#F59E0B' }}>{p.stock_quantity} left</span>
+                          {isOut && (
+                            <div className="absolute inset-0 flex items-center justify-center rounded-t-2xl" style={{ background: 'rgba(10,9,16,0.55)' }}>
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: 'rgba(239,68,68,0.22)', border: '1px solid rgba(239,68,68,0.5)', color: '#EF4444' }}>Out of stock</span>
+                            </div>
                           )}
                         </div>
-                      </div>
-                    </button>
+
+                        {/* Card bottom */}
+                        <div className="px-2.5 py-2.5">
+                          <p className="text-xs font-semibold leading-snug line-clamp-2 min-h-[32px]" style={{ color: '#EDE8FF' }}>{p.name}</p>
+                          <div className="flex items-center justify-between mt-1.5">
+                            <span className="text-sm font-bold" style={{ fontFamily: "'JetBrains Mono',monospace", color: cg.color }}>A${p.price.toFixed(2)}</span>
+                            {isLow && !isOut && (
+                              <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.25)', color: '#F59E0B' }}>{p.stock_quantity} left</span>
+                            )}
+                          </div>
+                        </div>
+                      </button>
+                    </div>
                   );
                 })}
               </div>
@@ -1186,7 +1234,7 @@ export default function TerminalPage() {
             /* ── CART VIEW ────────────────────────────────────── */
             <>
               {/* Cart header */}
-              <div className="flex-shrink-0 px-4 py-3 flex items-center gap-2" style={{ borderBottom: '1px solid #1C1928' }}>
+              <div ref={cartAnchor} className="flex-shrink-0 px-4 py-3 flex items-center gap-2" style={{ borderBottom: '1px solid #1C1928' }}>
                 <span className="text-sm font-semibold" style={{ color: '#EDE8FF' }}>Order</span>
                 {cart.length > 0 && (
                   <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(139,92,246,0.12)', border: '1px solid rgba(139,92,246,0.25)', color: '#8B5CF6' }}>
