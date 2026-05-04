@@ -1,16 +1,9 @@
 'use client';
 import { useState, useEffect } from 'react';
 
-interface CashierRow {
-  name: string;
-  sales_count: number;
-  revenue: number;
-  cash_sales: number;
-  card_sales: number;
-  refunds: number;
-  avg_basket: number;
-}
+interface CashierRow { name: string; sales_count: number; revenue: number; cash_sales: number; card_sales: number; refunds: number; avg_basket: number; }
 
+const C = { bg:'rgba(17,15,26,0.95)', card:'rgba(26,23,40,0.9)', border:'#2A2540', text:'#EDE8FF', muted:'#8B85A8', dim:'#4A4565', violet:'#8B5CF6' };
 function fmtDate(d: Date) { return d.toISOString().split('T')[0]; }
 
 export default function CashierReportPage() {
@@ -24,82 +17,69 @@ export default function CashierReportPage() {
     setLoading(true);
     fetch(`/api/pos/reports/cashier?from=${from}&to=${to}`)
       .then(r => r.json())
-      .then(d => {
-        setRows(d.by_cashier ?? []);
-        setTotals(d.totals ?? null);
-        setLoading(false);
-      })
+      .then(d => { setRows(d.by_cashier ?? []); setTotals(d.totals ?? null); setLoading(false); })
       .catch(() => setLoading(false));
   }, [from, to]);
 
   return (
-    <div className="min-h-full bg-gray-50 overflow-y-auto">
-      <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-xl font-semibold text-gray-900">Cashier Report</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Sales performance by staff member</p>
+    <div style={{ minHeight: '100%', background: C.bg, color: C.text, fontFamily: "'Manrope',sans-serif" }}>
+      <div style={{ padding: '24px 24px 32px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
+          <div>
+            <h1 style={{ fontSize: 20, fontWeight: 700, color: C.text, marginBottom: 2 }}>Cashier Report</h1>
+            <p style={{ fontSize: 12, color: C.muted }}>Sales performance by staff member</p>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <input type="date" value={from} onChange={e => setFrom(e.target.value)} style={{ background: C.card, border: `1px solid ${C.border}`, color: C.text, borderRadius: 8, padding: '6px 10px', fontSize: 12, outline: 'none' }} />
+            <span style={{ color: C.dim, fontSize: 12 }}>to</span>
+            <input type="date" value={to} onChange={e => setTo(e.target.value)} style={{ background: C.card, border: `1px solid ${C.border}`, color: C.text, borderRadius: 8, padding: '6px 10px', fontSize: 12, outline: 'none' }} />
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <input type="date" value={from} onChange={e => setFrom(e.target.value)}
-            className="text-sm border border-gray-200 rounded-xl px-3 py-2 outline-none bg-white text-gray-700" />
-          <span className="text-sm text-gray-400">to</span>
-          <input type="date" value={to} onChange={e => setTo(e.target.value)}
-            className="text-sm border border-gray-200 rounded-xl px-3 py-2 outline-none bg-white text-gray-700" />
-        </div>
-      </div>
 
-      <div className="max-w-5xl mx-auto px-6 py-6 space-y-5">
-        {/* Summary strip */}
-        <div className="grid grid-cols-3 gap-4">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12, marginBottom: 20 }}>
           {[
-            { label: 'Total revenue',    value: `A$${(totals?.total_revenue ?? 0).toFixed(2)}` },
-            { label: 'Total sales',      value: String(totals?.total_sales ?? 0) },
-            { label: 'Active cashiers',  value: String(totals?.cashier_count ?? 0) },
+            { label: 'Total Revenue',   value: `A$${(totals?.total_revenue ?? 0).toFixed(2)}` },
+            { label: 'Total Sales',     value: String(totals?.total_sales ?? 0) },
+            { label: 'Active Cashiers', value: String(totals?.cashier_count ?? 0) },
           ].map(s => (
-            <div key={s.label} className="bg-white border border-gray-200 rounded-xl px-5 py-4">
-              <p className="text-xs text-gray-400 uppercase tracking-wider mb-1">{s.label}</p>
-              <p className="text-2xl font-bold font-mono text-gray-900">{s.value}</p>
+            <div key={s.label} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: '16px 20px' }}>
+              <p style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: C.dim, marginBottom: 8 }}>{s.label}</p>
+              <p style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 24, fontWeight: 700, color: C.text }}>{s.value}</p>
             </div>
           ))}
         </div>
 
         {loading ? (
-          <div className="bg-white border border-gray-200 rounded-xl p-8 flex justify-center">
-            <div className="w-6 h-6 rounded-full border-2 border-gray-300 border-t-gray-600 animate-spin" />
+          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: 48, display: 'flex', justifyContent: 'center' }}>
+            <div style={{ width: 24, height: 24, borderRadius: '50%', border: `2px solid rgba(139,92,246,0.3)`, borderTopColor: C.violet, animation: 'spin 0.7s linear infinite' }} />
           </div>
         ) : rows.length === 0 ? (
-          <div className="bg-white border border-gray-200 rounded-xl p-12 text-center">
-            <p className="text-gray-400 text-sm">No sales data for this period.</p>
-            <p className="text-gray-300 text-xs mt-1">Make sure staff enter their name in the &ldquo;Sale by&rdquo; field on the terminal.</p>
+          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: 64, textAlign: 'center' }}>
+            <p style={{ color: C.muted, fontSize: 14 }}>No cashier data for this period.</p>
+            <p style={{ color: C.dim, fontSize: 12, marginTop: 6 }}>Fill in the &ldquo;Sale by&rdquo; field on the terminal to track cashier performance.</p>
           </div>
         ) : (
-          <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-            <div className="grid text-xs font-medium text-gray-400 uppercase tracking-wider px-4 py-3 border-b border-gray-100 bg-gray-50"
-              style={{ gridTemplateColumns: '1fr 80px 120px 100px 100px 100px 100px' }}>
-              <span>Cashier</span>
-              <span className="text-right">Sales</span>
-              <span className="text-right">Revenue</span>
-              <span className="text-right">Cash</span>
-              <span className="text-right">Card</span>
-              <span className="text-right">Refunds</span>
-              <span className="text-right">Avg basket</span>
+          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, overflow: 'hidden' }}>
+            {/* Header row */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 72px 120px 100px 100px 90px 100px', padding: '12px 16px', borderBottom: `1px solid ${C.border}`, background: 'rgba(255,255,255,0.03)' }}>
+              {['Cashier','Sales','Revenue','Cash','Card','Refunds','Avg Basket'].map(h => (
+                <span key={h} style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: C.dim, textAlign: h === 'Cashier' ? 'left' : 'right' }}>{h}</span>
+              ))}
             </div>
             {rows.map((row, i) => (
-              <div key={row.name}
-                className={`grid px-4 py-3 text-sm items-center border-b border-gray-50 last:border-0 ${i % 2 === 0 ? '' : 'bg-gray-50/50'}`}
-                style={{ gridTemplateColumns: '1fr 80px 120px 100px 100px 100px 100px' }}>
-                <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-full bg-violet-100 flex items-center justify-center text-xs font-bold text-violet-700 flex-shrink-0">
+              <div key={row.name} style={{ display: 'grid', gridTemplateColumns: '1fr 72px 120px 100px 100px 90px 100px', padding: '12px 16px', borderBottom: i < rows.length - 1 ? `1px solid ${C.border}` : 'none', alignItems: 'center', background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.01)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{ width: 30, height: 30, borderRadius: '50%', background: 'rgba(139,92,246,0.15)', border: `1px solid rgba(139,92,246,0.3)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, color: C.violet, flexShrink: 0 }}>
                     {row.name[0]?.toUpperCase() ?? '?'}
                   </div>
-                  <span className="font-medium text-gray-900">{row.name}</span>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{row.name}</span>
                 </div>
-                <span className="text-right text-gray-600">{row.sales_count}</span>
-                <span className="text-right font-semibold font-mono text-gray-900">A${row.revenue.toFixed(2)}</span>
-                <span className="text-right font-mono text-gray-500">A${row.cash_sales.toFixed(2)}</span>
-                <span className="text-right font-mono text-gray-500">A${row.card_sales.toFixed(2)}</span>
-                <span className="text-right font-mono text-red-500">{row.refunds > 0 ? `A${row.refunds.toFixed(2)}` : '—'}</span>
-                <span className="text-right font-mono text-gray-500">A${row.avg_basket.toFixed(2)}</span>
+                <span style={{ textAlign: 'right', color: C.muted, fontSize: 13 }}>{row.sales_count}</span>
+                <span style={{ textAlign: 'right', fontFamily: "'JetBrains Mono',monospace", fontWeight: 700, color: C.text, fontSize: 13 }}>A${row.revenue.toFixed(2)}</span>
+                <span style={{ textAlign: 'right', fontFamily: "'JetBrains Mono',monospace", color: C.muted, fontSize: 12 }}>A${row.cash_sales.toFixed(2)}</span>
+                <span style={{ textAlign: 'right', fontFamily: "'JetBrains Mono',monospace", color: C.muted, fontSize: 12 }}>A${row.card_sales.toFixed(2)}</span>
+                <span style={{ textAlign: 'right', fontFamily: "'JetBrains Mono',monospace", color: row.refunds > 0 ? '#EF4444' : C.dim, fontSize: 12 }}>{row.refunds > 0 ? `A$${row.refunds.toFixed(2)}` : '—'}</span>
+                <span style={{ textAlign: 'right', fontFamily: "'JetBrains Mono',monospace", color: C.muted, fontSize: 12 }}>A${row.avg_basket.toFixed(2)}</span>
               </div>
             ))}
           </div>

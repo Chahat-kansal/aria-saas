@@ -203,7 +203,8 @@ export default function TerminalPage() {
   const [reprintSale,      setReprintSale]      = useState<any>(null);
 
   /* ── Terminal view state ────────────────────────────────────────── */
-  const [terminalView, setTerminalView] = useState<'pos' | 'checkout' | 'confirm'>('pos');
+  const [terminalView,     setTerminalView]     = useState<'pos' | 'checkout' | 'confirm'>('pos');
+  const [showReceiptModal, setShowReceiptModal] = useState(false);
 
   /* ── Context menu ─────────────────────────────────────────────── */
   const [contextMenu,      setContextMenu]      = useState<{ product: Product; x: number; y: number } | null>(null);
@@ -994,20 +995,20 @@ export default function TerminalPage() {
                 </div>
               </div>
             </div>
-            {/* Print receipt button — shows Receipt modal on top of confirm overlay */}
-            {showReceipt && (
+            {/* Receipt modal — only when user clicks Print */}
+            {showReceiptModal && showReceipt && (
               <Receipt
                 sale={showReceipt}
                 businessName={businessName}
-                onClose={() => {/* stay on confirm */}}
+                onClose={() => setShowReceiptModal(false)}
               />
             )}
-            <button onClick={() => window.print()}
+            <button onClick={() => setShowReceiptModal(true)}
               style={{ height: 40, padding: '0 24px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.05)', color: 'rgba(220,240,255,0.7)', fontFamily: 'inherit', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 7 }}>
               🖨️ Print receipt
             </button>
             {/* New Sale button */}
-            <button onClick={() => { setShowReceipt(null); setTerminalView('pos'); if (window.innerWidth < 768) setMobileTab('products'); }}
+            <button onClick={() => { setShowReceipt(null); setTerminalView('pos'); setShowReceiptModal(false); if (window.innerWidth < 768) setMobileTab('products'); }}
               style={{ height: 52, padding: '0 40px', borderRadius: 14, border: 'none', background: 'linear-gradient(135deg,#00E5FF,#00BFCC,#7B2FFF)', color: '#000', fontFamily: 'inherit', fontSize: 14, fontWeight: 900, cursor: 'pointer', boxShadow: '0 5px 0 rgba(0,150,200,0.5), 0 10px 30px rgba(0,229,255,0.3)', transition: 'all 220ms', display: 'flex', alignItems: 'center', gap: 8, animation: 'fade-up 0.4s 0.3s cubic-bezier(0.16,1,0.3,1) both' }}
               onMouseEnter={e => { const el = e.currentTarget; el.style.transform = 'translateY(-3px)'; el.style.boxShadow = '0 8px 0 rgba(0,150,200,0.5), 0 16px 40px rgba(0,229,255,0.4)'; }}
               onMouseLeave={e => { const el = e.currentTarget; el.style.transform = ''; el.style.boxShadow = '0 5px 0 rgba(0,150,200,0.5), 0 10px 30px rgba(0,229,255,0.3)'; }}>

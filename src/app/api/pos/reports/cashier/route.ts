@@ -23,51 +23,57 @@ export async function GET(req: Request) {
   const from = searchParams.get('from') ?? new Date(Date.now() - 29 * 86400000).toISOString().split('T')[0];
   const to   = searchParams.get('to')   ?? new Date().toISOString().split('T')[0];
 
-  try {
-    const { data: sales, error } = await supabase
+  // Try with served_by first, fall back without it
+  let sales: Array<{ total_amount: number; payment_method: string; status: string; served_by?: string | null }> = [];
+  const { data, error } = await supabase
+    .from('pos_sales')
+    .select('total_amount, payment_method, status, served_by')
+    .eq('business_id', bid)
+    .gte('created_at', `${from}T00:00:00`)
+    .lte('created_at', `${to}T23:59:59`)
+    .limit(2000);
+
+  if (error) {
+    // served_by column may not exist — retry without it
+    const { data: fallback } = await supabase
       .from('pos_sales')
-      .select('id, total_amount, payment_method, status, served_by, created_at')
+      .select('total_amount, payment_method, status')
       .eq('business_id', bid)
-      .gte('created_at', `${from}T00:00:00.000Z`)
-      .lte('created_at', `${to}T23:59:59.999Z`)
+      .gte('created_at', `${from}T00:00:00`)
+      .lte('created_at', `${to}T23:59:59`)
       .limit(2000);
-
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-
-    const rows = sales ?? [];
-
-    // Group by served_by
-    const cashierMap = new Map<string, {
-      name: string; sales_count: number; revenue: number;
-      cash_sales: number; card_sales: number; refunds: number;
-    }>();
-
-    for (const s of rows) {
-      const name = s.served_by || 'Unassigned';
-      const existing = cashierMap.get(name) ?? { name, sales_count: 0, revenue: 0, cash_sales: 0, card_sales: 0, refunds: 0 };
-      if (s.status === 'refunded' || (s.total_amount ?? 0) < 0) {
-        existing.refunds += Math.abs(s.total_amount ?? 0);
-      } else if (s.status === 'completed') {
-        existing.sales_count++;
-        existing.revenue += s.total_amount ?? 0;
-        if (s.payment_method === 'cash') existing.cash_sales += s.total_amount ?? 0;
-        else existing.card_sales += s.total_amount ?? 0;
-      }
-      cashierMap.set(name, existing);
-    }
-
-    const by_cashier = Array.from(cashierMap.values())
-      .map(r => ({ ...r, avg_basket: r.sales_count > 0 ? r.revenue / r.sales_count : 0 }))
-      .sort((a, b) => b.revenue - a.revenue);
-
-    const totals = {
-      total_revenue: by_cashier.reduce((s, r) => s + r.revenue, 0),
-      total_sales:   by_cashier.reduce((s, r) => s + r.sales_count, 0),
-      cashier_count: by_cashier.length,
-    };
-
-    return NextResponse.json({ by_cashier, totals });
-  } catch (err) {
-    return NextResponse.json({ error: String(err) }, { status: 500 });
+    sales = fallback ?? [];
+  } else {
+    sales = data ?? [];
   }
+
+  // Group by cashier name
+  const cashierMap = new Map<string, { name: string; sales_count: number; revenue: number; cash_sales: number; card_sales: number; refunds: number }>();
+
+  for (const s of sales) {
+    const name = (s as any).served_by || 'Unassigned';
+    const existing = cashierMap.get(name) ?? { name, sales_count: 0, revenue: 0, cash_sales: 0, card_sales: 0, refunds: 0 };
+    const amt = s.total_amount ?? 0;
+    if (amt < 0 || s.status === 'refunded') {
+      existing.refunds += Math.abs(amt);
+    } else {
+      existing.sales_count++;
+      existing.revenue += amt;
+      if (s.payment_method === 'cash') existing.cash_sales += amt;
+      else existing.card_sales += amt;
+    }
+    cashierMap.set(name, existing);
+  }
+
+  const by_cashier = Array.from(cashierMap.values())
+    .map(r => ({ ...r, avg_basket: r.sales_count > 0 ? r.revenue / r.sales_count : 0 }))
+    .sort((a, b) => b.revenue - a.revenue);
+
+  const totals = {
+    total_revenue:  by_cashier.reduce((s, r) => s + r.revenue, 0),
+    total_sales:    by_cashier.reduce((s, r) => s + r.sales_count, 0),
+    cashier_count:  by_cashier.length,
+  };
+
+  return NextResponse.json({ by_cashier, totals });
 }

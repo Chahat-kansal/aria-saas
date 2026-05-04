@@ -1,3 +1,6 @@
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 
@@ -22,7 +25,8 @@ export async function POST(req: Request) {
     items, customer_id, payment_method,
     subtotal, tax_amount, discount_amount, total_amount,
     cash_tendered, change_given, notes,
-    split_cash, split_card, outlet_id,
+    split_cash, split_card, outlet_id, served_by,
+    session_id: bodySessionId, age_verified,
   } = body;
 
   if (!items?.length) return NextResponse.json({ error: 'No items' }, { status: 400 });
@@ -83,6 +87,8 @@ export async function POST(req: Request) {
       split_card: split_card ?? null,
       outlet_id: outlet_id ?? null,
       notes: notes ?? null,
+      served_by: served_by ?? null,
+      age_verified: age_verified ?? false,
       status: 'completed',
     })
     .select()
