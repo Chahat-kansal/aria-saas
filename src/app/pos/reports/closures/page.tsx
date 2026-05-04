@@ -1,29 +1,25 @@
 'use client';
 import { useState, useEffect } from 'react';
-interface Session { id: string; opened_at: string; closed_at: string | null; opening_float: number | null; closing_float: number | null; total_cash_sales: number | null; total_card_sales: number | null; status: string; }
+interface Session { id: string; opened_at: string; closed_at: string | null; opening_float: number | null; closing_float: number | null; total_cash_sales: number | null; total_card_sales: number | null; total_revenue: number | null; transaction_count: number | null; variance: number; duration_mins: number | null; status: string; }
 export default function RegisterClosuresPage() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
   useEffect(() => {
-    fetch('/api/pos/sessions').then(r=>r.json()).then(d=>{
-      setSessions((d.sessions||[]).filter((s:Session)=>s.status==='closed'));
+    fetch('/api/pos/reports/closures').then(r=>r.json()).then(d=>{
+      setSessions(d.sessions || []);
       setLoading(false);
-    });
+    }).catch(() => setLoading(false));
   }, []);
 
-  function variance(s: Session) {
-    const expected = (s.opening_float??0) + (s.total_cash_sales??0);
-    return (s.closing_float??0) - expected;
-  }
-
   function exportCSV() {
-    const rows = [['Date','Opened','Closed','Opening Float','Cash Sales','Card Sales','Closing Float','Variance']];
+    const rows = [['Date','Opened','Closed','Duration','Opening Float','Cash Sales','Card Sales','Closing Float','Variance']];
     sessions.forEach(s => {
-      const v = variance(s);
+      const v = s.variance ?? 0;
       rows.push([
         s.opened_at ? new Date(s.opened_at).toLocaleDateString() : '',
         s.opened_at ? new Date(s.opened_at).toLocaleTimeString() : '',
         s.closed_at ? new Date(s.closed_at).toLocaleTimeString() : '',
+        s.duration_mins ? `${s.duration_mins}min` : '',
         String(s.opening_float??0), String(s.total_cash_sales??0), String(s.total_card_sales??0),
         String(s.closing_float??0), v.toFixed(2),
       ]);
@@ -47,7 +43,7 @@ export default function RegisterClosuresPage() {
             <thead><tr className="border-b border-[rgba(0,0,0,.06)]">{['Date','Open','Close','Float','Cash Sales','Card Sales','Closing Float','Variance'].map(h=><th key={h} className="px-4 py-3 text-left text-xs font-medium text-[rgba(26,26,22,.45)]">{h}</th>)}</tr></thead>
             <tbody>
               {sessions.map(s => {
-                const v = variance(s);
+                const v = s.variance ?? 0;
                 return (
                   <tr key={s.id} className="border-b border-[rgba(0,0,0,.04)] hover:bg-[rgba(0,0,0,.02)]">
                     <td className="px-4 py-3 text-[#1a1a16] font-medium">{s.opened_at?new Date(s.opened_at).toLocaleDateString():'-'}</td>
