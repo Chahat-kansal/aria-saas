@@ -4,15 +4,8 @@ import { useRouter } from 'next/navigation';
 
 interface EODDebrief {
   debrief: string | null;
-  stats: {
-    today_revenue: number;
-    today_count: number;
-    avg_basket: number;
-    top_product: string | null;
-    vs_avg_pct: number | null;
-  } | null;
+  stats: { today_revenue: number; today_count: number; avg_basket: number; top_product: string | null; vs_avg_pct: number | null; } | null;
 }
-
 interface Session {
   id: string; opened_at: string; status: string; opened_by: string | null;
   opening_float: number; total_cash_sales: number; total_card_sales: number;
@@ -21,73 +14,68 @@ interface Session {
 
 const DENOMS = [
   { label: '$100', value: 100 }, { label: '$50', value: 50 }, { label: '$20', value: 20 },
-  { label: '$10', value: 10 },  { label: '$5', value: 5 },   { label: '$2', value: 2 },
-  { label: '$1', value: 1 },    { label: '50¢', value: 0.50 }, { label: '20¢', value: 0.20 },
-  { label: '10¢', value: 0.10 }, { label: '5¢', value: 0.05 },
+  { label: '$10', value: 10  }, { label: '$5',  value: 5   }, { label: '$2',  value: 2   },
+  { label: '$1',  value: 1   }, { label: '50¢', value: 0.50}, { label: '20¢', value: 0.20},
+  { label: '10¢', value: 0.10}, { label: '5¢',  value: 0.05},
 ];
 
 function formatDuration(openedAt: string) {
   const ms = Date.now() - new Date(openedAt).getTime();
-  const h = Math.floor(ms / 3600000);
-  const m = Math.floor((ms % 3600000) / 60000);
+  const h = Math.floor(ms / 3600000), m = Math.floor((ms % 3600000) / 60000);
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+
+function Spinner() {
+  return <span style={{ width: 16, height: 16, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', display: 'inline-block', animation: 'processing 0.7s linear infinite' }} />;
+}
+
+function DarkCard({ title, children, accent }: { title: string; children: React.ReactNode; accent?: string }) {
+  return (
+    <div style={{ background: '#1A1728', border: `1px solid ${accent ?? '#2A2540'}`, borderRadius: 20, overflow: 'hidden' }}>
+      <div style={{ padding: '16px 24px', borderBottom: '1px solid #1C1928' }}>
+        <h2 style={{ fontSize: 15, fontWeight: 600, color: '#EDE8FF' }}>{title}</h2>
+      </div>
+      {children}
+    </div>
+  );
 }
 
 export default function ClosePage() {
   const router = useRouter();
-  const [session, setSession] = useState<Session | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [counts, setCounts] = useState<Record<number, string>>({});
-  const [closing, setClosing] = useState(false);
-  const [done, setDone] = useState(false);
-  const [debrief, setDebrief] = useState<EODDebrief | null>(null);
+  const [session, setSession]       = useState<Session | null>(null);
+  const [loading, setLoading]       = useState(true);
+  const [counts, setCounts]         = useState<Record<number, string>>({});
+  const [closing, setClosing]       = useState(false);
+  const [done, setDone]             = useState(false);
+  const [debrief, setDebrief]       = useState<EODDebrief | null>(null);
   const [debriefLoading, setDebriefLoading] = useState(false);
 
   useEffect(() => {
-    fetch('/api/pos/sessions')
-      .then(r => r.json())
-      .then(d => { setSession(d.openSession ?? null); setLoading(false); });
+    fetch('/api/pos/sessions').then(r => r.json()).then(d => { setSession(d.openSession ?? null); setLoading(false); });
   }, []);
 
-  const closingFloat = DENOMS.reduce((s, d) => s + (parseFloat(counts[d.value] || '0') || 0) * d.value, 0);
-  const expectedCash = (session?.opening_float ?? 0) + (session?.total_cash_sales ?? 0);
-  const variance = closingFloat - expectedCash;
+  const closingFloat  = DENOMS.reduce((s, d) => s + (parseFloat(counts[d.value] || '0') || 0) * d.value, 0);
+  const expectedCash  = (session?.opening_float ?? 0) + (session?.total_cash_sales ?? 0);
+  const variance      = closingFloat - expectedCash;
 
   async function closeSession() {
     if (!session || !confirm('Close the register? This action cannot be undone.')) return;
     setClosing(true);
-    await fetch('/api/pos/sessions', {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ session_id: session.id, closing_float: closingFloat }),
-    });
-    setDone(true);
-    setClosing(false);
+    await fetch('/api/pos/sessions', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ session_id: session.id, closing_float: closingFloat }) });
+    setDone(true); setClosing(false);
     fetchDebrief(session.id);
   }
 
   async function fetchDebrief(sessionId: string) {
     setDebriefLoading(true);
     try {
-      const res = await fetch('/api/aria/pos-end-of-day', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_id: sessionId }),
-      });
+      const res = await fetch('/api/aria/pos-end-of-day', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ session_id: sessionId }) });
       if (res.ok) {
         const data = await res.json();
         setDebrief(data);
-        fetch('/api/aria/pos-end-of-day/email', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ session_id: sessionId, debrief: data }),
-        }).catch(() => null);
+        fetch('/api/aria/pos-end-of-day/email', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ session_id: sessionId, debrief: data }) }).catch(() => null);
         if (data?.stats?.today_revenue > 0) {
-          fetch('/api/aria/outcomes', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              recommendation_type: 'eod_summary',
-              recommendation_detail: `Session closed. Revenue: A$${data.stats.today_revenue.toFixed(2)}, ${data.stats.today_count} transactions`,
-              acted_on: true, outcome_value_cents: Math.round(data.stats.today_revenue * 100),
-            }),
-          }).catch(() => null);
+          fetch('/api/aria/outcomes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ recommendation_type: 'eod_summary', recommendation_detail: `Session closed. Revenue: A$${data.stats.today_revenue.toFixed(2)}, ${data.stats.today_count} transactions`, acted_on: true, outcome_value_cents: Math.round(data.stats.today_revenue * 100) }) }).catch(() => null);
         }
       }
     } catch { /* non-blocking */ }
@@ -97,234 +85,192 @@ export default function ClosePage() {
   function shareReport() {
     if (!debrief?.stats) return;
     const s = debrief.stats;
-    const text = [`Aria POS — End of Day Report`, `Revenue: A$${s.today_revenue.toFixed(2)}`,
-      `Transactions: ${s.today_count}`, `Avg basket: A$${s.avg_basket.toFixed(2)}`,
-      s.top_product ? `Top product: ${s.top_product}` : '',
-      s.vs_avg_pct != null ? `vs 7-day avg: ${s.vs_avg_pct > 0 ? '+' : ''}${s.vs_avg_pct.toFixed(0)}%` : '',
-      debrief.debrief ? `\n${debrief.debrief}` : ''].filter(Boolean).join('\n');
+    const text = [`Aria POS — End of Day Report`, `Revenue: A$${s.today_revenue.toFixed(2)}`, `Transactions: ${s.today_count}`, `Avg basket: A$${s.avg_basket.toFixed(2)}`, s.top_product ? `Top product: ${s.top_product}` : '', s.vs_avg_pct != null ? `vs 7-day avg: ${s.vs_avg_pct > 0 ? '+' : ''}${s.vs_avg_pct.toFixed(0)}%` : '', debrief.debrief ? `\n${debrief.debrief}` : ''].filter(Boolean).join('\n');
     navigator.clipboard?.writeText(text).catch(() => null);
     alert('Report copied to clipboard!');
   }
 
-  if (loading) {
-    return (
-      <div className="h-full flex items-center justify-center bg-gray-50">
-        <div className="w-6 h-6 rounded-full border-2 border-gray-300 border-t-gray-600 animate-spin" />
-      </div>
-    );
-  }
+  if (loading) return (
+    <div className="h-full flex items-center justify-center" style={{ background: '#0A0910' }}>
+      <div style={{ width: 24, height: 24, borderRadius: '50%', border: '2px solid rgba(139,92,246,0.3)', borderTopColor: '#8B5CF6', animation: 'processing 0.7s linear infinite' }} />
+    </div>
+  );
 
-  /* ── SUCCESS STATE ──────────────────────────────────────────── */
+  /* ── SUCCESS ─────────────────────────────────────────────────── */
   if (done) return (
-    <div className="min-h-full bg-gray-50 overflow-y-auto">
-      <div className="bg-white border-b border-gray-200 px-6 py-4">
-        <h1 className="text-xl font-semibold text-gray-900">Register Closed</h1>
-        <p className="text-sm text-gray-500 mt-0.5">
-          Closing float: <span className="font-mono font-medium">A${closingFloat.toFixed(2)}</span>
-          {' · '}Variance:{' '}
-          <span className={`font-mono font-medium ${Math.abs(variance) < 0.05 ? 'text-emerald-600' : 'text-red-600'}`}>
-            {variance >= 0 ? '+' : ''}A${variance.toFixed(2)}
-          </span>
+    <div className="min-h-full overflow-y-auto" style={{ background: '#0A0910' }}>
+      <div style={{ background: 'rgba(8,6,16,0.92)', backdropFilter: 'blur(16px)', borderBottom: '1px solid #1C1928', padding: '16px 24px' }}>
+        <h1 style={{ fontSize: 20, fontWeight: 600, color: '#EDE8FF' }}>Register Closed</h1>
+        <p style={{ fontSize: 13, color: '#8B85A8', marginTop: 2 }}>
+          Closing float: <span style={{ fontFamily: "'JetBrains Mono',monospace", color: '#EDE8FF' }}>A${closingFloat.toFixed(2)}</span>
+          {' · '}Variance: <span style={{ fontFamily: "'JetBrains Mono',monospace", color: Math.abs(variance) < 0.05 ? '#22C55E' : '#EF4444' }}>{variance >= 0 ? '+' : ''}A${variance.toFixed(2)}</span>
         </p>
       </div>
 
-      <div className="max-w-2xl mx-auto px-4 py-6 space-y-4">
+      <div style={{ maxWidth: 640, margin: '0 auto', padding: '24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
         {/* Success card */}
-        <div className="bg-white border border-gray-200 rounded-2xl p-6 flex items-center gap-4">
-          <div className="w-12 h-12 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0">
-            <svg viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth={2.5} className="w-6 h-6"><polyline points="20 6 9 17 4 12"/></svg>
+        <div style={{ background: '#1A1728', border: '1px solid rgba(34,197,94,0.2)', borderRadius: 20, padding: '20px 24px', display: 'flex', alignItems: 'center', gap: 16 }}>
+          <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'rgba(34,197,94,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="#22C55E" strokeWidth={2.5} width={24} height={24}><polyline points="20 6 9 17 4 12"/></svg>
           </div>
           <div>
-            <p className="font-semibold text-gray-900">Session ended successfully</p>
-            <p className="text-sm text-gray-500 mt-0.5">Z-Report generated · Data saved</p>
+            <p style={{ fontWeight: 600, color: '#EDE8FF' }}>Session ended successfully</p>
+            <p style={{ fontSize: 13, color: '#4A4565', marginTop: 2 }}>Z-Report generated · Data saved</p>
           </div>
         </div>
 
         {/* EOD debrief */}
         {(debriefLoading || debrief) && (
-          <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden border-l-4 border-l-[#059669]">
-            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-              <h2 className="text-base font-semibold text-gray-900">Aria's end of day</h2>
-              {debriefLoading && <span className="text-xs text-gray-400 animate-pulse">Analysing…</span>}
-            </div>
+          <DarkCard title="Aria's end of day" accent="rgba(139,92,246,0.25)">
+            {debriefLoading && !debrief && (
+              <div style={{ padding: '20px 24px', display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ width: 16, height: 16, borderRadius: '50%', border: '2px solid rgba(139,92,246,0.3)', borderTopColor: '#8B5CF6', animation: 'processing 0.7s linear infinite' }} />
+                <span style={{ fontSize: 13, color: '#8B85A8' }}>Aria is analysing your day…</span>
+              </div>
+            )}
             {debrief?.stats && (
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-0 border-b border-gray-100">
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', borderBottom: '1px solid #1C1928' }}>
                 {[
-                  { label: 'Revenue', value: `A$${debrief.stats.today_revenue.toFixed(2)}`, color: 'text-gray-900' },
-                  { label: 'Transactions', value: String(debrief.stats.today_count), color: 'text-gray-900' },
-                  { label: 'Avg basket', value: `A$${debrief.stats.avg_basket.toFixed(2)}`, color: 'text-gray-900' },
-                  {
-                    label: 'vs 7-day avg',
-                    value: debrief.stats.vs_avg_pct != null ? `${debrief.stats.vs_avg_pct > 0 ? '+' : ''}${debrief.stats.vs_avg_pct.toFixed(0)}%` : '—',
-                    color: (debrief.stats.vs_avg_pct ?? 0) >= 0 ? 'text-emerald-600' : 'text-red-600',
-                  },
+                  { label: 'Revenue', value: `A$${debrief.stats.today_revenue.toFixed(2)}` },
+                  { label: 'Transactions', value: String(debrief.stats.today_count) },
+                  { label: 'Avg basket', value: `A$${debrief.stats.avg_basket.toFixed(2)}` },
+                  { label: 'vs 7-day avg', value: debrief.stats.vs_avg_pct != null ? `${debrief.stats.vs_avg_pct > 0 ? '+' : ''}${debrief.stats.vs_avg_pct.toFixed(0)}%` : '—', color: (debrief.stats.vs_avg_pct ?? 0) >= 0 ? '#22C55E' : '#EF4444' },
                 ].map((s, i) => (
-                  <div key={s.label} className={`px-5 py-4 ${i < 3 ? 'border-r border-gray-100' : ''}`}>
-                    <p className="text-xs text-gray-400 uppercase tracking-wider mb-1">{s.label}</p>
-                    <p className={`text-xl font-bold font-mono ${s.color}`}>{s.value}</p>
+                  <div key={s.label} style={{ padding: '16px 20px', borderRight: i < 3 ? '1px solid #1C1928' : 'none' }}>
+                    <p style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#4A4565', marginBottom: 6 }}>{s.label}</p>
+                    <p style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 20, fontWeight: 700, color: (s as { color?: string }).color ?? '#EDE8FF' }}>{s.value}</p>
                   </div>
                 ))}
               </div>
             )}
             {debrief?.stats?.top_product && (
-              <div className="px-6 py-2 border-b border-gray-100">
-                <p className="text-sm text-gray-500">Top seller: <span className="font-medium text-gray-900">{debrief.stats.top_product}</span></p>
+              <div style={{ padding: '10px 24px', borderBottom: '1px solid #1C1928' }}>
+                <p style={{ fontSize: 13, color: '#8B85A8' }}>Top seller: <span style={{ color: '#EDE8FF', fontWeight: 500 }}>{debrief.stats.top_product}</span></p>
               </div>
             )}
             {debrief?.debrief && (
-              <div className="px-6 py-4">
-                <p className="text-sm text-gray-700 leading-relaxed">{debrief.debrief}</p>
+              <div style={{ padding: '16px 24px' }}>
+                <p style={{ fontSize: 13, color: '#8B85A8', lineHeight: 1.7 }}>{debrief.debrief}</p>
               </div>
             )}
             {!debriefLoading && !debrief?.debrief && (
-              <div className="px-6 py-4">
-                <p className="text-sm text-gray-400">AI debrief not available — add your Anthropic API key to enable.</p>
+              <div style={{ padding: '16px 24px' }}>
+                <p style={{ fontSize: 13, color: '#4A4565' }}>AI debrief not available — add your Anthropic API key to enable.</p>
               </div>
             )}
-          </div>
+          </DarkCard>
         )}
 
-        <div className="flex flex-wrap gap-3">
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
           {debrief?.stats && (
-            <button onClick={shareReport}
-              className="px-5 py-2.5 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 bg-white hover:bg-gray-50 transition-colors">
-              Copy report
-            </button>
+            <button onClick={shareReport} style={{ padding: '10px 20px', borderRadius: 12, border: '1px solid #2A2540', color: '#8B85A8', background: 'rgba(255,255,255,0.02)', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>Copy report</button>
           )}
-          <button onClick={() => window.print()}
-            className="px-5 py-2.5 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 bg-white hover:bg-gray-50 transition-colors">
-            🖨️ Print Z-Report
-          </button>
-          <button onClick={() => router.push('/pos')}
-            className="px-5 py-2.5 rounded-xl text-sm font-medium bg-[#111827] text-white hover:bg-gray-800 transition-colors">
-            Back to Register
-          </button>
+          <button onClick={() => window.print()} style={{ padding: '10px 20px', borderRadius: 12, border: '1px solid #2A2540', color: '#8B85A8', background: 'rgba(255,255,255,0.02)', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>🖨️ Print Z-Report</button>
+          <button onClick={() => router.push('/pos')} style={{ padding: '10px 20px', borderRadius: 12, background: '#8B5CF6', border: 'none', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Back to Register</button>
         </div>
       </div>
     </div>
   );
 
   if (!session) return (
-    <div className="h-full flex items-center justify-center bg-gray-50">
-      <div className="text-center">
-        <p className="text-sm text-gray-500">No open session — open the register first.</p>
-        <button onClick={() => router.push('/pos')}
-          className="mt-4 px-4 py-2 bg-gray-900 text-white text-sm rounded-xl hover:bg-gray-800">
-          Go to Register
-        </button>
+    <div className="h-full flex items-center justify-center" style={{ background: '#0A0910' }}>
+      <div style={{ textAlign: 'center' }}>
+        <p style={{ fontSize: 13, color: '#8B85A8' }}>No open session — open the register first.</p>
+        <button onClick={() => router.push('/pos')} style={{ marginTop: 16, padding: '8px 18px', background: '#8B5CF6', border: 'none', color: '#fff', borderRadius: 10, fontSize: 13, cursor: 'pointer' }}>Go to Register</button>
       </div>
     </div>
   );
 
   const totalRevenue = (session.total_cash_sales ?? 0) + (session.total_card_sales ?? 0);
 
-  /* ── CLOSE REGISTER FORM ────────────────────────────────────── */
+  /* ── CLOSE FORM ──────────────────────────────────────────────── */
   return (
-    <div className="min-h-full bg-gray-50 overflow-y-auto">
-      {/* Header */}
-      <div className="bg-white border-b border-gray-200 px-6 py-4">
-        <h1 className="text-xl font-semibold text-gray-900">Close Register</h1>
-        <p className="text-sm text-gray-500 mt-0.5">
+    <div className="min-h-full overflow-y-auto" style={{ background: '#0A0910' }}>
+      <div style={{ background: 'rgba(8,6,16,0.92)', backdropFilter: 'blur(16px)', borderBottom: '1px solid #1C1928', padding: '16px 24px' }}>
+        <h1 style={{ fontSize: 20, fontWeight: 600, color: '#EDE8FF' }}>Close Register</h1>
+        <p style={{ fontSize: 13, color: '#8B85A8', marginTop: 2 }}>
           Opened {new Date(session.opened_at).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}
           {session.opened_by && <> · {session.opened_by}</>}
           {' · '}{formatDuration(session.opened_at)} session
         </p>
       </div>
 
-      <div className="max-w-2xl mx-auto py-6 px-4 space-y-4">
+      <div style={{ maxWidth: 640, margin: '0 auto', padding: '24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
 
-        {/* Cash reconciliation card */}
-        <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-100">
-            <h2 className="text-base font-semibold text-gray-900">Cash reconciliation</h2>
-          </div>
-          <div className="px-6 py-4">
-            <div className="space-y-0 mb-4">
-              {[
-                { label: 'Opening float', value: session.opening_float ?? 0, color: 'text-gray-900' },
-                { label: 'Cash sales', value: session.total_cash_sales ?? 0, color: 'text-emerald-600' },
-                { label: 'Expected in drawer', value: expectedCash, color: 'text-gray-900', bold: true },
-              ].map(row => (
-                <div key={row.label} className={`flex justify-between py-2 border-b border-gray-50 ${row.bold ? 'font-semibold' : ''}`}>
-                  <span className="text-sm text-gray-600">{row.label}</span>
-                  <span className={`text-sm font-mono ${row.color}`}>A${row.value.toFixed(2)}</span>
-                </div>
-              ))}
-            </div>
+        {/* Cash reconciliation */}
+        <DarkCard title="Cash reconciliation">
+          <div style={{ padding: '16px 24px' }}>
+            {[
+              { label: 'Opening float', value: session.opening_float ?? 0, color: '#8B85A8' },
+              { label: 'Cash sales',    value: session.total_cash_sales ?? 0, color: '#22C55E' },
+              { label: 'Expected in drawer', value: expectedCash, color: '#EDE8FF', bold: true },
+            ].map(row => (
+              <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #1C1928' }}>
+                <span style={{ fontSize: 13, color: '#8B85A8', fontWeight: row.bold ? 600 : 400 }}>{row.label}</span>
+                <span style={{ fontSize: 13, fontFamily: "'JetBrains Mono',monospace", color: row.color, fontWeight: row.bold ? 700 : 400 }}>A${row.value.toFixed(2)}</span>
+              </div>
+            ))}
 
-            {/* Denomination counter */}
-            <p className="text-sm font-medium text-gray-700 mb-3">Count the cash in the drawer</p>
-            <div className="grid grid-cols-2 gap-2 mb-4">
+            <p style={{ fontSize: 13, fontWeight: 600, color: '#EDE8FF', margin: '16px 0 10px' }}>Count the cash in the drawer</p>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 16 }}>
               {DENOMS.map(d => {
                 const qty = parseFloat(counts[d.value] || '0') || 0;
                 return (
-                  <div key={d.value} className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-gray-50">
-                    <span className="text-sm font-semibold text-gray-900 w-12">{d.label}</span>
-                    <input value={counts[d.value] ?? ''} onChange={e => setCounts(c => ({ ...c, [d.value]: e.target.value }))}
+                  <div key={d.value} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 10, background: 'rgba(255,255,255,0.02)' }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: '#EDE8FF', width: 40 }}>{d.label}</span>
+                    <input
+                      value={counts[d.value] ?? ''}
+                      onChange={e => setCounts(c => ({ ...c, [d.value]: e.target.value }))}
                       type="number" min="0" placeholder="0"
-                      className="w-16 bg-gray-50 border border-gray-200 rounded-lg px-2 py-1.5 text-sm text-gray-900 text-center outline-none focus:ring-1 focus:ring-gray-400" />
-                    <span className="text-sm text-gray-400 font-mono ml-auto">A${(qty * d.value).toFixed(2)}</span>
+                      style={{ width: 56, background: 'rgba(255,255,255,0.04)', border: '1px solid #2A2540', borderRadius: 8, padding: '6px 8px', fontSize: 13, color: '#EDE8FF', textAlign: 'center', outline: 'none', fontFamily: "'JetBrains Mono',monospace" }}
+                    />
+                    <span style={{ fontSize: 12, color: '#4A4565', marginLeft: 'auto', fontFamily: "'JetBrains Mono',monospace" }}>A${(qty * d.value).toFixed(2)}</span>
                   </div>
                 );
               })}
             </div>
 
-            {/* Variance display */}
-            <div className={`rounded-xl px-4 py-3 flex items-center justify-between ${
-              Math.abs(variance) < 0.05 ? 'bg-emerald-50 border border-emerald-100' :
-              variance > 0 ? 'bg-amber-50 border border-amber-100' : 'bg-red-50 border border-red-100'
-            }`}>
+            {/* Variance */}
+            <div style={{ borderRadius: 14, padding: '14px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: Math.abs(variance) < 0.05 ? 'rgba(34,197,94,0.08)' : variance > 0 ? 'rgba(245,158,11,0.08)' : 'rgba(239,68,68,0.08)', border: `1px solid ${Math.abs(variance) < 0.05 ? 'rgba(34,197,94,0.2)' : variance > 0 ? 'rgba(245,158,11,0.2)' : 'rgba(239,68,68,0.2)'}` }}>
               <div>
-                <p className="text-xs text-gray-500 mb-0.5">Counted</p>
-                <p className="text-2xl font-bold font-mono text-gray-900">A${closingFloat.toFixed(2)}</p>
+                <p style={{ fontSize: 10, color: '#8B85A8', marginBottom: 4 }}>Counted</p>
+                <p style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 24, fontWeight: 700, color: '#EDE8FF' }}>A${closingFloat.toFixed(2)}</p>
               </div>
-              <div className="text-right">
-                <p className="text-xs text-gray-500 mb-0.5">Variance</p>
-                <p className={`text-xl font-bold font-mono ${
-                  Math.abs(variance) < 0.05 ? 'text-emerald-600' :
-                  variance > 0 ? 'text-amber-600' : 'text-red-600'
-                }`}>
-                  {Math.abs(variance) < 0.05 ? '✓ Balanced' : `${variance >= 0 ? '+' : ''}A${variance.toFixed(2)}`}
+              <div style={{ textAlign: 'right' }}>
+                <p style={{ fontSize: 10, color: '#8B85A8', marginBottom: 4 }}>Variance</p>
+                <p style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 20, fontWeight: 700, color: Math.abs(variance) < 0.05 ? '#22C55E' : variance > 0 ? '#F59E0B' : '#EF4444' }}>
+                  {Math.abs(variance) < 0.05 ? '✓ Balanced' : `${variance >= 0 ? '+' : ''}A$${Math.abs(variance).toFixed(2)}`}
                 </p>
               </div>
             </div>
           </div>
-        </div>
+        </DarkCard>
 
-        {/* Session summary card */}
-        <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-100">
-            <h2 className="text-base font-semibold text-gray-900">Session summary</h2>
+        {/* Session summary */}
+        <DarkCard title="Session summary">
+          <div style={{ padding: 16, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            {[
+              { label: 'Total revenue',   value: `A$${totalRevenue.toFixed(2)}`,                          big: true  },
+              { label: 'Transactions',    value: String(session.transaction_count ?? 0),                    big: true  },
+              { label: 'Cash sales',      value: `A$${(session.total_cash_sales ?? 0).toFixed(2)}`,         big: false },
+              { label: 'Card sales',      value: `A$${(session.total_card_sales ?? 0).toFixed(2)}`,         big: false },
+              { label: 'Avg basket',      value: (session.transaction_count ?? 0) > 0 ? `A$${(totalRevenue / (session.transaction_count ?? 1)).toFixed(2)}` : '—', big: false },
+              { label: 'Opening float',   value: `A$${(session.opening_float ?? 0).toFixed(2)}`,            big: false },
+            ].map(s => (
+              <div key={s.label} style={{ background: 'rgba(255,255,255,0.02)', borderRadius: 12, padding: '12px 16px', border: '1px solid #1C1928' }}>
+                <p style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#4A4565', marginBottom: 6 }}>{s.label}</p>
+                <p style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: s.big ? 24 : 18, fontWeight: 700, color: '#EDE8FF' }}>{s.value}</p>
+              </div>
+            ))}
           </div>
-          <div className="p-4">
-            <div className="grid grid-cols-2 gap-3">
-              {[
-                { label: 'Total revenue', value: `A$${totalRevenue.toFixed(2)}`, big: true },
-                { label: 'Transactions', value: String(session.transaction_count ?? 0), big: true },
-                { label: 'Cash sales', value: `A$${(session.total_cash_sales ?? 0).toFixed(2)}`, big: false },
-                { label: 'Card sales', value: `A$${(session.total_card_sales ?? 0).toFixed(2)}`, big: false },
-                { label: 'Avg basket', value: (session.transaction_count ?? 0) > 0 ? `A$${(totalRevenue / (session.transaction_count ?? 1)).toFixed(2)}` : '—', big: false },
-                { label: 'Opening float', value: `A$${(session.opening_float ?? 0).toFixed(2)}`, big: false },
-              ].map(s => (
-                <div key={s.label} className="bg-gray-50 rounded-xl px-4 py-3">
-                  <p className="text-xs text-gray-400 uppercase tracking-wider mb-1">{s.label}</p>
-                  <p className={`font-bold font-mono text-gray-900 ${s.big ? 'text-2xl' : 'text-lg'}`}>{s.value}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
+        </DarkCard>
 
         {/* Close button */}
         <button onClick={closeSession} disabled={closing}
-          className="w-full py-3.5 rounded-xl text-sm font-semibold text-white bg-red-600 hover:bg-red-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-2">
-          {closing ? <><Spinner /> Closing…</> : 'Close Register & End Session'}
+          style={{ width: '100%', padding: '14px', borderRadius: 14, border: 'none', background: '#EF4444', color: '#fff', fontFamily: "'Manrope',sans-serif", fontWeight: 700, fontSize: 15, cursor: closing ? 'not-allowed' : 'pointer', opacity: closing ? 0.6 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+          {closing ? <><Spinner /><span>Closing…</span></> : 'Close Register & End Session'}
         </button>
       </div>
     </div>
   );
-}
-
-function Spinner() {
-  return <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>;
 }

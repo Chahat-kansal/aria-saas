@@ -10,28 +10,48 @@ const ResponsiveContainer = dynamic(() => import('recharts').then(m => m.Respons
 const Tooltip  = dynamic(() => import('recharts').then(m => m.Tooltip),  { ssr: false });
 
 interface Session {
-  id: string;
-  opened_at: string;
-  opened_by: string | null;
-  opening_float: number;
-  total_cash_sales: number;
-  total_card_sales: number;
-  transaction_count: number;
-  status: string;
+  id: string; opened_at: string; opened_by: string | null;
+  opening_float: number; total_cash_sales: number; total_card_sales: number;
+  transaction_count: number; status: string;
+}
+interface DayRevenue { date: string; revenue: number; label: string; }
+
+function LogoMark() {
+  return (
+    <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+      <path d="M16 2L28 9v14L16 30 4 23V9z" fill="rgba(139,92,246,0.15)" stroke="#8B5CF6" strokeWidth="1.5"/>
+      <path d="M16 8l7 4v8l-7 4-7-4V12z" fill="rgba(139,92,246,0.25)" stroke="#8B5CF6" strokeWidth="1"/>
+      <circle cx="16" cy="16" r="2.5" fill="#8B5CF6"/>
+    </svg>
+  );
 }
 
-interface DayRevenue { date: string; revenue: number; label: string; }
+function Orb({ style }: { style: React.CSSProperties }) {
+  return <div style={{ position: 'absolute', borderRadius: '50%', pointerEvents: 'none', ...style }} />;
+}
+
+function Spinner() {
+  return (
+    <span style={{ width: 16, height: 16, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', display: 'inline-block', animation: 'processing 0.7s linear infinite' }} />
+  );
+}
 
 export default function POSHomePage() {
   const router = useRouter();
-  const [session, setSession] = useState<Session | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [posUser, setPosUser] = useState<Record<string, unknown> | null>(null);
+  const [session, setSession]       = useState<Session | null>(null);
+  const [loading, setLoading]       = useState(true);
+  const [posUser, setPosUser]       = useState<Record<string, unknown> | null>(null);
   const [userChecked, setUserChecked] = useState(false);
   const [businessId, setBusinessId] = useState<string | null>(null);
-  const [businessName, setBusinessName] = useState<string>('AriaPOS');
+  const [businessName, setBusinessName] = useState('AriaPOS');
+  const [openingFloat, setOpeningFloat] = useState('200');
+  const [opening, setOpening]       = useState(false);
+  const [openError, setOpenError]   = useState<string | null>(null);
+  const [chartData, setChartData]   = useState<DayRevenue[]>([]);
+  const [lowStockCount, setLowStockCount] = useState(0);
+  const [topProduct, setTopProduct] = useState<string | null>(null);
+  const [insightText, setInsightText] = useState<string | null>(null);
 
-  // Check for existing POS user in localStorage
   useEffect(() => {
     try {
       const stored = localStorage.getItem('aria_pos_user');
@@ -40,20 +60,12 @@ export default function POSHomePage() {
     setUserChecked(true);
   }, []);
 
-  // Get business info for user login screen
   useEffect(() => {
     fetch('/api/pos/products').then(r => r.json()).then(d => {
       if (d.business_id) setBusinessId(d.business_id);
       if (d.business_name) setBusinessName(d.business_name);
     }).catch(() => null);
   }, []);
-  const [openingFloat, setOpeningFloat] = useState('200');
-  const [opening, setOpening] = useState(false);
-  const [openError, setOpenError] = useState<string | null>(null);
-  const [chartData, setChartData] = useState<DayRevenue[]>([]);
-  const [lowStockCount, setLowStockCount] = useState(0);
-  const [topProduct, setTopProduct] = useState<string | null>(null);
-  const [insightText, setInsightText] = useState<string | null>(null);
 
   const loadSession = useCallback(async () => {
     try {
@@ -66,49 +78,33 @@ export default function POSHomePage() {
 
   useEffect(() => {
     loadSession();
-    // Load supporting data (non-blocking)
-    fetch('/api/pos/products')
-      .then(r => r.json())
-      .then(d => {
-        const prods = d.products ?? [];
-        const low = prods.filter((p: any) => p.track_stock && p.stock_quantity <= (p.low_stock_threshold ?? 5) && p.is_active).length;
-        setLowStockCount(low);
-      })
-      .catch(() => null);
+    fetch('/api/pos/products').then(r => r.json()).then(d => {
+      const prods = d.products ?? [];
+      setLowStockCount(prods.filter((p: { track_stock: boolean; stock_quantity: number; low_stock_threshold: number; is_active: boolean }) =>
+        p.track_stock && p.stock_quantity <= (p.low_stock_threshold ?? 5) && p.is_active).length);
+    }).catch(() => null);
 
-    // Build 7-day chart from recent sessions
-    fetch('/api/pos/reports/closures')
-      .then(r => r.json())
-      .then(d => {
-        const sessions: any[] = d.closures ?? [];
-        const dayMap = new Map<string, number>();
-        for (let i = 6; i >= 0; i--) {
-          const d = new Date(Date.now() - i * 86400000);
-          const key = d.toISOString().split('T')[0];
-          dayMap.set(key, 0);
-        }
-        for (const s of sessions) {
-          const key = new Date(s.opened_at).toISOString().split('T')[0];
-          if (dayMap.has(key)) {
-            dayMap.set(key, (dayMap.get(key) ?? 0) + (s.total_cash_sales ?? 0) + (s.total_card_sales ?? 0));
-          }
-        }
-        const chart: DayRevenue[] = Array.from(dayMap.entries()).map(([date, revenue]) => ({
-          date,
-          revenue: Math.round(revenue * 100) / 100,
-          label: new Date(date + 'T12:00:00').toLocaleDateString('en-AU', { weekday: 'short' }),
-        }));
-        setChartData(chart);
-        // Top product heuristic
-        const sorted = sessions.sort((a: any, b: any) => b.transaction_count - a.transaction_count);
-        if (sorted[0]?.top_product) setTopProduct(sorted[0].top_product);
-      })
-      .catch(() => null);
+    fetch('/api/pos/reports/closures').then(r => r.json()).then(d => {
+      const sessions: { opened_at: string; total_cash_sales: number; total_card_sales: number; transaction_count: number; top_product?: string }[] = d.closures ?? [];
+      const dayMap = new Map<string, number>();
+      for (let i = 6; i >= 0; i--) {
+        const dt = new Date(Date.now() - i * 86400000);
+        dayMap.set(dt.toISOString().split('T')[0], 0);
+      }
+      for (const s of sessions) {
+        const key = new Date(s.opened_at).toISOString().split('T')[0];
+        if (dayMap.has(key)) dayMap.set(key, (dayMap.get(key) ?? 0) + (s.total_cash_sales ?? 0) + (s.total_card_sales ?? 0));
+      }
+      setChartData(Array.from(dayMap.entries()).map(([date, revenue]) => ({
+        date, revenue: Math.round(revenue * 100) / 100,
+        label: new Date(date + 'T12:00:00').toLocaleDateString('en-AU', { weekday: 'short' }),
+      })));
+      const sorted = [...sessions].sort((a, b) => b.transaction_count - a.transaction_count);
+      if (sorted[0]?.top_product) setTopProduct(sorted[0].top_product);
+    }).catch(() => null);
 
     fetch('/api/aria/pos-insight?page=pos-home', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) })
-      .then(r => r.json())
-      .then(d => { if (d.insight) setInsightText(d.insight); })
-      .catch(() => null);
+      .then(r => r.json()).then(d => { if (d.insight) setInsightText(d.insight); }).catch(() => null);
   }, [loadSession]);
 
   async function openRegister() {
@@ -126,12 +122,11 @@ export default function POSHomePage() {
   }
 
   const todayRevenue = session ? (session.total_cash_sales ?? 0) + (session.total_card_sales ?? 0) : 0;
-  const txCount = session?.transaction_count ?? 0;
-  const avgBasket = txCount > 0 ? todayRevenue / txCount : 0;
-  const estCash = session ? (session.opening_float ?? 0) + (session.total_cash_sales ?? 0) : 0;
-  const openSince = session ? new Date(session.opened_at).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' }) : '';
+  const txCount      = session?.transaction_count ?? 0;
+  const avgBasket    = txCount > 0 ? todayRevenue / txCount : 0;
+  const estCash      = session ? (session.opening_float ?? 0) + (session.total_cash_sales ?? 0) : 0;
+  const openSince    = session ? new Date(session.opened_at).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' }) : '';
 
-  // Show user login if not authenticated and business is known
   if (userChecked && !posUser && businessId) {
     return (
       <POSUserLogin
@@ -148,144 +143,169 @@ export default function POSHomePage() {
 
   if (loading) {
     return (
-      <div className="h-full flex items-center justify-center bg-gray-50">
-        <div className="w-6 h-6 rounded-full border-2 border-gray-300 border-t-gray-600 animate-spin" />
+      <div className="h-full flex items-center justify-center" style={{ background: '#0A0910' }}>
+        <div style={{ width: 24, height: 24, borderRadius: '50%', border: '2px solid rgba(139,92,246,0.3)', borderTopColor: '#8B5CF6', animation: 'processing 0.7s linear infinite' }} />
       </div>
     );
   }
 
+  /* ── CLOSED: Open Register ─────────────────────────────────────── */
   if (!session) {
     return (
-      <div className="h-full bg-white flex items-center justify-center p-6">
-        <div className="w-full max-w-md">
-          <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-8">
-            <div className="flex justify-center mb-6">
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-700 text-xs font-semibold rounded-full border border-emerald-100">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                AriaPOS
-              </span>
-            </div>
-            <h1 className="text-2xl font-semibold text-gray-900 text-center mb-1">Open Register</h1>
-            <p className="text-sm text-gray-500 text-center mb-8">Count your float and open the register to start trading.</p>
+      <div className="h-full flex items-center justify-center p-6" style={{ background: '#0A0910', position: 'relative', overflow: 'hidden' }}>
+        <Orb style={{ width: 400, height: 400, top: '-100px', left: '-100px', background: 'radial-gradient(circle,rgba(139,92,246,0.2),transparent 70%)', filter: 'blur(60px)', animation: 'orb-pulse-0 4s ease-in-out infinite' }} />
+        <Orb style={{ width: 300, height: 300, bottom: '-80px', right: '-80px', background: 'radial-gradient(circle,rgba(99,102,241,0.15),transparent 70%)', filter: 'blur(50px)', animation: 'orb-pulse-1 5s ease-in-out infinite 1s' }} />
+        <Orb style={{ width: 250, height: 250, top: '40%', left: '60%', background: 'radial-gradient(circle,rgba(139,92,246,0.1),transparent 70%)', filter: 'blur(40px)', animation: 'orb-pulse-2 6s ease-in-out infinite 2s' }} />
 
-            <div className="mb-6">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Opening float</label>
-              <div className="relative">
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 font-medium">A$</span>
-                <input
-                  type="number" min="0" step="0.01"
-                  value={openingFloat}
-                  onChange={e => setOpeningFloat(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter') openRegister(); }}
-                  className="w-full border border-gray-200 rounded-xl pl-10 pr-4 py-3 text-lg font-mono focus:ring-2 focus:ring-[#059669] focus:border-transparent outline-none"
-                  autoFocus />
-              </div>
-              {openError && (
-                <p className="mt-2 text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{openError}</p>
-              )}
-            </div>
-
-            <button onClick={openRegister} disabled={opening}
-              className="w-full h-13 py-3.5 bg-[#111827] hover:bg-gray-800 text-white font-semibold text-base rounded-xl transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
-              {opening ? <><Spinner /> Opening…</> : 'Open Register'}
-            </button>
-            <p className="text-xs text-gray-400 text-center mt-3">You can close the register at any time from the terminal</p>
+        <div className="w-full max-w-sm relative z-10 pos-scale-in" style={{ background: 'rgba(26,23,40,0.8)', backdropFilter: 'blur(24px)', border: '1px solid rgba(139,92,246,0.2)', borderRadius: 24, padding: 40, boxShadow: '0 24px 64px rgba(0,0,0,0.7), 0 0 0 1px rgba(139,92,246,0.08)' }}>
+          <div className="flex flex-col items-center mb-8">
+            <LogoMark />
+            <p style={{ fontFamily: "'Instrument Serif',serif", fontStyle: 'italic', fontSize: 28, color: '#8B5CF6', marginTop: 12, lineHeight: 1 }}>AriaPOS</p>
+            <p style={{ fontSize: 13, color: '#8B85A8', marginTop: 6 }}>{businessName}</p>
           </div>
+
+          <div className="mb-5">
+            <p style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#4A4565', marginBottom: 10 }}>Opening Float</p>
+            <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #2A2540', borderRadius: 12, background: 'rgba(255,255,255,0.03)', overflow: 'hidden' }}>
+              <span style={{ padding: '14px 14px 14px 16px', fontFamily: "'JetBrains Mono',monospace", color: '#4A4565', fontSize: 14 }}>A$</span>
+              <input
+                type="number" min="0" step="0.01"
+                value={openingFloat}
+                onChange={e => setOpeningFloat(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') openRegister(); }}
+                style={{ flex: 1, background: 'transparent', outline: 'none', fontFamily: "'JetBrains Mono',monospace", fontSize: 24, fontWeight: 700, color: '#EDE8FF', padding: '10px 16px 10px 0' }}
+                autoFocus
+              />
+            </div>
+            {openError && (
+              <p style={{ marginTop: 8, fontSize: 12, color: '#EF4444', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 8, padding: '8px 12px' }}>{openError}</p>
+            )}
+          </div>
+
+          <button
+            onClick={openRegister}
+            disabled={opening}
+            style={{
+              width: '100%', height: 52, borderRadius: 14, border: 'none',
+              background: '#8B5CF6',
+              boxShadow: '0 4px 0 rgba(124,58,237,0.4), 0 6px 20px rgba(139,92,246,0.33)',
+              color: '#fff', fontFamily: "'Manrope',sans-serif", fontWeight: 700, fontSize: 15,
+              cursor: opening ? 'not-allowed' : 'pointer', opacity: opening ? 0.6 : 1,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+              transition: 'all 150ms ease',
+            }}
+            onMouseEnter={e => { if (!opening) { const el = e.currentTarget; el.style.transform = 'translateY(-1px)'; el.style.boxShadow = '0 6px 0 rgba(124,58,237,0.4),0 8px 28px rgba(139,92,246,0.4)'; }}}
+            onMouseLeave={e => { const el = e.currentTarget; el.style.transform = ''; el.style.boxShadow = '0 4px 0 rgba(124,58,237,0.4),0 6px 20px rgba(139,92,246,0.33)'; }}
+            onMouseDown={e => { const el = e.currentTarget; el.style.transform = 'translateY(2px) scale(0.98)'; el.style.boxShadow = '0 1px 0 rgba(124,58,237,0.5),0 2px 8px rgba(139,92,246,0.44)'; }}
+            onMouseUp={e => { const el = e.currentTarget; el.style.transform = 'translateY(-1px)'; el.style.boxShadow = '0 6px 0 rgba(124,58,237,0.4),0 8px 28px rgba(139,92,246,0.4)'; }}
+          >
+            {opening ? <><Spinner /><span>Opening…</span></> : 'Open Register'}
+          </button>
+          <p style={{ textAlign: 'center', fontSize: 11, color: '#4A4565', marginTop: 12 }}>
+            You can close the register at any time from the terminal
+          </p>
         </div>
       </div>
     );
   }
 
+  /* ── OPEN: Dashboard ───────────────────────────────────────────── */
   return (
-    <div className="h-full bg-gray-50 overflow-y-auto">
+    <div className="h-full overflow-y-auto" style={{ background: '#0A0910', position: 'relative' }}>
+      <Orb style={{ width: 300, height: 300, top: 0, left: '20%', background: 'radial-gradient(circle,rgba(139,92,246,0.12),transparent 70%)', filter: 'blur(60px)', animation: 'orb-pulse-0 4s ease-in-out infinite', pointerEvents: 'none', position: 'fixed', zIndex: 0 }} />
+
       {/* Session header */}
-      <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-        <p className="text-sm text-gray-500">
-          Register open since <span className="font-medium text-gray-700">{openSince}</span>
+      <div style={{ position: 'sticky', top: 0, zIndex: 10, background: 'rgba(8,6,16,0.92)', backdropFilter: 'blur(16px)', borderBottom: '1px solid #1C1928', padding: '12px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <p style={{ fontSize: 13, color: '#8B85A8' }}>
+          Open since <span style={{ color: '#EDE8FF', fontWeight: 600 }}>{openSince}</span>
           {session.opened_by && <> · {session.opened_by}</>}
           {posUser && (
-            <span className="ml-3 text-gray-400">
-              · 👤 {(posUser as any).name}
+            <span style={{ marginLeft: 12, color: '#4A4565' }}>
+              · 👤 {(posUser as { name: string }).name}
               <button onClick={() => { localStorage.removeItem('aria_pos_user'); setPosUser(null); }}
-                className="ml-1.5 text-gray-400 hover:text-gray-600 underline text-xs">
+                style={{ marginLeft: 6, color: '#8B5CF6', background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, textDecoration: 'underline' }}>
                 switch
               </button>
             </span>
           )}
         </p>
         <button onClick={() => router.push('/pos/close')}
-          className="text-sm px-4 py-2 border border-gray-200 text-gray-700 rounded-xl hover:bg-red-50 hover:border-red-200 hover:text-red-600 transition-colors">
+          style={{ fontSize: 13, padding: '6px 14px', borderRadius: 9, border: '1px solid rgba(239,68,68,0.25)', color: '#EF4444', background: 'rgba(239,68,68,0.06)', cursor: 'pointer' }}>
           Close Register
         </button>
       </div>
 
-      <div className="max-w-5xl mx-auto px-6 py-6 space-y-5">
+      <div style={{ maxWidth: 960, margin: '0 auto', padding: '24px 24px', position: 'relative', zIndex: 1 }}>
         {/* KPI strip */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 16, marginBottom: 24 }}>
           {[
-            { label: 'Revenue today', value: `A$${todayRevenue.toFixed(2)}`, sub: `${txCount} transaction${txCount !== 1 ? 's' : ''}` },
-            { label: 'Avg basket', value: `A$${avgBasket.toFixed(2)}`, sub: 'per transaction' },
-            { label: 'Est. cash in drawer', value: `A$${estCash.toFixed(2)}`, sub: 'float + cash sales' },
-            { label: 'Best seller today', value: topProduct ?? '—', sub: 'by volume', isText: true },
+            { label: 'Revenue today',       value: `A$${todayRevenue.toFixed(2)}`, sub: `${txCount} transaction${txCount !== 1 ? 's' : ''}` },
+            { label: 'Avg basket',          value: `A$${avgBasket.toFixed(2)}`,    sub: 'per transaction' },
+            { label: 'Est. cash in drawer', value: `A$${estCash.toFixed(2)}`,      sub: 'float + cash sales' },
+            { label: 'Best seller today',   value: topProduct ?? '—',              sub: 'by volume', isText: true },
           ].map(kpi => (
-            <div key={kpi.label} className="bg-white border border-gray-100 rounded-xl px-5 py-4">
-              <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">{kpi.label}</p>
-              <p className={`font-bold font-mono text-gray-900 ${kpi.isText ? 'text-xl truncate' : 'text-2xl'}`}>{kpi.value}</p>
-              <p className="text-sm text-gray-400 mt-0.5">{kpi.sub}</p>
+            <div key={kpi.label} style={{ background: '#1A1728', border: '1px solid #2A2540', borderRadius: 16, padding: '16px 20px' }}>
+              <p style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#4A4565', marginBottom: 8 }}>{kpi.label}</p>
+              <p style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: kpi.isText ? 18 : 28, fontWeight: 700, color: '#EDE8FF', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{kpi.value}</p>
+              <p style={{ fontSize: 11, color: '#4A4565', marginTop: 4 }}>{kpi.sub}</p>
             </div>
           ))}
         </div>
 
         {/* New Sale button */}
-        <div className="flex justify-center">
-          <button onClick={() => router.push('/pos/terminal')}
-            className="w-72 h-[72px] bg-[#111827] hover:bg-gray-800 text-white text-xl font-semibold rounded-2xl shadow-md hover:shadow-lg hover:scale-[1.02] transition-all">
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 24 }}>
+          <button
+            onClick={() => router.push('/pos/terminal')}
+            style={{
+              width: 280, height: 72, borderRadius: 20,
+              background: '#8B5CF6',
+              boxShadow: '0 4px 0 rgba(124,58,237,0.4), 0 8px 32px rgba(139,92,246,0.4)',
+              border: 'none', cursor: 'pointer', color: '#fff',
+              fontFamily: "'Instrument Serif',serif", fontStyle: 'italic', fontSize: 22,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              transition: 'all 150ms ease',
+            }}
+            onMouseEnter={e => { const el = e.currentTarget; el.style.transform = 'translateY(-2px)'; el.style.boxShadow = '0 6px 0 rgba(124,58,237,0.4),0 12px 40px rgba(139,92,246,0.5)'; }}
+            onMouseLeave={e => { const el = e.currentTarget; el.style.transform = ''; el.style.boxShadow = '0 4px 0 rgba(124,58,237,0.4),0 8px 32px rgba(139,92,246,0.4)'; }}
+            onMouseDown={e => { const el = e.currentTarget; el.style.transform = 'translateY(2px) scale(0.98)'; el.style.boxShadow = '0 1px 0 rgba(124,58,237,0.5),0 2px 8px rgba(139,92,246,0.44)'; }}
+            onMouseUp={e => { const el = e.currentTarget; el.style.transform = 'translateY(-2px)'; }}
+          >
             New Sale →
           </button>
         </div>
 
         {/* Aria insight */}
-        {insightText && (
-          <div className="bg-white border border-gray-100 rounded-xl px-5 py-4 border-l-[3px] border-l-[#059669]">
-            <p className="text-sm text-gray-700">
-              <span className="font-medium text-[#059669]">Aria: </span>{insightText}
+        <div style={{ background: 'rgba(139,92,246,0.06)', border: '1px solid rgba(139,92,246,0.15)', borderRadius: 16, padding: '16px 20px', marginBottom: 16 }}>
+          {insightText ? (
+            <p style={{ fontSize: 13, color: '#8B85A8', lineHeight: 1.6 }}>
+              <span style={{ color: '#8B5CF6', fontWeight: 600 }}>Aria: </span>{insightText}
             </p>
-          </div>
-        )}
-        {!insightText && (
-          <div className="bg-white border border-gray-100 rounded-xl px-5 py-4 border-l-[3px] border-l-[#059669] animate-pulse">
-            <div className="h-4 bg-gray-100 rounded w-3/4" />
-          </div>
-        )}
+          ) : (
+            <div style={{ height: 16, borderRadius: 6, background: 'rgba(139,92,246,0.1)', width: '70%', animation: 'pulse 2s ease-in-out infinite' }} />
+          )}
+        </div>
 
-        {/* Low stock alert */}
+        {/* Low stock */}
         {lowStockCount > 0 && (
-          <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-center justify-between">
-            <p className="text-sm text-amber-700 font-medium">
+          <div style={{ background: 'rgba(245,158,11,0.07)', border: '1px solid rgba(245,158,11,0.15)', borderRadius: 12, padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+            <p style={{ fontSize: 13, color: '#F59E0B', fontWeight: 500 }}>
               {lowStockCount} product{lowStockCount > 1 ? 's' : ''} need reordering
             </p>
-            <a href="/dashboard/reorder" className="text-sm text-amber-700 font-semibold hover:underline">Review →</a>
+            <a href="/dashboard/reorder" style={{ fontSize: 13, color: '#F59E0B', fontWeight: 700 }}>Review →</a>
           </div>
         )}
 
         {/* 7-day chart */}
         {chartData.length > 0 && (
-          <div className="bg-white border border-gray-100 rounded-xl p-5">
-            <p className="text-sm font-medium text-gray-700 mb-3">Last 7 days</p>
-            <ResponsiveContainer width="100%" height={120}>
+          <div style={{ background: '#1A1728', border: '1px solid #2A2540', borderRadius: 16, padding: '20px' }}>
+            <p style={{ fontSize: 13, fontWeight: 600, color: '#EDE8FF', marginBottom: 12 }}>Last 7 days</p>
+            <ResponsiveContainer width="100%" height={100}>
               <BarChart data={chartData} barCategoryGap="30%">
-                <Bar dataKey="revenue" fill="#059669" radius={[3, 3, 0, 0]} />
+                <Bar dataKey="revenue" fill="#8B5CF6" radius={[3, 3, 0, 0]} />
                 <Tooltip
-                  contentStyle={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 12 }}
-                  formatter={(v: unknown) => {
-                    const num = typeof v === 'number' ? v : 0;
-                    return [`A$${num.toFixed(2)}`, 'Revenue'];
-                  }}
-                  labelFormatter={(l: unknown) => {
-                    const key = typeof l === 'string' ? l : '';
-                    const item = chartData.find(d => d.label === key || d.date === key);
-                    return item?.label ?? key;
-                  }}
+                  contentStyle={{ background: '#1A1728', border: '1px solid #2A2540', borderRadius: 8, fontSize: 12, color: '#EDE8FF' }}
+                  formatter={(v: unknown) => { const num = typeof v === 'number' ? v : 0; return [`A$${num.toFixed(2)}`, 'Revenue']; }}
+                  labelFormatter={(l: unknown) => { const key = typeof l === 'string' ? l : ''; const item = chartData.find(d => d.label === key || d.date === key); return item?.label ?? key; }}
                 />
               </BarChart>
             </ResponsiveContainer>
@@ -294,8 +314,4 @@ export default function POSHomePage() {
       </div>
     </div>
   );
-}
-
-function Spinner() {
-  return <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>;
 }
