@@ -1,17 +1,19 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
-import { POSAriaInsight } from '@/components/pos/POSAriaInsight';
+import Link from 'next/link';
 
 interface Category { id: string; name: string; color: string; }
 interface Product {
   id: string; name: string; sku: string | null; barcode: string | null;
   description: string | null; price: number; cost_price: number | null;
-  tax_rate: number | null; stock_quantity: number | null;
-  low_stock_threshold: number | null; track_stock: boolean;
+  cost: number | null; tax_rate: number | null; stock_quantity: number | null;
+  low_stock_threshold: number | null; track_stock: boolean; case_quantity: number | null;
   is_active: boolean; show_online: boolean; image_url: string | null;
-  category_id: string | null; supplier_id: string | null;
+  category_id: string | null; supplier_id: string | null; brand_id: string | null; family_id: string | null;
   pos_categories?: { name: string; color: string } | null;
 }
+
+const C = { bg:'rgba(17,15,26,0.95)', card:'rgba(26,23,40,0.9)', border:'#2A2540', text:'#EDE8FF', muted:'#8B85A8', dim:'#4A4565', violet:'#8B5CF6', green:'#22C55E', red:'#EF4444' };
 
 const EMPTY_FORM = {
   name: '', sku: '', barcode: '', description: '',
@@ -21,20 +23,25 @@ const EMPTY_FORM = {
   category_id: '', supplier_id: '',
 };
 
+interface CSVRow { name: string; sku: string; barcode: string; price: string; cost_price: string; category: string; stock: string; active: string; }
+
 export default function ProductsPage() {
-  const [products, setProducts] = useState<Product[]>([]);
+  const [products, setProducts]   = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
+  const [loading, setLoading]     = useState(true);
+  const [search, setSearch]       = useState('');
   const [filterCat, setFilterCat] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive'>('all');
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [modal, setModal] = useState<{ open: boolean; mode: 'add' | 'edit'; product?: Product }>({ open: false, mode: 'add' });
-  const [form, setForm] = useState({ ...EMPTY_FORM });
-  const [saving, setSaving] = useState(false);
+  const [selected, setSelected]   = useState<Set<string>>(new Set());
+  const [modal, setModal]         = useState<{ open: boolean; mode: 'add' | 'edit'; product?: Product }>({ open: false, mode: 'add' });
+  const [form, setForm]           = useState({ ...EMPTY_FORM });
+  const [saving, setSaving]       = useState(false);
   const [saveError, setSaveError] = useState('');
-  const [deleting, setDeleting] = useState<string | null>(null);
+  const [deleting, setDeleting]   = useState<string | null>(null);
   const [bulkAction, setBulkAction] = useState('');
+  const [csvModal, setCsvModal]   = useState(false);
+  const [csvRows, setCsvRows]     = useState<CSVRow[]>([]);
+  const [importing, setImporting] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -44,7 +51,7 @@ export default function ProductsPage() {
         setProducts(d.products || []);
         setCategories(d.categories || []);
         setLoading(false);
-      });
+      }).catch(() => setLoading(false));
   }, []);
 
   const filtered = products.filter(p => {
@@ -60,10 +67,7 @@ export default function ProductsPage() {
     return true;
   });
 
-  function openAdd() {
-    setForm({ ...EMPTY_FORM });
-    setModal({ open: true, mode: 'add' });
-  }
+  function openAdd() { setForm({ ...EMPTY_FORM }); setSaveError(''); setModal({ open: true, mode: 'add' }); }
 
   function openEdit(p: Product) {
     setForm({
@@ -76,13 +80,13 @@ export default function ProductsPage() {
       track_stock: p.track_stock, is_active: p.is_active, show_online: p.show_online,
       image_url: p.image_url ?? '', category_id: p.category_id ?? '', supplier_id: p.supplier_id ?? '',
     });
+    setSaveError('');
     setModal({ open: true, mode: 'edit', product: p });
   }
 
   async function saveProduct() {
     if (!form.name.trim() || !form.price) return;
-    setSaving(true);
-    setSaveError('');
+    setSaving(true); setSaveError('');
     const payload = {
       name: form.name.trim(), sku: form.sku || null, barcode: form.barcode || null,
       description: form.description || null, price: parseFloat(form.price),
@@ -94,34 +98,15 @@ export default function ProductsPage() {
       image_url: form.image_url || null,
       category_id: form.category_id || null, supplier_id: form.supplier_id || null,
     };
-
     if (modal.mode === 'add') {
-      const res = await fetch('/api/pos/products', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
+      const res = await fetch('/api/pos/products', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       const d = await res.json();
-      if (d.product) {
-        setProducts(ps => [...ps, d.product]);
-        setModal({ open: false, mode: 'add' });
-      } else {
-        console.error('Product save failed:', d.error);
-        setSaveError(d.error || 'Failed to save product. Please try again.');
-        setSaving(false);
-        return;
-      }
+      if (d.product) { setProducts(ps => [d.product, ...ps]); setModal({ open: false, mode: 'add' }); }
+      else { setSaveError(d.error || 'Failed to save'); setSaving(false); return; }
     } else if (modal.product) {
-      const res = await fetch(`/api/pos/products?id=${modal.product.id}`, {
-        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
+      const res = await fetch(`/api/pos/products?id=${modal.product.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       const d = await res.json();
-      if (d.ok !== undefined && !d.ok) {
-        console.error('Product update failed:', d.error);
-        setSaveError(d.error || 'Failed to update product. Please try again.');
-        setSaving(false);
-        return;
-      }
+      if (d.ok === false) { setSaveError(d.error || 'Failed to update'); setSaving(false); return; }
       setProducts(ps => ps.map(p => p.id === modal.product!.id ? { ...p, ...payload, pos_categories: categories.find(c => c.id === payload.category_id) ?? null } : p));
       setModal({ open: false, mode: 'add' });
     }
@@ -137,384 +122,375 @@ export default function ProductsPage() {
   }
 
   const allSelected = filtered.length > 0 && filtered.every(p => selected.has(p.id));
-  function toggleAll() {
-    if (allSelected) setSelected(new Set());
-    else setSelected(new Set(filtered.map(p => p.id)));
-  }
+  function toggleAll() { allSelected ? setSelected(new Set()) : setSelected(new Set(filtered.map(p => p.id))); }
 
   async function applyBulk() {
     if (!bulkAction || selected.size === 0) return;
     const ids = [...selected];
     if (bulkAction === 'delete') {
+      if (!confirm(`Delete ${ids.length} product(s)?`)) return;
       await Promise.all(ids.map(id => fetch(`/api/pos/products?id=${id}`, { method: 'DELETE' })));
       setProducts(ps => ps.filter(p => !ids.includes(p.id)));
     } else {
       const patch = bulkAction === 'activate' ? { is_active: true } : { is_active: false };
-      await Promise.all(ids.map(id => fetch(`/api/pos/products?id=${id}`, {
-        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(patch),
-      })));
+      await Promise.all(ids.map(id => fetch(`/api/pos/products?id=${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch) })));
       setProducts(ps => ps.map(p => ids.includes(p.id) ? { ...p, ...patch } : p));
     }
-    setSelected(new Set());
-    setBulkAction('');
+    setSelected(new Set()); setBulkAction('');
   }
 
   function exportCSV() {
     const rows = [
-      ['Name', 'SKU', 'Barcode', 'Price', 'Cost', 'Tax%', 'Stock', 'Track Stock', 'Active', 'Category'],
-      ...products.map(p => [
-        p.name, p.sku ?? '', p.barcode ?? '', p.price, p.cost_price ?? '', p.tax_rate ?? 10,
-        p.stock_quantity ?? '', p.track_stock ? 'Yes' : 'No', p.is_active ? 'Yes' : 'No',
-        p.pos_categories?.name ?? '',
-      ]),
+      ['Name','SKU','Barcode','Price','Cost','Tax%','Stock','Track Stock','Active','Category'],
+      ...products.map(p => [p.name, p.sku ?? '', p.barcode ?? '', p.price, p.cost_price ?? '', p.tax_rate ?? 10, p.stock_quantity ?? '', p.track_stock ? 'Yes' : 'No', p.is_active ? 'Yes' : 'No', p.pos_categories?.name ?? '']),
     ];
     const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
-    a.download = 'products.csv';
-    a.click();
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); a.download = 'products.csv'; a.click();
   }
 
-  function handleCSVImport(e: React.ChangeEvent<HTMLInputElement>) {
+  function handleCSVFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = async ev => {
+    reader.onload = ev => {
       const lines = (ev.target?.result as string).split('\n').slice(1).filter(Boolean);
-      for (const line of lines) {
+      const rows: CSVRow[] = lines.map(line => {
         const cols = line.split(',').map(c => c.replace(/^"|"$/g, '').replace(/""/g, '"'));
-        const [name, sku, barcode, price, cost_price, tax_rate, stock_quantity, track_stock, is_active] = cols;
-        if (!name || !price) continue;
-        const res = await fetch('/api/pos/products', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            name, sku: sku || null, barcode: barcode || null,
-            price: parseFloat(price) || 0,
-            cost_price: cost_price ? parseFloat(cost_price) : null,
-            tax_rate: tax_rate ? parseFloat(tax_rate) : 10,
-            stock_quantity: stock_quantity ? parseInt(stock_quantity) : null,
-            track_stock: track_stock === 'Yes',
-            is_active: is_active !== 'No',
-          }),
-        });
-        const d = await res.json();
-        if (d.product) setProducts(ps => [...ps, d.product]);
-      }
-      if (fileRef.current) fileRef.current.value = '';
+        return { name: cols[0] ?? '', sku: cols[1] ?? '', barcode: cols[2] ?? '', price: cols[3] ?? '', cost_price: cols[4] ?? '', category: cols[9] ?? '', stock: cols[6] ?? '', active: cols[8] ?? 'Yes' };
+      }).filter(r => r.name && r.price);
+      setCsvRows(rows); setCsvModal(true);
     };
     reader.readAsText(file);
+    if (fileRef.current) fileRef.current.value = '';
   }
 
-  const fld = (k: keyof typeof form) => ({
-    value: form[k] as string,
-    onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
-      setForm(f => ({ ...f, [k]: e.target.value })),
-  });
+  async function importCSV() {
+    setImporting(true);
+    for (const row of csvRows) {
+      const res = await fetch('/api/pos/products', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: row.name, sku: row.sku || null, barcode: row.barcode || null, price: parseFloat(row.price) || 0, cost_price: row.cost_price ? parseFloat(row.cost_price) : null, is_active: row.active !== 'No', stock_quantity: row.stock ? parseInt(row.stock) : null }),
+      });
+      const d = await res.json();
+      if (d.product) setProducts(ps => [d.product, ...ps]);
+    }
+    setCsvModal(false); setCsvRows([]); setImporting(false);
+  }
+
+  const iCls = { background: 'rgba(10,9,16,0.8)', border: `1px solid ${C.border}`, borderRadius: 8, padding: '9px 12px', fontSize: 13, color: C.text, outline: 'none', fontFamily: "'Manrope',sans-serif", width: '100%', boxSizing: 'border-box' as const };
+  const lCls = { display: 'block', fontSize: 11, fontWeight: 700, color: C.muted, marginBottom: 6, textTransform: 'uppercase' as const, letterSpacing: '0.05em' };
+  const fld = (k: keyof typeof form) => ({ value: form[k] as string, onChange: (e: React.ChangeEvent<HTMLInputElement|HTMLTextAreaElement|HTMLSelectElement>) => setForm(f => ({ ...f, [k]: e.target.value })) });
 
   return (
-    <div className="min-h-full bg-gray-50">
-      <POSAriaInsight page="pos/products" />
-      <div className="p-6">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-xl font-semibold text-[#1a1a16]">Products</h1>
-          <p className="text-xs text-[rgba(26,26,22,.45)] mt-0.5">
-            {products.length} total · {products.filter(p => p.is_active).length} active
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <input ref={fileRef} type="file" accept=".csv" className="hidden" onChange={handleCSVImport} />
-          <button onClick={() => fileRef.current?.click()}
-            className="px-3 py-2 rounded-lg text-xs font-medium text-[rgba(26,26,22,.6)] border border-[rgba(0,0,0,.1)] hover:bg-[rgba(0,0,0,.04)] transition-colors">
-            Import CSV
-          </button>
-          <button onClick={exportCSV}
-            className="px-3 py-2 rounded-lg text-xs font-medium text-[rgba(26,26,22,.6)] border border-[rgba(0,0,0,.1)] hover:bg-[rgba(0,0,0,.04)] transition-colors">
-            Export CSV
-          </button>
-          <button onClick={openAdd}
-            className="px-4 py-2 rounded-lg text-sm font-medium text-white"
-            style={{ background: 'linear-gradient(135deg,#2563eb,#1d4ed8)' }}>
-            + Add Product
-          </button>
-        </div>
-      </div>
+    <div style={{ minHeight: '100%', background: C.bg, color: C.text, fontFamily: "'Manrope',sans-serif" }}>
+      <input ref={fileRef} type="file" accept=".csv" style={{ display: 'none' }} onChange={handleCSVFile} />
+      <div style={{ padding: '20px 24px' }}>
 
-      {/* Filters */}
-      <div className="flex items-center gap-3 mb-4 flex-wrap">
-        <input value={search} onChange={e => setSearch(e.target.value)}
-          placeholder="Search name, SKU, barcode…"
-          className="bg-white border border-[rgba(0,0,0,.1)] rounded-lg px-3 py-2 text-xs text-[#1a1a16] placeholder-[rgba(26,26,22,.3)] focus:outline-none focus:border-[#2563eb] w-64" />
-        <select value={filterCat} onChange={e => setFilterCat(e.target.value)}
-          className="bg-white border border-[rgba(0,0,0,.1)] rounded-lg px-3 py-2 text-xs text-[#1a1a16] focus:outline-none focus:border-[#2563eb]">
-          <option value="">All Categories</option>
-          {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
-        {(['all', 'active', 'inactive'] as const).map(s => (
-          <button key={s} onClick={() => setFilterStatus(s)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium capitalize transition-colors ${filterStatus === s ? 'bg-[#2563eb] text-white' : 'bg-white border border-[rgba(0,0,0,.1)] text-[rgba(26,26,22,.6)] hover:bg-[rgba(0,0,0,.04)]'}`}>
-            {s}
-          </button>
-        ))}
-        {selected.size > 0 && (
-          <div className="flex items-center gap-2 ml-auto">
-            <span className="text-xs text-[rgba(26,26,22,.5)]">{selected.size} selected</span>
-            <select value={bulkAction} onChange={e => setBulkAction(e.target.value)}
-              className="bg-white border border-[rgba(0,0,0,.1)] rounded-lg px-2 py-1.5 text-xs text-[#1a1a16] focus:outline-none">
-              <option value="">Bulk action…</option>
-              <option value="activate">Set Active</option>
-              <option value="deactivate">Set Inactive</option>
-              <option value="delete">Delete</option>
-            </select>
-            <button onClick={applyBulk} disabled={!bulkAction}
-              className="px-3 py-1.5 rounded-lg text-xs font-medium bg-[#1a1a16] text-white disabled:opacity-40 hover:opacity-90 transition-opacity">
-              Apply
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
+          <div>
+            <h1 style={{ fontSize: 20, fontWeight: 700, color: C.text, marginBottom: 2 }}>Products</h1>
+            <p style={{ fontSize: 12, color: C.muted }}>{products.length} total · {products.filter(p => p.is_active).length} active</p>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button onClick={() => fileRef.current?.click()}
+              style={{ padding: '8px 16px', borderRadius: 9, border: `1px solid ${C.border}`, background: 'transparent', color: C.muted, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+              Import CSV
+            </button>
+            <button onClick={exportCSV}
+              style={{ padding: '8px 16px', borderRadius: 9, border: `1px solid ${C.border}`, background: 'transparent', color: C.muted, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+              Export CSV
+            </button>
+            <button onClick={openAdd}
+              style={{ padding: '9px 20px', borderRadius: 9, border: 'none', background: C.violet, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+              + Add Product
             </button>
           </div>
-        )}
-      </div>
+        </div>
 
-      {/* Table */}
-      <div className="bg-white rounded-2xl border border-[rgba(0,0,0,.08)] overflow-hidden shadow-sm">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-[rgba(0,0,0,.06)]" style={{ background: '#fafaf8' }}>
-              <th className="px-4 py-3 w-10">
-                <input type="checkbox" checked={allSelected} onChange={toggleAll}
-                  className="rounded border-[rgba(0,0,0,.2)] accent-[#2563eb]" />
-              </th>
-              {['Product', 'SKU', 'Category', 'Price', 'Cost', 'Stock', 'Status', ''].map(h => (
-                <th key={h} className="text-left text-[10px] text-[rgba(26,26,22,.4)] uppercase tracking-wider px-3 py-3 font-medium">{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              [...Array(4)].map((_, i) => (
-                <tr key={i} className="border-b border-[rgba(0,0,0,.04)]">
-                  {[...Array(8)].map((_, j) => (
-                    <td key={j} className="px-3 py-3"><div className="h-3 rounded bg-[rgba(0,0,0,.06)] animate-pulse w-20" /></td>
-                  ))}
-                </tr>
-              ))
-            ) : !filtered.length ? (
-              <tr>
-                <td colSpan={9} className="text-center py-16">
-                  <p className="text-sm text-[rgba(26,26,22,.35)]">
-                    {!products.length ? 'No products yet — add your first product above' : 'No products match your filters'}
-                  </p>
-                </td>
+        {/* Filters */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search name, SKU, barcode…"
+            style={{ ...iCls, width: 240, flex: 'none' }} />
+          <select value={filterCat} onChange={e => setFilterCat(e.target.value)}
+            style={{ ...iCls, width: 'auto', flex: 'none', background: C.card }}>
+            <option value="">All Categories</option>
+            {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+          <div style={{ display: 'flex', gap: 4 }}>
+            {(['all', 'active', 'inactive'] as const).map(s => (
+              <button key={s} onClick={() => setFilterStatus(s)}
+                style={{ padding: '7px 14px', borderRadius: 8, border: `1px solid ${filterStatus === s ? C.violet : C.border}`, background: filterStatus === s ? 'rgba(139,92,246,0.15)' : 'transparent', color: filterStatus === s ? C.violet : C.muted, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', textTransform: 'capitalize' }}>
+                {s}
+              </button>
+            ))}
+          </div>
+          {selected.size > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 'auto' }}>
+              <span style={{ fontSize: 12, color: C.muted }}>{selected.size} selected</span>
+              <select value={bulkAction} onChange={e => setBulkAction(e.target.value)}
+                style={{ ...iCls, width: 'auto', flex: 'none', background: C.card }}>
+                <option value="">Bulk action…</option>
+                <option value="activate">Set Active</option>
+                <option value="deactivate">Set Inactive</option>
+                <option value="delete">Delete</option>
+              </select>
+              <button onClick={applyBulk} disabled={!bulkAction}
+                style={{ padding: '7px 14px', borderRadius: 8, border: 'none', background: C.violet, color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', opacity: bulkAction ? 1 : 0.4 }}>
+                Apply
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Table */}
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, overflow: 'hidden' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ background: 'rgba(255,255,255,0.03)', borderBottom: `1px solid ${C.border}` }}>
+                <th style={{ width: 40, padding: '10px 14px' }}>
+                  <input type="checkbox" checked={allSelected} onChange={toggleAll} style={{ accentColor: C.violet, width: 14, height: 14 }} />
+                </th>
+                {['Status','Product','Category','Cost','Inventory','Price','Actions'].map(h => (
+                  <th key={h} style={{ textAlign: 'left', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: C.dim, padding: '10px 12px' }}>{h}</th>
+                ))}
               </tr>
-            ) : (
-              filtered.map(p => {
+            </thead>
+            <tbody>
+              {loading ? (
+                [...Array(5)].map((_, i) => (
+                  <tr key={i} style={{ borderBottom: `1px solid ${C.border}` }}>
+                    {[...Array(8)].map((_, j) => (
+                      <td key={j} style={{ padding: '12px' }}>
+                        <div style={{ height: 12, borderRadius: 4, background: 'rgba(255,255,255,0.05)', width: j === 1 ? 140 : 60 }} />
+                      </td>
+                    ))}
+                  </tr>
+                ))
+              ) : !filtered.length ? (
+                <tr>
+                  <td colSpan={8} style={{ padding: '48px 24px', textAlign: 'center', color: C.dim, fontSize: 13 }}>
+                    {!products.length ? 'No products yet — add your first product above' : 'No products match your filters'}
+                  </td>
+                </tr>
+              ) : filtered.map((p, i) => {
                 const lowStock = p.track_stock && p.stock_quantity != null && p.low_stock_threshold != null && p.stock_quantity <= p.low_stock_threshold;
+                const margin = p.cost_price && p.price > 0 ? ((p.price - p.cost_price) / p.price * 100) : null;
                 return (
-                  <tr key={p.id} className={`border-b border-[rgba(0,0,0,.04)] last:border-0 hover:bg-[rgba(37,99,235,.02)] transition-colors ${selected.has(p.id) ? 'bg-[rgba(37,99,235,.04)]' : ''}`}>
-                    <td className="px-4 py-3">
+                  <tr key={p.id} style={{ borderBottom: i < filtered.length - 1 ? `1px solid ${C.border}` : 'none', background: selected.has(p.id) ? 'rgba(139,92,246,0.05)' : 'transparent', transition: 'background 100ms' }}>
+                    <td style={{ padding: '10px 14px' }}>
                       <input type="checkbox" checked={selected.has(p.id)}
                         onChange={e => setSelected(s => { const n = new Set(s); e.target.checked ? n.add(p.id) : n.delete(p.id); return n; })}
-                        className="rounded border-[rgba(0,0,0,.2)] accent-[#2563eb]" />
+                        style={{ accentColor: C.violet, width: 14, height: 14 }} />
                     </td>
-                    <td className="px-3 py-3">
-                      <div className="flex items-center gap-2.5">
+                    {/* Status dot */}
+                    <td style={{ padding: '10px 12px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <div style={{ width: 7, height: 7, borderRadius: '50%', background: p.is_active ? C.green : C.dim, flexShrink: 0 }} />
+                        <span style={{ fontSize: 10, color: p.is_active ? C.green : C.dim }}>{p.is_active ? 'Active' : 'Inactive'}</span>
+                      </div>
+                    </td>
+                    {/* Product */}
+                    <td style={{ padding: '10px 12px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                         {p.image_url
-                          ? <img src={p.image_url} alt="" className="w-8 h-8 rounded-lg object-cover flex-shrink-0" />
-                          : <div className="w-8 h-8 rounded-lg bg-[rgba(37,99,235,.1)] flex items-center justify-center flex-shrink-0 text-[10px] font-bold text-[#2563eb]">{p.name[0].toUpperCase()}</div>}
+                          ? <img src={p.image_url} alt="" style={{ width: 32, height: 32, borderRadius: 8, objectFit: 'cover', flexShrink: 0 }} />
+                          : <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(139,92,246,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 12, fontWeight: 700, color: C.violet }}>{p.name[0].toUpperCase()}</div>}
                         <div>
-                          <p className="text-[13px] font-medium text-[#1a1a16] leading-tight">{p.name}</p>
-                          {p.barcode && <p className="text-[10px] text-[rgba(26,26,22,.35)] font-mono">{p.barcode}</p>}
+                          <p style={{ fontSize: 13, fontWeight: 600, color: C.text, marginBottom: 1 }}>{p.name}</p>
+                          <p style={{ fontSize: 10, color: C.dim, fontFamily: "'JetBrains Mono',monospace" }}>{p.sku ? `SKU: ${p.sku}` : p.barcode ? p.barcode : '—'}</p>
                         </div>
                       </div>
                     </td>
-                    <td className="px-3 py-3">
-                      <span className="text-[11px] text-[rgba(26,26,22,.45)] font-mono">{p.sku || '—'}</span>
-                    </td>
-                    <td className="px-3 py-3">
+                    {/* Category */}
+                    <td style={{ padding: '10px 12px' }}>
                       {p.pos_categories
-                        ? <span className="text-[10px] px-2 py-0.5 rounded-full font-medium"
-                            style={{ background: `${p.pos_categories.color}20`, color: p.pos_categories.color, border: `1px solid ${p.pos_categories.color}40` }}>
-                            {p.pos_categories.name}
-                          </span>
-                        : <span className="text-[10px] text-[rgba(26,26,22,.25)]">—</span>}
+                        ? <span style={{ fontSize: 10, padding: '3px 8px', borderRadius: 99, background: `${p.pos_categories.color}20`, color: p.pos_categories.color, border: `1px solid ${p.pos_categories.color}40`, fontWeight: 700 }}>{p.pos_categories.name}</span>
+                        : <span style={{ fontSize: 11, color: C.dim }}>—</span>}
                     </td>
-                    <td className="px-3 py-3">
-                      <span className="text-sm font-semibold text-[#1a1a16]">${Number(p.price).toFixed(2)}</span>
+                    {/* Cost + margin */}
+                    <td style={{ padding: '10px 12px' }}>
+                      <p style={{ fontSize: 12, color: C.muted, fontFamily: "'JetBrains Mono',monospace" }}>
+                        {p.cost_price != null ? `A$${Number(p.cost_price).toFixed(2)}` : '—'}
+                      </p>
+                      {margin != null && <p style={{ fontSize: 10, color: margin > 20 ? C.green : '#F59E0B' }}>{margin.toFixed(1)}%</p>}
                     </td>
-                    <td className="px-3 py-3">
-                      <span className="text-[11px] text-[rgba(26,26,22,.45)]">
-                        {p.cost_price != null ? `$${Number(p.cost_price).toFixed(2)}` : '—'}
-                      </span>
-                    </td>
-                    <td className="px-3 py-3">
+                    {/* Inventory */}
+                    <td style={{ padding: '10px 12px' }}>
                       {!p.track_stock
-                        ? <span className="text-[10px] text-[rgba(26,26,22,.35)]">∞</span>
-                        : <span className={`text-xs font-medium ${lowStock ? 'text-amber-600' : 'text-[rgba(26,26,22,.7)]'}`}>
+                        ? <span style={{ fontSize: 11, color: C.dim }}>Untracked</span>
+                        : <span style={{ fontSize: 13, fontWeight: 600, color: lowStock ? C.red : C.text, fontFamily: "'JetBrains Mono',monospace" }}>
                             {p.stock_quantity ?? 0}
-                            {lowStock && <span className="ml-1 text-[9px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full">Low</span>}
+                            {p.case_quantity && p.case_quantity > 1 ? <span style={{ fontSize: 10, color: C.dim, fontWeight: 400 }}> items</span> : null}
+                            {lowStock && <span style={{ marginLeft: 6, fontSize: 9, padding: '2px 6px', borderRadius: 99, background: 'rgba(239,68,68,0.12)', color: C.red, fontWeight: 700 }}>LOW</span>}
                           </span>}
                     </td>
-                    <td className="px-3 py-3">
-                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${p.is_active ? 'bg-violet-50 text-violet-700 border border-violet-200' : 'bg-[rgba(0,0,0,.05)] text-[rgba(26,26,22,.4)] border border-[rgba(0,0,0,.08)]'}`}>
-                        {p.is_active ? 'Active' : 'Inactive'}
-                      </span>
+                    {/* Price */}
+                    <td style={{ padding: '10px 12px' }}>
+                      <span style={{ fontSize: 15, fontWeight: 800, color: C.text, fontFamily: "'JetBrains Mono',monospace" }}>A${Number(p.price).toFixed(2)}</span>
                     </td>
-                    <td className="px-3 py-3 text-right">
-                      <button onClick={() => openEdit(p)}
-                        className="text-[10px] text-[rgba(26,26,22,.4)] hover:text-[#2563eb] transition-colors font-medium">
-                        Edit
-                      </button>
+                    {/* Actions */}
+                    <td style={{ padding: '10px 12px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <Link href={`/pos/products/${p.id}`}
+                          style={{ padding: '5px 10px', borderRadius: 6, border: `1px solid ${C.border}`, background: 'transparent', color: C.muted, fontSize: 11, fontWeight: 600, textDecoration: 'none', display: 'inline-block' }}>
+                          View
+                        </Link>
+                        <Link href={`/pos/products/${p.id}/edit`}
+                          style={{ padding: '5px 10px', borderRadius: 6, border: `1px solid rgba(139,92,246,0.3)`, background: 'rgba(139,92,246,0.08)', color: C.violet, fontSize: 11, fontWeight: 600, textDecoration: 'none', display: 'inline-block' }}>
+                          Edit
+                        </Link>
+                        <button onClick={() => { if (confirm(`Delete "${p.name}"?`)) deleteProduct(p.id); }}
+                          disabled={deleting === p.id}
+                          style={{ padding: '5px 10px', borderRadius: 6, border: '1px solid rgba(239,68,68,0.25)', background: 'rgba(239,68,68,0.06)', color: C.red, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', opacity: deleting === p.id ? 0.5 : 1 }}>
+                          {deleting === p.id ? '…' : 'Del'}
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );
-              })
-            )}
-          </tbody>
-        </table>
+              })}
+            </tbody>
+          </table>
+        </div>
       </div>
 
-      {/* Add / Edit Modal */}
+      {/* Add/Edit Modal */}
       {modal.open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,.45)' }}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl max-h-[90vh] overflow-y-auto">
-            <div className="px-6 py-5 border-b border-[rgba(0,0,0,.08)] flex items-center justify-between">
-              <h2 className="text-base font-semibold text-[#1a1a16]">
-                {modal.mode === 'add' ? 'Add Product' : 'Edit Product'}
-              </h2>
-              <button onClick={() => setModal({ open: false, mode: 'add' })}
-                className="text-[rgba(26,26,22,.4)] hover:text-[#1a1a16] transition-colors text-xl leading-none">&times;</button>
+        <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, background: 'rgba(0,0,0,0.6)' }}>
+          <div style={{ background: '#0F0D1C', border: `1px solid ${C.border}`, borderRadius: 18, width: '100%', maxWidth: 560, maxHeight: '90vh', overflowY: 'auto' }}>
+            <div style={{ padding: '18px 22px', borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <h2 style={{ fontSize: 15, fontWeight: 700, color: C.text }}>{modal.mode === 'add' ? 'Add Product' : 'Edit Product'}</h2>
+              <button onClick={() => setModal({ open: false, mode: 'add' })} style={{ background: 'none', border: 'none', color: C.muted, fontSize: 20, cursor: 'pointer', lineHeight: 1 }}>&times;</button>
             </div>
-            <div className="px-6 py-5 space-y-4">
-              {/* Name */}
+            <div style={{ padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: 16 }}>
               <div>
-                <label className="block text-xs font-medium text-[rgba(26,26,22,.6)] mb-1.5">Product Name *</label>
-                <input {...fld('name')} placeholder="e.g. Coffee Blend 250g"
-                  className="w-full bg-[#fafaf8] border border-[rgba(0,0,0,.1)] rounded-lg px-3 py-2.5 text-sm text-[#1a1a16] placeholder-[rgba(26,26,22,.3)] focus:outline-none focus:border-[#2563eb]" />
+                <label style={lCls}>Product Name *</label>
+                <input {...fld('name')} placeholder="e.g. Coffee Blend 250g" style={iCls} />
               </div>
-              {/* SKU + Barcode */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-[rgba(26,26,22,.6)] mb-1.5">SKU</label>
-                  <input {...fld('sku')} placeholder="SKU-001"
-                    className="w-full bg-[#fafaf8] border border-[rgba(0,0,0,.1)] rounded-lg px-3 py-2.5 text-sm text-[#1a1a16] placeholder-[rgba(26,26,22,.3)] focus:outline-none focus:border-[#2563eb]" />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-[rgba(26,26,22,.6)] mb-1.5">Barcode</label>
-                  <input {...fld('barcode')} placeholder="9312345678901"
-                    className="w-full bg-[#fafaf8] border border-[rgba(0,0,0,.1)] rounded-lg px-3 py-2.5 text-sm text-[#1a1a16] placeholder-[rgba(26,26,22,.3)] focus:outline-none focus:border-[#2563eb]" />
-                </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div><label style={lCls}>SKU</label><input {...fld('sku')} placeholder="SKU-001" style={iCls} /></div>
+                <div><label style={lCls}>Barcode</label><input {...fld('barcode')} placeholder="9312345678901" style={iCls} /></div>
               </div>
-              {/* Price + Cost + Tax */}
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-[rgba(26,26,22,.6)] mb-1.5">Price (incl. tax) *</label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-[rgba(26,26,22,.4)]">$</span>
-                    <input {...fld('price')} type="number" step="0.01" min="0" placeholder="0.00"
-                      className="w-full bg-[#fafaf8] border border-[rgba(0,0,0,.1)] rounded-lg pl-6 pr-3 py-2.5 text-sm text-[#1a1a16] focus:outline-none focus:border-[#2563eb]" />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-[rgba(26,26,22,.6)] mb-1.5">Cost Price</label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-[rgba(26,26,22,.4)]">$</span>
-                    <input {...fld('cost_price')} type="number" step="0.01" min="0" placeholder="0.00"
-                      className="w-full bg-[#fafaf8] border border-[rgba(0,0,0,.1)] rounded-lg pl-6 pr-3 py-2.5 text-sm text-[#1a1a16] focus:outline-none focus:border-[#2563eb]" />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-[rgba(26,26,22,.6)] mb-1.5">Tax Rate %</label>
-                  <input {...fld('tax_rate')} type="number" step="0.5" min="0" max="100"
-                    className="w-full bg-[#fafaf8] border border-[rgba(0,0,0,.1)] rounded-lg px-3 py-2.5 text-sm text-[#1a1a16] focus:outline-none focus:border-[#2563eb]" />
-                </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+                <div><label style={lCls}>Price (A$) *</label><input {...fld('price')} type="number" step="0.01" min="0" placeholder="0.00" style={iCls} /></div>
+                <div><label style={lCls}>Cost Price</label><input {...fld('cost_price')} type="number" step="0.01" min="0" placeholder="0.00" style={iCls} /></div>
+                <div><label style={lCls}>Tax Rate %</label><input {...fld('tax_rate')} type="number" step="0.5" min="0" max="100" style={iCls} /></div>
               </div>
-              {/* Category */}
               <div>
-                <label className="block text-xs font-medium text-[rgba(26,26,22,.6)] mb-1.5">Category</label>
-                <select value={form.category_id} onChange={e => setForm(f => ({ ...f, category_id: e.target.value }))}
-                  className="w-full bg-[#fafaf8] border border-[rgba(0,0,0,.1)] rounded-lg px-3 py-2.5 text-sm text-[#1a1a16] focus:outline-none focus:border-[#2563eb]">
+                <label style={lCls}>Category</label>
+                <select value={form.category_id} onChange={e => setForm(f => ({ ...f, category_id: e.target.value }))} style={{ ...iCls, background: '#0A0910' }}>
                   <option value="">No category</option>
                   {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
               </div>
-              {/* Stock */}
               <div>
-                <div className="flex items-center gap-2 mb-2">
-                  <input type="checkbox" id="track_stock" checked={form.track_stock}
-                    onChange={e => setForm(f => ({ ...f, track_stock: e.target.checked }))}
-                    className="rounded border-[rgba(0,0,0,.2)] accent-[#2563eb]" />
-                  <label htmlFor="track_stock" className="text-xs font-medium text-[rgba(26,26,22,.7)]">Track stock quantity</label>
-                </div>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', marginBottom: 8 }}>
+                  <input type="checkbox" checked={form.track_stock} onChange={e => setForm(f => ({ ...f, track_stock: e.target.checked }))} style={{ accentColor: C.violet, width: 14, height: 14 }} />
+                  <span style={{ fontSize: 13, color: C.text }}>Track stock quantity</span>
+                </label>
                 {form.track_stock && (
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs font-medium text-[rgba(26,26,22,.6)] mb-1.5">Stock Quantity</label>
-                      <input {...fld('stock_quantity')} type="number" min="0" placeholder="0"
-                        className="w-full bg-[#fafaf8] border border-[rgba(0,0,0,.1)] rounded-lg px-3 py-2.5 text-sm text-[#1a1a16] focus:outline-none focus:border-[#2563eb]" />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-[rgba(26,26,22,.6)] mb-1.5">Low Stock Alert</label>
-                      <input {...fld('low_stock_threshold')} type="number" min="0" placeholder="5"
-                        className="w-full bg-[#fafaf8] border border-[rgba(0,0,0,.1)] rounded-lg px-3 py-2.5 text-sm text-[#1a1a16] focus:outline-none focus:border-[#2563eb]" />
-                    </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                    <div><label style={lCls}>Stock Quantity</label><input {...fld('stock_quantity')} type="number" min="0" placeholder="0" style={iCls} /></div>
+                    <div><label style={lCls}>Low Stock Alert</label><input {...fld('low_stock_threshold')} type="number" min="0" placeholder="5" style={iCls} /></div>
                   </div>
                 )}
               </div>
-              {/* Description */}
               <div>
-                <label className="block text-xs font-medium text-[rgba(26,26,22,.6)] mb-1.5">Description</label>
-                <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-                  rows={2} placeholder="Optional product description…"
-                  className="w-full bg-[#fafaf8] border border-[rgba(0,0,0,.1)] rounded-lg px-3 py-2.5 text-sm text-[#1a1a16] placeholder-[rgba(26,26,22,.3)] focus:outline-none focus:border-[#2563eb] resize-none" />
+                <label style={lCls}>Description</label>
+                <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} rows={2} placeholder="Optional description…" style={{ ...iCls, resize: 'vertical' as const }} />
               </div>
-              {/* Image URL */}
               <div>
-                <label className="block text-xs font-medium text-[rgba(26,26,22,.6)] mb-1.5">Image URL</label>
-                <input {...fld('image_url')} placeholder="https://…"
-                  className="w-full bg-[#fafaf8] border border-[rgba(0,0,0,.1)] rounded-lg px-3 py-2.5 text-sm text-[#1a1a16] placeholder-[rgba(26,26,22,.3)] focus:outline-none focus:border-[#2563eb]" />
+                <label style={lCls}>Image URL</label>
+                <input {...fld('image_url')} placeholder="https://…" style={iCls} />
               </div>
-              {/* Toggles */}
-              <div className="flex items-center gap-6">
-                {[['is_active', 'Active'], ['show_online', 'Show Online']] .map(([k, label]) => (
-                  <label key={k} className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" checked={form[k as 'is_active' | 'show_online']}
-                      onChange={e => setForm(f => ({ ...f, [k]: e.target.checked }))}
-                      className="rounded border-[rgba(0,0,0,.2)] accent-[#2563eb]" />
-                    <span className="text-xs font-medium text-[rgba(26,26,22,.7)]">{label}</span>
+              <div style={{ display: 'flex', gap: 20 }}>
+                {([['is_active', 'Active'], ['show_online', 'Show Online']] as const).map(([k, label]) => (
+                  <label key={k} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                    <input type="checkbox" checked={form[k]} onChange={e => setForm(f => ({ ...f, [k]: e.target.checked }))} style={{ accentColor: C.violet, width: 14, height: 14 }} />
+                    <span style={{ fontSize: 13, color: C.text }}>{label}</span>
                   </label>
                 ))}
               </div>
+              {saveError && <p style={{ fontSize: 12, color: C.red }}>{saveError}</p>}
             </div>
-            <div className="px-6 py-4 border-t border-[rgba(0,0,0,.08)] flex items-center justify-between gap-3">
+            <div style={{ padding: '14px 22px', borderTop: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div>
                 {modal.mode === 'edit' && (
-                  <button onClick={() => modal.product && deleteProduct(modal.product.id)}
-                    disabled={deleting === modal.product?.id}
-                    className="text-xs text-red-500 hover:text-red-600 transition-colors disabled:opacity-50">
+                  <button onClick={() => modal.product && deleteProduct(modal.product.id)} disabled={deleting === modal.product?.id}
+                    style={{ fontSize: 12, color: C.red, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
                     {deleting === modal.product?.id ? 'Deleting…' : 'Delete product'}
                   </button>
                 )}
               </div>
-              <div className="flex items-center gap-2">
+              <div style={{ display: 'flex', gap: 8 }}>
                 <button onClick={() => setModal({ open: false, mode: 'add' })}
-                  className="px-4 py-2 rounded-lg text-sm font-medium text-[rgba(26,26,22,.6)] border border-[rgba(0,0,0,.1)] hover:bg-[rgba(0,0,0,.04)] transition-colors">
+                  style={{ padding: '8px 18px', borderRadius: 9, border: `1px solid ${C.border}`, background: 'transparent', color: C.muted, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
                   Cancel
                 </button>
                 <button onClick={saveProduct} disabled={saving || !form.name.trim() || !form.price}
-                  className="px-4 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-50 transition-opacity hover:opacity-90"
-                  style={{ background: 'linear-gradient(135deg,#2563eb,#1d4ed8)' }}>
+                  style={{ padding: '8px 22px', borderRadius: 9, border: 'none', background: C.violet, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', opacity: saving || !form.name.trim() || !form.price ? 0.5 : 1 }}>
                   {saving ? 'Saving…' : modal.mode === 'add' ? 'Add Product' : 'Save Changes'}
                 </button>
               </div>
-              {saveError && (
-                <p className="text-xs mt-2 text-right" style={{ color: '#ef4444' }}>{saveError}</p>
-              )}
             </div>
           </div>
         </div>
       )}
-      </div>
+
+      {/* CSV Preview Modal */}
+      {csvModal && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, background: 'rgba(0,0,0,0.6)' }}>
+          <div style={{ background: '#0F0D1C', border: `1px solid ${C.border}`, borderRadius: 18, width: '100%', maxWidth: 720, maxHeight: '80vh', overflowY: 'auto' }}>
+            <div style={{ padding: '18px 22px', borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div>
+                <h2 style={{ fontSize: 15, fontWeight: 700, color: C.text }}>CSV Import Preview</h2>
+                <p style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>{csvRows.length} products found</p>
+              </div>
+              <button onClick={() => { setCsvModal(false); setCsvRows([]); }} style={{ background: 'none', border: 'none', color: C.muted, fontSize: 20, cursor: 'pointer', lineHeight: 1 }}>&times;</button>
+            </div>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ background: 'rgba(255,255,255,0.03)', borderBottom: `1px solid ${C.border}` }}>
+                    {['Name','SKU','Barcode','Price','Cost','Stock','Active'].map(h => (
+                      <th key={h} style={{ textAlign: 'left', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: C.dim, padding: '8px 12px' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {csvRows.slice(0, 20).map((r, i) => (
+                    <tr key={i} style={{ borderBottom: `1px solid ${C.border}` }}>
+                      <td style={{ padding: '8px 12px', fontSize: 12, color: C.text }}>{r.name}</td>
+                      <td style={{ padding: '8px 12px', fontSize: 11, color: C.muted, fontFamily: 'monospace' }}>{r.sku || '—'}</td>
+                      <td style={{ padding: '8px 12px', fontSize: 11, color: C.muted, fontFamily: 'monospace' }}>{r.barcode || '—'}</td>
+                      <td style={{ padding: '8px 12px', fontSize: 12, color: C.text, fontFamily: 'monospace' }}>A${parseFloat(r.price).toFixed(2)}</td>
+                      <td style={{ padding: '8px 12px', fontSize: 11, color: C.muted, fontFamily: 'monospace' }}>{r.cost_price ? `A$${parseFloat(r.cost_price).toFixed(2)}` : '—'}</td>
+                      <td style={{ padding: '8px 12px', fontSize: 11, color: C.muted }}>{r.stock || '—'}</td>
+                      <td style={{ padding: '8px 12px' }}>
+                        <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 99, background: r.active !== 'No' ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)', color: r.active !== 'No' ? C.green : C.red }}>{r.active !== 'No' ? 'Yes' : 'No'}</span>
+                      </td>
+                    </tr>
+                  ))}
+                  {csvRows.length > 20 && (
+                    <tr><td colSpan={7} style={{ padding: '10px 12px', textAlign: 'center', fontSize: 12, color: C.dim }}>…and {csvRows.length - 20} more</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+            <div style={{ padding: '14px 22px', borderTop: `1px solid ${C.border}`, display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <button onClick={() => { setCsvModal(false); setCsvRows([]); }}
+                style={{ padding: '8px 18px', borderRadius: 9, border: `1px solid ${C.border}`, background: 'transparent', color: C.muted, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+                Cancel
+              </button>
+              <button onClick={importCSV} disabled={importing}
+                style={{ padding: '8px 22px', borderRadius: 9, border: 'none', background: C.violet, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', opacity: importing ? 0.6 : 1 }}>
+                {importing ? 'Importing…' : `Import ${csvRows.length} Products`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
