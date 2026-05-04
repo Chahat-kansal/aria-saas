@@ -10,27 +10,24 @@ interface Props {
   businessId: string;
   businessName: string;
   onLogin: (user: PosUser) => void;
-  onSkip: () => void; // owner bypass
+  onSkip: () => void;
 }
-
-const ROLE_COLORS: Record<string, string> = {
-  cashier: 'bg-blue-100 text-blue-700',
-  supervisor: 'bg-amber-100 text-amber-700',
-  manager: 'bg-purple-100 text-purple-700',
-  owner: 'bg-emerald-100 text-emerald-700',
-};
-const ROLE_EMOJIS: Record<string, string> = { cashier: '💼', supervisor: '⭐', manager: '🎯', owner: '👑' };
 
 const NUM_PAD = ['1','2','3','4','5','6','7','8','9','','0','⌫'];
 
+function Orb({ style }: { style: React.CSSProperties }) {
+  return <div style={{ position: 'absolute', borderRadius: '50%', pointerEvents: 'none', ...style }} />;
+}
+
 export function POSUserLogin({ businessId, businessName, onLogin, onSkip }: Props) {
-  const [users, setUsers] = useState<PosUser[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [users, setUsers]             = useState<PosUser[]>([]);
+  const [loading, setLoading]         = useState(true);
   const [selectedUser, setSelectedUser] = useState<PosUser | null>(null);
-  const [pin, setPin] = useState('');
-  const [error, setError] = useState('');
-  const [attempts, setAttempts] = useState(0);
-  const [verifying, setVerifying] = useState(false);
+  const [pin, setPin]                 = useState('');
+  const [error, setError]             = useState('');
+  const [attempts, setAttempts]       = useState(0);
+  const [verifying, setVerifying]     = useState(false);
+  const [shaking, setShaking]         = useState(false);
 
   const loadUsers = useCallback(async () => {
     try {
@@ -43,13 +40,10 @@ export function POSUserLogin({ businessId, businessName, onLogin, onSkip }: Prop
   useEffect(() => { loadUsers(); }, [loadUsers]);
 
   function handlePad(key: string) {
-    if (key === '⌫') {
-      setPin(p => p.slice(0, -1));
-      setError('');
-    } else if (pin.length < 4) {
+    if (key === '⌫') { setPin(p => p.slice(0, -1)); setError(''); }
+    else if (pin.length < 4) {
       const next = pin + key;
-      setPin(next);
-      setError('');
+      setPin(next); setError('');
       if (next.length === 4) verifyPin(next);
     }
   }
@@ -71,123 +65,142 @@ export function POSUserLogin({ businessId, businessName, onLogin, onSkip }: Prop
         setAttempts(newAttempts);
         setPin('');
         setError(newAttempts >= 3 ? 'Too many wrong attempts. Please ask a manager.' : 'Incorrect PIN. Try again.');
+        setShaking(true);
+        setTimeout(() => setShaking(false), 400);
       }
     } catch {
-      setPin('');
-      setError('Verification failed. Check your connection.');
+      setPin(''); setError('Verification failed. Check your connection.');
     }
     setVerifying(false);
   }
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-[#111827] flex items-center justify-center">
-        <div className="w-6 h-6 rounded-full border-2 border-emerald-500 border-t-transparent animate-spin" />
-      </div>
-    );
-  }
+  if (loading) return (
+    <div style={{ minHeight: '100dvh', background: '#0A0910', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ width: 24, height: 24, borderRadius: '50%', border: '2px solid rgba(139,92,246,0.3)', borderTopColor: '#8B5CF6', animation: 'processing 0.7s linear infinite' }} />
+    </div>
+  );
 
-  // First-time setup: no users exist
-  if (users.length === 0) {
-    return (
-      <div className="min-h-screen bg-[#111827] flex flex-col items-center justify-center p-8 text-center">
-        <div className="mb-6">
-          <p className="text-4xl font-black text-white mb-1">{businessName}</p>
-          <p className="text-gray-400 text-lg">AriaPOS</p>
-        </div>
-        <div className="bg-white/10 rounded-2xl p-6 max-w-sm w-full">
-          <p className="text-xl font-bold text-white mb-2">Set up your first cashier</p>
-          <p className="text-gray-400 text-sm mb-5">Add yourself as a cashier to start using the register</p>
-          <a href="/pos/settings/users"
-            className="block w-full py-3 rounded-xl text-center text-sm font-semibold text-white"
-            style={{ background: '#059669' }}>
+  if (users.length === 0) return (
+    <div style={{ minHeight: '100dvh', background: '#0A0910', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 32, textAlign: 'center', fontFamily: "'Manrope',system-ui,sans-serif", position: 'relative', overflow: 'hidden' }}>
+      <Orb style={{ width: 400, height: 400, top: '-100px', left: '-100px', background: 'radial-gradient(circle,rgba(139,92,246,0.15),transparent 70%)', filter: 'blur(80px)', animation: 'orb-pulse-0 4s ease-in-out infinite' }} />
+      <div style={{ position: 'relative', zIndex: 1 }}>
+        <p style={{ fontFamily: "'Instrument Serif',serif", fontStyle: 'italic', fontSize: 36, color: '#8B5CF6', marginBottom: 4 }}>AriaPOS</p>
+        <p style={{ fontSize: 14, color: '#8B85A8', marginBottom: 32 }}>{businessName}</p>
+        <div style={{ background: 'rgba(26,23,40,0.8)', backdropFilter: 'blur(24px)', border: '1px solid rgba(139,92,246,0.2)', borderRadius: 20, padding: '28px 32px', maxWidth: 380, width: '100%' }}>
+          <p style={{ fontSize: 18, fontWeight: 700, color: '#EDE8FF', marginBottom: 8 }}>Set up your first cashier</p>
+          <p style={{ fontSize: 13, color: '#8B85A8', marginBottom: 24 }}>Add yourself as a cashier to start using the register</p>
+          <a href="/pos/settings/users" style={{ display: 'block', width: '100%', padding: '12px 0', borderRadius: 12, textAlign: 'center', fontSize: 14, fontWeight: 600, color: '#fff', background: '#8B5CF6', textDecoration: 'none' }}>
             Set up users →
           </a>
-          <button onClick={onSkip} className="mt-3 w-full text-gray-500 text-xs hover:text-gray-400 py-2">
+          <button onClick={onSkip} style={{ marginTop: 12, width: '100%', background: 'none', border: 'none', color: '#4A4565', fontSize: 12, cursor: 'pointer', padding: '8px 0' }}>
             Skip for now (owner mode)
           </button>
         </div>
       </div>
-    );
-  }
+    </div>
+  );
 
   return (
-    <div className="min-h-screen bg-[#111827] flex flex-col items-center justify-center p-8">
-      <div className="mb-8 text-center">
-        <p className="text-4xl font-black text-white mb-1">{businessName}</p>
-        <p className="text-gray-400 text-lg">{selectedUser ? 'Enter your PIN' : "Who's working today?"}</p>
-      </div>
+    <div style={{ minHeight: '100dvh', background: '#0A0910', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 32, fontFamily: "'Manrope',system-ui,sans-serif", position: 'relative', overflow: 'hidden' }}>
+      <Orb style={{ width: 400, height: 400, top: '-100px', left: '-100px', background: 'radial-gradient(circle,rgba(139,92,246,0.15),transparent 70%)', filter: 'blur(80px)', animation: 'orb-pulse-0 4s ease-in-out infinite' }} />
+      <Orb style={{ width: 300, height: 300, bottom: '-80px', right: '-80px', background: 'radial-gradient(circle,rgba(99,102,241,0.12),transparent 70%)', filter: 'blur(60px)', animation: 'orb-pulse-1 5s ease-in-out infinite 1s' }} />
 
-      {!selectedUser ? (
-        /* User selection grid */
-        <div className="w-full max-w-xl">
-          <div className="grid grid-cols-3 gap-3 mb-6">
-            {users.map(u => (
-              <button key={u.id} onClick={() => { setSelectedUser(u); setPin(''); setError(''); setAttempts(0); }}
-                className="bg-white/10 hover:bg-white/20 active:scale-95 rounded-2xl p-5 text-center transition-all">
-                <div className="w-14 h-14 rounded-full bg-white/20 flex items-center justify-center mx-auto mb-3 text-2xl font-black text-white">
-                  {u.name[0]?.toUpperCase()}
-                </div>
-                <p className="text-white font-semibold text-sm">{u.name}</p>
-                <div className="mt-1.5 flex justify-center">
-                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full capitalize ${ROLE_COLORS[u.role] ?? 'bg-gray-100 text-gray-500'}`}>
-                    {ROLE_EMOJIS[u.role] ?? ''} {u.role}
-                  </span>
-                </div>
+      <div style={{ position: 'relative', zIndex: 1, width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+        <p style={{ fontFamily: "'Instrument Serif',serif", fontStyle: 'italic', fontSize: 32, color: '#8B5CF6', marginBottom: 4 }}>AriaPOS</p>
+        <p style={{ fontSize: 14, color: '#8B85A8', marginBottom: 40 }}>
+          {selectedUser ? 'Enter your PIN' : "Who's working today?"}
+        </p>
+
+        {!selectedUser ? (
+          /* User grid */
+          <div style={{ width: '100%', maxWidth: 560 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12, marginBottom: 24 }}>
+              {users.map((u, idx) => {
+                const initials = u.name.slice(0,2).toUpperCase();
+                return (
+                  <button
+                    key={u.id}
+                    onClick={() => { setSelectedUser(u); setPin(''); setError(''); setAttempts(0); }}
+                    className="pos-card-enter"
+                    style={{
+                      background: '#1A1728', border: '1px solid #2A2540', borderRadius: 16,
+                      padding: '20px 16px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10,
+                      cursor: 'pointer', animationDelay: `${idx * 60}ms`, transition: 'all 150ms ease',
+                    }}
+                    onMouseEnter={e => { const el = e.currentTarget; el.style.border = '1px solid rgba(139,92,246,0.35)'; el.style.background = 'rgba(139,92,246,0.06)'; }}
+                    onMouseLeave={e => { const el = e.currentTarget; el.style.border = '1px solid #2A2540'; el.style.background = '#1A1728'; }}
+                  >
+                    <div style={{ width: 56, height: 56, borderRadius: '50%', background: 'rgba(139,92,246,0.1)', border: '2px solid rgba(139,92,246,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <span style={{ fontSize: 18, fontWeight: 800, color: '#8B5CF6' }}>{initials}</span>
+                    </div>
+                    <p style={{ fontSize: 13, fontWeight: 600, color: '#EDE8FF' }}>{u.name}</p>
+                    <span style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#4A4565', fontWeight: 600 }}>{u.role}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <div style={{ textAlign: 'center' }}>
+              <button onClick={onSkip} style={{ background: 'none', border: 'none', color: '#4A4565', fontSize: 12, cursor: 'pointer', padding: '8px 0' }}>
+                I&apos;m the owner — skip PIN
               </button>
-            ))}
+            </div>
           </div>
-          <div className="text-center">
-            <button onClick={onSkip} className="text-gray-500 text-xs hover:text-gray-400 py-2">
-              I&apos;m the owner — skip PIN
+        ) : (
+          /* PIN entry */
+          <div style={{ width: '100%', maxWidth: 300, textAlign: 'center' }}>
+            {/* User mini-card */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 24 }}>
+              <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'rgba(139,92,246,0.12)', border: '1.5px solid rgba(139,92,246,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <span style={{ fontSize: 13, fontWeight: 800, color: '#8B5CF6' }}>{selectedUser.name.slice(0,2).toUpperCase()}</span>
+              </div>
+              <div style={{ textAlign: 'left' }}>
+                <p style={{ fontSize: 14, fontWeight: 600, color: '#EDE8FF' }}>{selectedUser.name}</p>
+                <p style={{ fontSize: 11, color: '#4A4565', textTransform: 'capitalize' }}>{selectedUser.role}</p>
+              </div>
+            </div>
+
+            {/* PIN dots */}
+            <div style={{ display: 'flex', justifyContent: 'center', gap: 16, marginBottom: 20, animation: shaking ? 'shake 0.4s ease' : 'none' }}>
+              {[0,1,2,3].map(i => (
+                <div key={i} style={{ width: 14, height: 14, borderRadius: '50%', background: pin.length > i ? '#8B5CF6' : 'transparent', border: `2px solid ${pin.length > i ? '#8B5CF6' : '#2A2540'}`, transition: 'all 150ms ease', transform: pin.length > i ? 'scale(1.1)' : 'scale(1)' }} />
+              ))}
+            </div>
+
+            {error && <p style={{ fontSize: 12, color: '#EF4444', marginBottom: 12, background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 8, padding: '6px 12px' }}>{error}</p>}
+            {verifying && <p style={{ fontSize: 12, color: '#8B5CF6', marginBottom: 12, animation: 'pulse 1s ease-in-out infinite' }}>Verifying…</p>}
+
+            {/* Numpad */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8, marginBottom: 20 }}>
+              {NUM_PAD.map((k, i) => (
+                <button key={i}
+                  onClick={() => k && handlePad(k)}
+                  disabled={verifying || !k || attempts >= 3}
+                  style={{
+                    height: 52, borderRadius: 12,
+                    background: k ? '#1A1728' : 'transparent',
+                    border: k ? '1px solid #2A2540' : 'none',
+                    color: '#EDE8FF', fontSize: 18, fontWeight: 700, cursor: k ? 'pointer' : 'default',
+                    fontFamily: k === '⌫' ? 'system-ui' : "'JetBrains Mono',monospace",
+                    opacity: (!k || attempts >= 3) ? 0.3 : 1,
+                    transition: 'all 100ms ease',
+                  }}
+                  onMouseEnter={e => { if (k && attempts < 3) { const el = e.currentTarget; el.style.border = '1px solid rgba(139,92,246,0.35)'; el.style.background = 'rgba(139,92,246,0.08)'; }}}
+                  onMouseLeave={e => { if (k) { const el = e.currentTarget; el.style.border = '1px solid #2A2540'; el.style.background = '#1A1728'; }}}
+                  onMouseDown={e => { if (k) { const el = e.currentTarget; el.style.transform = 'translateY(1px) scale(0.96)'; el.style.boxShadow = 'none'; }}}
+                  onMouseUp={e => { const el = e.currentTarget; el.style.transform = ''; }}
+                >
+                  {k}
+                </button>
+              ))}
+            </div>
+
+            <button onClick={() => { setSelectedUser(null); setPin(''); setError(''); }}
+              style={{ background: 'none', border: 'none', color: '#4A4565', fontSize: 12, cursor: 'pointer' }}>
+              ← Choose different user
             </button>
           </div>
-        </div>
-      ) : (
-        /* PIN entry */
-        <div className="w-full max-w-xs text-center">
-          <div className="flex items-center justify-center gap-2 mb-2">
-            <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center text-white font-bold text-sm">
-              {selectedUser.name[0]?.toUpperCase()}
-            </div>
-            <div className="text-left">
-              <p className="text-white font-semibold text-sm">{selectedUser.name}</p>
-              <p className="text-gray-500 text-xs capitalize">{selectedUser.role}</p>
-            </div>
-          </div>
-
-          {/* PIN dots */}
-          <div className="flex justify-center gap-4 mb-5 mt-4">
-            {[0,1,2,3].map(i => (
-              <div key={i} className={`w-4 h-4 rounded-full border-2 transition-all ${
-                pin.length > i ? 'bg-emerald-400 border-emerald-400' : 'border-white/30 bg-transparent'
-              }`} />
-            ))}
-          </div>
-
-          {error && <p className="text-red-400 text-xs mb-3">{error}</p>}
-          {verifying && <p className="text-emerald-400 text-xs mb-3 animate-pulse">Verifying…</p>}
-
-          {/* Number pad */}
-          <div className="grid grid-cols-3 gap-2 mb-5">
-            {NUM_PAD.map((k, i) => (
-              <button key={i} onClick={() => k && handlePad(k)} disabled={verifying || !k || attempts >= 3}
-                className={`h-14 rounded-2xl text-xl font-bold transition-all ${
-                  k
-                    ? 'bg-white/10 hover:bg-white/20 active:scale-95 text-white disabled:opacity-30'
-                    : 'bg-transparent'
-                }`}>
-                {k}
-              </button>
-            ))}
-          </div>
-
-          <button onClick={() => { setSelectedUser(null); setPin(''); setError(''); }}
-            className="text-gray-500 text-xs hover:text-gray-400">
-            ← Choose different user
-          </button>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }
