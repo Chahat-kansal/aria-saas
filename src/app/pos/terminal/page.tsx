@@ -701,6 +701,45 @@ export default function TerminalPage() {
 
   const registerIsOpen = !!registerSession;
 
+  /* ── Session gate — must open register before using terminal ─── */
+  if (!registerLoading && !registerIsOpen) {
+    return (
+      <div style={{ height: '100%', background: 'var(--pos-base,#080C10)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, position: 'relative', overflow: 'hidden' }}>
+        <div style={{ position: 'absolute', width: 400, height: 400, top: '-100px', left: '-100px', borderRadius: '50%', background: 'radial-gradient(circle,rgba(20,184,166,0.12),transparent 70%)', filter: 'blur(80px)', animation: 'pos-orb-breathe 4s ease-in-out infinite', pointerEvents: 'none' }} />
+        <div style={{ background: 'var(--pos-elevated,#162030)', backdropFilter: 'blur(20px)', border: '1px solid rgba(20,184,166,0.2)', borderRadius: 24, padding: '40px 32px', maxWidth: 420, width: '100%', textAlign: 'center', boxShadow: '0 24px 64px rgba(0,0,0,0.6)', animation: 'pos-scale-in 0.4s var(--pos-ease,cubic-bezier(0.16,1,0.3,1))' }}>
+          <svg width={36} height={36} viewBox="0 0 32 32" fill="none" style={{ margin: '0 auto 12px' }}>
+            <path d="M16 2L28 9v14L16 30 4 23V9z" fill="rgba(20,184,166,0.15)" stroke="#14B8A6" strokeWidth="1.5"/>
+            <path d="M16 8l7 4v8l-7 4-7-4V12z" fill="rgba(20,184,166,0.25)" stroke="#14B8A6" strokeWidth="1"/>
+            <circle cx="16" cy="16" r="2.5" fill="#14B8A6"/>
+          </svg>
+          <p style={{ fontFamily: "'Instrument Serif',Georgia,serif", fontStyle: 'italic', fontSize: 26, color: '#14B8A6', marginBottom: 6, lineHeight: 1 }}>AriaPOS</p>
+          <p style={{ fontSize: 13, color: 'var(--pos-text-secondary,#7A9BB5)', marginBottom: 32 }}>{businessName}</p>
+          <p style={{ fontSize: 20, fontWeight: 700, color: 'var(--pos-text-primary,#E8F4F8)', marginBottom: 6, fontFamily: "'Manrope',sans-serif" }}>Register is closed</p>
+          <p style={{ fontSize: 13, color: 'var(--pos-text-secondary,#7A9BB5)', marginBottom: 28 }}>Enter your opening float to start trading.</p>
+          <div style={{ marginBottom: 20 }}>
+            <p style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--pos-text-tertiary,#3D5A73)', marginBottom: 10, fontFamily: "'Manrope',sans-serif" }}>Opening Float</p>
+            <div style={{ display: 'flex', alignItems: 'center', border: '1px solid var(--pos-border-default,#243347)', borderRadius: 12, background: 'rgba(255,255,255,0.03)', overflow: 'hidden' }}>
+              <span style={{ padding: '14px 12px 14px 16px', fontFamily: "'JetBrains Mono',monospace", color: 'var(--pos-text-tertiary,#3D5A73)', fontSize: 14 }}>A$</span>
+              <input
+                type="number" min="0" step="0.01"
+                value={openingFloat}
+                onChange={e => setOpeningFloat(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') openRegister(); }}
+                style={{ flex: 1, background: 'transparent', outline: 'none', fontFamily: "'JetBrains Mono',monospace", fontSize: 24, fontWeight: 700, color: 'var(--pos-text-primary,#E8F4F8)', padding: '10px 16px 10px 0' }}
+                autoFocus
+              />
+            </div>
+            {registerError && <p style={{ marginTop: 8, fontSize: 12, color: '#EF4444', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 8, padding: '8px 12px' }}>{registerError}</p>}
+          </div>
+          <button onClick={openRegister} disabled={openingRegister}
+            style={{ width: '100%', height: 52, borderRadius: 14, border: 'none', background: '#14B8A6', boxShadow: '0 4px 0 rgba(13,148,136,0.4),0 6px 20px rgba(20,184,166,0.3)', color: '#fff', fontFamily: "'Manrope',sans-serif", fontWeight: 700, fontSize: 15, cursor: openingRegister ? 'not-allowed' : 'pointer', opacity: openingRegister ? 0.6 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+            {openingRegister ? 'Opening…' : 'Open Register'}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   /* ══════════════════════════════════════════════════════════════
      RENDER
   ══════════════════════════════════════════════════════════════ */
