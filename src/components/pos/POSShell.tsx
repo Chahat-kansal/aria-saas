@@ -287,7 +287,7 @@ export default function POSShell({ children, businessId, businessName }: {
   };
 
   return (
-    <div style={{ display: 'flex', height: '100dvh', overflow: 'hidden', background: 'var(--pos-base)' }}>
+    <div className="pos-shell" style={{ display: 'flex', height: '100dvh', overflow: 'hidden', background: 'var(--pos-base)' }}>
       <POSSidebar
         businessName={businessName}
         posUser={userForSidebar}

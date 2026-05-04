@@ -1,107 +1,195 @@
-/* AriaPOS Design System — Deep Slate + Electric Teal */
-/* Import in src/app/pos/layout.tsx */
+/* AriaPOS Design System — Dark Violet */
+@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Manrope:wght@400;450;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 :root {
   /* Backgrounds */
-  --pos-base:        #080C10;
-  --pos-surface:     #0F1520;
-  --pos-elevated:    #162030;
-  --pos-overlay:     #1C2B3A;
-  --pos-hover:       #121C28;
-  --pos-active:      #1A2838;
+  --pos-base:     #0A0910;
+  --pos-surface:  #110F1A;
+  --pos-elevated: #1A1728;
+  --pos-overlay:  #231F32;
+  --pos-hover:    #161320;
+  --pos-active:   #1E1B2C;
 
   /* Borders */
-  --pos-border-subtle:  #1A2535;
-  --pos-border-default: #243347;
-  --pos-border-strong:  #2E4560;
-  --pos-border-teal:    rgba(20,184,166,0.3);
+  --pos-border-subtle:  #1C1928;
+  --pos-border-default: #2A2540;
+  --pos-border-strong:  #3D3660;
+  --pos-border-accent:  rgba(139,92,246,0.3);
 
-  /* Teal Accent — PRIMARY */
-  --pos-teal:        #14B8A6;
-  --pos-teal-600:    #0D9488;
-  --pos-teal-700:    #0F766E;
-  --pos-teal-dim:    rgba(20,184,166,0.10);
-  --pos-teal-glow:   rgba(20,184,166,0.18);
+  /* PRIMARY ACCENT — Violet */
+  --pos-accent:      #8B5CF6;
+  --pos-accent-600:  #7C3AED;
+  --pos-accent-dim:  rgba(139,92,246,0.10);
+  --pos-accent-glow: rgba(139,92,246,0.18);
 
   /* Text */
-  --pos-text-primary:   #E8F4F8;
-  --pos-text-secondary: #7A9BB5;
-  --pos-text-tertiary:  #3D5A73;
+  --pos-text-1: #EDE8FF;
+  --pos-text-2: #8B85A8;
+  --pos-text-3: #4A4565;
 
   /* Semantic */
-  --pos-success:     #10B981;
-  --pos-warning:     #F59E0B;
-  --pos-danger:      #EF4444;
+  --pos-success:  #22C55E;
+  --pos-warning:  #F59E0B;
+  --pos-danger:   #EF4444;
+  --pos-info:     #38BDF8;
 
   /* Typography */
+  --pos-ui:   'Manrope', system-ui, sans-serif;
+  --pos-mono: 'JetBrains Mono', monospace;
+  --pos-disp: 'Instrument Serif', Georgia, serif;
+
+  --pos-ease: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* ── Backwards-compat aliases (for components using old names) ── */
+  --pos-teal:           #8B5CF6;
+  --pos-teal-600:       #7C3AED;
+  --pos-teal-dim:       rgba(139,92,246,0.10);
+  --pos-teal-glow:      rgba(139,92,246,0.18);
+  --pos-border-teal:    rgba(139,92,246,0.3);
+  --pos-text-primary:   #EDE8FF;
+  --pos-text-secondary: #8B85A8;
+  --pos-text-tertiary:  #4A4565;
   --pos-font-ui:   'Manrope', system-ui, sans-serif;
   --pos-font-mono: 'JetBrains Mono', monospace;
   --pos-font-disp: 'Instrument Serif', Georgia, serif;
-
-  --pos-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --pos-border-hover: rgba(255,255,255,0.06);
 }
 
-/* ── Animations ─────────────────────────────────────────────────── */
+/* ── Global shell defaults ────────────────────────────────────────── */
+.pos-shell {
+  font-family: var(--pos-ui);
+  background: var(--pos-base);
+  color: var(--pos-text-1);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Scrollbar ────────────────────────────────────────────────────── */
+.pos-shell ::-webkit-scrollbar { width: 3px; height: 3px; }
+.pos-shell ::-webkit-scrollbar-track { background: transparent; }
+.pos-shell ::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.08); border-radius: 2px;
+}
+
+/* ── Form defaults ────────────────────────────────────────────────── */
+.pos-shell input:not([type=checkbox]):not([type=radio]),
+.pos-shell textarea,
+.pos-shell select {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--pos-border-default);
+  color: var(--pos-text-1);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-family: var(--pos-ui);
+  font-size: 13px;
+  transition: border-color 150ms, box-shadow 150ms;
+}
+.pos-shell input::placeholder,
+.pos-shell textarea::placeholder { color: var(--pos-text-3); }
+.pos-shell input:focus,
+.pos-shell textarea:focus,
+.pos-shell select:focus {
+  outline: none;
+  border-color: rgba(139,92,246,0.4);
+  box-shadow: 0 0 0 3px rgba(139,92,246,0.08);
+}
+
+/* ── Table defaults ───────────────────────────────────────────────── */
+.pos-shell table { width: 100%; border-collapse: collapse; }
+.pos-shell th {
+  background: var(--pos-surface);
+  color: var(--pos-text-3);
+  font-size: 9px; text-transform: uppercase;
+  letter-spacing: 0.08em; font-weight: 700;
+  padding: 10px 14px; text-align: left;
+  border-bottom: 1px solid var(--pos-border-subtle);
+}
+.pos-shell td {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--pos-border-subtle);
+  color: var(--pos-text-1); font-size: 13px;
+}
+.pos-shell tr:hover td { background: var(--pos-hover); }
+
+/* ── Animations ───────────────────────────────────────────────────── */
 @keyframes pos-card-enter {
-  from { opacity:0; transform:translateY(16px) scale(0.94) }
+  from { opacity:0; transform:translateY(18px) scale(0.93) }
   to   { opacity:1; transform:translateY(0) scale(1) }
 }
 @keyframes pos-scale-in {
   from { transform:scale(0.4); opacity:0 }
-  60%  { transform:scale(1.1) }
+  60%  { transform:scale(1.12) }
   to   { transform:scale(1); opacity:1 }
 }
-@keyframes pos-float-in {
-  from { transform:translateX(20px) scale(0.97); opacity:0 }
-  to   { transform:translateX(0) scale(1); opacity:1 }
-}
 @keyframes pos-slide-up {
-  from { transform:translateY(20px); opacity:0 }
+  from { transform:translateY(22px); opacity:0 }
   to   { transform:translateY(0); opacity:1 }
 }
-@keyframes pos-orb-breathe {
-  0%,100% { transform:scale(1); opacity:0.6 }
-  50%     { transform:scale(1.08); opacity:0.9 }
-}
-@keyframes pos-paid-ring {
-  0%   { transform:scale(0.5); opacity:0.8 }
-  100% { transform:scale(2.5); opacity:0 }
+@keyframes pos-float-in {
+  from { transform:translateX(22px) scale(0.97); opacity:0 }
+  to   { transform:translateX(0) scale(1); opacity:1 }
 }
 @keyframes pos-nav-glow {
-  0%,100% { box-shadow: 0 0 8px rgba(20,184,166,0.15) }
-  50%     { box-shadow: 0 0 20px rgba(20,184,166,0.35) }
+  0%,100% { box-shadow: 0 0 10px rgba(139,92,246,0.15) }
+  50%     { box-shadow: 0 0 22px rgba(139,92,246,0.35) }
 }
-@keyframes pos-processing {
-  to { transform: rotate(360deg) }
-}
-@keyframes pos-shake {
-  0%,100% { transform:translateX(0) }
-  20%,60% { transform:translateX(-6px) }
-  40%,80% { transform:translateX(6px) }
+@keyframes pos-orb-breathe {
+  0%,100% { transform:scale(1); opacity:0.8 }
+  50%     { transform:scale(1.08); opacity:1 }
 }
 @keyframes pos-idle-float {
   0%,100% { transform:translateY(0) }
-  50%     { transform:translateY(-12px) }
+  50%     { transform:translateY(-10px) }
+}
+@keyframes pos-paid-ring {
+  0%   { transform:scale(0.5); opacity:0.8 }
+  100% { transform:scale(2.2); opacity:0 }
+}
+@keyframes pos-dot-pulse {
+  0%,80%,100% { transform:scale(0.6); opacity:0.4 }
+  40%         { transform:scale(1); opacity:1 }
 }
 @keyframes pos-pulse-ring {
   0%   { transform:scale(1); opacity:0.4 }
   100% { transform:scale(2); opacity:0 }
 }
-
-/* ── Utility classes ─────────────────────────────────────────────── */
-.pos-card-enter  { animation: pos-card-enter 0.3s var(--pos-ease) both; }
-.pos-scale-in    { animation: pos-scale-in   0.4s var(--pos-ease) both; }
-.pos-slide-up    { animation: pos-slide-up   0.3s var(--pos-ease) both; }
-.pos-float-in    { animation: pos-float-in   0.3s var(--pos-ease) both; }
-.pos-idle-float  { animation: pos-idle-float 3s ease-in-out infinite; }
-.pos-shake       { animation: pos-shake      0.4s ease; }
-
-/* ── Scrollbar ──────────────────────────────────────────────────── */
-.pos-scroll::-webkit-scrollbar { width:3px; height:3px; }
-.pos-scroll::-webkit-scrollbar-track { background:transparent; }
-.pos-scroll::-webkit-scrollbar-thumb {
-  background:rgba(20,184,166,0.15); border-radius:2px;
+@keyframes pos-processing {
+  to { transform:rotate(360deg) }
 }
-.pos-scroll::-webkit-scrollbar-thumb:hover {
-  background:rgba(20,184,166,0.3);
+@keyframes pos-shake {
+  0%,100% { transform:translateX(0) }
+  20%,60% { transform:translateX(-5px) }
+  40%,80% { transform:translateX(5px) }
 }
+@keyframes pos-btn-shine {
+  from { left:-100% }
+  to   { left:150% }
+}
+@keyframes pos-orb-pulse-0 {
+  0%,100% { opacity:0.15; transform:scale(1) }
+  50%     { opacity:0.4; transform:scale(1.05) }
+}
+@keyframes pos-orb-pulse-1 {
+  0%,100% { opacity:0.2; transform:scale(1) }
+  50%     { opacity:0.5; transform:scale(1.08) }
+}
+@keyframes pos-orb-pulse-2 {
+  0%,100% { opacity:0.1; transform:scale(1) }
+  50%     { opacity:0.35; transform:scale(1.06) }
+}
+
+/* ── Scan line (barcode scanner) ──────────────────────────────────── */
+@keyframes scan-line {
+  0%   { top: 6px; }
+  50%  { top: calc(100% - 6px); }
+  100% { top: 6px; }
+}
+.animate-scan-line {
+  animation: scan-line 2s ease-in-out infinite;
+  position: absolute;
+}
+
+/* ── Safe area ────────────────────────────────────────────────────── */
+.pt-safe-top    { padding-top:    env(safe-area-inset-top,    0px); }
+.pb-safe-bottom { padding-bottom: env(safe-area-inset-bottom, 0px); }
+.pt-safe        { padding-top:    env(safe-area-inset-top,    0px); }
+.pb-safe        { padding-bottom: env(safe-area-inset-bottom, 0px); }
