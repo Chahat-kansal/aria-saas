@@ -715,11 +715,11 @@ export default function TerminalPage() {
         <div style={{ position: 'absolute', width: 400, height: 400, top: '-100px', left: '-100px', borderRadius: '50%', background: 'radial-gradient(circle,rgba(20,184,166,0.12),transparent 70%)', filter: 'blur(80px)', animation: 'pos-orb-breathe 4s ease-in-out infinite', pointerEvents: 'none' }} />
         <div style={{ background: 'var(--pos-elevated,#162030)', backdropFilter: 'blur(20px)', border: '1px solid rgba(20,184,166,0.2)', borderRadius: 24, padding: '40px 32px', maxWidth: 420, width: '100%', textAlign: 'center', boxShadow: '0 24px 64px rgba(0,0,0,0.6)', animation: 'pos-scale-in 0.4s var(--pos-ease,cubic-bezier(0.16,1,0.3,1))' }}>
           <svg width={36} height={36} viewBox="0 0 32 32" fill="none" style={{ margin: '0 auto 12px' }}>
-            <path d="M16 2L28 9v14L16 30 4 23V9z" fill="rgba(20,184,166,0.15)" stroke="#14B8A6" strokeWidth="1.5"/>
-            <path d="M16 8l7 4v8l-7 4-7-4V12z" fill="rgba(20,184,166,0.25)" stroke="#14B8A6" strokeWidth="1"/>
-            <circle cx="16" cy="16" r="2.5" fill="#14B8A6"/>
+            <path d="M16 2L28 9v14L16 30 4 23V9z" fill="rgba(139,92,246,0.15)" stroke="#8B5CF6" strokeWidth="1.5"/>
+            <path d="M16 8l7 4v8l-7 4-7-4V12z" fill="rgba(139,92,246,0.25)" stroke="#8B5CF6" strokeWidth="1"/>
+            <circle cx="16" cy="16" r="2.5" fill="#8B5CF6"/>
           </svg>
-          <p style={{ fontFamily: "'Instrument Serif',Georgia,serif", fontStyle: 'italic', fontSize: 26, color: '#14B8A6', marginBottom: 6, lineHeight: 1 }}>AriaPOS</p>
+          <p style={{ fontFamily: "'Instrument Serif',Georgia,serif", fontStyle: 'italic', fontSize: 26, color: '#8B5CF6', marginBottom: 6, lineHeight: 1 }}>AriaPOS</p>
           <p style={{ fontSize: 13, color: 'var(--pos-text-secondary,#7A9BB5)', marginBottom: 32 }}>{businessName}</p>
           <p style={{ fontSize: 20, fontWeight: 700, color: 'var(--pos-text-primary,#E8F4F8)', marginBottom: 6, fontFamily: "'Manrope',sans-serif" }}>Register is closed</p>
           <p style={{ fontSize: 13, color: 'var(--pos-text-secondary,#7A9BB5)', marginBottom: 28 }}>Enter your opening float to start trading.</p>
@@ -739,7 +739,7 @@ export default function TerminalPage() {
             {registerError && <p style={{ marginTop: 8, fontSize: 12, color: '#EF4444', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 8, padding: '8px 12px' }}>{registerError}</p>}
           </div>
           <button onClick={openRegister} disabled={openingRegister}
-            style={{ width: '100%', height: 52, borderRadius: 14, border: 'none', background: '#14B8A6', boxShadow: '0 4px 0 rgba(13,148,136,0.4),0 6px 20px rgba(20,184,166,0.3)', color: '#fff', fontFamily: "'Manrope',sans-serif", fontWeight: 700, fontSize: 15, cursor: openingRegister ? 'not-allowed' : 'pointer', opacity: openingRegister ? 0.6 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+            style={{ width: '100%', height: 52, borderRadius: 14, border: 'none', background: '#8B5CF6', boxShadow: '0 4px 0 rgba(124,58,237,0.4),0 6px 20px rgba(139,92,246,0.33)', color: '#fff', fontFamily: "'Manrope',sans-serif", fontWeight: 700, fontSize: 15, cursor: openingRegister ? 'not-allowed' : 'pointer', opacity: openingRegister ? 0.6 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
             {openingRegister ? 'Opening…' : 'Open Register'}
           </button>
         </div>
@@ -756,10 +756,10 @@ export default function TerminalPage() {
       {/* Mobile mode banner */}
       {showMobileBanner && (
         <div className="fixed top-0 left-0 right-0 z-40 flex items-center justify-between px-4 py-3 flex-shrink-0"
-          style={{ background: '#1D9E75' }}>
+          style={{ background: '#8B5CF6' }}>
           <div>
             <p className="text-white text-sm font-semibold leading-tight">Mobile device detected</p>
-            <p className="text-green-100 text-xs">Switch to mobile mode for camera barcode scanning</p>
+            <p className="text-xs" style={{ color: 'rgba(255,255,255,0.75)' }}>Switch to mobile mode for camera barcode scanning</p>
           </div>
           <div className="flex gap-2 ml-3 flex-shrink-0">
             <button onClick={() => setShowMobileBanner(false)}
@@ -768,8 +768,8 @@ export default function TerminalPage() {
               Stay
             </button>
             <a href="/pos/mobile"
-              className="px-3 py-1.5 rounded-lg text-[#1D9E75] text-xs font-bold"
-              style={{ background: '#fff' }}>
+              className="px-3 py-1.5 rounded-lg text-xs font-bold"
+              style={{ background: '#fff', color: '#8B5CF6' }}>
               Switch →
             </a>
           </div>
@@ -874,7 +874,7 @@ export default function TerminalPage() {
                     if (w) w.focus();
                     setShowQuickPanel(false);
                   }}
-                  className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-gray-700 hover:bg-gray-50 transition-colors w-full text-left">
+                  className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors w-full text-left" style={{ color: 'var(--pos-text-2)' }} onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background='var(--pos-hover)';}} onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background='';}}>
                   <span className="text-base w-6 text-center">📺</span>
                   <span>Customer Display ↗</span>
                 </button>
@@ -2097,14 +2097,14 @@ export default function TerminalPage() {
               <p className="font-semibold text-gray-900 text-sm">#{reprintSale.id.slice(-6).toUpperCase()}</p>
               <button onClick={() => setReprintSale(null)} className="text-gray-400 hover:text-gray-600">×</button>
             </div>
-            <div className="px-5 py-4 font-mono text-xs text-gray-700 space-y-0.5">
+            <div className="px-5 py-4 font-mono text-xs space-y-0.5" style={{ color: 'var(--pos-text-2)' }}>
               <div className="flex justify-between"><span className="text-gray-400">Time</span><span>{reprintSale.time.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}</span></div>
               <div className="flex justify-between"><span className="text-gray-400">Items</span><span>{reprintSale.items}</span></div>
               <div className="flex justify-between font-bold text-sm text-gray-900 mt-2"><span>TOTAL</span><span>A${reprintSale.total.toFixed(2)}</span></div>
             </div>
             <div className="px-5 pb-5 flex gap-2">
               <button onClick={() => setReprintSale(null)} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-500">Close</button>
-              <button onClick={() => window.print()} className="flex-1 py-2.5 rounded-xl bg-gray-900 text-white text-sm font-medium">🖨️ Print</button>
+              <button onClick={() => window.print()} className="flex-1 py-2.5 rounded-xl text-sm font-medium" style={{ background: 'var(--pos-elevated)', border: '1px solid var(--pos-border-default)', color: 'var(--pos-text-2)' }}>🖨️ Print</button>
             </div>
           </div>
         </div>
