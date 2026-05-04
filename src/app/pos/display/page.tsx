@@ -42,9 +42,9 @@ function Orb({ style }: { style: React.CSSProperties }) {
 function LogoMark({ size = 48 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 32 32" fill="none">
-      <path d="M16 2L28 9v14L16 30 4 23V9z" fill="rgba(20,184,166,0.15)" stroke="#14B8A6" strokeWidth="1.5"/>
-      <path d="M16 8l7 4v8l-7 4-7-4V12z" fill="rgba(20,184,166,0.25)" stroke="#14B8A6" strokeWidth="1"/>
-      <circle cx="16" cy="16" r="2.5" fill="#14B8A6"/>
+      <path d="M16 2L28 9v14L16 30 4 23V9z" fill="rgba(139,92,246,0.15)" stroke="#8B5CF6" strokeWidth="1.5"/>
+      <path d="M16 8l7 4v8l-7 4-7-4V12z" fill="rgba(139,92,246,0.25)" stroke="#8B5CF6" strokeWidth="1"/>
+      <circle cx="16" cy="16" r="2.5" fill="#8B5CF6"/>
     </svg>
   );
 }
@@ -97,8 +97,8 @@ export default function CustomerDisplayPage() {
   const discCents  = state.discount_cents ?? 0;
   const exclGst    = totalCents - taxCents;
 
-  const TEAL = '#14B8A6';
-  const BG   = '#080C10';
+  const TEAL = '#8B5CF6';
+  const BG   = '#0A0910';
   const TEXT  = '#E8F4F8';
   const TEXT2 = '#7A9BB5';
 
@@ -109,7 +109,7 @@ export default function CustomerDisplayPage() {
     return (
       <div style={{ width: '100vw', height: '100vh', background: BG, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: 40, position: 'relative', overflow: 'hidden', fontFamily: "'Manrope',system-ui,sans-serif" }}>
         {flash && <div style={{ position: 'fixed', inset: 0, background: '#fff', opacity: 0.12, pointerEvents: 'none', zIndex: 100 }} />}
-        <Orb style={{ width: 300, height: 300, borderRadius: '50%', border: '2px solid rgba(20,184,166,0.4)', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', animation: 'pos-paid-ring 0.8s ease-out forwards', pointerEvents: 'none', position: 'absolute' }} />
+        <Orb style={{ width: 300, height: 300, borderRadius: '50%', border: '2px solid rgba(139,92,246,0.4)', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', animation: 'pos-paid-ring 0.8s ease-out forwards', pointerEvents: 'none', position: 'absolute' }} />
         <Orb style={{ width: 300, height: 300, borderRadius: '50%', border: '2px solid rgba(16,185,129,0.3)', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', animation: 'pos-paid-ring 0.8s ease-out 0.2s forwards', position: 'absolute' }} />
         <Orb style={{ width: 600, height: 600, top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: 'radial-gradient(circle,rgba(16,185,129,0.08),transparent 70%)', filter: 'blur(60px)', position: 'absolute' }} />
 
@@ -138,7 +138,7 @@ export default function CustomerDisplayPage() {
   if (isActive) {
     return (
       <div style={{ width: '100vw', height: '100vh', background: BG, display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden', fontFamily: "'Manrope',system-ui,sans-serif" }}>
-        <Orb style={{ width: 350, height: 350, top: '-80px', right: '-80px', background: `radial-gradient(circle,rgba(20,184,166,0.1),transparent 70%)`, filter: 'blur(80px)', animation: 'pos-orb-breathe 5s ease-in-out infinite' }} />
+        <Orb style={{ width: 350, height: 350, top: '-80px', right: '-80px', background: `radial-gradient(circle,rgba(139,92,246,0.1),transparent 70%)`, filter: 'blur(80px)', animation: 'pos-orb-breathe 5s ease-in-out infinite' }} />
 
         {/* Top bar */}
         <div style={{ flexShrink: 0, height: 48, padding: '0 32px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(8,12,16,0.9)', borderBottom: '1px solid #1A2535' }}>
@@ -148,9 +148,9 @@ export default function CustomerDisplayPage() {
 
         {/* Customer greeting */}
         {state.customer_name && (
-          <div style={{ flexShrink: 0, padding: '12px 32px', background: 'rgba(20,184,166,0.06)', borderBottom: '1px solid rgba(20,184,166,0.12)' }}>
+          <div style={{ flexShrink: 0, padding: '12px 32px', background: 'rgba(139,92,246,0.06)', borderBottom: '1px solid rgba(139,92,246,0.12)' }}>
             <p style={{ fontFamily: "'Instrument Serif',serif", fontStyle: 'italic', fontSize: 'clamp(16px,2vw,22px)', color: TEAL }}>Welcome back, {state.customer_name}! ✨</p>
-            {(state.loyalty_points ?? 0) > 0 && <p style={{ fontSize: 13, color: 'rgba(20,184,166,0.7)', marginTop: 2 }}>{state.loyalty_points} loyalty points available</p>}
+            {(state.loyalty_points ?? 0) > 0 && <p style={{ fontSize: 13, color: 'rgba(139,92,246,0.7)', marginTop: 2 }}>{state.loyalty_points} loyalty points available</p>}
           </div>
         )}
 
@@ -161,7 +161,7 @@ export default function CustomerDisplayPage() {
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <p style={{ fontSize: 'clamp(16px,2vw,24px)', fontWeight: 600, color: TEXT }}>{item.name}</p>
-                  {item.quantity > 1 && <span style={{ background: 'rgba(20,184,166,0.1)', borderRadius: 6, padding: '2px 7px', fontSize: 13, color: TEAL, fontFamily: "'JetBrains Mono',monospace" }}>×{item.quantity}</span>}
+                  {item.quantity > 1 && <span style={{ background: 'rgba(139,92,246,0.1)', borderRadius: 6, padding: '2px 7px', fontSize: 13, color: TEAL, fontFamily: "'JetBrains Mono',monospace" }}>×{item.quantity}</span>}
                 </div>
                 {item.modifiers && <p style={{ fontSize: 13, color: TEXT2, fontStyle: 'italic', marginTop: 3 }}>{item.modifiers}</p>}
               </div>
@@ -205,10 +205,10 @@ export default function CustomerDisplayPage() {
   const slide = PROMO_SLIDES[slideIdx];
   return (
     <div style={{ width: '100vw', height: '100vh', background: BG, display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden', fontFamily: "'Manrope',system-ui,sans-serif" }}>
-      <Orb style={{ width: 500, height: 500, top: '-150px', left: '-150px', background: `radial-gradient(circle,rgba(20,184,166,0.12),transparent 70%)`, filter: 'blur(120px)', animation: 'pos-orb-breathe 4s ease-in-out infinite' }} />
-      <Orb style={{ width: 400, height: 400, top: '35%', left: '30%', background: `radial-gradient(circle,rgba(8,145,178,0.15),transparent 70%)`, filter: 'blur(100px)', animation: 'pos-orb-breathe 5s ease-in-out infinite 1s' }} />
-      <Orb style={{ width: 600, height: 600, bottom: '-200px', right: '-150px', background: `radial-gradient(circle,rgba(20,184,166,0.08),transparent 70%)`, filter: 'blur(150px)', animation: 'pos-orb-breathe 6s ease-in-out infinite 2s' }} />
-      <Orb style={{ width: 300, height: 300, top: '-50px', right: '10%', background: `radial-gradient(circle,rgba(0,188,212,0.06),transparent 70%)`, filter: 'blur(80px)' }} />
+      <Orb style={{ width: 500, height: 500, top: '-150px', left: '-150px', background: `radial-gradient(circle,rgba(139,92,246,0.12),transparent 70%)`, filter: 'blur(120px)', animation: 'pos-orb-breathe 4s ease-in-out infinite' }} />
+      <Orb style={{ width: 400, height: 400, top: '35%', left: '30%', background: `radial-gradient(circle,rgba(99,102,241,0.15),transparent 70%)`, filter: 'blur(100px)', animation: 'pos-orb-breathe 5s ease-in-out infinite 1s' }} />
+      <Orb style={{ width: 600, height: 600, bottom: '-200px', right: '-150px', background: `radial-gradient(circle,rgba(139,92,246,0.08),transparent 70%)`, filter: 'blur(150px)', animation: 'pos-orb-breathe 6s ease-in-out infinite 2s' }} />
+      <Orb style={{ width: 300, height: 300, top: '-50px', right: '10%', background: `radial-gradient(circle,rgba(139,92,246,0.06),transparent 70%)`, filter: 'blur(80px)' }} />
 
       {/* Top bar */}
       <div style={{ flexShrink: 0, padding: '12px 32px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(8,12,16,0.5)', borderBottom: '1px solid rgba(255,255,255,0.04)', position: 'relative', zIndex: 1 }}>
