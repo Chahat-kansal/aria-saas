@@ -48,7 +48,7 @@ export default function OnlineStorePage() {
             <p className="text-xs text-[rgba(26,26,22,.45)] mt-0.5">{settings.enabled ? 'Your store is publicly visible and accepting orders' : 'Enable to publish your online storefront'}</p>
           </div>
           <button onClick={() => setSettings(s => ({ ...s, enabled: !s.enabled }))}
-            className={`relative w-11 h-6 rounded-full transition-colors ${settings.enabled ? 'bg-emerald-500' : 'bg-[rgba(0,0,0,.15)]'}`}>
+            className={`relative w-11 h-6 rounded-full transition-colors ${settings.enabled ? 'bg-violet-500' : 'bg-[rgba(0,0,0,.15)]'}`}>
             <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${settings.enabled ? 'translate-x-5.5 left-0' : 'left-0.5'}`} style={{ transform: settings.enabled ? 'translateX(20px)' : 'translateX(0)' }} />
           </button>
         </div>
@@ -80,7 +80,7 @@ export default function OnlineStorePage() {
         <div className="pt-1 border-t border-[rgba(0,0,0,.06)] flex items-center justify-between">
           <p className="text-xs text-[rgba(26,26,22,.4)]">Products with "Show Online" enabled will appear in your store</p>
           <div className="flex items-center gap-3">
-            {saved && <span className="text-xs text-emerald-600 font-medium">Saved!</span>}
+            {saved && <span className="text-xs text-violet-600 font-medium">Saved!</span>}
             <button onClick={save} disabled={saving}
               className="px-4 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-50"
               style={{ background: 'linear-gradient(135deg,#2563eb,#1d4ed8)' }}>

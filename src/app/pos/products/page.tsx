@@ -356,7 +356,7 @@ export default function ProductsPage() {
                           </span>}
                     </td>
                     <td className="px-3 py-3">
-                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${p.is_active ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-[rgba(0,0,0,.05)] text-[rgba(26,26,22,.4)] border border-[rgba(0,0,0,.08)]'}`}>
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${p.is_active ? 'bg-violet-50 text-violet-700 border border-violet-200' : 'bg-[rgba(0,0,0,.05)] text-[rgba(26,26,22,.4)] border border-[rgba(0,0,0,.08)]'}`}>
                         {p.is_active ? 'Active' : 'Inactive'}
                       </span>
                     </td>

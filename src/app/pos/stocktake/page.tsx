@@ -48,7 +48,7 @@ export default function StocktakePage() {
           <p className="text-xs text-[rgba(26,26,22,.45)] mt-0.5">{products.length} tracked products · {changed.length} changes</p>
         </div>
         <div className="flex items-center gap-3">
-          {saved && <span className="text-xs text-emerald-600 font-medium">Saved!</span>}
+          {saved && <span className="text-xs text-violet-600 font-medium">Saved!</span>}
           <button onClick={save} disabled={saving || changed.length === 0}
             className="px-4 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-40"
             style={{ background: 'linear-gradient(135deg,#16a34a,#15803d)' }}>
@@ -96,7 +96,7 @@ export default function StocktakePage() {
                   </td>
                   <td className="px-4 py-3">
                     {isDirty && (
-                      <span className={`text-xs font-semibold ${variance > 0 ? 'text-emerald-600' : variance < 0 ? 'text-red-500' : 'text-[rgba(26,26,22,.4)]'}`}>
+                      <span className={`text-xs font-semibold ${variance > 0 ? 'text-violet-600' : variance < 0 ? 'text-red-500' : 'text-[rgba(26,26,22,.4)]'}`}>
                         {variance > 0 ? '+' : ''}{variance}
                       </span>
                     )}

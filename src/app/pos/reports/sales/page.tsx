@@ -61,7 +61,7 @@ export default function SalesReportPage() {
                 <td className="px-4 py-3 text-xs text-[rgba(26,26,22,.55)]">{new Date(s.created_at).toLocaleDateString()}</td>
                 <td className="px-4 py-3 text-xs text-[rgba(26,26,22,.7)]">{s.pos_customers?.name ?? '—'}</td>
                 <td className="px-4 py-3">
-                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium capitalize ${s.payment_method === 'cash' ? 'bg-emerald-50 text-emerald-700' : s.payment_method === 'card' ? 'bg-blue-50 text-blue-700' : 'bg-purple-50 text-purple-700'}`}>
+                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium capitalize ${s.payment_method === 'cash' ? 'bg-violet-50 text-violet-700' : s.payment_method === 'card' ? 'bg-blue-50 text-blue-700' : 'bg-purple-50 text-purple-700'}`}>
                     {s.payment_method}
                   </span>
                 </td>
@@ -69,7 +69,7 @@ export default function SalesReportPage() {
                 <td className="px-4 py-3 text-xs text-[rgba(26,26,22,.55)]">${(s.tax_amount ?? 0).toFixed(2)}</td>
                 <td className="px-4 py-3 text-sm font-semibold text-[#1a1a16]">${s.total_amount.toFixed(2)}</td>
                 <td className="px-4 py-3">
-                  <span className={`text-[10px] px-2 py-0.5 rounded-full ${s.status === 'completed' ? 'bg-emerald-50 text-emerald-700' : s.status === 'refunded' ? 'bg-red-50 text-red-600' : 'bg-[rgba(0,0,0,.05)] text-[rgba(26,26,22,.5)]'}`}>
+                  <span className={`text-[10px] px-2 py-0.5 rounded-full ${s.status === 'completed' ? 'bg-violet-50 text-violet-700' : s.status === 'refunded' ? 'bg-red-50 text-red-600' : 'bg-[rgba(0,0,0,.05)] text-[rgba(26,26,22,.5)]'}`}>
                     {s.status}
                   </span>
                 </td>

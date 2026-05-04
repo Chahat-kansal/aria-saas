@@ -122,7 +122,7 @@ export default function KitchenPage() {
       {/* Top bar */}
       <div style={{ background: '#1a1a1a', padding: '12px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <span style={{ color: '#1D9E75', fontWeight: 700, fontSize: 18 }}>KITCHEN</span>
+          <span style={{ color: '#8B5CF6', fontWeight: 700, fontSize: 18 }}>KITCHEN</span>
           <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>
             {new Date().toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
           </span>

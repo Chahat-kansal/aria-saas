@@ -89,7 +89,7 @@ export default function CashPage() {
             {entries.map(e => (
               <div key={e.id} className="flex items-center justify-between px-4 py-3">
                 <div className="flex items-center gap-3">
-                  <div className={`w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold ${e.type === 'float_in' ? 'bg-emerald-500' : 'bg-red-400'}`}>
+                  <div className={`w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold ${e.type === 'float_in' ? 'bg-violet-500' : 'bg-red-400'}`}>
                     {e.type === 'float_in' ? '+' : '−'}
                   </div>
                   <div>
@@ -100,7 +100,7 @@ export default function CashPage() {
                   </div>
                 </div>
                 <div className="text-right">
-                  <p className={`text-sm font-semibold ${e.type === 'float_in' || e.type === 'sale' ? 'text-emerald-600' : 'text-red-500'}`}>
+                  <p className={`text-sm font-semibold ${e.type === 'float_in' || e.type === 'sale' ? 'text-violet-600' : 'text-red-500'}`}>
                     {e.type === 'float_in' || e.type === 'sale' ? '+' : '−'}${e.amount.toFixed(2)}
                   </p>
                   <p className="text-[10px] text-[rgba(26,26,22,.3)]">{new Date(e.created_at).toLocaleTimeString()}</p>

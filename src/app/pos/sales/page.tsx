@@ -145,7 +145,7 @@ export default function SalesPage() {
 
 function StatusPill({ status }: { status: string }) {
   const map: Record<string, [string, string]> = {
-    completed: ['text-emerald-700', 'bg-emerald-50 border-emerald-200'],
+    completed: ['text-violet-700', 'bg-violet-50 border-violet-200'],
     pending:   ['text-amber-700',   'bg-amber-50 border-amber-200'],
     voided:    ['text-red-600',     'bg-red-50 border-red-200'],
     refunded:  ['text-blue-700',    'bg-blue-50 border-blue-200'],

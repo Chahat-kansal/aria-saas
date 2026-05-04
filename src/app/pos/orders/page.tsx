@@ -41,7 +41,7 @@ export default function OrdersPage() {
   const STATUS_COLORS: Record<string, string> = {
     draft: 'bg-[rgba(0,0,0,.05)] text-[rgba(26,26,22,.5)]',
     sent: 'bg-blue-50 text-blue-700',
-    received: 'bg-emerald-50 text-emerald-700',
+    received: 'bg-violet-50 text-violet-700',
     partial: 'bg-amber-50 text-amber-700',
     cancelled: 'bg-red-50 text-red-600',
   };

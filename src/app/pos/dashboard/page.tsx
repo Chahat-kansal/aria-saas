@@ -76,7 +76,7 @@ export default function POSDashboardPage() {
           <h1 className="text-xl font-semibold text-[#1a1a16]">POS Dashboard</h1>
           <p className="text-xs text-[rgba(26,26,22,.45)] mt-0.5">Today — {new Date().toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
         </div>
-        <Link href="/pos/terminal" className="px-4 py-2 rounded-xl text-sm font-semibold text-white" style={{ background: '#1D9E75' }}>
+        <Link href="/pos/terminal" className="px-4 py-2 rounded-xl text-sm font-semibold text-white" style={{ background: '#8B5CF6' }}>
           Open Register →
         </Link>
       </div>
@@ -105,7 +105,7 @@ export default function POSDashboardPage() {
               <BarChart data={chartData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
                 <XAxis dataKey="day" tick={{ fontSize: 11, fill: 'rgba(26,26,22,.4)' }} axisLine={false} tickLine={false} />
                 <Tooltip formatter={(v) => [`A$${Number(v).toFixed(2)}`, 'Revenue']} contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid rgba(0,0,0,.08)' }} />
-                <Bar dataKey="revenue" fill="#1D9E75" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="revenue" fill="#8B5CF6" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           ) : (
@@ -119,10 +119,10 @@ export default function POSDashboardPage() {
         <div className="bg-white rounded-2xl border border-[rgba(0,0,0,.08)] p-5 shadow-sm flex flex-col">
           <div className="flex items-center gap-2 mb-3">
             <div className="w-6 h-6 rounded-full bg-[rgba(29,158,117,.12)] flex items-center justify-center">
-              <span className="text-[10px] font-bold" style={{ color: '#1D9E75' }}>A</span>
+              <span className="text-[10px] font-bold" style={{ color: '#8B5CF6' }}>A</span>
             </div>
-            <p className="text-xs font-semibold" style={{ color: '#1D9E75' }}>Aria Insight</p>
-            {(insightLoading) && <span className="inline-block w-3 h-3 rounded-full border border-[#1D9E75] border-t-transparent animate-spin ml-auto" />}
+            <p className="text-xs font-semibold" style={{ color: '#8B5CF6' }}>Aria Insight</p>
+            {(insightLoading) && <span className="inline-block w-3 h-3 rounded-full border border-[#8B5CF6] border-t-transparent animate-spin ml-auto" />}
           </div>
           {insight ? (
             <p className="text-sm text-[rgba(26,26,22,.7)] leading-relaxed flex-1">{insight}</p>
@@ -133,7 +133,7 @@ export default function POSDashboardPage() {
           ) : (
             <p className="text-sm text-[rgba(26,26,22,.35)] flex-1">Start recording sales to get daily insights.</p>
           )}
-          <Link href="/pos/reports/sales" className="text-xs mt-4" style={{ color: '#1D9E75' }}>View full report →</Link>
+          <Link href="/pos/reports/sales" className="text-xs mt-4" style={{ color: '#8B5CF6' }}>View full report →</Link>
         </div>
       </div>
 
@@ -160,7 +160,7 @@ export default function POSDashboardPage() {
       <h2 className="text-xs font-semibold text-[rgba(26,26,22,.4)] uppercase tracking-wider mb-3">Quick Access</h2>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {quickLinks.map(l => (
-          <Link key={l.href} href={l.href} className="bg-white rounded-2xl border border-[rgba(0,0,0,.08)] p-4 shadow-sm hover:border-[#1D9E75] hover:shadow-md transition-all text-center">
+          <Link key={l.href} href={l.href} className="bg-white rounded-2xl border border-[rgba(0,0,0,.08)] p-4 shadow-sm hover:border-[#8B5CF6] hover:shadow-md transition-all text-center">
             <div className="text-2xl mb-2">{l.icon}</div>
             <p className="text-[13px] font-medium text-[#1a1a16]">{l.label}</p>
           </Link>

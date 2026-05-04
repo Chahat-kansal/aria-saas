@@ -38,7 +38,7 @@ export default function GiftCardsPage() {
           <h1 className="text-xl font-semibold text-[#1a1a16]">Gift Cards</h1>
           <p className="text-xs text-[rgba(26,26,22,.45)] mt-0.5">Issue and manage gift cards for customers</p>
         </div>
-        <button onClick={() => setShowIssue(true)} className="px-4 py-2 rounded-xl text-sm font-semibold text-white" style={{ background: '#1D9E75' }}>+ Issue Gift Card</button>
+        <button onClick={() => setShowIssue(true)} className="px-4 py-2 rounded-xl text-sm font-semibold text-white" style={{ background: '#8B5CF6' }}>+ Issue Gift Card</button>
       </div>
 
       <div className="grid grid-cols-3 gap-4 mb-6">
@@ -52,7 +52,7 @@ export default function GiftCardsPage() {
 
       {issued && (
         <div className="mb-4 rounded-xl px-5 py-4 flex items-center justify-between" style={{ background: 'rgba(29,158,117,0.08)', border: '1px solid rgba(29,158,117,0.2)' }}>
-          <p className="text-sm" style={{ color: '#1D9E75' }}>Gift card issued! Code: <strong className="font-mono">{issued.code}</strong> · Balance: A${(issued.initial_balance / 100).toFixed(2)}</p>
+          <p className="text-sm" style={{ color: '#8B5CF6' }}>Gift card issued! Code: <strong className="font-mono">{issued.code}</strong> · Balance: A${(issued.initial_balance / 100).toFixed(2)}</p>
           <button onClick={() => setIssued(null)} className="text-xs text-gray-400">✕</button>
         </div>
       )}
@@ -90,7 +90,7 @@ export default function GiftCardsPage() {
             </div>
             <div className="flex gap-2 mt-5">
               <button onClick={() => setShowIssue(false)} className="flex-1 py-2.5 rounded-xl text-sm border border-[rgba(0,0,0,.12)] text-[rgba(26,26,22,.5)]">Cancel</button>
-              <button onClick={issueCard} disabled={issuing || !amount} className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-40" style={{ background: '#1D9E75' }}>{issuing ? 'Issuing…' : 'Issue card'}</button>
+              <button onClick={issueCard} disabled={issuing || !amount} className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-40" style={{ background: '#8B5CF6' }}>{issuing ? 'Issuing…' : 'Issue card'}</button>
             </div>
           </div>
         </div>

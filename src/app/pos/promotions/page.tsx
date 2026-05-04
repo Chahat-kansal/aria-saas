@@ -47,7 +47,7 @@ export default function PromotionsPage() {
           <h1 className="text-xl font-semibold text-[#1a1a16]">Promotions</h1>
           <p className="text-xs text-[rgba(26,26,22,.45)] mt-0.5">Create discounts and promotional offers</p>
         </div>
-        <button onClick={() => setShowAdd(true)} className="px-4 py-2 rounded-xl text-sm font-semibold text-white" style={{ background: '#1D9E75' }}>+ New Promotion</button>
+        <button onClick={() => setShowAdd(true)} className="px-4 py-2 rounded-xl text-sm font-semibold text-white" style={{ background: '#8B5CF6' }}>+ New Promotion</button>
       </div>
 
       <div className="grid grid-cols-3 gap-4 mb-6">
@@ -96,11 +96,11 @@ export default function PromotionsPage() {
                 <div><label className="text-xs font-medium text-[rgba(26,26,22,.5)] mb-1 block">Start</label><input type="date" value={form.start_date} onChange={e => setForm(p => ({ ...p, start_date: e.target.value }))} className={inputCls} /></div>
                 <div><label className="text-xs font-medium text-[rgba(26,26,22,.5)] mb-1 block">End</label><input type="date" value={form.end_date} onChange={e => setForm(p => ({ ...p, end_date: e.target.value }))} className={inputCls} /></div>
               </div>
-              <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={form.is_active} onChange={e => setForm(p => ({ ...p, is_active: e.target.checked }))} className="w-4 h-4 accent-[#1D9E75]" /><span className="text-sm text-[#1a1a16]">Active immediately</span></label>
+              <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={form.is_active} onChange={e => setForm(p => ({ ...p, is_active: e.target.checked }))} className="w-4 h-4 accent-[#8B5CF6]" /><span className="text-sm text-[#1a1a16]">Active immediately</span></label>
             </div>
             <div className="flex gap-2 mt-5">
               <button onClick={() => setShowAdd(false)} className="flex-1 py-2.5 rounded-xl text-sm border border-[rgba(0,0,0,.12)] text-[rgba(26,26,22,.5)]">Cancel</button>
-              <button onClick={save} disabled={saving || !form.name} className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-40" style={{ background: '#1D9E75' }}>{saving ? 'Saving…' : 'Create'}</button>
+              <button onClick={save} disabled={saving || !form.name} className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-40" style={{ background: '#8B5CF6' }}>{saving ? 'Saving…' : 'Create'}</button>
             </div>
           </div>
         </div>

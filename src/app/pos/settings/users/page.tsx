@@ -17,7 +17,7 @@ const ROLE_COLORS: Record<string, string> = {
   cashier: 'bg-blue-100 text-blue-700',
   supervisor: 'bg-amber-100 text-amber-700',
   manager: 'bg-purple-100 text-purple-700',
-  owner: 'bg-emerald-100 text-emerald-700',
+  owner: 'bg-violet-100 text-violet-700',
 };
 
 const BLANK_FORM = { name: '', pin: '', role: 'cashier', can_apply_discount: true, can_refund: false, max_discount_pct: '10', can_close_register: false, can_override_price: false };
@@ -103,7 +103,7 @@ export default function UsersSettingsPage() {
         </div>
         <button onClick={() => { setShowAdd(true); setEditUser(null); setForm({ ...BLANK_FORM }); }}
           className="px-4 py-2 rounded-xl text-sm font-medium text-white"
-          style={{ background: '#059669' }}>
+          style={{ background: '#8B5CF6' }}>
           + Add user
         </button>
       </div>
@@ -117,7 +117,7 @@ export default function UsersSettingsPage() {
               <div>
                 <label className="text-xs font-medium text-gray-600 mb-1 block">Name</label>
                 <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-[#059669]"
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-[#8B5CF6]"
                   placeholder="Staff name" />
               </div>
               <div>
@@ -126,14 +126,14 @@ export default function UsersSettingsPage() {
                 </label>
                 <input type="password" inputMode="numeric" maxLength={4} value={form.pin}
                   onChange={e => { setForm(f => ({ ...f, pin: e.target.value })); setPinError(''); }}
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-[#059669] font-mono tracking-widest"
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-[#8B5CF6] font-mono tracking-widest"
                   placeholder="••••" />
                 {pinError && <p className="text-xs text-red-500 mt-1">{pinError}</p>}
               </div>
               <div>
                 <label className="text-xs font-medium text-gray-600 mb-1 block">Role</label>
                 <select value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value }))}
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-[#059669] bg-white">
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-[#8B5CF6] bg-white">
                   {['cashier','supervisor','manager','owner'].map(r => <option key={r} value={r} className="capitalize">{r.charAt(0).toUpperCase() + r.slice(1)}</option>)}
                 </select>
               </div>
@@ -141,7 +141,7 @@ export default function UsersSettingsPage() {
                 <label className="text-xs font-medium text-gray-600 mb-1 block">Max discount %</label>
                 <input type="number" min="0" max="100" value={form.max_discount_pct}
                   onChange={e => setForm(f => ({ ...f, max_discount_pct: e.target.value }))}
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-[#059669]" />
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-[#8B5CF6]" />
               </div>
             </div>
             <div className="space-y-2 mb-5">
@@ -154,7 +154,7 @@ export default function UsersSettingsPage() {
                 <label key={p.key} className="flex items-center gap-2.5 cursor-pointer">
                   <input type="checkbox" checked={form[p.key as keyof typeof form] as boolean}
                     onChange={e => setForm(f => ({ ...f, [p.key]: e.target.checked }))}
-                    className="w-4 h-4 accent-[#059669]" />
+                    className="w-4 h-4 accent-[#8B5CF6]" />
                   <span className="text-sm text-gray-700">{p.label}</span>
                 </label>
               ))}
@@ -162,7 +162,7 @@ export default function UsersSettingsPage() {
             <div className="flex gap-2">
               <button onClick={save} disabled={saving}
                 className="px-5 py-2.5 rounded-xl text-sm font-medium text-white disabled:opacity-50"
-                style={{ background: '#059669' }}>
+                style={{ background: '#8B5CF6' }}>
                 {saving ? 'Saving…' : editUser ? 'Update user' : 'Create user'}
               </button>
               <button onClick={() => { setShowAdd(false); setEditUser(null); }} className="px-5 py-2.5 rounded-xl text-sm text-gray-500 hover:bg-gray-100">

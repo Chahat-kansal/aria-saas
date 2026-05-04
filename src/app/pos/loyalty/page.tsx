@@ -92,7 +92,7 @@ export default function LoyaltyPage() {
         {/* Leaderboard */}
         {loading ? (
           <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 40 }}>
-            <div style={{ width: 24, height: 24, borderRadius: '50%', border: '2px solid rgba(20,184,166,0.3)', borderTopColor: 'var(--pos-teal)', animation: 'pos-processing 0.7s linear infinite' }} />
+            <div style={{ width: 24, height: 24, borderRadius: '50%', border: '2px solid rgba(139,92,246,0.3)', borderTopColor: 'var(--pos-teal)', animation: 'pos-processing 0.7s linear infinite' }} />
           </div>
         ) : (
           <div style={{ background: 'var(--pos-surface)', border: '1px solid var(--pos-border-default)', borderRadius: 16, overflow: 'hidden' }}>

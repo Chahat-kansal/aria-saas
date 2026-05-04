@@ -92,7 +92,7 @@ export default function ModifiersPage() {
         </div>
         <button onClick={() => { setForm({ name: '', price_adjustment: '0', modifier_group: 'Extras' }); setEditId(null); setShowAdd(true); }}
           className="px-4 py-2 rounded-xl text-sm font-semibold text-white"
-          style={{ background: '#1D9E75' }}>
+          style={{ background: '#8B5CF6' }}>
           + Add modifier
         </button>
       </div>
@@ -104,7 +104,7 @@ export default function ModifiersPage() {
           <p className="text-4xl mb-3">⚙️</p>
           <p className="text-sm font-semibold text-[#1a1a16] mb-1">No modifiers yet</p>
           <p className="text-xs text-[rgba(26,26,22,0.4)] mb-4">Create modifiers like &ldquo;Extra shot +$0.80&rdquo; or &ldquo;No onion&rdquo; and attach them to products.</p>
-          <button onClick={() => setShowAdd(true)} className="px-4 py-2 rounded-xl text-sm font-medium text-white" style={{ background: '#1D9E75' }}>
+          <button onClick={() => setShowAdd(true)} className="px-4 py-2 rounded-xl text-sm font-medium text-white" style={{ background: '#8B5CF6' }}>
             Create your first modifier
           </button>
         </div>
@@ -120,7 +120,7 @@ export default function ModifiersPage() {
                   <div key={mod.id} className="flex items-center justify-between px-5 py-3">
                     <div className="flex items-center gap-3">
                       <button onClick={() => toggleAvailable(mod)}
-                        className={`w-8 h-4 rounded-full transition-colors ${mod.available ? 'bg-[#1D9E75]' : 'bg-[rgba(0,0,0,0.15)]'}`}
+                        className={`w-8 h-4 rounded-full transition-colors ${mod.available ? 'bg-[#8B5CF6]' : 'bg-[rgba(0,0,0,0.15)]'}`}
                         style={{ position: 'relative' }}>
                         <span className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-all ${mod.available ? 'right-0.5' : 'left-0.5'}`} />
                       </button>
@@ -179,7 +179,7 @@ export default function ModifiersPage() {
               </button>
               <button onClick={save} disabled={saving || !form.name.trim()}
                 className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white disabled:opacity-50"
-                style={{ background: '#1D9E75' }}>
+                style={{ background: '#8B5CF6' }}>
                 {saving ? 'Saving…' : editId ? 'Save' : 'Add'}
               </button>
             </div>

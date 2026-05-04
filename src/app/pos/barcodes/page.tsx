@@ -32,7 +32,7 @@ export default function BarcodesPage() {
             <option value="standard">Standard label</option>
             <option value="large">Large label</option>
           </select>
-          <button onClick={() => window.print()} disabled={selected.size === 0} className="px-4 py-2 rounded-xl text-sm font-semibold text-white disabled:opacity-40" style={{ background: '#1D9E75' }}>
+          <button onClick={() => window.print()} disabled={selected.size === 0} className="px-4 py-2 rounded-xl text-sm font-semibold text-white disabled:opacity-40" style={{ background: '#8B5CF6' }}>
             Print {selected.size > 0 ? `(${selected.size})` : ''} labels
           </button>
         </div>
@@ -65,7 +65,7 @@ export default function BarcodesPage() {
               <div className="p-8 text-center text-sm text-[rgba(26,26,22,.35)]">No products found</div>
             ) : filtered.map(p => (
               <label key={p.id} className="flex items-center gap-3 px-4 py-3 border-b border-[rgba(0,0,0,.04)] cursor-pointer hover:bg-[rgba(0,0,0,.015)]">
-                <input type="checkbox" checked={selected.has(p.id)} onChange={e => setSelected(s => { const n = new Set(s); e.target.checked ? n.add(p.id) : n.delete(p.id); return n; })} className="w-4 h-4 accent-[#1D9E75]" />
+                <input type="checkbox" checked={selected.has(p.id)} onChange={e => setSelected(s => { const n = new Set(s); e.target.checked ? n.add(p.id) : n.delete(p.id); return n; })} className="w-4 h-4 accent-[#8B5CF6]" />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-[#1a1a16] truncate">{p.name}</p>
                   <p className="text-xs text-[rgba(26,26,22,.4)]">{p.sku ?? 'No SKU'} · A${p.price.toFixed(2)}</p>
@@ -74,7 +74,7 @@ export default function BarcodesPage() {
             ))}
           </div>
           <div className="flex items-center justify-between mt-2">
-            <button onClick={() => setSelected(new Set(filtered.map(p => p.id)))} className="text-xs text-[#1D9E75]">Select all</button>
+            <button onClick={() => setSelected(new Set(filtered.map(p => p.id)))} className="text-xs text-[#8B5CF6]">Select all</button>
             <button onClick={() => setSelected(new Set())} className="text-xs text-[rgba(26,26,22,.4)]">Clear</button>
           </div>
         </div>

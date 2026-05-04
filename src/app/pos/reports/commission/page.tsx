@@ -73,8 +73,8 @@ export default function CommissionReportPage() {
       <div className="max-w-4xl mx-auto px-6 py-6 space-y-5">
         {/* Aria insight */}
         {insight && (
-          <div className="bg-white border border-gray-100 rounded-xl px-4 py-3 border-l-[3px] border-l-[#059669]">
-            <p className="text-sm text-gray-700"><span className="font-semibold text-[#059669]">Aria: </span>{insight}</p>
+          <div className="bg-white border border-gray-100 rounded-xl px-4 py-3 border-l-[3px] border-l-[#8B5CF6]">
+            <p className="text-sm text-gray-700"><span className="font-semibold text-[#8B5CF6]">Aria: </span>{insight}</p>
           </div>
         )}
 
@@ -140,7 +140,7 @@ export default function CommissionReportPage() {
                   {row.pending > 0 ? (
                     <button onClick={e => { e.stopPropagation(); markPaid(row.name); }} disabled={paying === row.name}
                       className="justify-self-end text-xs px-2.5 py-1.5 rounded-lg text-white disabled:opacity-50"
-                      style={{ background: '#059669' }}>
+                      style={{ background: '#8B5CF6' }}>
                       {paying === row.name ? '…' : 'Pay'}
                     </button>
                   ) : (

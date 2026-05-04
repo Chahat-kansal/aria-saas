@@ -69,17 +69,17 @@ export default function SessionsPage() {
       <div className="p-6 max-w-4xl mx-auto space-y-5">
         {/* Current session card */}
         <div className={`bg-white rounded-2xl border shadow-sm overflow-hidden ${
-          openSession ? 'border-emerald-200' : 'border-gray-200'
+          openSession ? 'border-violet-200' : 'border-gray-200'
         }`}>
           <div className={`px-5 py-3 border-b flex items-center gap-2 ${
-            openSession ? 'bg-emerald-50 border-emerald-100' : 'bg-gray-50 border-gray-100'
+            openSession ? 'bg-violet-50 border-violet-100' : 'bg-gray-50 border-gray-100'
           }`}>
-            <span className={`w-2 h-2 rounded-full flex-shrink-0 ${openSession ? 'bg-emerald-500' : 'bg-gray-300'}`} />
+            <span className={`w-2 h-2 rounded-full flex-shrink-0 ${openSession ? 'bg-violet-500' : 'bg-gray-300'}`} />
             <h2 className="text-sm font-semibold text-gray-900">
               {openSession ? 'Register open' : 'Register closed'}
             </h2>
             {openSession && (
-              <span className="text-xs text-emerald-600 ml-1">
+              <span className="text-xs text-violet-600 ml-1">
                 since {new Date(openSession.opened_at).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}
                 {' · '}A${(openSession.opening_float || 0).toFixed(2)} float
               </span>
@@ -90,7 +90,7 @@ export default function SessionsPage() {
             {openSession ? (
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="rounded-xl p-3 bg-emerald-50 border border-emerald-100">
+                  <div className="rounded-xl p-3 bg-violet-50 border border-violet-100">
                     <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-1">Cash sales</p>
                     <p className="text-lg font-bold font-mono text-gray-900">A${(openSession.total_cash_sales || 0).toFixed(2)}</p>
                   </div>
@@ -113,7 +113,7 @@ export default function SessionsPage() {
                       <div className="flex-1">
                         <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-1.5">Variance</p>
                         <p className={`text-sm font-semibold font-mono px-3 py-2.5 rounded-lg ${
-                          Math.abs(variance) < 0.05 ? 'text-emerald-700 bg-emerald-50' :
+                          Math.abs(variance) < 0.05 ? 'text-violet-700 bg-violet-50' :
                           variance > 0 ? 'text-amber-600 bg-amber-50' : 'text-red-600 bg-red-50'
                         }`}>
                           {variance >= 0 ? '+' : ''}A${variance.toFixed(2)}
@@ -184,7 +184,7 @@ export default function SessionsPage() {
                         <td className="px-4 py-3">
                           {v !== null ? (
                             <span className={`text-xs font-medium font-mono ${
-                              Math.abs(v) < 0.05 ? 'text-emerald-600' : v >= 0 ? 'text-amber-600' : 'text-red-600'
+                              Math.abs(v) < 0.05 ? 'text-violet-600' : v >= 0 ? 'text-amber-600' : 'text-red-600'
                             }`}>
                               {v >= 0 ? '+' : ''}A${v.toFixed(2)}
                             </span>

@@ -111,10 +111,10 @@ export default function TimesheetsPage() {
           <input value={staffName} onChange={e => setStaffName(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && clockIn()}
             placeholder="Staff name or ID"
-            className="flex-1 bg-[rgba(0,0,0,0.04)] border border-[rgba(0,0,0,0.1)] rounded-xl px-3 py-2 text-sm text-[#1a1a16] outline-none focus:border-[#1D9E75]" />
+            className="flex-1 bg-[rgba(0,0,0,0.04)] border border-[rgba(0,0,0,0.1)] rounded-xl px-3 py-2 text-sm text-[#1a1a16] outline-none focus:border-[#8B5CF6]" />
           <button onClick={clockIn} disabled={clockingIn || !staffName.trim()}
             className="px-4 py-2 rounded-xl text-sm font-semibold text-white disabled:opacity-50 transition-colors"
-            style={{ background: '#1D9E75' }}>
+            style={{ background: '#8B5CF6' }}>
             {clockingIn ? '…' : 'Clock in'}
           </button>
         </div>

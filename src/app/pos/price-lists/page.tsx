@@ -43,7 +43,7 @@ export default function PriceListsPage() {
     <div className="p-6 max-w-6xl mx-auto">
       <div className="mb-6 flex items-start justify-between gap-4">
         <div><h1 className="text-xl font-semibold text-[#1a1a16]">Price Lists</h1><p className="text-xs text-[rgba(26,26,22,.45)] mt-0.5">Custom pricing for customer groups and promotions</p></div>
-        <button onClick={() => setShowAdd(true)} className="px-4 py-2 rounded-xl text-sm font-semibold text-white" style={{ background: '#1D9E75' }}>+ New Price List</button>
+        <button onClick={() => setShowAdd(true)} className="px-4 py-2 rounded-xl text-sm font-semibold text-white" style={{ background: '#8B5CF6' }}>+ New Price List</button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -59,7 +59,7 @@ export default function PriceListsPage() {
           ) : (
             <div className="space-y-2">
               {lists.map(list => (
-                <button key={list.id} onClick={() => selectList(list)} className={`w-full text-left bg-white rounded-xl border p-4 shadow-sm transition-all ${selectedList?.id === list.id ? 'border-[#1D9E75]' : 'border-[rgba(0,0,0,.08)] hover:border-[rgba(0,0,0,.15)]'}`}>
+                <button key={list.id} onClick={() => selectList(list)} className={`w-full text-left bg-white rounded-xl border p-4 shadow-sm transition-all ${selectedList?.id === list.id ? 'border-[#8B5CF6]' : 'border-[rgba(0,0,0,.08)] hover:border-[rgba(0,0,0,.15)]'}`}>
                   <div className="flex items-start justify-between">
                     <div>
                       <p className="text-sm font-medium text-[#1a1a16]">{list.name}</p>
@@ -100,7 +100,7 @@ export default function PriceListsPage() {
                           <td className="px-4 py-3 font-medium text-[#1a1a16]">{item.pos_products?.name ?? 'Unknown'}</td>
                           <td className="px-4 py-3 text-[rgba(26,26,22,.5)]">A${std.toFixed(2)}</td>
                           <td className="px-4 py-3 font-semibold text-[#1a1a16]">A${override.toFixed(2)}</td>
-                          <td className="px-4 py-3 text-sm" style={{ color: saving > 0 ? '#1D9E75' : saving < 0 ? '#ef4444' : '#9ca3af' }}>{saving > 0 ? `-A$${saving.toFixed(2)}` : saving < 0 ? `+A$${Math.abs(saving).toFixed(2)}` : '—'}</td>
+                          <td className="px-4 py-3 text-sm" style={{ color: saving > 0 ? '#8B5CF6' : saving < 0 ? '#ef4444' : '#9ca3af' }}>{saving > 0 ? `-A$${saving.toFixed(2)}` : saving < 0 ? `+A$${Math.abs(saving).toFixed(2)}` : '—'}</td>
                         </tr>
                       );
                     })}
@@ -123,11 +123,11 @@ export default function PriceListsPage() {
             <div className="space-y-3">
               <div><label className="text-xs font-medium text-[rgba(26,26,22,.5)] mb-1 block">Name *</label><input value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} className={inputCls} placeholder="e.g. Wholesale Pricing" /></div>
               <div><label className="text-xs font-medium text-[rgba(26,26,22,.5)] mb-1 block">Description</label><input value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} className={inputCls} placeholder="Optional description" /></div>
-              <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={form.is_active} onChange={e => setForm(p => ({ ...p, is_active: e.target.checked }))} className="w-4 h-4 accent-[#1D9E75]" /><span className="text-sm text-[#1a1a16]">Active</span></label>
+              <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={form.is_active} onChange={e => setForm(p => ({ ...p, is_active: e.target.checked }))} className="w-4 h-4 accent-[#8B5CF6]" /><span className="text-sm text-[#1a1a16]">Active</span></label>
             </div>
             <div className="flex gap-2 mt-5">
               <button onClick={() => setShowAdd(false)} className="flex-1 py-2.5 rounded-xl text-sm border border-[rgba(0,0,0,.12)] text-[rgba(26,26,22,.5)]">Cancel</button>
-              <button onClick={createList} disabled={saving || !form.name} className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-40" style={{ background: '#1D9E75' }}>{saving ? 'Creating…' : 'Create'}</button>
+              <button onClick={createList} disabled={saving || !form.name} className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-40" style={{ background: '#8B5CF6' }}>{saving ? 'Creating…' : 'Create'}</button>
             </div>
           </div>
         </div>

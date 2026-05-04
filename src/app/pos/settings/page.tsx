@@ -78,7 +78,7 @@ export default function SettingsPage() {
           ))}
         </div>
         <div className="flex items-center justify-end gap-3 pt-2">
-          {saved && <span className="text-xs text-emerald-600 font-medium">Saved!</span>}
+          {saved && <span className="text-xs text-violet-600 font-medium">Saved!</span>}
           <button onClick={save} disabled={saving}
             className="px-4 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-50"
             style={{ background: 'linear-gradient(135deg,#2563eb,#1d4ed8)' }}>
