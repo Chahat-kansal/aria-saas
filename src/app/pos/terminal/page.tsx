@@ -4,6 +4,7 @@ import { isMobileDevice, hasCameraSupport } from '@/lib/mobile-detect';
 import { SFX } from '@/lib/pos-utils';
 import dynamic from 'next/dynamic';
 import type { FlyToCartHandle } from '@/components/pos/FlyToCart';
+import Receipt from '@/components/pos/Receipt';
 
 const CursorGlow = dynamic(() => import('@/components/pos/CursorGlow'), { ssr: false });
 const AnimatedBg = dynamic(() => import('@/components/pos/AnimatedBg'), { ssr: false });
@@ -993,6 +994,18 @@ export default function TerminalPage() {
                 </div>
               </div>
             </div>
+            {/* Print receipt button — shows Receipt modal on top of confirm overlay */}
+            {showReceipt && (
+              <Receipt
+                sale={showReceipt}
+                businessName={businessName}
+                onClose={() => {/* stay on confirm */}}
+              />
+            )}
+            <button onClick={() => window.print()}
+              style={{ height: 40, padding: '0 24px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.05)', color: 'rgba(220,240,255,0.7)', fontFamily: 'inherit', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 7 }}>
+              🖨️ Print receipt
+            </button>
             {/* New Sale button */}
             <button onClick={() => { setShowReceipt(null); setTerminalView('pos'); if (window.innerWidth < 768) setMobileTab('products'); }}
               style={{ height: 52, padding: '0 40px', borderRadius: 14, border: 'none', background: 'linear-gradient(135deg,#00E5FF,#00BFCC,#7B2FFF)', color: '#000', fontFamily: 'inherit', fontSize: 14, fontWeight: 900, cursor: 'pointer', boxShadow: '0 5px 0 rgba(0,150,200,0.5), 0 10px 30px rgba(0,229,255,0.3)', transition: 'all 220ms', display: 'flex', alignItems: 'center', gap: 8, animation: 'fade-up 0.4s 0.3s cubic-bezier(0.16,1,0.3,1) both' }}
@@ -1392,59 +1405,14 @@ export default function TerminalPage() {
         <div className={`flex flex-col overflow-hidden ${mobileTab !== 'cart' ? 'hidden md:flex' : 'flex'}`}
           style={{ background: 'rgba(10,14,30,0.88)', borderRight: '1px solid rgba(0,229,255,0.06)' }}>
 
-          {showReceipt ? (
-            /* ── RECEIPT VIEW ─────────────────────────────────── */
-            <div className="flex-1 overflow-y-auto flex flex-col items-center justify-center p-4">
-              <div className="w-full max-w-sm rounded-2xl overflow-hidden" style={{ background: '#1A1728', border: '1px solid #2A2540' }}>
-                {/* Success */}
-                <div className="px-6 py-4 flex items-center gap-3" style={{ background: 'rgba(34,197,94,0.08)', borderBottom: '1px solid rgba(34,197,94,0.15)' }}>
-                  <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(34,197,94,0.15)' }}>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="#22C55E" strokeWidth={2.5} className="w-4 h-4"><polyline points="20 6 9 17 4 12" /></svg>
-                  </div>
-                  <div>
-                    <p className="font-semibold text-sm" style={{ color: '#EDE8FF' }}>Sale complete</p>
-                    <p className="text-xs" style={{ color: '#4A4565' }}>{showReceipt.businessName ?? businessName}</p>
-                  </div>
-                </div>
-                {/* Receipt body */}
-                <div className="px-5 py-4 text-xs space-y-1" style={{ fontFamily: "'JetBrains Mono', monospace", color: '#8B85A8' }}>
-                  <div className="flex justify-between"><span style={{ color: '#4A4565' }}>Receipt</span><span style={{ color: '#EDE8FF' }}>{showReceipt.sale_number}</span></div>
-                  <div className="flex justify-between"><span style={{ color: '#4A4565' }}>Date</span><span>{new Date(showReceipt.created_at ?? Date.now()).toLocaleDateString('en-AU')}</span></div>
-                  <div className="flex justify-between"><span style={{ color: '#4A4565' }}>Time</span><span>{new Date(showReceipt.created_at ?? Date.now()).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}</span></div>
-                  {showReceipt.customerSnapshot && (
-                    <div className="flex justify-between"><span style={{ color: '#4A4565' }}>Customer</span><span style={{ color: '#EDE8FF' }}>{showReceipt.customerSnapshot.name}</span></div>
-                  )}
-                  <div className="my-2 pt-2 space-y-1" style={{ borderTop: '1px dashed #2A2540' }}>
-                    {(showReceipt.cartSnapshot ?? []).map((item: CartItem, i: number) => (
-                      <div key={i} className="flex justify-between gap-2">
-                        <span className="flex-1 truncate" style={{ color: '#EDE8FF' }}>{item.qty}× {item.label ?? item.product.name}</span>
-                        <span>A${(item.unitPrice * item.qty).toFixed(2)}</span>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="pt-2 space-y-0.5" style={{ borderTop: '1px dashed #2A2540' }}>
-                    <div className="flex justify-between text-[10px]"><span style={{ color: '#4A4565' }}>Excl. GST</span><span>A${(showReceipt.total_amount / 1.1).toFixed(2)}</span></div>
-                    <div className="flex justify-between text-[10px]"><span style={{ color: '#4A4565' }}>GST (10%)</span><span>A${(showReceipt.total_amount - showReceipt.total_amount / 1.1).toFixed(2)}</span></div>
-                    <div className="flex justify-between font-bold text-sm mt-1"><span style={{ color: '#EDE8FF' }}>TOTAL</span><span style={{ color: '#EDE8FF' }}>A${showReceipt.total_amount?.toFixed(2)}</span></div>
-                    <div className="flex justify-between text-[10px]"><span style={{ color: '#4A4565' }}>Payment</span><span className="capitalize">{showReceipt.payment_method}</span></div>
-                    {showReceipt.cash_tendered != null && <div className="flex justify-between text-[10px]"><span style={{ color: '#4A4565' }}>Tendered</span><span>A${showReceipt.cash_tendered?.toFixed(2)}</span></div>}
-                    {showReceipt.change_given != null && showReceipt.change_given > 0 && <div className="flex justify-between text-[10px]"><span style={{ color: '#4A4565' }}>Change</span><span>A${showReceipt.change_given?.toFixed(2)}</span></div>}
-                  </div>
-                  <p className="text-center text-[10px] pt-2" style={{ color: '#4A4565' }}>Thank you for shopping with us!</p>
-                </div>
-              </div>
-              <div className="flex gap-3 mt-4">
-                <button onClick={() => window.print()}
-                  className="px-5 py-2.5 rounded-xl text-sm font-medium"
-                  style={{ border: '1px solid #2A2540', color: '#8B85A8', background: 'rgba(255,255,255,0.02)' }}>
-                  🖨️ Print
-                </button>
-                <button onClick={() => { setShowReceipt(null); if (window.innerWidth < 768) setMobileTab('products'); }}
-                  className="px-5 py-2.5 rounded-xl text-sm font-medium text-white"
-                  style={{ background: '#8B5CF6' }}>
-                  New Sale
-                </button>
-              </div>
+          {showReceipt && terminalView !== 'confirm' ? (
+            /* ── RECEIPT VIEW (non-confirm, e.g. reprint) ─────── */
+            <div className="flex-1 flex items-center justify-center p-4">
+              <Receipt
+                sale={showReceipt}
+                businessName={businessName}
+                onClose={() => { setShowReceipt(null); if (window.innerWidth < 768) setMobileTab('products'); }}
+              />
             </div>
           ) : (
             /* ── CART VIEW ────────────────────────────────────── */

@@ -18,18 +18,35 @@ export default function PromotionsPage() {
   }, []);
   useEffect(() => { load(); }, [load]);
 
+  const [error, setError] = useState<string | null>(null);
+
   async function save() {
     if (!form.name) return;
-    setSaving(true);
-    await fetch('/api/pos/promotions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...form, discount_value: parseFloat(form.discount_value) || 0, start_date: form.start_date || null, end_date: form.end_date || null }) });
-    setSaving(false); setShowAdd(false);
+    setSaving(true); setError(null);
+    const r = await fetch('/api/pos/promotions', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...form, discount_type: form.type, discount_value: parseFloat(form.discount_value) || 0, start_date: form.start_date || null, end_date: form.end_date || null }),
+    });
+    const d = await r.json();
+    setSaving(false);
+    if (d.error) { setError(d.error); return; }
+    // Optimistically add to list immediately
+    if (d.promotion) setPromos(prev => [d.promotion, ...prev]);
+    setShowAdd(false);
     setForm({ name: '', type: 'percentage', discount_value: '', start_date: '', end_date: '', is_active: true });
-    load();
   }
 
   async function toggle(id: string, cur: boolean) {
-    await fetch(`/api/pos/promotions?id=${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ is_active: !cur }) });
-    load();
+    // Optimistic update
+    setPromos(prev => prev.map(p => p.id === id ? { ...p, is_active: !cur } : p));
+    const r = await fetch(`/api/pos/promotions?id=${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ is_active: !cur }) });
+    if (!r.ok) load(); // revert on failure
+  }
+
+  async function del(id: string) {
+    if (!confirm('Delete this promotion?')) return;
+    setPromos(prev => prev.filter(p => p.id !== id));
+    await fetch(`/api/pos/promotions?id=${id}`, { method: 'DELETE' });
   }
 
   const now = new Date();
@@ -65,19 +82,25 @@ export default function PromotionsPage() {
           <tbody>
             {loading ? <tr><td colSpan={7} className="px-4 py-8 text-center text-sm text-[rgba(26,26,22,.35)]">Loading…</td></tr>
             : promos.length === 0 ? <tr><td colSpan={7} className="px-4 py-12 text-center"><p className="text-sm font-medium text-[#1a1a16] mb-1">No promotions yet</p><p className="text-xs text-[rgba(26,26,22,.4)]">Create your first promotion to offer discounts at checkout.</p></td></tr>
-            : promos.map(p => (
+            : promos.map(p => {
+              const discType = (p as any).discount_type ?? p.type;
+              return (
               <tr key={p.id} className="border-b border-[rgba(0,0,0,.04)] hover:bg-[rgba(0,0,0,.015)]">
                 <td className="px-4 py-3 font-medium text-[#1a1a16]">{p.name}</td>
-                <td className="px-4 py-3 text-xs text-[rgba(26,26,22,.5)]">{TYPE_LABELS[p.type] ?? p.type}</td>
-                <td className="px-4 py-3 font-semibold">{p.type === 'percentage' ? `${p.discount_value}%` : `A$${p.discount_value}`}</td>
+                <td className="px-4 py-3 text-xs text-[rgba(26,26,22,.5)]">{TYPE_LABELS[discType] ?? discType}</td>
+                <td className="px-4 py-3 font-semibold">{discType === 'percentage' ? `${p.discount_value}%` : `A$${p.discount_value}`}</td>
                 <td className="px-4 py-3 text-xs text-[rgba(26,26,22,.4)]">{p.start_date ? new Date(p.start_date).toLocaleDateString() : '—'}</td>
                 <td className="px-4 py-3 text-xs text-[rgba(26,26,22,.4)]">{p.end_date ? new Date(p.end_date).toLocaleDateString() : '—'}</td>
                 <td className="px-4 py-3 text-xs text-[rgba(26,26,22,.4)]">{p.usage_count ?? 0}</td>
                 <td className="px-4 py-3">
-                  <button onClick={() => toggle(p.id, p.is_active)} className={`text-xs px-3 py-1 rounded-full font-medium ${p.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{p.is_active ? 'Active' : 'Inactive'}</button>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => toggle(p.id, p.is_active)} className={`text-xs px-3 py-1 rounded-full font-medium ${p.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{p.is_active ? 'Active' : 'Inactive'}</button>
+                    <button onClick={() => del(p.id)} className="text-xs text-red-400 hover:text-red-600 transition-colors leading-none">×</button>
+                  </div>
                 </td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -98,8 +121,9 @@ export default function PromotionsPage() {
               </div>
               <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={form.is_active} onChange={e => setForm(p => ({ ...p, is_active: e.target.checked }))} className="w-4 h-4 accent-[#8B5CF6]" /><span className="text-sm text-[#1a1a16]">Active immediately</span></label>
             </div>
+            {error && <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
             <div className="flex gap-2 mt-5">
-              <button onClick={() => setShowAdd(false)} className="flex-1 py-2.5 rounded-xl text-sm border border-[rgba(0,0,0,.12)] text-[rgba(26,26,22,.5)]">Cancel</button>
+              <button onClick={() => { setShowAdd(false); setError(null); }} className="flex-1 py-2.5 rounded-xl text-sm border border-[rgba(0,0,0,.12)] text-[rgba(26,26,22,.5)]">Cancel</button>
               <button onClick={save} disabled={saving || !form.name} className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-40" style={{ background: '#8B5CF6' }}>{saving ? 'Saving…' : 'Create'}</button>
             </div>
           </div>
