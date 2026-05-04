@@ -1,3 +1,4 @@
+import '@/styles/pos-design-system.css';
 import { redirect } from 'next/navigation';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { POSTopNav } from '@/components/pos/POSTopNav';

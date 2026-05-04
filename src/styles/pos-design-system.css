@@ -1,0 +1,107 @@
+/* AriaPOS Design System — Deep Slate + Electric Teal */
+/* Import in src/app/pos/layout.tsx */
+
+:root {
+  /* Backgrounds */
+  --pos-base:        #080C10;
+  --pos-surface:     #0F1520;
+  --pos-elevated:    #162030;
+  --pos-overlay:     #1C2B3A;
+  --pos-hover:       #121C28;
+  --pos-active:      #1A2838;
+
+  /* Borders */
+  --pos-border-subtle:  #1A2535;
+  --pos-border-default: #243347;
+  --pos-border-strong:  #2E4560;
+  --pos-border-teal:    rgba(20,184,166,0.3);
+
+  /* Teal Accent — PRIMARY */
+  --pos-teal:        #14B8A6;
+  --pos-teal-600:    #0D9488;
+  --pos-teal-700:    #0F766E;
+  --pos-teal-dim:    rgba(20,184,166,0.10);
+  --pos-teal-glow:   rgba(20,184,166,0.18);
+
+  /* Text */
+  --pos-text-primary:   #E8F4F8;
+  --pos-text-secondary: #7A9BB5;
+  --pos-text-tertiary:  #3D5A73;
+
+  /* Semantic */
+  --pos-success:     #10B981;
+  --pos-warning:     #F59E0B;
+  --pos-danger:      #EF4444;
+
+  /* Typography */
+  --pos-font-ui:   'Manrope', system-ui, sans-serif;
+  --pos-font-mono: 'JetBrains Mono', monospace;
+  --pos-font-disp: 'Instrument Serif', Georgia, serif;
+
+  --pos-ease: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ── Animations ─────────────────────────────────────────────────── */
+@keyframes pos-card-enter {
+  from { opacity:0; transform:translateY(16px) scale(0.94) }
+  to   { opacity:1; transform:translateY(0) scale(1) }
+}
+@keyframes pos-scale-in {
+  from { transform:scale(0.4); opacity:0 }
+  60%  { transform:scale(1.1) }
+  to   { transform:scale(1); opacity:1 }
+}
+@keyframes pos-float-in {
+  from { transform:translateX(20px) scale(0.97); opacity:0 }
+  to   { transform:translateX(0) scale(1); opacity:1 }
+}
+@keyframes pos-slide-up {
+  from { transform:translateY(20px); opacity:0 }
+  to   { transform:translateY(0); opacity:1 }
+}
+@keyframes pos-orb-breathe {
+  0%,100% { transform:scale(1); opacity:0.6 }
+  50%     { transform:scale(1.08); opacity:0.9 }
+}
+@keyframes pos-paid-ring {
+  0%   { transform:scale(0.5); opacity:0.8 }
+  100% { transform:scale(2.5); opacity:0 }
+}
+@keyframes pos-nav-glow {
+  0%,100% { box-shadow: 0 0 8px rgba(20,184,166,0.15) }
+  50%     { box-shadow: 0 0 20px rgba(20,184,166,0.35) }
+}
+@keyframes pos-processing {
+  to { transform: rotate(360deg) }
+}
+@keyframes pos-shake {
+  0%,100% { transform:translateX(0) }
+  20%,60% { transform:translateX(-6px) }
+  40%,80% { transform:translateX(6px) }
+}
+@keyframes pos-idle-float {
+  0%,100% { transform:translateY(0) }
+  50%     { transform:translateY(-12px) }
+}
+@keyframes pos-pulse-ring {
+  0%   { transform:scale(1); opacity:0.4 }
+  100% { transform:scale(2); opacity:0 }
+}
+
+/* ── Utility classes ─────────────────────────────────────────────── */
+.pos-card-enter  { animation: pos-card-enter 0.3s var(--pos-ease) both; }
+.pos-scale-in    { animation: pos-scale-in   0.4s var(--pos-ease) both; }
+.pos-slide-up    { animation: pos-slide-up   0.3s var(--pos-ease) both; }
+.pos-float-in    { animation: pos-float-in   0.3s var(--pos-ease) both; }
+.pos-idle-float  { animation: pos-idle-float 3s ease-in-out infinite; }
+.pos-shake       { animation: pos-shake      0.4s ease; }
+
+/* ── Scrollbar ──────────────────────────────────────────────────── */
+.pos-scroll::-webkit-scrollbar { width:3px; height:3px; }
+.pos-scroll::-webkit-scrollbar-track { background:transparent; }
+.pos-scroll::-webkit-scrollbar-thumb {
+  background:rgba(20,184,166,0.15); border-radius:2px;
+}
+.pos-scroll::-webkit-scrollbar-thumb:hover {
+  background:rgba(20,184,166,0.3);
+}
