@@ -11,42 +11,46 @@ const NAV_SECTIONS = [
   {
     title: 'POS',
     items: [
-      { href: '/pos',         label: 'Register',  icon: '🏠', exact: true },
-      { href: '/pos/terminal',label: 'Terminal',  icon: '🛒' },
-      { href: '/pos/mobile',  label: 'Mobile',    icon: '📱' },
+      { href: '/pos',          label: 'Register',    icon: '🏠', exact: true },
+      { href: '/pos/terminal', label: 'Terminal',    icon: '🛒' },
+      { href: '/pos/history',  label: 'History',     icon: '🧾' },
+      { href: '/pos/mobile',   label: 'Mobile',      icon: '📱' },
+    ],
+  },
+  {
+    title: 'Register',
+    items: [
+      { href: '/pos/cash',  label: 'Cash Management', icon: '💰' },
+      { href: '/pos/close', label: 'Close Register',  icon: '🔒' },
     ],
   },
   {
     title: 'Inventory',
     items: [
-      { href: '/pos/products',    label: 'Products',        icon: '📦' },
-      { href: '/pos/categories',  label: 'Categories',      icon: '📋' },
-      { href: '/pos/suppliers',   label: 'Suppliers',       icon: '🚚' },
-      { href: '/pos/orders',      label: 'Purchase Orders', icon: '📄' },
-      { href: '/pos/stocktake',   label: 'Stocktake',       icon: '✅' },
-      { href: '/pos/transfers',   label: 'Transfers',       icon: '↔️' },
-      { href: '/pos/price-lists', label: 'Price Lists',     icon: '🏷️' },
-      { href: '/pos/barcodes',    label: 'Barcodes',        icon: '▦' },
+      { href: '/pos/products',         label: 'Products',         icon: '📦' },
+      { href: '/pos/categories',       label: 'Categories',       icon: '📋' },
+      { href: '/pos/classifications',  label: 'Classifications',  icon: '🏷' },
+      { href: '/pos/stocktake',        label: 'Stocktake',        icon: '✅' },
+      { href: '/pos/barcodes',         label: 'Barcodes',         icon: '▦' },
+    ],
+  },
+  {
+    title: 'Purchasing',
+    items: [
+      { href: '/pos/orders',      label: 'Orders & Invoices', icon: '📄' },
+      { href: '/pos/suppliers',   label: 'Suppliers',         icon: '🚚' },
+      { href: '/pos/transfers',   label: 'Transfers',         icon: '↔️' },
+      { href: '/pos/price-lists', label: 'Price Lists',       icon: '💲' },
     ],
   },
   {
     title: 'Customers',
     items: [
-      { href: '/pos/customers',       label: 'Customers',   icon: '👤' },
-      { href: '/pos/customer-groups', label: 'Groups',      icon: '👥' },
-      { href: '/pos/gift-cards',      label: 'Gift Cards',  icon: '🎁' },
-      { href: '/pos/promotions',      label: 'Promotions',  icon: '%' },
-      { href: '/pos/loyalty',         label: 'Loyalty',     icon: '⭐' },
-    ],
-  },
-  {
-    title: 'Operations',
-    items: [
-      { href: '/pos/kitchen',    label: 'Kitchen (KDS)',  icon: '🍳' },
-      { href: '/pos/tables',     label: 'Tables',         icon: '⊞' },
-      { href: '/pos/timesheets', label: 'Timesheets',     icon: '⏰' },
-      { href: '/pos/cash',       label: 'Cash',           icon: '💰' },
-      { href: '/pos/close',      label: 'Close Register', icon: '🔒' },
+      { href: '/pos/customers',       label: 'Customers',      icon: '👤' },
+      { href: '/pos/customer-groups', label: 'Groups',         icon: '👥' },
+      { href: '/pos/loyalty',         label: 'Loyalty',        icon: '⭐' },
+      { href: '/pos/gift-cards',      label: 'Gift Cards',     icon: '🎁' },
+      { href: '/pos/promotions',      label: 'Promotions',     icon: '%' },
     ],
   },
   {
@@ -60,11 +64,20 @@ const NAV_SECTIONS = [
     ],
   },
   {
+    title: 'Operations',
+    items: [
+      { href: '/pos/kitchen',    label: 'Kitchen (KDS)', icon: '🍳' },
+      { href: '/pos/tables',     label: 'Tables',        icon: '⊞' },
+      { href: '/pos/timesheets', label: 'Timesheets',    icon: '⏰' },
+      { href: '/pos/void',       label: 'Void/Refund',   icon: '↩️' },
+    ],
+  },
+  {
     title: 'Settings',
     items: [
-      { href: '/pos/settings',       label: 'Settings',    icon: '⚙️' },
-      { href: '/pos/settings/users', label: 'Staff PINs',  icon: '🔑' },
-      { href: '/pos/void',           label: 'Void/Refund', icon: '↩️' },
+      { href: '/pos/settings',        label: 'Settings',      icon: '⚙️' },
+      { href: '/pos/settings/users',  label: 'Staff PINs',    icon: '🔑' },
+      { href: '/pos/price-tickets',   label: 'Price Tickets', icon: '🖨️' },
     ],
   },
 ];

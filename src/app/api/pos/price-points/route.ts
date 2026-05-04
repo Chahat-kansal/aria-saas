@@ -4,27 +4,32 @@ export const dynamic = 'force-dynamic';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
 
-async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
+async function getBiz(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string) {
   const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle();
   if (active?.business_id) return active.business_id as string;
   const { data } = await supabase.from('businesses').select('id').eq('user_id', userId).eq('is_active', true).order('created_at', { ascending: true }).limit(1).maybeSingle();
   return data?.id ?? null;
 }
 
-export async function GET() {
+export async function GET(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const bid = await getBid(supabase, user.id);
-  if (!bid) return NextResponse.json({ groups: [] });
+  const { searchParams } = new URL(req.url);
+  const product_id = searchParams.get('product_id');
+  const outlet_id  = searchParams.get('outlet_id');
 
-  const { data, error } = await supabase.from('pos_customer_groups').select('*').eq('business_id', bid).order('name');
+  let query = supabase.from('pos_price_points').select('*').order('quantity');
+  if (product_id) query = query.eq('product_id', product_id);
+  if (outlet_id)  query = query.eq('outlet_id', outlet_id);
+
+  const { data, error } = await query;
   if (error) {
-    if (error.code === '42P01') return NextResponse.json({ groups: [] });
+    if (error.code === '42P01') return NextResponse.json({ price_points: [] }); // table not yet created
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
-  return NextResponse.json({ groups: data ?? [] });
+  return NextResponse.json({ price_points: data ?? [] });
 }
 
 export async function POST(req: Request) {
@@ -32,18 +37,21 @@ export async function POST(req: Request) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const bid = await getBid(supabase, user.id);
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 404 });
+  const body = await req.json();
+  const { product_id, outlet_id, price_set_name, quantity, price, cost } = body;
+  if (!product_id || !quantity || !price) return NextResponse.json({ error: 'product_id, quantity, price required' }, { status: 400 });
 
-  const { name, discount_percent, price_list_id } = await req.json();
-  if (!name) return NextResponse.json({ error: 'name required' }, { status: 400 });
+  const margin_percent = cost && price > 0 ? ((price - cost) / price) * 100 : null;
 
-  const { data, error } = await supabase.from('pos_customer_groups').insert({
-    business_id: bid, name, discount_percent: discount_percent ?? 0, price_list_id: price_list_id ?? null,
+  const { data, error } = await supabase.from('pos_price_points').insert({
+    product_id, outlet_id: outlet_id ?? null,
+    price_set_name: price_set_name ?? 'Default Price Set',
+    quantity: parseInt(quantity), price: parseFloat(price),
+    cost: cost ? parseFloat(cost) : null, margin_percent,
   }).select().single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ group: data });
+  return NextResponse.json({ price_point: data });
 }
 
 export async function PATCH(req: Request) {
@@ -56,7 +64,11 @@ export async function PATCH(req: Request) {
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
 
   const body = await req.json();
-  const { error } = await supabase.from('pos_customer_groups').update(body).eq('id', id);
+  if (body.price && body.cost) {
+    body.margin_percent = ((body.price - body.cost) / body.price) * 100;
+  }
+
+  const { error } = await supabase.from('pos_price_points').update(body).eq('id', id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });
 }
@@ -70,7 +82,7 @@ export async function DELETE(req: Request) {
   const id = searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
 
-  const { error } = await supabase.from('pos_customer_groups').delete().eq('id', id);
+  const { error } = await supabase.from('pos_price_points').delete().eq('id', id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });
 }
