@@ -201,6 +201,9 @@ export default function TerminalPage() {
   /* ── Receipt reprint ──────────────────────────────────────────── */
   const [reprintSale,      setReprintSale]      = useState<any>(null);
 
+  /* ── Terminal view state ────────────────────────────────────────── */
+  const [terminalView, setTerminalView] = useState<'pos' | 'checkout' | 'confirm'>('pos');
+
   /* ── Context menu ─────────────────────────────────────────────── */
   const [contextMenu,      setContextMenu]      = useState<{ product: Product; x: number; y: number } | null>(null);
 
@@ -741,6 +744,7 @@ export default function TerminalPage() {
       } catch { /* ignore */ }
 
       setShowReceipt({ ...d.sale, cartSnapshot, customerSnapshot, businessName });
+      setTerminalView('confirm');
       clearSale();
     } finally { setProcessing(false); }
   }
@@ -789,10 +793,217 @@ export default function TerminalPage() {
   /* ══════════════════════════════════════════════════════════════
      RENDER
   ══════════════════════════════════════════════════════════════ */
+  /* ── Quick helpers for checkout overlay ────────────────────────── */
+  const loyaltyPoints = Math.floor(total);
+
   return (
-    <div className="flex flex-col overflow-hidden" style={{ height: '100%', background: 'var(--bg-base)', position: 'relative' }}>
+    <div className="flex flex-col overflow-hidden" style={{ height: '100%', background: '#030510', position: 'relative' }}>
+      {/* Full-screen animated dot grid */}
+      <AnimatedBg />
       <CursorGlow />
       <FlyToCart ref={flyRef} />
+
+      {/* ══ CHECKOUT OVERLAY ════════════════════════════════════════ */}
+      {terminalView === 'checkout' && (
+        <div style={{ position: 'absolute', inset: 0, zIndex: 50, display: 'flex', fontFamily: "'Manrope',sans-serif", background: 'rgba(3,5,16,0.92)', backdropFilter: 'blur(20px)' }}>
+          {/* Left: Summary */}
+          <div style={{ width: 300, display: 'flex', flexDirection: 'column', background: 'rgba(10,14,30,0.9)', borderRight: '1px solid rgba(0,229,255,0.07)' }}>
+            <div style={{ padding: '14px 18px', borderBottom: '1px solid rgba(0,229,255,0.07)', display: 'flex', alignItems: 'center', gap: 10 }}>
+              <button onClick={() => setTerminalView('pos')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(130,160,200,0.6)', display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, fontFamily: 'inherit', padding: 0 }}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg> Back
+              </button>
+              <span style={{ fontSize: 13, fontWeight: 700, color: 'rgba(220,240,255,0.9)', flex: 1, textAlign: 'right' }}>Summary</span>
+            </div>
+            <div style={{ flex: 1, overflowY: 'auto', padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {cart.map(item => {
+                const cn = (item.product.pos_categories?.name ?? 'other').toLowerCase();
+                const cMeta: Record<string, { a: string; b: string }> = { beer: { a:'#F59E0B', b:'#92400E' }, 'beer & cider': { a:'#F59E0B', b:'#92400E' }, wine: { a:'#9333EA', b:'#4C1D95' }, spirits: { a:'#00E5FF', b:'#7B2FFF' }, coffee: { a:'#A16207', b:'#451A03' }, food: { a:'#EF4444', b:'#7F1D1D' }, snacks: { a:'#F97316', b:'#7C2D12' }, other: { a:'#6366F1', b:'#312E81' } };
+                const m = cMeta[cn] ?? cMeta.other;
+                const initials = item.product.name.split(' ').map((w: string) => w[0]).join('').slice(0,2).toUpperCase();
+                return (
+                  <div key={cartKey(item)} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 8, background: 'rgba(0,229,255,0.03)' }}>
+                    <div style={{ width: 28, height: 28, borderRadius: 7, background: `linear-gradient(135deg,${m.a}33,${m.b}66)`, border: `1px solid ${m.a}44`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 800, color: m.a, fontFamily: "'JetBrains Mono',monospace", flexShrink: 0 }}>{initials}</div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 11, fontWeight: 600, color: 'rgba(220,240,255,0.9)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.label ?? item.product.name}</div>
+                      <div style={{ fontSize: 9, color: 'rgba(130,160,200,0.5)', fontFamily: "'JetBrains Mono',monospace" }}>×{item.qty}</div>
+                    </div>
+                    <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 12, fontWeight: 700, color: 'rgba(220,240,255,0.85)' }}>A${(item.unitPrice * item.qty).toFixed(2)}</span>
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{ padding: '12px 18px', borderTop: '1px solid rgba(0,229,255,0.07)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <span style={{ fontSize: 10, color: 'rgba(130,160,200,0.5)' }}>Loyalty earned</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'rgba(0,229,255,0.07)', border: '1px solid rgba(0,229,255,0.2)', borderRadius: 20, padding: '3px 10px' }}>
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#00E5FF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                  <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, fontWeight: 800, color: '#00E5FF' }}>{loyaltyPoints}</span>
+                  <span style={{ fontSize: 9, color: 'rgba(130,160,200,0.4)', fontWeight: 600 }}>PTS</span>
+                </div>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: 'rgba(220,240,255,0.9)' }}>Total</span>
+                <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 24, fontWeight: 900, color: 'rgba(220,240,255,0.95)', letterSpacing: '-0.04em' }}>A${roundedTotal.toFixed(2)}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Right: Payment */}
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            {/* Payment method tabs */}
+            <div style={{ padding: '12px 20px', borderBottom: '1px solid rgba(0,229,255,0.07)', display: 'flex', gap: 8 }}>
+              {([
+                { id: 'card'  as const, label: 'Card',   icon: '💳', color: '#00E5FF' },
+                { id: 'cash'  as const, label: 'Cash',   icon: '💵', color: '#22C55E' },
+                { id: 'split' as const, label: 'Split',  icon: '✂️', color: '#F59E0B' },
+              ]).map(m => (
+                <button key={m.id} onClick={() => setPayMethod(m.id)}
+                  style={{ flex: 1, height: 60, borderRadius: 12, border: `1.5px solid ${payMethod === m.id ? m.color + '55' : 'rgba(0,229,255,0.08)'}`, background: payMethod === m.id ? `${m.color}12` : 'rgba(0,229,255,0.02)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, cursor: 'pointer', transition: 'all 200ms', transform: payMethod === m.id ? 'translateY(-2px)' : 'none', boxShadow: payMethod === m.id ? `0 6px 20px ${m.color}33` : 'none' }}>
+                  <span style={{ fontSize: 18 }}>{m.icon}</span>
+                  <span style={{ fontSize: 10, fontWeight: 700, color: payMethod === m.id ? m.color : 'rgba(130,160,200,0.5)', fontFamily: 'inherit' }}>{m.label}</span>
+                </button>
+              ))}
+            </div>
+
+            {/* Payment UI */}
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'auto', padding: 24 }}>
+              {payMethod === 'card' && (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 20 }}>
+                  {/* 3D EFTPOS terminal */}
+                  <div style={{ width: 220, background: 'linear-gradient(160deg,rgba(17,22,40,0.97),rgba(6,9,22,0.99))', border: '1px solid rgba(0,229,255,0.15)', borderRadius: 24, padding: 20, boxShadow: '0 22px 64px rgba(0,0,0,0.65), 0 0 50px rgba(0,229,255,0.1), inset 0 1px 0 rgba(0,229,255,0.06)', transform: 'perspective(600px) rotateX(6deg)' }}>
+                    {/* Screen */}
+                    <div style={{ background: '#050A14', borderRadius: 14, padding: '20px 16px', border: '1px solid rgba(0,229,255,0.1)', marginBottom: 14, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, position: 'relative', overflow: 'hidden' }}>
+                      <div style={{ position: 'absolute', inset: 0, background: 'repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,229,255,0.012) 2px,rgba(0,229,255,0.012) 4px)', borderRadius: 14, pointerEvents: 'none' }} />
+                      {/* NFC rings */}
+                      <div style={{ position: 'relative', width: 80, height: 80, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        {[0, 1, 2].map(i => (
+                          <div key={i} style={{ position: 'absolute', width: 48 + i * 20, height: 48 + i * 20, borderRadius: '50%', border: `1.5px solid rgba(0,229,255,${0.6 - i * 0.18})`, animation: `nfc-pulse 2s ease-in-out infinite`, animationDelay: `${i * 0.4}s` }} />
+                        ))}
+                        <div style={{ width: 38, height: 38, borderRadius: '50%', border: '2px solid rgba(0,229,255,0.7)', background: 'rgba(0,229,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', zIndex: 1 }}>
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#00E5FF" strokeWidth="1.5" strokeLinecap="round"><path d="M6 8.32a7.43 7.43 0 0 0 0 7.36"/><path d="M9.46 6.21a11.76 11.76 0 0 0 0 11.58"/><path d="M12.91 4.1a15.91 15.91 0 0 1 0 15.8"/></svg>
+                        </div>
+                      </div>
+                      <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 28, fontWeight: 800, color: 'rgba(220,240,255,0.95)', letterSpacing: '-0.04em' }}>A${roundedTotal.toFixed(2)}</div>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: '#00E5FF', letterSpacing: '0.08em' }}>TAP TO PAY</div>
+                      {/* Indicator dots */}
+                      <div style={{ display: 'flex', gap: 5 }}>
+                        {[0, 1, 2].map(i => <div key={i} style={{ width: 6, height: 6, borderRadius: '50%', background: i === 1 ? '#00E5FF' : 'rgba(0,229,255,0.2)', boxShadow: i === 1 ? '0 0 6px #00E5FF' : 'none' }} />)}
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 12, color: 'rgba(130,160,200,0.5)', textAlign: 'center' }}>Tap, insert or swipe card</div>
+                  {/* Confirm Payment */}
+                  <button onClick={() => { processSale(); }} disabled={processing}
+                    style={{ height: 52, padding: '0 36px', borderRadius: 14, border: 'none', background: 'linear-gradient(135deg,#00E5FF,#00BFCC,#7B2FFF)', color: '#000', fontFamily: 'inherit', fontSize: 14, fontWeight: 900, cursor: processing ? 'not-allowed' : 'pointer', boxShadow: '0 5px 0 rgba(0,150,200,0.5), 0 10px 30px rgba(0,229,255,0.3)', transition: 'all 200ms', opacity: processing ? 0.6 : 1, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    {processing ? 'Processing…' : `Confirm Payment · A$${roundedTotal.toFixed(2)}`}
+                  </button>
+                </div>
+              )}
+
+              {payMethod === 'cash' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, width: 280 }}>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    {[...new Set([roundedTotal, Math.ceil(roundedTotal/5)*5, Math.ceil(roundedTotal/10)*10, 50, 100].filter(a=>a>=roundedTotal))].slice(0,4).map(a => (
+                      <button key={a} onClick={() => setCashTendered(a.toFixed(2))} style={{ flex: 1, height: 32, borderRadius: 8, border: '1px solid rgba(0,229,255,0.12)', background: 'rgba(0,229,255,0.04)', color: 'rgba(220,240,255,0.85)', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: "'JetBrains Mono',monospace" }}>A${a.toFixed(0)}</button>
+                    ))}
+                  </div>
+                  <div style={{ background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(0,229,255,0.15)', borderRadius: 12, padding: '10px 14px', textAlign: 'right' }}>
+                    <div style={{ fontSize: 9, color: 'rgba(130,160,200,0.4)', marginBottom: 4, letterSpacing: '0.06em' }}>CASH TENDERED</div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
+                      <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 13, color: 'rgba(130,160,200,0.4)' }}>A$</span>
+                      <input type="number" value={cashTendered} onChange={e => setCashTendered(e.target.value)}
+                        placeholder="0.00" autoFocus
+                        style={{ background: 'none', border: 'none', outline: 'none', fontFamily: "'JetBrains Mono',monospace", fontSize: 32, fontWeight: 800, color: 'rgba(220,240,255,0.95)', width: '100%', textAlign: 'right' }} />
+                    </div>
+                  </div>
+                  {tendered >= roundedTotal && (
+                    <div style={{ background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.25)', borderRadius: 10, padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: '#22C55E' }}>Change due</span>
+                      <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 22, fontWeight: 800, color: '#22C55E' }}>A${change.toFixed(2)}</span>
+                    </div>
+                  )}
+                  <button onClick={() => processSale()} disabled={processing || tendered < roundedTotal}
+                    style={{ height: 50, borderRadius: 12, border: 'none', background: 'linear-gradient(135deg,#22C55E,#16A34A)', color: '#000', fontFamily: 'inherit', fontSize: 14, fontWeight: 900, cursor: (processing || tendered < roundedTotal) ? 'not-allowed' : 'pointer', opacity: (processing || tendered < roundedTotal) ? 0.4 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: '0 4px 0 rgba(22,163,74,0.5), 0 8px 20px rgba(34,197,94,0.25)' }}>
+                    {processing ? 'Processing…' : `Confirm Cash · A$${roundedTotal.toFixed(2)}`}
+                  </button>
+                </div>
+              )}
+
+              {payMethod === 'split' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12, width: 280, textAlign: 'center' }}>
+                  <p style={{ fontSize: 13, color: 'rgba(130,160,200,0.6)' }}>Cash portion:</p>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(0,229,255,0.15)', borderRadius: 12, padding: '8px 14px' }}>
+                    <span style={{ fontFamily: "'JetBrains Mono',monospace", color: 'rgba(130,160,200,0.4)' }}>A$</span>
+                    <input type="number" value={splitCash} onChange={e => setSplitCash(e.target.value)} placeholder="0.00" autoFocus style={{ flex: 1, background: 'none', border: 'none', outline: 'none', fontFamily: "'JetBrains Mono',monospace", fontSize: 24, fontWeight: 800, color: 'rgba(220,240,255,0.95)' }} />
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', background: 'rgba(0,229,255,0.04)', border: '1px solid rgba(0,229,255,0.1)', borderRadius: 10 }}>
+                    <span style={{ fontSize: 12, color: 'rgba(130,160,200,0.6)' }}>Card remainder</span>
+                    <span style={{ fontFamily: "'JetBrains Mono',monospace", fontWeight: 700, color: 'rgba(220,240,255,0.85)' }}>A${splitCardAmt.toFixed(2)}</span>
+                  </div>
+                  <button onClick={() => processSale()} disabled={processing}
+                    style={{ height: 50, borderRadius: 12, border: 'none', background: 'linear-gradient(135deg,#00E5FF,#7B2FFF)', color: '#000', fontFamily: 'inherit', fontSize: 14, fontWeight: 900, cursor: processing ? 'not-allowed' : 'pointer', opacity: processing ? 0.4 : 1, boxShadow: '0 4px 0 rgba(0,150,200,0.4), 0 8px 20px rgba(0,229,255,0.25)' }}>
+                    {processing ? 'Processing…' : 'Confirm Split Payment'}
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══ CONFIRM OVERLAY ═════════════════════════════════════════ */}
+      {showReceipt && terminalView === 'confirm' && (
+        <div style={{ position: 'absolute', inset: 0, zIndex: 50, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 20, fontFamily: "'Manrope',sans-serif", overflow: 'hidden' }}>
+          <AnimatedBg />
+          <div style={{ position: 'relative', zIndex: 2, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 20 }}>
+            {/* Green check with expanding rings */}
+            <div style={{ position: 'relative', width: 120, height: 120, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              {[0, 1, 2].map(i => (
+                <div key={i} style={{ position: 'absolute', width: 76 + i * 24, height: 76 + i * 24, borderRadius: '50%', border: `1.5px solid rgba(34,197,94,${0.55 - i * 0.15})`, animation: `paid-ring 1.6s ${i * 0.3}s ease-out infinite` }} />
+              ))}
+              <div style={{ width: 80, height: 80, borderRadius: '50%', background: 'rgba(34,197,94,0.1)', border: '2px solid rgba(34,197,94,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 60px rgba(34,197,94,0.3)', animation: 'scale-in 0.5s cubic-bezier(0.16,1,0.3,1)', position: 'relative', zIndex: 1 }}>
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#22C55E" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+              </div>
+            </div>
+            {/* Title */}
+            <div style={{ textAlign: 'center', animation: 'fade-up 0.4s 0.1s cubic-bezier(0.16,1,0.3,1) both' }}>
+              <div style={{ fontSize: 38, fontWeight: 900, color: 'rgba(220,240,255,0.95)', letterSpacing: '-0.04em', lineHeight: 1 }}>Payment approved</div>
+              <div style={{ fontSize: 13, color: 'rgba(130,160,200,0.6)', marginTop: 6 }}>
+                via {showReceipt.payment_method ?? 'card'} · R{(showReceipt.sale_number ?? String(showReceipt.id ?? '')).slice(-5).toUpperCase() || Math.floor(Math.random()*90000+10000)}
+              </div>
+            </div>
+            {/* Receipt card */}
+            <div style={{ background: 'rgba(10,14,30,0.85)', border: '1px solid rgba(0,229,255,0.12)', borderRadius: 20, padding: '20px 28px', minWidth: 320, maxWidth: 380, backdropFilter: 'blur(24px)', animation: 'fade-up 0.4s 0.2s cubic-bezier(0.16,1,0.3,1) both', boxShadow: '0 20px 60px rgba(0,0,0,0.5), 0 0 30px rgba(0,229,255,0.06)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                <span style={{ fontSize: 12, color: 'rgba(130,160,200,0.6)' }}>{(showReceipt.cartSnapshot ?? []).reduce((s: number, i: CartItem) => s + i.qty, 0)} items</span>
+                <span style={{ fontSize: 12, fontFamily: "'JetBrains Mono',monospace", color: 'rgba(130,160,200,0.6)' }}>A${showReceipt.total_amount?.toFixed(2) ?? roundedTotal.toFixed(2)}</span>
+              </div>
+              <div style={{ height: 1, background: 'rgba(0,229,255,0.07)', margin: '10px 0' }} />
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                <span style={{ fontSize: 14, fontWeight: 700, color: 'rgba(220,240,255,0.9)' }}>Charged</span>
+                <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 30, fontWeight: 900, color: '#22C55E', letterSpacing: '-0.05em' }}>A${showReceipt.total_amount?.toFixed(2) ?? roundedTotal.toFixed(2)}</span>
+              </div>
+              <div style={{ height: 1, background: 'rgba(0,229,255,0.07)', margin: '10px 0' }} />
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: 11, color: 'rgba(130,160,200,0.5)' }}>Points earned</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'rgba(0,229,255,0.07)', border: '1px solid rgba(0,229,255,0.2)', borderRadius: 20, padding: '3px 10px' }}>
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#00E5FF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                  <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, fontWeight: 800, color: '#00E5FF' }}>{loyaltyPoints}</span>
+                  <span style={{ fontSize: 9, color: 'rgba(130,160,200,0.4)', fontWeight: 600 }}>PTS</span>
+                </div>
+              </div>
+            </div>
+            {/* New Sale button */}
+            <button onClick={() => { setShowReceipt(null); setTerminalView('pos'); if (window.innerWidth < 768) setMobileTab('products'); }}
+              style={{ height: 52, padding: '0 40px', borderRadius: 14, border: 'none', background: 'linear-gradient(135deg,#00E5FF,#00BFCC,#7B2FFF)', color: '#000', fontFamily: 'inherit', fontSize: 14, fontWeight: 900, cursor: 'pointer', boxShadow: '0 5px 0 rgba(0,150,200,0.5), 0 10px 30px rgba(0,229,255,0.3)', transition: 'all 220ms', display: 'flex', alignItems: 'center', gap: 8, animation: 'fade-up 0.4s 0.3s cubic-bezier(0.16,1,0.3,1) both' }}
+              onMouseEnter={e => { const el = e.currentTarget; el.style.transform = 'translateY(-3px)'; el.style.boxShadow = '0 8px 0 rgba(0,150,200,0.5), 0 16px 40px rgba(0,229,255,0.4)'; }}
+              onMouseLeave={e => { const el = e.currentTarget; el.style.transform = ''; el.style.boxShadow = '0 5px 0 rgba(0,150,200,0.5), 0 10px 30px rgba(0,229,255,0.3)'; }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              New Sale
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Mobile mode banner */}
       {showMobileBanner && (
@@ -831,7 +1042,7 @@ export default function TerminalPage() {
 
       {/* Register status bar */}
       {!registerLoading && (
-        <div className="flex-shrink-0 flex items-center justify-between px-4 py-1.5 text-xs" style={{ background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid #1C1928' }}>
+        <div className="flex-shrink-0 flex items-center justify-between px-4 py-1.5 text-xs" style={{ background: 'rgba(0,0,0,0.3)', borderBottom: '1px solid rgba(0,229,255,0.05)', position: 'relative', zIndex: 2 }}>
           <div className="flex items-center gap-1.5">
             <span className="w-1.5 h-1.5 rounded-full" style={{ background: registerIsOpen ? '#22C55E' : '#EF4444' }} />
             <span style={{ color: registerIsOpen ? '#22C55E' : '#EF4444' }}>
@@ -862,14 +1073,38 @@ export default function TerminalPage() {
         </div>
       )}
 
+      {/* ── TOP BAR ───────────────────────────────────────────────── */}
+      <div className="flex-shrink-0 flex items-center px-4 gap-3" style={{ height: 46, background: 'rgba(3,5,16,0.92)', borderBottom: '1px solid rgba(0,229,255,0.06)', backdropFilter: 'blur(16px)', position: 'relative', zIndex: 2 }}>
+        <svg width="20" height="20" viewBox="0 0 32 32" fill="none" style={{ flexShrink: 0 }}>
+          <rect x="16" y="2" width="19" height="19" rx="3" transform="rotate(45 16 2)" stroke="#00E5FF" strokeWidth="1.8" fill="none"/>
+          <circle cx="16" cy="16" r="3" fill="#00E5FF"/>
+          <circle cx="16" cy="4.5" r="1.8" fill="#00E5FF" opacity="0.4"/>
+          <circle cx="27.5" cy="16" r="1.8" fill="#00E5FF" opacity="0.4"/>
+          <circle cx="16" cy="27.5" r="1.8" fill="#00E5FF" opacity="0.4"/>
+          <circle cx="4.5" cy="16" r="1.8" fill="#00E5FF" opacity="0.4"/>
+        </svg>
+        <span style={{ fontSize: 13, fontWeight: 700, color: 'rgba(220,240,255,0.9)', letterSpacing: '-0.02em' }}>Point of Sale</span>
+        <span style={{ fontSize: 11, color: 'rgba(130,160,200,0.35)', fontWeight: 400 }}>{businessName}</span>
+        <div style={{ flex: 1 }} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'rgba(34,197,94,0.07)', border: '1px solid rgba(34,197,94,0.15)', borderRadius: 20, padding: '3px 9px' }}>
+          <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#22C55E', display: 'inline-block', boxShadow: '0 0 5px #22C55E' }} />
+          <span style={{ fontSize: 9, fontWeight: 700, color: 'rgba(34,197,94,0.75)', letterSpacing: '0.04em' }}>LIVE</span>
+        </div>
+        <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 8, padding: '3px 10px', display: 'flex', gap: 7, alignItems: 'center' }}>
+          <span style={{ fontSize: 9, color: 'rgba(130,160,200,0.35)', letterSpacing: '0.06em' }}>TODAY</span>
+          <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 12, fontWeight: 700, color: 'rgba(220,240,255,0.75)' }}>A${recentSales.reduce((s,r)=>s+r.total,0).toFixed(2)}</span>
+        </div>
+        <button style={{ width: 27, height: 27, borderRadius: 7, border: '1px solid rgba(255,255,255,0.05)', background: 'rgba(255,255,255,0.03)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'rgba(130,160,200,0.4)' }}>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        </button>
+      </div>
+
       {/* 3-column grid */}
-      <div className="flex-1 min-h-0 grid overflow-hidden"
-        style={{ gridTemplateColumns: '272px 1fr 308px' }}>
+      <div className="flex-1 min-h-0 grid overflow-hidden" style={{ gridTemplateColumns: '300px 1fr 296px', position: 'relative', zIndex: 1 }}>
 
         {/* ── LEFT: Product browser ──────────────────────────────── */}
         <div className={`relative flex flex-col overflow-hidden ${mobileTab !== 'products' ? 'hidden md:flex' : 'flex'}`}
-          style={{ borderRight: '1px solid #1C1928', background: '#110F1A' }}>
-          <AnimatedBg />
+          style={{ borderRight: '1px solid rgba(0,229,255,0.06)', background: 'rgba(10,14,30,0.85)' }}>
 
           {/* Quick panel slide-out */}
           {showQuickPanel && (
@@ -942,7 +1177,7 @@ export default function TerminalPage() {
           )}
 
           {/* Search + menu button row */}
-          <div className="px-3 py-2.5 flex gap-2" style={{ borderBottom: '1px solid #1C1928' }}>
+          <div className="px-3 py-2.5 flex gap-2" style={{ borderBottom: '1px solid rgba(0,229,255,0.06)' }}>
             <button onClick={() => setShowQuickPanel(v => !v)}
               className="flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-xl text-base"
               style={{ border: '1px solid #2A2540', background: 'rgba(255,255,255,0.03)', color: '#8B85A8' }}>
@@ -956,7 +1191,7 @@ export default function TerminalPage() {
                 onChange={e => setSearch(e.target.value)}
                 placeholder="Search or scan barcode…"
                 className="w-full pl-9 pr-8 py-2.5 rounded-[10px] text-sm outline-none"
-                style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid #1C1928', color: '#EDE8FF', fontFamily: "'Manrope', sans-serif" }}
+                style={{ background: 'rgba(0,229,255,0.04)', border: '1px solid rgba(0,229,255,0.08)', color: 'rgba(220,240,255,0.9)', fontFamily: "'Manrope', sans-serif" }}
               />
               {search && (
                 <button onClick={() => setSearch('')}
@@ -1056,125 +1291,106 @@ export default function TerminalPage() {
                 <p className="text-sm" style={{ color: '#4A4565' }}>{search ? `No products match "${search}"` : 'No products yet'}</p>
                 {!search && <a href="/pos/products" className="mt-3 text-xs font-medium hover:underline" style={{ color: '#8B5CF6' }}>Add products →</a>}
               </div>
-            ) : (
-              <div className="grid grid-cols-2 gap-2.5" style={{ perspective: '800px' }}>
-                {displayedProducts.map((p, idx) => {
-                  const isOut = p.track_stock && p.stock_quantity <= 0;
-                  const isLow = p.track_stock && p.stock_quantity > 0 && p.stock_quantity <= (p.low_stock_threshold ?? 5);
-                  const catName = (p.pos_categories?.name ?? '').toLowerCase();
-                  const catGrad: Record<string, { grad: string; border: string; color: string }> = {
-                    'beer':         { grad: 'linear-gradient(135deg,rgba(245,158,11,0.22),rgba(146,64,14,0.44))',   border: 'rgba(245,158,11,0.3)',  color: '#F59E0B' },
-                    'beer & cider': { grad: 'linear-gradient(135deg,rgba(245,158,11,0.22),rgba(146,64,14,0.44))',   border: 'rgba(245,158,11,0.3)',  color: '#F59E0B' },
-                    'wine':         { grad: 'linear-gradient(135deg,rgba(147,51,234,0.22),rgba(76,29,149,0.44))',   border: 'rgba(147,51,234,0.3)',  color: '#9333EA' },
-                    'spirits':      { grad: 'linear-gradient(135deg,rgba(59,130,246,0.22),rgba(30,58,95,0.44))',    border: 'rgba(59,130,246,0.3)',  color: '#3B82F6' },
-                    'coffee':       { grad: 'linear-gradient(135deg,rgba(161,98,7,0.22),rgba(69,26,3,0.44))',       border: 'rgba(161,98,7,0.3)',    color: '#A16207' },
-                    'food':         { grad: 'linear-gradient(135deg,rgba(239,68,68,0.22),rgba(127,29,29,0.44))',    border: 'rgba(239,68,68,0.3)',   color: '#EF4444' },
-                    'soft drinks':  { grad: 'linear-gradient(135deg,rgba(16,185,129,0.22),rgba(6,78,59,0.44))',     border: 'rgba(16,185,129,0.3)', color: '#10B981' },
-                    'snacks':       { grad: 'linear-gradient(135deg,rgba(249,115,22,0.22),rgba(124,45,18,0.44))',   border: 'rgba(249,115,22,0.3)', color: '#F97316' },
-                    'rtd':          { grad: 'linear-gradient(135deg,rgba(16,185,129,0.22),rgba(6,78,59,0.44))',     border: 'rgba(16,185,129,0.3)', color: '#10B981' },
-                    'water':        { grad: 'linear-gradient(135deg,rgba(56,189,248,0.22),rgba(12,74,110,0.44))',   border: 'rgba(56,189,248,0.3)', color: '#38BDF8' },
-                  };
-                  const cg = catGrad[catName] ?? { grad: 'linear-gradient(135deg,rgba(99,102,241,0.22),rgba(49,46,129,0.44))', border: 'rgba(99,102,241,0.3)', color: '#6366F1' };
-
-                  return (
-                    <div key={p.id}
-                      className="pos-card-enter"
-                      style={{ animationDelay: `${idx * 30}ms`, perspective: '600px' }}
-                      onMouseMove={e => {
-                        if (isOut) return;
-                        const el = e.currentTarget as HTMLDivElement;
-                        const card = el.querySelector('.card-inner') as HTMLElement;
-                        if (!card) return;
-                        const r = el.getBoundingClientRect();
-                        const x = (e.clientX - r.left) / r.width  - 0.5;
-                        const y = (e.clientY - r.top)  / r.height - 0.5;
-                        card.style.transform = `rotateY(${x * 14}deg) rotateX(${-y * 10}deg) translateZ(6px)`;
-                        const foil = card.querySelector('.card-foil') as HTMLElement;
-                        if (foil) {
-                          foil.style.opacity = '0.18';
-                          foil.style.backgroundPosition = `${(x + 0.5) * 100}% ${(y + 0.5) * 100}%`;
-                        }
-                      }}
-                      onMouseLeave={e => {
-                        const el = e.currentTarget as HTMLDivElement;
-                        const card = el.querySelector('.card-inner') as HTMLElement;
-                        if (!card) return;
-                        card.style.transform = 'rotateY(0deg) rotateX(0deg) translateZ(0)';
-                        const foil = card.querySelector('.card-foil') as HTMLElement;
-                        if (foil) foil.style.opacity = '0';
-                      }}>
-                      <button
+            ) : (() => {
+              const CAT_META_LOCAL: Record<string, { a: string; b: string }> = {
+                'beer':         { a: '#F59E0B', b: '#92400E' },
+                'beer & cider': { a: '#F59E0B', b: '#92400E' },
+                'wine':         { a: '#9333EA', b: '#4C1D95' },
+                'spirits':      { a: '#00E5FF', b: '#7B2FFF' },
+                'coffee':       { a: '#A16207', b: '#451A03' },
+                'food':         { a: '#EF4444', b: '#7F1D1D' },
+                'soft drinks':  { a: '#10B981', b: '#064E3B' },
+                'rtd':          { a: '#10B981', b: '#064E3B' },
+                'snacks':       { a: '#F97316', b: '#7C2D12' },
+                'water':        { a: '#38BDF8', b: '#0C4A6E' },
+                'other':        { a: '#6366F1', b: '#312E81' },
+              };
+              return (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(130px,1fr))', gap: 10 }}>
+                  {displayedProducts.map((p, idx) => {
+                    const isOut = p.track_stock && p.stock_quantity <= 0;
+                    const isLow = p.track_stock && p.stock_quantity > 0 && p.stock_quantity <= (p.low_stock_threshold ?? 5);
+                    const catName = (p.pos_categories?.name ?? 'other').toLowerCase();
+                    const m = CAT_META_LOCAL[catName] ?? CAT_META_LOCAL.other;
+                    const initials = p.name.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase();
+                    return (
+                      <div key={p.id}
                         onClick={e => {
                           if (isOut) return;
                           if (priceCheckMode) { setPriceCheckProd(p); return; }
                           checkAndAddToCart(p, e.currentTarget as HTMLElement);
                         }}
                         onContextMenu={e => { e.preventDefault(); setContextMenu({ product: p, x: e.clientX, y: e.clientY }); }}
-                        disabled={isOut}
-                        className="card-inner relative text-left rounded-2xl overflow-hidden w-full"
                         style={{
-                          background: 'rgba(26,23,40,0.95)',
-                          border: `1px solid ${cg.border}`,
-                          boxShadow: `0 2px 12px rgba(0,0,0,0.6), 0 0 0 0.5px rgba(255,255,255,0.04) inset`,
+                          background: '#0A0E1E',
+                          border: `1px solid rgba(0,229,255,0.08)`,
+                          borderRadius: 18,
+                          padding: 14,
                           cursor: isOut ? 'not-allowed' : 'pointer',
-                          transformStyle: 'preserve-3d',
-                          transition: 'transform 120ms cubic-bezier(0.16,1,0.3,1), box-shadow 120ms',
                           filter: isOut ? 'grayscale(0.7)' : 'none',
                           opacity: isOut ? 0.5 : 1,
+                          transition: 'all 150ms cubic-bezier(0.16,1,0.3,1)',
+                          animation: `card-enter 0.35s cubic-bezier(0.16,1,0.3,1) ${idx * 30}ms both`,
+                          position: 'relative',
+                          overflow: 'hidden',
                         }}
-                        onMouseDown={e => { const el = e.currentTarget as HTMLElement; el.style.transform = 'scale(0.95)'; el.style.boxShadow = '0 1px 4px rgba(0,0,0,0.5)'; }}
-                        onMouseUp={e => { const el = e.currentTarget as HTMLElement; el.style.transform = ''; el.style.boxShadow = ''; }}>
+                        onMouseEnter={e => {
+                          if (isOut) return;
+                          const el = e.currentTarget as HTMLElement;
+                          el.style.border = `1px solid ${m.a}55`;
+                          el.style.boxShadow = `0 8px 24px rgba(0,0,0,0.5), 0 0 0 1px ${m.a}33`;
+                          el.style.transform = 'translateY(-2px) scale(1.02)';
+                        }}
+                        onMouseLeave={e => {
+                          const el = e.currentTarget as HTMLElement;
+                          el.style.border = '1px solid rgba(0,229,255,0.08)';
+                          el.style.boxShadow = '';
+                          el.style.transform = '';
+                        }}
+                        onMouseDown={e => { const el = e.currentTarget as HTMLElement; el.style.transform = 'translateY(0) scale(0.96)'; }}
+                        onMouseUp={e => { const el = e.currentTarget as HTMLElement; el.style.transform = 'translateY(-2px) scale(1.02)'; }}>
 
-                        {/* Holographic foil overlay */}
-                        <div className="card-foil absolute inset-0 rounded-2xl pointer-events-none z-20 transition-opacity duration-200"
-                          style={{
-                            opacity: 0,
-                            background: 'linear-gradient(105deg,transparent 20%,rgba(255,255,255,0.06) 40%,rgba(139,92,246,0.12) 50%,rgba(255,255,255,0.06) 60%,transparent 80%)',
-                            backgroundSize: '200% 200%',
-                            mixBlendMode: 'screen',
-                          }} />
-
-                        {/* Card top — category gradient */}
-                        <div className="flex flex-col items-center justify-center py-4 relative overflow-hidden"
-                          style={{ background: cg.grad, minHeight: 72, borderBottom: `1px solid ${cg.border}` }}>
-                          <div className="absolute inset-0" style={{ background: `radial-gradient(circle at 30% 30%, ${cg.color}44, transparent 65%)` }} />
-                          {(p as any).image_url ? (
-                            <img src={(p as any).image_url} alt={p.name} className="h-12 w-12 object-contain relative z-10" />
-                          ) : (
-                            <div className="relative z-10 flex flex-col items-center gap-0.5">
-                              <span className="text-2xl leading-none">{getCatStyle(p.pos_categories?.name).emoji}</span>
-                              <span className="text-[9px] font-bold tracking-widest uppercase" style={{ color: cg.color }}>{p.name.slice(0, 6)}</span>
-                            </div>
-                          )}
+                        {/* Category icon square */}
+                        <div style={{ width: 68, height: 68, borderRadius: 14, background: `linear-gradient(135deg,${m.a}44,${m.b}88)`, border: `1px solid ${m.a}44`, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 10, position: 'relative', overflow: 'hidden' }}>
+                          <div style={{ position: 'absolute', inset: 0, opacity: 0.2, background: `radial-gradient(circle at 30% 30%, ${m.a}, transparent 60%)` }} />
+                          {(p as any).image_url
+                            ? <img src={(p as any).image_url} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 14 }} />
+                            : <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 22, fontWeight: 800, color: m.a, letterSpacing: '-0.02em', position: 'relative' }}>{initials}</span>
+                          }
                           {isOut && (
-                            <div className="absolute inset-0 flex items-center justify-center rounded-t-2xl" style={{ background: 'rgba(10,9,16,0.55)' }}>
-                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: 'rgba(239,68,68,0.22)', border: '1px solid rgba(239,68,68,0.5)', color: '#EF4444' }}>Out of stock</span>
+                            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.55)' }}>
+                              <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 99, background: 'rgba(239,68,68,0.22)', border: '1px solid rgba(239,68,68,0.5)', color: '#EF4444' }}>Out</span>
                             </div>
                           )}
                         </div>
 
-                        {/* Card bottom */}
-                        <div className="px-2.5 py-2.5">
-                          <p className="text-xs font-semibold leading-snug line-clamp-2 min-h-[32px]" style={{ color: '#EDE8FF' }}>{p.name}</p>
-                          <div className="flex items-center justify-between mt-1.5">
-                            <span className="text-sm font-bold" style={{ fontFamily: "'JetBrains Mono',monospace", color: cg.color }}>A${p.price.toFixed(2)}</span>
-                            {isLow && !isOut && (
-                              <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.25)', color: '#F59E0B' }}>{p.stock_quantity} left</span>
-                            )}
-                          </div>
+                        {/* Name */}
+                        <div style={{ fontSize: 12, fontWeight: 700, color: 'rgba(220,240,255,0.93)', lineHeight: 1.3, marginBottom: 6, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const, overflow: 'hidden' }}>
+                          {p.name}
                         </div>
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+
+                        {/* Price */}
+                        <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 15, fontWeight: 700, color: 'rgba(220,240,255,0.9)' }}>
+                          A${p.price.toFixed(2)}
+                        </div>
+
+                        {isLow && !isOut && (
+                          <div style={{ position: 'absolute', top: 8, right: 8, background: 'rgba(245,158,11,0.15)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: 99, padding: '1px 6px', fontSize: 9, fontWeight: 700, color: '#F59E0B' }}>
+                            {p.stock_quantity} left
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
           </div>
         </div>
 
-        {/* ── CENTRE: Cart + Payment (or Receipt) ───────────────── */}
+        {/* ── CENTRE: Cart ──────────────────────────────────────── */}
         <div className={`flex flex-col overflow-hidden ${mobileTab !== 'cart' ? 'hidden md:flex' : 'flex'}`}
-          style={{ background: 'rgba(8,6,16,0.5)', borderRight: '1px solid #1C1928' }}>
+          style={{ background: 'rgba(10,14,30,0.88)', borderRight: '1px solid rgba(0,229,255,0.06)' }}>
 
           {showReceipt ? (
             /* ── RECEIPT VIEW ─────────────────────────────────── */
@@ -1303,11 +1519,13 @@ export default function TerminalPage() {
               </div>
 
               {/* Cart items */}
-              <div className="flex-1 overflow-y-auto" style={{ background: 'rgba(8,6,16,0.3)' }}>
+              <div className="flex-1 overflow-y-auto" style={{ background: 'transparent' }}>
                 {cart.length === 0 ? (
                   <div className="flex flex-col items-center justify-center h-full text-center px-6 py-12">
-                    <BagOutlineIcon className="w-12 h-12 mb-3" />
-                    <p className="text-sm" style={{ color: '#4A4565' }}>Add items to begin</p>
+                    <div style={{ width: 52, height: 52, borderRadius: 15, border: '1px dashed rgba(0,229,255,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 10 }}>
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="rgba(0,229,255,0.15)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+                    </div>
+                    <p style={{ fontSize: 12, color: 'rgba(130,160,200,0.3)', lineHeight: 1.6 }}>Tap a product<br/>to begin</p>
                   </div>
                 ) : (
                   <div>
@@ -1366,188 +1584,86 @@ export default function TerminalPage() {
                 )}
               </div>
 
-              {/* Discount row */}
+              {/* Discount quick-select pills */}
               {cart.length > 0 && (
-                <div className="flex-shrink-0 px-4 py-2 flex items-center gap-2" style={{ borderTop: '1px solid #1C1928' }}>
-                  {discountMode === null ? (
-                    <>
-                      <button onClick={() => setDiscountMode('pct')} className="text-xs rounded-lg px-3 py-1.5" style={{ border: '1px solid #2A2540', color: '#8B85A8' }}>% Discount</button>
-                      <button onClick={() => setDiscountMode('amt')} className="text-xs rounded-lg px-3 py-1.5" style={{ border: '1px solid #2A2540', color: '#8B85A8' }}>A$ Discount</button>
-                    </>
-                  ) : (
-                    <>
-                      <input type="number" min="0" max={discountMode === 'pct' ? 100 : undefined}
-                        value={discountVal} onChange={e => setDiscountVal(e.target.value)}
-                        placeholder={discountMode === 'pct' ? '10' : '5.00'}
-                        className="w-20 text-xs rounded-lg px-2.5 py-1.5 outline-none"
-                        style={{ border: '1px solid #2A2540', background: 'rgba(255,255,255,0.03)', color: '#EDE8FF' }}
-                        autoFocus />
-                      <span className="text-xs" style={{ color: '#4A4565' }}>{discountMode === 'pct' ? '%' : 'A$'}</span>
-                      <button onClick={() => {
-                        const val = parseFloat(discountVal);
-                        if (isNaN(val) || val <= 0) { setDiscountMode(null); setDiscountVal(''); return; }
-                        if (selectedItem) { setCart(c => c.map(i => { if (i.product.id !== selectedItem) return i; const pct = discountMode === 'pct' ? Math.min(100, val) : Math.min(100, (val / i.unitPrice) * 100); return { ...i, discount_percent: pct }; })); }
-                        else { setCart(c => c.map(i => { const pct = discountMode === 'pct' ? Math.min(100, val) : Math.min(100, (val / i.unitPrice) * 100); return { ...i, discount_percent: pct }; })); }
-                        setDiscountMode(null); setDiscountVal('');
-                      }} className="text-xs rounded-lg px-3 py-1.5 text-white" style={{ background: '#8B5CF6' }}>Apply</button>
-                      <button onClick={() => { setDiscountMode(null); setDiscountVal(''); }} className="text-xs" style={{ color: '#4A4565' }}>Cancel</button>
-                    </>
-                  )}
-                  {cart.some(i => (i.discount_percent ?? 0) > 0) && (
-                    <span className="text-xs ml-auto" style={{ color: '#22C55E' }}>
-                      Applied ·{' '}
-                      <button onClick={() => setCart(c => c.map(i => ({ ...i, discount_percent: 0 })))} style={{ color: '#EF4444' }}>Remove</button>
-                    </span>
-                  )}
+                <div style={{ flexShrink: 0, padding: '8px 12px', display: 'flex', gap: 5, borderTop: '1px solid rgba(0,229,255,0.06)' }}>
+                  {[0, 5, 10, 15, 20].map(d => {
+                    const curDisc = cart.length > 0 ? Math.round(cart[0].discount_percent ?? 0) : 0;
+                    const active = d === 0 ? curDisc === 0 : curDisc === d;
+                    return (
+                      <button key={d} onClick={() => setCart(c => c.map(i => ({ ...i, discount_percent: d })))}
+                        style={{ flex: 1, height: 26, borderRadius: 7, border: `1px solid ${active ? 'rgba(0,229,255,0.35)' : 'rgba(0,229,255,0.1)'}`, background: active ? 'rgba(0,229,255,0.12)' : 'rgba(0,229,255,0.03)', color: active ? '#00E5FF' : 'rgba(130,160,200,0.45)', fontSize: 10, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', transition: 'all 150ms' }}>
+                        {d === 0 ? '—' : `${d}%`}
+                      </button>
+                    );
+                  })}
                 </div>
               )}
 
               {/* Summary */}
-              <div className="flex-shrink-0 px-3 py-3" style={{ borderTop: '1px solid #2A2540' }}>
-                <div className="rounded-xl px-3 py-2.5 space-y-1" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid #1C1928' }}>
-                  <div className="flex justify-between text-xs py-0.5">
-                    <span style={{ color: '#8B85A8' }}>Subtotal</span>
-                    <span style={{ fontFamily: "'JetBrains Mono',monospace", color: '#EDE8FF' }}>A${netAmount.toFixed(2)}</span>
-                  </div>
-                  {cart.some(i => (i.discount_percent ?? 0) > 0) && (
-                    <div className="flex justify-between text-xs py-0.5">
-                      <span style={{ color: '#22C55E' }}>Discount</span>
-                      <span style={{ fontFamily: "'JetBrains Mono',monospace", color: '#22C55E' }}>-A${(subtotal / 1.1 - netAmount < 0 ? 0 : (cart.reduce((s,i)=>s+i.unitPrice*i.qty,0)/1.1 - netAmount)).toFixed(2)}</span>
+              {cart.length > 0 && (
+                <div style={{ flexShrink: 0, padding: '8px 14px 0', borderTop: '1px solid rgba(0,229,255,0.06)' }}>
+                  <div style={{ borderRadius: 12, padding: '10px 14px', background: 'rgba(0,229,255,0.03)', border: '1px solid rgba(0,229,255,0.06)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                      <span style={{ fontSize: 11, color: 'rgba(130,160,200,0.55)' }}>Subtotal</span>
+                      <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, color: 'rgba(220,240,255,0.7)' }}>A${subtotal.toFixed(2)}</span>
                     </div>
-                  )}
-                  <div className="flex justify-between text-[10px] py-0.5">
-                    <span style={{ color: '#4A4565' }}>GST (10%)</span>
-                    <span style={{ fontFamily: "'JetBrains Mono',monospace", color: '#4A4565' }}>A${taxAmount.toFixed(2)}</span>
-                  </div>
-                  {payMethod === 'cash' && Math.abs(roundedTotal - total) > 0.001 && (
-                    <div className="flex justify-between text-[10px] py-0.5">
-                      <span style={{ color: '#4A4565' }}>Cash rounding</span>
-                      <span style={{ fontFamily: "'JetBrains Mono',monospace", color: '#4A4565' }}>{(roundedTotal - total) > 0 ? '+' : ''}A${(roundedTotal - total).toFixed(2)}</span>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                      <span style={{ fontSize: 10, color: 'rgba(130,160,200,0.35)' }}>GST incl.</span>
+                      <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 10, color: 'rgba(130,160,200,0.35)' }}>A${taxAmount.toFixed(2)}</span>
                     </div>
-                  )}
-                  <div className="pt-2 mt-1 flex justify-between items-baseline" style={{ borderTop: '1px dashed #2A2540' }}>
-                    <span className="text-[9px] uppercase tracking-[0.1em]" style={{ color: '#4A4565' }}>TOTAL</span>
-                    <span className="font-black" style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 26, color: '#EDE8FF' }}>A${roundedTotal.toFixed(2)}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Payment section */}
-              <div className="flex-shrink-0 px-4 py-3" style={{ borderTop: '1px solid #2A2540' }}>
-                <p className="text-[9px] font-medium uppercase tracking-wider mb-2" style={{ color: '#4A4565' }}>Payment method</p>
-                <div className="grid grid-cols-3 gap-2 mb-3">
-                  {([
-                    { id: 'card', label: 'Card', emoji: '💳' },
-                    { id: 'cash', label: 'Cash', emoji: '💵' },
-                    { id: 'split', label: 'Split', emoji: '✂️' },
-                  ] as const).map(m => (
-                    <button key={m.id} onClick={() => setPayMethod(m.id)}
-                      className="rounded-xl flex flex-col items-center justify-center gap-1 transition-all"
-                      style={{
-                        minHeight: 64, borderRadius: 12,
-                        border: payMethod === m.id ? '1.5px solid rgba(139,92,246,0.4)' : '1.5px solid #2A2540',
-                        background: payMethod === m.id ? 'rgba(139,92,246,0.12)' : 'rgba(255,255,255,0.02)',
-                        boxShadow: payMethod === m.id ? '0 0 20px rgba(139,92,246,0.2)' : 'none',
-                        color: payMethod === m.id ? '#8B5CF6' : '#8B85A8',
-                      }}>
-                      <span className="text-xl">{m.emoji}</span>
-                      <span className="text-[11px] font-bold">{m.label}</span>
-                    </button>
-                  ))}
-                </div>
-
-                {payMethod === 'cash' && (
-                  <div className="space-y-2 mb-3">
-                    <p className="text-[9px] uppercase tracking-wider" style={{ color: '#4A4565' }}>Amount Tendered</p>
-                    <div className="flex items-center rounded-[10px] overflow-hidden" style={{ border: '1px solid #2A2540' }}>
-                      <span className="pl-4 pr-1 text-sm" style={{ color: '#4A4565', fontFamily: "'JetBrains Mono',monospace" }}>A$</span>
-                      <input type="number" value={cashTendered} onChange={e => setCashTendered(e.target.value)}
-                        placeholder="0.00"
-                        className="flex-1 py-2.5 pr-4 outline-none bg-transparent text-center"
-                        style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 22, fontWeight: 800, color: '#EDE8FF' }}
-                        autoFocus />
-                    </div>
-                    <div className="flex gap-1.5 flex-wrap">
-                      {[...new Set([roundedTotal, Math.ceil(roundedTotal/5)*5, Math.ceil(roundedTotal/10)*10, 50])].filter(v=>v>=roundedTotal).slice(0,4).map(v => (
-                        <button key={v} onClick={() => setCashTendered(v.toFixed(2))}
-                          className="text-xs rounded-full px-3 py-1.5"
-                          style={{ border: '1px solid #2A2540', fontFamily: "'JetBrains Mono',monospace", color: '#8B85A8', background: 'rgba(255,255,255,0.02)' }}>
-                          A${v.toFixed(0)}
-                        </button>
-                      ))}
-                    </div>
-                    {tendered >= roundedTotal && (
-                      <div className="rounded-[10px] px-5 py-3 text-center" style={{ background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.2)' }}>
-                        <p className="text-[9px] uppercase tracking-wider font-medium mb-0.5" style={{ color: '#22C55E' }}>CHANGE</p>
-                        <p className="font-black" style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 28, color: '#22C55E' }}>A${change.toFixed(2)}</p>
+                    {/* Loyalty points earned */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                      <span style={{ fontSize: 10, color: 'rgba(130,160,200,0.35)' }}>Loyalty earned</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(0,229,255,0.07)', border: '1px solid rgba(0,229,255,0.18)', borderRadius: 20, padding: '2px 8px' }}>
+                        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#00E5FF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                        <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 9, fontWeight: 800, color: '#00E5FF' }}>{loyaltyPoints} PTS</span>
                       </div>
-                    )}
-                  </div>
-                )}
-                {payMethod === 'card' && (
-                  <div className="rounded-2xl px-4 py-3 text-center mb-3" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid #2A2540' }}>
-                    <p className="text-xl mb-1">💳</p>
-                    <p className="text-sm" style={{ color: '#8B85A8' }}>Process on EFTPOS</p>
-                    <p className="font-black mt-0.5" style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 20, color: '#EDE8FF' }}>A${roundedTotal.toFixed(2)}</p>
-                  </div>
-                )}
-                {payMethod === 'split' && (
-                  <div className="space-y-2 mb-3">
-                    <p className="text-xs" style={{ color: '#4A4565' }}>Cash portion</p>
-                    <div className="flex items-center rounded-[10px]" style={{ border: '1px solid #2A2540' }}>
-                      <span className="pl-4 text-sm" style={{ color: '#4A4565', fontFamily: "'JetBrains Mono',monospace" }}>A$</span>
-                      <input type="number" value={splitCash} onChange={e => setSplitCash(e.target.value)} placeholder="0.00"
-                        className="flex-1 py-3 pr-4 pl-2 text-xl outline-none bg-transparent"
-                        style={{ fontFamily: "'JetBrains Mono',monospace", color: '#EDE8FF' }} />
                     </div>
-                    <div className="flex justify-between items-center rounded-xl px-4 py-2.5" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid #1C1928' }}>
-                      <span className="text-xs" style={{ color: '#8B85A8' }}>Card remainder</span>
-                      <span className="font-bold" style={{ fontFamily: "'JetBrains Mono',monospace", color: '#EDE8FF' }}>A${splitCardAmt.toFixed(2)}</span>
+                    <div style={{ height: 1, background: 'rgba(0,229,255,0.06)', marginBottom: 8 }} />
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: 'rgba(220,240,255,0.7)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Total</span>
+                      <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 26, fontWeight: 900, color: 'rgba(220,240,255,0.95)', letterSpacing: '-0.04em' }}>A${roundedTotal.toFixed(2)}</span>
                     </div>
                   </div>
-                )}
+                </div>
+              )}
 
-                {/* Complete Sale + Hold buttons */}
+              {/* Charge button */}
+              <div style={{ flexShrink: 0, padding: '12px 14px 14px', borderTop: '1px solid rgba(0,229,255,0.06)' }}>
                 {!registerIsOpen && !registerLoading ? (
                   <button onClick={() => setShowRegisterModal(true)}
-                    className="w-full h-14 text-white font-bold text-sm rounded-xl transition-all"
-                    style={{ background: '#8B5CF6', boxShadow: '0 4px 0 rgba(124,58,237,0.4), 0 6px 20px rgba(139,92,246,0.33)' }}>
+                    style={{ width: '100%', height: 56, borderRadius: 14, border: 'none', background: 'linear-gradient(135deg,#00E5FF,#7B2FFF)', color: '#000', fontFamily: 'inherit', fontSize: 14, fontWeight: 900, cursor: 'pointer', boxShadow: '0 5px 0 rgba(0,150,200,0.4), 0 10px 30px rgba(0,229,255,0.25)' }}>
                     Open Register to Sell
                   </button>
                 ) : (
-                  <div className="flex gap-2">
+                  <div style={{ display: 'flex', gap: 8 }}>
                     {cart.length > 0 && (
                       <button onClick={parkSale}
-                        className="h-14 px-4 rounded-xl text-sm font-medium flex-shrink-0 flex flex-col items-center justify-center gap-0.5 transition-all"
-                        style={{ border: '1px solid #2A2540', color: '#8B85A8', background: 'rgba(255,255,255,0.02)' }}>
+                        style={{ height: 56, width: 52, borderRadius: 12, border: '1px solid rgba(0,229,255,0.1)', background: 'rgba(0,229,255,0.04)', color: 'rgba(130,160,200,0.5)', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3, flexShrink: 0, fontFamily: 'inherit' }}>
                         <span>⏸</span>
-                        <span className="text-[10px]">Hold</span>
+                        <span style={{ fontSize: 9, fontWeight: 600 }}>Hold</span>
                       </button>
                     )}
                     <button
-                      onClick={processSale}
-                      disabled={!cart.length || !registerIsOpen || processing || (payMethod === 'cash' && cashTendered !== '' && tendered < roundedTotal)}
-                      className="flex-1 h-14 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold rounded-[14px] flex items-center justify-center gap-2 transition-all"
+                      onClick={() => cart.length > 0 && registerIsOpen && setTerminalView('checkout')}
+                      disabled={!cart.length || !registerIsOpen || processing}
                       style={{
-                        background: '#8B5CF6',
-                        boxShadow: processing ? 'none' : '0 4px 0 rgba(124,58,237,0.4), 0 6px 20px rgba(139,92,246,0.33)',
-                        fontFamily: "'Manrope', sans-serif",
+                        flex: 1, height: 56, borderRadius: 14, border: 'none',
+                        background: cart.length > 0 ? 'linear-gradient(135deg,#00E5FF,#00BFCC,#7B2FFF)' : 'rgba(0,229,255,0.05)',
+                        color: cart.length > 0 ? '#000' : 'rgba(130,160,200,0.3)',
+                        fontFamily: 'inherit', fontSize: 14, fontWeight: 900, cursor: !cart.length || !registerIsOpen ? 'not-allowed' : 'pointer',
+                        opacity: (!cart.length || !registerIsOpen) ? 0.4 : 1,
+                        boxShadow: cart.length > 0 ? '0 5px 0 rgba(0,150,200,0.5), 0 10px 30px rgba(0,229,255,0.3)' : 'none',
+                        transition: 'all 200ms', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                        position: 'relative', overflow: 'hidden',
                       }}
-                      onMouseEnter={e => { const el = e.currentTarget as HTMLButtonElement; if (!el.disabled) el.style.boxShadow = '0 6px 0 rgba(124,58,237,0.4),0 8px 28px rgba(139,92,246,0.4)'; el.style.transform = 'translateY(-1px)'; }}
-                      onMouseLeave={e => { const el = e.currentTarget as HTMLButtonElement; el.style.boxShadow = '0 4px 0 rgba(124,58,237,0.4),0 6px 20px rgba(139,92,246,0.33)'; el.style.transform = ''; }}
-                      onMouseDown={e => { const el = e.currentTarget as HTMLButtonElement; el.style.transform = 'translateY(2px) scale(0.98)'; el.style.boxShadow = '0 1px 0 rgba(124,58,237,0.5),0 2px 8px rgba(139,92,246,0.44)'; }}
-                      onMouseUp={e => { const el = e.currentTarget as HTMLButtonElement; el.style.transform = 'translateY(-1px)'; el.style.boxShadow = '0 6px 0 rgba(124,58,237,0.4),0 8px 28px rgba(139,92,246,0.4)'; }}>
-                      {processing ? (
-                        <span className="flex items-center gap-2">
-                          <span className="w-4 h-4 rounded-full border-2 flex-shrink-0" style={{ borderColor: 'rgba(255,255,255,0.3)', borderTopColor: 'white', animation: 'processing 0.7s linear infinite' }} />
-                          <span className="text-sm">Processing...</span>
-                        </span>
-                      ) : (
-                        <>
-                          <span className="text-[15px] font-extrabold">Complete Sale</span>
-                          <span style={{ color: 'rgba(255,255,255,0.5)', fontFamily: "'JetBrains Mono',monospace", fontSize: 14, fontWeight: 700 }}>A${roundedTotal.toFixed(2)}</span>
-                        </>
-                      )}
+                      onMouseEnter={e => { const el = e.currentTarget; if (!el.disabled) { el.style.transform = 'translateY(-2px)'; el.style.boxShadow = '0 8px 0 rgba(0,150,200,0.5), 0 16px 40px rgba(0,229,255,0.4)'; } }}
+                      onMouseLeave={e => { const el = e.currentTarget; el.style.transform = ''; el.style.boxShadow = cart.length > 0 ? '0 5px 0 rgba(0,150,200,0.5), 0 10px 30px rgba(0,229,255,0.3)' : 'none'; }}
+                      onMouseDown={e => { const el = e.currentTarget; el.style.transform = 'translateY(2px) scale(0.97)'; el.style.boxShadow = '0 2px 0 rgba(0,150,200,0.5)'; }}
+                      onMouseUp={e => { const el = e.currentTarget; el.style.transform = 'translateY(-2px)'; }}>
+                      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+                      {cart.length > 0 ? `Charge A$${roundedTotal.toFixed(2)}` : 'Select items to charge'}
                     </button>
                   </div>
                 )}
@@ -1558,7 +1674,7 @@ export default function TerminalPage() {
 
         {/* ── RIGHT: Aria panel ─────────────────────────────────── */}
         <div className={`flex flex-col overflow-hidden ${mobileTab !== 'aria' ? 'hidden md:flex' : 'flex'}`}
-          style={{ background: 'rgba(17,15,26,0.95)', backdropFilter: 'blur(24px)', borderLeft: '1px solid rgba(139,92,246,0.1)' }}>
+          style={{ background: 'rgba(10,14,30,0.88)', backdropFilter: 'blur(24px)', borderLeft: '1px solid rgba(0,229,255,0.06)' }}>
 
           {/* Aria header */}
           <div className="flex-shrink-0 px-4 py-3.5 flex items-center justify-between relative overflow-hidden"

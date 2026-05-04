@@ -1,80 +1,85 @@
 'use client';
-import { useEffect, useRef } from 'react';
-
-interface Dot { x: number; y: number; baseOpacity: number; opacity: number; size: number; }
+import { useRef, useEffect } from 'react';
 
 export default function AnimatedBg() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const mouse = useRef({ x: -9999, y: -9999 });
-  const dots  = useRef<Dot[]>([]);
-  const rafId = useRef<number>(0);
+  const frameRef = useRef<number | null>(null);
+  const mouse = useRef({ x: -999, y: -999 });
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    const ctx = canvas.getContext('2d')!;
+    let t = 0;
 
-    const SPACING = 32;
-    const RADIUS  = 120;
+    const resize = () => {
+      const dpr = Math.min(window.devicePixelRatio, 2);
+      canvas.width  = canvas.offsetWidth  * dpr;
+      canvas.height = canvas.offsetHeight * dpr;
+      ctx.scale(dpr, dpr);
+    };
+    resize();
+    window.addEventListener('resize', resize);
 
-    function build() {
-      if (!canvas) return;
-      canvas.width  = canvas.offsetWidth;
-      canvas.height = canvas.offsetHeight;
-      dots.current  = [];
-      const cols = Math.ceil(canvas.width  / SPACING) + 1;
-      const rows = Math.ceil(canvas.height / SPACING) + 1;
-      for (let r = 0; r < rows; r++) {
-        for (let c = 0; c < cols; c++) {
-          dots.current.push({
-            x: c * SPACING,
-            y: r * SPACING,
-            baseOpacity: 0.08,
-            opacity: 0.08,
-            size: 1.5,
-          });
-        }
-      }
-    }
-
-    function draw() {
-      if (!canvas || !ctx) return;
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      const mx = mouse.current.x;
-      const my = mouse.current.y;
-      for (const d of dots.current) {
-        const dist = Math.hypot(d.x - mx, d.y - my);
-        const inf  = Math.max(0, 1 - dist / RADIUS);
-        d.opacity  = d.baseOpacity + inf * 0.55;
-        const size = d.size + inf * 2.5;
-        ctx.beginPath();
-        ctx.arc(d.x, d.y, size, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(139,92,246,${d.opacity.toFixed(3)})`;
-        ctx.fill();
-      }
-      rafId.current = requestAnimationFrame(draw);
-    }
-
-    build();
-    draw();
-
-    const onMove = (e: MouseEvent) => {
+    const onMouse = (e: MouseEvent) => {
       const r = canvas.getBoundingClientRect();
       mouse.current = { x: e.clientX - r.left, y: e.clientY - r.top };
     };
-    const onLeave = () => { mouse.current = { x: -9999, y: -9999 }; };
-    const onResize = () => { build(); };
+    window.addEventListener('mousemove', onMouse);
 
-    window.addEventListener('mousemove', onMove);
-    canvas.addEventListener('mouseleave', onLeave);
-    window.addEventListener('resize', onResize);
+    const draw = () => {
+      const W = canvas.offsetWidth, H = canvas.offsetHeight;
+      ctx.clearRect(0, 0, W, H);
+
+      // Deep background
+      ctx.fillStyle = '#030510';
+      ctx.fillRect(0, 0, W, H);
+
+      // Dot grid with mouse repel
+      const spacing = 38;
+      const mx = mouse.current.x, my = mouse.current.y;
+      for (let r = 0; r <= Math.ceil(H / spacing) + 1; r++) {
+        for (let c = 0; c <= Math.ceil(W / spacing) + 1; c++) {
+          const bx = c * spacing - spacing / 2;
+          const by = r * spacing - spacing / 2;
+          const dx = bx - mx, dy = by - my;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          const wave = Math.sin(t * 0.9 + bx * 0.016 + by * 0.011) * 0.5 + 0.5;
+          const mag  = Math.max(0, 1 - dist / 220);
+          const px   = bx + (dx / (dist + 1)) * mag * -10;
+          const py   = by + (dy / (dist + 1)) * mag * -10;
+          const sz    = 1.1 + wave * 0.9 + mag * 2.5;
+          const alpha = 0.05 + wave * 0.07 + mag * 0.3;
+          ctx.beginPath();
+          ctx.arc(px, py, sz, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(0,229,255,${alpha.toFixed(3)})`;
+          ctx.fill();
+        }
+      }
+
+      // Flowing sine wave lines
+      for (let i = 0; i < 4; i++) {
+        ctx.beginPath();
+        ctx.strokeStyle = `rgba(${i % 2 === 0 ? '0,229,255' : '123,47,255'},${0.03 + i * 0.01})`;
+        ctx.lineWidth = 0.8;
+        for (let x = 0; x <= W; x += 4) {
+          const y = H * (0.2 + i * 0.2)
+            + Math.sin(x * 0.007 + t * (0.35 + i * 0.1) + i * 2) * 35
+            + Math.sin(x * 0.018 + t * 0.2) * 14;
+          x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+      }
+
+      t += 0.022;
+      frameRef.current = requestAnimationFrame(draw);
+    };
+    frameRef.current = requestAnimationFrame(draw);
 
     return () => {
-      cancelAnimationFrame(rafId.current);
-      window.removeEventListener('mousemove', onMove);
-      canvas.removeEventListener('mouseleave', onLeave);
-      window.removeEventListener('resize', onResize);
+      window.removeEventListener('resize', resize);
+      window.removeEventListener('mousemove', onMouse);
+      if (frameRef.current) cancelAnimationFrame(frameRef.current);
     };
   }, []);
 
@@ -84,8 +89,7 @@ export default function AnimatedBg() {
       style={{
         position: 'absolute', inset: 0,
         width: '100%', height: '100%',
-        pointerEvents: 'none',
-        zIndex: 0,
+        pointerEvents: 'none', zIndex: 0,
       }}
     />
   );
