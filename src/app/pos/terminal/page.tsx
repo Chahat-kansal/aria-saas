@@ -335,7 +335,7 @@ export default function TerminalPage() {
       if (e.key === 'F3')  { e.preventDefault(); parkSale(); return; }
       if (e.key === 'F8')  { e.preventDefault(); setPayMethod('cash'); return; }
       if (e.key === 'F9')  { e.preventDefault(); setPayMethod('card'); return; }
-      if (e.key === 'F10') { e.preventDefault(); processSale(); return; }
+      if (e.key === 'F10') { e.preventDefault(); if (cart.length > 0 && registerIsOpen) setTerminalView('checkout'); return; }
       if (e.key === 'Escape') { if (!variantModal) confirmClear(); return; }
       if (e.key.length === 1) {
         if (now - barcodeTs.current > 100) barcodeBuffer.current = '';
