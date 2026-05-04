@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { isMobileDevice, hasCameraSupport } from '@/lib/mobile-detect';
+import { SFX } from '@/lib/pos-utils';
 
 /* ─── Types ─────────────────────────────────────────────────────── */
 interface Product {
@@ -258,22 +259,33 @@ export default function TerminalPage() {
 
   /* ── Customer display sync ────────────────────────────────────── */
   useEffect(() => {
-    if (showReceipt) return; // handled by processSale
+    if (showReceipt) return;
     try {
       const sub = cart.reduce((s, i) => s + i.unitPrice * i.qty * (1 - (i.discount_percent ?? 0) / 100), 0);
       const tax = sub - sub / 1.1;
       const tot = sub;
-      localStorage.setItem('aria_pos_display_state', JSON.stringify({
+      const payload = JSON.stringify({
         status: cart.length > 0 ? 'active' : 'idle',
         business_name: businessName,
-        cart: cart.map(i => ({ name: i.label ?? i.product.name, qty: i.qty, price: i.unitPrice })),
+        items: cart.map(i => ({
+          id:        i.product.id,
+          name:      i.label ?? i.product.name,
+          cat:       i.product.pos_categories?.name?.toLowerCase() ?? 'other',
+          category:  i.product.pos_categories?.name ?? 'other',
+          price:     i.unitPrice,
+          price_cents: Math.round(i.unitPrice * 100),
+          quantity:  i.qty,
+        })),
         subtotal_cents: Math.round(sub * 100),
         discount_cents: 0,
         tax_cents: Math.round(tax * 100),
         total_cents: Math.round(tot * 100),
         customer_name: customer?.name ?? null,
+        loyalty_points: customer?.loyalty_points ?? 0,
         timestamp: Date.now(),
-      }));
+      });
+      localStorage.setItem('aria_display_state', payload);
+      localStorage.setItem('aria_pos_display_state', payload); // legacy
     } catch { /* ignore */ }
   }, [cart, customer, businessName, showReceipt]);
 
@@ -290,6 +302,7 @@ export default function TerminalPage() {
         if (code.length >= 4) {
           const hit = products.find(p => p.barcode === code || p.sku === code);
           if (hit && hit.is_active && (!hit.track_stock || hit.stock_quantity > 0)) {
+            SFX.scan();
             checkAndAddToCart(hit);
           } else if (!hit) {
             // Not in local catalog — try global products / Open Food Facts
@@ -406,8 +419,8 @@ export default function TerminalPage() {
 
   /* ─── Cart helpers ───────────────────────────────────────────── */
   function updateQty(key: string, qty: number) {
-    if (qty <= 0) setCart(c => c.filter(i => cartKey(i) !== key));
-    else setCart(c => c.map(i => cartKey(i) === key ? { ...i, qty } : i));
+    if (qty <= 0) { SFX.remove(); setCart(c => c.filter(i => cartKey(i) !== key)); }
+    else { SFX.tap(); setCart(c => c.map(i => cartKey(i) === key ? { ...i, qty } : i)); }
   }
   function confirmClear() { if (!cart.length) return; if (confirm('Clear the current sale?')) clearSale(); }
   function clearSale() {
@@ -429,6 +442,7 @@ export default function TerminalPage() {
       if (hit) return c.map(i => `${i.product.id}::${i.label ?? i.product.name}` === key ? { ...i, qty: i.qty + qty } : i);
       return [...c, { product: p, qty, label: fullLabel !== p.name ? fullLabel : undefined, variantLabel, modifierDetails: mods, unitPrice, discount_percent: 0 }];
     });
+    SFX.add();
     setSelectedItem(p.id);
     setLastAddedId(p.id);
     setSearch('');
@@ -688,17 +702,28 @@ export default function TerminalPage() {
         }).catch(() => null);
       }
 
-      // Signal customer display: complete state
+      // Signal customer display: complete state + sound
       try {
         const changeCents = payMethod === 'cash' ? Math.round(change * 100) : 0;
-        localStorage.setItem('aria_pos_display_state', JSON.stringify({
+        const completePayload = JSON.stringify({
           status: 'complete',
           business_name: businessName,
           change_cents: changeCents,
           customer_name: customerSnapshot?.name ?? null,
           loyalty_earned: Math.floor(roundedTotal),
           timestamp: Date.now(),
-        }));
+        });
+        localStorage.setItem('aria_display_state', completePayload);
+        localStorage.setItem('aria_pos_display_state', completePayload);
+        SFX.ching();
+        // Reset display to idle after 4.5 seconds
+        setTimeout(() => {
+          try {
+            const idlePayload = JSON.stringify({ status: 'idle', business_name: businessName, timestamp: Date.now() });
+            localStorage.setItem('aria_display_state', idlePayload);
+            localStorage.setItem('aria_pos_display_state', idlePayload);
+          } catch { /* ignore */ }
+        }, 4500);
       } catch { /* ignore */ }
 
       setShowReceipt({ ...d.sale, cartSnapshot, customerSnapshot, businessName });
