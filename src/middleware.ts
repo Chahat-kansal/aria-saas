@@ -28,6 +28,16 @@ export async function middleware(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
   const { pathname } = request.nextUrl;
 
+  // Admin route protection — must be admin email
+  if (pathname.startsWith('/admin')) {
+    if (!user) return NextResponse.redirect(new URL('/login', request.url));
+    const adminEmails = (process.env.ADMIN_EMAILS || '').split(',').map(e => e.trim()).filter(Boolean);
+    if (!adminEmails.includes(user.email || '')) {
+      return NextResponse.redirect(new URL('/dashboard', request.url));
+    }
+    return response;
+  }
+
   const isProtected =
     pathname.startsWith('/dashboard') ||
     pathname.startsWith('/onboarding') ||
@@ -55,6 +65,8 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
+    '/admin/:path*',
+    '/admin',
     '/dashboard/:path*',
     '/onboarding/:path*',
     '/businesses/:path*',
