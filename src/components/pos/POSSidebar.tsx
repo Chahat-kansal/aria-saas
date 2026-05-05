@@ -33,6 +33,7 @@ const NAV_SECTIONS = [
       { href: '/pos/stocktake',        label: 'Stocktake',        icon: '✅' },
       { href: '/pos/barcodes',         label: 'Barcodes',         icon: '▦' },
       { href: '/pos/import',           label: 'Import Products',  icon: '📥' },
+      { href: '/pos/inventory-scan',   label: 'Mobile Scanner',   icon: '📱' },
     ],
   },
   {
