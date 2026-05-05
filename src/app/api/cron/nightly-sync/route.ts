@@ -156,6 +156,60 @@ export async function GET(req: Request) {
         }
       } catch { /* non-critical */ }
 
+      // Publish scheduled social posts that are due
+      try {
+        const { data: duePosts } = await supabaseAdmin
+          .from('social_posts')
+          .select('id, business_id')
+          .eq('status', 'approved')
+          .lte('scheduled_for', new Date().toISOString());
+        for (const post of (duePosts ?? [])) {
+          fetch(`${appUrl}/api/social/publish`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ post_id: post.id, business_id: post.business_id }),
+          }).catch(() => { /* non-critical */ });
+        }
+      } catch { /* non-critical */ }
+
+      // Generate social post suggestions (if business has connections and frequency matches)
+      try {
+        const { data: socialPrefs } = await supabaseAdmin
+          .from('social_preferences').select('post_frequency').eq('business_id', biz.id).maybeSingle();
+        const { data: socialConns } = await supabaseAdmin
+          .from('social_connections').select('platform').eq('business_id', biz.id).eq('is_active', true);
+        if (socialConns && socialConns.length > 0 && socialPrefs?.post_frequency !== 'on_demand') {
+          const { data: recentDrafts } = await supabaseAdmin
+            .from('social_posts').select('id', { count: 'exact', head: true })
+            .eq('business_id', biz.id).eq('status', 'draft')
+            .gte('created_at', new Date(Date.now() - 86400000).toISOString());
+          if (!recentDrafts) {
+            fetch(`${appUrl}/api/aria/social-suggest`, {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ business_id: biz.id, platforms: socialConns.map((c: any) => c.platform), count: 3 }),
+            }).catch(() => { /* non-critical */ });
+          }
+        }
+      } catch { /* non-critical */ }
+
+      // Generate weekly order draft on Sunday nights
+      try {
+        const dayOfWeek = new Date().getDay();
+        if (dayOfWeek === 0) {
+          const weekStart = new Date();
+          weekStart.setDate(weekStart.getDate() + 1);
+          const weekStartStr = weekStart.toISOString().split('T')[0];
+          const { data: existingDraft } = await supabaseAdmin
+            .from('purchase_order_drafts').select('id')
+            .eq('business_id', biz.id).eq('week_starting', weekStartStr).maybeSingle();
+          if (!existingDraft) {
+            fetch(`${appUrl}/api/aria/weekly-order`, {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ business_id: biz.id, week_starting: weekStartStr }),
+            }).catch(() => { /* non-critical */ });
+          }
+        }
+      } catch { /* non-critical */ }
+
       processed++;
     } catch (err: any) {
       errors.push({ business_id: biz.id, error: err.message });
