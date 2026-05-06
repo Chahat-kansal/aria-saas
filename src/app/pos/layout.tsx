@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { headers } from 'next/headers';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import POSShell from '@/components/pos/POSShell';
+import { POSThemeProvider } from '@/components/pos/ThemeProvider';
 
 export const metadata = { title: 'AriaPOS — Point of Sale' };
 
@@ -12,7 +13,7 @@ export default async function PosLayout({ children }: { children: React.ReactNod
   const headersList = headers();
   const pathname = headersList.get('x-next-pathname') ?? '';
   if (pathname === '/pos/login') {
-    return <>{children}</>;
+    return <POSThemeProvider>{children}</POSThemeProvider>;
   }
 
   const supabase = createServerSupabaseClient();
@@ -31,8 +32,10 @@ export default async function PosLayout({ children }: { children: React.ReactNod
   if (!biz) redirect('/onboarding/industry');
 
   return (
-    <POSShell businessId={biz.id} businessName={biz.name ?? 'AriaPOS'}>
-      {children}
-    </POSShell>
+    <POSThemeProvider>
+      <POSShell businessId={biz.id} businessName={biz.name ?? 'AriaPOS'}>
+        {children}
+      </POSShell>
+    </POSThemeProvider>
   );
 }

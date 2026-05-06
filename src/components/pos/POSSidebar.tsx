@@ -81,10 +81,11 @@ const NAV_SECTIONS = [
     title: 'Operations',
     // Visible to all — kitchen, tables, void are day-to-day register operations
     items: [
-      { href: '/pos/kitchen',    label: 'Kitchen (KDS)', icon: '🍳' },
-      { href: '/pos/tables',     label: 'Tables',        icon: '⊞' },
-      { href: '/pos/timesheets', label: 'Timesheets',    icon: '⏰' },
-      { href: '/pos/void',       label: 'Void/Refund',   icon: '↩️' },
+      { href: '/pos/kitchen',              label: 'Kitchen (KDS)', icon: '🍳' },
+      { href: '/pos/tables',               label: 'Tables',        icon: '⊞' },
+      { href: '/pos/timesheets',           label: 'Timesheets',    icon: '⏰' },
+      { href: '/pos/timesheets/roster',    label: 'Roster',        icon: '📅' },
+      { href: '/pos/void',                 label: 'Void/Refund',   icon: '↩️' },
     ],
   },
   {

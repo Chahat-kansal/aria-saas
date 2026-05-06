@@ -13,6 +13,9 @@ export default function ClosureDetailPage() {
   const [sales, setSales] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<Tab>('revenue');
+  const [editingReceived, setEditingReceived] = useState(false);
+  const [receivedAmount, setReceivedAmount] = useState(0);
+  const [savingReceived, setSavingReceived] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -22,6 +25,8 @@ export default function ClosureDetailPage() {
     ]).then(([sd, salesData]) => {
       setSession(sd.session ?? null);
       setSales(salesData.sales ?? []);
+      const received = sd.session?.closing_cash ?? sd.session?.actual_cash_cents ? (sd.session.actual_cash_cents / 100) : null;
+      if (received !== null) setReceivedAmount(received);
       setLoading(false);
     }).catch(() => setLoading(false));
   }, [id]);
@@ -40,8 +45,20 @@ export default function ClosureDetailPage() {
     </div>
   );
 
+  async function saveReceived() {
+    if (!id) return;
+    setSavingReceived(true);
+    await fetch(`/api/pos/sessions?id=${id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ closing_cash: receivedAmount, actual_cash_cents: Math.round(receivedAmount * 100) }),
+    });
+    setEditingReceived(false);
+    setSavingReceived(false);
+  }
+
   // Calculations
   const totalRevenue = sales.reduce((s, r) => s + (r.total_amount || 0), 0);
+  const variance = receivedAmount > 0 ? receivedAmount - totalRevenue : null;
   const totalDiscount = sales.reduce((s, r) => s + (r.discount_amount || 0), 0);
   const totalTax = totalRevenue * 10 / 110;
   const txCount = sales.length;
@@ -114,7 +131,25 @@ export default function ClosureDetailPage() {
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:14 }}>
           <div style={{ background:'rgba(29,78,216,0.2)', border:'1px solid rgba(59,130,246,0.3)', borderRadius:14, padding:'18px 20px', textAlign:'center' }}>
             <p style={{ fontSize:11, fontWeight:700, textTransform:'uppercase', color:'rgba(147,197,253,0.8)', marginBottom:8 }}>Money Received</p>
-            <p style={{ fontFamily:'monospace', fontSize:22, fontWeight:800, color:'#93C5FD' }}>A${totalRevenue.toFixed(2)}</p>
+            {editingReceived ? (
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}>
+                <span style={{ color:'#93C5FD', fontSize:18, fontWeight:800 }}>A$</span>
+                <input type="number" step="0.01" value={receivedAmount} onChange={e => setReceivedAmount(parseFloat(e.target.value)||0)} autoFocus
+                  style={{ width:90, fontSize:18, fontWeight:700, textAlign:'right', background:'rgba(255,255,255,0.1)', border:'1px solid rgba(255,255,255,0.3)', borderRadius:6, padding:'4px 8px', color:'#fff', outline:'none', fontFamily:'monospace' }} />
+                <button onClick={saveReceived} disabled={savingReceived} style={{ padding:'4px 10px', borderRadius:6, border:'none', background:C.green, color:'#fff', fontSize:12, cursor:'pointer', fontFamily:'inherit' }}>✓</button>
+                <button onClick={() => setEditingReceived(false)} style={{ padding:'4px 10px', borderRadius:6, border:`1px solid ${C.border}`, background:'transparent', color:C.muted, fontSize:12, cursor:'pointer', fontFamily:'inherit' }}>✗</button>
+              </div>
+            ) : (
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
+                <p style={{ fontFamily:'monospace', fontSize:22, fontWeight:800, color:'#93C5FD' }}>A${(receivedAmount||totalRevenue).toFixed(2)}</p>
+                <button onClick={() => { setReceivedAmount(totalRevenue); setEditingReceived(true); }} title="Edit received amount" style={{ background:'none', border:'none', color:'rgba(255,255,255,0.4)', cursor:'pointer', fontSize:14, padding:0 }}>✏️</button>
+              </div>
+            )}
+            {variance !== null && (
+              <p style={{ fontSize:12, fontWeight:600, color:variance>=0?C.green:C.red, marginTop:4 }}>
+                {variance>=0?'+':''}{variance.toFixed(2)} variance
+              </p>
+            )}
           </div>
           <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:14, padding:'18px 20px', textAlign:'center' }}>
             <p style={{ fontSize:11, fontWeight:700, textTransform:'uppercase', color:C.dim, marginBottom:8 }}>Transactions</p>
