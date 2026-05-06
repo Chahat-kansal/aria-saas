@@ -23,27 +23,27 @@ const HANDLES = ['nw','n','ne','e','se','s','sw','w'] as const
 type Handle = typeof HANDLES[number]
 const HANDLE_CURSOR: Record<Handle,string> = { nw:'nwse-resize',n:'ns-resize',ne:'nesw-resize',e:'ew-resize',se:'nwse-resize',s:'ns-resize',sw:'nesw-resize',w:'ew-resize' }
 
-/* ─── Default template elements ─────────────────────────────────── */
+/* ─── Default template elements — all colors use 6-digit hex ────── */
 const DEFAULT_ELS: El[] = [
   { id:'logo',    type:'image',        x:101,y:16,  width:100,height:60, zIndex:1, locked:false,visible:true, objectFit:'contain', imageUrl:'' },
-  { id:'biz',     type:'dynamic_text', x:0,  y:84,  width:CW, height:24, zIndex:2, locked:false,visible:true, content:'{{business_name}}',   fontSize:16,fontWeight:'bold',  textAlign:'center',color:'#000',fontFamily:'sans-serif', dataBinding:'{{business_name}}' },
-  { id:'addr',    type:'dynamic_text', x:0,  y:112, width:CW, height:14, zIndex:3, locked:false,visible:true, content:'{{business_address}}', fontSize:9, textAlign:'center',color:'#555',fontFamily:'monospace', dataBinding:'{{business_address}}' },
-  { id:'phone',   type:'dynamic_text', x:0,  y:128, width:CW, height:14, zIndex:4, locked:false,visible:true, content:'{{business_phone}}',   fontSize:9, textAlign:'center',color:'#555',fontFamily:'monospace', dataBinding:'{{business_phone}}' },
-  { id:'div1',    type:'divider',      x:10, y:148, width:CW-20,height:8, zIndex:5, locked:false,visible:true, dividerStyle:'dashed',dividerThickness:1,color:'#ccc' },
-  { id:'info',    type:'dynamic_text', x:0,  y:158, width:CW, height:14, zIndex:6, locked:false,visible:true, content:'Receipt #{{receipt_number}} | {{date}}', fontSize:9,textAlign:'center',color:'#666',fontFamily:'monospace' },
-  { id:'cashier', type:'dynamic_text', x:8,  y:174, width:CW, height:14, zIndex:7, locked:false,visible:true, content:'Served by: {{cashier_name}}', fontSize:9,textAlign:'left',color:'#666',fontFamily:'monospace' },
-  { id:'div2',    type:'divider',      x:10, y:194, width:CW-20,height:8, zIndex:8, locked:false,visible:true, dividerStyle:'solid',dividerThickness:1,color:'#000' },
-  { id:'items',   type:'items_table',  x:0,  y:202, width:CW, height:180,zIndex:9, locked:false,visible:true, fontSize:10,fontFamily:'monospace',color:'#000' },
-  { id:'div3',    type:'divider',      x:10, y:390, width:CW-20,height:8, zIndex:10,locked:false,visible:true, dividerStyle:'solid',dividerThickness:1,color:'#000' },
-  { id:'totals',  type:'totals_block', x:0,  y:398, width:CW, height:80, zIndex:11,locked:false,visible:true, fontSize:10,fontFamily:'monospace',color:'#000' },
-  { id:'div4',    type:'divider',      x:10, y:484, width:CW-20,height:8, zIndex:12,locked:false,visible:true, dividerStyle:'dashed',dividerThickness:1,color:'#ccc' },
-  { id:'pay',     type:'payment_info', x:0,  y:492, width:CW, height:30, zIndex:13,locked:false,visible:true, fontSize:10,fontFamily:'monospace',color:'#000' },
-  { id:'loyal',   type:'loyalty_block',x:0,  y:528, width:CW, height:20, zIndex:14,locked:false,visible:true, fontSize:10,textAlign:'center',color:'#000',fontFamily:'monospace' },
-  { id:'div5',    type:'divider',      x:10, y:554, width:CW-20,height:8, zIndex:15,locked:false,visible:true, dividerStyle:'dashed',dividerThickness:1,color:'#ccc' },
-  { id:'footer',  type:'text',         x:0,  y:562, width:CW, height:36, zIndex:16,locked:false,visible:true, content:'Thank you for your business!\nPlease come again.', fontSize:9,textAlign:'center',color:'#555',fontFamily:'monospace',lineHeight:1.6 },
-  { id:'abn',     type:'dynamic_text', x:0,  y:602, width:CW, height:12, zIndex:17,locked:false,visible:true, content:'ABN: {{business_abn}}', fontSize:8,textAlign:'center',color:'#888',fontFamily:'monospace', dataBinding:'{{business_abn}}' },
+  { id:'biz',     type:'dynamic_text', x:0,  y:84,  width:CW, height:24, zIndex:2, locked:false,visible:true, content:'{{business_name}}',   fontSize:16,fontWeight:'bold',  textAlign:'center',color:'#000000',fontFamily:'sans-serif', dataBinding:'{{business_name}}' },
+  { id:'addr',    type:'dynamic_text', x:0,  y:112, width:CW, height:14, zIndex:3, locked:false,visible:true, content:'{{business_address}}', fontSize:9, textAlign:'center',color:'#555555',fontFamily:'monospace', dataBinding:'{{business_address}}' },
+  { id:'phone',   type:'dynamic_text', x:0,  y:128, width:CW, height:14, zIndex:4, locked:false,visible:true, content:'{{business_phone}}',   fontSize:9, textAlign:'center',color:'#555555',fontFamily:'monospace', dataBinding:'{{business_phone}}' },
+  { id:'div1',    type:'divider',      x:10, y:148, width:CW-20,height:8, zIndex:5, locked:false,visible:true, dividerStyle:'dashed',dividerThickness:1,color:'#cccccc' },
+  { id:'info',    type:'dynamic_text', x:0,  y:158, width:CW, height:14, zIndex:6, locked:false,visible:true, content:'Receipt #{{receipt_number}} | {{date}}', fontSize:9,textAlign:'center',color:'#666666',fontFamily:'monospace' },
+  { id:'cashier', type:'dynamic_text', x:8,  y:174, width:CW, height:14, zIndex:7, locked:false,visible:true, content:'Served by: {{cashier_name}}', fontSize:9,textAlign:'left',color:'#666666',fontFamily:'monospace' },
+  { id:'div2',    type:'divider',      x:10, y:194, width:CW-20,height:8, zIndex:8, locked:false,visible:true, dividerStyle:'solid',dividerThickness:1,color:'#000000' },
+  { id:'items',   type:'items_table',  x:0,  y:202, width:CW, height:180,zIndex:9, locked:false,visible:true, fontSize:10,fontFamily:'monospace',color:'#000000' },
+  { id:'div3',    type:'divider',      x:10, y:390, width:CW-20,height:8, zIndex:10,locked:false,visible:true, dividerStyle:'solid',dividerThickness:1,color:'#000000' },
+  { id:'totals',  type:'totals_block', x:0,  y:398, width:CW, height:80, zIndex:11,locked:false,visible:true, fontSize:10,fontFamily:'monospace',color:'#000000' },
+  { id:'div4',    type:'divider',      x:10, y:484, width:CW-20,height:8, zIndex:12,locked:false,visible:true, dividerStyle:'dashed',dividerThickness:1,color:'#cccccc' },
+  { id:'pay',     type:'payment_info', x:0,  y:492, width:CW, height:30, zIndex:13,locked:false,visible:true, fontSize:10,fontFamily:'monospace',color:'#000000' },
+  { id:'loyal',   type:'loyalty_block',x:0,  y:528, width:CW, height:20, zIndex:14,locked:false,visible:true, fontSize:10,textAlign:'center',color:'#000000',fontFamily:'monospace' },
+  { id:'div5',    type:'divider',      x:10, y:554, width:CW-20,height:8, zIndex:15,locked:false,visible:true, dividerStyle:'dashed',dividerThickness:1,color:'#cccccc' },
+  { id:'footer',  type:'text',         x:0,  y:562, width:CW, height:36, zIndex:16,locked:false,visible:true, content:'Thank you for your business!\nPlease come again.', fontSize:9,textAlign:'center',color:'#555555',fontFamily:'monospace',lineHeight:1.6 },
+  { id:'abn',     type:'dynamic_text', x:0,  y:602, width:CW, height:12, zIndex:17,locked:false,visible:true, content:'ABN: {{business_abn}}', fontSize:8,textAlign:'center',color:'#888888',fontFamily:'monospace', dataBinding:'{{business_abn}}' },
   { id:'barcode', type:'barcode',      x:76, y:618, width:150,height:50, zIndex:18,locked:false,visible:true },
-  { id:'pwrd',    type:'text',         x:0,  y:674, width:CW, height:12, zIndex:19,locked:false,visible:true, content:'Powered by Aria', fontSize:7,textAlign:'center',color:'#bbb',fontFamily:'monospace' },
+  { id:'pwrd',    type:'text',         x:0,  y:674, width:CW, height:12, zIndex:19,locked:false,visible:true, content:'Powered by Aria', fontSize:7,textAlign:'center',color:'#bbbbbb',fontFamily:'monospace' },
 ]
 
 /* ─── Variable substitution ─────────────────────────────────────── */
@@ -57,16 +57,26 @@ function resolve(s:string):string { return Object.entries(VARS).reduce((t,[k,v])
 
 /* ─── ColorPicker ───────────────────────────────────────────────── */
 const PRESETS = ['#000000','#333333','#555555','#888888','#cccccc','#ffffff','#8B5CF6','#22C55E']
+
+// Expand 3-digit hex (#abc) to 6-digit (#aabbcc) so <input type="color"> accepts it
+function expand6(hex: string): string {
+  if (/^#[0-9a-fA-F]{3}$/.test(hex)) {
+    return '#' + hex[1]+hex[1]+hex[2]+hex[2]+hex[3]+hex[3]
+  }
+  return /^#[0-9a-fA-F]{6}$/.test(hex) ? hex : '#000000'
+}
+
 function ColorPicker({ value, onChange }:{ value:string; onChange:(v:string)=>void }) {
+  const safe = expand6(value || '#000000')
   return (
     <div>
       <div style={{ display:'flex',gap:4,flexWrap:'wrap',marginBottom:6 }}>
         {PRESETS.map(c=>(
-          <div key={c} onClick={()=>onChange(c)} style={{ width:18,height:18,borderRadius:3,background:c,cursor:'pointer',border:c===value?'2px solid #8B5CF6':'1px solid rgba(255,255,255,0.15)',boxSizing:'border-box' }} />
+          <div key={c} onClick={()=>onChange(c)} style={{ width:18,height:18,borderRadius:3,background:c,cursor:'pointer',border:safe===c?'2px solid #8B5CF6':'1px solid rgba(255,255,255,0.15)',boxSizing:'border-box' }} />
         ))}
       </div>
       <div style={{ display:'flex',gap:6,alignItems:'center' }}>
-        <input type="color" value={value||'#000000'} onChange={e=>onChange(e.target.value)} style={{ width:28,height:22,border:'none',background:'none',cursor:'pointer',padding:0 }} />
+        <input type="color" value={safe} onChange={e=>onChange(e.target.value)} style={{ width:28,height:22,border:'none',background:'none',cursor:'pointer',padding:0 }} />
         <input type="text" value={value||''} onChange={e=>{ if(/^#[0-9a-fA-F]{0,6}$/.test(e.target.value)) onChange(e.target.value) }}
           style={{ background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:5,padding:'2px 7px',color:'#fff',fontSize:11,fontFamily:'monospace',width:76,outline:'none' }} />
       </div>
@@ -160,9 +170,13 @@ export default function ReceiptBuilderPage() {
   },[id])
 
   /* ── Save ── */
+  const [migrationNeeded, setMigrationNeeded] = useState(false)
+
   const save = useCallback(async()=>{
     setSaving('saving')
     const r = await fetch(`/api/pos/receipt-templates/${id}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,elements:els,canvas_height:canvasH,background_color:bgColor})})
+    const d = await r.json()
+    if(d.migration_needed) setMigrationNeeded(true)
     setSaving(r.ok?'saved':'error')
     setTimeout(()=>setSaving('idle'),2500)
   },[id,name,els,canvasH,bgColor])
@@ -323,6 +337,12 @@ export default function ReceiptBuilderPage() {
           {saving==='saving'?'Saving…':saving==='saved'?'Saved ✓':saving==='error'?'Error':'💾 Save'}
         </button>
       </div>
+
+      {migrationNeeded&&(
+        <div style={{ padding:'8px 16px',background:'rgba(245,158,11,0.12)',borderBottom:'1px solid rgba(245,158,11,0.3)',fontSize:12,color:'#F59E0B',flexShrink:0 }}>
+          ⚠️ Canvas columns not yet in database — run migration <code style={{ background:'rgba(0,0,0,0.3)',padding:'1px 5px',borderRadius:3 }}>20260510000003_receipt_builder_v2.sql</code> in Supabase SQL Editor to save element positions. Name &amp; type are saving correctly.
+        </div>
+      )}
 
       <div style={{ display:'flex',flex:1,overflow:'hidden' }}>
 
