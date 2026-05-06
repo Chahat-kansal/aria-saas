@@ -2,6 +2,10 @@
 import { POSAriaInsight } from '@/components/pos/POSAriaInsight';
 import { useState, useEffect, useCallback } from 'react';
 
+const C = { bg: 'rgba(17,15,26,0.95)', card: 'rgba(26,23,40,0.9)', border: '#2A2540', text: '#EDE8FF', muted: '#8B85A8', dim: '#4A4565', violet: '#8B5CF6', green: '#22C55E', red: '#EF4444', amber: '#F59E0B' };
+const iStyle: React.CSSProperties = { background: '#0A0910', border: `1px solid ${C.border}`, borderRadius: 8, padding: '9px 12px', fontSize: 13, color: C.text, outline: 'none', width: '100%', fontFamily: 'inherit' };
+const lStyle: React.CSSProperties = { display: 'block', fontSize: 11, fontWeight: 700, color: C.muted, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' };
+
 // DB columns: promotion_type, discount_amount, discount_percent, starts_at, ends_at, active
 interface Promo {
   id: string;
@@ -144,143 +148,198 @@ export default function PromotionsPage() {
   const activeCount = promos.filter(p => p.active).length;
   const liveCount = promos.filter(p => p.active && (!p.starts_at || new Date(p.starts_at) <= now) && (!p.ends_at || new Date(p.ends_at) >= now)).length;
 
-  const inputCls = 'w-full px-3 py-2.5 rounded-xl text-sm border border-[rgba(0,0,0,.12)] outline-none';
-
   return (
-    <div className="min-h-full">
+    <div style={{ minHeight: '100%', background: C.bg, color: C.text, fontFamily: "'Manrope',sans-serif" }}>
       <POSAriaInsight page="pos/promotions" />
-      <div className="p-6 max-w-5xl mx-auto">
-      <div className="mb-6 flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-semibold text-[#1a1a16]">Promotions</h1>
-          <p className="text-xs text-[rgba(26,26,22,.45)] mt-0.5">Create discounts and promotional offers</p>
-        </div>
-        <button onClick={openAdd} className="px-4 py-2 rounded-xl text-sm font-semibold text-white" style={{ background: '#8B5CF6' }}>+ New Promotion</button>
-      </div>
-
-      <div className="grid grid-cols-3 gap-4 mb-6">
-        {[{ label: 'Total', value: promos.length }, { label: 'Active', value: activeCount }, { label: 'Live now', value: liveCount }].map(s => (
-          <div key={s.label} className="bg-white rounded-xl border border-[rgba(0,0,0,.06)] p-4 shadow-sm">
-            <p className="text-xs text-[rgba(26,26,22,.4)] mb-1">{s.label}</p>
-            <p className="text-2xl font-semibold text-[#1a1a16]">{s.value}</p>
+      <div style={{ padding: '20px 24px', maxWidth: 960, margin: '0 auto' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20, gap: 12 }}>
+          <div>
+            <h1 style={{ fontSize: 20, fontWeight: 700, color: C.text, marginBottom: 2 }}>Promotions</h1>
+            <p style={{ fontSize: 12, color: C.muted }}>Create discounts and promotional offers</p>
           </div>
-        ))}
-      </div>
+          <button onClick={openAdd}
+            style={{ padding: '9px 20px', borderRadius: 9, border: 'none', background: C.violet, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}>
+            + New Promotion
+          </button>
+        </div>
 
-      <div className="bg-white rounded-2xl border border-[rgba(0,0,0,.08)] overflow-hidden shadow-sm">
-        <table className="w-full text-sm">
-          <thead><tr className="border-b border-[rgba(0,0,0,.06)]">{['Name','Type','Discount','Starts','Ends','Status','Actions'].map(h => <th key={h} className="px-4 py-3 text-left text-xs font-medium text-[rgba(26,26,22,.4)]">{h}</th>)}</tr></thead>
-          <tbody>
-            {loading ? <tr><td colSpan={7} className="px-4 py-8 text-center text-sm text-[rgba(26,26,22,.35)]">Loading…</td></tr>
-            : promos.length === 0 ? <tr><td colSpan={7} className="px-4 py-12 text-center"><p className="text-sm font-medium text-[#1a1a16] mb-1">No promotions yet</p><p className="text-xs text-[rgba(26,26,22,.4)]">Create your first promotion to offer discounts at checkout.</p></td></tr>
-            : promos.map(p => (
-              <tr key={p.id} className="border-b border-[rgba(0,0,0,.04)] hover:bg-[rgba(0,0,0,.015)]">
-                <td className="px-4 py-3 font-medium text-[#1a1a16]">{p.name}</td>
-                <td className="px-4 py-3">
-                  <span className="text-xs px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-100">
-                    {TYPE_LABELS[p.promotion_type] ?? p.promotion_type}
-                  </span>
-                </td>
-                <td className="px-4 py-3 font-semibold text-[#1a1a16]">{discountSummary(p)}</td>
-                <td className="px-4 py-3 text-xs text-[rgba(26,26,22,.4)]">{p.starts_at ? new Date(p.starts_at).toLocaleDateString() : '—'}</td>
-                <td className="px-4 py-3 text-xs text-[rgba(26,26,22,.4)]">{p.ends_at ? new Date(p.ends_at).toLocaleDateString() : '—'}</td>
-                <td className="px-4 py-3">
-                  <button onClick={() => toggle(p.id, p.active)} className={`text-xs px-3 py-1 rounded-full font-medium ${p.active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
-                    {p.active ? 'Active' : 'Inactive'}
-                  </button>
-                </td>
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-2">
-                    <button onClick={() => openEdit(p)} className="text-xs px-2 py-1 rounded-lg border border-[rgba(0,0,0,.1)] text-[rgba(26,26,22,.5)] hover:bg-gray-50">Edit</button>
-                    <button onClick={() => del(p.id)} className="text-xs text-red-400 hover:text-red-600 transition-colors leading-none px-1">×</button>
-                  </div>
-                </td>
+        {/* Stats */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12, marginBottom: 16 }}>
+          {[{ label: 'Total', value: promos.length }, { label: 'Active', value: activeCount }, { label: 'Live now', value: liveCount }].map(s => (
+            <div key={s.label} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '14px 18px' }}>
+              <p style={{ fontSize: 11, color: C.muted, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{s.label}</p>
+              <p style={{ fontSize: 22, fontWeight: 700, color: C.text, fontFamily: "'JetBrains Mono',monospace" }}>{s.value}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Table */}
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, overflow: 'hidden' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ background: 'rgba(255,255,255,0.03)', borderBottom: `1px solid ${C.border}` }}>
+                {['Name', 'Type', 'Discount', 'Starts', 'Ends', 'Status', 'Actions'].map(h => (
+                  <th key={h} style={{ textAlign: 'left', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: C.dim, padding: '10px 14px' }}>{h}</th>
+                ))}
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr><td colSpan={7} style={{ padding: '48px', textAlign: 'center', color: C.dim, fontSize: 13 }}>Loading…</td></tr>
+              ) : promos.length === 0 ? (
+                <tr><td colSpan={7} style={{ padding: '48px', textAlign: 'center' }}>
+                  <p style={{ fontSize: 14, fontWeight: 600, color: C.text, marginBottom: 4 }}>No promotions yet</p>
+                  <p style={{ fontSize: 12, color: C.muted }}>Create your first promotion to offer discounts at checkout.</p>
+                </td></tr>
+              ) : promos.map((p, i) => (
+                <tr key={p.id} style={{ borderBottom: i < promos.length - 1 ? `1px solid ${C.border}` : 'none' }}>
+                  <td style={{ padding: '10px 14px', fontSize: 13, fontWeight: 600, color: C.text }}>{p.name}</td>
+                  <td style={{ padding: '10px 14px' }}>
+                    <span style={{ fontSize: 10, padding: '3px 8px', borderRadius: 99, fontWeight: 700, background: 'rgba(139,92,246,0.12)', color: C.violet, border: '1px solid rgba(139,92,246,0.25)' }}>
+                      {TYPE_LABELS[p.promotion_type] ?? p.promotion_type}
+                    </span>
+                  </td>
+                  <td style={{ padding: '10px 14px', fontSize: 13, fontWeight: 600, color: C.text }}>{discountSummary(p)}</td>
+                  <td style={{ padding: '10px 14px', fontSize: 11, color: C.muted }}>{p.starts_at ? new Date(p.starts_at).toLocaleDateString() : '—'}</td>
+                  <td style={{ padding: '10px 14px', fontSize: 11, color: C.muted }}>{p.ends_at ? new Date(p.ends_at).toLocaleDateString() : '—'}</td>
+                  <td style={{ padding: '10px 14px' }}>
+                    <button onClick={() => toggle(p.id, p.active)}
+                      style={{ fontSize: 10, padding: '3px 10px', borderRadius: 99, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', border: 'none', background: p.active ? 'rgba(34,197,94,0.15)' : 'rgba(74,69,101,0.3)', color: p.active ? C.green : C.muted }}>
+                      {p.active ? 'Active' : 'Inactive'}
+                    </button>
+                  </td>
+                  <td style={{ padding: '10px 14px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <button onClick={() => openEdit(p)}
+                        style={{ fontSize: 11, padding: '4px 10px', borderRadius: 6, border: `1px solid ${C.border}`, background: 'transparent', color: C.muted, cursor: 'pointer', fontFamily: 'inherit' }}>
+                        Edit
+                      </button>
+                      <button onClick={() => del(p.id)}
+                        style={{ fontSize: 13, background: 'none', border: 'none', color: C.red, cursor: 'pointer', lineHeight: 1 }}>×</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
 
-      {showAdd && (
-        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl border border-[rgba(0,0,0,.08)] max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold text-[#1a1a16]">{editPromo ? 'Edit Promotion' : 'New Promotion'}</h3>
-              <button onClick={() => { setShowAdd(false); setEditPromo(null); setError(null); }} className="text-gray-400 text-xl leading-none">&times;</button>
-            </div>
-            <div className="space-y-3">
-              <div>
-                <label className="text-xs font-medium text-[rgba(26,26,22,.5)] mb-1 block">Name *</label>
-                <input value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} className={inputCls} placeholder="e.g. Summer Sale 10% Off" />
+        {/* Modal */}
+        {showAdd && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: 16 }}>
+            <div style={{ background: '#0F0D1C', border: `1px solid ${C.border}`, borderRadius: 18, width: '100%', maxWidth: 480, maxHeight: '90vh', overflowY: 'auto' }}>
+              <div style={{ padding: '18px 22px', borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <h3 style={{ fontSize: 15, fontWeight: 700, color: C.text }}>{editPromo ? 'Edit Promotion' : 'New Promotion'}</h3>
+                <button onClick={() => { setShowAdd(false); setEditPromo(null); setError(null); }}
+                  style={{ background: 'none', border: 'none', color: C.muted, fontSize: 22, cursor: 'pointer', lineHeight: 1 }}>&times;</button>
               </div>
-              <div>
-                <label className="text-xs font-medium text-[rgba(26,26,22,.5)] mb-1 block">Type</label>
-                <select value={form.promotion_type} onChange={e => setForm(p => ({ ...p, promotion_type: e.target.value }))} className={inputCls + ' bg-white'}>
-                  {Object.entries(TYPE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-                </select>
-              </div>
+              <div style={{ padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <div>
+                  <label style={lStyle}>Name *</label>
+                  <input value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))}
+                    style={iStyle} placeholder="e.g. Summer Sale 10% Off" />
+                </div>
+                <div>
+                  <label style={lStyle}>Type</label>
+                  <select value={form.promotion_type} onChange={e => setForm(p => ({ ...p, promotion_type: e.target.value }))}
+                    style={{ ...iStyle, background: '#0A0910' }}>
+                    {Object.entries(TYPE_LABELS).map(([v, l]) => (
+                      <option key={v} value={v} style={{ background: '#0A0910', color: C.text }}>{l}</option>
+                    ))}
+                  </select>
+                </div>
 
-              {form.promotion_type === 'percentage_discount' && (
-                <div>
-                  <label className="text-xs font-medium text-[rgba(26,26,22,.5)] mb-1 block">Discount %</label>
-                  <input type="number" min={0} max={100} value={form.discount_percent} onChange={e => setForm(p => ({ ...p, discount_percent: e.target.value }))} className={inputCls} placeholder="10" />
-                </div>
-              )}
-              {form.promotion_type === 'fixed_discount' && (
-                <div>
-                  <label className="text-xs font-medium text-[rgba(26,26,22,.5)] mb-1 block">Discount Amount (A$)</label>
-                  <input type="number" min={0} value={form.discount_amount} onChange={e => setForm(p => ({ ...p, discount_amount: e.target.value }))} className={inputCls} placeholder="5.00" />
-                </div>
-              )}
-              {form.promotion_type === 'bundle' && (
-                <div>
-                  <label className="text-xs font-medium text-[rgba(26,26,22,.5)] mb-1 block">Bundle Price (A$)</label>
-                  <input type="number" min={0} value={form.bundle_price} onChange={e => setForm(p => ({ ...p, bundle_price: e.target.value }))} className={inputCls} placeholder="25.00" />
-                </div>
-              )}
-              {(form.promotion_type === 'bogo' || form.promotion_type === 'multibuy') && (
-                <div className="grid grid-cols-2 gap-2">
+                {form.promotion_type === 'percentage_discount' && (
                   <div>
-                    <label className="text-xs font-medium text-[rgba(26,26,22,.5)] mb-1 block">Buy Qty</label>
-                    <input type="number" min={1} value={form.buy_quantity} onChange={e => setForm(p => ({ ...p, buy_quantity: e.target.value }))} className={inputCls} placeholder="2" />
+                    <label style={lStyle}>Discount %</label>
+                    <input type="number" min={0} max={100} value={form.discount_percent}
+                      onChange={e => setForm(p => ({ ...p, discount_percent: e.target.value }))}
+                      style={iStyle} placeholder="10" />
+                  </div>
+                )}
+                {form.promotion_type === 'fixed_discount' && (
+                  <div>
+                    <label style={lStyle}>Discount Amount (A$)</label>
+                    <input type="number" min={0} value={form.discount_amount}
+                      onChange={e => setForm(p => ({ ...p, discount_amount: e.target.value }))}
+                      style={iStyle} placeholder="5.00" />
+                  </div>
+                )}
+                {form.promotion_type === 'bundle' && (
+                  <div>
+                    <label style={lStyle}>Bundle Price (A$)</label>
+                    <input type="number" min={0} value={form.bundle_price}
+                      onChange={e => setForm(p => ({ ...p, bundle_price: e.target.value }))}
+                      style={iStyle} placeholder="25.00" />
+                  </div>
+                )}
+                {(form.promotion_type === 'bogo' || form.promotion_type === 'multibuy') && (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                    <div>
+                      <label style={lStyle}>Buy Qty</label>
+                      <input type="number" min={1} value={form.buy_quantity}
+                        onChange={e => setForm(p => ({ ...p, buy_quantity: e.target.value }))}
+                        style={iStyle} placeholder="2" />
+                    </div>
+                    <div>
+                      <label style={lStyle}>{form.promotion_type === 'bogo' ? 'Get Qty' : 'Discount %'}</label>
+                      {form.promotion_type === 'bogo'
+                        ? <input type="number" min={1} value={form.get_quantity}
+                            onChange={e => setForm(p => ({ ...p, get_quantity: e.target.value }))}
+                            style={iStyle} placeholder="1" />
+                        : <input type="number" min={0} max={100} value={form.discount_percent}
+                            onChange={e => setForm(p => ({ ...p, discount_percent: e.target.value }))}
+                            style={iStyle} placeholder="10" />
+                      }
+                    </div>
+                  </div>
+                )}
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  <div>
+                    <label style={lStyle}>Starts</label>
+                    <input type="date" value={form.starts_at}
+                      onChange={e => setForm(p => ({ ...p, starts_at: e.target.value }))}
+                      style={iStyle} />
                   </div>
                   <div>
-                    <label className="text-xs font-medium text-[rgba(26,26,22,.5)] mb-1 block">{form.promotion_type === 'bogo' ? 'Get Qty' : 'Discount %'}</label>
-                    {form.promotion_type === 'bogo'
-                      ? <input type="number" min={1} value={form.get_quantity} onChange={e => setForm(p => ({ ...p, get_quantity: e.target.value }))} className={inputCls} placeholder="1" />
-                      : <input type="number" min={0} max={100} value={form.discount_percent} onChange={e => setForm(p => ({ ...p, discount_percent: e.target.value }))} className={inputCls} placeholder="10" />
-                    }
+                    <label style={lStyle}>Ends</label>
+                    <input type="date" value={form.ends_at}
+                      onChange={e => setForm(p => ({ ...p, ends_at: e.target.value }))}
+                      style={iStyle} />
                   </div>
                 </div>
-              )}
 
-              <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="text-xs font-medium text-[rgba(26,26,22,.5)] mb-1 block">Starts</label>
-                  <input type="date" value={form.starts_at} onChange={e => setForm(p => ({ ...p, starts_at: e.target.value }))} className={inputCls} />
+                  <label style={lStyle}>Notes</label>
+                  <input value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))}
+                    style={iStyle} placeholder="Optional notes" />
                 </div>
-                <div>
-                  <label className="text-xs font-medium text-[rgba(26,26,22,.5)] mb-1 block">Ends</label>
-                  <input type="date" value={form.ends_at} onChange={e => setForm(p => ({ ...p, ends_at: e.target.value }))} className={inputCls} />
-                </div>
+
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                  <input type="checkbox" checked={form.active}
+                    onChange={e => setForm(p => ({ ...p, active: e.target.checked }))}
+                    style={{ accentColor: C.violet, width: 14, height: 14 }} />
+                  <span style={{ fontSize: 13, color: C.text }}>Active immediately</span>
+                </label>
+
+                {error && (
+                  <p style={{ fontSize: 12, color: C.red, background: 'rgba(239,68,68,0.08)', borderRadius: 8, padding: '8px 12px' }}>{error}</p>
+                )}
               </div>
-              <div>
-                <label className="text-xs font-medium text-[rgba(26,26,22,.5)] mb-1 block">Notes</label>
-                <input value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} className={inputCls} placeholder="Optional notes" />
+              <div style={{ padding: '14px 22px', borderTop: `1px solid ${C.border}`, display: 'flex', gap: 8 }}>
+                <button onClick={() => { setShowAdd(false); setEditPromo(null); setError(null); }}
+                  style={{ flex: 1, padding: '10px', borderRadius: 9, border: `1px solid ${C.border}`, background: 'transparent', color: C.muted, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+                  Cancel
+                </button>
+                <button onClick={save} disabled={saving || !form.name}
+                  style={{ flex: 1, padding: '10px', borderRadius: 9, border: 'none', background: C.violet, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', opacity: saving || !form.name ? 0.5 : 1 }}>
+                  {saving ? 'Saving…' : editPromo ? 'Save Changes' : 'Create'}
+                </button>
               </div>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" checked={form.active} onChange={e => setForm(p => ({ ...p, active: e.target.checked }))} className="w-4 h-4 accent-[#8B5CF6]" />
-                <span className="text-sm text-[#1a1a16]">Active immediately</span>
-              </label>
-            </div>
-            {error && <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2 mt-3">{error}</p>}
-            <div className="flex gap-2 mt-5">
-              <button onClick={() => { setShowAdd(false); setEditPromo(null); setError(null); }} className="flex-1 py-2.5 rounded-xl text-sm border border-[rgba(0,0,0,.12)] text-[rgba(26,26,22,.5)]">Cancel</button>
-              <button onClick={save} disabled={saving || !form.name} className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-40" style={{ background: '#8B5CF6' }}>{saving ? 'Saving…' : editPromo ? 'Save Changes' : 'Create'}</button>
             </div>
           </div>
-        </div>
-      )}
+        )}
       </div>
     </div>
   );

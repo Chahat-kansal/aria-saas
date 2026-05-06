@@ -2,6 +2,10 @@
 import { POSAriaInsight } from '@/components/pos/POSAriaInsight';
 import { useState, useEffect } from 'react';
 
+const C = { bg: 'rgba(17,15,26,0.95)', card: 'rgba(26,23,40,0.9)', border: '#2A2540', text: '#EDE8FF', muted: '#8B85A8', dim: '#4A4565', violet: '#8B5CF6', green: '#22C55E', red: '#EF4444', amber: '#F59E0B' };
+const iStyle: React.CSSProperties = { background: '#0A0910', border: `1px solid ${C.border}`, borderRadius: 8, padding: '9px 12px', fontSize: 13, color: C.text, outline: 'none', width: '100%', fontFamily: 'inherit' };
+const lStyle: React.CSSProperties = { display: 'block', fontSize: 10, fontWeight: 700, color: C.muted, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.08em' };
+
 interface Customer {
   id: string; name: string; email: string | null; phone: string | null;
   loyalty_points: number; created_at: string;
@@ -47,108 +51,96 @@ export default function CustomersPage() {
   };
 
   return (
-    <div className="min-h-full bg-gray-50">
+    <div style={{ minHeight: '100%', background: C.bg, color: C.text, fontFamily: "'Manrope',sans-serif" }}>
       <POSAriaInsight page="pos/customers" />
-      <div className="p-6 max-w-4xl mx-auto">
-        <div className="flex items-center justify-between mb-6">
+      <div style={{ padding: '20px 24px', maxWidth: 900, margin: '0 auto' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
           <div>
-            <h1 className="text-xl font-semibold text-gray-900">Customers</h1>
-            <p className="text-xs text-gray-500 mt-0.5">{customers.length} registered</p>
+            <h1 style={{ fontSize: 20, fontWeight: 700, color: C.text, marginBottom: 2 }}>Customers</h1>
+            <p style={{ fontSize: 12, color: C.muted }}>{customers.length} registered</p>
           </div>
           <button onClick={() => setShowAdd(s => !s)}
-            className="px-4 py-2 rounded-lg text-sm font-medium text-white transition-opacity hover:opacity-90"
-            style={{ background: 'linear-gradient(135deg,#F97316,#ea6c0e)' }}>
+            style={{ padding: '9px 20px', borderRadius: 9, border: 'none', background: C.violet, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
             + Add customer
           </button>
         </div>
 
         {showAdd && (
           <form onSubmit={addCustomer}
-            className="bg-white rounded-2xl p-5 mb-5 space-y-4 border border-orange-100 shadow-sm">
-            <h3 className="text-sm font-medium text-gray-900">New customer</h3>
-            <div className="grid grid-cols-3 gap-3">
+            style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '20px 22px', marginBottom: 16 }}>
+            <h3 style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 14 }}>New customer</h3>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12, marginBottom: 14 }}>
               <div>
-                <label className="block text-[10px] text-gray-500 uppercase tracking-widest mb-1.5">Name *</label>
+                <label style={lStyle}>Name *</label>
                 <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} required
-                  className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent"
-                  placeholder="Full name" />
+                  style={iStyle} placeholder="Full name" />
               </div>
               <div>
-                <label className="block text-[10px] text-gray-500 uppercase tracking-widest mb-1.5">Email</label>
+                <label style={lStyle}>Email</label>
                 <input value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} type="email"
-                  className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent"
-                  placeholder="Optional" />
+                  style={iStyle} placeholder="Optional" />
               </div>
               <div>
-                <label className="block text-[10px] text-gray-500 uppercase tracking-widest mb-1.5">Phone</label>
+                <label style={lStyle}>Phone</label>
                 <input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
-                  className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent"
-                  placeholder="Optional" />
+                  style={iStyle} placeholder="Optional" />
               </div>
             </div>
-            <div className="flex gap-2">
+            <div style={{ display: 'flex', gap: 8 }}>
               <button type="submit" disabled={saving}
-                className="px-4 py-2 rounded-lg text-xs font-medium text-white disabled:opacity-50"
-                style={{ background: 'linear-gradient(135deg,#F97316,#ea6c0e)' }}>
+                style={{ padding: '8px 20px', borderRadius: 8, border: 'none', background: C.violet, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', opacity: saving ? 0.5 : 1 }}>
                 {saving ? 'Saving…' : 'Add customer'}
               </button>
               <button type="button" onClick={() => setShowAdd(false)}
-                className="px-4 py-2 rounded-lg text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors">
+                style={{ padding: '8px 16px', borderRadius: 8, border: `1px solid ${C.border}`, background: 'transparent', color: C.muted, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>
                 Cancel
               </button>
             </div>
           </form>
         )}
 
-        <div className="mb-4">
+        <div style={{ marginBottom: 14 }}>
           <input value={search} onChange={e => setSearch(e.target.value)}
             placeholder="Search by name, email, or phone…"
-            className="w-full max-w-xs bg-white border border-gray-200 rounded-lg px-3 py-2 text-xs text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent" />
+            style={{ ...iStyle, maxWidth: 320 }} />
         </div>
 
-        <div className="bg-white rounded-2xl overflow-hidden border border-gray-200 shadow-sm">
-          <table className="w-full">
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, overflow: 'hidden' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
-              <tr className="bg-gray-50 border-b border-gray-200">
+              <tr style={{ background: 'rgba(255,255,255,0.03)', borderBottom: `1px solid ${C.border}` }}>
                 {['Customer', 'Email', 'Phone', 'Loyalty pts', 'Since'].map(h => (
-                  <th key={h} className="text-left text-[10px] text-gray-400 uppercase tracking-widest px-4 py-3 font-medium">{h}</th>
+                  <th key={h} style={{ textAlign: 'left', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: C.dim, padding: '10px 14px' }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={5} className="text-center py-12 text-xs text-gray-400">Loading…</td></tr>
+                <tr><td colSpan={5} style={{ textAlign: 'center', padding: '48px 14px', fontSize: 13, color: C.dim }}>Loading…</td></tr>
               ) : !filtered.length ? (
-                <tr><td colSpan={5} className="text-center py-12 text-xs text-gray-400">
+                <tr><td colSpan={5} style={{ textAlign: 'center', padding: '48px 14px', fontSize: 13, color: C.dim }}>
                   {!customers.length ? 'No customers yet' : 'No customers match'}
                 </td></tr>
               ) : (
-                filtered.map(c => (
-                  <tr key={c.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50 transition-colors">
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <div className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-medium flex-shrink-0"
-                          style={{ background: 'rgba(249,115,22,.12)', color: '#ea580c' }}>
+                filtered.map((c, i) => (
+                  <tr key={c.id} style={{ borderBottom: i < filtered.length - 1 ? `1px solid ${C.border}` : 'none' }}>
+                    <td style={{ padding: '10px 14px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <div style={{ width: 30, height: 30, borderRadius: '50%', background: 'rgba(139,92,246,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: C.violet, flexShrink: 0 }}>
                           {c.name[0].toUpperCase()}
                         </div>
-                        <span className="text-xs text-gray-900 font-medium">{c.name}</span>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{c.name}</span>
                       </div>
                     </td>
-                    <td className="px-4 py-3">
-                      <span className="text-xs text-gray-500">{c.email || '—'}</span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="text-xs text-gray-500">{c.phone || '—'}</span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="text-xs font-medium" style={{ color: c.loyalty_points > 0 ? '#ea580c' : '#9ca3af' }}>
+                    <td style={{ padding: '10px 14px', fontSize: 12, color: C.muted }}>{c.email || '—'}</td>
+                    <td style={{ padding: '10px 14px', fontSize: 12, color: C.muted }}>{c.phone || '—'}</td>
+                    <td style={{ padding: '10px 14px' }}>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: c.loyalty_points > 0 ? C.violet : C.dim }}>
                         {c.loyalty_points}
                       </span>
                     </td>
-                    <td className="px-4 py-3">
-                      <span className="text-[10px] text-gray-400">
-                        {new Date(c.created_at).toLocaleDateString('en-AU')}
-                      </span>
+                    <td style={{ padding: '10px 14px', fontSize: 11, color: C.dim }}>
+                      {new Date(c.created_at).toLocaleDateString('en-AU')}
                     </td>
                   </tr>
                 ))

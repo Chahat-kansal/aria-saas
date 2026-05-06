@@ -2,7 +2,14 @@
 import { POSAriaInsight } from '@/components/pos/POSAriaInsight';
 import { useState, useEffect } from 'react';
 
-interface GiftCard { id: string; code: string; initial_balance: number; current_balance: number; status: string; created_at: string; expires_at: string | null; }
+const C = { bg: 'rgba(17,15,26,0.95)', card: 'rgba(26,23,40,0.9)', border: '#2A2540', text: '#EDE8FF', muted: '#8B85A8', dim: '#4A4565', violet: '#8B5CF6', green: '#22C55E', red: '#EF4444', amber: '#F59E0B' };
+const iStyle: React.CSSProperties = { background: '#0A0910', border: `1px solid ${C.border}`, borderRadius: 8, padding: '9px 12px', fontSize: 13, color: C.text, outline: 'none', width: '100%', fontFamily: 'inherit' };
+const lStyle: React.CSSProperties = { display: 'block', fontSize: 11, fontWeight: 700, color: C.muted, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' };
+
+interface GiftCard {
+  id: string; code: string; initial_balance: number; current_balance: number;
+  recipient_name: string | null; status: string; created_at: string; expires_at: string | null; is_active: boolean;
+}
 
 export default function GiftCardsPage() {
   const [cards, setCards] = useState<GiftCard[]>([]);
@@ -10,91 +17,252 @@ export default function GiftCardsPage() {
   const [search, setSearch] = useState('');
   const [showIssue, setShowIssue] = useState(false);
   const [amount, setAmount] = useState('');
+  const [recipientName, setRecipientName] = useState('');
   const [expiry, setExpiry] = useState('');
   const [issuing, setIssuing] = useState(false);
   const [issued, setIssued] = useState<GiftCard | null>(null);
+  const [issueError, setIssueError] = useState<string | null>(null);
+  const [checkCode, setCheckCode] = useState('');
+  const [checkResult, setCheckResult] = useState<GiftCard | null>(null);
+  const [checking, setChecking] = useState(false);
 
-  const load = () => fetch('/api/pos/gift-cards').then(r => r.json()).then(d => { setCards(d.gift_cards ?? []); setLoading(false); }).catch(() => setLoading(false));
+  const load = () => {
+    fetch('/api/pos/gift-cards')
+      .then(r => r.json())
+      .then(d => { setCards(d.gift_cards ?? []); setLoading(false); })
+      .catch(() => setLoading(false));
+  };
   useEffect(() => { load(); }, []);
 
   async function issueCard() {
     if (!amount || parseFloat(amount) <= 0) return;
     setIssuing(true);
-    const res = await fetch('/api/pos/gift-cards', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ initial_balance: Math.round(parseFloat(amount) * 100), expires_at: expiry || null }) }).then(r => r.json());
+    setIssueError(null);
+    try {
+      const res = await fetch('/api/pos/gift-cards', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: parseFloat(amount),
+          recipient_name: recipientName.trim() || null,
+          expires_at: expiry || null,
+        }),
+      });
+      const d = await res.json();
+      if (d.gift_card) {
+        setIssued(d.gift_card);
+        setCards(c => [d.gift_card, ...c]);
+        setAmount('');
+        setRecipientName('');
+        setExpiry('');
+        setShowIssue(false);
+      } else {
+        setIssueError(d.error || 'Failed to issue gift card');
+      }
+    } catch (e) {
+      setIssueError('Network error — please try again');
+    }
     setIssuing(false);
-    if (res.gift_card) { setIssued(res.gift_card); setCards(c => [res.gift_card, ...c]); setAmount(''); setExpiry(''); setShowIssue(false); }
   }
 
-  const filtered = cards.filter(c => !search || c.code.toLowerCase().includes(search.toLowerCase()));
-  const activeCount = cards.filter(c => c.status === 'active').length;
-  const totalBalance = cards.filter(c => c.status === 'active').reduce((s, c) => s + c.current_balance, 0);
+  async function checkBalance() {
+    if (!checkCode.trim()) return;
+    setChecking(true);
+    setCheckResult(null);
+    try {
+      const res = await fetch(`/api/pos/gift-cards?code=${encodeURIComponent(checkCode.trim().toUpperCase())}`);
+      const d = await res.json();
+      setCheckResult(d.gift_card ?? null);
+    } catch { /* silent */ }
+    setChecking(false);
+  }
+
+  async function deactivate(id: string) {
+    await fetch(`/api/pos/gift-cards?id=${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ is_active: false }),
+    });
+    setCards(c => c.map(gc => gc.id === id ? { ...gc, is_active: false, status: 'cancelled' } : gc));
+  }
+
+  const filtered = cards.filter(c => !search || c.code.toLowerCase().includes(search.toLowerCase()) || (c.recipient_name ?? '').toLowerCase().includes(search.toLowerCase()));
+  const activeCount = cards.filter(c => c.is_active && c.status !== 'used' && c.status !== 'cancelled').length;
+  const totalBalance = cards.filter(c => c.is_active).reduce((s, c) => s + (c.current_balance ?? 0), 0);
+
+  function statusColor(gc: GiftCard) {
+    if (!gc.is_active || gc.status === 'cancelled') return C.red;
+    if (gc.status === 'used') return C.muted;
+    if (gc.expires_at && new Date(gc.expires_at) < new Date()) return C.amber;
+    return C.green;
+  }
+  function statusLabel(gc: GiftCard) {
+    if (!gc.is_active || gc.status === 'cancelled') return 'Cancelled';
+    if (gc.status === 'used') return 'Used';
+    if (gc.expires_at && new Date(gc.expires_at) < new Date()) return 'Expired';
+    return 'Active';
+  }
 
   return (
-    <div className="min-h-full">
+    <div style={{ minHeight: '100%', background: C.bg, color: C.text, fontFamily: "'Manrope',sans-serif" }}>
       <POSAriaInsight page="pos/gift-cards" />
-      <div className="p-6 max-w-5xl mx-auto">
-      <div className="mb-6 flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-semibold text-[#1a1a16]">Gift Cards</h1>
-          <p className="text-xs text-[rgba(26,26,22,.45)] mt-0.5">Issue and manage gift cards for customers</p>
-        </div>
-        <button onClick={() => setShowIssue(true)} className="px-4 py-2 rounded-xl text-sm font-semibold text-white" style={{ background: '#8B5CF6' }}>+ Issue Gift Card</button>
-      </div>
+      <div style={{ padding: '20px 24px', maxWidth: 960, margin: '0 auto' }}>
 
-      <div className="grid grid-cols-3 gap-4 mb-6">
-        {[{ label: 'Active cards', value: activeCount }, { label: 'Total issued', value: cards.length }, { label: 'Outstanding', value: `A$${(totalBalance / 100).toFixed(2)}` }].map(s => (
-          <div key={s.label} className="bg-white rounded-xl border border-[rgba(0,0,0,.06)] p-4 shadow-sm">
-            <p className="text-xs text-[rgba(26,26,22,.4)] mb-1">{s.label}</p>
-            <p className="text-2xl font-semibold text-[#1a1a16]">{s.value}</p>
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20, gap: 12 }}>
+          <div>
+            <h1 style={{ fontSize: 20, fontWeight: 700, color: C.text, marginBottom: 2 }}>Gift Cards</h1>
+            <p style={{ fontSize: 12, color: C.muted }}>Issue and manage gift cards for customers</p>
           </div>
-        ))}
-      </div>
-
-      {issued && (
-        <div className="mb-4 rounded-xl px-5 py-4 flex items-center justify-between" style={{ background: 'rgba(29,158,117,0.08)', border: '1px solid rgba(29,158,117,0.2)' }}>
-          <p className="text-sm" style={{ color: '#8B5CF6' }}>Gift card issued! Code: <strong className="font-mono">{issued.code}</strong> · Balance: A${(issued.initial_balance / 100).toFixed(2)}</p>
-          <button onClick={() => setIssued(null)} className="text-xs text-gray-400">✕</button>
+          <button onClick={() => { setShowIssue(true); setIssueError(null); }}
+            style={{ padding: '9px 20px', borderRadius: 9, border: 'none', background: C.violet, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}>
+            + Issue Gift Card
+          </button>
         </div>
-      )}
 
-      <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by code…" className="w-full px-4 py-2.5 rounded-xl text-sm outline-none bg-white border border-[rgba(0,0,0,.1)] mb-4" />
+        {/* Stats */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12, marginBottom: 16 }}>
+          {[
+            { label: 'Active cards', value: activeCount },
+            { label: 'Total issued', value: cards.length },
+            { label: 'Outstanding balance', value: `A$${totalBalance.toFixed(2)}` },
+          ].map(s => (
+            <div key={s.label} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '14px 18px' }}>
+              <p style={{ fontSize: 11, color: C.muted, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{s.label}</p>
+              <p style={{ fontSize: 22, fontWeight: 700, color: C.text, fontFamily: "'JetBrains Mono',monospace" }}>{s.value}</p>
+            </div>
+          ))}
+        </div>
 
-      <div className="bg-white rounded-2xl border border-[rgba(0,0,0,.08)] overflow-hidden shadow-sm">
-        <table className="w-full text-sm">
-          <thead><tr className="border-b border-[rgba(0,0,0,.06)]">{['Code','Initial','Current','Issued','Expires','Status'].map(h => <th key={h} className="px-4 py-3 text-left text-xs font-medium text-[rgba(26,26,22,.4)]">{h}</th>)}</tr></thead>
-          <tbody>
-            {loading ? <tr><td colSpan={6} className="px-4 py-8 text-center text-sm text-[rgba(26,26,22,.35)]">Loading…</td></tr>
-            : filtered.length === 0 ? <tr><td colSpan={6} className="px-4 py-12 text-center"><p className="text-sm font-medium text-[#1a1a16] mb-1">No gift cards yet</p><p className="text-xs text-[rgba(26,26,22,.4)]">Click &quot;Issue Gift Card&quot; to get started.</p></td></tr>
-            : filtered.map(card => (
-              <tr key={card.id} className="border-b border-[rgba(0,0,0,.04)] hover:bg-[rgba(0,0,0,.015)]">
-                <td className="px-4 py-3 font-mono font-bold text-[#1a1a16]">{card.code}</td>
-                <td className="px-4 py-3 text-[rgba(26,26,22,.6)]">A${(card.initial_balance/100).toFixed(2)}</td>
-                <td className="px-4 py-3 font-semibold text-[#1a1a16]">A${(card.current_balance/100).toFixed(2)}</td>
-                <td className="px-4 py-3 text-xs text-[rgba(26,26,22,.4)]">{new Date(card.created_at).toLocaleDateString()}</td>
-                <td className="px-4 py-3 text-xs text-[rgba(26,26,22,.4)]">{card.expires_at ? new Date(card.expires_at).toLocaleDateString() : '—'}</td>
-                <td className="px-4 py-3"><span className={`text-xs px-2 py-0.5 rounded-full capitalize ${card.status === 'active' ? 'bg-green-100 text-green-700' : card.status === 'expired' ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-500'}`}>{card.status}</span></td>
+        {/* Issued toast */}
+        {issued && (
+          <div style={{ marginBottom: 14, borderRadius: 12, padding: '12px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.2)' }}>
+            <p style={{ fontSize: 13, color: C.green }}>
+              Gift card issued! Code: <strong style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 14, color: C.text }}>{issued.code}</strong>
+              {issued.recipient_name && <span style={{ color: C.muted }}> · {issued.recipient_name}</span>}
+              {' '}· Balance: <strong>A${(issued.current_balance ?? issued.initial_balance).toFixed(2)}</strong>
+            </p>
+            <button onClick={() => setIssued(null)} style={{ background: 'none', border: 'none', color: C.muted, cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>✕</button>
+          </div>
+        )}
+
+        {/* Check balance */}
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '14px 18px', marginBottom: 14 }}>
+          <p style={{ fontSize: 12, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 }}>Check Balance</p>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <input value={checkCode} onChange={e => setCheckCode(e.target.value.toUpperCase())}
+              placeholder="Enter gift card code…"
+              style={{ ...iStyle, flex: 1, fontFamily: "'JetBrains Mono',monospace" }}
+              onKeyDown={e => e.key === 'Enter' && checkBalance()} />
+            <button onClick={checkBalance} disabled={checking || !checkCode.trim()}
+              style={{ padding: '9px 18px', borderRadius: 8, border: 'none', background: C.violet, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', opacity: checking || !checkCode.trim() ? 0.5 : 1, flexShrink: 0 }}>
+              {checking ? 'Checking…' : 'Check'}
+            </button>
+          </div>
+          {checkResult && (
+            <div style={{ marginTop: 10, padding: '10px 14px', background: 'rgba(139,92,246,0.08)', borderRadius: 8, border: `1px solid rgba(139,92,246,0.2)` }}>
+              <p style={{ fontSize: 13, color: C.text }}>Code: <strong style={{ fontFamily: "'JetBrains Mono',monospace" }}>{checkResult.code}</strong></p>
+              <p style={{ fontSize: 13, color: C.text }}>Balance: <strong style={{ color: C.violet }}>A${(checkResult.current_balance ?? 0).toFixed(2)}</strong> / A${(checkResult.initial_balance ?? 0).toFixed(2)}</p>
+              <p style={{ fontSize: 12, color: statusColor(checkResult) }}>{statusLabel(checkResult)}</p>
+            </div>
+          )}
+          {checkResult === null && checkCode && !checking && (
+            <p style={{ marginTop: 8, fontSize: 12, color: C.red }}>No gift card found with that code.</p>
+          )}
+        </div>
+
+        {/* Search */}
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by code or recipient…"
+          style={{ ...iStyle, marginBottom: 12 }} />
+
+        {/* Table */}
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, overflow: 'hidden' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ background: 'rgba(255,255,255,0.03)', borderBottom: `1px solid ${C.border}` }}>
+                {['Code', 'Recipient', 'Initial', 'Balance', 'Issued', 'Expires', 'Status', ''].map(h => (
+                  <th key={h} style={{ textAlign: 'left', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: C.dim, padding: '10px 14px' }}>{h}</th>
+                ))}
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr><td colSpan={8} style={{ padding: '40px 14px', textAlign: 'center', color: C.dim, fontSize: 13 }}>Loading…</td></tr>
+              ) : filtered.length === 0 ? (
+                <tr><td colSpan={8} style={{ padding: '48px 14px', textAlign: 'center' }}>
+                  <p style={{ fontSize: 14, fontWeight: 600, color: C.text, marginBottom: 4 }}>No gift cards yet</p>
+                  <p style={{ fontSize: 12, color: C.muted }}>Click &quot;Issue Gift Card&quot; to get started.</p>
+                </td></tr>
+              ) : filtered.map((card, i) => (
+                <tr key={card.id} style={{ borderBottom: i < filtered.length - 1 ? `1px solid ${C.border}` : 'none' }}>
+                  <td style={{ padding: '10px 14px', fontFamily: "'JetBrains Mono',monospace", fontWeight: 700, fontSize: 14, color: C.text }}>{card.code}</td>
+                  <td style={{ padding: '10px 14px', fontSize: 13, color: C.muted }}>{card.recipient_name || '—'}</td>
+                  <td style={{ padding: '10px 14px', fontSize: 13, color: C.muted, fontFamily: "'JetBrains Mono',monospace" }}>A${(card.initial_balance ?? 0).toFixed(2)}</td>
+                  <td style={{ padding: '10px 14px', fontSize: 14, fontWeight: 700, color: C.text, fontFamily: "'JetBrains Mono',monospace" }}>A${(card.current_balance ?? 0).toFixed(2)}</td>
+                  <td style={{ padding: '10px 14px', fontSize: 11, color: C.muted }}>{new Date(card.created_at).toLocaleDateString()}</td>
+                  <td style={{ padding: '10px 14px', fontSize: 11, color: C.muted }}>{card.expires_at ? new Date(card.expires_at).toLocaleDateString() : '—'}</td>
+                  <td style={{ padding: '10px 14px' }}>
+                    <span style={{ fontSize: 10, padding: '3px 8px', borderRadius: 99, fontWeight: 700, background: `${statusColor(card)}18`, color: statusColor(card), border: `1px solid ${statusColor(card)}30` }}>
+                      {statusLabel(card)}
+                    </span>
+                  </td>
+                  <td style={{ padding: '10px 14px' }}>
+                    {card.is_active && card.status !== 'cancelled' && (
+                      <button onClick={() => { if (confirm('Deactivate this gift card?')) deactivate(card.id); }}
+                        style={{ fontSize: 11, padding: '4px 10px', borderRadius: 6, border: `1px solid rgba(239,68,68,0.3)`, background: 'rgba(239,68,68,0.07)', color: C.red, cursor: 'pointer', fontFamily: 'inherit' }}>
+                        Cancel
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
 
-      {showIssue && (
-        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-xl border border-[rgba(0,0,0,.08)]">
-            <div className="flex items-center justify-between mb-4"><h3 className="font-semibold text-[#1a1a16]">Issue Gift Card</h3><button onClick={() => setShowIssue(false)} className="text-gray-400">×</button></div>
-            <div className="space-y-3">
-              <div><label className="text-xs font-medium text-[rgba(26,26,22,.5)] mb-1 block">Amount (A$) *</label><input type="number" min={1} step={0.01} value={amount} onChange={e => setAmount(e.target.value)} className="w-full px-3 py-2.5 rounded-xl text-sm border border-[rgba(0,0,0,.12)] outline-none" placeholder="50.00" /></div>
-              <div><label className="text-xs font-medium text-[rgba(26,26,22,.5)] mb-1 block">Expiry (optional)</label><input type="date" value={expiry} onChange={e => setExpiry(e.target.value)} className="w-full px-3 py-2.5 rounded-xl text-sm border border-[rgba(0,0,0,.12)] outline-none" /></div>
-              <p className="text-xs text-[rgba(26,26,22,.4)]">A unique code (e.g. GC-ABCD-EFGH) will be auto-generated.</p>
-            </div>
-            <div className="flex gap-2 mt-5">
-              <button onClick={() => setShowIssue(false)} className="flex-1 py-2.5 rounded-xl text-sm border border-[rgba(0,0,0,.12)] text-[rgba(26,26,22,.5)]">Cancel</button>
-              <button onClick={issueCard} disabled={issuing || !amount} className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-40" style={{ background: '#8B5CF6' }}>{issuing ? 'Issuing…' : 'Issue card'}</button>
+        {/* Issue modal */}
+        {showIssue && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: 16 }}>
+            <div style={{ background: '#0F0D1C', border: `1px solid ${C.border}`, borderRadius: 18, width: '100%', maxWidth: 400, padding: '24px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+                <h3 style={{ fontSize: 16, fontWeight: 700, color: C.text }}>Issue Gift Card</h3>
+                <button onClick={() => { setShowIssue(false); setIssueError(null); }}
+                  style={{ background: 'none', border: 'none', color: C.muted, fontSize: 22, cursor: 'pointer', lineHeight: 1 }}>&times;</button>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <div>
+                  <label style={lStyle}>Amount (A$) *</label>
+                  <input type="number" min={1} step={0.01} value={amount} onChange={e => setAmount(e.target.value)}
+                    style={iStyle} placeholder="50.00" autoFocus />
+                </div>
+                <div>
+                  <label style={lStyle}>Recipient Name (optional)</label>
+                  <input type="text" value={recipientName} onChange={e => setRecipientName(e.target.value)}
+                    style={iStyle} placeholder="e.g. Jane Smith" />
+                </div>
+                <div>
+                  <label style={lStyle}>Expiry Date (optional)</label>
+                  <input type="date" value={expiry} onChange={e => setExpiry(e.target.value)}
+                    style={iStyle} />
+                </div>
+                <p style={{ fontSize: 11, color: C.dim }}>A unique code (e.g. AB12CD34) will be auto-generated and shown after issuing.</p>
+              </div>
+              {issueError && (
+                <p style={{ marginTop: 12, fontSize: 12, color: C.red, background: 'rgba(239,68,68,0.08)', borderRadius: 8, padding: '8px 12px' }}>{issueError}</p>
+              )}
+              <div style={{ display: 'flex', gap: 8, marginTop: 20 }}>
+                <button onClick={() => { setShowIssue(false); setIssueError(null); }}
+                  style={{ flex: 1, padding: '10px', borderRadius: 9, border: `1px solid ${C.border}`, background: 'transparent', color: C.muted, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+                  Cancel
+                </button>
+                <button onClick={issueCard} disabled={issuing || !amount || parseFloat(amount) <= 0}
+                  style={{ flex: 1, padding: '10px', borderRadius: 9, border: 'none', background: C.violet, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', opacity: issuing || !amount || parseFloat(amount) <= 0 ? 0.5 : 1 }}>
+                  {issuing ? 'Issuing…' : 'Issue Gift Card'}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
       </div>
     </div>
   );

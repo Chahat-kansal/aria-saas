@@ -2,22 +2,16 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 
+const C = { bg: 'rgba(17,15,26,0.95)', card: 'rgba(26,23,40,0.9)', border: '#2A2540', text: '#EDE8FF', muted: '#8B85A8', dim: '#4A4565', violet: '#8B5CF6', green: '#22C55E', red: '#EF4444' };
+const iStyle: React.CSSProperties = { background: '#0A0910', border: `1px solid ${C.border}`, borderRadius: 8, padding: '9px 12px', fontSize: 13, color: C.text, outline: 'none', width: '100%', fontFamily: 'inherit' };
+const lStyle: React.CSSProperties = { display: 'block', fontSize: 11, fontWeight: 700, color: C.muted, marginBottom: 6 };
+
 interface Settings {
-  business_name: string;
-  currency: string;
-  tax_inclusive: boolean;
-  receipt_footer: string;
-  receipt_header: string;
-  business_abn: string;
-  business_address: string;
-  business_phone: string;
-  business_website: string;
-  receipt_show_gst: boolean;
-  receipt_show_cashier: boolean;
-  receipt_show_loyalty: boolean;
-  low_stock_notify: boolean;
-  loyalty_enabled: boolean;
-  cash_rounding: boolean;
+  business_name: string; currency: string; tax_inclusive: boolean;
+  receipt_footer: string; receipt_header: string; business_abn: string;
+  business_address: string; business_phone: string; business_website: string;
+  receipt_show_gst: boolean; receipt_show_cashier: boolean; receipt_show_loyalty: boolean;
+  low_stock_notify: boolean; loyalty_enabled: boolean; cash_rounding: boolean;
 }
 
 const SETTING_SECTIONS = [
@@ -68,138 +62,132 @@ export default function SettingsPage() {
     onChange: (e: React.ChangeEvent<HTMLInputElement>) => setForm(f => ({ ...f, [key]: e.target.checked })),
   });
 
-  const inputCls = 'w-full bg-[#fafaf8] border border-[rgba(0,0,0,.1)] rounded-lg px-3 py-2.5 text-sm text-[#1a1a16] focus:outline-none focus:border-[#2563eb]';
-
   return (
-    <div className="p-6 max-w-3xl mx-auto">
-      <div className="mb-6 flex items-center justify-between">
+    <div style={{ minHeight: '100%', background: C.bg, color: C.text, fontFamily: "'Manrope',sans-serif", padding: '20px 24px', maxWidth: 720, margin: '0 auto' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
         <div>
-          <h1 className="text-xl font-semibold text-[#1a1a16]">Settings</h1>
-          <p className="text-xs text-[rgba(26,26,22,.45)] mt-0.5">POS configuration and receipt template</p>
+          <h1 style={{ fontSize: 20, fontWeight: 700, color: C.text, marginBottom: 2 }}>Settings</h1>
+          <p style={{ fontSize: 12, color: C.muted }}>POS configuration and receipt template</p>
         </div>
-        <div className="flex items-center gap-3">
-          {saved && <span className="text-xs text-violet-600 font-medium">Saved!</span>}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          {saved && <span style={{ fontSize: 12, color: C.green, fontWeight: 600 }}>Saved!</span>}
           <button onClick={save} disabled={saving}
-            className="px-4 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-50"
-            style={{ background: 'linear-gradient(135deg,#7C3AED,#6D28D9)' }}>
+            style={{ padding: '9px 20px', borderRadius: 9, border: 'none', background: C.violet, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', opacity: saving ? 0.6 : 1 }}>
             {saving ? 'Saving…' : 'Save Settings'}
           </button>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 mb-6 bg-gray-100 rounded-xl p-1 w-fit">
+      <div style={{ display: 'flex', gap: 4, marginBottom: 20, background: 'rgba(255,255,255,0.03)', borderRadius: 10, padding: 4, width: 'fit-content' }}>
         {(['general', 'receipt'] as const).map(t => (
           <button key={t} onClick={() => setTab(t)}
-            className={`px-4 py-1.5 rounded-lg text-sm font-medium capitalize transition-colors ${tab === t ? 'bg-white shadow-sm text-[#1a1a16]' : 'text-[rgba(26,26,22,.5)] hover:text-[#1a1a16]'}`}>
+            style={{ padding: '7px 18px', borderRadius: 8, fontSize: 13, fontWeight: 600, textTransform: 'capitalize', cursor: 'pointer', fontFamily: 'inherit', border: 'none', background: tab === t ? C.card : 'transparent', color: tab === t ? C.text : C.muted }}>
             {t}
           </button>
         ))}
       </div>
 
       {loading ? (
-        <div className="flex justify-center py-12"><div className="w-6 h-6 rounded-full border-2 border-violet-300 border-t-violet-600 animate-spin" /></div>
+        <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 48 }}>
+          <div style={{ width: 24, height: 24, borderRadius: '50%', border: `2px solid rgba(139,92,246,0.3)`, borderTopColor: C.violet, animation: 'pos-processing 0.7s linear infinite' }} />
+        </div>
       ) : tab === 'general' ? (
         <>
-          <div className="bg-white rounded-2xl border border-[rgba(0,0,0,.08)] shadow-sm p-6 mb-6 space-y-4">
-            <h2 className="text-sm font-semibold text-[rgba(26,26,22,.6)] uppercase tracking-wider">Business</h2>
-            <div className="grid grid-cols-2 gap-4">
+          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '20px 22px', marginBottom: 14 }}>
+            <p style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 16 }}>Business</p>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
               <div>
-                <label className="block text-xs font-medium text-[rgba(26,26,22,.6)] mb-1.5">Business Name</label>
-                <input {...F('business_name')} className={inputCls} />
+                <label style={lStyle}>Business Name</label>
+                <input {...F('business_name')} style={iStyle} />
               </div>
               <div>
-                <label className="block text-xs font-medium text-[rgba(26,26,22,.6)] mb-1.5">Currency</label>
-                <select {...F('currency')} className={inputCls}>
-                  {['AUD', 'NZD', 'USD', 'GBP', 'EUR', 'CAD', 'SGD'].map(c => <option key={c}>{c}</option>)}
+                <label style={lStyle}>Currency</label>
+                <select {...F('currency')} style={{ ...iStyle, background: '#0A0910' }}>
+                  {['AUD', 'NZD', 'USD', 'GBP', 'EUR', 'CAD', 'SGD'].map(c => (
+                    <option key={c} style={{ background: '#0A0910', color: C.text }}>{c}</option>
+                  ))}
                 </select>
               </div>
             </div>
-            <div className="flex flex-col gap-3 pt-1">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {([
                 ['tax_inclusive',    'Tax-inclusive pricing (GST included in displayed prices)'],
                 ['cash_rounding',    'Cash rounding — round to nearest 5 cents'],
                 ['low_stock_notify', 'Notify when stock is low'],
                 ['loyalty_enabled',  'Enable loyalty points program'],
               ] as const).map(([k, label]) => (
-                <label key={k} className="flex items-center gap-2.5 cursor-pointer">
-                  <input type="checkbox" {...CHK(k as keyof Settings)} className="rounded border-[rgba(0,0,0,.2)] accent-violet-600 w-4 h-4" />
-                  <span className="text-sm text-[#1a1a16]">{label}</span>
+                <label key={k} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                  <input type="checkbox" {...CHK(k as keyof Settings)} style={{ accentColor: C.violet, width: 14, height: 14 }} />
+                  <span style={{ fontSize: 13, color: C.text }}>{label}</span>
                 </label>
               ))}
             </div>
           </div>
 
           {/* Sub-sections */}
-          <h2 className="text-xs font-semibold text-[rgba(26,26,22,.5)] uppercase tracking-wider mb-3">More Settings</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <p style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12 }}>More Settings</p>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 10 }}>
             {SETTING_SECTIONS.map(s => (
               <Link key={s.href} href={s.href}
-                className="bg-white rounded-2xl border border-[rgba(0,0,0,.08)] p-4 shadow-sm hover:border-violet-400 transition-colors group">
-                <p className="text-[13px] font-semibold text-[#1a1a16] group-hover:text-violet-600 transition-colors">{s.label}</p>
-                <p className="text-[11px] text-[rgba(26,26,22,.45)] mt-0.5">{s.desc}</p>
+                style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '14px 18px', textDecoration: 'none', display: 'block' }}>
+                <p style={{ fontSize: 13, fontWeight: 600, color: C.text, marginBottom: 3 }}>{s.label}</p>
+                <p style={{ fontSize: 11, color: C.muted }}>{s.desc}</p>
               </Link>
             ))}
           </div>
         </>
       ) : (
         /* Receipt tab */
-        <div className="bg-white rounded-2xl border border-[rgba(0,0,0,.08)] shadow-sm p-6 space-y-4">
-          <h2 className="text-sm font-semibold text-[rgba(26,26,22,.6)] uppercase tracking-wider">Receipt Template</h2>
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '20px 22px' }}>
+          <p style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 16 }}>Receipt Template</p>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
             <div>
-              <label className="block text-xs font-medium text-[rgba(26,26,22,.6)] mb-1.5">ABN</label>
-              <input {...F('business_abn')} placeholder="12 345 678 901" className={inputCls} />
+              <label style={lStyle}>ABN</label>
+              <input {...F('business_abn')} placeholder="12 345 678 901" style={iStyle} />
             </div>
             <div>
-              <label className="block text-xs font-medium text-[rgba(26,26,22,.6)] mb-1.5">Phone</label>
-              <input {...F('business_phone')} placeholder="+61 2 1234 5678" className={inputCls} />
+              <label style={lStyle}>Phone</label>
+              <input {...F('business_phone')} placeholder="+61 2 1234 5678" style={iStyle} />
             </div>
           </div>
 
-          <div>
-            <label className="block text-xs font-medium text-[rgba(26,26,22,.6)] mb-1.5">Business Address</label>
+          <div style={{ marginBottom: 14 }}>
+            <label style={lStyle}>Business Address</label>
             <textarea {...F('business_address')} rows={2} placeholder="123 Main St, Sydney NSW 2000"
-              className={inputCls + ' resize-none'} />
+              style={{ ...iStyle, resize: 'vertical' }} />
           </div>
 
-          <div>
-            <label className="block text-xs font-medium text-[rgba(26,26,22,.6)] mb-1.5">Website</label>
-            <input {...F('business_website')} placeholder="https://yourstore.com.au" className={inputCls} />
+          <div style={{ marginBottom: 14 }}>
+            <label style={lStyle}>Website</label>
+            <input {...F('business_website')} placeholder="https://yourstore.com.au" style={iStyle} />
           </div>
 
-          <div>
-            <label className="block text-xs font-medium text-[rgba(26,26,22,.6)] mb-1.5">Receipt Header</label>
+          <div style={{ marginBottom: 14 }}>
+            <label style={lStyle}>Receipt Header</label>
             <textarea {...F('receipt_header')} rows={2} placeholder="Custom text at the top of every receipt"
-              className={inputCls + ' resize-none'} />
+              style={{ ...iStyle, resize: 'vertical' }} />
           </div>
 
-          <div>
-            <label className="block text-xs font-medium text-[rgba(26,26,22,.6)] mb-1.5">Receipt Footer</label>
+          <div style={{ marginBottom: 16 }}>
+            <label style={lStyle}>Receipt Footer</label>
             <textarea {...F('receipt_footer')} rows={2} placeholder="Thank you for your business!"
-              className={inputCls + ' resize-none'} />
+              style={{ ...iStyle, resize: 'vertical' }} />
           </div>
 
-          <div className="flex flex-col gap-3 pt-1 border-t border-[rgba(0,0,0,.06)]">
-            <p className="text-xs font-medium text-[rgba(26,26,22,.5)] uppercase tracking-wider pt-1">Show on Receipt</p>
+          <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 16 }}>
+            <p style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12 }}>Show on Receipt</p>
             {([
               ['receipt_show_gst',     'GST breakdown (excl. GST + GST amount)'],
               ['receipt_show_cashier', 'Cashier name'],
               ['receipt_show_loyalty', 'Loyalty points earned'],
             ] as const).map(([k, label]) => (
-              <label key={k} className="flex items-center gap-2.5 cursor-pointer">
-                <input type="checkbox" {...CHK(k as keyof Settings)} className="rounded border-[rgba(0,0,0,.2)] accent-violet-600 w-4 h-4" />
-                <span className="text-sm text-[#1a1a16]">{label}</span>
+              <label key={k} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', marginBottom: 10 }}>
+                <input type="checkbox" {...CHK(k as keyof Settings)} style={{ accentColor: C.violet, width: 14, height: 14 }} />
+                <span style={{ fontSize: 13, color: C.text }}>{label}</span>
               </label>
             ))}
-          </div>
-
-          <div className="flex items-center justify-end gap-3 pt-2 border-t border-[rgba(0,0,0,.06)]">
-            <p className="text-xs text-[rgba(26,26,22,.4)] flex-1">
-              Run the SQL migration to add receipt columns to pos_settings before saving:
-              <code className="ml-1 text-[10px] bg-gray-100 px-1 rounded">supabase/migrations/20260504000001_pos_promotions_receipt.sql</code>
-            </p>
           </div>
         </div>
       )}

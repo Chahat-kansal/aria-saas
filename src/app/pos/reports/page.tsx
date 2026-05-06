@@ -2,6 +2,9 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 
+const C = { bg: 'rgba(17,15,26,0.95)', card: 'rgba(26,23,40,0.9)', border: '#2A2540', text: '#EDE8FF', muted: '#8B85A8', dim: '#4A4565', violet: '#8B5CF6', green: '#22C55E', red: '#EF4444', amber: '#F59E0B' };
+const iStyle: React.CSSProperties = { background: '#0A0910', border: `1px solid ${C.border}`, borderRadius: 8, padding: '8px 12px', fontSize: 13, color: C.text, outline: 'none', fontFamily: 'inherit' };
+
 interface Summary {
   total_revenue: number; total_tax: number; total_discount: number;
   transaction_count: number; cash_sales: number; card_sales: number; avg_transaction: number;
@@ -9,6 +12,14 @@ interface Summary {
 interface DayRow { date: string; revenue: number; count: number; }
 
 function fmt(from: Date) { return from.toISOString().slice(0, 10); }
+
+const REPORT_LINKS = [
+  { label: 'Sales Reports',     href: '/pos/reports/sales',     desc: 'Detailed transaction history' },
+  { label: 'Inventory Reports', href: '/pos/reports/inventory',  desc: 'Stock levels and movements' },
+  { label: 'Purchase Reports',  href: '/pos/reports/purchases',  desc: 'Supplier orders and invoices' },
+  { label: 'Transfer Reports',  href: '/pos/reports/transfers',  desc: 'Inter-outlet stock transfers' },
+  { label: 'Register Closures', href: '/pos/reports/closures',   desc: 'End of day session summaries' },
+];
 
 export default function ReportsDashboardPage() {
   const [summary, setSummary] = useState<Summary | null>(null);
@@ -26,65 +37,57 @@ export default function ReportsDashboardPage() {
 
   const maxRev = Math.max(...daily.map(d => d.revenue), 1);
 
-  const REPORT_LINKS = [
-    { label: 'Sales Reports', href: '/pos/reports/sales', desc: 'Detailed transaction history' },
-    { label: 'Inventory Reports', href: '/pos/reports/inventory', desc: 'Stock levels and movements' },
-    { label: 'Purchase Reports', href: '/pos/reports/purchases', desc: 'Supplier orders and invoices' },
-    { label: 'Transfer Reports', href: '/pos/reports/transfers', desc: 'Inter-outlet stock transfers' },
-    { label: 'Register Closures', href: '/pos/reports/closures', desc: 'End of day session summaries' },
-  ];
-
   return (
-    <div className="p-6">
-      <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
+    <div style={{ minHeight: '100%', background: C.bg, color: C.text, fontFamily: "'Manrope',sans-serif", padding: '20px 24px' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
         <div>
-          <h1 className="text-xl font-semibold text-[#1a1a16]">Reporting Dashboard</h1>
-          <p className="text-xs text-[rgba(26,26,22,.45)] mt-0.5">Business performance overview</p>
+          <h1 style={{ fontSize: 20, fontWeight: 700, color: C.text, marginBottom: 2 }}>Reporting Dashboard</h1>
+          <p style={{ fontSize: 12, color: C.muted }}>Business performance overview</p>
         </div>
-        <div className="flex items-center gap-2">
-          <input type="date" value={from} onChange={e => setFrom(e.target.value)}
-            className="bg-white border border-[rgba(0,0,0,.1)] rounded-lg px-3 py-2 text-xs text-[#1a1a16] focus:outline-none focus:border-[#2563eb]" />
-          <span className="text-xs text-[rgba(26,26,22,.4)]">to</span>
-          <input type="date" value={to} onChange={e => setTo(e.target.value)}
-            className="bg-white border border-[rgba(0,0,0,.1)] rounded-lg px-3 py-2 text-xs text-[#1a1a16] focus:outline-none focus:border-[#2563eb]" />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <input type="date" value={from} onChange={e => setFrom(e.target.value)} style={iStyle} />
+          <span style={{ fontSize: 12, color: C.muted }}>to</span>
+          <input type="date" value={to} onChange={e => setTo(e.target.value)} style={iStyle} />
         </div>
       </div>
 
       {/* KPI cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 16 }}>
         {[
-          { label: 'Total Revenue', value: `$${(summary?.total_revenue ?? 0).toFixed(2)}`, color: '#16a34a' },
-          { label: 'Transactions', value: String(summary?.transaction_count ?? 0), color: '#2563eb' },
-          { label: 'Avg Transaction', value: `$${(summary?.avg_transaction ?? 0).toFixed(2)}`, color: '#7c3aed' },
-          { label: 'Tax Collected', value: `$${(summary?.total_tax ?? 0).toFixed(2)}`, color: '#d97706' },
+          { label: 'Total Revenue',    value: `$${(summary?.total_revenue ?? 0).toFixed(2)}`,    color: C.green },
+          { label: 'Transactions',     value: String(summary?.transaction_count ?? 0),            color: '#38BDF8' },
+          { label: 'Avg Transaction',  value: `$${(summary?.avg_transaction ?? 0).toFixed(2)}`,  color: C.violet },
+          { label: 'Tax Collected',    value: `$${(summary?.total_tax ?? 0).toFixed(2)}`,         color: C.amber },
         ].map(({ label, value, color }) => (
-          <div key={label} className="bg-white rounded-2xl border border-[rgba(0,0,0,.08)] p-4 shadow-sm">
-            <p className="text-[10px] text-[rgba(26,26,22,.4)] uppercase tracking-wider mb-1">{label}</p>
-            <p className="text-2xl font-bold" style={{ color }}>{loading ? '—' : value}</p>
+          <div key={label} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '14px 18px' }}>
+            <p style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 6 }}>{label}</p>
+            <p style={{ fontSize: 22, fontWeight: 700, color: loading ? C.dim : color, fontFamily: "'JetBrains Mono',monospace" }}>
+              {loading ? '—' : value}
+            </p>
           </div>
         ))}
       </div>
 
       {/* Payment split */}
       {summary && (
-        <div className="bg-white rounded-2xl border border-[rgba(0,0,0,.08)] p-4 shadow-sm mb-6">
-          <p className="text-xs font-medium text-[rgba(26,26,22,.5)] mb-3">Payment Methods</p>
-          <div className="flex items-center gap-4">
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '16px 18px', marginBottom: 14 }}>
+          <p style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 14 }}>Payment Methods</p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
             {[
-              { label: 'Cash', value: summary.cash_sales, color: '#16a34a' },
-              { label: 'Card', value: summary.card_sales, color: '#2563eb' },
+              { label: 'Cash', value: summary.cash_sales, color: C.green },
+              { label: 'Card', value: summary.card_sales, color: '#38BDF8' },
             ].map(({ label, value, color }) => {
               const pct = summary.total_revenue > 0 ? (value / summary.total_revenue) * 100 : 0;
               return (
-                <div key={label} className="flex-1">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs text-[rgba(26,26,22,.6)]">{label}</span>
-                    <span className="text-xs font-semibold text-[#1a1a16]">${value.toFixed(2)}</span>
+                <div key={label} style={{ flex: 1 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                    <span style={{ fontSize: 12, color: C.muted }}>{label}</span>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: C.text, fontFamily: "'JetBrains Mono',monospace" }}>${value.toFixed(2)}</span>
                   </div>
-                  <div className="h-2 rounded-full bg-[rgba(0,0,0,.06)]">
-                    <div className="h-2 rounded-full transition-all" style={{ width: `${pct}%`, background: color }} />
+                  <div style={{ height: 6, borderRadius: 3, background: 'rgba(255,255,255,0.06)' }}>
+                    <div style={{ height: 6, borderRadius: 3, width: `${pct}%`, background: color, transition: 'width 300ms' }} />
                   </div>
-                  <p className="text-[10px] text-[rgba(26,26,22,.35)] mt-0.5">{pct.toFixed(0)}%</p>
+                  <p style={{ fontSize: 10, color: C.dim, marginTop: 3 }}>{pct.toFixed(0)}%</p>
                 </div>
               );
             })}
@@ -92,34 +95,35 @@ export default function ReportsDashboardPage() {
         </div>
       )}
 
-      {/* Daily revenue chart */}
+      {/* Daily chart */}
       {daily.length > 0 && (
-        <div className="bg-white rounded-2xl border border-[rgba(0,0,0,.08)] p-4 shadow-sm mb-6">
-          <p className="text-xs font-medium text-[rgba(26,26,22,.5)] mb-4">Daily Revenue</p>
-          <div className="flex items-end gap-1 h-32">
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '16px 18px', marginBottom: 14 }}>
+          <p style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 14 }}>Daily Revenue</p>
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: 100 }}>
             {daily.map(d => {
               const h = (d.revenue / maxRev) * 100;
               return (
-                <div key={d.date} className="flex-1 flex flex-col items-center gap-1 group" title={`${d.date}: $${d.revenue.toFixed(2)}`}>
-                  <div className="w-full rounded-t transition-all" style={{ height: `${Math.max(h, 2)}%`, background: '#2563eb', opacity: 0.75 }} />
+                <div key={d.date} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}
+                  title={`${d.date}: $${d.revenue.toFixed(2)}`}>
+                  <div style={{ width: '100%', borderRadius: '3px 3px 0 0', background: C.violet, opacity: 0.8, height: `${Math.max(h, 2)}%` }} />
                 </div>
               );
             })}
           </div>
-          <div className="flex justify-between mt-1">
-            <span className="text-[9px] text-[rgba(26,26,22,.3)]">{daily[0]?.date}</span>
-            <span className="text-[9px] text-[rgba(26,26,22,.3)]">{daily[daily.length - 1]?.date}</span>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6 }}>
+            <span style={{ fontSize: 10, color: C.dim }}>{daily[0]?.date}</span>
+            <span style={{ fontSize: 10, color: C.dim }}>{daily[daily.length - 1]?.date}</span>
           </div>
         </div>
       )}
 
       {/* Report links */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10 }}>
         {REPORT_LINKS.map(r => (
           <Link key={r.href} href={r.href}
-            className="bg-white rounded-2xl border border-[rgba(0,0,0,.08)] p-4 shadow-sm hover:border-[#2563eb] hover:shadow-md transition-all group">
-            <p className="text-[13px] font-semibold text-[#1a1a16] group-hover:text-[#2563eb] transition-colors">{r.label}</p>
-            <p className="text-[11px] text-[rgba(26,26,22,.45)] mt-0.5">{r.desc}</p>
+            style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '14px 18px', textDecoration: 'none', display: 'block', transition: 'border-color 150ms' }}>
+            <p style={{ fontSize: 13, fontWeight: 600, color: C.text, marginBottom: 3 }}>{r.label}</p>
+            <p style={{ fontSize: 11, color: C.muted }}>{r.desc}</p>
           </Link>
         ))}
       </div>

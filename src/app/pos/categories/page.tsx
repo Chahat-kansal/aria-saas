@@ -1,6 +1,10 @@
 'use client';
 import { useState, useEffect } from 'react';
 
+const C = { bg: 'rgba(17,15,26,0.95)', card: 'rgba(26,23,40,0.9)', border: '#2A2540', text: '#EDE8FF', muted: '#8B85A8', dim: '#4A4565', violet: '#8B5CF6', green: '#22C55E', red: '#EF4444' };
+const iStyle: React.CSSProperties = { background: '#0A0910', border: `1px solid ${C.border}`, borderRadius: 8, padding: '9px 12px', fontSize: 13, color: C.text, outline: 'none', width: '100%', fontFamily: 'inherit' };
+const lStyle: React.CSSProperties = { display: 'block', fontSize: 11, fontWeight: 700, color: C.muted, marginBottom: 6 };
+
 interface Category {
   id: string; name: string; description: string | null; color: string;
   sort_order: number | null; is_active: boolean;
@@ -73,48 +77,45 @@ export default function CategoriesPage() {
   }
 
   return (
-    <div className="p-6">
-      <div className="flex items-center justify-between mb-6">
+    <div style={{ minHeight: '100%', background: C.bg, color: C.text, fontFamily: "'Manrope',sans-serif", padding: '20px 24px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
         <div>
-          <h1 className="text-xl font-semibold text-[#1a1a16]">Categories</h1>
-          <p className="text-xs text-[rgba(26,26,22,.45)] mt-0.5">{categories.length} categories</p>
+          <h1 style={{ fontSize: 20, fontWeight: 700, color: C.text, marginBottom: 2 }}>Categories</h1>
+          <p style={{ fontSize: 12, color: C.muted }}>{categories.length} categories</p>
         </div>
         <button onClick={openAdd}
-          className="px-4 py-2 rounded-lg text-sm font-medium text-white"
-          style={{ background: 'linear-gradient(135deg,#2563eb,#1d4ed8)' }}>
+          style={{ padding: '9px 20px', borderRadius: 9, border: 'none', background: C.violet, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
           + Add Category
         </button>
       </div>
 
       {loading ? (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(160px,1fr))', gap: 12 }}>
           {[...Array(6)].map((_, i) => (
-            <div key={i} className="h-24 rounded-2xl bg-[rgba(0,0,0,.05)] animate-pulse" />
+            <div key={i} style={{ height: 96, borderRadius: 14, background: 'rgba(255,255,255,0.04)', animation: 'pos-processing 1s ease infinite' }} />
           ))}
         </div>
       ) : !categories.length ? (
-        <div className="text-center py-20">
-          <div className="w-12 h-12 rounded-xl mx-auto mb-3 flex items-center justify-center" style={{ background: 'rgba(37,99,235,.1)' }}>
-            <FolderIcon />
-          </div>
-          <p className="text-sm text-[rgba(26,26,22,.4)] mb-4">No categories yet</p>
-          <button onClick={openAdd} className="text-sm text-[#2563eb] hover:underline">Create your first category</button>
+        <div style={{ textAlign: 'center', paddingTop: 80 }}>
+          <p style={{ fontSize: 14, color: C.muted, marginBottom: 16 }}>No categories yet</p>
+          <button onClick={openAdd} style={{ fontSize: 13, color: C.violet, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
+            Create your first category
+          </button>
         </div>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-          {categories.map(c => (
-            <button key={c.id} onClick={() => openEdit(c)}
-              className={`relative p-4 rounded-2xl text-left transition-all hover:scale-[1.02] active:scale-100 ${!c.is_active ? 'opacity-50' : ''}`}
-              style={{ background: `${c.color}18`, border: `1.5px solid ${c.color}35` }}>
-              <div className="w-8 h-8 rounded-lg mb-3 flex items-center justify-center" style={{ background: c.color }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(160px,1fr))', gap: 12 }}>
+          {categories.map(cat => (
+            <button key={cat.id} onClick={() => openEdit(cat)}
+              style={{ position: 'relative', padding: '16px', borderRadius: 14, textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit', border: `1.5px solid ${cat.color}35`, background: `${cat.color}12`, opacity: !cat.is_active ? 0.5 : 1 }}>
+              <div style={{ width: 32, height: 32, borderRadius: 8, background: cat.color, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 10 }}>
                 <FolderIcon white />
               </div>
-              <p className="text-[13px] font-semibold text-[#1a1a16] leading-tight">{c.name}</p>
-              {c.description && (
-                <p className="text-[10px] text-[rgba(26,26,22,.45)] mt-0.5 line-clamp-1">{c.description}</p>
+              <p style={{ fontSize: 13, fontWeight: 600, color: C.text, marginBottom: 2 }}>{cat.name}</p>
+              {cat.description && (
+                <p style={{ fontSize: 10, color: C.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cat.description}</p>
               )}
-              {!c.is_active && (
-                <span className="absolute top-2 right-2 text-[9px] bg-[rgba(0,0,0,.08)] text-[rgba(26,26,22,.4)] px-1.5 py-0.5 rounded-full">Inactive</span>
+              {!cat.is_active && (
+                <span style={{ position: 'absolute', top: 8, right: 8, fontSize: 9, background: 'rgba(0,0,0,0.4)', color: C.dim, padding: '2px 6px', borderRadius: 99 }}>Inactive</span>
               )}
             </button>
           ))}
@@ -122,79 +123,75 @@ export default function CategoriesPage() {
       )}
 
       {modal.open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,.45)' }}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
-            <div className="px-6 py-5 border-b border-[rgba(0,0,0,.08)] flex items-center justify-between">
-              <h2 className="text-base font-semibold text-[#1a1a16]">
+        <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, background: 'rgba(0,0,0,0.7)' }}>
+          <div style={{ background: '#0F0D1C', border: `1px solid ${C.border}`, borderRadius: 18, width: '100%', maxWidth: 440 }}>
+            <div style={{ padding: '18px 22px', borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <h2 style={{ fontSize: 15, fontWeight: 700, color: C.text }}>
                 {modal.mode === 'add' ? 'New Category' : 'Edit Category'}
               </h2>
               <button onClick={() => setModal({ open: false, mode: 'add' })}
-                className="text-[rgba(26,26,22,.4)] hover:text-[#1a1a16] text-xl leading-none">&times;</button>
+                style={{ background: 'none', border: 'none', color: C.muted, fontSize: 22, cursor: 'pointer', lineHeight: 1 }}>&times;</button>
             </div>
-            <div className="px-6 py-5 space-y-4">
+            <div style={{ padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div>
-                <label className="block text-xs font-medium text-[rgba(26,26,22,.6)] mb-1.5">Name *</label>
+                <label style={lStyle}>Name *</label>
                 <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                  placeholder="e.g. Beverages"
-                  className="w-full bg-[#fafaf8] border border-[rgba(0,0,0,.1)] rounded-lg px-3 py-2.5 text-sm text-[#1a1a16] placeholder-[rgba(26,26,22,.3)] focus:outline-none focus:border-[#2563eb]" />
+                  placeholder="e.g. Beverages" style={iStyle} />
               </div>
               <div>
-                <label className="block text-xs font-medium text-[rgba(26,26,22,.6)] mb-1.5">Description</label>
+                <label style={lStyle}>Description</label>
                 <input value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-                  placeholder="Optional…"
-                  className="w-full bg-[#fafaf8] border border-[rgba(0,0,0,.1)] rounded-lg px-3 py-2.5 text-sm text-[#1a1a16] placeholder-[rgba(26,26,22,.3)] focus:outline-none focus:border-[#2563eb]" />
+                  placeholder="Optional…" style={iStyle} />
               </div>
               <div>
-                <label className="block text-xs font-medium text-[rgba(26,26,22,.6)] mb-2">Colour</label>
-                <div className="flex items-center gap-2 flex-wrap">
+                <label style={lStyle}>Colour</label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
                   {PALETTE.map(col => (
                     <button key={col} onClick={() => setForm(f => ({ ...f, color: col }))}
-                      className={`w-7 h-7 rounded-full transition-transform hover:scale-110 ${form.color === col ? 'ring-2 ring-offset-2 ring-[#2563eb] scale-110' : ''}`}
-                      style={{ background: col }} />
+                      style={{ width: 28, height: 28, borderRadius: '50%', background: col, border: form.color === col ? `3px solid #fff` : '2px solid transparent', cursor: 'pointer', flexShrink: 0 }} />
                   ))}
                   <input type="color" value={form.color} onChange={e => setForm(f => ({ ...f, color: e.target.value }))}
-                    className="w-7 h-7 rounded-full border border-[rgba(0,0,0,.1)] cursor-pointer p-0.5" title="Custom colour" />
+                    style={{ width: 28, height: 28, borderRadius: '50%', padding: 2, cursor: 'pointer', border: `1px solid ${C.border}`, background: 'transparent' }} />
                 </div>
-                <div className="mt-3 p-3 rounded-xl flex items-center gap-2" style={{ background: `${form.color}18`, border: `1.5px solid ${form.color}35` }}>
-                  <div className="w-6 h-6 rounded-md flex items-center justify-center" style={{ background: form.color }}>
+                <div style={{ padding: '10px 14px', borderRadius: 10, display: 'flex', alignItems: 'center', gap: 10, background: `${form.color}12`, border: `1.5px solid ${form.color}35` }}>
+                  <div style={{ width: 24, height: 24, borderRadius: 6, background: form.color, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <FolderIcon white />
                   </div>
-                  <span className="text-xs font-medium text-[#1a1a16]">{form.name || 'Preview'}</span>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{form.name || 'Preview'}</span>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div>
-                  <label className="block text-xs font-medium text-[rgba(26,26,22,.6)] mb-1.5">Sort Order</label>
+                  <label style={lStyle}>Sort Order</label>
                   <input value={form.sort_order} onChange={e => setForm(f => ({ ...f, sort_order: e.target.value }))}
-                    type="number" min="0" placeholder="0"
-                    className="w-full bg-[#fafaf8] border border-[rgba(0,0,0,.1)] rounded-lg px-3 py-2.5 text-sm text-[#1a1a16] focus:outline-none focus:border-[#2563eb]" />
+                    type="number" min="0" placeholder="0" style={iStyle} />
                 </div>
-                <div className="flex items-end pb-1">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" checked={form.is_active} onChange={e => setForm(f => ({ ...f, is_active: e.target.checked }))}
-                      className="rounded border-[rgba(0,0,0,.2)] accent-[#2563eb]" />
-                    <span className="text-xs font-medium text-[rgba(26,26,22,.7)]">Active</span>
+                <div style={{ display: 'flex', alignItems: 'flex-end', paddingBottom: 4 }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                    <input type="checkbox" checked={form.is_active}
+                      onChange={e => setForm(f => ({ ...f, is_active: e.target.checked }))}
+                      style={{ accentColor: C.violet, width: 14, height: 14 }} />
+                    <span style={{ fontSize: 13, color: C.text }}>Active</span>
                   </label>
                 </div>
               </div>
             </div>
-            <div className="px-6 py-4 border-t border-[rgba(0,0,0,.08)] flex items-center justify-between">
+            <div style={{ padding: '14px 22px', borderTop: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div>
                 {modal.mode === 'edit' && (
                   <button onClick={() => modal.cat && del(modal.cat.id)} disabled={!!deleting}
-                    className="text-xs text-red-500 hover:text-red-600 transition-colors disabled:opacity-50">
+                    style={{ fontSize: 12, color: C.red, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', opacity: deleting ? 0.5 : 1 }}>
                     {deleting ? 'Deleting…' : 'Delete'}
                   </button>
                 )}
               </div>
-              <div className="flex items-center gap-2">
+              <div style={{ display: 'flex', gap: 8 }}>
                 <button onClick={() => setModal({ open: false, mode: 'add' })}
-                  className="px-4 py-2 rounded-lg text-sm font-medium text-[rgba(26,26,22,.6)] border border-[rgba(0,0,0,.1)] hover:bg-[rgba(0,0,0,.04)] transition-colors">
+                  style={{ padding: '8px 18px', borderRadius: 9, border: `1px solid ${C.border}`, background: 'transparent', color: C.muted, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
                   Cancel
                 </button>
                 <button onClick={save} disabled={saving || !form.name.trim()}
-                  className="px-4 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-50 hover:opacity-90 transition-opacity"
-                  style={{ background: 'linear-gradient(135deg,#2563eb,#1d4ed8)' }}>
+                  style={{ padding: '8px 22px', borderRadius: 9, border: 'none', background: C.violet, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', opacity: saving || !form.name.trim() ? 0.5 : 1 }}>
                   {saving ? 'Saving…' : modal.mode === 'add' ? 'Create' : 'Save'}
                 </button>
               </div>
@@ -208,7 +205,7 @@ export default function CategoriesPage() {
 
 function FolderIcon({ white }: { white?: boolean }) {
   return (
-    <svg viewBox="0 0 20 20" fill="currentColor" className={`w-3.5 h-3.5 ${white ? 'text-white' : 'text-[#2563eb]'}`}>
+    <svg viewBox="0 0 20 20" fill="currentColor" style={{ width: 14, height: 14, color: white ? '#fff' : C.violet }}>
       <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/>
     </svg>
   );
