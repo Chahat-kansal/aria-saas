@@ -32,6 +32,19 @@ export async function GET(req: Request) {
 
   const { searchParams } = new URL(req.url);
   const q = searchParams.get('q');
+  const id = searchParams.get('id');
+
+  // Fetch a single customer by ID
+  if (id) {
+    const { data: customer, error } = await supabase
+      .from('pos_customers')
+      .select('*')
+      .eq('id', id)
+      .eq('business_id', bid)
+      .maybeSingle();
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ customer: customer ?? null });
+  }
 
   let query = supabase
     .from('pos_customers')
@@ -67,4 +80,27 @@ export async function POST(req: Request) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ customer });
+}
+
+export async function PATCH(req: Request) {
+  const supabase = createServerSupabaseClient();
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  const bid = await getBusinessId(supabase, user.id);
+  if (!bid) return NextResponse.json({ error: 'No business found' }, { status: 400 });
+
+  const { searchParams } = new URL(req.url);
+  const id = searchParams.get('id');
+  if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
+
+  const body = await req.json();
+  const { error } = await supabase
+    .from('pos_customers')
+    .update(body)
+    .eq('id', id)
+    .eq('business_id', bid);
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ ok: true });
 }

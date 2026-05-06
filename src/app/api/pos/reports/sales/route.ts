@@ -22,9 +22,11 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const from = searchParams.get('from') ?? new Date(Date.now() - 29 * 86400000).toISOString().split('T')[0];
   const to   = searchParams.get('to')   ?? new Date().toISOString().split('T')[0];
+  const reportType = searchParams.get('report_type') ?? 'outlet';
+  const sessionId  = searchParams.get('session_id') ?? null;
 
-  // Use minimal select — avoid columns or FK joins that may not exist in this schema
-  const { data: sales, error } = await supabase
+  // Build base query
+  let query = supabase
     .from('pos_sales')
     .select('id, sale_number, total_amount, tax_amount, discount_amount, payment_method, status, created_at, customer_id, served_by')
     .eq('business_id', bid)
@@ -33,9 +35,16 @@ export async function GET(req: Request) {
     .order('created_at', { ascending: false })
     .limit(500);
 
+  // Filter by session if requested
+  if (sessionId) {
+    query = (query as any).eq('session_id', sessionId);
+  }
+
+  const { data: sales, error } = await query;
+
   // If served_by column causes error, retry without it
   const rows = error ? await (async () => {
-    const { data: fallback } = await supabase
+    let fb = supabase
       .from('pos_sales')
       .select('id, sale_number, total_amount, tax_amount, discount_amount, payment_method, status, created_at, customer_id')
       .eq('business_id', bid)
@@ -43,6 +52,8 @@ export async function GET(req: Request) {
       .lte('created_at', `${to}T23:59:59`)
       .order('created_at', { ascending: false })
       .limit(500);
+    if (sessionId) fb = (fb as any).eq('session_id', sessionId);
+    const { data: fallback } = await fb;
     return fallback ?? [];
   })() : (sales ?? []);
 
@@ -72,5 +83,24 @@ export async function GET(req: Request) {
     by_method[m].total += s.total_amount ?? 0;
   }
 
-  return NextResponse.json({ sales: rows, total_revenue_cents, transaction_count, avg_basket_cents, revenue_by_day, by_payment_method: by_method });
+  // Grouping by report_type
+  let grouped: Record<string, { key: string; count: number; total: number }> = {};
+  if (reportType === 'user') {
+    for (const s of valid) {
+      const k = (s as any).served_by ?? 'Unknown';
+      if (!grouped[k]) grouped[k] = { key: k, count: 0, total: 0 };
+      grouped[k].count++;
+      grouped[k].total += s.total_amount ?? 0;
+    }
+  } else if (reportType === 'customer') {
+    for (const s of valid) {
+      const k = (s as any).customer_id ?? 'Walk-in';
+      if (!grouped[k]) grouped[k] = { key: k, count: 0, total: 0 };
+      grouped[k].count++;
+      grouped[k].total += s.total_amount ?? 0;
+    }
+  }
+  const grouped_rows = Object.values(grouped).sort((a, b) => b.total - a.total);
+
+  return NextResponse.json({ sales: rows, total_revenue_cents, transaction_count, avg_basket_cents, revenue_by_day, by_payment_method: by_method, grouped_rows, report_type: reportType });
 }

@@ -32,6 +32,18 @@ export async function GET(req: Request) {
 
   const { searchParams } = new URL(req.url);
   const history = searchParams.get('history') === 'true';
+  const sessionId = searchParams.get('id');
+
+  // Fetch a specific session by ID
+  if (sessionId) {
+    const { data: session } = await supabase
+      .from('pos_cash_sessions')
+      .select('*')
+      .eq('id', sessionId)
+      .eq('business_id', bid)
+      .maybeSingle();
+    return NextResponse.json({ session: session || null });
+  }
 
   const { data: openSession } = await supabase
     .from('pos_cash_sessions')
