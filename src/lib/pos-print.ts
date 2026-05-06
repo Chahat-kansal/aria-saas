@@ -1,7 +1,7 @@
 'use client'
 
-// Fetches the business's default receipt template and renders it to a print window.
-// Falls back gracefully if no template exists or the table isn't created yet.
+// Fetches the business's default receipt template and renders a print window.
+// Returns true if a template was found and printed; false to fall back to Receipt modal.
 
 interface SaleData {
   id?: string
@@ -11,77 +11,91 @@ interface SaleData {
   payment_method?: string
   cash_tendered?: number
   change_given?: number
-  cartSnapshot?: Array<{ product?: { name: string }; label?: string; qty: number; unitPrice: number; discount_percent?: number }>
+  cartSnapshot?: Array<{
+    product?: { name: string }
+    label?: string
+    qty: number
+    unitPrice: number
+    discount_percent?: number
+  }>
   customerSnapshot?: { name: string; loyalty_points?: number } | null
   loyaltyEarned?: number
-  served_by?: string
 }
 
-interface Comp {
-  type: string
-  config: Record<string, unknown>
-}
+interface Comp { type: string; config: Record<string, unknown> }
 
-function renderCompHTML(comp: Comp, sale: SaleData, businessName: string): string {
-  const ROW = (l: string, r: string) => `<div style="display:flex;justify-content:space-between"><span>${l}</span><span>${r}</span></div>`
-  const LINE = `<div style="border-top:1px dashed #000;margin:5px 0"></div>`
-  const fmt = (n: number) => `A$${n.toFixed(2)}`
-
-  const total    = sale.total_amount ?? 0
-  const items    = sale.cartSnapshot ?? []
-  const subTotal = items.length > 0
+function compToHTML(comp: Comp, sale: SaleData, businessName: string): string {
+  const total  = sale.total_amount ?? 0
+  const items  = sale.cartSnapshot ?? []
+  const sub    = items.length > 0
     ? items.reduce((s, i) => s + i.unitPrice * i.qty * (1 - (i.discount_percent ?? 0) / 100), 0)
     : total
-  const gst      = subTotal - subTotal / 1.1
-  const date     = sale.created_at ? new Date(sale.created_at) : new Date()
-  const dateStr  = date.toLocaleString('en-AU', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
-  const saleRef  = sale.sale_number ?? (sale.id ? `#${String(sale.id).slice(-6).toUpperCase()}` : '#------')
-  const pmLabel  = (sale.payment_method ?? 'card').replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+  const gst    = sub - sub / 1.1
+  const date   = sale.created_at ? new Date(sale.created_at) : new Date()
+  const ds     = date.toLocaleString('en-AU', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+  const ref    = sale.sale_number ?? (sale.id ? `#${String(sale.id).slice(-6).toUpperCase()}` : '#------')
+  const pm     = (sale.payment_method ?? 'card').replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+  const fmt    = (n: number) => `A$${n.toFixed(2)}`
+  const row    = (l: string, r: string) => `<div style="display:flex;justify-content:space-between"><span>${l}</span><span>${r}</span></div>`
+  const line   = `<div style="border-top:1px dashed #000;margin:5px 0"></div>`
+
+  const bizName = (comp.config.business_name as string) || businessName || 'Your Business'
+  const footer  = (comp.config.footer as string) || ''
 
   switch (comp.type) {
     case 'header':
-      return `<div style="text-align:center"><strong style="font-size:13px">${businessName}</strong></div>${LINE}<div style="text-align:center"><strong>TAX INVOICE</strong></div><div style="text-align:center">${dateStr}</div><div style="text-align:center">Inv ${saleRef}</div>`
+      return `<div style="text-align:center"><strong style="font-size:13px">${bizName}</strong></div>${line}<div style="text-align:center"><strong>TAX INVOICE</strong></div><div style="text-align:center">${ds}</div><div style="text-align:center">${ref}</div>${footer ? `<div style="text-align:center;font-size:10px;color:#444;margin-top:4px">${footer}</div>` : ''}`
 
     case 'products': {
       const rows = items.map(i => {
-        const lineTotal = i.unitPrice * i.qty * (1 - (i.discount_percent ?? 0) / 100)
-        return `<div style="display:flex;justify-content:space-between"><span style="flex:1">${i.label ?? i.product?.name ?? 'Item'}</span><span style="width:25px;text-align:center">${i.qty}</span><span style="width:60px;text-align:right">${fmt(lineTotal)}</span></div>`
+        const ln = i.unitPrice * i.qty * (1 - (i.discount_percent ?? 0) / 100)
+        return `<div style="display:flex;justify-content:space-between"><span style="flex:1">${i.label ?? i.product?.name ?? 'Item'}</span><span style="width:20px;text-align:center">${i.qty}</span><span style="width:60px;text-align:right">${fmt(ln)}</span></div>`
       }).join('')
-      return `${LINE}<div style="display:flex;justify-content:space-between;font-weight:bold"><span style="flex:1">Item</span><span>Qty</span><span>Total</span></div>${LINE}${rows || '<div>No items</div>'}`
+      return `${line}<div style="display:flex;justify-content:space-between;font-weight:bold"><span style="flex:1">Item</span><span>Qty</span><span style="margin-left:8px">Total</span></div>${line}${rows || '<div>No items</div>'}`
     }
 
     case 'tax':
-      return `${LINE}${ROW('GST (10% incl.):', fmt(gst))}`
+      return `${line}${row('GST (10% incl.):', fmt(gst))}`
 
     case 'totals':
-      return `${LINE}${ROW('Subtotal:', fmt(subTotal))}<div style="display:flex;justify-content:space-between;font-weight:bold;font-size:14px"><span>TOTAL:</span><span>${fmt(total)}</span></div>`
+      return `${line}${row('Subtotal:', fmt(sub))}<div style="display:flex;justify-content:space-between;font-weight:bold;font-size:14px"><span>TOTAL:</span><span>${fmt(total)}</span></div>`
 
     case 'payments': {
-      const lines = [ROW(`${pmLabel}:`, fmt(total))]
-      if (sale.cash_tendered) lines.push(ROW('Cash tendered:', fmt(sale.cash_tendered)))
-      if (sale.change_given)  lines.push(ROW('Change:', fmt(sale.change_given)))
-      return `${LINE}${lines.join('')}`
+      const lines = [row(`${pm}:`, fmt(total))]
+      if (sale.cash_tendered) lines.push(row('Cash tendered:', fmt(sale.cash_tendered)))
+      if (sale.change_given)  lines.push(row('Change:', fmt(sale.change_given)))
+      return `${line}${lines.join('')}`
     }
 
     case 'loyalty':
-      if (!sale.loyaltyEarned && !sale.customerSnapshot?.loyalty_points) return ''
-      return `${LINE}${sale.loyaltyEarned ? ROW('Points earned:', String(sale.loyaltyEarned)) : ''}${sale.customerSnapshot?.loyalty_points ? ROW('Total points:', String(sale.customerSnapshot.loyalty_points)) : ''}`
-
-    case 'account':
-      if (!sale.customerSnapshot) return ''
-      return `${LINE}<div>Account: ${sale.customerSnapshot.name}</div>`
+      return (sale.loyaltyEarned || sale.customerSnapshot?.loyalty_points)
+        ? `${line}${sale.loyaltyEarned ? row('Points earned:', String(sale.loyaltyEarned)) : ''}${sale.customerSnapshot?.loyalty_points ? row('Total points:', String(sale.customerSnapshot.loyalty_points)) : ''}`
+        : ''
 
     case 'tax_indicator':
       return `<div style="font-size:9px;color:#666">* = GST applicable</div>`
 
+    case 'surcharge':
+      return row('Card surcharge:', '')
+
+    case 'account':
+      return sale.customerSnapshot ? `${line}<div>Account – ${sale.customerSnapshot.name}</div>` : ''
+
     case 'barcode':
-      return `<div style="text-align:center"><div style="font-size:18px;letter-spacing:2px">${'|'.repeat(24)}</div><div>${saleRef}</div></div>`
+      return `<div style="text-align:center"><div style="font-size:18px;letter-spacing:2px">${'|'.repeat(24)}</div><div>${ref}</div></div>`
 
     case 'spacer':
       return `<div style="height:${(comp.config.height as number) || 12}px"></div>`
 
     case 'text':
-      return `<div style="text-align:${(comp.config.align as string) || 'center'};font-weight:${comp.config.bold ? 'bold' : 'normal'}">${(comp.config.text as string) || ''}</div>`
+      return (comp.config.text as string)
+        ? `<div style="text-align:${(comp.config.align as string) || 'center'};font-weight:${comp.config.bold ? 'bold' : 'normal'};font-size:${comp.config.size === 'large' ? 14 : comp.config.size === 'small' ? 9 : 11}px">${comp.config.text}</div>`
+        : ''
+
+    case 'image':
+      return (comp.config.url as string)
+        ? `<img src="${comp.config.url}" alt="${(comp.config.alt as string) || ''}" style="width:100%;max-height:${(comp.config.height as number) || 80}px;object-fit:contain">`
+        : ''
 
     default:
       return ''
@@ -91,41 +105,33 @@ function renderCompHTML(comp: Comp, sale: SaleData, businessName: string): strin
 export async function printReceiptWithTemplate(
   sale: SaleData,
   businessName: string,
-  businessId?: string,
 ): Promise<boolean> {
-  // Try to fetch the default template for this business
   try {
-    const endpoint = businessId
-      ? `/api/pos/receipt-templates?business_id=${businessId}`
-      : '/api/pos/receipt-templates'
-    const res  = await fetch(endpoint)
+    const res  = await fetch('/api/pos/receipt-templates')
+    if (!res.ok) return false
     const data = await res.json()
     const templates: Array<{ id: string; components: Comp[]; is_default: boolean }> = data.templates ?? []
+    if (!templates.length) return false
 
-    // Use the default template, or the first one if no default is set
+    // Prefer the marked default; fall back to the first template
     const template = templates.find(t => t.is_default) ?? templates[0]
-    if (!template || !template.components?.length) return false
+    if (!template?.components?.length) return false
 
-    // Render each component to HTML using real sale data
     const body = template.components
-      .map(c => renderCompHTML(c, sale, businessName))
+      .map(c => compToHTML(c, sale, businessName))
       .filter(Boolean)
       .join('\n')
 
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Receipt</title>
-<style>
-  *{margin:0;padding:0;box-sizing:border-box}
-  body{font-family:'Courier New',monospace;font-size:11px;width:300px;padding:12px;background:#fff;color:#000}
-  @media print{@page{size:80mm auto;margin:0}body{width:80mm;padding:4mm}}
-</style>
+<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Courier New',monospace;font-size:11px;width:300px;padding:12px;background:#fff;color:#000}@media print{@page{size:80mm auto;margin:0}body{width:80mm;padding:4mm}}</style>
 </head><body>${body}</body></html>`
 
-    const w = window.open('', '_blank', 'width=400,height=700')
+    const w = window.open('', '_blank', 'width=420,height=700')
     if (!w) return false
     w.document.write(html)
     w.document.close()
     w.focus()
-    setTimeout(() => { w.print(); w.close() }, 400)
+    setTimeout(() => { w.print(); w.close() }, 500)
     return true
   } catch {
     return false

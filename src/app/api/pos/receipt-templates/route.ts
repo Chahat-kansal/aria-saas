@@ -50,6 +50,15 @@ export async function PATCH(req: Request) {
   if (!biz) return NextResponse.json({ error: 'No business' }, { status: 404 })
   const body = await req.json()
   const { id, business_id: _bid, ...updates } = body
+
+  // When setting a new default, unset all others for this business first
+  if (updates.is_default === true) {
+    await supabase.from('pos_receipt_templates')
+      .update({ is_default: false })
+      .eq('business_id', biz.id)
+      .neq('id', id)
+  }
+
   const { data, error } = await supabase.from('pos_receipt_templates')
     .update({ ...updates, updated_at: new Date().toISOString() })
     .eq('id', id).eq('business_id', biz.id).select().single()
