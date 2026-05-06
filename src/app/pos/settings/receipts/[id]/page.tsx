@@ -148,14 +148,31 @@ export default function ReceiptBuilderPage() {
   const [ctxMenu, setCtxMenu]   = useState<{x:number;y:number;id:string}|null>(null)
   const [showHelp, setShowHelp] = useState(false)
 
-  const dragRef   = useRef<{id:string;startMX:number;startMY:number;startEX:number;startEY:number}|null>(null)
-  const resizeRef = useRef<{id:string;handle:Handle;startMX:number;startMY:number;startEX:number;startEY:number;startEW:number;startEH:number}|null>(null)
-  const saveTimer = useRef<ReturnType<typeof setTimeout>|null>(null)
-  const canvasRef = useRef<HTMLDivElement>(null)
+  const dragRef      = useRef<{id:string;startMX:number;startMY:number;startEX:number;startEY:number}|null>(null)
+  const resizeRef    = useRef<{id:string;handle:Handle;startMX:number;startMY:number;startEX:number;startEY:number;startEW:number;startEH:number}|null>(null)
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout>|null>(null)
+  const canvasRef    = useRef<HTMLDivElement>(null)
+
+  // Refs for save — reading via ref means save() never needs els/name/etc in its deps
+  // This breaks the els→save→debouncedSave→effect→els loop
+  const elsRef      = useRef<El[]>(DEFAULT_ELS)
+  const nameRef     = useRef('New Receipt')
+  const canvasHRef  = useRef(800)
+  const bgColorRef  = useRef('#ffffff')
+  const isSavingRef = useRef(false)
+  const lastSaveRef = useRef(0)
+
+  // Keep refs in sync with state (these effects are one-way, no loop risk)
+  useEffect(()=>{ elsRef.current = els },     [els])
+  useEffect(()=>{ nameRef.current = name },   [name])
+  useEffect(()=>{ canvasHRef.current = canvasH }, [canvasH])
+  useEffect(()=>{ bgColorRef.current = bgColor }, [bgColor])
 
   const selEl = selId ? els.find(e=>e.id===selId)||null : null
 
-  /* ── Load ── */
+  /* ── Load (runs once on mount) ── */
+  const [initialLoad, setInitialLoad] = useState(true)
+
   useEffect(()=>{
     fetch(`/api/pos/receipt-templates/${id}`).then(r=>r.json()).then(d=>{
       if(d.template){
@@ -166,27 +183,61 @@ export default function ReceiptBuilderPage() {
         if(Array.isArray(e)&&e.length) setEls(e)
       }
       setLoaded(true)
-    }).catch(()=>setLoaded(true))
-  },[id])
+      setInitialLoad(false)
+    }).catch(()=>{ setLoaded(true); setInitialLoad(false) })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[]) // intentionally empty — id is stable for the lifetime of this page
 
   /* ── Save ── */
   const [migrationNeeded, setMigrationNeeded] = useState(false)
 
+  // save() reads everything from refs → only depends on [id] → stable identity
+  // A stable save means debouncedSave is stable, so the auto-save effect never
+  // triggers itself in a loop
   const save = useCallback(async()=>{
+    // Rate limit: never fire more than once per 2 seconds
+    const now = Date.now()
+    if(now - lastSaveRef.current < 2000) return
+    if(isSavingRef.current) return
+    lastSaveRef.current = now
+    isSavingRef.current = true
     setSaving('saving')
-    const r = await fetch(`/api/pos/receipt-templates/${id}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,elements:els,canvas_height:canvasH,background_color:bgColor})})
-    const d = await r.json()
-    if(d.migration_needed) setMigrationNeeded(true)
-    setSaving(r.ok?'saved':'error')
-    setTimeout(()=>setSaving('idle'),2500)
-  },[id,name,els,canvasH,bgColor])
+    try {
+      const r = await fetch(`/api/pos/receipt-templates/${id}`,{
+        method:'PATCH',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+          name:     nameRef.current,
+          elements: elsRef.current,
+          canvas_height:    canvasHRef.current,
+          background_color: bgColorRef.current,
+        }),
+      })
+      const d = await r.json()
+      if(d.migration_needed||d._migration_needed) setMigrationNeeded(true)
+      setSaving(r.ok?'saved':'error')
+    } catch {
+      setSaving('error')
+    } finally {
+      isSavingRef.current = false
+      setTimeout(()=>setSaving('idle'),2500)
+    }
+  },[id]) // ONLY id — never changes during page lifetime
 
+  // debouncedSave is stable because save is stable
   const debouncedSave = useCallback(()=>{
-    if(saveTimer.current) clearTimeout(saveTimer.current)
-    saveTimer.current = setTimeout(save,2000)
+    if(saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    saveTimerRef.current = setTimeout(save, 2000)
   },[save])
 
-  useEffect(()=>{ if(loaded) debouncedSave() },[els,canvasH,bgColor,name,loaded,debouncedSave])
+  // Auto-save: fires when content changes, but NOT during initial load
+  // save and debouncedSave are stable → this effect never triggers a loop
+  useEffect(()=>{
+    if(initialLoad) return
+    debouncedSave()
+  // debouncedSave is stable; intentionally omitted to avoid needing it in deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[els,canvasH,bgColor,name])
 
   /* ── History ── */
   function saveHistory(){ setHistory(h=>[...h.slice(-49),[...els]]); setFuture([]) }
@@ -333,7 +384,7 @@ export default function ReceiptBuilderPage() {
           <button onClick={()=>setShowHelp(h=>!h)} title="Keyboard shortcuts" style={{ ...Z.btn(),padding:'4px 8px' }}>?</button>
         </div>
         <button onClick={openPrint} style={{ padding:'6px 14px',borderRadius:7,border:'1px solid rgba(255,255,255,0.1)',background:'transparent',color:'rgba(200,220,255,0.8)',fontSize:12,cursor:'pointer',fontFamily:'inherit' }}>🖨 Preview</button>
-        <button onClick={save} style={{ padding:'6px 18px',borderRadius:7,border:'none',background:saving==='saved'?'#22C55E':saving==='error'?'#EF4444':'#8B5CF6',color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',fontFamily:'inherit',minWidth:80 }}>
+        <button onClick={()=>{ lastSaveRef.current=0; save() }} style={{ padding:'6px 18px',borderRadius:7,border:'none',background:saving==='saved'?'#22C55E':saving==='error'?'#EF4444':'#8B5CF6',color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',fontFamily:'inherit',minWidth:80 }}>
           {saving==='saving'?'Saving…':saving==='saved'?'Saved ✓':saving==='error'?'Error':'💾 Save'}
         </button>
       </div>

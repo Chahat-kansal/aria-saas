@@ -81,12 +81,24 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       .single()
 
     if (error) {
-      // Column doesn't exist yet — save only proven-safe fields
+      // Column doesn't exist yet — fall back to safe known columns
       if (error.code === '42703' || error.message?.includes('column')) {
         const safe: Record<string, unknown> = { updated_at: update.updated_at }
-        for (const k of ['name', 'is_default', 'type', 'for_type', 'components', 'template_data', 'settings']) {
-          if (update[k] !== undefined) safe[k] = update[k]
+        if (update.name       !== undefined) safe.name       = update.name
+        if (update.is_default !== undefined) safe.is_default = update.is_default
+        if (update.type       !== undefined) safe.type       = update.type
+        if (update.for_type   !== undefined) safe.for_type   = update.for_type
+        if (update.components !== undefined) safe.components  = update.components
+
+        // Store elements in template_data as JSON until columns are added
+        if (update.elements !== undefined) {
+          safe.template_data = JSON.stringify({
+            elements:         update.elements,
+            canvas_height:    update.canvas_height,
+            background_color: update.background_color,
+          })
         }
+
         const { data: safeData, error: safeErr } = await supabase
           .from('pos_receipt_templates')
           .update(safe)
@@ -97,7 +109,6 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 
         if (safeErr) throw new Error(safeErr.message)
 
-        // Log migration SQL so owner can run it
         const migrationSql = [
           'ALTER TABLE pos_receipt_templates',
           '  ADD COLUMN IF NOT EXISTS canvas_width integer DEFAULT 302,',
@@ -106,7 +117,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
           "  ADD COLUMN IF NOT EXISTS elements jsonb DEFAULT '[]',",
           '  ADD COLUMN IF NOT EXISTS is_default boolean DEFAULT false;',
         ].join('\n')
-        console.warn('[receipt-templates] Run this SQL in Supabase SQL Editor:\n', migrationSql)
+        console.warn('[receipt-templates] Missing columns. Run in Supabase SQL Editor:\n', migrationSql)
 
         return NextResponse.json({
           ...safeData,
