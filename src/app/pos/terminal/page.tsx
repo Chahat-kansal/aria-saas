@@ -320,7 +320,7 @@ export default function TerminalPage() {
         barcodeBuffer.current = '';
         if (code.length >= 4) {
           const hit = products.find(p => p.barcode === code || p.sku === code);
-          if (hit && hit.is_active && (!hit.track_stock || hit.stock_quantity > 0)) {
+          if (hit && hit.is_active) {
             SFX.scan();
             checkAndAddToCart(hit);
           } else if (!hit) {
@@ -1431,7 +1431,6 @@ export default function TerminalPage() {
                     return (
                       <div key={p.id}
                         onClick={e => {
-                          if (isOut) return;
                           if (priceCheckMode) { setPriceCheckProd(p); return; }
                           checkAndAddToCart(p, e.currentTarget as HTMLElement);
                         }}
@@ -1441,16 +1440,13 @@ export default function TerminalPage() {
                           border: `1px solid rgba(0,229,255,0.08)`,
                           borderRadius: 18,
                           padding: 14,
-                          cursor: isOut ? 'not-allowed' : 'pointer',
-                          filter: isOut ? 'grayscale(0.7)' : 'none',
-                          opacity: isOut ? 0.5 : 1,
+                          cursor: 'pointer',
                           transition: 'all 150ms cubic-bezier(0.16,1,0.3,1)',
                           animation: `card-enter 0.35s cubic-bezier(0.16,1,0.3,1) ${idx * 30}ms both`,
                           position: 'relative',
                           overflow: 'hidden',
                         }}
                         onMouseEnter={e => {
-                          if (isOut) return;
                           const el = e.currentTarget as HTMLElement;
                           el.style.border = `1px solid ${m.a}55`;
                           el.style.boxShadow = `0 8px 24px rgba(0,0,0,0.5), 0 0 0 1px ${m.a}33`;
@@ -1474,7 +1470,7 @@ export default function TerminalPage() {
                           }
                           {isOut && (
                             <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.55)' }}>
-                              <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 99, background: 'rgba(239,68,68,0.22)', border: '1px solid rgba(239,68,68,0.5)', color: '#EF4444' }}>Out</span>
+                              <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 99, background: 'rgba(239,68,68,0.22)', border: '1px solid rgba(239,68,68,0.5)', color: '#EF4444' }}>Out of Stock</span>
                             </div>
                           )}
                         </div>
@@ -1589,7 +1585,7 @@ export default function TerminalPage() {
               </div>
 
               {/* Cart items */}
-              <div className="flex-1 overflow-y-auto" style={{ background: 'transparent' }}>
+              <div className="flex-1 overflow-y-auto" style={{ background: 'transparent', minHeight: 0 }}>
                 {cart.length === 0 ? (
                   <div className="flex flex-col items-center justify-center h-full text-center px-6 py-12">
                     <div style={{ width: 52, height: 52, borderRadius: 15, border: '1px dashed rgba(0,229,255,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 10 }}>

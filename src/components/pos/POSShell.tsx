@@ -372,7 +372,7 @@ export default function POSShell({ children, businessId, businessName }: {
           setPosUser(null);
         }}
       />
-      <main style={{ flex: 1, overflow: 'hidden', minWidth: 0, height: '100dvh' }}>
+      <main style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', minWidth: 0, height: '100dvh' }}>
         {children}
       </main>
     </div>
