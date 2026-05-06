@@ -29,6 +29,9 @@ CREATE INDEX IF NOT EXISTS idx_pos_gift_cards_code   ON pos_gift_cards (business
 CREATE INDEX IF NOT EXISTS idx_pos_gift_cards_active ON pos_gift_cards (business_id, is_active);
 
 -- Safe column additions for existing deployments
-ALTER TABLE pos_gift_cards ADD COLUMN IF NOT EXISTS recipient_name  text;
-ALTER TABLE pos_gift_cards ADD COLUMN IF NOT EXISTS issued_at       timestamptz DEFAULT now();
-ALTER TABLE pos_gift_cards ADD COLUMN IF NOT EXISTS status          text DEFAULT 'active';
+ALTER TABLE pos_gift_cards ADD COLUMN IF NOT EXISTS recipient_name   text;
+ALTER TABLE pos_gift_cards ADD COLUMN IF NOT EXISTS issued_at        timestamptz DEFAULT now();
+ALTER TABLE pos_gift_cards ADD COLUMN IF NOT EXISTS status           text DEFAULT 'active';
+ALTER TABLE pos_gift_cards ADD COLUMN IF NOT EXISTS customer_id      uuid;
+ALTER TABLE pos_gift_cards ADD COLUMN IF NOT EXISTS current_balance  numeric(10,2) DEFAULT 0;
+ALTER TABLE pos_gift_cards ADD COLUMN IF NOT EXISTS initial_balance  numeric(10,2) DEFAULT 0;
