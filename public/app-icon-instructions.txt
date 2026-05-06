@@ -1,0 +1,37 @@
+ARIA OS — FACEBOOK APP ICON INSTRUCTIONS
+========================================
+
+You need a 1024x1024 PNG icon for your Facebook App.
+
+OPTION A — Use Canva (free, 3 minutes):
+1. Go to canva.com
+2. Create design → Custom size → 1024 × 1024 px
+3. Set background colour: #030510 (dark navy)
+4. Add a shape: Diamond / Rhombus rotated 45 degrees
+5. Set shape colour: #8B5CF6 (violet)
+6. Add text: "A" in white, Manrope font, bold, centred inside the diamond
+7. Download as PNG
+8. Upload to: developers.facebook.com → your app → Settings → Basic → App Icon
+
+OPTION B — Extract the LogoMark from the codebase:
+1. Open src/components/pos/LogoMark.tsx in your editor
+2. Copy the SVG content into an HTML file and open it in a browser
+3. Screenshot at 1024x1024 resolution (use browser dev tools → device emulation)
+4. Save as PNG
+5. Upload as above
+
+OPTION C — Any square image:
+Facebook just needs any 1024x1024 PNG for the App Review process.
+It does not have to match your exact brand for initial testing.
+Use any square purple/dark logo or icon you already have.
+
+RECOMMENDED COLOURS:
+  Background:  #030510  (dark navy)
+  Primary:     #8B5CF6  (violet)
+  Text/accent: #FFFFFF  (white)
+
+WHERE TO UPLOAD:
+  developers.facebook.com
+  → Your App → Settings → Basic
+  → App Icon field (accepts PNG, max 2MB)
+  → Also upload to: App Review → Required Items
