@@ -3,6 +3,29 @@ export const runtime = 'nodejs'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { NextResponse } from 'next/server'
 
+// Identical pattern to all working POS routes (promotions, products, customers, etc.)
+async function getBid(
+  supabase: ReturnType<typeof createServerSupabaseClient>,
+  userId: string
+): Promise<string | null> {
+  const { data: active } = await supabase
+    .from('user_active_business')
+    .select('business_id')
+    .eq('user_id', userId)
+    .maybeSingle()
+  if (active?.business_id) return active.business_id as string
+
+  const { data } = await supabase
+    .from('businesses')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('is_active', true)
+    .order('created_at', { ascending: true })
+    .limit(1)
+    .maybeSingle()
+  return data?.id ?? null
+}
+
 export async function GET(_req: Request, { params }: { params: { id: string } }) {
   try {
     const supabase = createServerSupabaseClient()
@@ -23,17 +46,16 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
 
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
   try {
+    // Exact same client + auth + bid pattern as promotions/route.ts, products/route.ts, etc.
     const supabase = createServerSupabaseClient()
-
     const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+    const bid = await getBid(supabase, user.id)
+    if (!bid) return NextResponse.json({ error: 'No business found' }, { status: 404 })
 
     const id = params.id
-    if (!id) {
-      return NextResponse.json({ error: 'Missing id' }, { status: 400 })
-    }
+    if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })
 
     let body: Record<string, unknown> = {}
     try {
@@ -42,24 +64,10 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
     }
 
-    // Get this user's business_id
-    const { data: biz, error: bizError } = await supabase
-      .from('businesses')
-      .select('id')
-      .eq('user_id', user.id)
-      .maybeSingle()
-
-    if (bizError) {
-      console.error('[PATCH receipt] biz error:', bizError.message)
-      return NextResponse.json({ error: bizError.message }, { status: 500 })
-    }
-    if (!biz) {
-      return NextResponse.json({ error: 'No business found for this user' }, { status: 404 })
-    }
-
-    // Only update columns that were sent AND that exist in the table.
-    // Explicitly list every allowed column — no dynamic keys, no updated_at
-    // (updated_at is NOT in the confirmed column list for this table)
+    // Only update columns that were sent AND confirmed to exist in the table:
+    // id, business_id, name, type, for_type, components, created_at,
+    // canvas_width, canvas_height, background_color, elements, is_default
+    // Note: updated_at does NOT exist in this table — never include it
     const update: Record<string, unknown> = {}
 
     if (body.name             !== undefined) update.name             = String(body.name)
@@ -69,21 +77,19 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     if (body.background_color !== undefined) update.background_color = String(body.background_color)
     if (body.is_default       !== undefined) update.is_default       = Boolean(body.is_default)
     if (body.components       !== undefined) update.components       = body.components
-
-    // Never update: id, business_id, created_at, type, for_type
-    // ('type' is a Postgres reserved word and causes issues if included)
+    // type and for_type excluded: 'type' is a Postgres reserved word
 
     if (Object.keys(update).length === 0) {
       return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 })
     }
 
-    console.log('[PATCH receipt] updating id:', id, 'biz:', biz.id, 'fields:', Object.keys(update))
+    console.log('[PATCH receipt] id:', id, 'bid:', bid, 'fields:', Object.keys(update))
 
     const { data, error } = await supabase
       .from('pos_receipt_templates')
       .update(update)
       .eq('id', id)
-      .eq('business_id', biz.id)
+      .eq('business_id', bid)
       .select('id, name, elements, canvas_width, canvas_height, background_color, is_default')
       .single()
 
@@ -108,13 +114,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 
   } catch (err: unknown) {
     const e = err as { message?: string; code?: string }
-    console.error('[PATCH receipt] caught:', {
-      message: e?.message,
-      code: e?.code,
-    })
-    return NextResponse.json(
-      { error: e?.message || 'Internal server error' },
-      { status: 500 }
-    )
+    console.error('[PATCH receipt] caught:', { message: e?.message, code: e?.code })
+    return NextResponse.json({ error: e?.message || 'Internal server error' }, { status: 500 })
   }
 }
