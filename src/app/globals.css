@@ -110,6 +110,28 @@ html, body { height: 100%; }
   --pos-danger:      #EF4444;
 }
 
+/* ── Light/dark theme foundation ─────────────────────────────────── */
+/* These CSS vars are used by components that opt-in to theme support */
+:root {
+  --theme-bg: rgba(17,15,26,0.95);
+  --theme-card: rgba(26,23,40,0.9);
+  --theme-border: #2A2540;
+  --theme-text: #EDE8FF;
+  --theme-muted: #8B85A8;
+  --theme-dim: #4A4565;
+  --theme-violet: #8B5CF6;
+}
+
+[data-pos-theme="light"] {
+  --theme-bg: #F8F9FC;
+  --theme-card: #FFFFFF;
+  --theme-border: #E2E8F0;
+  --theme-text: #1A1A2E;
+  --theme-muted: #64748B;
+  --theme-dim: #94A3B8;
+  --theme-violet: #7C3AED;
+}
+
 @keyframes card-enter {
   from { opacity:0; transform:translateY(18px) scale(0.93) }
   to   { opacity:1; transform:translateY(0) scale(1) }

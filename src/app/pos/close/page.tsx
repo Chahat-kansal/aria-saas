@@ -14,6 +14,8 @@ const DENOMS = [
   { value: 100.00, label: '$100' },
 ];
 
+const VARIANCE_THRESHOLD = 50; // Require manager PIN if |variance| > this amount
+
 export default function CloseRegisterPage() {
   const router = useRouter();
   const [session, setSession] = useState<any>(null);
@@ -24,6 +26,21 @@ export default function CloseRegisterPage() {
   const [note, setNote] = useState('');
   const [closing, setClosing] = useState(false);
   const [showMore, setShowMore] = useState(false);
+  const [businessId, setBusinessId] = useState<string | null>(null);
+
+  // Editable received amount
+  const [manualReceived, setManualReceived] = useState('');
+  const [useManualReceived, setUseManualReceived] = useState(false);
+
+  // Variance
+  const [varianceReason, setVarianceReason] = useState('');
+
+  // Manager PIN modal
+  const [showManagerPin, setShowManagerPin] = useState(false);
+  const [managerPin, setManagerPin] = useState('');
+  const [managerPinError, setManagerPinError] = useState('');
+  const [managerPinChecking, setManagerPinChecking] = useState(false);
+  const [managerApproved, setManagerApproved] = useState(false);
 
   useEffect(() => {
     fetch('/api/pos/sessions?status=open')
@@ -34,14 +51,26 @@ export default function CloseRegisterPage() {
         setLoading(false);
       })
       .catch(() => setLoading(false));
+    // Get business ID for manager PIN verification
+    fetch('/api/pos/products')
+      .then(r => r.json())
+      .then(d => { if (d.business_id) setBusinessId(d.business_id); })
+      .catch(() => {});
   }, []);
 
   const inDrawer = DENOMS.reduce((s, d) => s + d.value * (parseFloat(counts[d.value] || '0') || 0), 0);
   const floatAmt = parseFloat(float) || 0;
-  const cashReceived = Math.max(0, inDrawer - floatAmt);
+  const denomCashReceived = Math.max(0, inDrawer - floatAmt);
+
+  // Use manual override if set, otherwise use denomination count
+  const cashReceived = useManualReceived && manualReceived !== ''
+    ? (parseFloat(manualReceived) || 0)
+    : denomCashReceived;
+
   const expectedCash = paymentTotals.cash || paymentTotals.Cash || 0;
   const expectedEftpos = paymentTotals.eftpos || paymentTotals.card || paymentTotals.Card || 0;
   const cashDiff = cashReceived - expectedCash;
+  const needsManagerPin = Math.abs(cashDiff) > VARIANCE_THRESHOLD && !managerApproved;
 
   const openedAgo = session?.opened_at
     ? (() => {
@@ -52,10 +81,45 @@ export default function CloseRegisterPage() {
       })()
     : '—';
 
+  async function verifyManagerPin() {
+    if (!managerPin || !businessId) return;
+    setManagerPinChecking(true);
+    setManagerPinError('');
+    try {
+      const res = await fetch('/api/pos/users/verify-override', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pin: managerPin, business_id: businessId, action: 'variance_approval' }),
+      });
+      const d = await res.json();
+      if (d.authorized) {
+        setManagerApproved(true);
+        setShowManagerPin(false);
+        setManagerPin('');
+      } else {
+        setManagerPinError(d.error || 'Invalid manager PIN');
+      }
+    } catch {
+      setManagerPinError('Connection error');
+    }
+    setManagerPinChecking(false);
+  }
+
   async function closeRegister() {
     if (!session) return;
+    if (needsManagerPin) {
+      setShowManagerPin(true);
+      return;
+    }
     setClosing(true);
     try {
+      // Build closure note with variance reason if applicable
+      let closureNote = note;
+      if (Math.abs(cashDiff) > 0.01 && varianceReason) {
+        const varianceStr = `Variance: ${cashDiff >= 0 ? '+' : ''}A$${cashDiff.toFixed(2)} — ${varianceReason}`;
+        closureNote = closureNote ? `${closureNote}\n${varianceStr}` : varianceStr;
+      }
+
       await fetch(`/api/pos/sessions?id=${session.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -64,7 +128,7 @@ export default function CloseRegisterPage() {
           actual_cash_cents: Math.round(cashReceived * 100),
           expected_cash_cents: Math.round(expectedCash * 100),
           variance_cents: Math.round(cashDiff * 100),
-          closure_note: note,
+          closure_note: closureNote,
         }),
       });
       router.push(`/pos/reports/closures/${session.id}`);
@@ -182,18 +246,46 @@ export default function CloseRegisterPage() {
             </table>
           </div>
 
+          {/* Variance reason */}
+          {Math.abs(cashDiff) > 0.01 && (
+            <div style={{ background: cashDiff >= 0 ? 'rgba(34,197,94,0.06)' : 'rgba(239,68,68,0.06)', border: `1px solid ${cashDiff >= 0 ? 'rgba(34,197,94,0.2)' : 'rgba(239,68,68,0.2)'}`, borderRadius: 12, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: cashDiff >= 0 ? C.green : C.red }}>
+                  {cashDiff >= 0 ? '↑ Cash surplus' : '↓ Cash shortage'}: {cashDiff >= 0 ? '+' : ''}A${cashDiff.toFixed(2)}
+                </span>
+                {needsManagerPin && (
+                  <span style={{ fontSize: 11, color: C.amber, fontWeight: 600 }}>⚠ Manager approval required (over A${VARIANCE_THRESHOLD})</span>
+                )}
+                {managerApproved && (
+                  <span style={{ fontSize: 11, color: C.green, fontWeight: 600 }}>✓ Manager approved</span>
+                )}
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: C.muted, marginBottom: 6 }}>
+                  Reason for variance
+                </label>
+                <input
+                  value={varianceReason}
+                  onChange={e => setVarianceReason(e.target.value)}
+                  placeholder="e.g. Counted short, customer gave incorrect change…"
+                  style={{ width: '100%', background: 'rgba(10,9,16,0.8)', border: `1px solid ${C.border}`, borderRadius: 8, padding: '9px 12px', fontSize: 13, color: C.text, outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' as const }}
+                />
+              </div>
+            </div>
+          )}
+
           <div>
             <label style={{ display: 'block', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: C.muted, marginBottom: 6 }}>
               Register Closure Note
             </label>
             <textarea value={note} onChange={e => setNote(e.target.value)} rows={3}
               placeholder="Optional note for this closure…"
-              style={{ width: '100%', background: 'rgba(10,9,16,0.8)', border: `1px solid ${C.border}`, borderRadius: 10, padding: '10px 14px', fontSize: 13, color: C.text, outline: 'none', fontFamily: 'inherit', resize: 'vertical', boxSizing: 'border-box' }} />
+              style={{ width: '100%', background: 'rgba(10,9,16,0.8)', border: `1px solid ${C.border}`, borderRadius: 10, padding: '10px 14px', fontSize: 13, color: C.text, outline: 'none', fontFamily: 'inherit', resize: 'vertical', boxSizing: 'border-box' as const }} />
           </div>
 
           <button onClick={closeRegister} disabled={closing}
             style={{ padding: '14px', borderRadius: 12, border: 'none', background: `linear-gradient(135deg,${C.violet},#6D28D9)`, color: '#fff', fontSize: 15, fontWeight: 800, cursor: closing ? 'not-allowed' : 'pointer', fontFamily: 'inherit', opacity: closing ? 0.6 : 1 }}>
-            {closing ? 'Closing register…' : '🔒 Close Register'}
+            {closing ? 'Closing register…' : needsManagerPin ? '⚠ Close Register (Manager PIN required)' : '🔒 Close Register'}
           </button>
         </div>
 
@@ -221,7 +313,7 @@ export default function CloseRegisterPage() {
                           type="number" min="0" step="1"
                           value={counts[d.value] || ''}
                           placeholder="0"
-                          onChange={e => setCounts(prev => ({ ...prev, [d.value]: e.target.value }))}
+                          onChange={e => { setCounts(prev => ({ ...prev, [d.value]: e.target.value })); setUseManualReceived(false); }}
                           style={{ ...iS, width: 80 }}
                         />
                       </td>
@@ -249,11 +341,42 @@ export default function CloseRegisterPage() {
                   style={{ ...iS, width: 90 }} />
               </div>
             </div>
-            <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: 14, fontWeight: 700, color: C.text }}>Cash Received (Total)</span>
-              <span style={{ fontSize: 20, fontWeight: 800, fontFamily: 'monospace', color: cashDiff >= 0 ? C.green : C.red }}>
-                A${cashReceived.toFixed(2)}
-              </span>
+            <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: 13, color: C.muted }}>From denominations</span>
+                <span style={{ fontSize: 15, fontWeight: 700, fontFamily: 'monospace', color: useManualReceived ? C.dim : C.text }}>
+                  A${denomCashReceived.toFixed(2)}
+                </span>
+              </div>
+
+              {/* Manual override */}
+              <div style={{ background: 'rgba(139,92,246,0.06)', border: `1px solid rgba(139,92,246,0.15)`, borderRadius: 10, padding: '10px 12px' }}>
+                <p style={{ fontSize: 11, color: C.muted, marginBottom: 6 }}>Or enter cash received directly:</p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontSize: 12, color: C.dim }}>A$</span>
+                  <input
+                    type="number" min="0" step="0.01"
+                    value={manualReceived}
+                    placeholder={denomCashReceived.toFixed(2)}
+                    onChange={e => { setManualReceived(e.target.value); setUseManualReceived(e.target.value !== ''); }}
+                    style={{ ...iS, flex: 1, textAlign: 'left' }}
+                  />
+                  {useManualReceived && (
+                    <button onClick={() => { setManualReceived(''); setUseManualReceived(false); }}
+                      style={{ fontSize: 11, padding: '4px 8px', borderRadius: 6, border: `1px solid ${C.border}`, background: 'transparent', color: C.muted, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
+                      Clear
+                    </button>
+                  )}
+                </div>
+                {useManualReceived && <p style={{ fontSize: 10, color: C.violet, marginTop: 4 }}>Using manual amount (overrides denomination count)</p>}
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
+                <span style={{ fontSize: 14, fontWeight: 700, color: C.text }}>Cash Received (Total)</span>
+                <span style={{ fontSize: 20, fontWeight: 800, fontFamily: 'monospace', color: cashDiff >= 0 ? C.green : C.red }}>
+                  A${cashReceived.toFixed(2)}
+                </span>
+              </div>
             </div>
             {Math.abs(cashDiff) > 0.01 && (
               <div style={{ fontSize: 12, color: cashDiff >= 0 ? C.green : C.red, textAlign: 'right' }}>
@@ -263,6 +386,42 @@ export default function CloseRegisterPage() {
           </div>
         </div>
       </div>
+
+      {/* Manager PIN Modal */}
+      {showManagerPin && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.7)' }}>
+          <div style={{ background: '#0F0D1C', border: `1px solid ${C.border}`, borderRadius: 20, padding: '32px', width: 360, boxShadow: '0 24px 64px rgba(0,0,0,0.7)' }}>
+            <h3 style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 8 }}>Manager Approval Required</h3>
+            <p style={{ fontSize: 13, color: C.muted, marginBottom: 20 }}>
+              Cash variance of A${Math.abs(cashDiff).toFixed(2)} exceeds A${VARIANCE_THRESHOLD}. Please enter a manager PIN to proceed.
+            </p>
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: C.muted, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Manager PIN</label>
+              <input
+                type="password"
+                inputMode="numeric"
+                maxLength={4}
+                value={managerPin}
+                onChange={e => { setManagerPin(e.target.value); setManagerPinError(''); }}
+                onKeyDown={e => e.key === 'Enter' && verifyManagerPin()}
+                placeholder="••••"
+                style={{ width: '100%', background: 'rgba(10,9,16,0.8)', border: `1px solid ${C.border}`, borderRadius: 8, padding: '10px 12px', fontSize: 18, color: C.text, outline: 'none', fontFamily: "'JetBrains Mono',monospace", letterSpacing: '0.2em', boxSizing: 'border-box' as const }}
+              />
+              {managerPinError && <p style={{ fontSize: 12, color: C.red, marginTop: 6 }}>{managerPinError}</p>}
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={verifyManagerPin} disabled={managerPinChecking || managerPin.length < 4}
+                style={{ flex: 1, padding: '10px', borderRadius: 10, border: 'none', background: C.violet, color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', opacity: managerPin.length < 4 ? 0.5 : 1 }}>
+                {managerPinChecking ? 'Verifying…' : 'Approve'}
+              </button>
+              <button onClick={() => { setShowManagerPin(false); setManagerPin(''); setManagerPinError(''); }}
+                style={{ padding: '10px 16px', borderRadius: 10, border: `1px solid ${C.border}`, background: 'transparent', color: C.muted, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit' }}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

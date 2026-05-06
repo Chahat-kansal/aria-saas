@@ -22,13 +22,34 @@ async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, u
   return data?.id ?? null;
 }
 
-export async function GET() {
+export async function GET(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const bid = await getBid(supabase, user.id);
   if (!bid) return NextResponse.json({ products: [], categories: [], sale_keys: [] });
+
+  const { searchParams } = new URL(req.url);
+  const singleId = searchParams.get('id');
+
+  // Single product fetch (for edit page)
+  if (singleId) {
+    const { data: product, error } = await supabase
+      .from('pos_products')
+      .select('id,name,sku,barcode,description,price,cost_price,tax_rate,stock_quantity,low_stock_threshold,track_stock,is_active,show_online,image_url,category_id,supplier_id,brand_id,family_id,loyalty_earn_rate,case_quantity,is_age_restricted,pos_categories(name,color)')
+      .eq('id', singleId)
+      .eq('business_id', bid)
+      .maybeSingle();
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    const { data: categories } = await supabase.from('pos_categories').select('*').eq('business_id', bid).order('name');
+    return NextResponse.json({
+      business_id: bid,
+      products: product ? [product] : [],
+      categories: categories || [],
+      sale_keys: [],
+    });
+  }
 
   const { data: biz } = await supabase.from('businesses').select('name').eq('id', bid).maybeSingle();
   const [{ data: products }, { data: categories }, { data: saleKeys }] = await Promise.all([

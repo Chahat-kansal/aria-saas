@@ -7,6 +7,12 @@ import LogoMark from './LogoMark';
 const COLLAPSED_W = 64;
 const EXPANDED_W  = 228;
 
+// Role rank: higher = more access
+const ROLE_RANK: Record<string, number> = { cashier: 0, supervisor: 1, manager: 2, admin: 3, owner: 4 };
+function hasAccess(minRole: string, currentRole: string): boolean {
+  return (ROLE_RANK[currentRole] ?? 0) >= (ROLE_RANK[minRole] ?? 0);
+}
+
 const NAV_SECTIONS = [
   {
     title: 'POS',
@@ -26,6 +32,7 @@ const NAV_SECTIONS = [
   },
   {
     title: 'Inventory',
+    minRole: 'manager',
     items: [
       { href: '/pos/products',         label: 'Products',         icon: '📦' },
       { href: '/pos/categories',       label: 'Categories',       icon: '📋' },
@@ -38,6 +45,7 @@ const NAV_SECTIONS = [
   },
   {
     title: 'Purchasing',
+    minRole: 'manager',
     items: [
       { href: '/pos/orders',      label: 'Orders & Invoices', icon: '📄' },
       { href: '/pos/suppliers',   label: 'Suppliers',         icon: '🚚' },
@@ -47,6 +55,7 @@ const NAV_SECTIONS = [
   },
   {
     title: 'Customers',
+    minRole: 'manager',
     items: [
       { href: '/pos/customers',       label: 'Customers',      icon: '👤' },
       { href: '/pos/customer-groups', label: 'Groups',         icon: '👥' },
@@ -57,16 +66,18 @@ const NAV_SECTIONS = [
   },
   {
     title: 'Reports',
+    minRole: 'manager',
     items: [
-      { href: '/pos/reports/sales',      label: 'Sales',       icon: '📈' },
-      { href: '/pos/reports/inventory',  label: 'Inventory',   icon: '📊' },
-      { href: '/pos/reports/cashier',    label: 'Cashier',     icon: '👤' },
-      { href: '/pos/reports/commission', label: 'Commission',  icon: '%' },
-      { href: '/pos/reports/closures',   label: 'Closures',    icon: '📅' },
+      { href: '/pos/reports/sales',      label: 'Sales Reports',     icon: '📈' },
+      { href: '/pos/reports/closures',   label: 'Register Closures', icon: '📋' },
+      { href: '/pos/reports/inventory',  label: 'Inventory',         icon: '📦' },
+      { href: '/pos/reports/cashier',    label: 'Cashier',           icon: '👤' },
+      { href: '/pos/reports/commission', label: 'Commission',        icon: '%' },
     ],
   },
   {
     title: 'Operations',
+    minRole: 'manager',
     items: [
       { href: '/pos/kitchen',    label: 'Kitchen (KDS)', icon: '🍳' },
       { href: '/pos/tables',     label: 'Tables',        icon: '⊞' },
@@ -76,6 +87,7 @@ const NAV_SECTIONS = [
   },
   {
     title: 'Settings',
+    minRole: 'manager',
     items: [
       { href: '/pos/settings',        label: 'Settings',      icon: '⚙️' },
       { href: '/pos/settings/users',  label: 'Staff PINs',    icon: '🔑' },
@@ -106,6 +118,8 @@ export default function POSSidebar({
   const [collapsed, setCollapsed] = useState(true);
   const [tooltip,   setTooltip]   = useState<string | null>(null);
   const [tooltipY,  setTooltipY]  = useState(0);
+  const [posRole,   setPosRole]   = useState<string>('cashier');
+  const [theme,     setTheme]     = useState<'dark' | 'light'>('dark');
   const pathname = usePathname();
 
   const user = currentUser ?? posUser ?? null;
@@ -115,12 +129,32 @@ export default function POSSidebar({
       const s = localStorage.getItem('aria_pos_sidebar');
       if (s === 'expanded') setCollapsed(false);
     } catch { /* ignore */ }
+    try {
+      const session = JSON.parse(localStorage.getItem('aria_pos_user') || '{}');
+      setPosRole(session.role || 'cashier');
+    } catch { setPosRole('cashier'); }
+    try {
+      const saved = localStorage.getItem('pos_theme') as 'dark' | 'light';
+      if (saved) {
+        setTheme(saved);
+        document.documentElement.setAttribute('data-pos-theme', saved);
+      }
+    } catch { /* ignore */ }
   }, []);
 
   function toggle() {
     const next = !collapsed;
     setCollapsed(next);
     try { localStorage.setItem('aria_pos_sidebar', next ? 'collapsed' : 'expanded'); } catch { /* ignore */ }
+  }
+
+  function toggleTheme() {
+    const next = theme === 'dark' ? 'light' : 'dark';
+    setTheme(next);
+    try {
+      localStorage.setItem('pos_theme', next);
+      document.documentElement.setAttribute('data-pos-theme', next);
+    } catch { /* ignore */ }
   }
 
   function isActive(href: string, exact = false) {
@@ -133,6 +167,7 @@ export default function POSSidebar({
     if (w) w.focus();
   }
 
+  const visibleSections = NAV_SECTIONS.filter(s => !s.minRole || hasAccess(s.minRole, posRole));
   const W = collapsed ? COLLAPSED_W : EXPANDED_W;
 
   return (
@@ -181,7 +216,7 @@ export default function POSSidebar({
 
       {/* Scrollable nav */}
       <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '6px 8px' }}>
-        {NAV_SECTIONS.map((section) => (
+        {visibleSections.map((section) => (
           <div key={section.title} style={{ marginBottom: 4 }}>
             {/* Section header */}
             {!collapsed ? (
@@ -193,7 +228,7 @@ export default function POSSidebar({
             )}
 
             {section.items.map((item) => {
-              const active = isActive(item.href, item.exact);
+              const active = isActive(item.href, (item as { href: string; label: string; icon: string; exact?: boolean }).exact);
               return (
                 <div
                   key={item.href}
@@ -265,6 +300,12 @@ export default function POSSidebar({
         <div onClick={onAriaToggle} style={{ display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 10, padding: collapsed ? '9px 14px' : '9px 10px', borderRadius: 10, cursor: 'pointer', border: `1px solid ${ariaOpen ? 'rgba(139,92,246,0.38)' : 'rgba(139,92,246,0.14)'}`, background: ariaOpen ? 'rgba(139,92,246,0.16)' : 'rgba(139,92,246,0.07)', boxShadow: ariaOpen ? '0 0 24px rgba(139,92,246,0.3)' : '0 0 10px rgba(139,92,246,0.1)', transition: 'all 200ms' }}>
           <span style={{ fontSize: 15, flexShrink: 0, width: 20, textAlign: 'center' }}>✨</span>
           {!collapsed && <span style={{ fontSize: 13, fontWeight: 700, color: ariaOpen ? '#8B5CF6' : 'rgba(139,92,246,0.8)' }}>Ask Aria</span>}
+        </div>
+
+        {/* Theme Toggle */}
+        <div onClick={toggleTheme} style={{ display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 10, padding: collapsed ? '9px 14px' : '9px 10px', borderRadius: 10, cursor: 'pointer', border: '1px solid transparent', background: 'rgba(255,255,255,0.03)', transition: 'all 150ms' }}>
+          <span style={{ fontSize: 15, flexShrink: 0, width: 20, textAlign: 'center' }}>{theme === 'dark' ? '☀️' : '🌙'}</span>
+          {!collapsed && <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-tertiary)' }}>{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span>}
         </div>
 
         {/* User */}
