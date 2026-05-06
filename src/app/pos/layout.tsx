@@ -1,11 +1,20 @@
 import '@/styles/pos-design-system.css';
 import { redirect } from 'next/navigation';
+import { headers } from 'next/headers';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import POSShell from '@/components/pos/POSShell';
 
 export const metadata = { title: 'AriaPOS — Point of Sale' };
 
 export default async function PosLayout({ children }: { children: React.ReactNode }) {
+  // /pos/login is a public-facing page — no auth check, no POSShell wrapper.
+  // The middleware sets x-next-pathname so we can detect it here.
+  const headersList = headers();
+  const pathname = headersList.get('x-next-pathname') ?? '';
+  if (pathname === '/pos/login') {
+    return <>{children}</>;
+  }
+
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) redirect('/login');

@@ -13,6 +13,8 @@ function hasAccess(minRole: string, currentRole: string): boolean {
   return (ROLE_RANK[currentRole] ?? 0) >= (ROLE_RANK[minRole] ?? 0);
 }
 
+// All POS navigation — only purchasing/reports/settings are manager-gated
+// Inventory, Customers, Operations are fully operational and visible to all staff
 const NAV_SECTIONS = [
   {
     title: 'POS',
@@ -32,7 +34,7 @@ const NAV_SECTIONS = [
   },
   {
     title: 'Inventory',
-    minRole: 'manager',
+    // Visible to all — cashiers need to look up products, check stock, scan barcodes
     items: [
       { href: '/pos/products',         label: 'Products',         icon: '📦' },
       { href: '/pos/categories',       label: 'Categories',       icon: '📋' },
@@ -45,7 +47,7 @@ const NAV_SECTIONS = [
   },
   {
     title: 'Purchasing',
-    minRole: 'manager',
+    minRole: 'manager', // Orders, suppliers, transfers — owner/manager only
     items: [
       { href: '/pos/orders',      label: 'Orders & Invoices', icon: '📄' },
       { href: '/pos/suppliers',   label: 'Suppliers',         icon: '🚚' },
@@ -55,7 +57,7 @@ const NAV_SECTIONS = [
   },
   {
     title: 'Customers',
-    minRole: 'manager',
+    // Visible to all — cashiers need customer selection, loyalty, gift cards
     items: [
       { href: '/pos/customers',       label: 'Customers',      icon: '👤' },
       { href: '/pos/customer-groups', label: 'Groups',         icon: '👥' },
@@ -66,7 +68,7 @@ const NAV_SECTIONS = [
   },
   {
     title: 'Reports',
-    minRole: 'manager',
+    minRole: 'manager', // Financial reports — manager/owner only
     items: [
       { href: '/pos/reports/sales',      label: 'Sales Reports',     icon: '📈' },
       { href: '/pos/reports/closures',   label: 'Register Closures', icon: '📋' },
@@ -77,7 +79,7 @@ const NAV_SECTIONS = [
   },
   {
     title: 'Operations',
-    minRole: 'manager',
+    // Visible to all — kitchen, tables, void are day-to-day register operations
     items: [
       { href: '/pos/kitchen',    label: 'Kitchen (KDS)', icon: '🍳' },
       { href: '/pos/tables',     label: 'Tables',        icon: '⊞' },
@@ -87,7 +89,7 @@ const NAV_SECTIONS = [
   },
   {
     title: 'Settings',
-    minRole: 'manager',
+    minRole: 'manager', // System config — manager/owner only
     items: [
       { href: '/pos/settings',        label: 'Settings',      icon: '⚙️' },
       { href: '/pos/settings/users',  label: 'Staff PINs',    icon: '🔑' },
@@ -98,7 +100,6 @@ const NAV_SECTIONS = [
 
 interface Props {
   businessName?:  string;
-  // Accept both old (posUser) and new (currentUser) prop names
   posUser?:       { name: string; initials: string; role: string } | null;
   currentUser?:   { name: string; initials: string; role: string } | null;
   onAriaToggle?:  () => void;
@@ -168,6 +169,7 @@ export default function POSSidebar({
   }
 
   const visibleSections = NAV_SECTIONS.filter(s => !s.minRole || hasAccess(s.minRole, posRole));
+  const isOwnerOrManager = hasAccess('manager', posRole);
   const W = collapsed ? COLLAPSED_W : EXPANDED_W;
 
   return (
@@ -307,6 +309,14 @@ export default function POSSidebar({
           <span style={{ fontSize: 15, flexShrink: 0, width: 20, textAlign: 'center' }}>{theme === 'dark' ? '☀️' : '🌙'}</span>
           {!collapsed && <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-tertiary)' }}>{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span>}
         </div>
+
+        {/* Back to ARIA OS Dashboard — owner/admin/manager only */}
+        {isOwnerOrManager && (
+          <Link href="/dashboard" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 10, padding: collapsed ? '9px 14px' : '9px 10px', borderRadius: 10, border: '1px solid transparent', background: 'rgba(255,255,255,0.03)', transition: 'all 150ms' }}>
+            <span style={{ fontSize: 15, flexShrink: 0, width: 20, textAlign: 'center' }}>⬡</span>
+            {!collapsed && <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-tertiary)' }}>ARIA OS Dashboard</span>}
+          </Link>
+        )}
 
         {/* User */}
         <div onClick={onUserSwitch} style={{ display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 8, padding: collapsed ? '6px 14px' : '6px 10px', borderRadius: 10, cursor: 'pointer' }}>

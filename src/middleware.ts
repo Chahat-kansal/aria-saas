@@ -2,8 +2,28 @@ import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
 export async function middleware(request: NextRequest) {
-  let response = NextResponse.next({ request });
+  const { pathname } = request.nextUrl;
 
+  // Forward the pathname to server components via a request header
+  // (used by pos/layout.tsx to detect /pos/login without auth check)
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set('x-next-pathname', pathname);
+
+  let response = NextResponse.next({
+    request: { headers: requestHeaders },
+  });
+
+  // ── Block dashboard/settings access for active POS employees ─────────────
+  // Cashier or supervisor who logged in via POS PIN cannot reach the
+  // owner dashboard. The cookie is set by POSShell when they log in.
+  if (pathname.startsWith('/dashboard') || pathname.startsWith('/settings')) {
+    const posEmp = request.cookies.get('pos_emp');
+    if (posEmp?.value && ['cashier', 'supervisor'].includes(posEmp.value)) {
+      return NextResponse.redirect(new URL('/pos', request.url));
+    }
+  }
+
+  // ── Supabase auth client ──────────────────────────────────────────────────
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -16,7 +36,9 @@ export async function middleware(request: NextRequest) {
           cookiesToSet.forEach(({ name, value }) =>
             request.cookies.set(name, value)
           );
-          response = NextResponse.next({ request });
+          response = NextResponse.next({
+            request: { headers: requestHeaders },
+          });
           cookiesToSet.forEach(({ name, value, options }) =>
             response.cookies.set(name, value, options)
           );
@@ -26,9 +48,8 @@ export async function middleware(request: NextRequest) {
   );
 
   const { data: { user } } = await supabase.auth.getUser();
-  const { pathname } = request.nextUrl;
 
-  // Admin route protection — must be admin email
+  // ── Admin route protection ────────────────────────────────────────────────
   if (pathname.startsWith('/admin')) {
     if (!user) return NextResponse.redirect(new URL('/login', request.url));
     const adminEmails = (process.env.ADMIN_EMAILS || '').split(',').map(e => e.trim()).filter(Boolean);
@@ -38,10 +59,12 @@ export async function middleware(request: NextRequest) {
     return response;
   }
 
+  // ── Protected routes ──────────────────────────────────────────────────────
+  // /pos/login is PUBLIC — it handles its own auth state detection
   const isProtected =
     pathname.startsWith('/dashboard') ||
     pathname.startsWith('/onboarding') ||
-    pathname.startsWith('/pos') ||
+    (pathname.startsWith('/pos') && pathname !== '/pos/login') ||
     pathname.startsWith('/visa') ||
     pathname.startsWith('/businesses') ||
     pathname.startsWith('/chat') ||
@@ -51,6 +74,7 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/login', request.url));
   }
 
+  // ── Authenticated users hitting auth pages → redirect away ───────────────
   const isAuthPage =
     pathname === '/login' ||
     pathname === '/signup' ||
@@ -72,6 +96,7 @@ export const config = {
     '/businesses/:path*',
     '/businesses',
     '/pos/:path*',
+    '/pos/login',
     '/visa/:path*',
     '/login',
     '/signup',

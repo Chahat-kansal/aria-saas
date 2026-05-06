@@ -170,12 +170,24 @@ function POSUserSelect({ businessId, businessName, onLogin }: {
       loginAt: Date.now(),
     };
     localStorage.setItem(POS_USER_KEY, JSON.stringify(owner));
+    // Owner bypass clears any employee restriction cookie
+    document.cookie = 'pos_emp=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
     onLogin(owner);
+  }
+
+  function setEmpCookie(role: string) {
+    const restricted = ['cashier', 'supervisor'].includes(role);
+    if (restricted) {
+      document.cookie = `pos_emp=${role}; path=/; SameSite=Lax; max-age=43200`;
+    } else {
+      document.cookie = 'pos_emp=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+    }
   }
 
   function handleVerified(u: PosUser) {
     const withTime = { ...u, loginAt: Date.now() };
     localStorage.setItem(POS_USER_KEY, JSON.stringify(withTime));
+    setEmpCookie(u.role);
     onLogin(withTime);
   }
 
@@ -369,6 +381,8 @@ export default function POSShell({ children, businessId, businessName }: {
         }}
         onUserSwitch={() => {
           localStorage.removeItem(POS_USER_KEY);
+          // Clear dashboard restriction cookie when employee logs out
+          document.cookie = 'pos_emp=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
           setPosUser(null);
         }}
       />
