@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
+import { trackUsage } from '@/lib/track-usage';
 import { getBusinessSales, getBusinessCustomers, getBusinessItems } from '@/lib/business-data';
 import { NextResponse } from 'next/server';
 import { ARIA_VOICE } from '@/lib/aria-voice-guide';
@@ -28,6 +29,8 @@ export async function POST(req: Request) {
     .single();
 
   if (!business) return NextResponse.json({ error: 'Business not found' }, { status: 404 });
+
+  trackUsage({ business_id: business_id, event_type: 'daily_briefing' });
 
   const today = new Date().toISOString().split('T')[0];
   const todayStart = new Date();

@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { getWeatherForecast, getUpcomingHolidays, getWeatherUplift } from '@/lib/external-apis';
+import { trackUsage } from '@/lib/track-usage';
 import { NextResponse } from 'next/server';
 
 export async function POST(req: Request) {
@@ -16,6 +17,8 @@ export async function POST(req: Request) {
   const { data: biz } = await supabase.from('businesses').select('id,name,city,industry')
     .eq('id', business_id).eq('user_id', user.id).maybeSingle();
   if (!biz) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+
+  trackUsage({ business_id, event_type: 'weekly_order' });
 
   const [
     { data: products },

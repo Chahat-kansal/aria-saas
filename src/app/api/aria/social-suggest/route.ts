@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { ARIA_VOICE } from '@/lib/aria-voice-guide';
 import { getWeatherForecast, getUpcomingHolidays } from '@/lib/external-apis';
+import { trackUsage } from '@/lib/track-usage';
 import Anthropic from '@anthropic-ai/sdk';
 import { NextResponse } from 'next/server';
 
@@ -80,6 +81,8 @@ export async function POST(req: Request) {
   ]);
 
   if (!biz) return NextResponse.json({ error: 'Business not found' }, { status: 404 });
+
+  trackUsage({ business_id, event_type: 'social_suggest' });
 
   const weather = await getWeatherForecast(biz.city || 'Melbourne').catch(() => []);
   const holidays = getUpcomingHolidays(30, 'VIC');
