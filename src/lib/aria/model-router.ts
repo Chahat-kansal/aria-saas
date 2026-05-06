@@ -34,9 +34,10 @@ export type AriaModelResult<T = any> = {
   provider?: 'anthropic' | 'openai' | 'openrouter';
 };
 
+// Tasks that genuinely need Sonnet-level reasoning (user-initiated, high-value)
+// High-frequency auto-refresh tasks (daily_briefing, business_health) use Haiku
+// to avoid 504 timeouts — they run on a schedule and volume matters more than depth
 const SMART_TASKS = new Set<AriaTask>([
-  'daily_briefing',
-  'business_health',
   'reorder_plan',
   'profit_leak',
   'supplier_risk',

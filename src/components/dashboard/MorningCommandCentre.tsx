@@ -157,11 +157,11 @@ function dateLabel(value: string | null) {
   });
 }
 
-async function postBrain(businessId: string, mode: string, context?: object): Promise<BrainOutput> {
+async function postBrain(businessId: string, mode: string, context?: object, forceRefresh = false): Promise<BrainOutput> {
   const res = await fetch('/api/aria/business-brain', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ business_id: businessId, mode, context }),
+    body: JSON.stringify({ business_id: businessId, mode, context, force_refresh: forceRefresh }),
   });
   if (!res.ok) throw new Error(`Business brain returned ${res.status}`);
   return res.json();
@@ -233,7 +233,7 @@ export function MorningCommandCentre() {
     }
   }, []);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (forceRefresh = false) => {
     if (!business?.id) {
       setData(EMPTY_OUTPUT);
       setLoading(false);
@@ -244,7 +244,7 @@ export function MorningCommandCentre() {
     // Load live monitor in parallel — don't block main brain
     loadLive(business.id);
     try {
-      const result = await postBrain(business.id, 'daily');
+      const result = await postBrain(business.id, 'daily', undefined, forceRefresh);
       setData({ ...EMPTY_OUTPUT, ...result, data_status: result.data_status ?? EMPTY_STATUS });
     } catch (error) {
       console.error('Morning Command Centre: business brain failed', error);
@@ -319,6 +319,14 @@ export function MorningCommandCentre() {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => load(true)}
+              disabled={loading}
+              title="Force refresh — bypasses 30-minute cache"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white/70 hover:bg-white/10 disabled:opacity-40"
+            >
+              {loading ? '…' : '↺'} Refresh
+            </button>
             <Link href="/dashboard/ask-aria" className="inline-flex items-center gap-2 rounded-xl bg-[#1D9E75] px-3 py-2 text-xs font-semibold text-white hover:bg-[#188765]">
               Ask Aria
               <ChevronRight className="h-3.5 w-3.5" />

@@ -246,7 +246,7 @@ async function analyse(mode: AriaBrainMode, data: AriaBusinessData, context?: ob
     systemPrompt: SYSTEM_PROMPT,
     schema: OUTPUT_SCHEMA,
     temperature: 0.15,
-    maxTokens: 3000,
+    maxTokens: 800,
     userPrompt: JSON.stringify({
       mode,
       context: context ?? null,
