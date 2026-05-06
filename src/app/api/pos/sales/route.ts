@@ -32,13 +32,18 @@ export async function GET(req: Request) {
 
   const { searchParams } = new URL(req.url);
   const limit = parseInt(searchParams.get('limit') || '50');
+  const session_id = searchParams.get('session_id');
 
-  const { data: sales, error } = await supabase
+  let query = supabase
     .from('pos_sales')
     .select('*, pos_customers(name), pos_sale_items(quantity, unit_price, discount_amount, pos_products(name))')
     .eq('business_id', bid)
     .order('created_at', { ascending: false })
     .limit(limit);
+
+  if (session_id) query = query.eq('session_id', session_id);
+
+  const { data: sales, error } = await query;
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ sales: sales || [] });

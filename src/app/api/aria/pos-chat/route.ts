@@ -26,7 +26,8 @@ export async function POST(req: Request) {
     current_sale_total?: number;
   };
   const { message, business_id, cart_context } = body;
-  if (!message) return NextResponse.json({ error: 'message required' }, { status: 400 });
+  const userMessage = message ?? '';
+  if (!userMessage) return NextResponse.json({ error: 'message required' }, { status: 400 });
 
   const bid = await getBid(supabase, user.id);
   if (!bid || (business_id && bid !== business_id)) {
@@ -68,7 +69,7 @@ export async function POST(req: Request) {
     promotions = (promoRes.data ?? []) as typeof promotions;
   } catch { /* promotions table optional */ }
 
-  const business  = bizRes.data;
+  const biz      = bizRes.data;
   const sales     = (salesRes.data ?? []) as SaleRow[];
   const products  = (productsRes.data ?? []) as ProductRow[];
   const settings  = settingsRes.data;
@@ -92,7 +93,7 @@ export async function POST(req: Request) {
 
   // Product inventory summary
   const outOfStock = products.filter((p: ProductRow) => p.track_stock && (p.stock_quantity ?? 0) <= 0);
-  const lowStock   = products.filter((p: ProductRow) => p.track_stock && (p.stock_quantity ?? 0) > 0 && (p.stock_quantity ?? 0) <= (p.low_stock_threshold ?? 5));
+  const lowStockItems = products.filter((p: ProductRow) => p.track_stock && (p.stock_quantity ?? 0) > 0 && (p.stock_quantity ?? 0) <= (p.low_stock_threshold ?? 5));
 
   const productsList = products.map((p: ProductRow) => {
     const sq = p.stock_quantity ?? 0;
@@ -120,15 +121,71 @@ export async function POST(req: Request) {
   const loyaltyValue = (settings as any)?.loyalty_points_per_dollar_value ?? 100;
   const gstInclusive = (settings as any)?.gst_inclusive !== false;
 
-  const businessContext = `BUSINESS: ${business?.name ?? 'Unknown'}, ${business?.industry ?? ''}, ${business?.city ?? 'Australia'}
+  // Enhanced real-time business context (month + customers + top products)
+  const [
+    { data: todaySales },
+    { data: monthSales },
+    { data: topProducts },
+    { data: lowStock },
+    { data: customers },
+  ] = await Promise.all([
+    supabase.from('pos_sales').select('total_amount').eq('business_id', resolvedBid)
+      .gte('created_at', new Date().toISOString().split('T')[0]),
+    supabase.from('pos_sales').select('total_amount,created_at').eq('business_id', resolvedBid)
+      .gte('created_at', new Date(Date.now()-30*86400000).toISOString()),
+    supabase.from('pos_sale_items').select('product_name,quantity,unit_price')
+      .eq('business_id', resolvedBid)
+      .gte('created_at', new Date(Date.now()-30*86400000).toISOString()),
+    supabase.from('pos_products').select('name,stock_quantity,track_stock')
+      .eq('business_id', resolvedBid).eq('is_active', true).eq('track_stock', true).lt('stock_quantity', 10),
+    supabase.from('pos_customers').select('id', { count: 'exact', head: true }).eq('business_id', resolvedBid),
+  ]);
+
+  const todayRevenue = (todaySales || []).reduce((s: number, r: any) => s + (r.total_amount || 0), 0);
+  const todayCount = (todaySales || []).length;
+  const monthRevenue = (monthSales || []).reduce((s: number, r: any) => s + (r.total_amount || 0), 0);
+  const monthCount = (monthSales || []).length;
+
+  const prodMap: Record<string, { qty: number; revenue: number }> = {};
+  for (const item of (topProducts || [])) {
+    if (!prodMap[item.product_name]) prodMap[item.product_name] = { qty: 0, revenue: 0 };
+    prodMap[item.product_name].qty += item.quantity;
+    prodMap[item.product_name].revenue += (item.unit_price || 0) * item.quantity;
+  }
+  const topProdList = Object.entries(prodMap).sort((a, b) => b[1].revenue - a[1].revenue).slice(0, 10);
+
+  const businessContext = `BUSINESS: ${biz?.name ?? 'Unknown'}, ${biz?.industry ?? ''}, ${biz?.city ?? 'Australia'}
 TIME: ${nowHHMM} (Sydney)
-TODAY: A$${revenue.toFixed(2)} from ${txCount} transactions (avg A$${avgBasket.toFixed(2)}) | ${cashSales} cash, ${cardSales} card
-TOP SELLERS: ${topSellers || 'No sales yet'}
-STOCK ALERTS: Out=${outOfStock.map((p: ProductRow) => p.name).join(', ') || 'None'} | Low=${lowStock.map((p: ProductRow) => `${p.name}(${p.stock_quantity ?? 0})`).join(', ') || 'None'}
+TODAY: A$${todayRevenue.toFixed(2)} from ${todayCount} transactions (avg A$${todayCount > 0 ? (todayRevenue/todayCount).toFixed(2) : '0.00'}) | ${cashSales} cash, ${cardSales} card
+THIS MONTH (30 days): A$${monthRevenue.toFixed(2)} revenue, ${monthCount} transactions
+TOTAL CUSTOMERS: ${(customers as any)?.count ?? 'unknown'}
+
+TOP 10 PRODUCTS THIS MONTH:
+${topProdList.map(([name, v], i) => `${i+1}. ${name}: A$${v.revenue.toFixed(2)} (${v.qty} sold)`).join('\n') || 'No sales data yet'}
+
+LOW STOCK ALERTS (< 10 units):
+${(lowStock || []).map((p: any) => `- ${p.name}: ${p.stock_quantity} remaining`).join('\n') || 'No low stock items'}
+
+TODAY TOP SELLERS: ${topSellers || 'No sales yet'}
+STOCK OUT: ${outOfStock.map((p: ProductRow) => p.name).join(', ') || 'None'} | LOW: ${lowStockItems.map((p: ProductRow) => `${p.name}(${p.stock_quantity ?? 0})`).join(', ') || 'None'}
 ACTIVE PROMOTIONS: ${promoList}
 CART: ${cartText}
 LOYALTY: ${loyaltyRate}pt/A$1 | ${loyaltyValue}pts=A$1 | GST ${gstInclusive ? 'inclusive' : 'exclusive'} | Cash rounding ${(settings as any)?.cash_rounding !== false ? 'yes' : 'no'}
 PRODUCTS (${products.length}): ${productsList}`;
+
+  // CSV generation if user wants a file export
+  const wantsFile = /excel|csv|download|export|spreadsheet/i.test(userMessage);
+  let downloadPayload: { filename: string; content: string; type: string } | null = null;
+
+  if (wantsFile && topProdList.length > 0) {
+    const csvRows = [['Product Name', 'Units Sold', 'Revenue', 'Avg Price']];
+    for (const [name, v] of topProdList) {
+      csvRows.push([name, String(v.qty), `A$${v.revenue.toFixed(2)}`, `A$${(v.revenue/v.qty).toFixed(2)}`]);
+    }
+    const csv = csvRows.map(r => r.map(c => `"${c.replace(/"/g,'""')}"`).join(',')).join('\n');
+    const month = new Date().toISOString().slice(0,7);
+    downloadPayload = { filename: `aria-sales-${month}.csv`, content: csv, type: 'text/csv' };
+  }
 
   const systemPrompt = `You are Aria — the AI co-pilot built into AriaPOS.
 You know everything about this POS system and this business.
@@ -189,7 +246,7 @@ RULES:
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 200,
       system: systemPrompt,
-      messages: [{ role: 'user', content: message as string }],
+      messages: [{ role: 'user', content: userMessage }],
     });
 
     const reply = response.content
@@ -205,7 +262,12 @@ RULES:
       if (match) action = { type: 'apply_discount', payload: { percentage: parseFloat(match[1]) } };
     }
 
-    return NextResponse.json({ reply, action });
+    const assistantText = reply;
+    return NextResponse.json({
+      reply: assistantText,
+      action,
+      ...(downloadPayload ? { download: downloadPayload } : {}),
+    });
   } catch (err) {
     console.error('[pos-chat] Claude error:', err);
     return NextResponse.json({ reply: "Sorry, I couldn't process that right now." });

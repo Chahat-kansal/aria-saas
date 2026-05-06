@@ -90,7 +90,7 @@ function getCategoryBg(catName: string | null | undefined): string {
 }
 
 const CART_SESSION_KEY = 'aria_pos_cart_v1';
-type PayMethod = 'card' | 'cash' | 'split';
+type PayMethod = 'card' | 'cash' | 'split' | 'gift_card' | 'direct_deposit';
 
 /* ═══════════════════════════════════════════════════════════════════
    TERMINAL
@@ -126,6 +126,12 @@ export default function TerminalPage() {
   const [splitCash,      setSplitCash]      = useState('');
   const [processing,     setProcessing]     = useState(false);
   const [showReceipt,    setShowReceipt]    = useState<any>(null);
+  const [giftCardCode,        setGiftCardCode]        = useState('');
+  const [giftCardBalance,     setGiftCardBalance]     = useState<number | null>(null);
+  const [giftCardChecking,    setGiftCardChecking]    = useState(false);
+  const [giftCardError,       setGiftCardError]       = useState('');
+  const [directDepositRef,    setDirectDepositRef]    = useState('');
+  const [directDepositName,   setDirectDepositName]   = useState('');
 
   /* ── Register ─────────────────────────────────────────────────── */
   const [registerSession,   setRegisterSession]   = useState<RegisterSession | null>(null);
@@ -652,6 +658,25 @@ export default function TerminalPage() {
   }
 
   /* ─── Process sale ───────────────────────────────────────────── */
+  const checkGiftCard = async () => {
+    if (!giftCardCode.trim() || !businessId) return;
+    setGiftCardChecking(true);
+    setGiftCardError('');
+    setGiftCardBalance(null);
+    try {
+      const res = await fetch(`/api/pos/payments/gift-card?code=${encodeURIComponent(giftCardCode.trim())}`);
+      const d = await res.json();
+      if (d.valid && d.card) {
+        setGiftCardBalance(d.card.balance);
+      } else {
+        setGiftCardError(d.error || 'Gift card not found');
+      }
+    } catch {
+      setGiftCardError('Could not check gift card');
+    }
+    setGiftCardChecking(false);
+  };
+
   async function processSale() {
     if (!cart.length || processing) return;
     // Age restriction gate — require ID check confirmation before proceeding
@@ -684,6 +709,8 @@ export default function TerminalPage() {
           split_card: payMethod === 'split' ? +splitCardAmt.toFixed(2) : null,
           outlet_id: outletId, session_id: registerSession?.id ?? null,
           age_verified: ageVerified,
+          ...(payMethod === 'gift_card' ? { gift_card_code: giftCardCode, gift_card_amount: Math.min(giftCardBalance ?? 0, roundedTotal) } : {}),
+          ...(payMethod === 'direct_deposit' ? { direct_deposit_ref: directDepositRef } : {}),
         }),
       });
       const d = await r.json();
@@ -855,9 +882,11 @@ export default function TerminalPage() {
             {/* Payment method tabs */}
             <div style={{ padding: '12px 20px', borderBottom: '1px solid rgba(0,229,255,0.07)', display: 'flex', gap: 8 }}>
               {([
-                { id: 'card'  as const, label: 'Card',   icon: '💳', color: '#00E5FF' },
-                { id: 'cash'  as const, label: 'Cash',   icon: '💵', color: '#22C55E' },
-                { id: 'split' as const, label: 'Split',  icon: '✂️', color: '#F59E0B' },
+                { id: 'card'           as const, label: 'Card',       icon: '💳', color: '#00E5FF' },
+                { id: 'cash'           as const, label: 'Cash',       icon: '💵', color: '#22C55E' },
+                { id: 'split'          as const, label: 'Split',      icon: '✂️', color: '#F59E0B' },
+                { id: 'gift_card'      as const, label: 'Gift Card',  icon: '🎁', color: '#8B5CF6' },
+                { id: 'direct_deposit' as const, label: 'Direct Dep.',icon: '🏦', color: '#F59E0B' },
               ]).map(m => (
                 <button key={m.id} onClick={() => setPayMethod(m.id)}
                   style={{ flex: 1, height: 60, borderRadius: 12, border: `1.5px solid ${payMethod === m.id ? m.color + '55' : 'rgba(0,229,255,0.08)'}`, background: payMethod === m.id ? `${m.color}12` : 'rgba(0,229,255,0.02)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, cursor: 'pointer', transition: 'all 200ms', transform: payMethod === m.id ? 'translateY(-2px)' : 'none', boxShadow: payMethod === m.id ? `0 6px 20px ${m.color}33` : 'none' }}>
@@ -945,6 +974,78 @@ export default function TerminalPage() {
                   <button onClick={() => processSale()} disabled={processing}
                     style={{ height: 50, borderRadius: 12, border: 'none', background: 'linear-gradient(135deg,#00E5FF,#7B2FFF)', color: '#000', fontFamily: 'inherit', fontSize: 14, fontWeight: 900, cursor: processing ? 'not-allowed' : 'pointer', opacity: processing ? 0.4 : 1, boxShadow: '0 4px 0 rgba(0,150,200,0.4), 0 8px 20px rgba(0,229,255,0.25)' }}>
                     {processing ? 'Processing…' : 'Confirm Split Payment'}
+                  </button>
+                </div>
+              )}
+
+              {payMethod === 'gift_card' && (
+                <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:16, width:300 }}>
+                  <div style={{ width:'100%' }}>
+                    <div style={{ fontSize:11, fontWeight:700, color:'rgba(130,160,200,0.6)', marginBottom:6, textTransform:'uppercase', letterSpacing:'0.06em' }}>Gift Card Code</div>
+                    <div style={{ display:'flex', gap:8 }}>
+                      <input
+                        value={giftCardCode}
+                        onChange={e => { setGiftCardCode(e.target.value.toUpperCase()); setGiftCardBalance(null); setGiftCardError(''); }}
+                        onKeyDown={e => e.key === 'Enter' && checkGiftCard()}
+                        placeholder="XXXX-XXXX"
+                        style={{ flex:1, background:'rgba(10,9,16,0.8)', border:'1px solid rgba(0,229,255,0.15)', borderRadius:10, padding:'10px 14px', fontSize:16, fontFamily:"'JetBrains Mono',monospace", color:'rgba(220,240,255,0.95)', outline:'none', letterSpacing:'0.1em' }}
+                      />
+                      <button onClick={checkGiftCard} disabled={!giftCardCode.trim() || giftCardChecking}
+                        style={{ padding:'10px 16px', borderRadius:10, border:'none', background:'rgba(139,92,246,0.2)', color:'#8B5CF6', fontSize:13, fontWeight:700, cursor:'pointer', fontFamily:'inherit', opacity:!giftCardCode.trim()?0.4:1 }}>
+                        {giftCardChecking ? '…' : 'Check'}
+                      </button>
+                    </div>
+                    {giftCardError && <p style={{ fontSize:12, color:'#EF4444', marginTop:6 }}>{giftCardError}</p>}
+                  </div>
+                  {giftCardBalance !== null && (
+                    <div style={{ width:'100%', background:'rgba(139,92,246,0.08)', border:'1px solid rgba(139,92,246,0.2)', borderRadius:12, padding:'14px 18px' }}>
+                      <div style={{ fontSize:11, color:'rgba(130,160,200,0.6)', marginBottom:4 }}>Available Balance</div>
+                      <div style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:28, fontWeight:800, color: giftCardBalance >= roundedTotal ? '#22C55E' : '#EF4444' }}>
+                        A${giftCardBalance.toFixed(2)}
+                      </div>
+                      {giftCardBalance < roundedTotal && (
+                        <p style={{ fontSize:12, color:'#EF4444', marginTop:6 }}>Insufficient — A${(roundedTotal - giftCardBalance).toFixed(2)} short</p>
+                      )}
+                      {giftCardBalance > roundedTotal && (
+                        <p style={{ fontSize:12, color:'rgba(130,160,200,0.6)', marginTop:4 }}>Change due: A${(giftCardBalance - roundedTotal).toFixed(2)}</p>
+                      )}
+                    </div>
+                  )}
+                  <button
+                    onClick={() => processSale()}
+                    disabled={processing || giftCardBalance === null || giftCardBalance <= 0}
+                    style={{ height:52, padding:'0 36px', borderRadius:14, border:'none', background:'linear-gradient(135deg,#8B5CF6,#6D28D9)', color:'#fff', fontFamily:'inherit', fontSize:14, fontWeight:900, cursor:(processing||giftCardBalance===null||giftCardBalance<=0)?'not-allowed':'pointer', boxShadow:'0 5px 0 rgba(109,40,217,0.5), 0 10px 30px rgba(139,92,246,0.3)', transition:'all 200ms', opacity:(processing||giftCardBalance===null||giftCardBalance<=0)?0.4:1 }}>
+                    {processing ? 'Processing…' : `Pay with Gift Card · A$${roundedTotal.toFixed(2)}`}
+                  </button>
+                </div>
+              )}
+
+              {payMethod === 'direct_deposit' && (
+                <div style={{ display:'flex', flexDirection:'column', gap:16, width:300 }}>
+                  <div style={{ fontSize:13, color:'rgba(130,160,200,0.7)', textAlign:'center' }}>Record a direct deposit / bank transfer payment</div>
+                  <div>
+                    <div style={{ fontSize:11, fontWeight:700, color:'rgba(130,160,200,0.6)', marginBottom:6, textTransform:'uppercase', letterSpacing:'0.06em' }}>Reference Number</div>
+                    <input
+                      value={directDepositRef}
+                      onChange={e => setDirectDepositRef(e.target.value)}
+                      placeholder="e.g. REF-20260506"
+                      style={{ width:'100%', background:'rgba(10,9,16,0.8)', border:'1px solid rgba(0,229,255,0.15)', borderRadius:10, padding:'10px 14px', fontSize:14, color:'rgba(220,240,255,0.95)', outline:'none', fontFamily:'inherit', boxSizing:'border-box' }}
+                    />
+                  </div>
+                  <div>
+                    <div style={{ fontSize:11, fontWeight:700, color:'rgba(130,160,200,0.6)', marginBottom:6, textTransform:'uppercase', letterSpacing:'0.06em' }}>Account Name (optional)</div>
+                    <input
+                      value={directDepositName}
+                      onChange={e => setDirectDepositName(e.target.value)}
+                      placeholder="e.g. John Smith"
+                      style={{ width:'100%', background:'rgba(10,9,16,0.8)', border:'1px solid rgba(0,229,255,0.15)', borderRadius:10, padding:'10px 14px', fontSize:14, color:'rgba(220,240,255,0.95)', outline:'none', fontFamily:'inherit', boxSizing:'border-box' }}
+                    />
+                  </div>
+                  <button
+                    onClick={() => processSale()}
+                    disabled={processing}
+                    style={{ height:52, padding:'0 36px', borderRadius:14, border:'none', background:'linear-gradient(135deg,#F59E0B,#D97706)', color:'#000', fontFamily:'inherit', fontSize:14, fontWeight:900, cursor:processing?'not-allowed':'pointer', boxShadow:'0 5px 0 rgba(217,119,6,0.5)', transition:'all 200ms', opacity:processing?0.6:1 }}>
+                    {processing ? 'Processing…' : `Mark as Paid · A$${roundedTotal.toFixed(2)}`}
                   </button>
                 </div>
               )}

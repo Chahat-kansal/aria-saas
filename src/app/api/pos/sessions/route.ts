@@ -33,6 +33,7 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const history = searchParams.get('history') === 'true';
   const sessionId = searchParams.get('id');
+  const openOnly = searchParams.get('open') === 'true';
 
   // Fetch a specific session by ID
   if (sessionId) {
@@ -51,6 +52,9 @@ export async function GET(req: Request) {
     .eq('business_id', bid)
     .eq('status', 'open')
     .maybeSingle();
+
+  // ?open=true — return open session under 'session' key for close page
+  if (openOnly) return NextResponse.json({ session: openSession || null, openSession: openSession || null });
 
   if (!history) return NextResponse.json({ openSession: openSession || null });
 
@@ -107,16 +111,29 @@ export async function PATCH(req: Request) {
   const bid = await getBusinessId(supabase, user.id);
   if (!bid) return NextResponse.json({ error: 'No business found' }, { status: 400 });
 
-  const { session_id, closing_float } = await req.json();
+  const { searchParams } = new URL(req.url);
+  const queryId = searchParams.get('id');
+
+  const body = await req.json();
+  // Support both legacy { session_id } body and new ?id= query param
+  const session_id = queryId ?? body.session_id;
   if (!session_id) return NextResponse.json({ error: 'session_id required' }, { status: 400 });
+
+  // Build update payload — support both legacy closing_float and new detailed fields
+  const updatePayload: Record<string, unknown> = {
+    status: 'closed',
+    closed_at: body.closed_at ?? new Date().toISOString(),
+  };
+  if (body.closing_float !== undefined) updatePayload.closing_float = body.closing_float;
+  if (body.closing_float_cents !== undefined) updatePayload.closing_float = body.closing_float_cents / 100;
+  if (body.actual_cash_cents !== undefined) updatePayload.actual_cash = body.actual_cash_cents / 100;
+  if (body.expected_cash_cents !== undefined) updatePayload.expected_cash = body.expected_cash_cents / 100;
+  if (body.variance_cents !== undefined) updatePayload.variance = body.variance_cents / 100;
+  if (body.notes !== undefined) updatePayload.notes = body.notes;
 
   const { error } = await supabase
     .from('pos_cash_sessions')
-    .update({
-      status: 'closed',
-      closed_at: new Date().toISOString(),
-      closing_float: closing_float ?? 0,
-    })
+    .update(updatePayload)
     .eq('id', session_id)
     .eq('business_id', bid)
     .eq('status', 'open');
