@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 
 const C = { bg:'rgba(17,15,26,0.95)', card:'rgba(26,23,40,0.9)', border:'#2A2540', text:'#EDE8FF', muted:'#8B85A8', dim:'#4A4565', violet:'#8B5CF6', green:'#22C55E', red:'#EF4444' };
 
-interface Template { id: string; name: string; type: string; for_type: string; }
+interface Template { id: string; name: string; type: string; for_type: string; is_default?: boolean; }
 
 export default function ReceiptsPage() {
   const router = useRouter();
@@ -31,6 +31,14 @@ export default function ReceiptsPage() {
     if (!confirm(`Delete "${name}"?`)) return;
     await fetch(`/api/pos/receipt-templates?id=${id}`, { method: 'DELETE' });
     setTemplates(prev => prev.filter(t => t.id !== id));
+  }
+
+  async function setDefault(id: string) {
+    await fetch('/api/pos/receipt-templates', {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, is_default: true }),
+    });
+    setTemplates(prev => prev.map(t => ({ ...t, is_default: t.id === id })));
   }
 
   async function cloneTemplate(t: Template) {
@@ -75,11 +83,17 @@ export default function ReceiptsPage() {
             <tbody>
               {templates.map((t, i) => (
                 <tr key={t.id} style={{ borderBottom: i < templates.length - 1 ? `1px solid ${C.border}` : 'none' }}>
-                  <td style={{ padding: '12px 16px', fontSize: 13, fontWeight: 600, color: C.text }}>{t.name}</td>
+                  <td style={{ padding: '12px 16px', fontSize: 13, fontWeight: 600, color: C.text }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      {t.name}
+                      {t.is_default && <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 99, background: 'rgba(34,197,94,0.15)', color: C.green, fontWeight: 700 }}>✓ Default</span>}
+                    </div>
+                  </td>
                   <td style={{ padding: '12px 16px', fontSize: 12, color: C.muted, textTransform: 'capitalize' }}>{t.type}</td>
                   <td style={{ padding: '12px 16px', fontSize: 12, color: C.muted, textTransform: 'capitalize' }}>{t.for_type}</td>
                   <td style={{ padding: '12px 16px', textAlign: 'right' }}>
                     <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                      {!t.is_default && <button onClick={() => setDefault(t.id)} style={{ fontSize: 12, color: C.green, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600 }}>Set default</button>}
                       <Link href={`/pos/settings/receipts/${t.id}`} style={{ fontSize: 12, color: C.violet, textDecoration: 'none', fontWeight: 600 }}>Edit</Link>
                       <button onClick={() => cloneTemplate(t)} style={{ fontSize: 12, color: C.muted, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>Clone</button>
                       <button onClick={() => deleteTemplate(t.id, t.name)} style={{ fontSize: 12, color: C.red, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>Delete</button>

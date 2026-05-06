@@ -5,6 +5,7 @@ import { SFX } from '@/lib/pos-utils';
 import dynamic from 'next/dynamic';
 import type { FlyToCartHandle } from '@/components/pos/FlyToCart';
 import Receipt from '@/components/pos/Receipt';
+import { printReceiptWithTemplate } from '@/lib/pos-print';
 
 const CursorGlow = dynamic(() => import('@/components/pos/CursorGlow'), { ssr: false });
 const AnimatedBg = dynamic(() => import('@/components/pos/AnimatedBg'), { ssr: false });
@@ -1104,7 +1105,11 @@ export default function TerminalPage() {
                 onClose={() => setShowReceiptModal(false)}
               />
             )}
-            <button onClick={() => setShowReceiptModal(true)}
+            <button
+              onClick={async () => {
+                const used = await printReceiptWithTemplate(showReceipt, businessName ?? '');
+                if (!used) setShowReceiptModal(true);
+              }}
               style={{ height: 40, padding: '0 24px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.05)', color: 'rgba(220,240,255,0.7)', fontFamily: 'inherit', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 7 }}>
               🖨️ Print receipt
             </button>

@@ -87,9 +87,10 @@ const NAV_SECTIONS = [
     title: 'Settings',
     minRole: 'manager',
     items: [
-      { href: '/pos/settings',        label: 'Settings',      icon: '⚙️' },
-      { href: '/pos/settings/users',  label: 'Staff PINs',    icon: '🔑' },
-      { href: '/pos/price-tickets',   label: 'Price Tickets', icon: '🖨️' },
+      { href: '/pos/settings',              label: 'Settings',         icon: '⚙️' },
+      { href: '/pos/settings/users',        label: 'Staff PINs',       icon: '🔑' },
+      { href: '/pos/settings/receipts',     label: 'Receipt Templates', icon: '🧾' },
+      { href: '/pos/price-tickets',         label: 'Price Tickets',    icon: '🖨️' },
     ],
   },
 ];
