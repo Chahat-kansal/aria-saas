@@ -24,114 +24,97 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
   try {
     const supabase = createServerSupabaseClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    // Get the user's business — single query is more reliable than getBizId
-    const { data: biz } = await supabase
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const id = params.id
+    if (!id) {
+      return NextResponse.json({ error: 'Missing id' }, { status: 400 })
+    }
+
+    let body: Record<string, unknown> = {}
+    try {
+      body = await req.json()
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
+    }
+
+    // Get this user's business_id
+    const { data: biz, error: bizError } = await supabase
       .from('businesses')
       .select('id')
       .eq('user_id', user.id)
-      .eq('is_active', true)
-      .order('created_at', { ascending: true })
-      .limit(1)
       .maybeSingle()
-    if (!biz) return NextResponse.json({ error: 'No business found' }, { status: 404 })
 
-    // Verify the template belongs to this business before updating
-    const { data: existing } = await supabase
-      .from('pos_receipt_templates')
-      .select('id, business_id')
-      .eq('id', params.id)
-      .eq('business_id', biz.id)
-      .maybeSingle()
-    if (!existing) return NextResponse.json({ error: 'Template not found' }, { status: 404 })
-
-    const body = await req.json().catch(() => ({}))
-
-    // When marking as default, unset all others first
-    if (body.is_default === true) {
-      await supabase.from('pos_receipt_templates')
-        .update({ is_default: false })
-        .eq('business_id', biz.id)
-        .neq('id', params.id)
+    if (bizError) {
+      console.error('[PATCH receipt] biz error:', bizError.message)
+      return NextResponse.json({ error: bizError.message }, { status: 500 })
+    }
+    if (!biz) {
+      return NextResponse.json({ error: 'No business found for this user' }, { status: 404 })
     }
 
-    // Build update — only include fields that were sent
-    const update: Record<string, unknown> = { updated_at: new Date().toISOString() }
-    if (body.name              !== undefined) update.name              = body.name
-    if (body.is_default        !== undefined) update.is_default        = body.is_default
-    if (body.components        !== undefined) update.components        = body.components
-    if (body.elements          !== undefined) update.elements          = body.elements
-    if (body.canvas_height     !== undefined) update.canvas_height     = body.canvas_height
-    if (body.canvas_width      !== undefined) update.canvas_width      = body.canvas_width
-    if (body.background_color  !== undefined) update.background_color  = body.background_color
-    // legacy fields
-    if (body.type              !== undefined) update.type              = body.type
-    if (body.for_type          !== undefined) update.for_type          = body.for_type
-    if (body.template_data     !== undefined) update.template_data     = body.template_data
-    if (body.settings          !== undefined) update.settings          = body.settings
+    // Only update columns that were sent AND that exist in the table.
+    // Explicitly list every allowed column — no dynamic keys, no updated_at
+    // (updated_at is NOT in the confirmed column list for this table)
+    const update: Record<string, unknown> = {}
+
+    if (body.name             !== undefined) update.name             = String(body.name)
+    if (body.elements         !== undefined) update.elements         = body.elements
+    if (body.canvas_width     !== undefined) update.canvas_width     = Number(body.canvas_width)
+    if (body.canvas_height    !== undefined) update.canvas_height    = Number(body.canvas_height)
+    if (body.background_color !== undefined) update.background_color = String(body.background_color)
+    if (body.is_default       !== undefined) update.is_default       = Boolean(body.is_default)
+    if (body.components       !== undefined) update.components       = body.components
+
+    // Never update: id, business_id, created_at, type, for_type
+    // ('type' is a Postgres reserved word and causes issues if included)
+
+    if (Object.keys(update).length === 0) {
+      return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 })
+    }
+
+    console.log('[PATCH receipt] updating id:', id, 'biz:', biz.id, 'fields:', Object.keys(update))
 
     const { data, error } = await supabase
       .from('pos_receipt_templates')
       .update(update)
-      .eq('id', params.id)
+      .eq('id', id)
       .eq('business_id', biz.id)
-      .select()
+      .select('id, name, elements, canvas_width, canvas_height, background_color, is_default')
       .single()
 
     if (error) {
-      // Column doesn't exist yet — fall back to safe known columns
-      if (error.code === '42703' || error.message?.includes('column')) {
-        const safe: Record<string, unknown> = { updated_at: update.updated_at }
-        if (update.name       !== undefined) safe.name       = update.name
-        if (update.is_default !== undefined) safe.is_default = update.is_default
-        if (update.type       !== undefined) safe.type       = update.type
-        if (update.for_type   !== undefined) safe.for_type   = update.for_type
-        if (update.components !== undefined) safe.components  = update.components
+      console.error('[PATCH receipt] supabase error:', {
+        message: error.message,
+        code: error.code,
+        details: error.details,
+        hint: error.hint,
+      })
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
 
-        // Store elements in template_data as JSON until columns are added
-        if (update.elements !== undefined) {
-          safe.template_data = JSON.stringify({
-            elements:         update.elements,
-            canvas_height:    update.canvas_height,
-            background_color: update.background_color,
-          })
-        }
-
-        const { data: safeData, error: safeErr } = await supabase
-          .from('pos_receipt_templates')
-          .update(safe)
-          .eq('id', params.id)
-          .eq('business_id', biz.id)
-          .select()
-          .single()
-
-        if (safeErr) throw new Error(safeErr.message)
-
-        const migrationSql = [
-          'ALTER TABLE pos_receipt_templates',
-          '  ADD COLUMN IF NOT EXISTS canvas_width integer DEFAULT 302,',
-          '  ADD COLUMN IF NOT EXISTS canvas_height integer DEFAULT 800,',
-          "  ADD COLUMN IF NOT EXISTS background_color text DEFAULT '#ffffff',",
-          "  ADD COLUMN IF NOT EXISTS elements jsonb DEFAULT '[]',",
-          '  ADD COLUMN IF NOT EXISTS is_default boolean DEFAULT false;',
-        ].join('\n')
-        console.warn('[receipt-templates] Missing columns. Run in Supabase SQL Editor:\n', migrationSql)
-
-        return NextResponse.json({
-          ...safeData,
-          _migration_needed: true,
-          _migration_sql: migrationSql,
-        })
-      }
-      throw new Error(error.message)
+    if (!data) {
+      return NextResponse.json(
+        { error: 'Template not found or does not belong to this business' },
+        { status: 404 }
+      )
     }
 
     return NextResponse.json(data)
+
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : 'Server error'
-    console.error('[receipt-templates PATCH]', msg)
-    return NextResponse.json({ error: msg }, { status: 500 })
+    const e = err as { message?: string; code?: string }
+    console.error('[PATCH receipt] caught:', {
+      message: e?.message,
+      code: e?.code,
+    })
+    return NextResponse.json(
+      { error: e?.message || 'Internal server error' },
+      { status: 500 }
+    )
   }
 }
