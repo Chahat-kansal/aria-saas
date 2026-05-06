@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import Receipt from '@/components/pos/Receipt';
+import type { ReceiptTemplate } from '@/components/pos/Receipt';
 
 interface SaleItem { id: string; product_name: string; quantity: number; unit_price: number; line_total: number; tax_rate: number; discount_percent: number; }
 interface Sale {
@@ -27,6 +28,7 @@ export default function HistoryPage() {
   const [search, setSearch] = useState('');
   const [payFilter, setPayFilter] = useState('');
   const [showReceipt, setShowReceipt] = useState(false);
+  const [receiptTemplate, setReceiptTemplate] = useState<ReceiptTemplate | null>(null);
   // Modify details state
   const [editMode, setEditMode] = useState(false);
   const [editServedBy, setEditServedBy] = useState('');
@@ -48,6 +50,20 @@ export default function HistoryPage() {
   }, [from, to]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Fetch the default receipt template once on mount
+  useEffect(() => {
+    fetch('/api/pos/receipt-templates')
+      .then(r => r.json())
+      .then(d => {
+        const templates: ReceiptTemplate[] = d.templates || [];
+        if (templates.length > 0) {
+          const def = templates.find(t => t.is_default) ?? templates[0];
+          if (def?.elements?.length) setReceiptTemplate(def);
+        }
+      })
+      .catch(() => null);
+  }, []);
 
   async function loadDetail(sale: Sale) {
     setSelected(sale);
@@ -308,6 +324,7 @@ export default function HistoryPage() {
       {showReceipt && selected && (
         <Receipt
           sale={{ ...selected, served_by: selected.served_by ?? undefined, cartSnapshot: (detail?.pos_sale_items ?? []).map(i => ({ product: { name: i.product_name }, qty: i.quantity, unitPrice: i.unit_price, label: i.product_name, discount_percent: i.discount_percent })) }}
+          template={receiptTemplate}
           onClose={() => setShowReceipt(false)}
         />
       )}
