@@ -17,7 +17,8 @@ export async function GET() {
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const bid = await getBid(supabase, user.id);
   if (!bid) return NextResponse.json({ gift_cards: [] });
-  const { data } = await supabase.from('pos_gift_cards').select('*').eq('business_id', bid).order('created_at', { ascending: false });
+  const { data, error: gcErr } = await supabase.from('pos_gift_cards').select('*').eq('business_id', bid).order('created_at', { ascending: false });
+  if (gcErr?.code === '42P01') return NextResponse.json({ gift_cards: [] });
   return NextResponse.json({ gift_cards: data ?? [] });
 }
 

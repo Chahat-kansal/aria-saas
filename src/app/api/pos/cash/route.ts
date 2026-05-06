@@ -28,12 +28,14 @@ export async function GET() {
   const bid = await getBid(supabase, user.id);
   if (!bid) return NextResponse.json({ entries: [] });
 
-  const { data: entries } = await supabase
+  const { data: entries, error: movErr } = await supabase
     .from('pos_cash_movements')
     .select('*')
     .eq('business_id', bid)
     .order('created_at', { ascending: false })
     .limit(100);
+
+  if (movErr?.code === '42P01') return NextResponse.json({ entries: [] });
 
   return NextResponse.json({ entries: entries || [] });
 }
@@ -55,6 +57,7 @@ export async function POST(req: Request) {
     .select()
     .single();
 
+  if (error?.code === '42P01') return NextResponse.json({ entry: null, warning: 'pos_cash_movements table not yet created' });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ entry });
 }

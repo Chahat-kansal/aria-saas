@@ -28,7 +28,8 @@ export async function GET() {
   const bid = await getBid(supabase, user.id);
   if (!bid) return NextResponse.json({ suppliers: [] });
 
-  const { data } = await supabase.from('pos_suppliers').select('*').eq('business_id', bid).order('name');
+  const { data, error: supErr } = await supabase.from('pos_suppliers').select('*').eq('business_id', bid).order('name');
+  if (supErr?.code === '42P01') return NextResponse.json({ suppliers: [] });
   return NextResponse.json({ suppliers: data || [] });
 }
 

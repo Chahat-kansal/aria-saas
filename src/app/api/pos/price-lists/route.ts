@@ -24,7 +24,8 @@ export async function GET(req: Request) {
       .order('created_at');
     return NextResponse.json({ items: data ?? [] });
   }
-  const { data: lists } = await supabase.from('pos_price_lists').select('*').eq('business_id', bid).order('name');
+  const { data: lists, error: plErr } = await supabase.from('pos_price_lists').select('*').eq('business_id', bid).order('name');
+  if (plErr?.code === '42P01') return NextResponse.json({ price_lists: [] });
   const counts = await Promise.all((lists ?? []).map(l =>
     supabase.from('pos_price_list_items').select('id', { count: 'exact', head: true }).eq('price_list_id', l.id)
   ));

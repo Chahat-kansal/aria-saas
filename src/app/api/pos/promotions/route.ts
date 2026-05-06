@@ -42,15 +42,20 @@ export async function POST(req: Request) {
   if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 });
   try {
     const body = await req.json();
-    // Normalise: accept both 'type' and 'discount_type'
-    const discount_type = body.discount_type ?? body.type ?? 'percentage';
-    const payload = {
+    // DB column is promotion_type — accept that directly, or fall back to legacy keys
+    const promotion_type = body.promotion_type ?? body.discount_type ?? body.type ?? 'percentage_discount';
+    const payload: Record<string, unknown> = {
       ...body,
       business_id: bid,
-      discount_type,
-      // Remove 'type' key if present to avoid generated-column conflict
+      promotion_type,
     };
+    // Remove legacy/conflicting keys that don't exist in DB
     delete payload.type;
+    delete payload.discount_type;
+    delete payload.is_active; // DB uses 'active', not 'is_active'
+    if (body.is_active !== undefined && payload.active === undefined) {
+      payload.active = body.is_active;
+    }
 
     const { data, error } = await supabase
       .from('pos_promotions')
@@ -75,8 +80,16 @@ export async function PATCH(req: Request) {
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
   try {
     const body = await req.json();
-    // Remove generated 'type' column from update payload
+    // Normalise field names: DB uses 'active' not 'is_active', 'promotion_type' not 'discount_type'
     delete body.type;
+    delete body.discount_type;
+    if (body.is_active !== undefined && body.active === undefined) {
+      body.active = body.is_active;
+    }
+    delete body.is_active;
+    if (body.promotion_type === undefined && (body as Record<string, unknown>).discount_type) {
+      body.promotion_type = (body as Record<string, unknown>).discount_type;
+    }
     const { error } = await supabase.from('pos_promotions').update(body).eq('id', id).eq('business_id', bid);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({ ok: true });

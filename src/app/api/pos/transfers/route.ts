@@ -25,10 +25,11 @@ export async function GET(req: Request) {
       .eq('transfer_id', id);
     return NextResponse.json({ items: items ?? [] });
   }
-  const { data } = await supabase.from('pos_inventory_transfers')
+  const { data, error: trErr } = await supabase.from('pos_inventory_transfers')
     .select('*, from_outlet:pos_outlets!from_outlet_id(name), to_outlet:pos_outlets!to_outlet_id(name)')
     .eq('business_id', bid)
     .order('created_at', { ascending: false });
+  if (trErr?.code === '42P01') return NextResponse.json({ transfers: [] });
   return NextResponse.json({ transfers: data ?? [] });
 }
 
