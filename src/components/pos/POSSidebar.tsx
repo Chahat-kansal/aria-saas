@@ -3,18 +3,16 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import LogoMark from './LogoMark';
+import { usePOSTheme } from '@/components/pos/ThemeProvider';
 
 const COLLAPSED_W = 64;
 const EXPANDED_W  = 228;
 
-// Role rank: higher = more access
 const ROLE_RANK: Record<string, number> = { cashier: 0, supervisor: 1, manager: 2, admin: 3, owner: 4 };
 function hasAccess(minRole: string, currentRole: string): boolean {
   return (ROLE_RANK[currentRole] ?? 0) >= (ROLE_RANK[minRole] ?? 0);
 }
 
-// All POS navigation — only purchasing/reports/settings are manager-gated
-// Inventory, Customers, Operations are fully operational and visible to all staff
 const NAV_SECTIONS = [
   {
     title: 'POS',
@@ -34,7 +32,6 @@ const NAV_SECTIONS = [
   },
   {
     title: 'Inventory',
-    // Visible to all — cashiers need to look up products, check stock, scan barcodes
     items: [
       { href: '/pos/products',         label: 'Products',         icon: '📦' },
       { href: '/pos/categories',       label: 'Categories',       icon: '📋' },
@@ -47,7 +44,7 @@ const NAV_SECTIONS = [
   },
   {
     title: 'Purchasing',
-    minRole: 'manager', // Orders, suppliers, transfers — owner/manager only
+    minRole: 'manager',
     items: [
       { href: '/pos/orders',      label: 'Orders & Invoices', icon: '📄' },
       { href: '/pos/suppliers',   label: 'Suppliers',         icon: '🚚' },
@@ -57,7 +54,6 @@ const NAV_SECTIONS = [
   },
   {
     title: 'Customers',
-    // Visible to all — cashiers need customer selection, loyalty, gift cards
     items: [
       { href: '/pos/customers',       label: 'Customers',      icon: '👤' },
       { href: '/pos/customer-groups', label: 'Groups',         icon: '👥' },
@@ -68,7 +64,7 @@ const NAV_SECTIONS = [
   },
   {
     title: 'Reports',
-    minRole: 'manager', // Financial reports — manager/owner only
+    minRole: 'manager',
     items: [
       { href: '/pos/reports/sales',      label: 'Sales Reports',     icon: '📈' },
       { href: '/pos/reports/closures',   label: 'Register Closures', icon: '📋' },
@@ -79,18 +75,17 @@ const NAV_SECTIONS = [
   },
   {
     title: 'Operations',
-    // Visible to all — kitchen, tables, void are day-to-day register operations
     items: [
-      { href: '/pos/kitchen',              label: 'Kitchen (KDS)', icon: '🍳' },
-      { href: '/pos/tables',               label: 'Tables',        icon: '⊞' },
-      { href: '/pos/timesheets',           label: 'Timesheets',    icon: '⏰' },
-      { href: '/pos/timesheets/roster',    label: 'Roster',        icon: '📅' },
-      { href: '/pos/void',                 label: 'Void/Refund',   icon: '↩️' },
+      { href: '/pos/kitchen',           label: 'Kitchen (KDS)', icon: '🍳' },
+      { href: '/pos/tables',            label: 'Tables',        icon: '⊞' },
+      { href: '/pos/timesheets',        label: 'Timesheets',    icon: '⏰' },
+      { href: '/pos/timesheets/roster', label: 'Roster',        icon: '📅' },
+      { href: '/pos/void',              label: 'Void/Refund',   icon: '↩️' },
     ],
   },
   {
     title: 'Settings',
-    minRole: 'manager', // System config — manager/owner only
+    minRole: 'manager',
     items: [
       { href: '/pos/settings',        label: 'Settings',      icon: '⚙️' },
       { href: '/pos/settings/users',  label: 'Staff PINs',    icon: '🔑' },
@@ -106,7 +101,6 @@ interface Props {
   onAriaToggle?:  () => void;
   ariaOpen?:      boolean;
   onUserSwitch?:  () => void;
-  sessionOpen?:   boolean;
 }
 
 export default function POSSidebar({
@@ -117,11 +111,11 @@ export default function POSSidebar({
   ariaOpen = false,
   onUserSwitch,
 }: Props) {
+  const { theme, colors, toggleTheme } = usePOSTheme();
   const [collapsed, setCollapsed] = useState(true);
   const [tooltip,   setTooltip]   = useState<string | null>(null);
   const [tooltipY,  setTooltipY]  = useState(0);
   const [posRole,   setPosRole]   = useState<string>('cashier');
-  const [theme,     setTheme]     = useState<'dark' | 'light'>('dark');
   const pathname = usePathname();
 
   const user = currentUser ?? posUser ?? null;
@@ -135,28 +129,12 @@ export default function POSSidebar({
       const session = JSON.parse(localStorage.getItem('aria_pos_user') || '{}');
       setPosRole(session.role || 'cashier');
     } catch { setPosRole('cashier'); }
-    try {
-      const saved = localStorage.getItem('pos_theme') as 'dark' | 'light';
-      if (saved) {
-        setTheme(saved);
-        document.documentElement.setAttribute('data-pos-theme', saved);
-      }
-    } catch { /* ignore */ }
   }, []);
 
   function toggle() {
     const next = !collapsed;
     setCollapsed(next);
     try { localStorage.setItem('aria_pos_sidebar', next ? 'collapsed' : 'expanded'); } catch { /* ignore */ }
-  }
-
-  function toggleTheme() {
-    const next = theme === 'dark' ? 'light' : 'dark';
-    setTheme(next);
-    try {
-      localStorage.setItem('pos_theme', next);
-      document.documentElement.setAttribute('data-pos-theme', next);
-    } catch { /* ignore */ }
   }
 
   function isActive(href: string, exact = false) {
@@ -177,8 +155,8 @@ export default function POSSidebar({
     <nav style={{
       width: W, minWidth: W,
       transition: 'width 280ms var(--ease,cubic-bezier(0.16,1,0.3,1)), min-width 280ms var(--ease,cubic-bezier(0.16,1,0.3,1))',
-      background: 'var(--bg-base)',
-      borderRight: '1px solid var(--border-subtle)',
+      background: colors.sidebarBg,
+      borderRight: `1px solid ${colors.border}`,
       display: 'flex', flexDirection: 'column',
       height: '100vh',
       position: 'relative',
@@ -194,24 +172,24 @@ export default function POSSidebar({
           position: 'absolute', right: -1, top: '50%',
           transform: 'translateY(-50%)',
           width: 16, height: 44,
-          background: 'var(--bg-elevated)',
-          border: '1px solid var(--border-default)', borderLeft: 'none',
+          background: colors.elevated,
+          border: `1px solid ${colors.border}`, borderLeft: 'none',
           borderRadius: '0 8px 8px 0',
           cursor: 'pointer',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           zIndex: 20,
         }}
       >
-        <span style={{ fontSize: 9, color: 'var(--violet)', fontWeight: 800 }}>
+        <span style={{ fontSize: 9, color: colors.violet, fontWeight: 800 }}>
           {collapsed ? '›' : '‹'}
         </span>
       </div>
 
       {/* Logo */}
-      <div style={{ padding: '14px 12px', display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0, borderBottom: '1px solid var(--border-subtle)', overflow: 'hidden' }}>
+      <div style={{ padding: '14px 12px', display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0, borderBottom: `1px solid ${colors.border}`, overflow: 'hidden' }}>
         <div style={{ flexShrink: 0 }}><LogoMark size={24} /></div>
         {!collapsed && (
-          <span style={{ fontFamily: 'var(--font-display)', fontStyle: 'italic', fontSize: 15, color: 'var(--text-primary)', whiteSpace: 'nowrap', fontWeight: 400 }}>
+          <span style={{ fontFamily: 'var(--font-display)', fontStyle: 'italic', fontSize: 15, color: colors.sidebarText, whiteSpace: 'nowrap', fontWeight: 400 }}>
             AriaPOS
           </span>
         )}
@@ -221,13 +199,12 @@ export default function POSSidebar({
       <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '6px 8px' }}>
         {visibleSections.map((section) => (
           <div key={section.title} style={{ marginBottom: 4 }}>
-            {/* Section header */}
             {!collapsed ? (
-              <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-tertiary)', padding: '8px 8px 4px', whiteSpace: 'nowrap' }}>
+              <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: colors.dim, padding: '8px 8px 4px', whiteSpace: 'nowrap' }}>
                 {section.title}
               </div>
             ) : (
-              <div style={{ height: 1, background: 'var(--border-subtle)', margin: '4px 6px' }} />
+              <div style={{ height: 1, background: colors.border, margin: '4px 6px' }} />
             )}
 
             {section.items.map((item) => {
@@ -252,9 +229,8 @@ export default function POSSidebar({
                       padding: collapsed ? '9px 14px' : '9px 10px',
                       borderRadius: 10, marginBottom: 1,
                       cursor: 'pointer',
-                      border: `1px solid ${active ? 'rgba(139,92,246,0.28)' : 'transparent'}`,
-                      background: active ? 'rgba(139,92,246,0.13)' : 'transparent',
-                      animation: active ? 'nav-glow 2s ease-in-out infinite' : 'none',
+                      border: `1px solid ${active ? `${colors.violet}44` : 'transparent'}`,
+                      background: active ? colors.sidebarActive : 'transparent',
                       transition: 'all 150ms cubic-bezier(0.16,1,0.3,1)',
                       overflow: 'hidden', whiteSpace: 'nowrap',
                     }}>
@@ -262,21 +238,20 @@ export default function POSSidebar({
                         {item.icon}
                       </span>
                       {!collapsed && (
-                        <span style={{ fontSize: 13, fontWeight: 600, color: active ? 'var(--violet)' : 'rgba(237,232,255,0.7)', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: active ? colors.accent : colors.sidebarText, overflow: 'hidden', textOverflow: 'ellipsis' }}>
                           {item.label}
                         </span>
                       )}
                     </div>
                   </Link>
 
-                  {/* Tooltip */}
                   {collapsed && tooltip === item.label && (
                     <div style={{
                       position: 'fixed', left: COLLAPSED_W + 8, top: tooltipY,
                       transform: 'translateY(-50%)',
-                      background: 'var(--bg-elevated)', border: '1px solid var(--border-default)',
+                      background: colors.elevated, border: `1px solid ${colors.border}`,
                       borderRadius: 8, padding: '6px 12px',
-                      fontSize: 12, fontWeight: 600, color: 'var(--text-primary)',
+                      fontSize: 12, fontWeight: 600, color: colors.text,
                       boxShadow: '0 4px 16px rgba(0,0,0,0.5)',
                       whiteSpace: 'nowrap', zIndex: 1000, pointerEvents: 'none',
                     }}>
@@ -291,43 +266,55 @@ export default function POSSidebar({
       </div>
 
       {/* Bottom */}
-      <div style={{ flexShrink: 0, borderTop: '1px solid var(--border-subtle)', padding: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <div style={{ flexShrink: 0, borderTop: `1px solid ${colors.border}`, padding: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
 
         {/* Customer Display */}
         <div onClick={openDisplay} style={{ display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 10, padding: collapsed ? '9px 14px' : '9px 10px', borderRadius: 10, cursor: 'pointer', border: '1px solid transparent', background: 'rgba(56,189,248,0.06)' }}>
           <span style={{ fontSize: 15, flexShrink: 0, width: 20, textAlign: 'center' }}>🖥️</span>
-          {!collapsed && <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--info)' }}>Customer Display</span>}
+          {!collapsed && <span style={{ fontSize: 13, fontWeight: 600, color: colors.accent }}>Customer Display</span>}
         </div>
 
         {/* Ask Aria */}
-        <div onClick={onAriaToggle} style={{ display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 10, padding: collapsed ? '9px 14px' : '9px 10px', borderRadius: 10, cursor: 'pointer', border: `1px solid ${ariaOpen ? 'rgba(139,92,246,0.38)' : 'rgba(139,92,246,0.14)'}`, background: ariaOpen ? 'rgba(139,92,246,0.16)' : 'rgba(139,92,246,0.07)', boxShadow: ariaOpen ? '0 0 24px rgba(139,92,246,0.3)' : '0 0 10px rgba(139,92,246,0.1)', transition: 'all 200ms' }}>
+        <div onClick={onAriaToggle} style={{ display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 10, padding: collapsed ? '9px 14px' : '9px 10px', borderRadius: 10, cursor: 'pointer', border: `1px solid ${ariaOpen ? `${colors.violet}60` : `${colors.violet}22`}`, background: ariaOpen ? `${colors.violet}25` : `${colors.violet}10`, transition: 'all 200ms' }}>
           <span style={{ fontSize: 15, flexShrink: 0, width: 20, textAlign: 'center' }}>✨</span>
-          {!collapsed && <span style={{ fontSize: 13, fontWeight: 700, color: ariaOpen ? '#8B5CF6' : 'rgba(139,92,246,0.8)' }}>Ask Aria</span>}
+          {!collapsed && <span style={{ fontSize: 13, fontWeight: 700, color: ariaOpen ? colors.violet : `${colors.violet}cc` }}>Ask Aria</span>}
         </div>
 
-        {/* Theme Toggle */}
-        <div onClick={toggleTheme} style={{ display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 10, padding: collapsed ? '9px 14px' : '9px 10px', borderRadius: 10, cursor: 'pointer', border: '1px solid transparent', background: 'rgba(255,255,255,0.03)', transition: 'all 150ms' }}>
-          <span style={{ fontSize: 15, flexShrink: 0, width: 20, textAlign: 'center' }}>{theme === 'dark' ? '☀️' : '🌙'}</span>
-          {!collapsed && <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-tertiary)' }}>{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span>}
-        </div>
+        {/* Theme toggle — wired to ThemeProvider context */}
+        <button
+          onClick={toggleTheme}
+          style={{
+            display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 8,
+            width: '100%', padding: collapsed ? '9px 14px' : '8px 10px',
+            borderRadius: 10, border: `1px solid ${colors.border}`,
+            background: 'transparent', color: colors.sidebarText,
+            fontSize: 12, fontWeight: 600, cursor: 'pointer',
+            fontFamily: 'inherit', textAlign: 'left',
+          }}
+        >
+          <span style={{ fontSize: 15, flexShrink: 0, width: 20, textAlign: 'center' }}>
+            {theme === 'dark' ? '☀️' : '🌙'}
+          </span>
+          {!collapsed && <span>{theme === 'dark' ? 'Light Mode' : 'Dark Mode'}</span>}
+        </button>
 
         {/* Back to ARIA OS Dashboard — owner/admin/manager only */}
         {isOwnerOrManager && (
-          <Link href="/dashboard" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 10, padding: collapsed ? '9px 14px' : '9px 10px', borderRadius: 10, border: '1px solid transparent', background: 'rgba(255,255,255,0.03)', transition: 'all 150ms' }}>
+          <Link href="/dashboard" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 10, padding: collapsed ? '9px 14px' : '9px 10px', borderRadius: 10, border: '1px solid transparent', background: 'transparent', transition: 'all 150ms' }}>
             <span style={{ fontSize: 15, flexShrink: 0, width: 20, textAlign: 'center' }}>⬡</span>
-            {!collapsed && <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-tertiary)' }}>ARIA OS Dashboard</span>}
+            {!collapsed && <span style={{ fontSize: 12, fontWeight: 500, color: colors.muted }}>ARIA OS Dashboard</span>}
           </Link>
         )}
 
         {/* User */}
         <div onClick={onUserSwitch} style={{ display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 8, padding: collapsed ? '6px 14px' : '6px 10px', borderRadius: 10, cursor: 'pointer' }}>
-          <div style={{ width: 28, height: 28, borderRadius: '50%', flexShrink: 0, background: 'rgba(139,92,246,0.1)', border: '1.5px solid rgba(139,92,246,0.22)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 800, color: '#8B5CF6' }}>
+          <div style={{ width: 28, height: 28, borderRadius: '50%', flexShrink: 0, background: `${colors.violet}18`, border: `1.5px solid ${colors.violet}38`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 800, color: colors.violet }}>
             {user?.initials || '?'}
           </div>
           {!collapsed && user && (
             <div style={{ overflow: 'hidden' }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>{user.name}</div>
-              <div style={{ fontSize: 9, color: 'var(--text-tertiary)', textTransform: 'uppercase' }}>{user.role}</div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: colors.text, whiteSpace: 'nowrap' }}>{user.name}</div>
+              <div style={{ fontSize: 9, color: colors.dim, textTransform: 'uppercase' }}>{user.role}</div>
             </div>
           )}
         </div>

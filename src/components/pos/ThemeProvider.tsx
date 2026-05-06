@@ -1,50 +1,48 @@
-'use client';
-import { useState, useEffect, createContext, useContext } from 'react';
-import { POSTheme, getTheme } from '@/lib/pos-theme';
-
-type Colors = ReturnType<typeof getTheme>;
+'use client'
+import React, { createContext, useContext, useState, useEffect } from 'react'
+import { POSTheme, getTheme, ThemeColors, DARK_THEME } from '@/lib/pos-theme'
 
 interface ThemeContextValue {
-  theme: POSTheme;
-  colors: Colors;
-  toggleTheme: () => void;
-  setTheme: (t: POSTheme) => void;
+  theme: POSTheme
+  colors: ThemeColors
+  toggleTheme: () => void
+  setTheme: (t: POSTheme) => void
 }
 
-export const ThemeContext = createContext<ThemeContextValue | null>(null);
+export const ThemeContext = createContext<ThemeContextValue>({
+  theme: 'dark',
+  colors: DARK_THEME,
+  toggleTheme: () => {},
+  setTheme: () => {},
+})
 
-export function usePOSTheme(): ThemeContextValue {
-  const ctx = useContext(ThemeContext);
-  if (!ctx) throw new Error('usePOSTheme must be used inside POSThemeProvider');
-  return ctx;
+export function usePOSTheme() {
+  return useContext(ThemeContext)
 }
 
 export function POSThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setThemeState] = useState<POSTheme>('dark');
+  const [theme, setThemeState] = useState<POSTheme>('dark')
+  const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
+    setMounted(true)
     try {
-      const saved = localStorage.getItem('pos_theme') as POSTheme;
-      if (saved === 'light' || saved === 'dark') {
-        setThemeState(saved);
-        document.documentElement.setAttribute('data-pos-theme', saved);
-      }
+      const saved = localStorage.getItem('pos_theme') as POSTheme
+      if (saved === 'light' || saved === 'dark') setThemeState(saved)
     } catch { /* ignore */ }
-  }, []);
+  }, [])
 
-  function setTheme(t: POSTheme) {
-    setThemeState(t);
-    try {
-      localStorage.setItem('pos_theme', t);
-      document.documentElement.setAttribute('data-pos-theme', t);
-    } catch { /* ignore */ }
+  const setTheme = (t: POSTheme) => {
+    setThemeState(t)
+    try { localStorage.setItem('pos_theme', t) } catch { /* ignore */ }
   }
 
-  function toggleTheme() {
-    setTheme(theme === 'dark' ? 'light' : 'dark');
-  }
+  const toggleTheme = () => setTheme(theme === 'dark' ? 'light' : 'dark')
+  const colors = getTheme(theme)
 
-  const colors = getTheme(theme);
+  if (!mounted) {
+    return <div style={{ background: '#030510', minHeight: '100vh' }}>{children}</div>
+  }
 
   return (
     <ThemeContext.Provider value={{ theme, colors, toggleTheme, setTheme }}>
@@ -55,11 +53,10 @@ export function POSThemeProvider({ children }: { children: React.ReactNode }) {
           color: colors.text,
           minHeight: '100vh',
           transition: 'background 200ms ease, color 200ms ease',
-          fontFamily: "'Manrope', system-ui, sans-serif",
         }}
       >
         {children}
       </div>
     </ThemeContext.Provider>
-  );
+  )
 }
