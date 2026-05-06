@@ -29,7 +29,7 @@ export async function GET(req: Request) {
 
   const { data: card, error } = await supabase
     .from('pos_gift_cards')
-    .select('id, code, current_balance, initial_balance, recipient_name, expires_at, is_active, status, card_type')
+    .select('id, code, balance, initial_balance, recipient_name, expires_at, is_active')
     .eq('business_id', bid)
     .eq('code', code)
     .maybeSingle();
@@ -37,8 +37,8 @@ export async function GET(req: Request) {
   if (error?.code === '42P01') return NextResponse.json({ valid: false, error: 'Gift cards not set up yet' });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   if (!card) return NextResponse.json({ valid: false, error: 'Gift card not found' });
-  if (!card.is_active || card.status === 'cancelled') return NextResponse.json({ valid: false, error: 'Gift card has been cancelled' });
-  if (card.status === 'used' || (card.current_balance ?? 0) <= 0) return NextResponse.json({ valid: false, error: 'Gift card has no remaining balance' });
+  if (!card.is_active) return NextResponse.json({ valid: false, error: 'Gift card has been cancelled' });
+  if ((card.balance ?? 0) <= 0) return NextResponse.json({ valid: false, error: 'Gift card has no remaining balance' });
   if (card.expires_at && new Date(card.expires_at) < new Date()) return NextResponse.json({ valid: false, error: 'Gift card has expired' });
 
   return NextResponse.json({
@@ -46,11 +46,10 @@ export async function GET(req: Request) {
     card: {
       id: card.id,
       code: card.code,
-      balance: card.current_balance,
+      balance: card.balance,
       initial_balance: card.initial_balance,
       recipient_name: card.recipient_name,
       expires_at: card.expires_at,
-      card_type: card.card_type ?? 'aria',
     },
   });
 }
@@ -83,7 +82,7 @@ export async function POST(req: Request) {
   // Fetch the card
   const { data: card, error: fetchErr } = await supabase
     .from('pos_gift_cards')
-    .select('id, current_balance, is_active, status, expires_at')
+    .select('id, balance, is_active, expires_at')
     .eq('business_id', bid)
     .eq('code', code)
     .maybeSingle();
@@ -91,22 +90,19 @@ export async function POST(req: Request) {
   if (fetchErr?.code === '42P01') return NextResponse.json({ error: 'Gift cards table not set up' }, { status: 500 });
   if (fetchErr) return NextResponse.json({ error: fetchErr.message }, { status: 500 });
   if (!card) return NextResponse.json({ error: 'Gift card not found' }, { status: 404 });
-  if (!card.is_active || card.status === 'cancelled') return NextResponse.json({ error: 'Gift card is cancelled' }, { status: 400 });
+  if (!card.is_active) return NextResponse.json({ error: 'Gift card is cancelled' }, { status: 400 });
   if (card.expires_at && new Date(card.expires_at) < new Date()) return NextResponse.json({ error: 'Gift card has expired' }, { status: 400 });
 
-  const currentBalance = parseFloat(String(card.current_balance ?? 0));
-  const actualCharge = Math.min(charge, currentBalance); // can't charge more than balance
+  const currentBalance = parseFloat(String(card.balance ?? 0));
+  const actualCharge = Math.min(charge, currentBalance);
   const newBalance = Math.max(0, currentBalance - actualCharge);
-  const newStatus = newBalance <= 0 ? 'used' : 'active';
 
   // Deduct from card
   const { error: updateErr } = await supabase
     .from('pos_gift_cards')
     .update({
-      current_balance: newBalance,
-      status: newStatus,
-      last_used_at: new Date().toISOString(),
-      times_used: (card as any).times_used ? (card as any).times_used + 1 : 1,
+      balance: newBalance,
+      is_active: newBalance > 0,
     })
     .eq('id', card.id);
 
@@ -123,7 +119,6 @@ export async function POST(req: Request) {
     ok: true,
     charged: actualCharge,
     remaining_balance: newBalance,
-    new_status: newStatus,
     short_paid: charge > actualCharge ? charge - actualCharge : 0,
   });
 }
