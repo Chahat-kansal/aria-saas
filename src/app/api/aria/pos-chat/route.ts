@@ -38,12 +38,28 @@ export async function POST(req: Request) {
   const today = new Date().toISOString().split('T')[0];
   const nowHHMM = new Date().toLocaleTimeString('en-AU', { timeZone: 'Australia/Sydney', hour: '2-digit', minute: '2-digit' });
 
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+
   type SaleRow    = { id: string; total_amount: number; payment_method: string; customer_id: string | null };
   type ProductRow = { name: string; price: number; cost_price: number; stock_quantity: number; low_stock_threshold: number; track_stock: boolean };
   type ItemRow    = { product_name: string; quantity: number };
 
-  // Fetch comprehensive context in parallel
-  const [bizRes, salesRes, productsRes, settingsRes, topItemsRes] = await Promise.all([
+  // Fetch all data in parallel
+  const [
+    bizRes,
+    salesRes,
+    productsRes,
+    settingsRes,
+    topItemsRes,
+    { data: todaySales },
+    { data: monthSales },
+    { data: topItems },
+    { data: lowStock },
+    { data: promotions },
+    customersRes,
+  ] = await Promise.all([
     supabase.from('businesses').select('name, industry, city').eq('id', resolvedBid).maybeSingle(),
     supabase.from('pos_sales')
       .select('id, total_amount, payment_method, customer_id')
@@ -59,32 +75,29 @@ export async function POST(req: Request) {
     supabase.from('pos_sale_items')
       .select('product_name, quantity').eq('business_id', resolvedBid)
       .gte('created_at', `${today}T00:00:00.000Z`).limit(200),
+    supabase.from('pos_sales').select('total_amount').eq('business_id', resolvedBid).gte('created_at', todayStart),
+    supabase.from('pos_sales').select('total_amount').eq('business_id', resolvedBid).gte('created_at', monthStart),
+    supabase.from('pos_sale_items').select('product_name,quantity').eq('business_id', resolvedBid).gte('created_at', monthStart),
+    supabase.from('pos_products').select('name,stock_quantity').eq('business_id', resolvedBid).eq('is_active', true).eq('track_stock', true).lt('stock_quantity', 10).order('stock_quantity').limit(10),
+    supabase.from('pos_promotions').select('name,active').eq('business_id', resolvedBid).eq('active', true).limit(5),
+    supabase.from('pos_customers').select('id', { count: 'exact', head: true }).eq('business_id', resolvedBid),
   ]);
-
-  // Promotions in a separate try/catch (table may not exist)
-  let promotions: Array<{ name: string; type: string; discount_value: number }> = [];
-  try {
-    const promoRes = await supabase.from('pos_promotions')
-      .select('name, type, discount_value').eq('business_id', resolvedBid).eq('is_active', true).limit(10);
-    promotions = (promoRes.data ?? []) as typeof promotions;
-  } catch { /* promotions table optional */ }
 
   const biz      = bizRes.data;
   const sales     = (salesRes.data ?? []) as SaleRow[];
   const products  = (productsRes.data ?? []) as ProductRow[];
   const settings  = settingsRes.data;
-  const topItems  = (topItemsRes.data ?? []) as ItemRow[];
+  const topItemsToday = (topItemsRes.data ?? []) as ItemRow[];
 
   // Aggregate today's stats
   const txCount   = sales.length;
   const revenue   = sales.reduce((s: number, r: SaleRow) => s + (r.total_amount ?? 0), 0);
-  const avgBasket = txCount > 0 ? (revenue / txCount) : 0;
   const cashSales = sales.filter((s: SaleRow) => s.payment_method === 'cash').length;
   const cardSales = txCount - cashSales;
 
   // Top items sold today
   const itemCounts: Record<string, number> = {};
-  for (const i of topItems) {
+  for (const i of topItemsToday) {
     const n = i.product_name ?? 'Unknown';
     itemCounts[n] = (itemCounts[n] ?? 0) + (i.quantity ?? 1);
   }
@@ -105,11 +118,6 @@ export async function POST(req: Request) {
     return `${p.name}: A$${(p.price ?? 0).toFixed(2)}${costInfo}${marginInfo}${stockInfo}`;
   }).join('\n');
 
-  // Active promotions
-  const promoList = promotions.length > 0
-    ? promotions.map(p => `• ${p.name} — ${p.type} ${p.discount_value}%`).join('\n')
-    : 'No active promotions';
-
   // Cart context
   const cartText = cart_context?.items?.length
     ? cart_context.items.map(i => `${i.qty}× ${i.name} @ A$${i.price.toFixed(2)}`).join(', ') +
@@ -121,71 +129,52 @@ export async function POST(req: Request) {
   const loyaltyValue = (settings as any)?.loyalty_points_per_dollar_value ?? 100;
   const gstInclusive = (settings as any)?.gst_inclusive !== false;
 
-  // Enhanced real-time business context (month + customers + top products)
-  const [
-    { data: todaySales },
-    { data: monthSales },
-    { data: topProducts },
-    { data: lowStock },
-    { data: customers },
-  ] = await Promise.all([
-    supabase.from('pos_sales').select('total_amount').eq('business_id', resolvedBid)
-      .gte('created_at', new Date().toISOString().split('T')[0]),
-    supabase.from('pos_sales').select('total_amount,created_at').eq('business_id', resolvedBid)
-      .gte('created_at', new Date(Date.now()-30*86400000).toISOString()),
-    supabase.from('pos_sale_items').select('product_name,quantity,unit_price')
-      .eq('business_id', resolvedBid)
-      .gte('created_at', new Date(Date.now()-30*86400000).toISOString()),
-    supabase.from('pos_products').select('name,stock_quantity,track_stock')
-      .eq('business_id', resolvedBid).eq('is_active', true).eq('track_stock', true).lt('stock_quantity', 10),
-    supabase.from('pos_customers').select('id', { count: 'exact', head: true }).eq('business_id', resolvedBid),
-  ]);
-
+  // Rich business context (1A)
   const todayRevenue = (todaySales || []).reduce((s: number, r: any) => s + (r.total_amount || 0), 0);
-  const todayCount = (todaySales || []).length;
   const monthRevenue = (monthSales || []).reduce((s: number, r: any) => s + (r.total_amount || 0), 0);
-  const monthCount = (monthSales || []).length;
 
-  const prodMap: Record<string, { qty: number; revenue: number }> = {};
-  for (const item of (topProducts || [])) {
-    if (!prodMap[item.product_name]) prodMap[item.product_name] = { qty: 0, revenue: 0 };
-    prodMap[item.product_name].qty += item.quantity;
-    prodMap[item.product_name].revenue += (item.unit_price || 0) * item.quantity;
+  const prodMap: Record<string, number> = {};
+  for (const item of (topItems || [])) {
+    prodMap[item.product_name] = (prodMap[item.product_name] || 0) + item.quantity;
   }
-  const topProdList = Object.entries(prodMap).sort((a, b) => b[1].revenue - a[1].revenue).slice(0, 10);
+  const topProductsList = Object.entries(prodMap).sort((a,b)=>b[1]-a[1]).slice(0,5)
+    .map(([name,qty],i)=>`${i+1}. ${name}: ${qty} sold`).join('\n');
 
-  const businessContext = `BUSINESS: ${biz?.name ?? 'Unknown'}, ${biz?.industry ?? ''}, ${biz?.city ?? 'Australia'}
+  const businessContext = `
+LIVE DATA FOR ${biz?.name}:
+TODAY: A$${todayRevenue.toFixed(2)}, ${(todaySales||[]).length} transactions
+THIS MONTH: A$${monthRevenue.toFixed(2)}, ${(monthSales||[]).length} transactions
+TOP PRODUCTS: ${topProductsList || 'No data yet'}
+LOW STOCK: ${(lowStock||[]).map((p:any)=>`${p.name}: ${p.stock_quantity}`).join(', ') || 'None'}
+ACTIVE PROMOTIONS: ${(promotions||[]).map((p:any)=>p.name).join(', ') || 'None'}
+
+BUSINESS: ${biz?.name ?? 'Unknown'}, ${biz?.industry ?? ''}, ${biz?.city ?? 'Australia'}
 TIME: ${nowHHMM} (Sydney)
-TODAY: A$${todayRevenue.toFixed(2)} from ${todayCount} transactions (avg A$${todayCount > 0 ? (todayRevenue/todayCount).toFixed(2) : '0.00'}) | ${cashSales} cash, ${cardSales} card
-THIS MONTH (30 days): A$${monthRevenue.toFixed(2)} revenue, ${monthCount} transactions
-TOTAL CUSTOMERS: ${(customers as any)?.count ?? 'unknown'}
-
-TOP 10 PRODUCTS THIS MONTH:
-${topProdList.map(([name, v], i) => `${i+1}. ${name}: A$${v.revenue.toFixed(2)} (${v.qty} sold)`).join('\n') || 'No sales data yet'}
-
-LOW STOCK ALERTS (< 10 units):
-${(lowStock || []).map((p: any) => `- ${p.name}: ${p.stock_quantity} remaining`).join('\n') || 'No low stock items'}
-
+TODAY: A$${revenue.toFixed(2)} from ${txCount} transactions | ${cashSales} cash, ${cardSales} card
+TOTAL CUSTOMERS: ${(customersRes as any)?.count ?? 'unknown'}
 TODAY TOP SELLERS: ${topSellers || 'No sales yet'}
 STOCK OUT: ${outOfStock.map((p: ProductRow) => p.name).join(', ') || 'None'} | LOW: ${lowStockItems.map((p: ProductRow) => `${p.name}(${p.stock_quantity ?? 0})`).join(', ') || 'None'}
-ACTIVE PROMOTIONS: ${promoList}
 CART: ${cartText}
 LOYALTY: ${loyaltyRate}pt/A$1 | ${loyaltyValue}pts=A$1 | GST ${gstInclusive ? 'inclusive' : 'exclusive'} | Cash rounding ${(settings as any)?.cash_rounding !== false ? 'yes' : 'no'}
-PRODUCTS (${products.length}): ${productsList}`;
+PRODUCTS (${products.length}):
+${productsList}`;
 
-  // CSV generation if user wants a file export
-  const wantsFile = /excel|csv|download|export|spreadsheet/i.test(userMessage);
-  let downloadPayload: { filename: string; content: string; type: string } | null = null;
+  // Action system prompt (1B)
+  const ACTION_PROMPT = `
+You have FULL authority to take actions. When asked to do something, DO IT.
 
-  if (wantsFile && topProdList.length > 0) {
-    const csvRows = [['Product Name', 'Units Sold', 'Revenue', 'Avg Price']];
-    for (const [name, v] of topProdList) {
-      csvRows.push([name, String(v.qty), `A$${v.revenue.toFixed(2)}`, `A$${(v.revenue/v.qty).toFixed(2)}`]);
-    }
-    const csv = csvRows.map(r => r.map(c => `"${c.replace(/"/g,'""')}"`).join(',')).join('\n');
-    const month = new Date().toISOString().slice(0,7);
-    downloadPayload = { filename: `aria-sales-${month}.csv`, content: csv, type: 'text/csv' };
-  }
+NEVER say "I cannot do that automatically" or "please go to X page manually".
+
+When you need to take an action, include it in your response like this:
+ACTION:CREATE_ORDER:{"items":[{"product_name":"NAME","qty":N}],"reason":"WHY"}
+ACTION:GENERATE_CSV:{"type":"sales","period":"month"}
+ACTION:CREATE_PROMOTION:{"name":"NAME","discount_type":"percentage","discount_percent":N}
+
+Examples:
+- "order more Coopers" → respond + ACTION:CREATE_ORDER:{"items":[{"product_name":"Coopers Pale Ale","qty":24}],"reason":"Owner request"}
+- "export sales to excel" → respond + ACTION:GENERATE_CSV:{"type":"sales","period":"month"}
+- "create 10% discount on beer" → respond + ACTION:CREATE_PROMOTION:{"name":"10% Beer Special","discount_type":"percentage","discount_percent":10}
+`;
 
   const systemPrompt = `You are Aria — the AI co-pilot built into AriaPOS.
 You know everything about this POS system and this business.
@@ -239,37 +228,130 @@ RULES:
 - Keep responses under 3 sentences — staff are serving customers
 - For "where is X" questions: give the exact sidebar path
 - For data questions: use the business context above
-- You know this entire POS system inside out`;
+- You know this entire POS system inside out
+${ACTION_PROMPT}`;
 
   try {
     const response = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 200,
+      max_tokens: 400,
       system: systemPrompt,
       messages: [{ role: 'user', content: userMessage }],
     });
 
-    const reply = response.content
-      .filter(b => b.type === 'text')
-      .map(b => (b as { type: 'text'; text: string }).text)
-      .join('')
-      .trim();
+    // 1C: Parse and execute actions
+    const rawText = response.content[0].type === 'text' ? response.content[0].text : '';
+    const actionResults: any[] = [];
+    let downloadPayload: { filename: string; content: string; type: string } | null = null;
 
-    // Detect actionable intent in the reply
+    // Parse ACTION: tags
+    const actionPattern = /ACTION:([A-Z_]+):([\s\S]*?)(?=\nACTION:|$)/gm;
+    let m: RegExpExecArray | null;
+    while ((m = actionPattern.exec(rawText)) !== null) {
+      const [, actionType, jsonStr] = m;
+      let data: any = {};
+      try { data = JSON.parse(jsonStr.trim()); } catch { continue; }
+
+      if (actionType === 'CREATE_ORDER') {
+        try {
+          const orderItems = (data.items || []).map((item: any) => ({
+            product_name: item.product_name || item.name,
+            suggested_qty: item.qty || item.quantity || 1,
+            manual_qty: null,
+            unit_cost_cents: 0,
+            total_cost_cents: 0,
+            reason: data.reason || 'Created by Aria',
+          }));
+          if (orderItems.length > 0) {
+            const { data: draft } = await supabase.from('purchase_order_drafts').insert({
+              business_id: resolvedBid,
+              draft_type: 'ai_generated',
+              status: 'pending_approval',
+              items: orderItems,
+              total_cost_cents: 0,
+              aria_reasoning: data.reason || 'Created by Aria from chat',
+              week_starting: new Date().toISOString().split('T')[0],
+            }).select().single();
+            actionResults.push({
+              type: 'order_created',
+              label: `✓ Purchase order created — ${orderItems.length} item(s)`,
+              url: '/dashboard/orders',
+              link_label: 'Review & approve →',
+              draft_id: (draft as any)?.id,
+            });
+          }
+        } catch (e) { console.error('CREATE_ORDER failed:', e); }
+      }
+
+      if (actionType === 'GENERATE_CSV') {
+        try {
+          const { data: saleItems } = await supabase
+            .from('pos_sale_items')
+            .select('product_name,quantity,unit_price,total_price,cost_price,created_at')
+            .eq('business_id', resolvedBid)
+            .gte('created_at', monthStart);
+
+          const byProd: Record<string, { qty: number; rev: number; cost: number }> = {};
+          for (const item of (saleItems || [])) {
+            const k = (item as any).product_name || 'Unknown';
+            if (!byProd[k]) byProd[k] = { qty: 0, rev: 0, cost: 0 };
+            byProd[k].qty += (item as any).quantity || 0;
+            byProd[k].rev += (item as any).total_price || 0;
+            byProd[k].cost += ((item as any).cost_price || 0) * ((item as any).quantity || 1);
+          }
+
+          const rows = Object.entries(byProd).sort((a,b) => b[1].rev - a[1].rev);
+          let csv = 'Product,Units Sold,Revenue,Cost,Profit,Margin %\n';
+          csv += rows.map(([name, v]) => [
+            `"${name}"`, v.qty,
+            `$${v.rev.toFixed(2)}`, `$${v.cost.toFixed(2)}`,
+            `$${(v.rev-v.cost).toFixed(2)}`,
+            v.rev > 0 ? `${((v.rev-v.cost)/v.rev*100).toFixed(1)}%` : '0%',
+          ].join(',')).join('\n');
+
+          const month = new Date().toISOString().slice(0,7);
+          downloadPayload = { filename: `aria-sales-${month}.csv`, content: csv, type: 'text/csv' };
+          actionResults.push({ type: 'file_ready', label: `✓ ${downloadPayload.filename} ready` });
+        } catch (e) { console.error('GENERATE_CSV failed:', e); }
+      }
+
+      if (actionType === 'CREATE_PROMOTION') {
+        try {
+          await supabase.from('pos_promotions').insert({
+            business_id: resolvedBid,
+            name: data.name,
+            promotion_type: data.promotion_type || 'percentage_discount',
+            discount_type: data.discount_type || 'percentage',
+            discount_percent: data.discount_percent || 0,
+            discount_amount: data.discount_amount || 0,
+            active: true,
+            product_ids: [],
+            category_ids: [],
+          });
+          actionResults.push({ type: 'promotion_created', label: `✓ Promotion "${data.name}" created`, url: '/pos/promotions', link_label: 'View promotions →' });
+        } catch (e) { console.error('CREATE_PROMOTION failed:', e); }
+      }
+    }
+
+    // Strip ACTION: lines from displayed text
+    const cleanText = rawText.replace(/ACTION:[A-Z_]+:[\s\S]*?(?=\nACTION:|\n\n|$)/gm, '').trim();
+
+    // Also detect legacy discount action
     let action: { type: string; payload: Record<string, unknown> } | undefined;
-    if (/applying|apply.*discount/i.test(reply)) {
-      const match = reply.match(/(\d+(?:\.\d+)?)\s*%/);
+    if (/applying|apply.*discount/i.test(cleanText)) {
+      const match = cleanText.match(/(\d+(?:\.\d+)?)\s*%/);
       if (match) action = { type: 'apply_discount', payload: { percentage: parseFloat(match[1]) } };
     }
 
-    const assistantText = reply;
     return NextResponse.json({
-      reply: assistantText,
+      message: cleanText,
+      reply: cleanText,
       action,
+      actions_taken: actionResults,
       ...(downloadPayload ? { download: downloadPayload } : {}),
     });
   } catch (err) {
     console.error('[pos-chat] Claude error:', err);
-    return NextResponse.json({ reply: "Sorry, I couldn't process that right now." });
+    return NextResponse.json({ reply: "Sorry, I couldn't process that right now.", message: "Sorry, I couldn't process that right now." });
   }
 }

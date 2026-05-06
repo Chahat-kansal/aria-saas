@@ -34,6 +34,7 @@ export async function GET(req: Request) {
   const history = searchParams.get('history') === 'true';
   const sessionId = searchParams.get('id');
   const openOnly = searchParams.get('open') === 'true';
+  const status = searchParams.get('status');
 
   // Fetch a specific session by ID
   if (sessionId) {
@@ -44,6 +45,40 @@ export async function GET(req: Request) {
       .eq('business_id', bid)
       .maybeSingle();
     return NextResponse.json({ session: session || null });
+  }
+
+  // ?status=open — return open session with payment totals for close page
+  if (status === 'open') {
+    const { data: session } = await supabase
+      .from('pos_cash_sessions')
+      .select('*')
+      .eq('business_id', bid)
+      .is('closed_at', null)
+      .order('opened_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (!session) return NextResponse.json({ session: null, payment_totals: {} });
+
+    const { data: salesData } = await supabase
+      .from('pos_sales')
+      .select('payment_method,total_amount')
+      .eq('business_id', bid)
+      .gte('created_at', session.opened_at)
+      .neq('status', 'voided');
+
+    const payment_totals: Record<string, number> = {};
+    for (const s of (salesData || [])) {
+      const meth = (s.payment_method as string) || 'cash';
+      payment_totals[meth] = (payment_totals[meth] || 0) + ((s.total_amount as number) || 0);
+    }
+
+    return NextResponse.json({
+      session,
+      payment_totals,
+      total_transactions: (salesData || []).length,
+      total_revenue: Object.values(payment_totals).reduce((a, b) => a + b, 0),
+    });
   }
 
   const { data: openSession } = await supabase
@@ -126,10 +161,21 @@ export async function PATCH(req: Request) {
   };
   if (body.closing_float !== undefined) updatePayload.closing_float = body.closing_float;
   if (body.closing_float_cents !== undefined) updatePayload.closing_float = body.closing_float_cents / 100;
-  if (body.actual_cash_cents !== undefined) updatePayload.actual_cash = body.actual_cash_cents / 100;
-  if (body.expected_cash_cents !== undefined) updatePayload.expected_cash = body.expected_cash_cents / 100;
-  if (body.variance_cents !== undefined) updatePayload.variance = body.variance_cents / 100;
+  if (body.actual_cash_cents !== undefined) {
+    updatePayload.actual_cash = body.actual_cash_cents / 100;
+    updatePayload.actual_cash_cents = body.actual_cash_cents;
+  }
+  if (body.expected_cash_cents !== undefined) {
+    updatePayload.expected_cash = body.expected_cash_cents / 100;
+    updatePayload.expected_cash_cents = body.expected_cash_cents;
+  }
+  if (body.variance_cents !== undefined) {
+    updatePayload.variance = body.variance_cents / 100;
+    updatePayload.variance_cents = body.variance_cents;
+  }
   if (body.notes !== undefined) updatePayload.notes = body.notes;
+  if (body.closure_note !== undefined) updatePayload.closure_note = body.closure_note;
+  if (body.closed_by !== undefined) updatePayload.closed_by = body.closed_by;
 
   const { error } = await supabase
     .from('pos_cash_sessions')
