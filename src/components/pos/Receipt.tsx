@@ -1,5 +1,43 @@
 'use client';
 
+/* ─── Shared type definitions ────────────────────────────────── */
+export interface ReceiptElement {
+  id: string;
+  type: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  zIndex?: number;
+  visible?: boolean;
+  locked?: boolean;
+  content?: string;
+  fontSize?: number;
+  fontFamily?: string;
+  fontWeight?: string;
+  fontStyle?: string;
+  textAlign?: string;
+  color?: string;
+  lineHeight?: number;
+  padding?: number;
+  backgroundColor?: string;
+  imageUrl?: string;
+  objectFit?: string;
+  dividerStyle?: string;
+  dividerThickness?: number;
+  dataBinding?: string;
+}
+
+export interface ReceiptTemplate {
+  id: string;
+  name: string;
+  elements: ReceiptElement[];
+  canvas_width?: number;
+  canvas_height?: number;
+  background_color?: string;
+  is_default?: boolean;
+}
+
 export interface ReceiptSale {
   id: string;
   sale_number?: string;
@@ -42,9 +80,255 @@ interface Props {
   businessName?: string;
   ariaMessage?: string;
   onClose?: () => void;
+  template?: ReceiptTemplate | null;
 }
 
-export default function Receipt({ sale, settings = {}, businessName, ariaMessage, onClose }: Props) {
+/* ─── Template-based receipt ────────────────────────────────────
+   Renders absolutely-positioned elements from the Canva editor
+   with real sale data substituted in.                           */
+function TemplateReceipt({ template, sale, businessName, settings, onClose }: {
+  template: ReceiptTemplate;
+  sale: ReceiptSale;
+  businessName: string;
+  settings: ReceiptSettings;
+  onClose?: () => void;
+}) {
+  const CW = template.canvas_width || 302;
+
+  // Variable substitution map — real sale data
+  const total = sale.total_amount ?? 0;
+  const gst   = sale.tax_amount   ?? (total - total / 1.1);
+  const vars: Record<string, string> = {
+    '{{business_name}}':    businessName,
+    '{{business_address}}': settings?.business_address ?? '',
+    '{{business_phone}}':   settings?.business_phone   ?? '',
+    '{{business_abn}}':     settings?.business_abn     ?? '',
+    '{{receipt_number}}':   sale.sale_number || sale.id?.slice(-8).toUpperCase() || '',
+    '{{date}}':             new Date(sale.created_at || Date.now()).toLocaleDateString('en-AU', {
+                              day: 'numeric', month: 'short', year: 'numeric',
+                              hour: '2-digit', minute: '2-digit',
+                            }),
+    '{{cashier_name}}':     sale.served_by    || '',
+    '{{customer_name}}':    sale.customerSnapshot?.name || '',
+    '{{receipt_barcode}}':  sale.sale_number  || sale.id?.slice(0, 12) || '',
+  };
+
+  function resolveContent(content: string): string {
+    return Object.entries(vars).reduce((t, [k, v]) => t.replaceAll(k, v), content || '');
+  }
+
+  const items = sale.cartSnapshot ?? [];
+
+  function renderEl(el: ReceiptElement) {
+    const ff = el.fontFamily === 'monospace' ? "'Courier New',Courier,monospace"
+             : el.fontFamily === 'serif'     ? 'Georgia,serif'
+             : 'Arial,sans-serif';
+
+    const base: React.CSSProperties = {
+      position:        'absolute',
+      left:            el.x,
+      top:             el.y,
+      width:           el.width,
+      height:          el.height || 'auto',
+      zIndex:          el.zIndex || 1,
+      boxSizing:       'border-box',
+      overflow:        'hidden',
+      fontFamily:      ff,
+      fontSize:        el.fontSize    || 10,
+      fontWeight:      (el.fontWeight || 'normal') as React.CSSProperties['fontWeight'],
+      fontStyle:       (el.fontStyle  || 'normal') as React.CSSProperties['fontStyle'],
+      textAlign:       (el.textAlign  || 'left')   as React.CSSProperties['textAlign'],
+      color:           el.color            || '#000000',
+      lineHeight:      el.lineHeight       || 1.4,
+      padding:         el.padding          || 0,
+      backgroundColor: el.backgroundColor || 'transparent',
+      whiteSpace:      'pre-wrap',
+    };
+
+    switch (el.type) {
+      case 'text':
+      case 'dynamic_text':
+        return <div key={el.id} style={base}>{resolveContent(el.content || '')}</div>;
+
+      case 'divider':
+        return (
+          <div key={el.id} style={{ ...base, display: 'flex', alignItems: 'center' }}>
+            <div style={{
+              width: '100%',
+              borderTopWidth: el.dividerThickness || 1,
+              borderTopStyle: (el.dividerStyle || 'solid') as React.CSSProperties['borderTopStyle'],
+              borderTopColor: el.color || '#000000',
+            }} />
+          </div>
+        );
+
+      case 'image':
+        return el.imageUrl ? (
+          <div key={el.id} style={{ ...base, overflow: 'hidden' }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={el.imageUrl} alt="Logo"
+              style={{ width: '100%', height: '100%', objectFit: (el.objectFit || 'contain') as React.CSSProperties['objectFit'] }} />
+          </div>
+        ) : null;
+
+      case 'spacer':
+        return <div key={el.id} style={base} />;
+
+      case 'barcode':
+        return (
+          <div key={el.id} style={{ ...base, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontSize: 8, color: '#666' }}>
+            <div style={{ fontSize: 16, letterSpacing: 2 }}>▌▌▌▐▌▌▐▌▐▌▌▐▌▐▌</div>
+            <div style={{ fontSize: 8, marginTop: 2 }}>{vars['{{receipt_barcode}}']}</div>
+          </div>
+        );
+
+      case 'items_table':
+        return (
+          <div key={el.id} style={{ ...base, padding: '0 8px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', borderBottom: '1px solid #000', paddingBottom: 2, marginBottom: 3, fontSize: el.fontSize || 10 }}>
+              <span style={{ flex: 2 }}>Item</span>
+              <span style={{ textAlign: 'right', minWidth: 24 }}>Qty</span>
+              <span style={{ textAlign: 'right', minWidth: 56 }}>Price</span>
+            </div>
+            {items.length > 0 ? items.map((item, i) => {
+              const name      = item.label ?? item.product?.name ?? 'Item';
+              const lineTotal = item.unitPrice * item.qty * (1 - (item.discount_percent ?? 0) / 100);
+              return (
+                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2, fontSize: el.fontSize || 10 }}>
+                  <span style={{ flex: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
+                  <span style={{ textAlign: 'right', minWidth: 24 }}>×{item.qty}</span>
+                  <span style={{ textAlign: 'right', minWidth: 56, fontFamily: "'Courier New',monospace" }}>A${lineTotal.toFixed(2)}</span>
+                </div>
+              );
+            }) : (
+              <div style={{ fontSize: el.fontSize || 10, color: '#777', marginBottom: 4 }}>1 item — A${total.toFixed(2)}</div>
+            )}
+          </div>
+        );
+
+      case 'totals_block': {
+        const subTotal = items.length > 0
+          ? items.reduce((s, i) => s + i.unitPrice * i.qty * (1 - (i.discount_percent ?? 0) / 100), 0)
+          : total;
+        const showGst = settings?.receipt_show_gst !== false;
+        return (
+          <div key={el.id} style={{ ...base, padding: '0 8px' }}>
+            {showGst && (
+              <>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2, fontSize: el.fontSize || 10 }}>
+                  <span>Subtotal</span>
+                  <span style={{ fontFamily: "'Courier New',monospace" }}>A${(subTotal / 1.1).toFixed(2)}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2, fontSize: el.fontSize || 10, color: '#666' }}>
+                  <span>GST (10%)</span>
+                  <span style={{ fontFamily: "'Courier New',monospace" }}>A${gst.toFixed(2)}</span>
+                </div>
+              </>
+            )}
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', borderTop: '1px solid #000', paddingTop: 3, marginTop: 2, fontSize: (el.fontSize || 10) + 2 }}>
+              <span>TOTAL</span>
+              <span style={{ fontFamily: "'Courier New',monospace" }}>A${total.toFixed(2)}</span>
+            </div>
+          </div>
+        );
+      }
+
+      case 'payment_info': {
+        const method = (sale.payment_method || 'Card').replace(/_/g, ' ');
+        return (
+          <div key={el.id} style={{ ...base, padding: '0 8px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: el.fontSize || 10 }}>
+              <span style={{ textTransform: 'capitalize' }}>{method}</span>
+              <span style={{ fontFamily: "'Courier New',monospace" }}>A${total.toFixed(2)}</span>
+            </div>
+            {(sale.cash_tendered ?? 0) > 0 && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: el.fontSize || 10, color: '#666' }}>
+                <span>Tendered</span>
+                <span style={{ fontFamily: "'Courier New',monospace" }}>A${(sale.cash_tendered ?? 0).toFixed(2)}</span>
+              </div>
+            )}
+            {(sale.change_given ?? 0) > 0 && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: el.fontSize || 10, color: '#666' }}>
+                <span>Change</span>
+                <span style={{ fontFamily: "'Courier New',monospace" }}>A${(sale.change_given ?? 0).toFixed(2)}</span>
+              </div>
+            )}
+          </div>
+        );
+      }
+
+      case 'loyalty_block': {
+        if (!sale.loyaltyEarned && !sale.customerSnapshot?.loyalty_points) return null;
+        return (
+          <div key={el.id} style={{ ...base, textAlign: 'center', padding: '0 8px' }}>
+            {sale.loyaltyEarned ? `★ +${sale.loyaltyEarned} loyalty points earned` : ''}
+            {sale.customerSnapshot?.loyalty_points != null ? ` · Balance: ${sale.customerSnapshot.loyalty_points}` : ''}
+          </div>
+        );
+      }
+
+      default:
+        return null;
+    }
+  }
+
+  const sortedElements = [...(template.elements || [])]
+    .filter(el => el.visible !== false)
+    .sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
+
+  function handlePrint() { window.print(); }
+
+  return (
+    <>
+      <style>{`
+        @media print {
+          body > * { display: none !important; }
+          .receipt-print-root { display: block !important; position: fixed !important; inset: 0 !important; z-index: 99999 !important; }
+          .receipt-print-root * { visibility: visible !important; }
+          .receipt-print-root { width: 80mm !important; margin: 0 auto !important; }
+          .no-print { display: none !important; }
+        }
+      `}</style>
+
+      <div className="no-print"
+        onClick={e => { if (e.target === e.currentTarget) onClose?.(); }}
+        style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+        <div style={{ background: '#fff', borderRadius: 20, overflow: 'hidden', width: '100%', maxWidth: 380, maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 80px rgba(0,0,0,0.5)' }}>
+          <div className="no-print" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid #f0f0f0', background: '#fff', flexShrink: 0 }}>
+            <span style={{ fontSize: 14, fontWeight: 700, color: '#111' }}>Receipt</span>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={handlePrint} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 14px', borderRadius: 8, background: '#7C3AED', color: '#fff', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+                🖨️ Print
+              </button>
+              {onClose && (
+                <button onClick={onClose} style={{ padding: '6px 14px', borderRadius: 8, background: '#f5f5f5', color: '#555', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+                  Close
+                </button>
+              )}
+            </div>
+          </div>
+          <div style={{ overflowY: 'auto', flex: 1 }}>
+            <div className="receipt-print-root" style={{ background: '#fff', overflow: 'hidden' }}>
+              <div style={{ position: 'relative', width: CW, minHeight: template.canvas_height || 800, background: template.background_color || '#ffffff', margin: '0 auto' }}>
+                {sortedElements.map(el => renderEl(el))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+/* ─── Settings-based receipt (original) ─────────────────────────
+   Kept exactly as-is — used as fallback when no template exists.  */
+function SettingsReceipt({ sale, settings, businessName, ariaMessage, onClose }: {
+  sale: ReceiptSale;
+  settings: ReceiptSettings;
+  businessName: string;
+  ariaMessage?: string;
+  onClose?: () => void;
+}) {
   const bName       = businessName ?? sale.businessName ?? 'AriaPOS';
   const total       = sale.total_amount ?? 0;
   const date        = new Date(sale.created_at || Date.now());
@@ -53,19 +337,15 @@ export default function Receipt({ sale, settings = {}, businessName, ariaMessage
   const showLoyalty = settings.receipt_show_loyalty !== false;
   const items       = sale.cartSnapshot ?? [];
 
-  // Use total_amount as the base; derive sub and gst from it
   const subTotal = items.length > 0
     ? items.reduce((s, i) => s + i.unitPrice * i.qty * (1 - (i.discount_percent ?? 0) / 100), 0)
     : total;
   const gstAmt = sale.tax_amount ?? (subTotal - subTotal / 1.1);
 
-  function handlePrint() {
-    window.print();
-  }
+  function handlePrint() { window.print(); }
 
   return (
     <>
-      {/* Scoped print CSS — only the receipt-print div is visible when printing */}
       <style>{`
         @media print {
           body > * { display: none !important; }
@@ -76,16 +356,10 @@ export default function Receipt({ sale, settings = {}, businessName, ariaMessage
         }
       `}</style>
 
-      {/* Overlay backdrop */}
-      <div
-        className="no-print"
+      <div className="no-print"
         onClick={e => { if (e.target === e.currentTarget) onClose?.(); }}
-        style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
-      >
-        {/* Modal card */}
+        style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
         <div style={{ background: '#fff', borderRadius: 20, overflow: 'hidden', width: '100%', maxWidth: 380, maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 80px rgba(0,0,0,0.5)' }}>
-
-          {/* Modal toolbar */}
           <div className="no-print" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid #f0f0f0', background: '#fff', flexShrink: 0 }}>
             <span style={{ fontSize: 14, fontWeight: 700, color: '#111' }}>Receipt</span>
             <div style={{ display: 'flex', gap: 8 }}>
@@ -100,11 +374,9 @@ export default function Receipt({ sale, settings = {}, businessName, ariaMessage
             </div>
           </div>
 
-          {/* Scrollable receipt content */}
           <div style={{ overflowY: 'auto', flex: 1 }}>
             <div className="receipt-print-root" style={{ padding: '20px 24px', fontFamily: "'Courier New', monospace", fontSize: 12, color: '#111', background: '#fff', lineHeight: 1.5 }}>
 
-              {/* Logo */}
               {settings.receipt_logo_url && (
                 <div style={{ textAlign: 'center', marginBottom: 12 }}>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -112,7 +384,6 @@ export default function Receipt({ sale, settings = {}, businessName, ariaMessage
                 </div>
               )}
 
-              {/* Business info */}
               <div style={{ textAlign: 'center', marginBottom: 12 }}>
                 <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 2 }}>{bName}</div>
                 {settings.business_address && <div style={{ fontSize: 11, color: '#555' }}>{settings.business_address}</div>}
@@ -130,7 +401,6 @@ export default function Receipt({ sale, settings = {}, businessName, ariaMessage
 
               <div style={{ borderTop: '1px dashed #ccc', margin: '8px 0' }} />
 
-              {/* Receipt meta */}
               {[
                 ['Receipt', sale.sale_number ?? sale.id.slice(-8).toUpperCase()],
                 ['Date',    date.toLocaleDateString('en-AU')],
@@ -146,7 +416,6 @@ export default function Receipt({ sale, settings = {}, businessName, ariaMessage
 
               <div style={{ borderTop: '1px dashed #ccc', margin: '8px 0' }} />
 
-              {/* Line items */}
               {items.length > 0 ? items.map((item, i) => {
                 const name      = item.label ?? item.product?.name ?? 'Item';
                 const lineTotal = item.unitPrice * item.qty * (1 - (item.discount_percent ?? 0) / 100);
@@ -173,7 +442,6 @@ export default function Receipt({ sale, settings = {}, businessName, ariaMessage
 
               <div style={{ borderTop: '1px dashed #ccc', margin: '8px 0' }} />
 
-              {/* Totals */}
               {showGst && (
                 <>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 2 }}>
@@ -193,7 +461,6 @@ export default function Receipt({ sale, settings = {}, businessName, ariaMessage
 
               <div style={{ borderTop: '1px dashed #ccc', margin: '8px 0' }} />
 
-              {/* Payment */}
               {[
                 ['Payment', (sale.payment_method ?? 'card').toUpperCase()],
                 ...(sale.cash_tendered != null ? [['Tendered', `A$${sale.cash_tendered.toFixed(2)}`]] : []),
@@ -205,7 +472,6 @@ export default function Receipt({ sale, settings = {}, businessName, ariaMessage
                 </div>
               ))}
 
-              {/* Loyalty */}
               {showLoyalty && (sale.loyaltyEarned || sale.customerSnapshot?.loyalty_points) && (
                 <>
                   <div style={{ borderTop: '1px dashed #ccc', margin: '8px 0' }} />
@@ -220,7 +486,6 @@ export default function Receipt({ sale, settings = {}, businessName, ariaMessage
 
               <div style={{ borderTop: '1px dashed #ccc', margin: '10px 0' }} />
 
-              {/* Footer */}
               <div style={{ textAlign: 'center', fontSize: 11, color: '#555', fontStyle: 'italic' }}>
                 {ariaMessage ?? settings.receipt_footer ?? 'Thank you for your business!'}
               </div>
@@ -230,5 +495,34 @@ export default function Receipt({ sale, settings = {}, businessName, ariaMessage
         </div>
       </div>
     </>
+  );
+}
+
+/* ─── Main export — picks template or settings receipt ────────── */
+export default function Receipt({ sale, settings = {}, businessName, ariaMessage, onClose, template }: Props) {
+  const bName = businessName ?? sale.businessName ?? 'AriaPOS';
+
+  // Use the custom template if it exists and has elements
+  if (template?.elements && template.elements.length > 0) {
+    return (
+      <TemplateReceipt
+        template={template}
+        sale={sale}
+        businessName={bName}
+        settings={settings}
+        onClose={onClose}
+      />
+    );
+  }
+
+  // Fallback: original settings-based receipt
+  return (
+    <SettingsReceipt
+      sale={sale}
+      settings={settings}
+      businessName={bName}
+      ariaMessage={ariaMessage}
+      onClose={onClose}
+    />
   );
 }

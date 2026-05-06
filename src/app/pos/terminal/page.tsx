@@ -5,6 +5,7 @@ import { SFX } from '@/lib/pos-utils';
 import dynamic from 'next/dynamic';
 import type { FlyToCartHandle } from '@/components/pos/FlyToCart';
 import Receipt from '@/components/pos/Receipt';
+import type { ReceiptTemplate } from '@/components/pos/Receipt';
 import { printReceiptWithTemplate } from '@/lib/pos-print';
 
 const CursorGlow = dynamic(() => import('@/components/pos/CursorGlow'), { ssr: false });
@@ -209,6 +210,9 @@ export default function TerminalPage() {
   /* ── Receipt reprint ──────────────────────────────────────────── */
   const [reprintSale,      setReprintSale]      = useState<any>(null);
 
+  /* ── Default receipt template (from Canva editor) ─────────────── */
+  const [receiptTemplate, setReceiptTemplate] = useState<ReceiptTemplate | null>(null);
+
   /* ── Terminal view state ────────────────────────────────────────── */
   const [terminalView,     setTerminalView]     = useState<'pos' | 'checkout' | 'confirm'>('pos');
   const [showReceiptModal, setShowReceiptModal] = useState(false);
@@ -252,7 +256,8 @@ export default function TerminalPage() {
     Promise.all([
       fetch('/api/pos/products').then(r => r.json()),
       fetch('/api/pos/park').then(r => r.json()),
-    ]).then(([prod, park]) => {
+      fetch('/api/pos/receipt-templates').then(r => r.json()).catch(() => ({ templates: [] })),
+    ]).then(([prod, park, tmplData]) => {
       if (prod.business_id) setBusinessId(prod.business_id);
       if (prod.business_name) setBusinessName(prod.business_name);
       const prods: Product[] = prod.products || [];
@@ -260,6 +265,12 @@ export default function TerminalPage() {
       setParkedSales(park.parked_sales || []);
       setLowStockItems(prods.filter(p => p.track_stock && p.stock_quantity <= (p.low_stock_threshold ?? 5) && p.is_active));
       setLoading(false);
+      // Load the default receipt template (is_default first, else first template)
+      const templates: ReceiptTemplate[] = tmplData.templates || [];
+      if (templates.length > 0) {
+        const def = templates.find((t: ReceiptTemplate) => t.is_default) ?? templates[0];
+        if (def?.elements?.length) setReceiptTemplate(def);
+      }
     }).catch(() => setLoading(false));
   }, [loadRegister]);
 
@@ -1102,6 +1113,7 @@ export default function TerminalPage() {
               <Receipt
                 sale={showReceipt}
                 businessName={businessName}
+                template={receiptTemplate}
                 onClose={() => setShowReceiptModal(false)}
               />
             )}
@@ -1514,6 +1526,7 @@ export default function TerminalPage() {
               <Receipt
                 sale={showReceipt}
                 businessName={businessName}
+                template={receiptTemplate}
                 onClose={() => { setShowReceipt(null); if (window.innerWidth < 768) setMobileTab('products'); }}
               />
             </div>
