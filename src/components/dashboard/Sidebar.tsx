@@ -53,6 +53,8 @@ const ALL_ITEMS: Record<string, NavItemDef> = {
   'variance':                   { href: '/dashboard/variance',                 label: 'Variance & shrinkage', icon: AlertTriangleIcon, badge: 'AI', section: 'Intelligence' },
   'missed-demand':              { href: '/dashboard/missed-demand',            label: 'Missed demand',     icon: ShoppingBagIcon,    badge: 'New', section: 'Intelligence' },
   'intelligence':               { href: '/dashboard/intelligence',             label: 'Intelligence centre', icon: BrainIcon,          section: 'Intelligence' },
+  'autopilot':                  { href: '/dashboard/autopilot',                label: 'Autopilot',           icon: BrainIcon,          badge: '⚡', section: 'Intelligence' },
+  'social-calendar':            { href: '/dashboard/social/calendar',          label: 'Post Calendar',       icon: CalendarIcon,       section: 'Marketing'    },
   'visa/clients':               { href: '/visa/clients',                       label: 'Clients',           icon: UsersIcon,          section: 'VisaAI'       },
   'visa/applications':          { href: '/visa/applications',                  label: 'Applications',      icon: FileTextIcon,       section: 'VisaAI'       },
   'visa/documents':             { href: '/visa/documents',                     label: 'Documents',         icon: FolderIcon,         section: 'VisaAI'       },

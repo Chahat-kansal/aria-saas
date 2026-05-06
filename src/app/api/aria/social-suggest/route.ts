@@ -145,8 +145,11 @@ Return ONLY a valid JSON array, no other text:
     "best_time": "e.g. Friday 5pm or Monday 7am",
     "why": "1 sentence why this will perform well",
     "image_prompt": "detailed description of ideal photo for this post",
+    "image_search_query": "2-4 word Unsplash search query for a real photo matching this post",
     "topic": "brief topic label",
-    "industry_tip": "1 tip specific to this industry for this post type"
+    "industry_tip": "1 tip specific to this industry for this post type",
+    "reel_concept": "15-30 second Instagram Reel idea based on this post",
+    "reel_script": "Word-for-word script for the owner to record this reel"
   }
 ]`,
     }],
@@ -160,8 +163,25 @@ Return ONLY a valid JSON array, no other text:
     return NextResponse.json({ error: 'Failed to parse AI response' }, { status: 500 });
   }
 
+  // Fetch Unsplash images if API key is configured
+  const unsplashKey = process.env.UNSPLASH_ACCESS_KEY;
+  async function fetchUnsplashImage(query: string): Promise<{ url: string; credit: string } | null> {
+    if (!unsplashKey || !query) return null;
+    try {
+      const res = await fetch(
+        `https://api.unsplash.com/search/photos?query=${encodeURIComponent(query)}&per_page=1&orientation=square`,
+        { headers: { Authorization: `Client-ID ${unsplashKey}` } }
+      );
+      const d = await res.json();
+      const photo = d.results?.[0];
+      if (!photo) return null;
+      return { url: photo.urls?.regular ?? photo.urls?.small, credit: photo.user?.name ?? 'Unsplash' };
+    } catch { return null; }
+  }
+
   const saved: any[] = [];
   for (const s of suggestions) {
+    const img = await fetchUnsplashImage(s.image_search_query || s.image_prompt?.split(' ').slice(0, 3).join(' ') || '');
     const { data: post } = await supabase.from('social_posts').insert({
       business_id,
       platform: s.platform,
@@ -169,6 +189,10 @@ Return ONLY a valid JSON array, no other text:
       caption: s.caption,
       hashtags: [...(s.hashtags || []), ...(prefs?.auto_hashtags || [])],
       image_prompt: s.image_prompt,
+      image_url: img?.url ?? null,
+      image_credit: img?.credit ?? null,
+      reel_concept: s.reel_concept ?? null,
+      reel_script: s.reel_script ?? null,
       aria_reasoning: s.why,
       industry_context: s.industry_tip,
       scheduled_for: getNextPostTime(s.best_time || '', s.platform, prefs),

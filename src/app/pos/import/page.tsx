@@ -212,6 +212,23 @@ export default function ImportPage() {
           </div>
         )}
 
+        {/* Shopfront migration banner — most prominent */}
+        <div style={{ background: 'linear-gradient(135deg,rgba(0,100,200,0.12),rgba(0,200,150,0.08))', border: '2px solid rgba(0,150,200,0.35)', borderRadius: 18, padding: '22px 24px', marginBottom: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 20, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16, flex: 1, minWidth: 260 }}>
+            <div style={{ fontSize: 36, flexShrink: 0 }}>🏪</div>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                <p style={{ fontSize: 16, fontWeight: 700, color: C.text }}>Migrate from Shopfront</p>
+                <span style={{ fontSize: 10, padding: '2px 9px', borderRadius: 99, background: 'rgba(0,229,255,0.12)', color: '#00E5FF', fontWeight: 700 }}>RECOMMENDED</span>
+              </div>
+              <p style={{ fontSize: 13, color: C.muted }}>Import all your products, customers, price lists, and sales history in one click. Everything transfers automatically.</p>
+            </div>
+          </div>
+          <a href="/api/integrations/shopfront/connect" style={{ padding: '13px 26px', borderRadius: 12, background: 'linear-gradient(135deg,#0060B0,#0099CC)', color: '#fff', fontWeight: 700, fontSize: 14, textDecoration: 'none', flexShrink: 0 }}>
+            Connect Shopfront →
+          </a>
+        </div>
+
         {/* Option cards — 3-col */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16, marginBottom: 36 }}>
           {/* Connect & Import */}
