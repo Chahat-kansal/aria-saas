@@ -21,9 +21,19 @@ export default function ReportsIndexPage() {
   function loadBriefing() {
     setBriefingLoading(true);
     setBriefingError(false);
+    setBriefing(null);
     fetch('/api/pos/reports/briefing')
-      .then(r => r.json())
-      .then(d => { setBriefing(d.bullets ?? null); setBriefingLoading(false); })
+      .then(r => { if (!r.ok) throw new Error('failed'); return r.json(); })
+      .then(d => {
+        const bullets: string[] = d.bullets ?? [];
+        // Sunday with no sales — surface a specific message
+        if (bullets.length === 0 && new Date().getDay() === 0) {
+          setBriefing(['No sales data recorded yet this week. Check back Monday.']);
+        } else {
+          setBriefing(bullets.length > 0 ? bullets : null);
+        }
+        setBriefingLoading(false);
+      })
       .catch(() => { setBriefingError(true); setBriefingLoading(false); });
   }
 
@@ -51,7 +61,12 @@ export default function ReportsIndexPage() {
 
       <div>
         <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 12, color: 'var(--text-primary)' }}>Aria&apos;s daily briefing</h2>
-        <AriaInsightCard bullets={briefing ?? undefined} loading={briefingLoading} error={briefingError} onRetry={loadBriefing} />
+        <AriaInsightCard
+          bullets={briefing ?? undefined}
+          loading={briefingLoading}
+          error={briefingError}
+          onRetry={loadBriefing}
+        />
       </div>
     </div>
   );

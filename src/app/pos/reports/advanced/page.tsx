@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import ReportHeader from '@/components/reports/ReportHeader';
 import ReportTable, { Column } from '@/components/reports/ReportTable';
 import AriaInsightCard from '@/components/reports/AriaInsightCard';
@@ -31,6 +31,8 @@ export default function AdvancedReportPage() {
   const [showTypePanel, setShowTypePanel] = useState(false);
   const [showColsModal, setShowColsModal] = useState(false);
   const [showSqlModal, setShowSqlModal] = useState(false);
+  const [sqlCopied, setSqlCopied] = useState(false);
+  const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [data, setData] = useState<Record<string, unknown>[]>([]);
   const [sql, setSql] = useState('');
   const [insight, setInsight] = useState<string[] | null>(null);
@@ -170,17 +172,33 @@ export default function AdvancedReportPage() {
         </div>
       )}
 
-      {/* SQL modal (read-only) */}
+      {/* SQL modal (read-only + copy) */}
       {showSqlModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ background: 'var(--bg-elevated)', borderRadius: 16, padding: 24, width: 600, boxShadow: 'var(--shadow-lg)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
-              <span style={{ fontSize: 14, fontWeight: 700 }}>Generated SQL</span>
-              <button onClick={() => setShowSqlModal(false)} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 16 }}>×</button>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.72)', zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={e => { if (e.target === e.currentTarget) setShowSqlModal(false); }}>
+          <div style={{ background: 'var(--bg-elevated)', borderRadius: 16, padding: 24, width: 640, maxWidth: '92vw', boxShadow: 'var(--shadow-lg)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>Generated SQL</span>
+              <button onClick={() => setShowSqlModal(false)} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 18 }}>×</button>
             </div>
-            <textarea readOnly value={sql} style={{ ...iS, width: '100%', minHeight: 180, fontSize: 12, fontFamily: "'JetBrains Mono',monospace", resize: 'vertical', boxSizing: 'border-box' }} />
-            <p style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 8 }}>SQL editing coming in Phase 2.</p>
-            <button onClick={() => setShowSqlModal(false)} style={{ ...tBtn(false), marginTop: 4 }}>Close</button>
+            <pre style={{ background: 'var(--bg-base)', borderRadius: 10, padding: '14px 16px', fontSize: 12, fontFamily: "'JetBrains Mono',monospace", color: 'var(--text-primary)', overflowX: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-all', margin: 0, maxHeight: 320, overflowY: 'auto', border: '1px solid var(--border-default)' }}>
+              {sql || 'No SQL generated yet — run a report first.'}
+            </pre>
+            <p style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 8, marginBottom: 14 }}>SQL editing coming in Phase 2.</p>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(sql).then(() => {
+                    setSqlCopied(true);
+                    if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
+                    copyTimeoutRef.current = setTimeout(() => setSqlCopied(false), 2000);
+                  }).catch(() => {});
+                }}
+                style={{ ...tBtn(sqlCopied), padding: '7px 16px', background: sqlCopied ? 'rgba(52,211,153,0.14)' : 'var(--bg-overlay)', borderColor: sqlCopied ? '#34D399' : 'var(--border-default)', color: sqlCopied ? '#34D399' : 'var(--text-secondary)' }}
+              >
+                {sqlCopied ? 'Copied ✓' : '📋 Copy'}
+              </button>
+              <button onClick={() => setShowSqlModal(false)} style={{ ...tBtn(false) }}>Close</button>
+            </div>
           </div>
         </div>
       )}

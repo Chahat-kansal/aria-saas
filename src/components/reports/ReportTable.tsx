@@ -19,6 +19,10 @@ interface ReportTableProps {
   loading?: boolean;
   emptyIcon?: string;
   emptyMessage?: string;
+  // Optional controlled sort — when provided, overrides internal sort state
+  sortField?: string | null;
+  sortDir?: 'asc' | 'desc';
+  onSort?: (field: string, dir: 'asc' | 'desc') => void;
 }
 
 const hdr: React.CSSProperties = {
@@ -41,20 +45,35 @@ const shimmerBar: React.CSSProperties = {
   backgroundSize: '200% 100%', animation: 'rt-shimmer 1.4s infinite',
 };
 
-export default function ReportTable({ columns, rows, groupBy, totalsRow, onRowClick, loading, emptyIcon = '📋', emptyMessage = 'No data found.' }: ReportTableProps) {
-  const [sortKey, setSortKey] = useState<string | null>(null);
-  const [sortAsc, setSortAsc] = useState(true);
+export default function ReportTable({
+  columns, rows, groupBy, totalsRow, onRowClick, loading,
+  emptyIcon = '📋', emptyMessage = 'No data found.',
+  sortField: extSortField, sortDir: extSortDir, onSort,
+}: ReportTableProps) {
+  // Internal sort state — used when no external props provided
+  const [intSortKey, setIntSortKey] = useState<string | null>(null);
+  const [intSortAsc, setIntSortAsc] = useState(true);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
-  function toggleSort(key: string) {
-    if (sortKey === key) setSortAsc(a => !a);
-    else { setSortKey(key); setSortAsc(true); }
+  const controlled = onSort !== undefined;
+  const sortKey = controlled ? (extSortField ?? null) : intSortKey;
+  const sortAsc = controlled ? (extSortDir === 'asc') : intSortAsc;
+
+  function handleSort(key: string) {
+    if (controlled) {
+      const nextDir: 'asc' | 'desc' = sortKey === key && extSortDir === 'desc' ? 'asc' : 'desc';
+      onSort!(key, nextDir);
+    } else {
+      if (intSortKey === key) setIntSortAsc(a => !a);
+      else { setIntSortKey(key); setIntSortAsc(true); }
+    }
   }
 
   const sorted = useMemo(() => {
     if (!sortKey) return rows;
     return [...rows].sort((a, b) => {
-      const av = a[sortKey], bv = b[sortKey];
+      const av = a[sortKey] ?? 0;
+      const bv = b[sortKey] ?? 0;
       if (typeof av === 'number' && typeof bv === 'number') return sortAsc ? av - bv : bv - av;
       return sortAsc ? String(av).localeCompare(String(bv)) : String(bv).localeCompare(String(av));
     });
@@ -85,10 +104,7 @@ export default function ReportTable({ columns, rows, groupBy, totalsRow, onRowCl
     return (
       <tr key={i}
         onClick={() => onRowClick?.(row)}
-        style={{
-          background: i % 2 === 0 ? 'var(--bg-surface)' : 'var(--bg-elevated)',
-          cursor: onRowClick ? 'pointer' : 'default',
-        }}
+        style={{ background: i % 2 === 0 ? 'var(--bg-surface)' : 'var(--bg-elevated)', cursor: onRowClick ? 'pointer' : 'default' }}
         onMouseEnter={e => { if (onRowClick) (e.currentTarget as HTMLTableRowElement).style.background = 'var(--bg-hover)'; }}
         onMouseLeave={e => { (e.currentTarget as HTMLTableRowElement).style.background = i % 2 === 0 ? 'var(--bg-surface)' : 'var(--bg-elevated)'; }}>
         {columns.map((col, ci) => {
@@ -116,7 +132,7 @@ export default function ReportTable({ columns, rows, groupBy, totalsRow, onRowCl
             <tr>
               {columns.map(col => (
                 <th key={col.key} style={{ ...hdr, textAlign: col.align ?? 'left', cursor: col.sortable ? 'pointer' : 'default', width: col.width }}
-                  onClick={() => col.sortable && toggleSort(col.key)}>
+                  onClick={() => col.sortable && handleSort(col.key)}>
                   {col.label}
                   {col.sortable && (
                     <span style={{ marginLeft: 4, opacity: sortKey === col.key ? 1 : 0.4 }}>

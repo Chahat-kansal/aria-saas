@@ -20,6 +20,30 @@ function presetToISO(range: DateRange) {
   return { from: range.from.toISOString().split('T')[0], to: range.to.toISOString().split('T')[0] };
 }
 
+function EmptyChart() {
+  return (
+    <div style={{
+      height: 320, display: 'flex', alignItems: 'center', justifyContent: 'center',
+      flexDirection: 'column', gap: 8, background: 'var(--bg-elevated)', borderRadius: 16,
+      border: '1px solid var(--border-subtle)',
+    }}>
+      <span style={{ fontSize: 32 }}>📊</span>
+      <p style={{ color: 'var(--text-tertiary)', fontSize: 13, margin: 0 }}>No data for this period</p>
+    </div>
+  );
+}
+
+function safeDateTick(val: unknown): string {
+  if (val == null || val === '') return '';
+  try {
+    const d = new Date(String(val));
+    if (isNaN(d.getTime())) return String(val);
+    return d.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' });
+  } catch {
+    return String(val);
+  }
+}
+
 export default function SalesDashboardPage() {
   const [range, setRange] = useState<DateRange>({ from: new Date(Date.now() - 29 * 86400000), to: new Date(), preset: 'This Month' });
   const [metric, setMetric] = useState<'Revenue' | 'Sale Count'>('Revenue');
@@ -33,6 +57,10 @@ export default function SalesDashboardPage() {
   const [topProducts, setTopProducts] = useState<Product[]>([]);
   const [insight, setInsight] = useState<string[] | null>(null);
   const [insightLoading, setInsightLoading] = useState(false);
+
+  // Controlled sort state persists across filter changes
+  const [sortField, setSortField] = useState<string | null>('revenue');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
 
   const load = useCallback(() => {
     const { from, to } = presetToISO(range);
@@ -70,6 +98,8 @@ export default function SalesDashboardPage() {
 
   const prodTotals = { revenue: topProducts.reduce((s, p) => s + p.revenue, 0), quantity: topProducts.reduce((s, p) => s + p.quantity, 0) };
 
+  const chartDataKey = metric === 'Revenue' ? 'revenue' : 'count';
+
   return (
     <div style={{ minHeight: '100%', background: 'var(--bg-base)', color: 'var(--text-primary)', fontFamily: "'Manrope',sans-serif" }}>
       <ReportHeader
@@ -98,16 +128,43 @@ export default function SalesDashboardPage() {
 
         {/* Stacked bar chart */}
         <div style={{ background: 'var(--bg-surface)', borderRadius: 14, padding: '20px 16px 12px', marginBottom: 20, boxShadow: 'var(--shadow-card)' }}>
-          <ResponsiveContainer width="100%" height={320}>
-            <BarChart data={daily} margin={{ top: 20, right: 20, left: 0, bottom: 40 }}>
-              <CartesianGrid {...ChartTheme.grid} vertical={false} />
-              <XAxis dataKey="date" tick={ChartTheme.axis.tick} tickLine={ChartTheme.axis.tickLine} axisLine={ChartTheme.axis.axisLine} tickFormatter={v => new Date(v).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })} interval="preserveStartEnd" />
-              <YAxis tick={ChartTheme.axis.tick} tickLine={ChartTheme.axis.tickLine} axisLine={ChartTheme.axis.axisLine} tickFormatter={v => metric === 'Revenue' ? `$${Math.round(v / 1000)}k` : String(v)} width={54} />
-              <Tooltip contentStyle={ChartTheme.tooltip.contentStyle} labelStyle={ChartTheme.tooltip.labelStyle} itemStyle={ChartTheme.tooltip.itemStyle} cursor={ChartTheme.tooltip.cursor} formatter={(v: unknown) => [metric === 'Revenue' ? fmtAUD(v as number) : fmtCount(v as number), metric]} />
-              <Legend {...ChartTheme.legend} />
-              <Bar dataKey={metric === 'Revenue' ? 'revenue' : 'count'} name={metric} fill={ChartTheme.colors[1]} radius={[4, 4, 0, 0]} isAnimationActive={false} />
-            </BarChart>
-          </ResponsiveContainer>
+          {daily.length === 0 && !loading ? (
+            <EmptyChart />
+          ) : (
+            <ResponsiveContainer width="100%" height={320}>
+              <BarChart data={daily} margin={{ top: 20, right: 20, left: 0, bottom: 40 }}>
+                <CartesianGrid {...ChartTheme.grid} vertical={false} />
+                <XAxis
+                  dataKey="date"
+                  tick={ChartTheme.axis.tick}
+                  tickLine={ChartTheme.axis.tickLine}
+                  axisLine={ChartTheme.axis.axisLine}
+                  tickFormatter={safeDateTick}
+                  interval="preserveStartEnd"
+                />
+                <YAxis
+                  tick={ChartTheme.axis.tick}
+                  tickLine={ChartTheme.axis.tickLine}
+                  axisLine={ChartTheme.axis.axisLine}
+                  tickFormatter={v => v == null ? '' : metric === 'Revenue' ? `$${Math.round((v as number) / 1000)}k` : String(v)}
+                  width={54}
+                />
+                <Tooltip
+                  contentStyle={ChartTheme.tooltip.contentStyle}
+                  labelStyle={ChartTheme.tooltip.labelStyle}
+                  itemStyle={ChartTheme.tooltip.itemStyle}
+                  cursor={ChartTheme.tooltip.cursor}
+                  formatter={(v: unknown) => [
+                    v != null ? (metric === 'Revenue' ? fmtAUD(v as number) : fmtCount(v as number)) : '—',
+                    metric,
+                  ]}
+                  labelFormatter={safeDateTick}
+                />
+                <Legend {...ChartTheme.legend} />
+                <Bar dataKey={chartDataKey} name={metric} fill={ChartTheme.colors[1]} radius={[4, 4, 0, 0]} isAnimationActive={false} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
         </div>
 
         {/* 5 metric cards */}
@@ -125,7 +182,17 @@ export default function SalesDashboardPage() {
             <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>TOP 20 PRODUCTS</span>
             <span style={{ fontSize: 11, color: 'var(--text-secondary)', marginLeft: 8 }}>SINCE {periodStart.toUpperCase()}</span>
           </div>
-          <ReportTable columns={prodCols} rows={topProducts} loading={loading} totalsRow={prodTotals} emptyIcon="📦" emptyMessage="No sales data for this period." />
+          <ReportTable
+            columns={prodCols}
+            rows={topProducts}
+            loading={loading}
+            totalsRow={prodTotals}
+            emptyIcon="📦"
+            emptyMessage="No sales data for this period."
+            sortField={sortField}
+            sortDir={sortDir}
+            onSort={(f, d) => { setSortField(f); setSortDir(d); }}
+          />
         </div>
       </div>
     </div>
