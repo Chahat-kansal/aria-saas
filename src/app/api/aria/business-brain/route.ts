@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
+import { trackUsage } from '@/lib/track-usage';
 import { collectBusinessData } from '@/lib/aria/business-data';
 import {
   AriaBrainMode,
@@ -145,6 +146,8 @@ export async function POST(req: Request) {
         return NextResponse.json({ ...cached.content, cached: true });
       }
     }
+
+    trackUsage({ business_id: businessId, event_type: 'daily_briefing', metadata: { mode } })
 
     const businessData = await collectBusinessData(businessId, { userId: user.id, supabase });
     if (!businessData.business) return NextResponse.json({ error: 'Not found' }, { status: 404 });

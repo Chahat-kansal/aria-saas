@@ -6,6 +6,7 @@ import { ARIA_VOICE } from '@/lib/aria-voice-guide'
 import Anthropic from '@anthropic-ai/sdk'
 import { NextResponse } from 'next/server'
 import { getWeatherForecast, getUpcomingHolidays } from '@/lib/external-apis'
+import { trackUsage } from '@/lib/track-usage'
 
 export async function POST(req: Request) {
   const supabase = createServerSupabaseClient()
@@ -21,6 +22,8 @@ export async function POST(req: Request) {
     .eq('user_id', user.id)
     .maybeSingle()
   if (!biz) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
+  trackUsage({ business_id: biz.id, event_type: 'pos_chat' })
 
   const now = new Date()
   const todayStart = new Date(now); todayStart.setHours(0, 0, 0, 0)
