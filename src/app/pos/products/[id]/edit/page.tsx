@@ -115,9 +115,9 @@ export default function ProductEditPage() {
     onChange: (e: React.ChangeEvent<HTMLInputElement>) => setForm(f => ({ ...f, [key]: e.target.checked })),
   });
 
-  const iCls = { background: 'rgba(10,9,16,0.8)', border: `1px solid ${C.border}`, borderRadius: 8, padding: '9px 12px', fontSize: 13, color: C.text, outline: 'none', fontFamily: "'Manrope',sans-serif", width: '100%', boxSizing: 'border-box' as const };
+  const iCls = { background: 'var(--bg-input)', borderRadius: 8, padding: '9px 12px', fontSize: 13, color: C.text, outline: 'none', fontFamily: "'Manrope',sans-serif", width: '100%', boxSizing: 'border-box' as const, boxShadow: 'var(--shadow-sm)' };
   const lCls = { display: 'block', fontSize: 11, fontWeight: 700, color: C.muted, marginBottom: 6, textTransform: 'uppercase' as const, letterSpacing: '0.05em' };
-  const ppIcls = { background: 'rgba(10,9,16,0.8)', border: `1px solid ${C.border}`, borderRadius: 6, padding: '5px 8px', fontSize: 12, color: C.text, outline: 'none', fontFamily: "'Manrope',sans-serif", width: '100%' };
+  const ppIcls = { background: 'var(--bg-input)', borderRadius: 6, padding: '5px 8px', fontSize: 12, color: C.text, outline: 'none', fontFamily: "'Manrope',sans-serif", width: '100%' };
 
   if (loading) return (
     <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', background: C.bg }}>
@@ -175,7 +175,7 @@ export default function ProductEditPage() {
             </div>
             <div>
               <label style={lCls}>Category</label>
-              <select value={form.category_id ?? ''} onChange={e => setForm(f => ({ ...f, category_id: e.target.value || null }))} style={{ ...iCls, background: 'var(--bg-base)' }}>
+              <select value={form.category_id ?? ''} onChange={e => setForm(f => ({ ...f, category_id: e.target.value || null }))} style={{ ...iCls, background: 'var(--bg-input)' }}>
                 <option value="">No category</option>
                 {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
@@ -208,14 +208,14 @@ export default function ProductEditPage() {
             </div>
             <div>
               <label style={lCls}>Brand</label>
-              <select value={form.brand_id ?? ''} onChange={e => setForm(f => ({ ...f, brand_id: e.target.value || null }))} style={{ ...iCls, background: 'var(--bg-base)' }}>
+              <select value={form.brand_id ?? ''} onChange={e => setForm(f => ({ ...f, brand_id: e.target.value || null }))} style={{ ...iCls, background: 'var(--bg-input)' }}>
                 <option value="">No brand</option>
                 {brands.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
               </select>
             </div>
             <div>
               <label style={lCls}>Family</label>
-              <select value={form.family_id ?? ''} onChange={e => setForm(f => ({ ...f, family_id: e.target.value || null }))} style={{ ...iCls, background: 'var(--bg-base)' }}>
+              <select value={form.family_id ?? ''} onChange={e => setForm(f => ({ ...f, family_id: e.target.value || null }))} style={{ ...iCls, background: 'var(--bg-input)' }}>
                 <option value="">No family</option>
                 {families.map(fam => <option key={fam.id} value={fam.id}>{fam.name}</option>)}
               </select>
@@ -262,7 +262,7 @@ export default function ProductEditPage() {
               )}
               <div>
                 <label style={lCls}>Tax Rate</label>
-                <select value={form.tax_rate ?? 10} onChange={e => setForm(f => ({ ...f, tax_rate: parseFloat(e.target.value) }))} style={{ ...iCls, background: 'var(--bg-base)' }}>
+                <select value={form.tax_rate ?? 10} onChange={e => setForm(f => ({ ...f, tax_rate: parseFloat(e.target.value) }))} style={{ ...iCls, background: 'var(--bg-input)' }}>
                   <option value={10}>10% GST</option>
                   <option value={0}>0% GST Free</option>
                 </select>

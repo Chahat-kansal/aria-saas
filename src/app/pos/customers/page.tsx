@@ -7,7 +7,7 @@ interface Group { id: string; name: string; }
 
 function Sparkline({ values }: { values: number[] }) {
   if (!values || values.filter(v => v > 0).length < 2) {
-    return <svg width={120} height={40}><line x1="0" y1="20" x2="120" y2="20" stroke="#e0e0e0" strokeWidth={1} /></svg>
+    return <svg width={120} height={40}><line x1="0" y1="20" x2="120" y2="20" stroke="rgba(100,100,100,0.3)" strokeWidth={1} /></svg>
   }
   const max = Math.max(...values, 1)
   const w = 120, h = 40
@@ -63,56 +63,59 @@ export default function CustomersPage() {
     return true
   })
 
+  // Blue header is branded — stays in both modes
   const hdr: React.CSSProperties = { padding: '11px 14px', background: '#29b6f6', color: 'white', fontWeight: 700, fontSize: 13, textAlign: 'left', whiteSpace: 'nowrap' }
   const cell: React.CSSProperties = { padding: '14px', fontSize: 13, verticalAlign: 'middle' }
+  const inS: React.CSSProperties = { width: '100%', padding: '10px 14px', fontSize: 14, background: 'var(--bg-input)', color: 'var(--text-primary)', border: 'none', borderRadius: 4, outline: 'none', boxSizing: 'border-box', boxShadow: 'var(--shadow-sm)', fontFamily: 'inherit' }
+  const lblS: React.CSSProperties = { fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 5, display: 'block' }
 
   return (
     <div style={{ minHeight: '100%', background: 'var(--bg-base)', color: 'var(--text-primary)', fontFamily: "'Manrope',system-ui,sans-serif", padding: '20px 24px' }}>
 
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 10 }}>
-        <h1 style={{ fontSize: 26, fontWeight: 700, margin: 0 }}>Customers</h1>
+        <h1 style={{ fontSize: 26, fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>Customers</h1>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          {/* Add Customer — stays branded cyan */}
           <button onClick={() => router.push('/pos/customers/new')}
-            style={{ padding: '8px 18px', borderRadius: 6, border: 'none', background: '#2196f3', color: 'white', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 6 }}>
+            style={{ padding: '8px 18px', borderRadius: 6, border: 'none', background: '#29b6f6', color: 'white', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 6 }}>
             👤 Add Customer
           </button>
-          {[['↑ Export', '#fff'], ['↓ Import', '#fff'], ['⊗ Merge', '#fff']].map(([label]) => (
-            <button key={label} style={{ padding: '8px 14px', borderRadius: 6, border: '1px solid #ccc', background: 'white', color: '#333', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>
+          {['↑ Export', '↓ Import', '⊗ Merge'].map(label => (
+            <button key={label} style={{ padding: '8px 14px', borderRadius: 6, border: 'none', background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', boxShadow: 'var(--shadow-sm)' }}>
               {label}
             </button>
           ))}
-          <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)', marginLeft: 4 }}>{filtered.length} Results</span>
+          <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', marginLeft: 4 }}>{filtered.length} Results</span>
         </div>
       </div>
 
       {/* Search */}
       <div style={{ marginBottom: 14 }}>
-        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 5 }}>Search</div>
-        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search Customers..."
-          style={{ width: '100%', padding: '10px 14px', fontSize: 14, background: 'white', color: '#111', border: '1px solid #ddd', borderRadius: 4, outline: 'none', boxSizing: 'border-box' }} />
+        <label style={lblS}>Search</label>
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search Customers..." style={inS} />
       </div>
 
       {/* Filters */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 18 }}>
         <div>
-          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 5 }}>Customer Group</div>
+          <label style={lblS}>Customer Group</label>
           <select value={selectedGroup} onChange={e => setSelectedGroup(e.target.value)}
-            style={{ width: '100%', padding: '10px 14px', fontSize: 14, background: 'white', color: selectedGroup ? '#111' : '#666', border: '1px solid #ddd', borderRadius: 4, outline: 'none', cursor: 'pointer' }}>
+            style={{ ...inS, cursor: 'pointer' }}>
             <option value="">Select...</option>
             {groups.map(g => <option key={g.id} value={g.name}>{g.name}</option>)}
           </select>
         </div>
         <div>
-          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 5 }}>Price List</div>
-          <select style={{ width: '100%', padding: '10px 14px', fontSize: 14, background: 'white', color: '#666', border: '1px solid #ddd', borderRadius: 4, outline: 'none', cursor: 'pointer' }}>
+          <label style={lblS}>Price List</label>
+          <select style={{ ...inS, cursor: 'pointer' }}>
             <option value="">Select...</option>
           </select>
         </div>
       </div>
 
       {/* Table */}
-      <div style={{ background: 'white', borderRadius: 6, overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
+      <div style={{ background: 'var(--bg-surface)', borderRadius: 6, overflow: 'hidden', boxShadow: 'var(--shadow-card)' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr>
@@ -125,22 +128,23 @@ export default function CustomersPage() {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={5} style={{ padding: 32, textAlign: 'center', color: '#999', fontSize: 13 }}>Loading…</td></tr>
+              <tr><td colSpan={5} style={{ padding: 32, textAlign: 'center', color: 'var(--text-tertiary)', fontSize: 13 }}>Loading…</td></tr>
             ) : filtered.length === 0 ? (
-              <tr><td colSpan={5} style={{ padding: 48, textAlign: 'center', color: '#999', fontSize: 13 }}>
+              <tr><td colSpan={5} style={{ padding: 48, textAlign: 'center', color: 'var(--text-tertiary)', fontSize: 13 }}>
                 No customers found.{' '}
-                <span onClick={() => router.push('/pos/customers/new')} style={{ color: '#2196f3', cursor: 'pointer' }}>Add one →</span>
+                <span onClick={() => router.push('/pos/customers/new')} style={{ color: '#29b6f6', cursor: 'pointer' }}>Add one →</span>
               </td></tr>
             ) : filtered.map((c, i) => (
-              <tr key={c.id} style={{ background: i % 2 === 0 ? 'white' : '#f9f9f9' }}
-                onMouseEnter={e => (e.currentTarget.style.background = '#e3f2fd')}
-                onMouseLeave={e => (e.currentTarget.style.background = i % 2 === 0 ? 'white' : '#f9f9f9')}>
+              <tr key={c.id}
+                style={{ background: i % 2 === 0 ? 'var(--bg-surface)' : 'var(--bg-elevated)' }}
+                onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
+                onMouseLeave={e => (e.currentTarget.style.background = i % 2 === 0 ? 'var(--bg-surface)' : 'var(--bg-elevated)')}>
                 <td style={cell}>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: '#111' }}>{c.name}</div>
-                  {c.phone && <div style={{ fontSize: 12, color: '#666', marginTop: 2 }}>{c.phone}</div>}
+                  <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>{c.name}</div>
+                  {c.phone && <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>{c.phone}</div>}
                 </td>
-                <td style={{ ...cell, color: '#333' }}>{c.group_name || '—'}</td>
-                <td style={{ ...cell, color: '#666' }}>{c.phone || c.email || '—'}</td>
+                <td style={{ ...cell, color: 'var(--text-primary)' }}>{c.group_name || '—'}</td>
+                <td style={{ ...cell, color: 'var(--text-secondary)' }}>{c.phone || c.email || '—'}</td>
                 <td style={{ ...cell, padding: '8px 14px' }}>
                   <Sparkline values={performances[c.id] || []} />
                 </td>
