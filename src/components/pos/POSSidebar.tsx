@@ -144,9 +144,27 @@ export default function POSSidebar({
   onUserSwitch,
   onNavigate,
 }: Props) {
-  const pathname = usePathname()
-  const router   = useRouter()
-  const user = currentUser ?? posUser ?? null
+  const pathname    = usePathname()
+  const router      = useRouter()
+  const user        = currentUser ?? posUser ?? null
+  const isTerminal  = pathname === '/pos/terminal'
+
+  // Dark overrides for terminal — sidebar matches terminal's forced-dark theme
+  const SB = isTerminal ? {
+    bg:        '#0A0910',
+    elevated:  '#1A1728',
+    text:      '#EDE8FF',
+    secondary: 'rgba(237,232,255,0.65)',
+    tertiary:  'rgba(237,232,255,0.4)',
+    divider:   'rgba(255,255,255,0.05)',
+  } : {
+    bg:        'var(--bg-surface)',
+    elevated:  'var(--bg-elevated)',
+    text:      'var(--text-primary)',
+    secondary: 'var(--text-secondary)',
+    tertiary:  'var(--text-tertiary)',
+    divider:   'var(--divider)',
+  }
 
   const [collapsed, setCollapsed]       = useState(false)
   const [openSections, setOpenSections] = useState<Set<string>>(
@@ -204,7 +222,7 @@ export default function POSSidebar({
       width: collapsed ? COLLAPSED_W : EXPANDED_W,
       minWidth: collapsed ? COLLAPSED_W : EXPANDED_W,
       transition: 'width 280ms cubic-bezier(0.16,1,0.3,1), min-width 280ms cubic-bezier(0.16,1,0.3,1)',
-      background: 'var(--bg-surface)',
+      background: SB.bg,
       boxShadow: collapsed ? 'none' : 'var(--shadow-md)',
       display: 'flex',
       flexDirection: 'column',
@@ -220,7 +238,7 @@ export default function POSSidebar({
         position: 'absolute', right: -12, top: '50%',
         transform: 'translateY(-50%)',
         width: 20, height: 44,
-        background: 'var(--bg-elevated)',
+        background: SB.elevated,
         boxShadow: 'var(--shadow-sm)',
         borderRadius: '0 8px 8px 0',
         cursor: 'pointer',
@@ -413,7 +431,7 @@ export default function POSSidebar({
           cursor: 'pointer',
           margin: collapsed ? 0 : '0 8px',
           borderRadius: 12,
-          background: 'var(--bg-elevated)',
+          background: SB.elevated,
           boxShadow: 'var(--shadow-sm)',
           transition: 'transform 200ms var(--ease)',
         }}

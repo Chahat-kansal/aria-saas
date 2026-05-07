@@ -59,58 +59,58 @@ html[data-theme="dark"] {
     radial-gradient(70% 60% at 78% 92%, rgba(180,155,251,0.06), transparent 65%);
 }
 
-/* ---------------- LIGHT ---------------- */
+/* ---------------- LIGHT (dark purple — both modes are dark) ---------------- */
 html[data-theme="light"] {
-  --bg-base:        #F6F4FB;
-  --bg-canvas:      #F1EEF8;
-  --bg-surface:     #FFFFFF;
-  --bg-elevated:    #FAF8FE;
-  --bg-overlay:     #FFFFFF;
-  --bg-hover:       #F4F0FB;
-  --bg-active:      #ECE5FB;
-  --bg-input:       #F4F1FB;
-  --bg-glass:       rgba(255, 255, 255, 0.78);
+  --bg-base:        #1A1625;
+  --bg-canvas:      #1E1A2E;
+  --bg-surface:     #231E36;
+  --bg-elevated:    #2A2440;
+  --bg-overlay:     #312B4A;
+  --bg-hover:       #2E2845;
+  --bg-active:      #352F50;
+  --bg-input:       #1E1A2E;
+  --bg-glass:       rgba(35, 30, 54, 0.85);
 
   --border-subtle:  transparent;
   --border-default: transparent;
   --border-strong:  transparent;
   --border-violet:  transparent;
-  --divider:        rgba(36, 28, 60, 0.06);
+  --divider:        rgba(255, 255, 255, 0.06);
 
-  --text-primary:   #14101E;
-  --text-secondary: #5C5474;
-  --text-tertiary:  #9C95B0;
-  --text-violet:    #7C3AED;
-  --text-inverse:   #FFFFFF;
+  --text-primary:   #EDE8FF;
+  --text-secondary: #9B94C0;
+  --text-tertiary:  #5E577A;
+  --text-violet:    #C4B5FD;
+  --text-inverse:   #1A1625;
 
-  --violet:         #7C3AED;
-  --violet-600:     #6D28D9;
-  --violet-700:     #5B21B6;
-  --violet-dim:     rgba(124,58,237,0.10);
-  --violet-glow:    rgba(124,58,237,0.20);
-  --violet-soft:    rgba(124,58,237,0.05);
+  --violet:         #A78BFA;
+  --violet-600:     #8B5CF6;
+  --violet-700:     #7C3AED;
+  --violet-dim:     rgba(167,139,250,0.16);
+  --violet-glow:    rgba(167,139,250,0.28);
+  --violet-soft:    rgba(167,139,250,0.08);
 
-  --success:        #16A34A;
-  --success-bg:     rgba(22,163,74,0.10);
-  --warning:        #D97706;
-  --warning-bg:     rgba(217,119,6,0.10);
-  --destructive:    #DC2626;
-  --destructive-bg: rgba(220,38,38,0.10);
-  --info:           #2563EB;
-  --info-bg:        rgba(37,99,235,0.10);
+  --success:        #34D399;
+  --success-bg:     rgba(52,211,153,0.14);
+  --warning:        #FBBF24;
+  --warning-bg:     rgba(251,191,36,0.14);
+  --destructive:    #F87171;
+  --destructive-bg: rgba(248,113,113,0.14);
+  --info:           #60A5FA;
+  --info-bg:        rgba(96,165,250,0.14);
 
-  --shadow-sm:      0 1px 2px rgba(36,28,60,0.05), 0 2px 6px rgba(36,28,60,0.04);
-  --shadow-md:      0 2px 4px rgba(36,28,60,0.05), 0 12px 28px rgba(36,28,60,0.08);
-  --shadow-lg:      0 8px 24px rgba(36,28,60,0.08), 0 24px 56px rgba(36,28,60,0.12);
-  --shadow-card:    0 1px 2px rgba(36,28,60,0.04), 0 4px 16px rgba(36,28,60,0.06);
-  --shadow-violet:  0 4px 14px rgba(124,58,237,0.25), 0 12px 32px rgba(124,58,237,0.22);
-  --shadow-glow:    0 12px 40px rgba(124,58,237,0.14);
+  --shadow-sm:      0 1px 2px rgba(0,0,0,0.4), 0 2px 6px rgba(0,0,0,0.25);
+  --shadow-md:      0 2px 6px rgba(0,0,0,0.35), 0 12px 28px rgba(0,0,0,0.45);
+  --shadow-lg:      0 8px 24px rgba(0,0,0,0.45), 0 24px 56px rgba(0,0,0,0.55);
+  --shadow-card:    0 1px 0 rgba(255,255,255,0.04) inset, 0 1px 2px rgba(0,0,0,0.4), 0 8px 24px rgba(0,0,0,0.32);
+  --shadow-violet:  0 4px 14px rgba(167,139,250,0.32), 0 12px 32px rgba(167,139,250,0.28);
+  --shadow-glow:    0 0 0 1px rgba(255,255,255,0.03) inset, 0 12px 40px rgba(167,139,250,0.18);
 
-  --halo: radial-gradient(80% 60% at 50% 0%, rgba(124,58,237,0.06), transparent 70%);
+  --halo: radial-gradient(80% 60% at 50% 0%, rgba(167,139,250,0.12), transparent 70%);
   --bg-aurora:
-    radial-gradient(60% 50% at 12% 8%, rgba(124,58,237,0.07), transparent 60%),
-    radial-gradient(50% 40% at 92% 18%, rgba(37,99,235,0.04), transparent 65%),
-    radial-gradient(70% 60% at 78% 92%, rgba(180,155,251,0.06), transparent 65%);
+    radial-gradient(60% 50% at 12% 8%, rgba(167,139,250,0.12), transparent 60%),
+    radial-gradient(50% 40% at 92% 18%, rgba(96,165,250,0.07), transparent 65%),
+    radial-gradient(70% 60% at 78% 92%, rgba(196,181,253,0.08), transparent 65%);
 }
 
 /* ---------------- SHARED ---------------- */

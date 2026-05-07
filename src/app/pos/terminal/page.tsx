@@ -231,6 +231,16 @@ export default function TerminalPage() {
   const barcodeTs     = useRef<number>(0);
   const quickPanelRef = useRef<HTMLDivElement>(null);
 
+  /* ── Terminal always dark — override theme ───────────────────── */
+  useEffect(() => {
+    const prev = document.documentElement.getAttribute('data-theme')
+    document.documentElement.setAttribute('data-theme', 'dark')
+    return () => {
+      const stored = localStorage.getItem('aria-theme') || 'dark'
+      document.documentElement.setAttribute('data-theme', stored)
+    }
+  }, [])
+
   /* ── sessionStorage cart persistence ─────────────────────────── */
   useEffect(() => {
     try { const saved = sessionStorage.getItem(CART_SESSION_KEY); if (saved) setCart(JSON.parse(saved)); } catch { /* ignore */ }
