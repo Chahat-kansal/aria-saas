@@ -1,154 +1,161 @@
-'use client';
-import { POSAriaInsight } from '@/components/pos/POSAriaInsight';
-import { useState, useEffect } from 'react';
+'use client'
+import { useState, useEffect, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 
-const C = { bg: 'var(--bg-base)', card: 'var(--bg-surface)', border: 'transparent', text: 'var(--text-primary)', muted: 'var(--text-secondary)', dim: 'var(--text-tertiary)', violet: '#8B5CF6', green: '#22C55E', red: '#EF4444', amber: '#F59E0B' };
-const iStyle: React.CSSProperties = { background: 'var(--bg-base)', border: `1px solid ${C.border}`, borderRadius: 8, padding: '9px 12px', fontSize: 13, color: C.text, outline: 'none', width: '100%', fontFamily: 'inherit' };
-const lStyle: React.CSSProperties = { display: 'block', fontSize: 10, fontWeight: 700, color: C.muted, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.08em' };
+interface Customer { id: string; name: string; email: string | null; phone: string | null; loyalty_points: number; group_name?: string | null; created_at: string; }
+interface Group { id: string; name: string; }
 
-interface Customer {
-  id: string; name: string; email: string | null; phone: string | null;
-  loyalty_points: number; created_at: string;
+function Sparkline({ values }: { values: number[] }) {
+  if (!values || values.filter(v => v > 0).length < 2) {
+    return <svg width={120} height={40}><line x1="0" y1="20" x2="120" y2="20" stroke="#e0e0e0" strokeWidth={1} /></svg>
+  }
+  const max = Math.max(...values, 1)
+  const w = 120, h = 40
+  const pts = values.map((v, i) => `${(i / (values.length - 1)) * w},${h - (v / max) * (h - 4) - 2}`).join(' ')
+  return (
+    <svg width={w} height={h}>
+      <polyline points={pts} fill="none" stroke="#29b6f6" strokeWidth={1.5} strokeLinejoin="round" strokeLinecap="round" />
+    </svg>
+  )
 }
 
 export default function CustomersPage() {
-  const [customers, setCustomers] = useState<Customer[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
-  const [showAdd, setShowAdd] = useState(false);
-  const [form, setForm] = useState({ name: '', email: '', phone: '' });
-  const [saving, setSaving] = useState(false);
+  const router = useRouter()
+  const [customers, setCustomers] = useState<Customer[]>([])
+  const [groups, setGroups] = useState<Group[]>([])
+  const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState('')
+  const [selectedGroup, setSelectedGroup] = useState('')
+  const [performances, setPerformances] = useState<Record<string, number[]>>({})
+  const [businessId, setBusinessId] = useState('')
 
-  const load = () => {
-    fetch('/api/pos/customers')
-      .then(r => r.json())
-      .then(d => { setCustomers(d.customers || []); setLoading(false); });
-  };
-  useEffect(load, []);
+  const load = useCallback(async () => {
+    setLoading(true)
+    const [cRes, gRes] = await Promise.all([
+      fetch('/api/pos/customers').then(r => r.json()).catch(() => ({ customers: [] })),
+      fetch('/api/pos/customer-groups').then(r => r.json()).catch(() => ({ groups: [] })),
+    ])
+    setCustomers(cRes.customers || [])
+    setGroups(gRes.groups || [])
+    setLoading(false)
+  }, [])
 
-  const filtered = customers.filter(c =>
-    !search ||
-    c.name.toLowerCase().includes(search.toLowerCase()) ||
-    c.email?.toLowerCase().includes(search.toLowerCase()) ||
-    c.phone?.includes(search)
-  );
+  useEffect(() => {
+    try {
+      const bid = localStorage.getItem('aria_business_id') || localStorage.getItem('pos_business_id') || ''
+      setBusinessId(bid)
+    } catch {}
+    load()
+  }, [load])
 
-  const addCustomer = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSaving(true);
-    const r = await fetch('/api/pos/customers', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: form.name, email: form.email || null, phone: form.phone || null }),
-    });
-    const d = await r.json();
-    setSaving(false);
-    if (d.customer) {
-      setCustomers(cs => [d.customer, ...cs]);
-      setShowAdd(false);
-      setForm({ name: '', email: '', phone: '' });
-    }
-  };
+  useEffect(() => {
+    if (customers.length === 0 || !businessId) return
+    const ids = customers.map(c => c.id)
+    fetch('/api/pos/customers/performance', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ business_id: businessId, customer_ids: ids }),
+    }).then(r => r.json()).then(d => setPerformances(d)).catch(() => {})
+  }, [customers, businessId])
+
+  const filtered = customers.filter(c => {
+    if (search && !c.name.toLowerCase().includes(search.toLowerCase()) && !(c.email || '').toLowerCase().includes(search.toLowerCase()) && !(c.phone || '').includes(search)) return false
+    if (selectedGroup && c.group_name !== selectedGroup) return false
+    return true
+  })
+
+  const hdr: React.CSSProperties = { padding: '11px 14px', background: '#29b6f6', color: 'white', fontWeight: 700, fontSize: 13, textAlign: 'left', whiteSpace: 'nowrap' }
+  const cell: React.CSSProperties = { padding: '14px', fontSize: 13, verticalAlign: 'middle' }
 
   return (
-    <div style={{ minHeight: '100%', background: C.bg, color: C.text, fontFamily: "'Manrope',sans-serif" }}>
-      <POSAriaInsight page="pos/customers" />
-      <div style={{ padding: '20px 24px', maxWidth: 900, margin: '0 auto' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-          <div>
-            <h1 style={{ fontSize: 20, fontWeight: 700, color: C.text, marginBottom: 2 }}>Customers</h1>
-            <p style={{ fontSize: 12, color: C.muted }}>{customers.length} registered</p>
-          </div>
-          <button onClick={() => setShowAdd(s => !s)}
-            style={{ padding: '9px 20px', borderRadius: 9, border: 'none', background: C.violet, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
-            + Add customer
+    <div style={{ minHeight: '100%', background: 'var(--bg-base)', color: 'var(--text-primary)', fontFamily: "'Manrope',system-ui,sans-serif", padding: '20px 24px' }}>
+
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 10 }}>
+        <h1 style={{ fontSize: 26, fontWeight: 700, margin: 0 }}>Customers</h1>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <button onClick={() => router.push('/pos/customers/new')}
+            style={{ padding: '8px 18px', borderRadius: 6, border: 'none', background: '#2196f3', color: 'white', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 6 }}>
+            👤 Add Customer
           </button>
-        </div>
-
-        {showAdd && (
-          <form onSubmit={addCustomer}
-            style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '20px 22px', marginBottom: 16 }}>
-            <h3 style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 14 }}>New customer</h3>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12, marginBottom: 14 }}>
-              <div>
-                <label style={lStyle}>Name *</label>
-                <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} required
-                  style={iStyle} placeholder="Full name" />
-              </div>
-              <div>
-                <label style={lStyle}>Email</label>
-                <input value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} type="email"
-                  style={iStyle} placeholder="Optional" />
-              </div>
-              <div>
-                <label style={lStyle}>Phone</label>
-                <input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
-                  style={iStyle} placeholder="Optional" />
-              </div>
-            </div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button type="submit" disabled={saving}
-                style={{ padding: '8px 20px', borderRadius: 8, border: 'none', background: C.violet, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', opacity: saving ? 0.5 : 1 }}>
-                {saving ? 'Saving…' : 'Add customer'}
-              </button>
-              <button type="button" onClick={() => setShowAdd(false)}
-                style={{ padding: '8px 16px', borderRadius: 8, border: `1px solid ${C.border}`, background: 'transparent', color: C.muted, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>
-                Cancel
-              </button>
-            </div>
-          </form>
-        )}
-
-        <div style={{ marginBottom: 14 }}>
-          <input value={search} onChange={e => setSearch(e.target.value)}
-            placeholder="Search by name, email, or phone…"
-            style={{ ...iStyle, maxWidth: 320 }} />
-        </div>
-
-        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, overflow: 'hidden' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ background: 'rgba(255,255,255,0.03)', borderBottom: `1px solid ${C.border}` }}>
-                {['Customer', 'Email', 'Phone', 'Loyalty pts', 'Since'].map(h => (
-                  <th key={h} style={{ textAlign: 'left', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: C.dim, padding: '10px 14px' }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr><td colSpan={5} style={{ textAlign: 'center', padding: '48px 14px', fontSize: 13, color: C.dim }}>Loading…</td></tr>
-              ) : !filtered.length ? (
-                <tr><td colSpan={5} style={{ textAlign: 'center', padding: '48px 14px', fontSize: 13, color: C.dim }}>
-                  {!customers.length ? 'No customers yet' : 'No customers match'}
-                </td></tr>
-              ) : (
-                filtered.map((c, i) => (
-                  <tr key={c.id} style={{ borderBottom: i < filtered.length - 1 ? `1px solid ${C.border}` : 'none' }}>
-                    <td style={{ padding: '10px 14px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <div style={{ width: 30, height: 30, borderRadius: '50%', background: 'rgba(139,92,246,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: C.violet, flexShrink: 0 }}>
-                          {c.name[0].toUpperCase()}
-                        </div>
-                        <span style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{c.name}</span>
-                      </div>
-                    </td>
-                    <td style={{ padding: '10px 14px', fontSize: 12, color: C.muted }}>{c.email || '—'}</td>
-                    <td style={{ padding: '10px 14px', fontSize: 12, color: C.muted }}>{c.phone || '—'}</td>
-                    <td style={{ padding: '10px 14px' }}>
-                      <span style={{ fontSize: 13, fontWeight: 600, color: c.loyalty_points > 0 ? C.violet : C.dim }}>
-                        {c.loyalty_points}
-                      </span>
-                    </td>
-                    <td style={{ padding: '10px 14px', fontSize: 11, color: C.dim }}>
-                      {new Date(c.created_at).toLocaleDateString('en-AU')}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+          {[['↑ Export', '#fff'], ['↓ Import', '#fff'], ['⊗ Merge', '#fff']].map(([label]) => (
+            <button key={label} style={{ padding: '8px 14px', borderRadius: 6, border: '1px solid #ccc', background: 'white', color: '#333', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>
+              {label}
+            </button>
+          ))}
+          <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)', marginLeft: 4 }}>{filtered.length} Results</span>
         </div>
       </div>
+
+      {/* Search */}
+      <div style={{ marginBottom: 14 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 5 }}>Search</div>
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search Customers..."
+          style={{ width: '100%', padding: '10px 14px', fontSize: 14, background: 'white', color: '#111', border: '1px solid #ddd', borderRadius: 4, outline: 'none', boxSizing: 'border-box' }} />
+      </div>
+
+      {/* Filters */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 18 }}>
+        <div>
+          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 5 }}>Customer Group</div>
+          <select value={selectedGroup} onChange={e => setSelectedGroup(e.target.value)}
+            style={{ width: '100%', padding: '10px 14px', fontSize: 14, background: 'white', color: selectedGroup ? '#111' : '#666', border: '1px solid #ddd', borderRadius: 4, outline: 'none', cursor: 'pointer' }}>
+            <option value="">Select...</option>
+            {groups.map(g => <option key={g.id} value={g.name}>{g.name}</option>)}
+          </select>
+        </div>
+        <div>
+          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 5 }}>Price List</div>
+          <select style={{ width: '100%', padding: '10px 14px', fontSize: 14, background: 'white', color: '#666', border: '1px solid #ddd', borderRadius: 4, outline: 'none', cursor: 'pointer' }}>
+            <option value="">Select...</option>
+          </select>
+        </div>
+      </div>
+
+      {/* Table */}
+      <div style={{ background: 'white', borderRadius: 6, overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr>
+              <th style={hdr}>Customer</th>
+              <th style={hdr}>Group</th>
+              <th style={hdr}>Contact</th>
+              <th style={hdr}>Performance</th>
+              <th style={hdr}>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr><td colSpan={5} style={{ padding: 32, textAlign: 'center', color: '#999', fontSize: 13 }}>Loading…</td></tr>
+            ) : filtered.length === 0 ? (
+              <tr><td colSpan={5} style={{ padding: 48, textAlign: 'center', color: '#999', fontSize: 13 }}>
+                No customers found.{' '}
+                <span onClick={() => router.push('/pos/customers/new')} style={{ color: '#2196f3', cursor: 'pointer' }}>Add one →</span>
+              </td></tr>
+            ) : filtered.map((c, i) => (
+              <tr key={c.id} style={{ background: i % 2 === 0 ? 'white' : '#f9f9f9' }}
+                onMouseEnter={e => (e.currentTarget.style.background = '#e3f2fd')}
+                onMouseLeave={e => (e.currentTarget.style.background = i % 2 === 0 ? 'white' : '#f9f9f9')}>
+                <td style={cell}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: '#111' }}>{c.name}</div>
+                  {c.phone && <div style={{ fontSize: 12, color: '#666', marginTop: 2 }}>{c.phone}</div>}
+                </td>
+                <td style={{ ...cell, color: '#333' }}>{c.group_name || '—'}</td>
+                <td style={{ ...cell, color: '#666' }}>{c.phone || c.email || '—'}</td>
+                <td style={{ ...cell, padding: '8px 14px' }}>
+                  <Sparkline values={performances[c.id] || []} />
+                </td>
+                <td style={cell}>
+                  <div style={{ display: 'flex', gap: 14 }}>
+                    <span onClick={() => router.push(`/pos/customers/${c.id}`)} style={{ color: '#2196f3', cursor: 'pointer', fontSize: 13, fontWeight: 500 }}>👁 View</span>
+                    <span onClick={() => router.push(`/pos/customers/${c.id}/edit`)} style={{ color: '#4caf50', cursor: 'pointer', fontSize: 13, fontWeight: 500 }}>✏️ Edit</span>
+                    <span onClick={async () => { if (!confirm('Delete this customer?')) return; await fetch(`/api/pos/customers?id=${c.id}`, { method: 'DELETE' }); load() }} style={{ color: '#f44336', cursor: 'pointer', fontSize: 13, fontWeight: 500 }}>🗑 Delete</span>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
-  );
+  )
 }

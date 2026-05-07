@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
 interface Category { id: string; name: string; color: string; }
 interface Product {
@@ -26,6 +27,7 @@ const EMPTY_FORM = {
 interface CSVRow { name: string; sku: string; barcode: string; price: string; cost_price: string; category: string; stock: string; active: string; }
 
 export default function ProductsPage() {
+  const router = useRouter();
   const [products, setProducts]   = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading]     = useState(true);
@@ -201,7 +203,7 @@ export default function ProductsPage() {
               style={{ padding: '8px 16px', borderRadius: 9, border: `1px solid ${C.border}`, background: 'transparent', color: C.muted, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
               Export CSV
             </button>
-            <button onClick={openAdd}
+            <button onClick={() => router.push('/pos/products/new')}
               style={{ padding: '9px 20px', borderRadius: 9, border: 'none', background: C.violet, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
               + Add Product
             </button>

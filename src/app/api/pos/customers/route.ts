@@ -69,12 +69,12 @@ export async function POST(req: Request) {
   const bid = await getBusinessId(supabase, user.id);
   if (!bid) return NextResponse.json({ error: 'No business found' }, { status: 400 });
 
-  const { name, email, phone } = await req.json();
+  const { name, email, phone, group_id, group_name, account_number } = await req.json();
   if (!name) return NextResponse.json({ error: 'name is required' }, { status: 400 });
 
   const { data: customer, error } = await supabase
     .from('pos_customers')
-    .insert({ business_id: bid, name, email: email || null, phone: phone || null, loyalty_points: 0 })
+    .insert({ business_id: bid, name, email: email || null, phone: phone || null, loyalty_points: 0, group_id: group_id || null, group_name: group_name || null, account_number: account_number || null })
     .select()
     .single();
 
