@@ -853,7 +853,7 @@ export default function TerminalPage() {
   const loyaltyPoints = Math.floor(total);
 
   return (
-    <div className="flex flex-col overflow-hidden" style={{ height: '100%', background: '#030510', position: 'relative' }}>
+    <div className="flex flex-col overflow-hidden" style={{ height: '100%', background: 'var(--bg-base)', position: 'relative' }}>
       {/* Full-screen animated dot grid */}
       <AnimatedBg />
       <CursorGlow />
@@ -861,14 +861,14 @@ export default function TerminalPage() {
 
       {/* ══ CHECKOUT OVERLAY ════════════════════════════════════════ */}
       {terminalView === 'checkout' && (
-        <div style={{ position: 'absolute', inset: 0, zIndex: 50, display: 'flex', fontFamily: "'Manrope',sans-serif", background: 'rgba(3,5,16,0.92)', backdropFilter: 'blur(20px)' }}>
+        <div style={{ position: 'absolute', inset: 0, zIndex: 50, display: 'flex', fontFamily: "'Manrope',sans-serif", background: 'var(--bg-base)', backdropFilter: 'blur(20px)' }}>
           {/* Left: Summary */}
-          <div style={{ width: 300, display: 'flex', flexDirection: 'column', background: 'rgba(10,14,30,0.9)', borderRight: '1px solid rgba(0,229,255,0.07)' }}>
+          <div style={{ width: 300, display: 'flex', flexDirection: 'column', background: 'var(--bg-surface)', borderRight: '1px solid rgba(0,229,255,0.07)' }}>
             <div style={{ padding: '14px 18px', borderBottom: '1px solid rgba(0,229,255,0.07)', display: 'flex', alignItems: 'center', gap: 10 }}>
               <button onClick={() => setTerminalView('pos')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, fontFamily: 'inherit', padding: 0 }}>
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg> Back
               </button>
-              <span style={{ fontSize: 13, fontWeight: 700, color: 'rgba(220,240,255,0.9)', flex: 1, textAlign: 'right' }}>Summary</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', flex: 1, textAlign: 'right' }}>Summary</span>
             </div>
             <div style={{ flex: 1, overflowY: 'auto', padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 6 }}>
               {cart.map(item => {
@@ -880,17 +880,17 @@ export default function TerminalPage() {
                   <div key={cartKey(item)} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 8, background: 'rgba(0,229,255,0.03)' }}>
                     <div style={{ width: 28, height: 28, borderRadius: 7, background: `linear-gradient(135deg,${m.a}33,${m.b}66)`, border: `1px solid ${m.a}44`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 800, color: m.a, fontFamily: "'JetBrains Mono',monospace", flexShrink: 0 }}>{initials}</div>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 11, fontWeight: 600, color: 'rgba(220,240,255,0.9)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.label ?? item.product.name}</div>
-                      <div style={{ fontSize: 9, color: 'rgba(130,160,200,0.5)', fontFamily: "'JetBrains Mono',monospace" }}>×{item.qty}</div>
+                      <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.label ?? item.product.name}</div>
+                      <div style={{ fontSize: 9, color: 'var(--text-tertiary)', fontFamily: "'JetBrains Mono',monospace" }}>×{item.qty}</div>
                     </div>
-                    <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 12, fontWeight: 700, color: 'rgba(220,240,255,0.85)' }}>A${(item.unitPrice * item.qty).toFixed(2)}</span>
+                    <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>A${(item.unitPrice * item.qty).toFixed(2)}</span>
                   </div>
                 );
               })}
             </div>
             <div style={{ padding: '12px 18px', borderTop: '1px solid rgba(0,229,255,0.07)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                <span style={{ fontSize: 10, color: 'rgba(130,160,200,0.5)' }}>Loyalty earned</span>
+                <span style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>Loyalty earned</span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'rgba(0,229,255,0.07)', border: '1px solid rgba(0,229,255,0.2)', borderRadius: 20, padding: '3px 10px' }}>
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#00E5FF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
                   <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, fontWeight: 800, color: '#00E5FF' }}>{loyaltyPoints}</span>
@@ -898,8 +898,8 @@ export default function TerminalPage() {
                 </div>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                <span style={{ fontSize: 13, fontWeight: 700, color: 'rgba(220,240,255,0.9)' }}>Total</span>
-                <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 24, fontWeight: 900, color: 'rgba(220,240,255,0.95)', letterSpacing: '-0.04em' }}>A${roundedTotal.toFixed(2)}</span>
+                <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>Total</span>
+                <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 24, fontWeight: 900, color: 'var(--text-primary)', letterSpacing: '-0.04em' }}>A${roundedTotal.toFixed(2)}</span>
               </div>
             </div>
           </div>
@@ -918,7 +918,7 @@ export default function TerminalPage() {
                 <button key={m.id} onClick={() => setPayMethod(m.id)}
                   style={{ flex: 1, height: 60, borderRadius: 12, border: `1.5px solid ${payMethod === m.id ? m.color + '55' : 'rgba(0,229,255,0.08)'}`, background: payMethod === m.id ? `${m.color}12` : 'rgba(0,229,255,0.02)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, cursor: 'pointer', transition: 'all 200ms', transform: payMethod === m.id ? 'translateY(-2px)' : 'none', boxShadow: payMethod === m.id ? `0 6px 20px ${m.color}33` : 'none' }}>
                   <span style={{ fontSize: 18 }}>{m.icon}</span>
-                  <span style={{ fontSize: 10, fontWeight: 700, color: payMethod === m.id ? m.color : 'rgba(130,160,200,0.5)', fontFamily: 'inherit' }}>{m.label}</span>
+                  <span style={{ fontSize: 10, fontWeight: 700, color: payMethod === m.id ? m.color : 'var(--text-tertiary)', fontFamily: 'inherit' }}>{m.label}</span>
                 </button>
               ))}
             </div>
@@ -941,7 +941,7 @@ export default function TerminalPage() {
                           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#00E5FF" strokeWidth="1.5" strokeLinecap="round"><path d="M6 8.32a7.43 7.43 0 0 0 0 7.36"/><path d="M9.46 6.21a11.76 11.76 0 0 0 0 11.58"/><path d="M12.91 4.1a15.91 15.91 0 0 1 0 15.8"/></svg>
                         </div>
                       </div>
-                      <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 28, fontWeight: 800, color: 'rgba(220,240,255,0.95)', letterSpacing: '-0.04em' }}>A${roundedTotal.toFixed(2)}</div>
+                      <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 28, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.04em' }}>A${roundedTotal.toFixed(2)}</div>
                       <div style={{ fontSize: 10, fontWeight: 700, color: '#00E5FF', letterSpacing: '0.08em' }}>TAP TO PAY</div>
                       {/* Indicator dots */}
                       <div style={{ display: 'flex', gap: 5 }}>
@@ -949,7 +949,7 @@ export default function TerminalPage() {
                       </div>
                     </div>
                   </div>
-                  <div style={{ fontSize: 12, color: 'rgba(130,160,200,0.5)', textAlign: 'center' }}>Tap, insert or swipe card</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-tertiary)', textAlign: 'center' }}>Tap, insert or swipe card</div>
                   {/* Confirm Payment */}
                   <button onClick={() => { processSale(); }} disabled={processing}
                     style={{ height: 52, padding: '0 36px', borderRadius: 14, border: 'none', background: 'linear-gradient(135deg,#00E5FF,#00BFCC,#7B2FFF)', color: '#000', fontFamily: 'inherit', fontSize: 14, fontWeight: 900, cursor: processing ? 'not-allowed' : 'pointer', boxShadow: '0 5px 0 rgba(0,150,200,0.5), 0 10px 30px rgba(0,229,255,0.3)', transition: 'all 200ms', opacity: processing ? 0.6 : 1, display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -962,7 +962,7 @@ export default function TerminalPage() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10, width: 280 }}>
                   <div style={{ display: 'flex', gap: 6 }}>
                     {[...new Set([roundedTotal, Math.ceil(roundedTotal/5)*5, Math.ceil(roundedTotal/10)*10, 50, 100].filter(a=>a>=roundedTotal))].slice(0,4).map(a => (
-                      <button key={a} onClick={() => setCashTendered(a.toFixed(2))} style={{ flex: 1, height: 32, borderRadius: 8, border: '1px solid rgba(0,229,255,0.12)', background: 'rgba(0,229,255,0.04)', color: 'rgba(220,240,255,0.85)', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: "'JetBrains Mono',monospace" }}>A${a.toFixed(0)}</button>
+                      <button key={a} onClick={() => setCashTendered(a.toFixed(2))} style={{ flex: 1, height: 32, borderRadius: 8, border: '1px solid rgba(0,229,255,0.12)', background: 'rgba(0,229,255,0.04)', color: 'var(--text-primary)', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: "'JetBrains Mono',monospace" }}>A${a.toFixed(0)}</button>
                     ))}
                   </div>
                   <div style={{ background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(0,229,255,0.15)', borderRadius: 12, padding: '10px 14px', textAlign: 'right' }}>
@@ -971,7 +971,7 @@ export default function TerminalPage() {
                       <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 13, color: 'var(--text-tertiary)' }}>A$</span>
                       <input type="number" value={cashTendered} onChange={e => setCashTendered(e.target.value)}
                         placeholder="0.00" autoFocus
-                        style={{ background: 'none', border: 'none', outline: 'none', fontFamily: "'JetBrains Mono',monospace", fontSize: 32, fontWeight: 800, color: 'rgba(220,240,255,0.95)', width: '100%', textAlign: 'right' }} />
+                        style={{ background: 'none', border: 'none', outline: 'none', fontFamily: "'JetBrains Mono',monospace", fontSize: 32, fontWeight: 800, color: 'var(--text-primary)', width: '100%', textAlign: 'right' }} />
                     </div>
                   </div>
                   {tendered >= roundedTotal && (
@@ -992,11 +992,11 @@ export default function TerminalPage() {
                   <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Cash portion:</p>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(0,229,255,0.15)', borderRadius: 12, padding: '8px 14px' }}>
                     <span style={{ fontFamily: "'JetBrains Mono',monospace", color: 'var(--text-tertiary)' }}>A$</span>
-                    <input type="number" value={splitCash} onChange={e => setSplitCash(e.target.value)} placeholder="0.00" autoFocus style={{ flex: 1, background: 'none', border: 'none', outline: 'none', fontFamily: "'JetBrains Mono',monospace", fontSize: 24, fontWeight: 800, color: 'rgba(220,240,255,0.95)' }} />
+                    <input type="number" value={splitCash} onChange={e => setSplitCash(e.target.value)} placeholder="0.00" autoFocus style={{ flex: 1, background: 'none', border: 'none', outline: 'none', fontFamily: "'JetBrains Mono',monospace", fontSize: 24, fontWeight: 800, color: 'var(--text-primary)' }} />
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', background: 'rgba(0,229,255,0.04)', border: '1px solid rgba(0,229,255,0.1)', borderRadius: 10 }}>
                     <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Card remainder</span>
-                    <span style={{ fontFamily: "'JetBrains Mono',monospace", fontWeight: 700, color: 'rgba(220,240,255,0.85)' }}>A${splitCardAmt.toFixed(2)}</span>
+                    <span style={{ fontFamily: "'JetBrains Mono',monospace", fontWeight: 700, color: 'var(--text-primary)' }}>A${splitCardAmt.toFixed(2)}</span>
                   </div>
                   <button onClick={() => processSale()} disabled={processing}
                     style={{ height: 50, borderRadius: 12, border: 'none', background: 'linear-gradient(135deg,#00E5FF,#7B2FFF)', color: '#000', fontFamily: 'inherit', fontSize: 14, fontWeight: 900, cursor: processing ? 'not-allowed' : 'pointer', opacity: processing ? 0.4 : 1, boxShadow: '0 4px 0 rgba(0,150,200,0.4), 0 8px 20px rgba(0,229,255,0.25)' }}>
@@ -1015,7 +1015,7 @@ export default function TerminalPage() {
                         onChange={e => { setGiftCardCode(e.target.value.toUpperCase()); setGiftCardBalance(null); setGiftCardError(''); }}
                         onKeyDown={e => e.key === 'Enter' && checkGiftCard()}
                         placeholder="XXXX-XXXX"
-                        style={{ flex:1, background:'rgba(10,9,16,0.8)', border:'1px solid rgba(0,229,255,0.15)', borderRadius:10, padding:'10px 14px', fontSize:16, fontFamily:"'JetBrains Mono',monospace", color:'rgba(220,240,255,0.95)', outline:'none', letterSpacing:'0.1em' }}
+                        style={{ flex:1, background:'var(--bg-surface)', border:'1px solid rgba(0,229,255,0.15)', borderRadius:10, padding:'10px 14px', fontSize:16, fontFamily:"'JetBrains Mono',monospace", color:'var(--text-primary)', outline:'none', letterSpacing:'0.1em' }}
                       />
                       <button onClick={checkGiftCard} disabled={!giftCardCode.trim() || giftCardChecking}
                         style={{ padding:'10px 16px', borderRadius:10, border:'none', background:'rgba(139,92,246,0.2)', color:'#8B5CF6', fontSize:13, fontWeight:700, cursor:'pointer', fontFamily:'inherit', opacity:!giftCardCode.trim()?0.4:1 }}>
@@ -1056,7 +1056,7 @@ export default function TerminalPage() {
                       value={directDepositRef}
                       onChange={e => setDirectDepositRef(e.target.value)}
                       placeholder="e.g. REF-20260506"
-                      style={{ width:'100%', background:'rgba(10,9,16,0.8)', border:'1px solid rgba(0,229,255,0.15)', borderRadius:10, padding:'10px 14px', fontSize:14, color:'rgba(220,240,255,0.95)', outline:'none', fontFamily:'inherit', boxSizing:'border-box' }}
+                      style={{ width:'100%', background:'var(--bg-surface)', border:'1px solid rgba(0,229,255,0.15)', borderRadius:10, padding:'10px 14px', fontSize:14, color:'var(--text-primary)', outline:'none', fontFamily:'inherit', boxSizing:'border-box' }}
                     />
                   </div>
                   <div>
@@ -1065,7 +1065,7 @@ export default function TerminalPage() {
                       value={directDepositName}
                       onChange={e => setDirectDepositName(e.target.value)}
                       placeholder="e.g. John Smith"
-                      style={{ width:'100%', background:'rgba(10,9,16,0.8)', border:'1px solid rgba(0,229,255,0.15)', borderRadius:10, padding:'10px 14px', fontSize:14, color:'rgba(220,240,255,0.95)', outline:'none', fontFamily:'inherit', boxSizing:'border-box' }}
+                      style={{ width:'100%', background:'var(--bg-surface)', border:'1px solid rgba(0,229,255,0.15)', borderRadius:10, padding:'10px 14px', fontSize:14, color:'var(--text-primary)', outline:'none', fontFamily:'inherit', boxSizing:'border-box' }}
                     />
                   </div>
                   <button
@@ -1097,7 +1097,7 @@ export default function TerminalPage() {
             </div>
             {/* Title */}
             <div style={{ textAlign: 'center', animation: 'fade-up 0.4s 0.1s cubic-bezier(0.16,1,0.3,1) both' }}>
-              <div style={{ fontSize: 38, fontWeight: 900, color: 'rgba(220,240,255,0.95)', letterSpacing: '-0.04em', lineHeight: 1 }}>Payment approved</div>
+              <div style={{ fontSize: 38, fontWeight: 900, color: 'var(--text-primary)', letterSpacing: '-0.04em', lineHeight: 1 }}>Payment approved</div>
               <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 6 }}>
                 via {showReceipt.payment_method ?? 'card'} · R{(showReceipt.sale_number ?? String(showReceipt.id ?? '')).slice(-5).toUpperCase() || Math.floor(Math.random()*90000+10000)}
               </div>
@@ -1110,12 +1110,12 @@ export default function TerminalPage() {
               </div>
               <div style={{ height: 1, background: 'rgba(0,229,255,0.07)', margin: '10px 0' }} />
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                <span style={{ fontSize: 14, fontWeight: 700, color: 'rgba(220,240,255,0.9)' }}>Charged</span>
+                <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>Charged</span>
                 <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 30, fontWeight: 900, color: '#22C55E', letterSpacing: '-0.05em' }}>A${showReceipt.total_amount?.toFixed(2) ?? roundedTotal.toFixed(2)}</span>
               </div>
               <div style={{ height: 1, background: 'rgba(0,229,255,0.07)', margin: '10px 0' }} />
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: 11, color: 'rgba(130,160,200,0.5)' }}>Points earned</span>
+                <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>Points earned</span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'rgba(0,229,255,0.07)', border: '1px solid rgba(0,229,255,0.2)', borderRadius: 20, padding: '3px 10px' }}>
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#00E5FF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
                   <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, fontWeight: 800, color: '#00E5FF' }}>{loyaltyPoints}</span>
@@ -1221,7 +1221,7 @@ export default function TerminalPage() {
       )}
 
       {/* ── TOP BAR ───────────────────────────────────────────────── */}
-      <div className="flex-shrink-0 flex items-center px-4 gap-3" style={{ height: 46, background: 'rgba(3,5,16,0.92)', borderBottom: '1px solid rgba(0,229,255,0.06)', backdropFilter: 'blur(16px)', position: 'relative', zIndex: 2 }}>
+      <div className="flex-shrink-0 flex items-center px-4 gap-3" style={{ height: 46, background: 'var(--bg-base)', borderBottom: '1px solid rgba(0,229,255,0.06)', backdropFilter: 'blur(16px)', position: 'relative', zIndex: 2 }}>
         <svg width="20" height="20" viewBox="0 0 32 32" fill="none" style={{ flexShrink: 0 }}>
           <rect x="16" y="2" width="19" height="19" rx="3" transform="rotate(45 16 2)" stroke="#00E5FF" strokeWidth="1.8" fill="none"/>
           <circle cx="16" cy="16" r="3" fill="#00E5FF"/>
@@ -1230,7 +1230,7 @@ export default function TerminalPage() {
           <circle cx="16" cy="27.5" r="1.8" fill="#00E5FF" opacity="0.4"/>
           <circle cx="4.5" cy="16" r="1.8" fill="#00E5FF" opacity="0.4"/>
         </svg>
-        <span style={{ fontSize: 13, fontWeight: 700, color: 'rgba(220,240,255,0.9)', letterSpacing: '-0.02em' }}>Point of Sale</span>
+        <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>Point of Sale</span>
         <span style={{ fontSize: 11, color: 'var(--text-tertiary)', fontWeight: 400 }}>{businessName}</span>
         <div style={{ flex: 1 }} />
         <div style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'rgba(34,197,94,0.07)', border: '1px solid rgba(34,197,94,0.15)', borderRadius: 20, padding: '3px 9px' }}>
@@ -1338,7 +1338,7 @@ export default function TerminalPage() {
                 onChange={e => setSearch(e.target.value)}
                 placeholder="Search or scan barcode…"
                 className="w-full pl-9 pr-8 py-2.5 rounded-[10px] text-sm outline-none"
-                style={{ background: 'rgba(0,229,255,0.04)', border: '1px solid rgba(0,229,255,0.08)', color: 'rgba(220,240,255,0.9)', fontFamily: "'Manrope', sans-serif" }}
+                style={{ background: 'rgba(0,229,255,0.04)', border: '1px solid rgba(0,229,255,0.08)', color: 'var(--text-primary)', fontFamily: "'Manrope', sans-serif" }}
               />
               {search && (
                 <button onClick={() => setSearch('')}
@@ -1508,12 +1508,12 @@ export default function TerminalPage() {
                         </div>
 
                         {/* Name */}
-                        <div style={{ fontSize: 12, fontWeight: 700, color: 'rgba(220,240,255,0.93)', lineHeight: 1.3, marginBottom: 6, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const, overflow: 'hidden' }}>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.3, marginBottom: 6, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const, overflow: 'hidden' }}>
                           {p.name}
                         </div>
 
                         {/* Price */}
-                        <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 15, fontWeight: 700, color: 'rgba(220,240,255,0.9)' }}>
+                        <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>
                           A${p.price.toFixed(2)}
                         </div>
 
@@ -1691,7 +1691,7 @@ export default function TerminalPage() {
                     const active = d === 0 ? curDisc === 0 : curDisc === d;
                     return (
                       <button key={d} onClick={() => setCart(c => c.map(i => ({ ...i, discount_percent: d })))}
-                        style={{ flex: 1, height: 26, borderRadius: 7, border: `1px solid ${active ? 'rgba(0,229,255,0.35)' : 'rgba(0,229,255,0.1)'}`, background: active ? 'rgba(0,229,255,0.12)' : 'rgba(0,229,255,0.03)', color: active ? '#00E5FF' : 'rgba(130,160,200,0.45)', fontSize: 10, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', transition: 'all 150ms' }}>
+                        style={{ flex: 1, height: 26, borderRadius: 7, border: `1px solid ${active ? 'rgba(0,229,255,0.35)' : 'rgba(0,229,255,0.1)'}`, background: active ? 'rgba(0,229,255,0.12)' : 'rgba(0,229,255,0.03)', color: active ? '#00E5FF' : 'var(--text-tertiary)', fontSize: 10, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', transition: 'all 150ms' }}>
                         {d === 0 ? '—' : `${d}%`}
                       </button>
                     );
@@ -1722,7 +1722,7 @@ export default function TerminalPage() {
                     <div style={{ height: 1, background: 'rgba(0,229,255,0.06)', marginBottom: 8 }} />
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
                       <span style={{ fontSize: 11, fontWeight: 700, color: 'rgba(220,240,255,0.7)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Total</span>
-                      <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 26, fontWeight: 900, color: 'rgba(220,240,255,0.95)', letterSpacing: '-0.04em' }}>A${roundedTotal.toFixed(2)}</span>
+                      <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 26, fontWeight: 900, color: 'var(--text-primary)', letterSpacing: '-0.04em' }}>A${roundedTotal.toFixed(2)}</span>
                     </div>
                   </div>
                 </div>
@@ -1739,7 +1739,7 @@ export default function TerminalPage() {
                   <div style={{ display: 'flex', gap: 8 }}>
                     {cart.length > 0 && (
                       <button onClick={parkSale}
-                        style={{ height: 56, width: 52, borderRadius: 12, border: '1px solid rgba(0,229,255,0.1)', background: 'rgba(0,229,255,0.04)', color: 'rgba(130,160,200,0.5)', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3, flexShrink: 0, fontFamily: 'inherit' }}>
+                        style={{ height: 56, width: 52, borderRadius: 12, border: '1px solid rgba(0,229,255,0.1)', background: 'rgba(0,229,255,0.04)', color: 'var(--text-tertiary)', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3, flexShrink: 0, fontFamily: 'inherit' }}>
                         <span>⏸</span>
                         <span style={{ fontSize: 9, fontWeight: 600 }}>Hold</span>
                       </button>
@@ -1908,7 +1908,7 @@ export default function TerminalPage() {
                 {parkedSales.slice(0, 3).map(p => (
                   <button key={p.id} onClick={() => restoreParked(p)}
                     className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-left transition-colors"
-                    style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid #1C1928' }}>
+                    style={{ background: 'var(--bg-input)', border: '1px solid #1C1928' }}>
                     <span className="text-xs truncate" style={{ color: 'var(--text-secondary)' }}>{p.label || 'Sale'} · {Array.isArray(p.items) ? p.items.length : 0} items</span>
                     <span className="text-xs font-medium flex-shrink-0 ml-2" style={{ fontFamily: "'JetBrains Mono',monospace", color: 'var(--text-primary)' }}>A${(p.total || 0).toFixed(2)}</span>
                   </button>
@@ -2046,7 +2046,7 @@ export default function TerminalPage() {
             </div>
             <div className="px-6 pb-5 flex gap-2">
               <button onClick={() => setVariantModal(null)}
-                className="flex-1 py-2.5 rounded-xl text-sm" style={{ border: '1px solid #2A2540', color: 'var(--text-secondary)', background: 'rgba(255,255,255,0.02)' }}>Cancel</button>
+                className="flex-1 py-2.5 rounded-xl text-sm" style={{ border: '1px solid #2A2540', color: 'var(--text-secondary)', background: 'var(--bg-input)' }}>Cancel</button>
               <button onClick={confirmVariantSelection}
                 className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold" style={{ background: '#8B5CF6' }}>
                 Add to cart
@@ -2075,7 +2075,7 @@ export default function TerminalPage() {
             </div>
             <div className="px-6 pb-5 flex gap-2">
               <button onClick={() => { setShowRegisterModal(false); setRegisterError(null); }}
-                className="flex-1 py-2.5 rounded-xl text-sm" style={{ border: '1px solid #2A2540', color: 'var(--text-secondary)', background: 'rgba(255,255,255,0.02)' }}>Cancel</button>
+                className="flex-1 py-2.5 rounded-xl text-sm" style={{ border: '1px solid #2A2540', color: 'var(--text-secondary)', background: 'var(--bg-input)' }}>Cancel</button>
               <button onClick={openRegister} disabled={openingRegister}
                 className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-50 flex items-center justify-center gap-2" style={{ background: '#8B5CF6' }}>
                 {openingRegister ? <><Spinner /> Opening…</> : 'Open Register'}
@@ -2106,7 +2106,7 @@ export default function TerminalPage() {
             </div>
             <div className="px-6 pb-5 flex gap-2">
               <button onClick={() => { setShowCloseModal(false); setRegisterError(null); }}
-                className="flex-1 py-2.5 rounded-xl text-sm" style={{ border: '1px solid #2A2540', color: 'var(--text-secondary)', background: 'rgba(255,255,255,0.02)' }}>Cancel</button>
+                className="flex-1 py-2.5 rounded-xl text-sm" style={{ border: '1px solid #2A2540', color: 'var(--text-secondary)', background: 'var(--bg-input)' }}>Cancel</button>
               <button onClick={closeRegister} disabled={closingRegister}
                 className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-50 flex items-center justify-center gap-2" style={{ background: '#EF4444' }}>
                 {closingRegister ? <><Spinner /> Closing…</> : 'Close Register'}
@@ -2129,7 +2129,7 @@ export default function TerminalPage() {
                 <p className="text-sm text-gray-400 text-center py-4">No parked sales. Press F8 to park.</p>
               ) : parkedSales.map(p => (
                 <button key={p.id} onClick={() => restoreParked(p)}
-                  className="w-full flex items-center gap-3 p-4 rounded-xl transition-all text-left" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid #2A2540' }}>
+                  className="w-full flex items-center gap-3 p-4 rounded-xl transition-all text-left" style={{ background: 'var(--bg-input)', border: '1px solid #2A2540' }}>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{p.label || 'Parked Sale'}</p>
                     <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-tertiary)' }}>
@@ -2170,7 +2170,7 @@ export default function TerminalPage() {
             </div>
             <div className="px-6 pb-5 flex gap-2">
               <button onClick={() => { setShowMissedModal(false); setMissedName(''); setMissedQty('1'); setMissedNote(''); }}
-                className="flex-1 py-2.5 rounded-xl text-sm" style={{ border: '1px solid #2A2540', color: 'var(--text-secondary)', background: 'rgba(255,255,255,0.02)' }}>Cancel</button>
+                className="flex-1 py-2.5 rounded-xl text-sm" style={{ border: '1px solid #2A2540', color: 'var(--text-secondary)', background: 'var(--bg-input)' }}>Cancel</button>
               <button disabled={savingMissed || !missedName.trim()}
                 onClick={async () => {
                   if (!businessId || !missedName.trim()) return;
@@ -2239,7 +2239,7 @@ export default function TerminalPage() {
             </div>
             <div className="px-6 pb-5 flex gap-2">
               <button onClick={() => { setShowCustomItem(false); setCustomItemForm({ desc: '', price: '', qty: '1', taxable: true, isNote: false }); }}
-                className="flex-1 py-2.5 rounded-xl text-sm" style={{ border: '1px solid #2A2540', color: 'var(--text-secondary)', background: 'rgba(255,255,255,0.02)' }}>Cancel</button>
+                className="flex-1 py-2.5 rounded-xl text-sm" style={{ border: '1px solid #2A2540', color: 'var(--text-secondary)', background: 'var(--bg-input)' }}>Cancel</button>
               <button onClick={addCustomItemToCart}
                 disabled={!customItemForm.desc.trim() || (!customItemForm.isNote && !customItemForm.price)}
                 className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-40" style={{ background: '#8B5CF6' }}>
@@ -2270,7 +2270,7 @@ export default function TerminalPage() {
             </div>
             <div className="px-6 pb-5 flex gap-2">
               <button onClick={() => setPriceCheckProd(null)}
-                className="flex-1 py-2.5 rounded-xl text-sm" style={{ border: '1px solid #2A2540', color: 'var(--text-secondary)', background: 'rgba(255,255,255,0.02)' }}>Close</button>
+                className="flex-1 py-2.5 rounded-xl text-sm" style={{ border: '1px solid #2A2540', color: 'var(--text-secondary)', background: 'var(--bg-input)' }}>Close</button>
               <button onClick={() => { checkAndAddToCart(priceCheckProd); setPriceCheckProd(null); setPriceCheckMode(false); }}
                 disabled={priceCheckProd.track_stock && priceCheckProd.stock_quantity <= 0}
                 className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-40" style={{ background: '#8B5CF6' }}>
@@ -2302,7 +2302,7 @@ export default function TerminalPage() {
                   <div className="space-y-2">
                     {refundResults.map((sale: any) => (
                       <button key={sale.id} onClick={() => { setRefundSale(sale); setRefundItems({}); }}
-                        className="w-full flex items-center gap-3 p-3 rounded-xl text-left transition-all" style={{ border: '1px solid #2A2540', background: 'rgba(255,255,255,0.02)' }}>
+                        className="w-full flex items-center gap-3 p-3 rounded-xl text-left transition-all" style={{ border: '1px solid #2A2540', background: 'var(--bg-input)' }}>
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>#{sale.sale_number ?? sale.id?.slice(-6).toUpperCase()}</p>
                           <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>{new Date(sale.created_at).toLocaleDateString('en-AU')} · {sale.customer_name ?? 'Walk-in'}</p>
@@ -2327,7 +2327,7 @@ export default function TerminalPage() {
                   <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>Select items to refund:</p>
                   <div className="space-y-1.5">
                     {(refundSale.items ?? []).map((item: any) => (
-                      <label key={item.id} className="flex items-center gap-3 p-2.5 rounded-lg cursor-pointer" style={{ border: '1px solid #2A2540', background: 'rgba(255,255,255,0.02)' }}>
+                      <label key={item.id} className="flex items-center gap-3 p-2.5 rounded-lg cursor-pointer" style={{ border: '1px solid #2A2540', background: 'var(--bg-input)' }}>
                         <input type="checkbox" checked={!!refundItems[item.id]}
                           onChange={e => setRefundItems(r => ({ ...r, [item.id]: e.target.checked }))}
                           className="w-4 h-4 accent-gray-900" />
@@ -2350,7 +2350,7 @@ export default function TerminalPage() {
             {refundSale && (
               <div className="px-6 pb-5 flex gap-2">
                 <button onClick={() => { setShowRefundModal(false); setRefundSale(null); }}
-                  className="flex-1 py-2.5 rounded-xl text-sm" style={{ border: '1px solid #2A2540', color: 'var(--text-secondary)', background: 'rgba(255,255,255,0.02)' }}>Cancel</button>
+                  className="flex-1 py-2.5 rounded-xl text-sm" style={{ border: '1px solid #2A2540', color: 'var(--text-secondary)', background: 'var(--bg-input)' }}>Cancel</button>
                 <button onClick={processRefund} disabled={processingRefund || Object.values(refundItems).every(v => !v)}
                   className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-40 flex items-center justify-center gap-2" style={{ background: '#EF4444' }}>
                   {processingRefund ? <><Spinner /> Processing…</> : 'Process Refund'}
@@ -2378,7 +2378,7 @@ export default function TerminalPage() {
             </div>
             <div className="px-6 pb-5 flex gap-2">
               <button onClick={() => { setShowCashierModal(false); setCashierName(''); }}
-                className="flex-1 py-2.5 rounded-xl text-sm" style={{ border: '1px solid #2A2540', color: 'var(--text-secondary)', background: 'rgba(255,255,255,0.02)' }}>Cancel</button>
+                className="flex-1 py-2.5 rounded-xl text-sm" style={{ border: '1px solid #2A2540', color: 'var(--text-secondary)', background: 'var(--bg-input)' }}>Cancel</button>
               <button onClick={switchCashier} disabled={!cashierName.trim() || switchingCashier}
                 className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-40 flex items-center justify-center gap-2" style={{ background: '#8B5CF6' }}>
                 {switchingCashier ? <><Spinner /> Switching…</> : 'Switch'}
@@ -2461,7 +2461,7 @@ export default function TerminalPage() {
             </div>
             <div className="px-6 pb-5 flex gap-2">
               <button onClick={() => setShowAgeModal(false)}
-                className="flex-1 py-2.5 rounded-xl text-sm" style={{ border: '1px solid #2A2540', color: 'var(--text-secondary)', background: 'rgba(255,255,255,0.02)' }}>
+                className="flex-1 py-2.5 rounded-xl text-sm" style={{ border: '1px solid #2A2540', color: 'var(--text-secondary)', background: 'var(--bg-input)' }}>
                 Cancel sale
               </button>
               <button
