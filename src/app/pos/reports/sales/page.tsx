@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
 
-const C = { bg:'rgba(17,15,26,0.95)',card:'rgba(26,23,40,0.9)',border:'#2A2540',text:'#EDE8FF',muted:'#8B85A8',dim:'#4A4565',violet:'#8B5CF6',green:'#22C55E',red:'#EF4444',amber:'#F59E0B',cyan:'#00E5FF' }
+const C = { bg:'var(--bg-base)',card:'var(--bg-surface)',border:'transparent',text:'var(--text-primary)',muted:'var(--text-secondary)',dim:'var(--text-tertiary)',violet:'#8B5CF6',green:'#22C55E',red:'#EF4444',amber:'#F59E0B',cyan:'#00E5FF' }
 const iS: React.CSSProperties = { background:'rgba(255,255,255,0.04)', border:`1px solid ${C.border}`, borderRadius:8, padding:'6px 10px', fontSize:12, color:C.text, outline:'none', fontFamily:'inherit' }
 const btn = (active=false,col='#8B5CF6'): React.CSSProperties => ({ padding:'6px 14px', borderRadius:8, border:`1px solid ${active?col:C.border}`, background:active?col+'20':'transparent', color:active?col:C.muted, fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:'inherit' })
 
@@ -165,7 +165,7 @@ export default function SalesHistoryPage() {
 
         {/* Detail panel */}
         {selectedId&&(
-          <div style={{flex:'0 0 50%',overflowY:'auto',padding:'16px 18px',background:'rgba(22,19,36,0.95)'}}>
+          <div style={{flex:'0 0 50%',overflowY:'auto',padding:'16px 18px',background:'var(--bg-surface)'}}>
             {detailLoading?<p style={{color:C.dim,fontSize:13}}>Loading…</p>:detail&&(
               <>
                 <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:16}}>

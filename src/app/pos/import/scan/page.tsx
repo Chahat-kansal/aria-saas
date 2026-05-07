@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import BarcodeScanner from '@/components/pos/BarcodeScanner';
 
-const C = { bg:'rgba(17,15,26,0.95)', card:'rgba(26,23,40,0.9)', border:'#2A2540', text:'#EDE8FF', muted:'#8B85A8', dim:'#4A4565', violet:'#8B5CF6', green:'#22C55E', red:'#EF4444', amber:'#F59E0B' };
+const C = { bg:'var(--bg-base)', card:'var(--bg-surface)', border:'transparent', text:'var(--text-primary)', muted:'var(--text-secondary)', dim:'var(--text-tertiary)', violet:'#8B5CF6', green:'#22C55E', red:'#EF4444', amber:'#F59E0B' };
 
 interface ScannedItem {
   barcode: string;
@@ -216,7 +216,7 @@ export default function ScanImportPage() {
 
       {/* Toast */}
       {toast && (
-        <div style={{ position: 'fixed', bottom: 32, left: '50%', transform: 'translateX(-50%)', zIndex: 60, background: '#1A1728', border: `1px solid ${C.border}`, borderRadius: 12, padding: '10px 20px', fontSize: 13, fontWeight: 600, color: C.text, boxShadow: '0 8px 32px rgba(0,0,0,0.5)', whiteSpace: 'nowrap' }}>
+        <div style={{ position: 'fixed', bottom: 32, left: '50%', transform: 'translateX(-50%)', zIndex: 60, background: 'var(--bg-elevated)', border: `1px solid ${C.border}`, borderRadius: 12, padding: '10px 20px', fontSize: 13, fontWeight: 600, color: C.text, boxShadow: '0 8px 32px rgba(0,0,0,0.5)', whiteSpace: 'nowrap' }}>
           {toast}
         </div>
       )}
@@ -305,7 +305,7 @@ export default function ScanImportPage() {
                 <div>
                   <label style={lCls}>Category</label>
                   <select value={pending.categoryId} onChange={e => setPending(p => p ? { ...p, categoryId: e.target.value } : p)}
-                    style={{ ...iCls, background: '#0A0910' }}>
+                    style={{ ...iCls, background: 'var(--bg-base)' }}>
                     <option value="">No category</option>
                     {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>

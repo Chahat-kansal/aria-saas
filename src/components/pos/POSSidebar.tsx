@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import LogoMark from './LogoMark';
 import { usePOSTheme } from '@/components/pos/ThemeProvider';
+import { ThemeToggle } from '@/components/ThemeProvider';
 
 const COLLAPSED_W = 64;
 const EXPANDED_W  = 228;
@@ -167,7 +168,7 @@ export default function POSSidebar({
       width: W, minWidth: W,
       transition: 'width 280ms var(--ease,cubic-bezier(0.16,1,0.3,1)), min-width 280ms var(--ease,cubic-bezier(0.16,1,0.3,1))',
       background: colors.sidebarBg,
-      borderRight: `1px solid ${colors.border}`,
+      borderRight: '1px solid var(--divider)',
       display: 'flex', flexDirection: 'column',
       height: '100vh',
       position: 'relative',
@@ -184,7 +185,7 @@ export default function POSSidebar({
           transform: 'translateY(-50%)',
           width: 16, height: 44,
           background: colors.elevated,
-          border: `1px solid ${colors.border}`, borderLeft: 'none',
+          border: '1px solid var(--divider)', borderLeft: 'none',
           borderRadius: '0 8px 8px 0',
           cursor: 'pointer',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -277,7 +278,7 @@ export default function POSSidebar({
       </div>
 
       {/* Bottom */}
-      <div style={{ flexShrink: 0, borderTop: `1px solid ${colors.border}`, padding: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <div style={{ flexShrink: 0, borderTop: '1px solid var(--divider)', padding: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
 
         {/* Customer Display */}
         <div onClick={openDisplay} style={{ display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 10, padding: collapsed ? '9px 14px' : '9px 10px', borderRadius: 10, cursor: 'pointer', border: '1px solid transparent', background: 'rgba(56,189,248,0.06)' }}>
@@ -291,23 +292,10 @@ export default function POSSidebar({
           {!collapsed && <span style={{ fontSize: 13, fontWeight: 700, color: ariaOpen ? colors.violet : `${colors.violet}cc` }}>Ask Aria</span>}
         </div>
 
-        {/* Theme toggle — wired to ThemeProvider context */}
-        <button
-          onClick={toggleTheme}
-          style={{
-            display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 8,
-            width: '100%', padding: collapsed ? '9px 14px' : '8px 10px',
-            borderRadius: 10, border: `1px solid ${colors.border}`,
-            background: 'transparent', color: colors.sidebarText,
-            fontSize: 12, fontWeight: 600, cursor: 'pointer',
-            fontFamily: 'inherit', textAlign: 'left',
-          }}
-        >
-          <span style={{ fontSize: 15, flexShrink: 0, width: 20, textAlign: 'center' }}>
-            {theme === 'dark' ? '☀️' : '🌙'}
-          </span>
-          {!collapsed && <span>{theme === 'dark' ? 'Light Mode' : 'Dark Mode'}</span>}
-        </button>
+        {/* Theme toggle */}
+        <div style={{ padding: collapsed ? '6px 14px' : '8px 12px', marginBottom: 4 }}>
+          <ThemeToggle collapsed={collapsed} />
+        </div>
 
         {/* Back to ARIA OS Dashboard — owner/admin/manager only */}
         {isOwnerOrManager && (

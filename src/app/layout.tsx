@@ -1,7 +1,9 @@
 import type { Metadata } from 'next';
 import { Sora, JetBrains_Mono } from 'next/font/google';
 import './globals.css';
+import '@/styles/aria-tokens.css';
 import { Providers } from './providers';
+import { ThemeProvider } from '@/components/ThemeProvider';
 
 const sora = Sora({ subsets: ['latin'], variable: '--font-sora' });
 const mono = JetBrains_Mono({ subsets: ['latin'], variable: '--font-mono' });
@@ -19,9 +21,11 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" data-theme="dark" suppressHydrationWarning>
       <body className={`${sora.variable} ${mono.variable} font-sans antialiased`}>
-        <Providers>{children}</Providers>
+        <ThemeProvider>
+          <Providers>{children}</Providers>
+        </ThemeProvider>
       </body>
     </html>
   );

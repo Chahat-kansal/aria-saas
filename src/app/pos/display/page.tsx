@@ -310,7 +310,7 @@ export default function CustomerDisplayPage() {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                     <div style={{ width: 6, height: 6, borderRadius: '50%', background: colA, boxShadow: `0 0 8px ${colA}` }} />
                     <span style={{ fontSize: 14, color: 'rgba(237,232,255,0.85)', fontWeight: 500 }}>{item.name}</span>
-                    <span style={{ fontSize: 12, color: 'rgba(139,133,168,0.4)' }}>×{qty}</span>
+                    <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>×{qty}</span>
                   </div>
                   <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 14, fontWeight: 700, color: 'rgba(237,232,255,0.85)' }}>
                     {fmt(price * qty)}

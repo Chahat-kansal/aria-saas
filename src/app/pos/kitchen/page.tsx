@@ -207,7 +207,7 @@ export default function KitchenPage() {
                   justifyContent: 'space-between',
                 }}>
                   <div>
-                    <span style={{ fontSize: 28, fontWeight: 800, color: '#111827' }}>
+                    <span style={{ fontSize: 28, fontWeight: 800, color: 'var(--bg-surface)' }}>
                       #{order.ticket_number ?? '—'}
                     </span>
                     {order.table_label && (
@@ -231,10 +231,10 @@ export default function KitchenPage() {
                   {order.items.map((item, i) => (
                     <div key={i} style={{ marginBottom: 8 }}>
                       <div style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}>
-                        <span style={{ fontWeight: 800, fontSize: 16, color: '#111827', minWidth: 24 }}>
+                        <span style={{ fontWeight: 800, fontSize: 16, color: 'var(--bg-surface)', minWidth: 24 }}>
                           {item.qty}×
                         </span>
-                        <span style={{ fontWeight: 600, fontSize: 14, color: '#111827' }}>{item.name}</span>
+                        <span style={{ fontWeight: 600, fontSize: 14, color: 'var(--bg-surface)' }}>{item.name}</span>
                         {item.course && item.course !== 'main' && (
                           <span style={{ fontSize: 10, background: '#f3f4f6', padding: '1px 6px', borderRadius: 4, color: '#6b7280' }}>
                             {item.course}

@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import { PieChart, Pie, Cell, Legend, Tooltip, ResponsiveContainer } from 'recharts';
 
-const C = { card: '#0A0E1A', border: 'rgba(0,229,255,0.08)', text: '#E8F4F8', muted: 'rgba(130,160,200,0.7)', dim: 'rgba(130,160,200,0.35)', cyan: '#00E5FF', green: '#22C55E', red: '#EF4444', amber: '#F59E0B', violet: '#8B5CF6' };
+const C = { card: 'var(--bg-surface)', border: 'rgba(0,229,255,0.08)', text: 'var(--text-primary)', muted: 'var(--text-secondary)', dim: 'var(--text-tertiary)', cyan: '#00E5FF', green: '#22C55E', red: '#EF4444', amber: '#F59E0B', violet: '#8B5CF6' };
 const PLAN_PRICE: Record<string, number> = { free: 0, pro: 99, enterprise: 299, trial: 0, disabled: 0 };
 const PLAN_COLORS: Record<string, string> = { free: '#374151', pro: '#3B82F6', enterprise: C.amber, trial: '#6B7280', disabled: C.red };
 
@@ -58,7 +58,7 @@ export default function BillingPage() {
                     {pieData.map(d => <Cell key={d.name} fill={PLAN_COLORS[d.name] || '#374151'} />)}
                   </Pie>
                   <Legend formatter={(v: string) => <span style={{ fontSize: 11, color: C.muted }}>{v}</span>} />
-                  <Tooltip contentStyle={{ background: '#0A0E1A', border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, fontSize: 11 }} />
+                  <Tooltip contentStyle={{ background: 'var(--bg-surface)', border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, fontSize: 11 }} />
                 </PieChart>
               </ResponsiveContainer>
             </div>

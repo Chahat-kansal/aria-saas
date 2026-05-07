@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 
 interface CashierRow { name: string; sales_count: number; revenue: number; cash_sales: number; card_sales: number; refunds: number; avg_basket: number; }
 
-const C = { bg:'rgba(17,15,26,0.95)', card:'rgba(26,23,40,0.9)', border:'#2A2540', text:'#EDE8FF', muted:'#8B85A8', dim:'#4A4565', violet:'#8B5CF6' };
+const C = { bg:'var(--bg-base)', card:'var(--bg-surface)', border:'transparent', text:'var(--text-primary)', muted:'var(--text-secondary)', dim:'var(--text-tertiary)', violet:'#8B5CF6' };
 function fmtDate(d: Date) { return d.toISOString().split('T')[0]; }
 
 export default function CashierReportPage() {

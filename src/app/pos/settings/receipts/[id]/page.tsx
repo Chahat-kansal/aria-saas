@@ -361,23 +361,23 @@ export default function ReceiptBuilderPage() {
   /* ── Sorted els for layers (highest zIndex first) ── */
   const layersSorted=[...els].sort((a,b)=>b.zIndex-a.zIndex)
 
-  const Z = { panel:{background:'#0A0E1A',color:'rgba(220,240,255,0.9)',fontFamily:"'Manrope',system-ui"}, lbl:{fontSize:10,fontWeight:700,color:'rgba(130,160,200,0.6)',textTransform:'uppercase' as const,letterSpacing:'0.05em',display:'block',marginBottom:5}, inp:{background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:6,padding:'4px 8px',color:'#fff',fontSize:12,outline:'none',fontFamily:'inherit',width:'100%',boxSizing:'border-box' as const}, btn:(active?:boolean):React.CSSProperties=>({flex:1,padding:'5px',borderRadius:6,fontSize:11,border:`1px solid ${active?'#8B5CF6':'rgba(255,255,255,0.1)'}`,background:active?'rgba(139,92,246,0.2)':'rgba(255,255,255,0.04)',color:active?'#8B5CF6':'rgba(200,220,255,0.7)',cursor:'pointer',fontFamily:'inherit',fontWeight:active?700:400}) }
+  const Z = { panel:{background:'var(--bg-surface)',color:'rgba(220,240,255,0.9)',fontFamily:"'Manrope',system-ui"}, lbl:{fontSize:10,fontWeight:700,color:'var(--text-secondary)',textTransform:'uppercase' as const,letterSpacing:'0.05em',display:'block',marginBottom:5}, inp:{background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:6,padding:'4px 8px',color:'#fff',fontSize:12,outline:'none',fontFamily:'inherit',width:'100%',boxSizing:'border-box' as const}, btn:(active?:boolean):React.CSSProperties=>({flex:1,padding:'5px',borderRadius:6,fontSize:11,border:`1px solid ${active?'#8B5CF6':'rgba(255,255,255,0.1)'}`,background:active?'rgba(139,92,246,0.2)':'rgba(255,255,255,0.04)',color:active?'#8B5CF6':'rgba(200,220,255,0.7)',cursor:'pointer',fontFamily:'inherit',fontWeight:active?700:400}) }
 
   if(!loaded) return <div style={{ minHeight:'100vh',background:'#030510',display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontFamily:'Manrope,system-ui' }}>Loading editor…</div>
 
   return (
-    <div style={{ display:'flex',flexDirection:'column',height:'100vh',overflow:'hidden',fontFamily:"'Manrope',system-ui",background:'#0A0E1A',color:'rgba(220,240,255,0.9)' }} onClick={()=>setCtxMenu(null)}>
+    <div style={{ display:'flex',flexDirection:'column',height:'100vh',overflow:'hidden',fontFamily:"'Manrope',system-ui",background:'var(--bg-surface)',color:'rgba(220,240,255,0.9)' }} onClick={()=>setCtxMenu(null)}>
 
       {/* ── TOOLBAR ── */}
       <div style={{ display:'flex',alignItems:'center',gap:8,padding:'0 16px',height:48,borderBottom:'1px solid rgba(0,229,255,0.08)',background:'#070D1C',flexShrink:0 }}>
-        <button onClick={()=>router.push('/pos/settings/receipts')} style={{ background:'none',border:'none',color:'rgba(130,160,200,0.7)',cursor:'pointer',fontSize:18,padding:'0 4px',lineHeight:1 }}>←</button>
+        <button onClick={()=>router.push('/pos/settings/receipts')} style={{ background:'none',border:'none',color:'var(--text-secondary)',cursor:'pointer',fontSize:18,padding:'0 4px',lineHeight:1 }}>←</button>
         <input value={name} onChange={e=>setName(e.target.value)} style={{ background:'none',border:'none',outline:'none',color:'rgba(220,240,255,0.95)',fontSize:14,fontWeight:700,fontFamily:'inherit',minWidth:160,flex:1 }} />
         <div style={{ display:'flex',gap:4,alignItems:'center' }}>
           <button onClick={undo} disabled={!history.length} title="Undo (Ctrl+Z)" style={{ ...Z.btn(),padding:'5px 10px',opacity:history.length?1:0.3 }}>↺</button>
           <button onClick={redo} disabled={!future.length} title="Redo (Ctrl+Y)" style={{ ...Z.btn(),padding:'5px 10px',opacity:future.length?1:0.3 }}>↻</button>
           <div style={{ width:1,height:20,background:'rgba(255,255,255,0.1)',margin:'0 4px' }}/>
           <button onClick={()=>setZoom(z=>Math.max(0.5,+(z-0.25).toFixed(2)))} style={{ ...Z.btn(),padding:'4px 8px',width:28 }}>−</button>
-          <span style={{ fontSize:11,color:'rgba(130,160,200,0.7)',minWidth:36,textAlign:'center' }}>{Math.round(zoom*100)}%</span>
+          <span style={{ fontSize:11,color:'var(--text-secondary)',minWidth:36,textAlign:'center' }}>{Math.round(zoom*100)}%</span>
           <button onClick={()=>setZoom(z=>Math.min(2,+(z+0.25).toFixed(2)))} style={{ ...Z.btn(),padding:'4px 8px',width:28 }}>+</button>
           <button onClick={()=>setZoom(1)} style={{ ...Z.btn(),padding:'4px 8px' }}>Fit</button>
           <div style={{ width:1,height:20,background:'rgba(255,255,255,0.1)',margin:'0 4px' }}/>
@@ -400,7 +400,7 @@ export default function ReceiptBuilderPage() {
         {/* ── LAYERS PANEL ── */}
         <div style={{ width:200,flexShrink:0,borderRight:'1px solid rgba(0,229,255,0.06)',background:'#070D1C',display:'flex',flexDirection:'column',overflow:'hidden' }}>
           <div style={{ padding:'10px 12px',borderBottom:'1px solid rgba(255,255,255,0.05)',display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0 }}>
-            <span style={{ fontSize:10,fontWeight:700,color:'rgba(130,160,200,0.6)',textTransform:'uppercase',letterSpacing:'0.05em' }}>Layers</span>
+            <span style={{ fontSize:10,fontWeight:700,color:'var(--text-secondary)',textTransform:'uppercase',letterSpacing:'0.05em' }}>Layers</span>
             <select onChange={e=>{ if(e.target.value){ addEl(e.target.value as EType); e.target.value='' }}} style={{ ...Z.inp,width:'auto',fontSize:11,padding:'3px 6px',cursor:'pointer' }} defaultValue="">
               <option value="" disabled>+ Add</option>
               <optgroup label="Text"><option value="text">Plain Text</option><option value="dynamic_text">Dynamic Text</option></optgroup>
@@ -422,7 +422,7 @@ export default function ReceiptBuilderPage() {
         </div>
 
         {/* ── CANVAS AREA ── */}
-        <div style={{ flex:1,overflow:'auto',background:'#111827',display:'flex',alignItems:'flex-start',justifyContent:'center',padding:40 }} onClick={()=>setSelId(null)}>
+        <div style={{ flex:1,overflow:'auto',background:'var(--bg-surface)',display:'flex',alignItems:'flex-start',justifyContent:'center',padding:40 }} onClick={()=>setSelId(null)}>
           <div ref={canvasRef} style={{ position:'relative',width:CW,height:canvasH,background:bgColor,boxShadow:'0 4px 40px rgba(0,0,0,0.7)',transform:`scale(${zoom})`,transformOrigin:'top center',flexShrink:0 }} onClick={e=>e.stopPropagation()}>
             {[...els].sort((a,b)=>a.zIndex-b.zIndex).map(el=>!el.visible?null:(
               <div key={el.id}
@@ -560,7 +560,7 @@ export default function ReceiptBuilderPage() {
 
       {/* ── CONTEXT MENU ── */}
       {ctxMenu&&(
-        <div style={{ position:'fixed',left:ctxMenu.x,top:ctxMenu.y,background:'#0A0E1A',border:'1px solid rgba(0,229,255,0.15)',borderRadius:10,padding:4,zIndex:9999,minWidth:160,boxShadow:'0 8px 32px rgba(0,0,0,0.6)' }} onClick={e=>e.stopPropagation()}>
+        <div style={{ position:'fixed',left:ctxMenu.x,top:ctxMenu.y,background:'var(--bg-surface)',border:'1px solid rgba(0,229,255,0.15)',borderRadius:10,padding:4,zIndex:9999,minWidth:160,boxShadow:'0 8px 32px rgba(0,0,0,0.6)' }} onClick={e=>e.stopPropagation()}>
           {[['Duplicate','⎘'],['Move to Front','⤒'],['Move to Back','⤓'],['Delete','🗑']].map(([l,icon])=>(
             <div key={l} onClick={()=>{
               saveHistory()
@@ -583,7 +583,7 @@ export default function ReceiptBuilderPage() {
       {/* ── HELP OVERLAY ── */}
       {showHelp&&(
         <div style={{ position:'fixed',inset:0,background:'rgba(0,0,0,0.6)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:9999 }} onClick={()=>setShowHelp(false)}>
-          <div style={{ background:'#0A0E1A',border:'1px solid rgba(0,229,255,0.15)',borderRadius:14,padding:24,minWidth:280 }} onClick={e=>e.stopPropagation()}>
+          <div style={{ background:'var(--bg-surface)',border:'1px solid rgba(0,229,255,0.15)',borderRadius:14,padding:24,minWidth:280 }} onClick={e=>e.stopPropagation()}>
             <p style={{ fontWeight:700,marginBottom:14,fontSize:14 }}>Keyboard Shortcuts</p>
             {[['Ctrl+Z','Undo'],['Ctrl+Y','Redo'],['Delete','Delete selected'],['↑↓←→','Nudge 1px'],['Shift+↑↓←→','Nudge 10px'],['Ctrl+D','Duplicate'],['Escape','Deselect'],['Right-click','Context menu']].map(([k,d])=>(
               <div key={k} style={{ display:'flex',justifyContent:'space-between',gap:24,marginBottom:8,fontSize:12 }}>

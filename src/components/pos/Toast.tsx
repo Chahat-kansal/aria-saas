@@ -23,7 +23,7 @@ export default function Toast({ message, type = 'success', onDismiss }: ToastPro
   return (
     <div style={{
       position: 'fixed', bottom: 24, right: 24, zIndex: 9999,
-      background: '#0A0E1E', border: `1px solid ${c.border}`,
+      background: 'var(--bg-base)', border: `1px solid ${c.border}`,
       borderLeft: `3px solid ${c.text}`, borderRadius: 10,
       padding: '12px 16px', maxWidth: 320,
       boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
@@ -33,9 +33,9 @@ export default function Toast({ message, type = 'success', onDismiss }: ToastPro
       <span style={{ fontSize: 16 }}>
         {type === 'success' ? '✓' : type === 'error' ? '✕' : 'ℹ'}
       </span>
-      <span style={{ fontSize: 13, color: '#EDE8FF', flex: 1, lineHeight: 1.4 }}>{message}</span>
+      <span style={{ fontSize: 13, color: 'var(--text-primary)', flex: 1, lineHeight: 1.4 }}>{message}</span>
       <button onClick={onDismiss}
-        style={{ background: 'none', border: 'none', color: '#6B7E99', cursor: 'pointer', fontSize: 16, padding: 0 }}>
+        style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 16, padding: 0 }}>
         ✕
       </button>
     </div>

@@ -1,4 +1,5 @@
 import '@/styles/pos-design-system.css';
+import '@/styles/aria-tokens.css';
 import { redirect } from 'next/navigation';
 import { headers } from 'next/headers';
 import { createServerSupabaseClient } from '@/lib/supabase-server';

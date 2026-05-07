@@ -29,7 +29,7 @@ function IconSparkles() {
   return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8B5CF6" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5z"/><path d="M19 3l.5 1.5L21 5l-1.5.5L19 7l-.5-1.5L17 5l1.5-.5z"/><path d="M5 17l.5 1.5L7 19l-1.5.5L5 21l-.5-1.5L3 19l1.5-.5z"/></svg>;
 }
 function IconBell({ muted }: { muted?: boolean }) {
-  return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={muted ? 'rgba(139,133,168,0.4)' : 'rgba(237,232,255,0.7)'} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>;
+  return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={muted ? 'var(--text-tertiary)' : 'rgba(237,232,255,0.7)'} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>;
 }
 
 /* ─── LogoMark ─────────────────────────────────────────────────── */
@@ -139,10 +139,10 @@ export function POSTopNav({ children }: { children: React.ReactNode }) {
   const initials = posUser?.name?.slice(0, 2).toUpperCase() ?? 'ME';
 
   return (
-    <div style={{ display: 'flex', height: '100dvh', background: '#0A0910', fontFamily: "'Manrope', system-ui, sans-serif" }}>
+    <div style={{ display: 'flex', height: '100dvh', background: 'var(--bg-base)', fontFamily: "'Manrope', system-ui, sans-serif" }}>
 
       {/* ── Sidebar ─────────────────────────────────────────────── */}
-      <div style={{ width: 60, flexShrink: 0, height: '100%', background: '#0A0910', borderRight: '1px solid rgba(255,255,255,0.04)', display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: 14, paddingBottom: 14, gap: 0, zIndex: 40 }}>
+      <div style={{ width: 60, flexShrink: 0, height: '100%', background: 'var(--bg-base)', borderRight: '1px solid rgba(255,255,255,0.04)', display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: 14, paddingBottom: 14, gap: 0, zIndex: 40 }}>
 
         {/* Logo */}
         <div style={{ marginBottom: 16 }}>
@@ -252,7 +252,7 @@ export function POSTopNav({ children }: { children: React.ReactNode }) {
               background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)',
               borderRadius: 8, padding: '3px 10px',
             }}>
-              <span style={{ fontSize: 9, letterSpacing: '0.06em', color: '#4A4565' }}>TODAY</span>
+              <span style={{ fontSize: 9, letterSpacing: '0.06em', color: 'var(--text-tertiary)' }}>TODAY</span>
               <span style={{ fontSize: 12, fontFamily: "'JetBrains Mono', monospace", fontWeight: 700, color: 'rgba(237,232,255,0.75)' }}>
                 A${sessionRevenue.toFixed(2)}
               </span>

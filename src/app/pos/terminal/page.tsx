@@ -865,7 +865,7 @@ export default function TerminalPage() {
           {/* Left: Summary */}
           <div style={{ width: 300, display: 'flex', flexDirection: 'column', background: 'rgba(10,14,30,0.9)', borderRight: '1px solid rgba(0,229,255,0.07)' }}>
             <div style={{ padding: '14px 18px', borderBottom: '1px solid rgba(0,229,255,0.07)', display: 'flex', alignItems: 'center', gap: 10 }}>
-              <button onClick={() => setTerminalView('pos')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(130,160,200,0.6)', display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, fontFamily: 'inherit', padding: 0 }}>
+              <button onClick={() => setTerminalView('pos')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, fontFamily: 'inherit', padding: 0 }}>
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg> Back
               </button>
               <span style={{ fontSize: 13, fontWeight: 700, color: 'rgba(220,240,255,0.9)', flex: 1, textAlign: 'right' }}>Summary</span>
@@ -894,7 +894,7 @@ export default function TerminalPage() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'rgba(0,229,255,0.07)', border: '1px solid rgba(0,229,255,0.2)', borderRadius: 20, padding: '3px 10px' }}>
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#00E5FF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
                   <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, fontWeight: 800, color: '#00E5FF' }}>{loyaltyPoints}</span>
-                  <span style={{ fontSize: 9, color: 'rgba(130,160,200,0.4)', fontWeight: 600 }}>PTS</span>
+                  <span style={{ fontSize: 9, color: 'var(--text-tertiary)', fontWeight: 600 }}>PTS</span>
                 </div>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
@@ -966,9 +966,9 @@ export default function TerminalPage() {
                     ))}
                   </div>
                   <div style={{ background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(0,229,255,0.15)', borderRadius: 12, padding: '10px 14px', textAlign: 'right' }}>
-                    <div style={{ fontSize: 9, color: 'rgba(130,160,200,0.4)', marginBottom: 4, letterSpacing: '0.06em' }}>CASH TENDERED</div>
+                    <div style={{ fontSize: 9, color: 'var(--text-tertiary)', marginBottom: 4, letterSpacing: '0.06em' }}>CASH TENDERED</div>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
-                      <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 13, color: 'rgba(130,160,200,0.4)' }}>A$</span>
+                      <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 13, color: 'var(--text-tertiary)' }}>A$</span>
                       <input type="number" value={cashTendered} onChange={e => setCashTendered(e.target.value)}
                         placeholder="0.00" autoFocus
                         style={{ background: 'none', border: 'none', outline: 'none', fontFamily: "'JetBrains Mono',monospace", fontSize: 32, fontWeight: 800, color: 'rgba(220,240,255,0.95)', width: '100%', textAlign: 'right' }} />
@@ -989,13 +989,13 @@ export default function TerminalPage() {
 
               {payMethod === 'split' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12, width: 280, textAlign: 'center' }}>
-                  <p style={{ fontSize: 13, color: 'rgba(130,160,200,0.6)' }}>Cash portion:</p>
+                  <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Cash portion:</p>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(0,229,255,0.15)', borderRadius: 12, padding: '8px 14px' }}>
-                    <span style={{ fontFamily: "'JetBrains Mono',monospace", color: 'rgba(130,160,200,0.4)' }}>A$</span>
+                    <span style={{ fontFamily: "'JetBrains Mono',monospace", color: 'var(--text-tertiary)' }}>A$</span>
                     <input type="number" value={splitCash} onChange={e => setSplitCash(e.target.value)} placeholder="0.00" autoFocus style={{ flex: 1, background: 'none', border: 'none', outline: 'none', fontFamily: "'JetBrains Mono',monospace", fontSize: 24, fontWeight: 800, color: 'rgba(220,240,255,0.95)' }} />
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', background: 'rgba(0,229,255,0.04)', border: '1px solid rgba(0,229,255,0.1)', borderRadius: 10 }}>
-                    <span style={{ fontSize: 12, color: 'rgba(130,160,200,0.6)' }}>Card remainder</span>
+                    <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Card remainder</span>
                     <span style={{ fontFamily: "'JetBrains Mono',monospace", fontWeight: 700, color: 'rgba(220,240,255,0.85)' }}>A${splitCardAmt.toFixed(2)}</span>
                   </div>
                   <button onClick={() => processSale()} disabled={processing}
@@ -1008,7 +1008,7 @@ export default function TerminalPage() {
               {payMethod === 'gift_card' && (
                 <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:16, width:300 }}>
                   <div style={{ width:'100%' }}>
-                    <div style={{ fontSize:11, fontWeight:700, color:'rgba(130,160,200,0.6)', marginBottom:6, textTransform:'uppercase', letterSpacing:'0.06em' }}>Gift Card Code</div>
+                    <div style={{ fontSize:11, fontWeight:700, color:'var(--text-secondary)', marginBottom:6, textTransform:'uppercase', letterSpacing:'0.06em' }}>Gift Card Code</div>
                     <div style={{ display:'flex', gap:8 }}>
                       <input
                         value={giftCardCode}
@@ -1026,7 +1026,7 @@ export default function TerminalPage() {
                   </div>
                   {giftCardBalance !== null && (
                     <div style={{ width:'100%', background:'rgba(139,92,246,0.08)', border:'1px solid rgba(139,92,246,0.2)', borderRadius:12, padding:'14px 18px' }}>
-                      <div style={{ fontSize:11, color:'rgba(130,160,200,0.6)', marginBottom:4 }}>Available Balance</div>
+                      <div style={{ fontSize:11, color:'var(--text-secondary)', marginBottom:4 }}>Available Balance</div>
                       <div style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:28, fontWeight:800, color: giftCardBalance >= roundedTotal ? '#22C55E' : '#EF4444' }}>
                         A${giftCardBalance.toFixed(2)}
                       </div>
@@ -1034,7 +1034,7 @@ export default function TerminalPage() {
                         <p style={{ fontSize:12, color:'#EF4444', marginTop:6 }}>Insufficient — A${(roundedTotal - giftCardBalance).toFixed(2)} short</p>
                       )}
                       {giftCardBalance > roundedTotal && (
-                        <p style={{ fontSize:12, color:'rgba(130,160,200,0.6)', marginTop:4 }}>Change due: A${(giftCardBalance - roundedTotal).toFixed(2)}</p>
+                        <p style={{ fontSize:12, color:'var(--text-secondary)', marginTop:4 }}>Change due: A${(giftCardBalance - roundedTotal).toFixed(2)}</p>
                       )}
                     </div>
                   )}
@@ -1049,9 +1049,9 @@ export default function TerminalPage() {
 
               {payMethod === 'direct_deposit' && (
                 <div style={{ display:'flex', flexDirection:'column', gap:16, width:300 }}>
-                  <div style={{ fontSize:13, color:'rgba(130,160,200,0.7)', textAlign:'center' }}>Record a direct deposit / bank transfer payment</div>
+                  <div style={{ fontSize:13, color:'var(--text-secondary)', textAlign:'center' }}>Record a direct deposit / bank transfer payment</div>
                   <div>
-                    <div style={{ fontSize:11, fontWeight:700, color:'rgba(130,160,200,0.6)', marginBottom:6, textTransform:'uppercase', letterSpacing:'0.06em' }}>Reference Number</div>
+                    <div style={{ fontSize:11, fontWeight:700, color:'var(--text-secondary)', marginBottom:6, textTransform:'uppercase', letterSpacing:'0.06em' }}>Reference Number</div>
                     <input
                       value={directDepositRef}
                       onChange={e => setDirectDepositRef(e.target.value)}
@@ -1060,7 +1060,7 @@ export default function TerminalPage() {
                     />
                   </div>
                   <div>
-                    <div style={{ fontSize:11, fontWeight:700, color:'rgba(130,160,200,0.6)', marginBottom:6, textTransform:'uppercase', letterSpacing:'0.06em' }}>Account Name (optional)</div>
+                    <div style={{ fontSize:11, fontWeight:700, color:'var(--text-secondary)', marginBottom:6, textTransform:'uppercase', letterSpacing:'0.06em' }}>Account Name (optional)</div>
                     <input
                       value={directDepositName}
                       onChange={e => setDirectDepositName(e.target.value)}
@@ -1098,15 +1098,15 @@ export default function TerminalPage() {
             {/* Title */}
             <div style={{ textAlign: 'center', animation: 'fade-up 0.4s 0.1s cubic-bezier(0.16,1,0.3,1) both' }}>
               <div style={{ fontSize: 38, fontWeight: 900, color: 'rgba(220,240,255,0.95)', letterSpacing: '-0.04em', lineHeight: 1 }}>Payment approved</div>
-              <div style={{ fontSize: 13, color: 'rgba(130,160,200,0.6)', marginTop: 6 }}>
+              <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 6 }}>
                 via {showReceipt.payment_method ?? 'card'} · R{(showReceipt.sale_number ?? String(showReceipt.id ?? '')).slice(-5).toUpperCase() || Math.floor(Math.random()*90000+10000)}
               </div>
             </div>
             {/* Receipt card */}
             <div style={{ background: 'rgba(10,14,30,0.85)', border: '1px solid rgba(0,229,255,0.12)', borderRadius: 20, padding: '20px 28px', minWidth: 320, maxWidth: 380, backdropFilter: 'blur(24px)', animation: 'fade-up 0.4s 0.2s cubic-bezier(0.16,1,0.3,1) both', boxShadow: '0 20px 60px rgba(0,0,0,0.5), 0 0 30px rgba(0,229,255,0.06)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                <span style={{ fontSize: 12, color: 'rgba(130,160,200,0.6)' }}>{(showReceipt.cartSnapshot ?? []).reduce((s: number, i: CartItem) => s + i.qty, 0)} items</span>
-                <span style={{ fontSize: 12, fontFamily: "'JetBrains Mono',monospace", color: 'rgba(130,160,200,0.6)' }}>A${showReceipt.total_amount?.toFixed(2) ?? roundedTotal.toFixed(2)}</span>
+                <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{(showReceipt.cartSnapshot ?? []).reduce((s: number, i: CartItem) => s + i.qty, 0)} items</span>
+                <span style={{ fontSize: 12, fontFamily: "'JetBrains Mono',monospace", color: 'var(--text-secondary)' }}>A${showReceipt.total_amount?.toFixed(2) ?? roundedTotal.toFixed(2)}</span>
               </div>
               <div style={{ height: 1, background: 'rgba(0,229,255,0.07)', margin: '10px 0' }} />
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
@@ -1119,7 +1119,7 @@ export default function TerminalPage() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'rgba(0,229,255,0.07)', border: '1px solid rgba(0,229,255,0.2)', borderRadius: 20, padding: '3px 10px' }}>
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#00E5FF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
                   <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, fontWeight: 800, color: '#00E5FF' }}>{loyaltyPoints}</span>
-                  <span style={{ fontSize: 9, color: 'rgba(130,160,200,0.4)', fontWeight: 600 }}>PTS</span>
+                  <span style={{ fontSize: 9, color: 'var(--text-tertiary)', fontWeight: 600 }}>PTS</span>
                 </div>
               </div>
             </div>
@@ -1200,15 +1200,15 @@ export default function TerminalPage() {
           </div>
           <div className="flex gap-1.5 flex-wrap">
             {parkedSales.length > 0 && (
-              <button onClick={() => setShowParked(true)} className="px-2 py-0.5 rounded text-xs" style={{ color: '#8B85A8', border: '1px solid #2A2540', background: 'rgba(255,255,255,0.03)' }}>
+              <button onClick={() => setShowParked(true)} className="px-2 py-0.5 rounded text-xs" style={{ color: 'var(--text-secondary)', border: '1px solid #2A2540', background: 'rgba(255,255,255,0.03)' }}>
                 Parked ({parkedSales.length})
               </button>
             )}
-            <button onClick={() => setShowRefundModal(true)} className="px-2 py-0.5 rounded text-xs" style={{ color: '#8B85A8', border: '1px solid #2A2540', background: 'rgba(255,255,255,0.03)' }}>
+            <button onClick={() => setShowRefundModal(true)} className="px-2 py-0.5 rounded text-xs" style={{ color: 'var(--text-secondary)', border: '1px solid #2A2540', background: 'rgba(255,255,255,0.03)' }}>
               ⟳ Refund
             </button>
             {registerIsOpen && (
-              <button onClick={() => setShowCashierModal(true)} className="px-2 py-0.5 rounded text-xs" style={{ color: '#8B85A8', border: '1px solid #2A2540', background: 'rgba(255,255,255,0.03)' }}>
+              <button onClick={() => setShowCashierModal(true)} className="px-2 py-0.5 rounded text-xs" style={{ color: 'var(--text-secondary)', border: '1px solid #2A2540', background: 'rgba(255,255,255,0.03)' }}>
                 {registerSession?.opened_by ? `👤 ${registerSession.opened_by}` : 'Switch cashier'}
               </button>
             )}
@@ -1231,17 +1231,17 @@ export default function TerminalPage() {
           <circle cx="4.5" cy="16" r="1.8" fill="#00E5FF" opacity="0.4"/>
         </svg>
         <span style={{ fontSize: 13, fontWeight: 700, color: 'rgba(220,240,255,0.9)', letterSpacing: '-0.02em' }}>Point of Sale</span>
-        <span style={{ fontSize: 11, color: 'rgba(130,160,200,0.35)', fontWeight: 400 }}>{businessName}</span>
+        <span style={{ fontSize: 11, color: 'var(--text-tertiary)', fontWeight: 400 }}>{businessName}</span>
         <div style={{ flex: 1 }} />
         <div style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'rgba(34,197,94,0.07)', border: '1px solid rgba(34,197,94,0.15)', borderRadius: 20, padding: '3px 9px' }}>
           <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#22C55E', display: 'inline-block', boxShadow: '0 0 5px #22C55E' }} />
           <span style={{ fontSize: 9, fontWeight: 700, color: 'rgba(34,197,94,0.75)', letterSpacing: '0.04em' }}>LIVE</span>
         </div>
         <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 8, padding: '3px 10px', display: 'flex', gap: 7, alignItems: 'center' }}>
-          <span style={{ fontSize: 9, color: 'rgba(130,160,200,0.35)', letterSpacing: '0.06em' }}>TODAY</span>
+          <span style={{ fontSize: 9, color: 'var(--text-tertiary)', letterSpacing: '0.06em' }}>TODAY</span>
           <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 12, fontWeight: 700, color: 'rgba(220,240,255,0.75)' }}>A${recentSales.reduce((s,r)=>s+r.total,0).toFixed(2)}</span>
         </div>
-        <button style={{ width: 27, height: 27, borderRadius: 7, border: '1px solid rgba(255,255,255,0.05)', background: 'rgba(255,255,255,0.03)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'rgba(130,160,200,0.4)' }}>
+        <button style={{ width: 27, height: 27, borderRadius: 7, border: '1px solid rgba(255,255,255,0.05)', background: 'rgba(255,255,255,0.03)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--text-tertiary)' }}>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
         </button>
       </div>
@@ -1255,13 +1255,13 @@ export default function TerminalPage() {
 
           {/* Quick panel slide-out */}
           {showQuickPanel && (
-            <div ref={quickPanelRef} className="absolute inset-0 z-20 flex flex-col" style={{ background: '#1A1728', boxShadow: '4px 0 24px rgba(0,0,0,0.5)' }}>
+            <div ref={quickPanelRef} className="absolute inset-0 z-20 flex flex-col" style={{ background: 'var(--bg-elevated)', boxShadow: '4px 0 24px rgba(0,0,0,0.5)' }}>
               <div className="flex items-center justify-between px-4 py-3" style={{ borderBottom: '1px solid #1C1928' }}>
                 <div>
-                  <p className="text-sm font-semibold" style={{ color: '#EDE8FF' }}>{businessName}</p>
-                  <p className="text-xs" style={{ color: '#4A4565' }}>{new Date().toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })}</p>
+                  <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{businessName}</p>
+                  <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>{new Date().toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })}</p>
                 </div>
-                <button onClick={() => setShowQuickPanel(false)} className="text-xl" style={{ color: '#4A4565' }}>×</button>
+                <button onClick={() => setShowQuickPanel(false)} className="text-xl" style={{ color: 'var(--text-tertiary)' }}>×</button>
               </div>
               <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
                 {[
@@ -1276,9 +1276,9 @@ export default function TerminalPage() {
                 ].map(link => (
                   <a key={link.href} href={link.href}
                     className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors"
-                    style={{ color: '#8B85A8' }}
-                    onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.background = 'rgba(255,255,255,0.04)'; (e.currentTarget as HTMLAnchorElement).style.color = '#EDE8FF'; }}
-                    onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.background = ''; (e.currentTarget as HTMLAnchorElement).style.color = '#8B85A8'; }}>
+                    style={{ color: 'var(--text-secondary)' }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.background = 'rgba(255,255,255,0.04)'; (e.currentTarget as HTMLAnchorElement).style.color = 'var(--text-primary)'; }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.background = ''; (e.currentTarget as HTMLAnchorElement).style.color = 'var(--text-secondary)'; }}>
                     <span className="text-base w-6 text-center">{link.icon}</span>
                     <span>{link.label}</span>
                   </a>
@@ -1305,7 +1305,7 @@ export default function TerminalPage() {
               </div>
               {lowStockItems.length > 0 && (
                 <div className="p-3" style={{ borderTop: '1px solid #1C1928' }}>
-                  <p className="text-[10px] uppercase tracking-wider mb-1.5" style={{ color: '#4A4565' }}>Low stock</p>
+                  <p className="text-[10px] uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-tertiary)' }}>Low stock</p>
                   {lowStockItems.slice(0, 3).map(p => (
                     <p key={p.id} className="text-xs py-0.5" style={{ color: '#F59E0B' }}>⚠ {p.name} ({p.stock_quantity} left)</p>
                   ))}
@@ -1327,7 +1327,7 @@ export default function TerminalPage() {
           <div className="px-3 py-2.5 flex gap-2" style={{ borderBottom: '1px solid rgba(0,229,255,0.06)' }}>
             <button onClick={() => setShowQuickPanel(v => !v)}
               className="flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-xl text-base"
-              style={{ border: '1px solid #2A2540', background: 'rgba(255,255,255,0.03)', color: '#8B85A8' }}>
+              style={{ border: '1px solid #2A2540', background: 'rgba(255,255,255,0.03)', color: 'var(--text-secondary)' }}>
               ≡
             </button>
             <div className="relative flex-1">
@@ -1343,7 +1343,7 @@ export default function TerminalPage() {
               {search && (
                 <button onClick={() => setSearch('')}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-base leading-none"
-                  style={{ color: '#4A4565' }}>
+                  style={{ color: 'var(--text-tertiary)' }}>
                   ×
                 </button>
               )}
@@ -1377,19 +1377,19 @@ export default function TerminalPage() {
           <div className="px-3 py-1.5 flex gap-1.5" style={{ borderBottom: '1px solid #1C1928' }}>
             <button onClick={() => { setCustomItemForm(f => ({ ...f, isNote: false })); setShowCustomItem(true); }}
               className="flex-1 text-xs rounded-lg py-1.5 transition-colors"
-              style={{ border: '1px dashed #2A2540', color: '#4A4565' }}>
+              style={{ border: '1px dashed #2A2540', color: 'var(--text-tertiary)' }}>
               + Custom item
             </button>
             <button onClick={() => { setCustomItemForm(f => ({ ...f, isNote: true, price: '0' })); setShowCustomItem(true); }}
               className="flex-1 text-xs rounded-lg py-1.5 transition-colors"
-              style={{ border: '1px dashed #2A2540', color: '#4A4565' }}>
+              style={{ border: '1px dashed #2A2540', color: 'var(--text-tertiary)' }}>
               + Note
             </button>
             <button onClick={() => setPriceCheckMode(v => !v)}
               className="px-2.5 text-xs rounded-lg py-1.5 transition-colors"
               style={priceCheckMode
                 ? { background: 'rgba(139,92,246,0.12)', border: '1px solid rgba(139,92,246,0.3)', color: '#8B5CF6' }
-                : { border: '1px solid #2A2540', color: '#4A4565' }}
+                : { border: '1px solid #2A2540', color: 'var(--text-tertiary)' }}
               title="Price check mode">
               🔍
             </button>
@@ -1425,7 +1425,7 @@ export default function TerminalPage() {
             {loading ? (
               <div className="grid grid-cols-2 gap-2">
                 {[...Array(8)].map((_, i) => (
-                  <div key={i} className="rounded-2xl p-3 animate-pulse" style={{ background: 'rgba(26,23,40,0.9)', border: '1px solid #2A2540' }}>
+                  <div key={i} className="rounded-2xl p-3 animate-pulse" style={{ background: 'var(--bg-surface)', border: '1px solid #2A2540' }}>
                     <div className="h-12 rounded-lg mb-2" style={{ background: 'rgba(255,255,255,0.04)' }} />
                     <div className="h-3 rounded mb-1" style={{ background: 'rgba(255,255,255,0.06)', width: '70%' }} />
                     <div className="h-3 rounded" style={{ background: 'rgba(255,255,255,0.04)', width: '45%' }} />
@@ -1435,7 +1435,7 @@ export default function TerminalPage() {
             ) : displayedProducts.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-center py-12">
                 <p className="text-3xl mb-2">📦</p>
-                <p className="text-sm" style={{ color: '#4A4565' }}>{search ? `No products match "${search}"` : 'No products yet'}</p>
+                <p className="text-sm" style={{ color: 'var(--text-tertiary)' }}>{search ? `No products match "${search}"` : 'No products yet'}</p>
                 {!search && <a href="/pos/products" className="mt-3 text-xs font-medium hover:underline" style={{ color: '#8B5CF6' }}>Add products →</a>}
               </div>
             ) : (() => {
@@ -1468,7 +1468,7 @@ export default function TerminalPage() {
                         }}
                         onContextMenu={e => { e.preventDefault(); setContextMenu({ product: p, x: e.clientX, y: e.clientY }); }}
                         style={{
-                          background: '#0A0E1E',
+                          background: 'var(--bg-base)',
                           border: `1px solid rgba(0,229,255,0.08)`,
                           borderRadius: 18,
                           padding: 14,
@@ -1550,7 +1550,7 @@ export default function TerminalPage() {
             <>
               {/* Cart header */}
               <div ref={cartAnchor} className="flex-shrink-0 px-4 py-3 flex items-center gap-2" style={{ borderBottom: '1px solid #1C1928' }}>
-                <span className="text-sm font-semibold" style={{ color: '#EDE8FF' }}>Order</span>
+                <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Order</span>
                 {cart.length > 0 && (
                   <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(139,92,246,0.12)', border: '1px solid rgba(139,92,246,0.25)', color: '#8B5CF6' }}>
                     {cart.reduce((s, i) => s + i.qty, 0)} item{cart.reduce((s, i) => s + i.qty, 0) !== 1 ? 's' : ''}
@@ -1560,14 +1560,14 @@ export default function TerminalPage() {
                 {cart.length > 0 && (
                   <button onClick={() => parkSale()}
                     className="text-xs px-2.5 py-1.5 rounded-lg transition-colors"
-                    style={{ border: '1px solid #2A2540', color: '#8B85A8' }}>
+                    style={{ border: '1px solid #2A2540', color: 'var(--text-secondary)' }}>
                     Park
                   </button>
                 )}
                 {cart.length > 0 && (
                   <button onClick={confirmClear}
                     className="text-xs px-2.5 py-1.5 rounded-lg transition-colors"
-                    style={{ border: '1px solid #2A2540', color: '#8B85A8' }}>
+                    style={{ border: '1px solid #2A2540', color: 'var(--text-secondary)' }}>
                     Clear
                   </button>
                 )}
@@ -1577,7 +1577,7 @@ export default function TerminalPage() {
                     <div className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold flex-shrink-0" style={{ background: 'rgba(139,92,246,0.2)', color: '#8B5CF6' }}>
                       {customer.name[0]}
                     </div>
-                    <span className="text-xs max-w-[80px] truncate" style={{ color: '#EDE8FF' }}>{customer.name}</span>
+                    <span className="text-xs max-w-[80px] truncate" style={{ color: 'var(--text-primary)' }}>{customer.name}</span>
                     {customer.loyalty_points > 0 && (
                       <span className="text-[10px]" style={{ color: '#8B5CF6' }}>{customer.loyalty_points}pts</span>
                     )}
@@ -1588,16 +1588,16 @@ export default function TerminalPage() {
                     <input value={customerSearch} onChange={e => setCustomerSearch(e.target.value)}
                       placeholder="+ Customer"
                       className="text-xs rounded-lg px-2.5 py-1.5 outline-none w-28"
-                      style={{ border: '1px dashed #2A2540', color: '#8B85A8', background: 'transparent' }} />
+                      style={{ border: '1px dashed #2A2540', color: 'var(--text-secondary)', background: 'transparent' }} />
                     {customerResults.length > 0 && (
-                      <div className="absolute top-full mt-1 right-0 rounded-xl shadow-xl z-30 overflow-hidden w-48" style={{ background: '#1A1728', border: '1px solid #2A2540' }}>
+                      <div className="absolute top-full mt-1 right-0 rounded-xl shadow-xl z-30 overflow-hidden w-48" style={{ background: 'var(--bg-elevated)', border: '1px solid #2A2540' }}>
                         {customerResults.map(c => (
                           <button key={c.id}
                             onClick={() => { setCustomer(c); setCustomerSearch(''); setCustomerResults([]); }}
                             className="w-full flex items-center gap-2 px-3 py-2 text-left" style={{ borderBottom: '1px solid #1C1928' }}>
                             <div className="flex-1 min-w-0">
-                              <p className="text-xs font-medium truncate" style={{ color: '#EDE8FF' }}>{c.name}</p>
-                              <p className="text-[10px]" style={{ color: '#4A4565' }}>{c.phone ?? c.email ?? ''}</p>
+                              <p className="text-xs font-medium truncate" style={{ color: 'var(--text-primary)' }}>{c.name}</p>
+                              <p className="text-[10px]" style={{ color: 'var(--text-tertiary)' }}>{c.phone ?? c.email ?? ''}</p>
                             </div>
                             <span className="text-[10px]" style={{ color: '#8B5CF6' }}>{c.loyalty_points}pts</span>
                           </button>
@@ -1610,11 +1610,11 @@ export default function TerminalPage() {
 
               {/* Sale attribution (commission) */}
               <div className="flex-shrink-0 px-4 py-1.5 flex items-center gap-2" style={{ borderBottom: '1px solid #1C1928' }}>
-                <span className="text-[10px] font-medium uppercase tracking-wider flex-shrink-0" style={{ color: '#4A4565' }}>Sale by</span>
+                <span className="text-[10px] font-medium uppercase tracking-wider flex-shrink-0" style={{ color: 'var(--text-tertiary)' }}>Sale by</span>
                 <input value={servedBy} onChange={e => setServedBy(e.target.value)}
                   placeholder="Cashier name…"
                   className="flex-1 text-xs bg-transparent outline-none"
-                  style={{ color: '#8B85A8' }} />
+                  style={{ color: 'var(--text-secondary)' }} />
               </div>
 
               {/* Cart items */}
@@ -1639,18 +1639,18 @@ export default function TerminalPage() {
                           {/* Row 1: name + total */}
                           <div className="flex items-start justify-between gap-2 mb-1.5">
                             <div className="flex-1 min-w-0">
-                              <p className="text-sm font-semibold leading-snug" style={{ color: '#EDE8FF' }}>
+                              <p className="text-sm font-semibold leading-snug" style={{ color: 'var(--text-primary)' }}>
                                 {item.label ?? item.product.name}
                               </p>
                               {item.modifierDetails && item.modifierDetails.length > 0 && (
-                                <p className="text-xs italic mt-0.5" style={{ color: '#8B85A8' }}>· {item.modifierDetails.map(m => m.name).join(', ')}</p>
+                                <p className="text-xs italic mt-0.5" style={{ color: 'var(--text-secondary)' }}>· {item.modifierDetails.map(m => m.name).join(', ')}</p>
                               )}
                             </div>
                             <div className="text-right flex-shrink-0">
                               {(item.discount_percent ?? 0) > 0 && (
-                                <p className="text-[10px] line-through" style={{ fontFamily: "'JetBrains Mono',monospace", color: '#4A4565' }}>A${(item.unitPrice * item.qty).toFixed(2)}</p>
+                                <p className="text-[10px] line-through" style={{ fontFamily: "'JetBrains Mono',monospace", color: 'var(--text-tertiary)' }}>A${(item.unitPrice * item.qty).toFixed(2)}</p>
                               )}
-                              <p className="text-sm font-bold" style={{ fontFamily: "'JetBrains Mono',monospace", color: '#EDE8FF' }}>A${lineTotal.toFixed(2)}</p>
+                              <p className="text-sm font-bold" style={{ fontFamily: "'JetBrains Mono',monospace", color: 'var(--text-primary)' }}>A${lineTotal.toFixed(2)}</p>
                             </div>
                           </div>
                           {/* Row 2: qty pill + remove */}
@@ -1659,10 +1659,10 @@ export default function TerminalPage() {
                               <button
                                 onClick={e => { e.stopPropagation(); updateQty(key, item.qty - 1); }}
                                 className="px-2.5 py-1 text-sm font-bold leading-none transition-colors"
-                                style={{ color: '#8B85A8' }}>
+                                style={{ color: 'var(--text-secondary)' }}>
                                 −
                               </button>
-                              <span className="px-3 py-1 text-sm font-bold min-w-[28px] text-center" style={{ fontFamily: "'JetBrains Mono',monospace", color: '#EDE8FF', borderLeft: '1px solid #2A2540', borderRight: '1px solid #2A2540' }}>
+                              <span className="px-3 py-1 text-sm font-bold min-w-[28px] text-center" style={{ fontFamily: "'JetBrains Mono',monospace", color: 'var(--text-primary)', borderLeft: '1px solid #2A2540', borderRight: '1px solid #2A2540' }}>
                                 {item.qty}
                               </span>
                               <button
@@ -1708,12 +1708,12 @@ export default function TerminalPage() {
                       <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, color: 'rgba(220,240,255,0.7)' }}>A${subtotal.toFixed(2)}</span>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                      <span style={{ fontSize: 10, color: 'rgba(130,160,200,0.35)' }}>GST incl.</span>
-                      <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 10, color: 'rgba(130,160,200,0.35)' }}>A${taxAmount.toFixed(2)}</span>
+                      <span style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>GST incl.</span>
+                      <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 10, color: 'var(--text-tertiary)' }}>A${taxAmount.toFixed(2)}</span>
                     </div>
                     {/* Loyalty points earned */}
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                      <span style={{ fontSize: 10, color: 'rgba(130,160,200,0.35)' }}>Loyalty earned</span>
+                      <span style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>Loyalty earned</span>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(0,229,255,0.07)', border: '1px solid rgba(0,229,255,0.18)', borderRadius: 20, padding: '2px 8px' }}>
                         <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#00E5FF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
                         <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 9, fontWeight: 800, color: '#00E5FF' }}>{loyaltyPoints} PTS</span>
@@ -1788,7 +1788,7 @@ export default function TerminalPage() {
                 <span className="absolute inset-0 w-1.5 h-1.5 rounded-full animate-ping" style={{ background: '#22C55E', opacity: 0.75 }} />
               </div>
             </div>
-            <kbd className="text-[10px] rounded px-1.5 py-0.5 relative z-10" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', fontFamily: "'JetBrains Mono',monospace", color: '#4A4565' }}>⌘K</kbd>
+            <kbd className="text-[10px] rounded px-1.5 py-0.5 relative z-10" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', fontFamily: "'JetBrains Mono',monospace", color: 'var(--text-tertiary)' }}>⌘K</kbd>
           </div>
 
           {/* Proactive alerts */}
@@ -1813,7 +1813,7 @@ export default function TerminalPage() {
           {/* Product suggestions */}
           {(suggestions.length > 0 || suggestionsLoading) && (
             <div className="flex-shrink-0 px-3 pb-2">
-              <p className="text-[10px] uppercase tracking-wider mb-1.5" style={{ color: '#4A4565' }}>Often bought together</p>
+              <p className="text-[10px] uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-tertiary)' }}>Often bought together</p>
               {suggestionsLoading ? (
                 <div className="h-6 rounded animate-pulse w-2/3" style={{ background: 'rgba(255,255,255,0.04)' }} />
               ) : (
@@ -1825,7 +1825,7 @@ export default function TerminalPage() {
                         onClick={() => prod && checkAndAddToCart(prod)}
                         disabled={!prod}
                         className="text-xs rounded-lg px-2.5 py-1.5 disabled:opacity-40 transition-all"
-                        style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid #2A2540', color: '#8B85A8' }}
+                        style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid #2A2540', color: 'var(--text-secondary)' }}
                         onMouseEnter={e => { const el = e.currentTarget as HTMLButtonElement; el.style.border = '1px solid rgba(139,92,246,0.3)'; el.style.background = 'rgba(139,92,246,0.06)'; }}
                         onMouseLeave={e => { const el = e.currentTarget as HTMLButtonElement; el.style.border = '1px solid #2A2540'; el.style.background = 'rgba(255,255,255,0.04)'; }}>
                         {s.name} <span style={{ color: '#8B5CF6', fontFamily: "'JetBrains Mono',monospace" }}>+A${s.price?.toFixed(2)}</span>
@@ -1840,7 +1840,7 @@ export default function TerminalPage() {
           {/* Aria chat */}
           <div className="flex-1 overflow-y-auto px-3 pb-2 space-y-2 min-h-0">
             {chatMessages.length === 0 && (
-              <p className="text-xs text-center pt-4 px-2" style={{ color: '#4A4565' }}>
+              <p className="text-xs text-center pt-4 px-2" style={{ color: 'var(--text-tertiary)' }}>
                 Ask about products, GST, stock levels, or today's sales.
               </p>
             )}
@@ -1848,7 +1848,7 @@ export default function TerminalPage() {
               m.role === 'user' ? (
                 <div key={i} className="flex justify-end">
                   <div className="max-w-[90%] rounded-[10px] px-3 py-2 text-xs leading-snug"
-                    style={{ background: 'rgba(139,92,246,0.12)', border: '1px solid rgba(139,92,246,0.2)', color: '#EDE8FF' }}>
+                    style={{ background: 'rgba(139,92,246,0.12)', border: '1px solid rgba(139,92,246,0.2)', color: 'var(--text-primary)' }}>
                     {m.content}
                   </div>
                 </div>
@@ -1861,7 +1861,7 @@ export default function TerminalPage() {
               ) : (
                 <div key={i} className="flex justify-start">
                   <div className="max-w-[90%] rounded-[10px] px-3 py-2 text-xs leading-snug"
-                    style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid #1C1928', color: '#8B85A8' }}>
+                    style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid #1C1928', color: 'var(--text-secondary)' }}>
                     {m.content}
                   </div>
                 </div>
@@ -1884,7 +1884,7 @@ export default function TerminalPage() {
                 onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendAriaChat(); } }}
                 placeholder="Ask Aria…"
                 className="flex-1 text-xs bg-transparent outline-none"
-                style={{ color: '#EDE8FF' }} />
+                style={{ color: 'var(--text-primary)' }} />
               <button onClick={sendAriaChat} disabled={!chatInput.trim() || chatLoading}
                 className="w-7 h-7 rounded-lg text-xs disabled:opacity-40 flex items-center justify-center flex-shrink-0 text-white"
                 style={{ background: '#8B5CF6' }}>↑</button>
@@ -1895,7 +1895,7 @@ export default function TerminalPage() {
           <div className="flex-shrink-0 px-3 pb-2">
             <button onClick={() => setShowMissedModal(true)}
               className="w-full rounded-[10px] py-2 text-xs transition-all"
-              style={{ border: '1px dashed #2A2540', color: '#4A4565' }}>
+              style={{ border: '1px dashed #2A2540', color: 'var(--text-tertiary)' }}>
               Log missed sale
             </button>
           </div>
@@ -1903,14 +1903,14 @@ export default function TerminalPage() {
           {/* Parked sales */}
           {parkedSales.length > 0 && (
             <div className="flex-shrink-0 px-3 py-2" style={{ borderTop: '1px solid #1C1928' }}>
-              <p className="text-[10px] uppercase tracking-wider mb-1.5" style={{ color: '#4A4565' }}>Held sales ({parkedSales.length})</p>
+              <p className="text-[10px] uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-tertiary)' }}>Held sales ({parkedSales.length})</p>
               <div className="space-y-1">
                 {parkedSales.slice(0, 3).map(p => (
                   <button key={p.id} onClick={() => restoreParked(p)}
                     className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-left transition-colors"
                     style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid #1C1928' }}>
-                    <span className="text-xs truncate" style={{ color: '#8B85A8' }}>{p.label || 'Sale'} · {Array.isArray(p.items) ? p.items.length : 0} items</span>
-                    <span className="text-xs font-medium flex-shrink-0 ml-2" style={{ fontFamily: "'JetBrains Mono',monospace", color: '#EDE8FF' }}>A${(p.total || 0).toFixed(2)}</span>
+                    <span className="text-xs truncate" style={{ color: 'var(--text-secondary)' }}>{p.label || 'Sale'} · {Array.isArray(p.items) ? p.items.length : 0} items</span>
+                    <span className="text-xs font-medium flex-shrink-0 ml-2" style={{ fontFamily: "'JetBrains Mono',monospace", color: 'var(--text-primary)' }}>A${(p.total || 0).toFixed(2)}</span>
                   </button>
                 ))}
               </div>
@@ -1920,24 +1920,24 @@ export default function TerminalPage() {
           {/* Recent sales */}
           <div className="flex-shrink-0" style={{ borderTop: '1px solid #1C1928' }}>
             <div className="px-4 py-2">
-              <p className="text-[10px] font-medium uppercase tracking-wider" style={{ color: '#4A4565' }}>Recent sales</p>
+              <p className="text-[10px] font-medium uppercase tracking-wider" style={{ color: 'var(--text-tertiary)' }}>Recent sales</p>
             </div>
           </div>
           <div className="flex-1 overflow-y-auto px-3 min-h-0" style={{ maxHeight: '140px' }}>
             {recentSales.length === 0 ? (
-              <p className="text-xs text-center py-4" style={{ color: '#4A4565' }}>No sales yet this session</p>
+              <p className="text-xs text-center py-4" style={{ color: 'var(--text-tertiary)' }}>No sales yet this session</p>
             ) : (
               <div>
                 {recentSales.map(s => (
                   <div key={s.id} className="py-2 group flex items-center gap-2" style={{ borderBottom: '1px solid #1C1928' }}>
                     <div className="flex-1 min-w-0">
-                      <div className="flex justify-between text-[10px] mb-0.5" style={{ color: '#4A4565' }}>
+                      <div className="flex justify-between text-[10px] mb-0.5" style={{ color: 'var(--text-tertiary)' }}>
                         <span>#{s.id.slice(-6).toUpperCase()}</span>
                         <span>{s.time.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-xs" style={{ color: '#8B85A8' }}>{s.items} item{s.items !== 1 ? 's' : ''}</span>
-                        <span className="text-xs font-semibold" style={{ fontFamily: "'JetBrains Mono',monospace", color: '#EDE8FF' }}>A${s.total.toFixed(2)}</span>
+                        <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{s.items} item{s.items !== 1 ? 's' : ''}</span>
+                        <span className="text-xs font-semibold" style={{ fontFamily: "'JetBrains Mono',monospace", color: 'var(--text-primary)' }}>A${s.total.toFixed(2)}</span>
                       </div>
                     </div>
                     <button onClick={() => setReprintSale(s)}
@@ -1959,8 +1959,8 @@ export default function TerminalPage() {
           ['F1','Search'], ['F2','Custom item'], ['F3','Hold'], ['F8','Cash'],
           ['F9','Card'], ['F10','Complete'], ['Esc','Clear'],
         ].map(([key, label]) => (
-          <span key={key} className="flex items-center gap-1 text-[10px] whitespace-nowrap" style={{ color: '#4A4565' }}>
-            <kbd className="rounded px-1 py-0.5 text-[10px]" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid #2A2540', fontFamily: "'JetBrains Mono',monospace", color: '#8B85A8' }}>{key}</kbd>
+          <span key={key} className="flex items-center gap-1 text-[10px] whitespace-nowrap" style={{ color: 'var(--text-tertiary)' }}>
+            <kbd className="rounded px-1 py-0.5 text-[10px]" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid #2A2540', fontFamily: "'JetBrains Mono',monospace", color: 'var(--text-secondary)' }}>{key}</kbd>
             {label}
           </span>
         ))}
@@ -1975,7 +1975,7 @@ export default function TerminalPage() {
         ]).map(t => (
           <button key={t.tab} onClick={() => setMobileTab(t.tab)}
             className="flex flex-col items-center justify-center gap-0.5 text-xs font-medium transition-colors"
-            style={{ color: mobileTab === t.tab ? '#8B5CF6' : '#4A4565' }}>
+            style={{ color: mobileTab === t.tab ? '#8B5CF6' : 'var(--text-tertiary)' }}>
             <span className="text-lg">{t.icon}</span>
             <span>{t.label}</span>
           </button>
@@ -1987,24 +1987,24 @@ export default function TerminalPage() {
       {/* Variant / Modifier modal */}
       {variantModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(8,6,16,0.88)' }}>
-          <div className="rounded-2xl w-full max-w-sm overflow-hidden" style={{ background: '#1A1728', border: '1px solid #2A2540', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
+          <div className="rounded-2xl w-full max-w-sm overflow-hidden" style={{ background: 'var(--bg-elevated)', border: '1px solid #2A2540', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
             <div className="px-6 py-5" style={{ borderBottom: '1px solid #1C1928' }}>
-              <h2 className="text-base font-bold" style={{ color: '#EDE8FF' }}>{variantModal.product.name}</h2>
-              <p className="text-xs mt-0.5" style={{ color: '#4A4565' }}>
+              <h2 className="text-base font-bold" style={{ color: 'var(--text-primary)' }}>{variantModal.product.name}</h2>
+              <p className="text-xs mt-0.5" style={{ color: 'var(--text-tertiary)' }}>
                 Base A${variantModal.product.price.toFixed(2)} — select options below
               </p>
             </div>
             <div className="px-6 py-4 space-y-5 max-h-[60vh] overflow-y-auto" style={{ borderBottom: '1px solid #1C1928' }}>
               {variantModal.variantGroups.map(g => (
                 <div key={g.id}>
-                  <p className="text-xs font-semibold mb-2" style={{ color: '#8B85A8' }}>{g.name}</p>
+                  <p className="text-xs font-semibold mb-2" style={{ color: 'var(--text-secondary)' }}>{g.name}</p>
                   <div className="flex flex-wrap gap-2">
                     {(g.values as string[]).map(v => {
                       const priceNote = g.affects_price && g.price_map[v] != null ? ` · A$${g.price_map[v].toFixed(2)}` : '';
                       return (
                         <button key={v} onClick={() => setSelectedVariants(p => ({ ...p, [g.id]: v }))}
                           className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
-                            selectedVariants[g.id] === v ? '' : ''} style={selectedVariants[g.id] === v ? { background: '#8B5CF6', border: '1px solid rgba(139,92,246,0.6)', color: '#fff' } : { background: 'rgba(255,255,255,0.03)', border: '1px solid #2A2540', color: '#8B85A8' }
+                            selectedVariants[g.id] === v ? '' : ''} style={selectedVariants[g.id] === v ? { background: '#8B5CF6', border: '1px solid rgba(139,92,246,0.6)', color: '#fff' } : { background: 'rgba(255,255,255,0.03)', border: '1px solid #2A2540', color: 'var(--text-secondary)' }
                           }`}>
                           {v}{priceNote}
                         </button>
@@ -2015,16 +2015,16 @@ export default function TerminalPage() {
               ))}
               {variantModal.modifiers.length > 0 && (
                 <div>
-                  <p className="text-xs font-semibold mb-2" style={{ color: '#8B85A8' }}>Extras</p>
+                  <p className="text-xs font-semibold mb-2" style={{ color: 'var(--text-secondary)' }}>Extras</p>
                   <div className="space-y-2">
                     {variantModal.modifiers.map(m => (
                       <label key={m.id} className="flex items-center gap-3 cursor-pointer">
                         <input type="checkbox" checked={!!selectedMods[m.id]}
                           onChange={e => setSelectedMods(p => ({ ...p, [m.id]: e.target.checked }))}
                           className="w-4 h-4 accent-gray-900" />
-                        <span className="text-xs flex-1" style={{ color: '#EDE8FF' }}>{m.name}</span>
+                        <span className="text-xs flex-1" style={{ color: 'var(--text-primary)' }}>{m.name}</span>
                         {m.price_adjustment !== 0 && (
-                          <span className="text-xs" style={{ color: '#4A4565', fontFamily: "'JetBrains Mono',monospace" }}>
+                          <span className="text-xs" style={{ color: 'var(--text-tertiary)', fontFamily: "'JetBrains Mono',monospace" }}>
                             {m.price_adjustment > 0 ? '+' : ''}A${m.price_adjustment.toFixed(2)}
                           </span>
                         )}
@@ -2034,19 +2034,19 @@ export default function TerminalPage() {
                 </div>
               )}
               <div>
-                <p className="text-xs font-semibold mb-2" style={{ color: '#8B85A8' }}>Quantity</p>
+                <p className="text-xs font-semibold mb-2" style={{ color: 'var(--text-secondary)' }}>Quantity</p>
                 <div className="flex items-center gap-3">
                   <button onClick={() => setVariantQty(q => Math.max(1, q - 1))}
-                    className="w-8 h-8 rounded-full flex items-center justify-center" style={{ border: '1px solid #2A2540', color: '#8B85A8' }}>−</button>
-                  <span className="text-base font-bold w-6 text-center" style={{ color: '#EDE8FF' }}>{variantQty}</span>
+                    className="w-8 h-8 rounded-full flex items-center justify-center" style={{ border: '1px solid #2A2540', color: 'var(--text-secondary)' }}>−</button>
+                  <span className="text-base font-bold w-6 text-center" style={{ color: 'var(--text-primary)' }}>{variantQty}</span>
                   <button onClick={() => setVariantQty(q => q + 1)}
-                    className="w-8 h-8 rounded-full flex items-center justify-center" style={{ border: '1px solid #2A2540', color: '#8B85A8' }}>+</button>
+                    className="w-8 h-8 rounded-full flex items-center justify-center" style={{ border: '1px solid #2A2540', color: 'var(--text-secondary)' }}>+</button>
                 </div>
               </div>
             </div>
             <div className="px-6 pb-5 flex gap-2">
               <button onClick={() => setVariantModal(null)}
-                className="flex-1 py-2.5 rounded-xl text-sm" style={{ border: '1px solid #2A2540', color: '#8B85A8', background: 'rgba(255,255,255,0.02)' }}>Cancel</button>
+                className="flex-1 py-2.5 rounded-xl text-sm" style={{ border: '1px solid #2A2540', color: 'var(--text-secondary)', background: 'rgba(255,255,255,0.02)' }}>Cancel</button>
               <button onClick={confirmVariantSelection}
                 className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold" style={{ background: '#8B5CF6' }}>
                 Add to cart
@@ -2059,23 +2059,23 @@ export default function TerminalPage() {
       {/* Open Register modal */}
       {showRegisterModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(8,6,16,0.88)' }}>
-          <div className="rounded-2xl w-full max-w-sm overflow-hidden" style={{ background: '#1A1728', border: '1px solid #2A2540', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
+          <div className="rounded-2xl w-full max-w-sm overflow-hidden" style={{ background: 'var(--bg-elevated)', border: '1px solid #2A2540', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
             <div className="px-6 py-5" style={{ borderBottom: '1px solid #1C1928' }}>
-              <h2 className="text-base font-bold" style={{ color: '#EDE8FF' }}>Open Register</h2>
-              <p className="text-xs mt-0.5" style={{ color: '#4A4565' }}>Enter opening float to start trading.</p>
+              <h2 className="text-base font-bold" style={{ color: 'var(--text-primary)' }}>Open Register</h2>
+              <p className="text-xs mt-0.5" style={{ color: 'var(--text-tertiary)' }}>Enter opening float to start trading.</p>
             </div>
             <div className="px-6 py-5 space-y-4">
               <div>
                 <label className="text-xs font-medium text-gray-500 block mb-1.5">Opening float (A$)</label>
                 <input type="number" min="0" step="0.01" value={openingFloat}
                   onChange={e => setOpeningFloat(e.target.value)}
-                  className="w-full rounded-xl px-4 py-2.5 text-lg font-bold outline-none" style={{ border: '1px solid #2A2540', background: 'rgba(255,255,255,0.03)', fontFamily: "'JetBrains Mono',monospace", color: '#EDE8FF' }} autoFocus />
+                  className="w-full rounded-xl px-4 py-2.5 text-lg font-bold outline-none" style={{ border: '1px solid #2A2540', background: 'rgba(255,255,255,0.03)', fontFamily: "'JetBrains Mono',monospace", color: 'var(--text-primary)' }} autoFocus />
               </div>
               {registerError && <p className="text-xs rounded-lg px-3 py-2" style={{ color: '#EF4444', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.15)' }}>{registerError}</p>}
             </div>
             <div className="px-6 pb-5 flex gap-2">
               <button onClick={() => { setShowRegisterModal(false); setRegisterError(null); }}
-                className="flex-1 py-2.5 rounded-xl text-sm" style={{ border: '1px solid #2A2540', color: '#8B85A8', background: 'rgba(255,255,255,0.02)' }}>Cancel</button>
+                className="flex-1 py-2.5 rounded-xl text-sm" style={{ border: '1px solid #2A2540', color: 'var(--text-secondary)', background: 'rgba(255,255,255,0.02)' }}>Cancel</button>
               <button onClick={openRegister} disabled={openingRegister}
                 className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-50 flex items-center justify-center gap-2" style={{ background: '#8B5CF6' }}>
                 {openingRegister ? <><Spinner /> Opening…</> : 'Open Register'}
@@ -2088,10 +2088,10 @@ export default function TerminalPage() {
       {/* Close Register modal */}
       {showCloseModal && registerSession && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(8,6,16,0.88)' }}>
-          <div className="rounded-2xl w-full max-w-sm overflow-hidden" style={{ background: '#1A1728', border: '1px solid #2A2540', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
+          <div className="rounded-2xl w-full max-w-sm overflow-hidden" style={{ background: 'var(--bg-elevated)', border: '1px solid #2A2540', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
             <div className="px-6 py-5" style={{ borderBottom: '1px solid #1C1928' }}>
-              <h2 className="text-base font-bold" style={{ color: '#EDE8FF' }}>Close Register</h2>
-              <p className="text-xs mt-0.5" style={{ color: '#4A4565' }}>
+              <h2 className="text-base font-bold" style={{ color: 'var(--text-primary)' }}>Close Register</h2>
+              <p className="text-xs mt-0.5" style={{ color: 'var(--text-tertiary)' }}>
                 Opened {new Date(registerSession.opened_at).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })} · Float A${(registerSession.opening_float || 0).toFixed(2)}
               </p>
             </div>
@@ -2106,7 +2106,7 @@ export default function TerminalPage() {
             </div>
             <div className="px-6 pb-5 flex gap-2">
               <button onClick={() => { setShowCloseModal(false); setRegisterError(null); }}
-                className="flex-1 py-2.5 rounded-xl text-sm" style={{ border: '1px solid #2A2540', color: '#8B85A8', background: 'rgba(255,255,255,0.02)' }}>Cancel</button>
+                className="flex-1 py-2.5 rounded-xl text-sm" style={{ border: '1px solid #2A2540', color: 'var(--text-secondary)', background: 'rgba(255,255,255,0.02)' }}>Cancel</button>
               <button onClick={closeRegister} disabled={closingRegister}
                 className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-50 flex items-center justify-center gap-2" style={{ background: '#EF4444' }}>
                 {closingRegister ? <><Spinner /> Closing…</> : 'Close Register'}
@@ -2119,10 +2119,10 @@ export default function TerminalPage() {
       {/* Parked sales drawer */}
       {showParked && (
         <div className="fixed inset-0 z-50 flex items-end justify-center p-4 md:items-center" style={{ background: 'rgba(8,6,16,0.88)' }}>
-          <div className="rounded-2xl w-full max-w-md overflow-hidden" style={{ background: '#1A1728', border: '1px solid #2A2540', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
+          <div className="rounded-2xl w-full max-w-md overflow-hidden" style={{ background: 'var(--bg-elevated)', border: '1px solid #2A2540', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
             <div className="px-6 py-5 flex items-center justify-between" style={{ borderBottom: '1px solid #1C1928' }}>
-              <h2 className="text-base font-bold" style={{ color: '#EDE8FF' }}>Parked Sales</h2>
-              <button onClick={() => setShowParked(false)} className="text-xl leading-none" style={{ color: '#4A4565' }}>×</button>
+              <h2 className="text-base font-bold" style={{ color: 'var(--text-primary)' }}>Parked Sales</h2>
+              <button onClick={() => setShowParked(false)} className="text-xl leading-none" style={{ color: 'var(--text-tertiary)' }}>×</button>
             </div>
             <div className="p-4 space-y-2 max-h-[60vh] overflow-y-auto">
               {parkedSales.length === 0 ? (
@@ -2131,13 +2131,13 @@ export default function TerminalPage() {
                 <button key={p.id} onClick={() => restoreParked(p)}
                   className="w-full flex items-center gap-3 p-4 rounded-xl transition-all text-left" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid #2A2540' }}>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium" style={{ color: '#EDE8FF' }}>{p.label || 'Parked Sale'}</p>
-                    <p className="text-[11px] mt-0.5" style={{ color: '#4A4565' }}>
+                    <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{p.label || 'Parked Sale'}</p>
+                    <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-tertiary)' }}>
                       {Array.isArray(p.items) ? p.items.length : 0} items · {new Date(p.created_at).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}
                     </p>
                   </div>
                   <div className="text-right flex-shrink-0">
-                    <p className="text-sm font-bold" style={{ fontFamily: "'JetBrains Mono',monospace", color: '#EDE8FF' }}>A${(p.total || 0).toFixed(2)}</p>
+                    <p className="text-sm font-bold" style={{ fontFamily: "'JetBrains Mono',monospace", color: 'var(--text-primary)' }}>A${(p.total || 0).toFixed(2)}</p>
                     <p className="text-[10px] mt-0.5" style={{ color: '#8B5CF6' }}>Restore →</p>
                   </div>
                 </button>
@@ -2150,27 +2150,27 @@ export default function TerminalPage() {
       {/* Missed sale modal */}
       {showMissedModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-          <div className="rounded-2xl w-full max-w-sm overflow-hidden" style={{ background: '#1A1728', border: '1px solid #2A2540', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
+          <div className="rounded-2xl w-full max-w-sm overflow-hidden" style={{ background: 'var(--bg-elevated)', border: '1px solid #2A2540', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
             <div className="px-6 py-5" style={{ borderBottom: '1px solid #1C1928' }}>
-              <h2 className="text-base font-bold" style={{ color: '#EDE8FF' }}>Log Missed Sale</h2>
-              <p className="text-xs mt-0.5" style={{ color: '#4A4565' }}>Record what a customer asked for that you didn't stock</p>
+              <h2 className="text-base font-bold" style={{ color: 'var(--text-primary)' }}>Log Missed Sale</h2>
+              <p className="text-xs mt-0.5" style={{ color: 'var(--text-tertiary)' }}>Record what a customer asked for that you didn't stock</p>
             </div>
             <div className="px-6 py-5 space-y-3">
               <input value={missedName} onChange={e => setMissedName(e.target.value)}
-                className="w-full rounded-xl px-4 py-2.5 text-sm outline-none" style={{ border: '1px solid #2A2540', background: 'rgba(255,255,255,0.03)', color: '#EDE8FF' }}
+                className="w-full rounded-xl px-4 py-2.5 text-sm outline-none" style={{ border: '1px solid #2A2540', background: 'rgba(255,255,255,0.03)', color: 'var(--text-primary)' }}
                 placeholder="Product name e.g. Oat Milk 1L" autoFocus />
               <div>
-                <label className="text-xs mb-1 block" style={{ color: '#4A4565' }}>Qty wanted</label>
+                <label className="text-xs mb-1 block" style={{ color: 'var(--text-tertiary)' }}>Qty wanted</label>
                 <input type="number" min="1" value={missedQty} onChange={e => setMissedQty(e.target.value)}
-                  className="w-full rounded-xl px-4 py-2.5 text-sm outline-none" style={{ border: '1px solid #2A2540', background: 'rgba(255,255,255,0.03)', color: '#EDE8FF' }} />
+                  className="w-full rounded-xl px-4 py-2.5 text-sm outline-none" style={{ border: '1px solid #2A2540', background: 'rgba(255,255,255,0.03)', color: 'var(--text-primary)' }} />
               </div>
               <input value={missedNote} onChange={e => setMissedNote(e.target.value)}
-                className="w-full rounded-xl px-4 py-2.5 text-sm outline-none" style={{ border: '1px solid #2A2540', background: 'rgba(255,255,255,0.03)', color: '#EDE8FF' }}
+                className="w-full rounded-xl px-4 py-2.5 text-sm outline-none" style={{ border: '1px solid #2A2540', background: 'rgba(255,255,255,0.03)', color: 'var(--text-primary)' }}
                 placeholder="Customer note (optional)" />
             </div>
             <div className="px-6 pb-5 flex gap-2">
               <button onClick={() => { setShowMissedModal(false); setMissedName(''); setMissedQty('1'); setMissedNote(''); }}
-                className="flex-1 py-2.5 rounded-xl text-sm" style={{ border: '1px solid #2A2540', color: '#8B85A8', background: 'rgba(255,255,255,0.02)' }}>Cancel</button>
+                className="flex-1 py-2.5 rounded-xl text-sm" style={{ border: '1px solid #2A2540', color: 'var(--text-secondary)', background: 'rgba(255,255,255,0.02)' }}>Cancel</button>
               <button disabled={savingMissed || !missedName.trim()}
                 onClick={async () => {
                   if (!businessId || !missedName.trim()) return;
@@ -2185,7 +2185,7 @@ export default function TerminalPage() {
                     setMissedName(''); setMissedQty('1'); setMissedNote('');
                   } finally { setSavingMissed(false); }
                 }}
-                className="flex-1 py-2.5 rounded-xl text-sm font-semibold disabled:opacity-40" style={{ background: '#F59E0B', color: '#0A0910' }}>
+                className="flex-1 py-2.5 rounded-xl text-sm font-semibold disabled:opacity-40" style={{ background: '#F59E0B', color: 'var(--bg-base)' }}>
                 {savingMissed ? 'Saving…' : 'Log it'}
               </button>
             </div>
@@ -2196,50 +2196,50 @@ export default function TerminalPage() {
       {/* Custom item / Note modal */}
       {showCustomItem && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(8,6,16,0.88)' }}>
-          <div className="rounded-2xl w-full max-w-sm overflow-hidden" style={{ background: '#1A1728', border: '1px solid #2A2540', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
+          <div className="rounded-2xl w-full max-w-sm overflow-hidden" style={{ background: 'var(--bg-elevated)', border: '1px solid #2A2540', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
             <div className="px-6 py-5" style={{ borderBottom: '1px solid #1C1928' }}>
-              <h2 className="text-base font-bold" style={{ color: '#EDE8FF' }}>
+              <h2 className="text-base font-bold" style={{ color: 'var(--text-primary)' }}>
                 {customItemForm.isNote ? 'Add Note to Cart' : 'Custom Item'}
               </h2>
-              <p className="text-xs mt-0.5" style={{ color: '#4A4565' }}>
+              <p className="text-xs mt-0.5" style={{ color: 'var(--text-tertiary)' }}>
                 {customItemForm.isNote ? 'Non-priced note — appears on receipt' : 'One-time item, not saved to products'}
               </p>
             </div>
             <div className="px-6 py-5 space-y-3">
               <div>
-                <label className="text-xs mb-1 block" style={{ color: '#4A4565' }}>{customItemForm.isNote ? 'Note text' : 'Description'}</label>
+                <label className="text-xs mb-1 block" style={{ color: 'var(--text-tertiary)' }}>{customItemForm.isNote ? 'Note text' : 'Description'}</label>
                 <input value={customItemForm.desc} onChange={e => setCustomItemForm(f => ({ ...f, desc: e.target.value }))}
-                  className="w-full rounded-xl px-4 py-2.5 text-sm outline-none" style={{ border: '1px solid #2A2540', background: 'rgba(255,255,255,0.03)', color: '#EDE8FF' }}
+                  className="w-full rounded-xl px-4 py-2.5 text-sm outline-none" style={{ border: '1px solid #2A2540', background: 'rgba(255,255,255,0.03)', color: 'var(--text-primary)' }}
                   placeholder={customItemForm.isNote ? 'e.g. Gift wrap requested' : 'e.g. Custom engraving'} autoFocus />
               </div>
               {!customItemForm.isNote && (
                 <>
                   <div className="flex gap-3">
                     <div className="flex-1">
-                      <label className="text-xs mb-1 block" style={{ color: '#4A4565' }}>Price (A$)</label>
+                      <label className="text-xs mb-1 block" style={{ color: 'var(--text-tertiary)' }}>Price (A$)</label>
                       <input type="number" min="0" step="0.01" value={customItemForm.price}
                         onChange={e => setCustomItemForm(f => ({ ...f, price: e.target.value }))}
-                        className="w-full rounded-xl px-4 py-2.5 text-sm outline-none" style={{ border: '1px solid #2A2540', background: 'rgba(255,255,255,0.03)', color: '#EDE8FF' }} />
+                        className="w-full rounded-xl px-4 py-2.5 text-sm outline-none" style={{ border: '1px solid #2A2540', background: 'rgba(255,255,255,0.03)', color: 'var(--text-primary)' }} />
                     </div>
                     <div className="w-20">
-                      <label className="text-xs mb-1 block" style={{ color: '#4A4565' }}>Qty</label>
+                      <label className="text-xs mb-1 block" style={{ color: 'var(--text-tertiary)' }}>Qty</label>
                       <input type="number" min="1" value={customItemForm.qty}
                         onChange={e => setCustomItemForm(f => ({ ...f, qty: e.target.value }))}
-                        className="w-full rounded-xl px-4 py-2.5 text-sm outline-none" style={{ border: '1px solid #2A2540', background: 'rgba(255,255,255,0.03)', color: '#EDE8FF' }} />
+                        className="w-full rounded-xl px-4 py-2.5 text-sm outline-none" style={{ border: '1px solid #2A2540', background: 'rgba(255,255,255,0.03)', color: 'var(--text-primary)' }} />
                     </div>
                   </div>
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input type="checkbox" checked={customItemForm.taxable}
                       onChange={e => setCustomItemForm(f => ({ ...f, taxable: e.target.checked }))}
                       className="w-4 h-4 accent-gray-900" />
-                    <span className="text-sm" style={{ color: '#8B85A8' }}>GST inclusive (10%)</span>
+                    <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>GST inclusive (10%)</span>
                   </label>
                 </>
               )}
             </div>
             <div className="px-6 pb-5 flex gap-2">
               <button onClick={() => { setShowCustomItem(false); setCustomItemForm({ desc: '', price: '', qty: '1', taxable: true, isNote: false }); }}
-                className="flex-1 py-2.5 rounded-xl text-sm" style={{ border: '1px solid #2A2540', color: '#8B85A8', background: 'rgba(255,255,255,0.02)' }}>Cancel</button>
+                className="flex-1 py-2.5 rounded-xl text-sm" style={{ border: '1px solid #2A2540', color: 'var(--text-secondary)', background: 'rgba(255,255,255,0.02)' }}>Cancel</button>
               <button onClick={addCustomItemToCart}
                 disabled={!customItemForm.desc.trim() || (!customItemForm.isNote && !customItemForm.price)}
                 className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-40" style={{ background: '#8B5CF6' }}>
@@ -2253,15 +2253,15 @@ export default function TerminalPage() {
       {/* Price check overlay */}
       {priceCheckProd && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(8,6,16,0.88)' }}>
-          <div className="rounded-2xl w-full max-w-xs overflow-hidden" style={{ background: '#1A1728', border: '1px solid #2A2540', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
+          <div className="rounded-2xl w-full max-w-xs overflow-hidden" style={{ background: 'var(--bg-elevated)', border: '1px solid #2A2540', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
             <div className="px-6 py-4 text-center" style={{ background: 'rgba(139,92,246,0.08)', borderBottom: '1px solid rgba(139,92,246,0.15)' }}>
               <p className="text-xs font-medium uppercase tracking-wider mb-1" style={{ color: '#8B5CF6' }}>Price Check</p>
               <h2 className="text-lg font-bold text-gray-900">{priceCheckProd.name}</h2>
               {priceCheckProd.pos_categories && <p className="text-sm text-gray-500">{priceCheckProd.pos_categories.name}</p>}
             </div>
             <div className="px-6 py-5 text-center">
-              <p className="text-4xl font-bold mb-1" style={{ fontFamily: "'JetBrains Mono',monospace", color: '#EDE8FF' }}>A${priceCheckProd.price.toFixed(2)}</p>
-              <p className="text-xs" style={{ color: '#4A4565' }}>Includes GST: A${(priceCheckProd.price - priceCheckProd.price / 1.1).toFixed(2)}</p>
+              <p className="text-4xl font-bold mb-1" style={{ fontFamily: "'JetBrains Mono',monospace", color: 'var(--text-primary)' }}>A${priceCheckProd.price.toFixed(2)}</p>
+              <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>Includes GST: A${(priceCheckProd.price - priceCheckProd.price / 1.1).toFixed(2)}</p>
               {priceCheckProd.track_stock && (
                 <p className="mt-3 text-sm font-medium" style={{ color: priceCheckProd.stock_quantity <= 0 ? '#EF4444' : priceCheckProd.stock_quantity <= priceCheckProd.low_stock_threshold ? '#F59E0B' : '#22C55E' }}>
                   {priceCheckProd.stock_quantity <= 0 ? 'Out of stock' : `${priceCheckProd.stock_quantity} in stock`}
@@ -2270,7 +2270,7 @@ export default function TerminalPage() {
             </div>
             <div className="px-6 pb-5 flex gap-2">
               <button onClick={() => setPriceCheckProd(null)}
-                className="flex-1 py-2.5 rounded-xl text-sm" style={{ border: '1px solid #2A2540', color: '#8B85A8', background: 'rgba(255,255,255,0.02)' }}>Close</button>
+                className="flex-1 py-2.5 rounded-xl text-sm" style={{ border: '1px solid #2A2540', color: 'var(--text-secondary)', background: 'rgba(255,255,255,0.02)' }}>Close</button>
               <button onClick={() => { checkAndAddToCart(priceCheckProd); setPriceCheckProd(null); setPriceCheckMode(false); }}
                 disabled={priceCheckProd.track_stock && priceCheckProd.stock_quantity <= 0}
                 className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-40" style={{ background: '#8B5CF6' }}>
@@ -2284,28 +2284,28 @@ export default function TerminalPage() {
       {/* Refund modal */}
       {showRefundModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(8,6,16,0.88)' }}>
-          <div className="rounded-2xl w-full max-w-lg overflow-hidden" style={{ background: '#1A1728', border: '1px solid #2A2540', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
+          <div className="rounded-2xl w-full max-w-lg overflow-hidden" style={{ background: 'var(--bg-elevated)', border: '1px solid #2A2540', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
             <div className="px-6 py-5 flex items-center justify-between" style={{ borderBottom: '1px solid #1C1928' }}>
               <div>
-                <h2 className="text-base font-bold" style={{ color: '#EDE8FF' }}>Process Refund</h2>
-                <p className="text-xs mt-0.5" style={{ color: '#4A4565' }}>Search by receipt number or customer name</p>
+                <h2 className="text-base font-bold" style={{ color: 'var(--text-primary)' }}>Process Refund</h2>
+                <p className="text-xs mt-0.5" style={{ color: 'var(--text-tertiary)' }}>Search by receipt number or customer name</p>
               </div>
               <button onClick={() => { setShowRefundModal(false); setRefundSale(null); setRefundSearch(''); setRefundResults([]); }}
-                className="text-xl" style={{ color: '#4A4565' }}>×</button>
+                className="text-xl" style={{ color: 'var(--text-tertiary)' }}>×</button>
             </div>
             <div className="px-6 py-4 space-y-4 max-h-[60vh] overflow-y-auto">
               {!refundSale ? (
                 <>
                   <input value={refundSearch} onChange={e => { setRefundSearch(e.target.value); searchRefundSales(e.target.value); }}
-                    className="w-full rounded-xl px-4 py-2.5 text-sm outline-none" style={{ border: '1px solid #2A2540', background: 'rgba(255,255,255,0.03)', color: '#EDE8FF' }}
+                    className="w-full rounded-xl px-4 py-2.5 text-sm outline-none" style={{ border: '1px solid #2A2540', background: 'rgba(255,255,255,0.03)', color: 'var(--text-primary)' }}
                     placeholder="Search receipt # or customer name…" autoFocus />
                   <div className="space-y-2">
                     {refundResults.map((sale: any) => (
                       <button key={sale.id} onClick={() => { setRefundSale(sale); setRefundItems({}); }}
                         className="w-full flex items-center gap-3 p-3 rounded-xl text-left transition-all" style={{ border: '1px solid #2A2540', background: 'rgba(255,255,255,0.02)' }}>
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium" style={{ color: '#EDE8FF' }}>#{sale.sale_number ?? sale.id?.slice(-6).toUpperCase()}</p>
-                          <p className="text-xs" style={{ color: '#4A4565' }}>{new Date(sale.created_at).toLocaleDateString('en-AU')} · {sale.customer_name ?? 'Walk-in'}</p>
+                          <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>#{sale.sale_number ?? sale.id?.slice(-6).toUpperCase()}</p>
+                          <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>{new Date(sale.created_at).toLocaleDateString('en-AU')} · {sale.customer_name ?? 'Walk-in'}</p>
                         </div>
                         <span className="font-mono font-semibold text-sm text-gray-900">A${(sale.total_amount ?? 0).toFixed(2)}</span>
                       </button>
@@ -2320,11 +2320,11 @@ export default function TerminalPage() {
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-sm font-semibold text-gray-900">#{refundSale.sale_number ?? refundSale.id?.slice(-6).toUpperCase()}</p>
-                      <p className="text-xs" style={{ color: '#4A4565' }}>{new Date(refundSale.created_at).toLocaleDateString('en-AU')} · A${(refundSale.total_amount ?? 0).toFixed(2)}</p>
+                      <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>{new Date(refundSale.created_at).toLocaleDateString('en-AU')} · A${(refundSale.total_amount ?? 0).toFixed(2)}</p>
                     </div>
                     <button onClick={() => setRefundSale(null)} className="text-xs text-gray-400 hover:text-gray-600">← Back</button>
                   </div>
-                  <p className="text-xs" style={{ color: '#8B85A8' }}>Select items to refund:</p>
+                  <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>Select items to refund:</p>
                   <div className="space-y-1.5">
                     {(refundSale.items ?? []).map((item: any) => (
                       <label key={item.id} className="flex items-center gap-3 p-2.5 rounded-lg cursor-pointer" style={{ border: '1px solid #2A2540', background: 'rgba(255,255,255,0.02)' }}>
@@ -2332,15 +2332,15 @@ export default function TerminalPage() {
                           onChange={e => setRefundItems(r => ({ ...r, [item.id]: e.target.checked }))}
                           className="w-4 h-4 accent-gray-900" />
                         <div className="flex-1">
-                          <p className="text-sm" style={{ color: '#EDE8FF' }}>{item.product_name ?? item.name}</p>
-                          <p className="text-xs" style={{ color: '#4A4565' }}>qty {item.quantity} × A${(item.unit_price ?? 0).toFixed(2)}</p>
+                          <p className="text-sm" style={{ color: 'var(--text-primary)' }}>{item.product_name ?? item.name}</p>
+                          <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>qty {item.quantity} × A${(item.unit_price ?? 0).toFixed(2)}</p>
                         </div>
                         <span className="font-mono text-sm text-gray-900">A${(item.line_total ?? 0).toFixed(2)}</span>
                       </label>
                     ))}
                   </div>
                   <div className="pt-2">
-                    <p className="text-sm font-medium" style={{ color: '#EDE8FF' }}>
+                    <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
                       Refund total: A${(refundSale.items ?? []).filter((i: any) => refundItems[i.id]).reduce((s: number, i: any) => s + (i.line_total ?? 0), 0).toFixed(2)}
                     </p>
                   </div>
@@ -2350,7 +2350,7 @@ export default function TerminalPage() {
             {refundSale && (
               <div className="px-6 pb-5 flex gap-2">
                 <button onClick={() => { setShowRefundModal(false); setRefundSale(null); }}
-                  className="flex-1 py-2.5 rounded-xl text-sm" style={{ border: '1px solid #2A2540', color: '#8B85A8', background: 'rgba(255,255,255,0.02)' }}>Cancel</button>
+                  className="flex-1 py-2.5 rounded-xl text-sm" style={{ border: '1px solid #2A2540', color: 'var(--text-secondary)', background: 'rgba(255,255,255,0.02)' }}>Cancel</button>
                 <button onClick={processRefund} disabled={processingRefund || Object.values(refundItems).every(v => !v)}
                   className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-40 flex items-center justify-center gap-2" style={{ background: '#EF4444' }}>
                   {processingRefund ? <><Spinner /> Processing…</> : 'Process Refund'}
@@ -2364,21 +2364,21 @@ export default function TerminalPage() {
       {/* Cashier switch modal */}
       {showCashierModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(8,6,16,0.88)' }}>
-          <div className="rounded-2xl w-full max-w-sm overflow-hidden" style={{ background: '#1A1728', border: '1px solid #2A2540', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
+          <div className="rounded-2xl w-full max-w-sm overflow-hidden" style={{ background: 'var(--bg-elevated)', border: '1px solid #2A2540', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
             <div className="px-6 py-5" style={{ borderBottom: '1px solid #1C1928' }}>
-              <h2 className="text-base font-bold" style={{ color: '#EDE8FF' }}>Switch Cashier</h2>
-              <p className="text-xs mt-0.5" style={{ color: '#4A4565' }}>Current: {registerSession?.opened_by ?? 'Unknown'}</p>
+              <h2 className="text-base font-bold" style={{ color: 'var(--text-primary)' }}>Switch Cashier</h2>
+              <p className="text-xs mt-0.5" style={{ color: 'var(--text-tertiary)' }}>Current: {registerSession?.opened_by ?? 'Unknown'}</p>
             </div>
             <div className="px-6 py-5">
-              <label className="text-xs mb-1.5 block" style={{ color: '#4A4565' }}>New cashier name</label>
+              <label className="text-xs mb-1.5 block" style={{ color: 'var(--text-tertiary)' }}>New cashier name</label>
               <input value={cashierName} onChange={e => setCashierName(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') switchCashier(); }}
-                className="w-full rounded-xl px-4 py-2.5 text-sm outline-none" style={{ border: '1px solid #2A2540', background: 'rgba(255,255,255,0.03)', color: '#EDE8FF' }}
+                className="w-full rounded-xl px-4 py-2.5 text-sm outline-none" style={{ border: '1px solid #2A2540', background: 'rgba(255,255,255,0.03)', color: 'var(--text-primary)' }}
                 placeholder="Enter name…" autoFocus />
             </div>
             <div className="px-6 pb-5 flex gap-2">
               <button onClick={() => { setShowCashierModal(false); setCashierName(''); }}
-                className="flex-1 py-2.5 rounded-xl text-sm" style={{ border: '1px solid #2A2540', color: '#8B85A8', background: 'rgba(255,255,255,0.02)' }}>Cancel</button>
+                className="flex-1 py-2.5 rounded-xl text-sm" style={{ border: '1px solid #2A2540', color: 'var(--text-secondary)', background: 'rgba(255,255,255,0.02)' }}>Cancel</button>
               <button onClick={switchCashier} disabled={!cashierName.trim() || switchingCashier}
                 className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-40 flex items-center justify-center gap-2" style={{ background: '#8B5CF6' }}>
                 {switchingCashier ? <><Spinner /> Switching…</> : 'Switch'}
@@ -2391,7 +2391,7 @@ export default function TerminalPage() {
       {/* Receipt reprint modal */}
       {reprintSale && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(8,6,16,0.88)' }}>
-          <div className="rounded-2xl w-full max-w-xs overflow-hidden" style={{ background: '#1A1728', border: '1px solid #2A2540', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
+          <div className="rounded-2xl w-full max-w-xs overflow-hidden" style={{ background: 'var(--bg-elevated)', border: '1px solid #2A2540', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
             <div className="px-5 py-4 flex items-center justify-between" style={{ background: 'rgba(34,197,94,0.08)', borderBottom: '1px solid rgba(34,197,94,0.15)' }}>
               <p className="font-semibold text-gray-900 text-sm">#{reprintSale.id.slice(-6).toUpperCase()}</p>
               <button onClick={() => setReprintSale(null)} className="text-gray-400 hover:text-gray-600">×</button>
@@ -2413,7 +2413,7 @@ export default function TerminalPage() {
       {contextMenu && (
         <div className="fixed z-50" style={{ top: contextMenu.y, left: contextMenu.x }}
           onClick={() => setContextMenu(null)}>
-          <div className="rounded-xl py-1 min-w-44" style={{ background: '#1A1728', border: '1px solid #2A2540', boxShadow: '0 12px 32px rgba(0,0,0,0.6)' }}
+          <div className="rounded-xl py-1 min-w-44" style={{ background: 'var(--bg-elevated)', border: '1px solid #2A2540', boxShadow: '0 12px 32px rgba(0,0,0,0.6)' }}
             onClick={e => e.stopPropagation()}>
             {[
               { label: 'View price & stock', action: () => { setPriceCheckProd(contextMenu.product); setContextMenu(null); } },
@@ -2430,12 +2430,12 @@ export default function TerminalPage() {
               { label: 'View in products', action: () => { window.location.href = `/pos/products?q=${encodeURIComponent(contextMenu.product.name)}`; setContextMenu(null); } },
             ].map(item => (
               <button key={item.label} onClick={item.action}
-                className="block w-full text-left px-4 py-2.5 text-sm transition-colors" style={{ color: '#8B85A8' }} onMouseEnter={e=>{(e.currentTarget as HTMLButtonElement).style.background='rgba(255,255,255,0.04)';}} onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.background='';}}>
+                className="block w-full text-left px-4 py-2.5 text-sm transition-colors" style={{ color: 'var(--text-secondary)' }} onMouseEnter={e=>{(e.currentTarget as HTMLButtonElement).style.background='rgba(255,255,255,0.04)';}} onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.background='';}}>
                 {item.label}
               </button>
             ))}
             <div className="my-1" style={{ borderTop: '1px solid #1C1928' }} />
-            <button onClick={() => setContextMenu(null)} className="block w-full text-left px-4 py-2.5 text-xs" style={{ color: '#4A4565' }}>Cancel</button>
+            <button onClick={() => setContextMenu(null)} className="block w-full text-left px-4 py-2.5 text-xs" style={{ color: 'var(--text-tertiary)' }}>Cancel</button>
           </div>
         </div>
       )}
@@ -2443,25 +2443,25 @@ export default function TerminalPage() {
       {/* Age verification modal */}
       {showAgeModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(8,6,16,0.92)' }}>
-          <div className="rounded-2xl w-full max-w-sm overflow-hidden" style={{ background: '#1A1728', border: '1px solid #2A2540', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
+          <div className="rounded-2xl w-full max-w-sm overflow-hidden" style={{ background: 'var(--bg-elevated)', border: '1px solid #2A2540', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
             <div className="px-6 py-5" style={{ background: 'rgba(239,68,68,0.08)', borderBottom: '1px solid rgba(239,68,68,0.15)' }}>
               <div className="flex items-center gap-3">
                 <span className="text-3xl">🔞</span>
                 <div>
-                  <h2 className="text-base font-bold" style={{ color: '#EDE8FF' }}>Age verification required</h2>
+                  <h2 className="text-base font-bold" style={{ color: 'var(--text-primary)' }}>Age verification required</h2>
                   <p className="text-xs text-red-600 mt-0.5">This sale contains age-restricted items</p>
                 </div>
               </div>
             </div>
             <div className="px-6 py-5">
-              <p className="text-sm" style={{ color: '#8B85A8' }}>
+              <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
                 You must verify the customer is <span className="font-semibold">18 years or older</span> before completing this sale.
               </p>
               <p className="text-xs text-gray-400 mt-2">Check photo ID (driver's licence, passport, or Proof of Age card).</p>
             </div>
             <div className="px-6 pb-5 flex gap-2">
               <button onClick={() => setShowAgeModal(false)}
-                className="flex-1 py-2.5 rounded-xl text-sm" style={{ border: '1px solid #2A2540', color: '#8B85A8', background: 'rgba(255,255,255,0.02)' }}>
+                className="flex-1 py-2.5 rounded-xl text-sm" style={{ border: '1px solid #2A2540', color: 'var(--text-secondary)', background: 'rgba(255,255,255,0.02)' }}>
                 Cancel sale
               </button>
               <button
@@ -2477,8 +2477,8 @@ export default function TerminalPage() {
       {/* Variant loading overlay */}
       {variantLoading && (
         <div className="fixed inset-0 z-40 flex items-center justify-center" style={{ background: 'rgba(8,6,16,0.5)' }}>
-          <div className="rounded-xl px-6 py-4 flex items-center gap-3" style={{ background: '#1A1728', border: '1px solid #2A2540' }}>
-            <Spinner /><span className="text-sm" style={{ color: '#8B85A8' }}>Loading options…</span>
+          <div className="rounded-xl px-6 py-4 flex items-center gap-3" style={{ background: 'var(--bg-elevated)', border: '1px solid #2A2540' }}>
+            <Spinner /><span className="text-sm" style={{ color: 'var(--text-secondary)' }}>Loading options…</span>
           </div>
         </div>
       )}

@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 
-const C = { bg: 'rgba(5,4,15,1)', card: 'rgba(15,13,25,0.95)', border: '#1E1A2E', text: '#EDE8FF', muted: '#8B85A8', dim: '#3A3555', violet: '#8B5CF6', green: '#22C55E', red: '#EF4444', amber: '#F59E0B', cyan: '#00E5FF' }
+const C = { bg: 'rgba(5,4,15,1)', card: 'var(--bg-surface)', border: 'transparent', text: 'var(--text-primary)', muted: 'var(--text-secondary)', dim: 'var(--text-tertiary)', violet: '#8B5CF6', green: '#22C55E', red: '#EF4444', amber: '#F59E0B', cyan: '#00E5FF' }
 
 interface Competitor { id?: string; competitor_name: string; competitor_address: string | null; distance_m: number | null; google_rating: number | null; website: string | null; }
 interface PriceResult { competitor_name: string; price_cents: number; confidence: string; source_url?: string; }

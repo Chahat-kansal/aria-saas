@@ -91,7 +91,7 @@ export default function PosLoginPage() {
   // Loading
   if (checking) {
     return (
-      <div style={{ minHeight: '100dvh', background: '#0A0910', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ minHeight: '100dvh', background: 'var(--bg-base)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <div style={{ width: 26, height: 26, borderRadius: '50%', border: '2px solid rgba(139,92,246,0.25)', borderTopColor: '#8B5CF6', animation: 'spin 0.7s linear infinite' }} />
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>
@@ -101,27 +101,27 @@ export default function PosLoginPage() {
   // Device not enrolled — owner must log in first
   if (!device) {
     return (
-      <div style={{ minHeight: '100dvh', background: '#0A0910', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 32, fontFamily: "'Manrope',system-ui,sans-serif", textAlign: 'center', position: 'relative', overflow: 'hidden' }}>
+      <div style={{ minHeight: '100dvh', background: 'var(--bg-base)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 32, fontFamily: "'Manrope',system-ui,sans-serif", textAlign: 'center', position: 'relative', overflow: 'hidden' }}>
         {/* Background orbs */}
         <div style={{ position: 'absolute', width: 400, height: 400, top: '-100px', left: '-100px', borderRadius: '50%', background: 'radial-gradient(circle,rgba(139,92,246,0.12),transparent 70%)', filter: 'blur(80px)', pointerEvents: 'none' }} />
         <div style={{ position: 'absolute', width: 300, height: 300, bottom: '-80px', right: '-80px', borderRadius: '50%', background: 'radial-gradient(circle,rgba(99,102,241,0.1),transparent 70%)', filter: 'blur(60px)', pointerEvents: 'none' }} />
 
         <div style={{ position: 'relative', zIndex: 1 }}>
           <p style={{ fontFamily: "'Instrument Serif',Georgia,serif", fontStyle: 'italic', fontSize: 38, color: '#8B5CF6', marginBottom: 4, lineHeight: 1 }}>AriaPOS</p>
-          <p style={{ fontSize: 13, color: '#8B85A8', marginBottom: 36 }}>Staff Login</p>
+          <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 36 }}>Staff Login</p>
 
           <div style={{ background: 'rgba(26,23,40,0.85)', backdropFilter: 'blur(24px)', border: '1px solid rgba(139,92,246,0.18)', borderRadius: 22, padding: '36px 40px', maxWidth: 440, width: '100%' }}>
             <div style={{ fontSize: 36, marginBottom: 16 }}>🔐</div>
-            <p style={{ fontSize: 19, fontWeight: 700, color: '#EDE8FF', marginBottom: 10 }}>Device not set up</p>
-            <p style={{ fontSize: 13, color: '#8B85A8', marginBottom: 28, lineHeight: 1.7 }}>
+            <p style={{ fontSize: 19, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 10 }}>Device not set up</p>
+            <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 28, lineHeight: 1.7 }}>
               The business owner must log in to ARIA OS on this device first.
               Once set up, staff can use their PIN to log in here.
             </p>
             <Link href="/login" style={{ display: 'block', padding: '13px 0', borderRadius: 13, textAlign: 'center', fontSize: 14, fontWeight: 700, color: '#fff', background: '#8B5CF6', textDecoration: 'none', marginBottom: 12 }}>
               Log in as Owner →
             </Link>
-            <p style={{ fontSize: 11, color: '#4A4565' }}>
-              After logging in, return to <strong style={{ color: '#8B85A8' }}>/pos/login</strong> for staff PIN access
+            <p style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
+              After logging in, return to <strong style={{ color: 'var(--text-secondary)' }}>/pos/login</strong> for staff PIN access
             </p>
           </div>
         </div>

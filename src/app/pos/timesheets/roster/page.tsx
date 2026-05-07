@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
 
-const C = { bg:"rgba(17,15,26,0.95)", card:"rgba(26,23,40,0.9)", border:"#2A2540", text:"#EDE8FF", muted:"#8B85A8", dim:"#4A4565", violet:"#8B5CF6", green:"#22C55E", red:"#EF4444", amber:"#F59E0B", cyan:"#00E5FF" };
+const C = { bg:"rgba(17,15,26,0.95)", card:"rgba(26,23,40,0.9)", border:"transparent", text:"#EDE8FF", muted:"#8B85A8", dim:"#4A4565", violet:"#8B5CF6", green:"#22C55E", red:"#EF4444", amber:"#F59E0B", cyan:"#00E5FF" };
 
 const DAYS = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
 const BREAK_OPTS = [0,15,30,45,60];
@@ -252,7 +252,7 @@ function ShiftEditor({shift,onSave,onRemove,onCancel}:{shift:Shift;onSave:(s:Shi
   const [end,setEnd]=useState(shift.end_time);
   const [role,setRole]=useState(shift.role);
   const [brk,setBrk]=useState(shift.break_minutes);
-  const C2={...{bg:"rgba(17,15,26,0.95)",card:"rgba(26,23,40,0.9)",border:"#2A2540",text:"#EDE8FF",muted:"#8B85A8",dim:"#4A4565",violet:"#8B5CF6",green:"#22C55E",red:"#EF4444"}};
+  const C2={...{bg:"rgba(17,15,26,0.95)",card:"rgba(26,23,40,0.9)",border:"transparent",text:"#EDE8FF",muted:"#8B85A8",dim:"#4A4565",violet:"#8B5CF6",green:"#22C55E",red:"#EF4444"}};
   const hours=hoursFromTimes(start,end,brk);
   const iCls={background:"rgba(10,9,16,0.8)",border:`1px solid ${C2.border}`,borderRadius:8,padding:"9px 12px",fontSize:13,color:C2.text,outline:"none",fontFamily:"inherit",width:"100%"} as React.CSSProperties;
 

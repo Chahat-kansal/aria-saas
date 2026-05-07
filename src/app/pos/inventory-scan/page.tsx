@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback, Suspense, lazy } from 'react';
 
 const BarcodeScanner = lazy(() => import('@/components/pos/BarcodeScanner'));
 
-const C = { bg: 'rgba(5,4,15,1)', card: 'rgba(15,13,25,0.95)', border: '#1E1A2E', text: '#EDE8FF', muted: '#8B85A8', dim: '#3A3555', violet: '#8B5CF6', green: '#22C55E', red: '#EF4444', amber: '#F59E0B' };
+const C = { bg: 'rgba(5,4,15,1)', card: 'var(--bg-surface)', border: 'transparent', text: 'var(--text-primary)', muted: 'var(--text-secondary)', dim: 'var(--text-tertiary)', violet: '#8B5CF6', green: '#22C55E', red: '#EF4444', amber: '#F59E0B' };
 
 type Mode = 'select' | 'count' | 'order' | 'receive';
 
@@ -154,7 +154,7 @@ export default function InventoryScanPage() {
 
       {/* Toast */}
       {toast && (
-        <div style={{ position: 'fixed', bottom: 32, left: '50%', transform: 'translateX(-50%)', zIndex: 60, background: '#1A1728', border: `1px solid ${C.border}`, borderRadius: 12, padding: '10px 18px', fontSize: 13, fontWeight: 600, color: C.text, boxShadow: '0 8px 32px rgba(0,0,0,0.5)', whiteSpace: 'nowrap' }}>
+        <div style={{ position: 'fixed', bottom: 32, left: '50%', transform: 'translateX(-50%)', zIndex: 60, background: 'var(--bg-elevated)', border: `1px solid ${C.border}`, borderRadius: 12, padding: '10px 18px', fontSize: 13, fontWeight: 600, color: C.text, boxShadow: '0 8px 32px rgba(0,0,0,0.5)', whiteSpace: 'nowrap' }}>
           {toast}
         </div>
       )}

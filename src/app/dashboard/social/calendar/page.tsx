@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 
-const C = { bg:"#0F0F1A", card:"rgba(26,23,40,0.9)", border:"#2A2540", text:"#EDE8FF", muted:"#8B85A8", dim:"#4A4565", violet:"#8B5CF6", green:"#22C55E", red:"#EF4444", amber:"#F59E0B" };
+const C = { bg:"#0F0F1A", card:"rgba(26,23,40,0.9)", border:"transparent", text:"#EDE8FF", muted:"#8B85A8", dim:"#4A4565", violet:"#8B5CF6", green:"#22C55E", red:"#EF4444", amber:"#F59E0B" };
 
 const PLATFORM_COLOR: Record<string,string> = { instagram:"#E1306C", facebook:"#1877F2", google_business:"#4285F4", tiktok:"#000000", twitter:"#1DA1F2" };
 

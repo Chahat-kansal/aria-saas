@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
 
-const C = { bg: '#0A0E1E', card: '#111827', border: '#1E2A3A', text: '#F0F4FF', muted: '#6B7E99', dim: '#3A4A5C', violet: '#8B5CF6', green: '#22C55E', red: '#EF4444', amber: '#F59E0B', blue: '#3B82F6' };
+const C = { bg: 'var(--bg-base)', card: 'var(--bg-surface)', border: 'transparent', text: '#F0F4FF', muted: 'var(--text-secondary)', dim: 'var(--text-tertiary)', violet: '#8B5CF6', green: '#22C55E', red: '#EF4444', amber: '#F59E0B', blue: '#3B82F6' };
 
 interface SocialPost { id: string; platform: string; status: string; caption: string; hashtags: string[]; image_url: string | null; image_prompt: string | null; image_credit: string | null; scheduled_for: string | null; published_at: string | null; aria_reasoning: string | null; industry_context: string | null; reel_concept: string | null; reel_script: string | null; created_at: string; }
 interface Providers { image: { stability_ai: boolean; dalle3: boolean; unsplash: boolean }; video: { runway: boolean; replicate: boolean }; voiceover: { elevenlabs: boolean } }

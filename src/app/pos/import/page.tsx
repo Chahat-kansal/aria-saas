@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
 
-const C = { bg:'rgba(17,15,26,0.95)', card:'rgba(26,23,40,0.9)', border:'#2A2540', text:'#EDE8FF', muted:'#8B85A8', dim:'#4A4565', violet:'#8B5CF6', green:'#22C55E', red:'#EF4444', amber:'#F59E0B' };
+const C = { bg:'var(--bg-base)', card:'var(--bg-surface)', border:'transparent', text:'var(--text-primary)', muted:'var(--text-secondary)', dim:'var(--text-tertiary)', violet:'#8B5CF6', green:'#22C55E', red:'#EF4444', amber:'#F59E0B' };
 
 interface IntegrationStatus {
   connected: boolean;
@@ -628,8 +628,8 @@ function ImportResultBanner({ result, platform }: { result: ImportResult; platfo
     <div style={{ marginTop: 14, padding: '12px 14px', background: 'rgba(34,197,94,0.07)', border: `1px solid rgba(34,197,94,0.2)`, borderRadius: 10, display: 'flex', gap: 20, flexWrap: 'wrap' }}>
       <span style={{ fontSize: 12, color: '#22C55E', fontWeight: 700 }}>✓ {platform} import complete</span>
       <span style={{ fontSize: 12, color: '#22C55E' }}>↑ {result.imported} new</span>
-      <span style={{ fontSize: 12, color: '#8B85A8' }}>↻ {result.updated} updated</span>
-      {result.skipped > 0 && <span style={{ fontSize: 12, color: '#4A4565' }}>✗ {result.skipped} skipped</span>}
+      <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>↻ {result.updated} updated</span>
+      {result.skipped > 0 && <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>✗ {result.skipped} skipped</span>}
       <Link href="/pos/products" style={{ fontSize: 12, color: '#8B5CF6', textDecoration: 'none', marginLeft: 'auto' }}>View products →</Link>
     </div>
   );

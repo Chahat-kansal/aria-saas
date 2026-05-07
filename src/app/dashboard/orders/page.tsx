@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 
-const C = { bg: '#0A0E1E', card: '#111827', border: '#1E2A3A', text: '#F0F4FF', muted: '#6B7E99', dim: '#3A4A5C', violet: '#8B5CF6', green: '#22C55E', red: '#EF4444', amber: '#F59E0B' };
+const C = { bg: 'var(--bg-base)', card: 'var(--bg-surface)', border: 'transparent', text: '#F0F4FF', muted: 'var(--text-secondary)', dim: 'var(--text-tertiary)', violet: '#8B5CF6', green: '#22C55E', red: '#EF4444', amber: '#F59E0B' };
 
 interface OrderItem { product_id: string; product_name: string; barcode: string | null; sku: string | null; category: string; current_stock: number; days_of_stock: number; daily_velocity: number; suggested_qty: number; manual_qty: number | null; unit_cost_cents: number; total_cost_cents: number; reason: string; weather_uplift: number | null; }
 interface Draft { id: string; status: string; draft_type: string; items: OrderItem[]; total_cost_cents: number; aria_reasoning: string | null; week_starting: string | null; created_at: string; approved_at: string | null; }

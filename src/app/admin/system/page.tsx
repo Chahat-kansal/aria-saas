@@ -1,7 +1,7 @@
 'use client';
 import { useState } from 'react';
 
-const C = { card: '#0A0E1A', border: 'rgba(0,229,255,0.08)', text: '#E8F4F8', muted: 'rgba(130,160,200,0.7)', dim: 'rgba(130,160,200,0.35)', cyan: '#00E5FF', green: '#22C55E', red: '#EF4444', amber: '#F59E0B' };
+const C = { card: 'var(--bg-surface)', border: 'rgba(0,229,255,0.08)', text: 'var(--text-primary)', muted: 'var(--text-secondary)', dim: 'var(--text-tertiary)', cyan: '#00E5FF', green: '#22C55E', red: '#EF4444', amber: '#F59E0B' };
 
 const ENV_VARS = [
   { key: 'NEXT_PUBLIC_SUPABASE_URL',      label: 'Supabase URL',          group: 'Required', note: 'Public DB URL' },

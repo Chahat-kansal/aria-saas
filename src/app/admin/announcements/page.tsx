@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 
-const C = { card: '#0A0E1A', border: 'rgba(0,229,255,0.08)', text: '#E8F4F8', muted: 'rgba(130,160,200,0.7)', dim: 'rgba(130,160,200,0.35)', cyan: '#00E5FF', green: '#22C55E', red: '#EF4444', amber: '#F59E0B' };
+const C = { card: 'var(--bg-surface)', border: 'rgba(0,229,255,0.08)', text: 'var(--text-primary)', muted: 'var(--text-secondary)', dim: 'var(--text-tertiary)', cyan: '#00E5FF', green: '#22C55E', red: '#EF4444', amber: '#F59E0B' };
 const TYPE_COLORS: Record<string,string> = { info:'rgba(56,189,248,0.15)', warning:'rgba(245,158,11,0.15)', success:'rgba(34,197,94,0.15)', critical:'rgba(239,68,68,0.15)', maintenance:'rgba(139,92,246,0.15)' };
 const TYPE_TEXT: Record<string,string>   = { info:'#38BDF8', warning:C.amber, success:C.green, critical:C.red, maintenance:'#8B5CF6' };
 
@@ -52,7 +52,7 @@ export default function AnnouncementsPage() {
     setEmailSending(false);
   }
 
-  const iS = { background: '#080C10', border: `1px solid rgba(0,229,255,0.12)`, borderRadius: 8, padding: '9px 12px', fontSize: 13, color: C.text, outline: 'none', fontFamily: 'inherit', width: '100%', boxSizing: 'border-box' as const };
+  const iS = { background: 'var(--bg-base)', border: `1px solid rgba(0,229,255,0.12)`, borderRadius: 8, padding: '9px 12px', fontSize: 13, color: C.text, outline: 'none', fontFamily: 'inherit', width: '100%', boxSizing: 'border-box' as const };
 
   return (
     <div>
@@ -71,7 +71,7 @@ export default function AnnouncementsPage() {
             <input value={form.title} onChange={e => setForm(f => ({...f,title:e.target.value}))} placeholder="Title *" style={iS} />
             <textarea value={form.message} onChange={e => setForm(f => ({...f,message:e.target.value}))} placeholder="Message *" rows={3} style={{ ...iS, resize:'vertical' as const }} />
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:10 }}>
-              <select value={form.type} onChange={e => setForm(f => ({...f,type:e.target.value}))} style={{ ...iS, background:'#080C10' }}>
+              <select value={form.type} onChange={e => setForm(f => ({...f,type:e.target.value}))} style={{ ...iS, background:'var(--bg-base)' }}>
                 {['info','warning','success','critical','maintenance'].map(t => <option key={t} value={t}>{t}</option>)}
               </select>
               <input value={form.cta_label} onChange={e => setForm(f => ({...f,cta_label:e.target.value}))} placeholder="CTA label (optional)" style={iS} />
@@ -119,7 +119,7 @@ export default function AnnouncementsPage() {
       <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:16, padding:'20px 22px' }}>
         <p style={{ fontSize:14, fontWeight:700, color:C.text, marginBottom:14 }}>📧 Email Blast</p>
         <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-          <select value={emailForm.to} onChange={e => setEmailForm(f => ({...f,to:e.target.value}))} style={{ ...iS, background:'#080C10' }}>
+          <select value={emailForm.to} onChange={e => setEmailForm(f => ({...f,to:e.target.value}))} style={{ ...iS, background:'var(--bg-base)' }}>
             <option value="all">All users</option>
             <option value="free">Free plan</option>
             <option value="pro">Pro plan</option>

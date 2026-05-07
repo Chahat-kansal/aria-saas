@@ -13,7 +13,7 @@ interface Product {
   pos_categories?: { name: string; color: string } | null;
 }
 
-const C = { bg:'rgba(17,15,26,0.95)', card:'rgba(26,23,40,0.9)', border:'#2A2540', text:'#EDE8FF', muted:'#8B85A8', dim:'#4A4565', violet:'#8B5CF6', green:'#22C55E', red:'#EF4444' };
+const C = { bg:'var(--bg-base)', card:'var(--bg-surface)', border:'transparent', text:'var(--text-primary)', muted:'var(--text-secondary)', dim:'var(--text-tertiary)', violet:'#8B5CF6', green:'#22C55E', red:'#EF4444' };
 
 const EMPTY_FORM = {
   name: '', sku: '', barcode: '', description: '',
@@ -379,7 +379,7 @@ export default function ProductsPage() {
               </div>
               <div>
                 <label style={lCls}>Category</label>
-                <select value={form.category_id} onChange={e => setForm(f => ({ ...f, category_id: e.target.value }))} style={{ ...iCls, background: '#0A0910' }}>
+                <select value={form.category_id} onChange={e => setForm(f => ({ ...f, category_id: e.target.value }))} style={{ ...iCls, background: 'var(--bg-base)' }}>
                   <option value="">No category</option>
                   {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>

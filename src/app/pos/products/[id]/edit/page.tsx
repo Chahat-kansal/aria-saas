@@ -17,7 +17,7 @@ interface ClassItem { id: string; name: string; }
 interface PricePoint { id: string; price_set_name: string; quantity: number; price: number; cost: number | null; margin_percent: number | null; }
 interface Outlet { id: string; name: string; }
 
-const C = { bg:'rgba(17,15,26,0.95)', card:'rgba(26,23,40,0.9)', border:'#2A2540', text:'#EDE8FF', muted:'#8B85A8', dim:'#4A4565', violet:'#8B5CF6', green:'#22C55E', red:'#EF4444' };
+const C = { bg:'var(--bg-base)', card:'var(--bg-surface)', border:'transparent', text:'var(--text-primary)', muted:'var(--text-secondary)', dim:'var(--text-tertiary)', violet:'#8B5CF6', green:'#22C55E', red:'#EF4444' };
 const TABS = ['General','Classifications','Sell & Cost','Inventory','Barcodes','Images','Loyalty','Suppliers'] as const;
 
 export default function ProductEditPage() {
@@ -175,7 +175,7 @@ export default function ProductEditPage() {
             </div>
             <div>
               <label style={lCls}>Category</label>
-              <select value={form.category_id ?? ''} onChange={e => setForm(f => ({ ...f, category_id: e.target.value || null }))} style={{ ...iCls, background: '#0A0910' }}>
+              <select value={form.category_id ?? ''} onChange={e => setForm(f => ({ ...f, category_id: e.target.value || null }))} style={{ ...iCls, background: 'var(--bg-base)' }}>
                 <option value="">No category</option>
                 {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
@@ -208,14 +208,14 @@ export default function ProductEditPage() {
             </div>
             <div>
               <label style={lCls}>Brand</label>
-              <select value={form.brand_id ?? ''} onChange={e => setForm(f => ({ ...f, brand_id: e.target.value || null }))} style={{ ...iCls, background: '#0A0910' }}>
+              <select value={form.brand_id ?? ''} onChange={e => setForm(f => ({ ...f, brand_id: e.target.value || null }))} style={{ ...iCls, background: 'var(--bg-base)' }}>
                 <option value="">No brand</option>
                 {brands.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
               </select>
             </div>
             <div>
               <label style={lCls}>Family</label>
-              <select value={form.family_id ?? ''} onChange={e => setForm(f => ({ ...f, family_id: e.target.value || null }))} style={{ ...iCls, background: '#0A0910' }}>
+              <select value={form.family_id ?? ''} onChange={e => setForm(f => ({ ...f, family_id: e.target.value || null }))} style={{ ...iCls, background: 'var(--bg-base)' }}>
                 <option value="">No family</option>
                 {families.map(fam => <option key={fam.id} value={fam.id}>{fam.name}</option>)}
               </select>
@@ -262,7 +262,7 @@ export default function ProductEditPage() {
               )}
               <div>
                 <label style={lCls}>Tax Rate</label>
-                <select value={form.tax_rate ?? 10} onChange={e => setForm(f => ({ ...f, tax_rate: parseFloat(e.target.value) }))} style={{ ...iCls, background: '#0A0910' }}>
+                <select value={form.tax_rate ?? 10} onChange={e => setForm(f => ({ ...f, tax_rate: parseFloat(e.target.value) }))} style={{ ...iCls, background: 'var(--bg-base)' }}>
                   <option value={10}>10% GST</option>
                   <option value={0}>0% GST Free</option>
                 </select>

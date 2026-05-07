@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 
-const C = { card: '#0A0E1A', border: 'rgba(0,229,255,0.08)', text: '#E8F4F8', muted: 'rgba(130,160,200,0.7)', dim: 'rgba(130,160,200,0.35)', cyan: '#00E5FF', amber: '#F59E0B' };
+const C = { card: 'var(--bg-surface)', border: 'rgba(0,229,255,0.08)', text: 'var(--text-primary)', muted: 'var(--text-secondary)', dim: 'var(--text-tertiary)', cyan: '#00E5FF', amber: '#F59E0B' };
 
 export default function UsagePage() {
   const [data, setData]     = useState<any>(null);
@@ -21,7 +21,7 @@ export default function UsagePage() {
     }).catch(() => setLoading(false));
   }, [range]);
 
-  const iS = { background: '#080C10', border: `1px solid rgba(0,229,255,0.12)`, borderRadius: 8, padding: '6px 12px', fontSize: 12, color: C.text, outline: 'none', fontFamily: 'inherit', cursor: 'pointer' };
+  const iS = { background: 'var(--bg-base)', border: `1px solid rgba(0,229,255,0.12)`, borderRadius: 8, padding: '6px 12px', fontSize: 12, color: C.text, outline: 'none', fontFamily: 'inherit', cursor: 'pointer' };
 
   return (
     <div>
@@ -48,7 +48,7 @@ export default function UsagePage() {
                   <BarChart data={data.by_event} margin={{ left: 0, right: 0, top: 0, bottom: 0 }} layout="vertical">
                     <XAxis type="number" tick={{ fill: C.dim, fontSize: 10 }} axisLine={false} tickLine={false} />
                     <YAxis type="category" dataKey="event_type" tick={{ fill: C.muted, fontSize: 10 }} axisLine={false} tickLine={false} width={120} />
-                    <Tooltip contentStyle={{ background: '#0A0E1A', border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, fontSize: 11 }} />
+                    <Tooltip contentStyle={{ background: 'var(--bg-surface)', border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, fontSize: 11 }} />
                     <Bar dataKey="count" fill={C.cyan} radius={[0,3,3,0]} name="Calls" />
                   </BarChart>
                 </ResponsiveContainer>

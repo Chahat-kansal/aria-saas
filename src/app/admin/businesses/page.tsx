@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 
-const C = { bg: '#080C10', card: '#0A0E1A', border: 'rgba(0,229,255,0.08)', text: '#E8F4F8', muted: 'rgba(130,160,200,0.7)', dim: 'rgba(130,160,200,0.35)', cyan: '#00E5FF', violet: '#8B5CF6', green: '#22C55E', red: '#EF4444', amber: '#F59E0B' };
+const C = { bg: 'var(--bg-base)', card: 'var(--bg-surface)', border: 'rgba(0,229,255,0.08)', text: 'var(--text-primary)', muted: 'var(--text-secondary)', dim: 'var(--text-tertiary)', cyan: '#00E5FF', violet: '#8B5CF6', green: '#22C55E', red: '#EF4444', amber: '#F59E0B' };
 
 const PLAN_COLORS: Record<string, string> = { free: C.muted, pro: '#3B82F6', enterprise: C.amber, trial: '#F59E0B', disabled: C.red };
 
@@ -86,7 +86,7 @@ export default function BusinessesPage() {
     else alert(d.error || 'Could not generate impersonation link');
   }
 
-  const iS = { background: '#0A0E1A', border: `1px solid rgba(0,229,255,0.12)`, borderRadius: 8, padding: '7px 12px', fontSize: 12, color: C.text, outline: 'none', fontFamily: 'inherit' };
+  const iS = { background: 'var(--bg-surface)', border: `1px solid rgba(0,229,255,0.12)`, borderRadius: 8, padding: '7px 12px', fontSize: 12, color: C.text, outline: 'none', fontFamily: 'inherit' };
 
   return (
     <div>
@@ -166,7 +166,7 @@ export default function BusinessesPage() {
                       <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                         <Link href={`/admin/businesses/${b.id}`} style={{ fontSize: 10, padding: '3px 8px', borderRadius: 6, border: `1px solid ${C.border}`, color: C.muted, textDecoration: 'none' }}>👁 View</Link>
                         <select value={b.plan || 'free'} onChange={e => setPlan(b.id, e.target.value)}
-                          style={{ fontSize: 10, padding: '3px 4px', borderRadius: 6, border: `1px solid rgba(0,229,255,0.15)`, background: '#0A0E1A', color: C.cyan, cursor: 'pointer' }}>
+                          style={{ fontSize: 10, padding: '3px 4px', borderRadius: 6, border: `1px solid rgba(0,229,255,0.15)`, background: 'var(--bg-surface)', color: C.cyan, cursor: 'pointer' }}>
                           {['free','pro','enterprise','trial','disabled'].map(p => <option key={p} value={p}>{p}</option>)}
                         </select>
                         {b.is_active !== false

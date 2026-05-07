@@ -4,7 +4,7 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 
-const C = { bg: '#080C10', card: '#0A0E1A', border: 'rgba(0,229,255,0.08)', text: '#E8F4F8', muted: 'rgba(130,160,200,0.7)', dim: 'rgba(130,160,200,0.35)', cyan: '#00E5FF', violet: '#8B5CF6', green: '#22C55E', red: '#EF4444', amber: '#F59E0B' };
+const C = { bg: 'var(--bg-base)', card: 'var(--bg-surface)', border: 'rgba(0,229,255,0.08)', text: 'var(--text-primary)', muted: 'var(--text-secondary)', dim: 'var(--text-tertiary)', cyan: '#00E5FF', violet: '#8B5CF6', green: '#22C55E', red: '#EF4444', amber: '#F59E0B' };
 const TABS = ['Overview','Sales','Products','Customers','Staff','Usage','Settings','Notes'] as const;
 const PLAN_COLORS: Record<string,string> = { free: C.muted, pro: '#3B82F6', enterprise: C.amber, trial: C.amber, disabled: C.red };
 
@@ -43,7 +43,7 @@ export default function BusinessDeepDive() {
   if (!data?.business) return <p style={{ color: C.red }}>Business not found</p>;
 
   const biz = data.business;
-  const iS  = { background: '#0A0E1A', border: `1px solid rgba(0,229,255,0.12)`, borderRadius: 8, padding: '8px 12px', fontSize: 13, color: C.text, outline: 'none', fontFamily: 'inherit', width: '100%', boxSizing: 'border-box' as const };
+  const iS  = { background: 'var(--bg-surface)', border: `1px solid rgba(0,229,255,0.12)`, borderRadius: 8, padding: '8px 12px', fontSize: 13, color: C.text, outline: 'none', fontFamily: 'inherit', width: '100%', boxSizing: 'border-box' as const };
 
   // Daily revenue chart
   const dayMap: Record<string, number> = {};
@@ -68,7 +68,7 @@ export default function BusinessDeepDive() {
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <select value={biz.plan || 'free'} onChange={e => setPlan(e.target.value)}
-            style={{ padding: '8px 12px', borderRadius: 8, border: `1px solid rgba(0,229,255,0.2)`, background: '#0A0E1A', color: C.cyan, fontSize: 12, cursor: 'pointer' }}>
+            style={{ padding: '8px 12px', borderRadius: 8, border: `1px solid rgba(0,229,255,0.2)`, background: 'var(--bg-surface)', color: C.cyan, fontSize: 12, cursor: 'pointer' }}>
             {['free','pro','enterprise','trial','disabled'].map(p => <option key={p} value={p}>{p}</option>)}
           </select>
           {biz.is_active !== false
@@ -125,7 +125,7 @@ export default function BusinessDeepDive() {
                 <BarChart data={salesChart} margin={{ left: 0, right: 0, top: 0, bottom: 0 }}>
                   <XAxis dataKey="date" tick={{ fill: C.dim, fontSize: 10 }} axisLine={false} tickLine={false} />
                   <YAxis tick={{ fill: C.dim, fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={v => `$${v}`} />
-                  <Tooltip contentStyle={{ background: '#0A0E1A', border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, fontSize: 12 }} />
+                  <Tooltip contentStyle={{ background: 'var(--bg-surface)', border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, fontSize: 12 }} />
                   <Bar dataKey="rev" fill={C.cyan} radius={[3,3,0,0]} name="Revenue" />
                 </BarChart>
               </ResponsiveContainer>

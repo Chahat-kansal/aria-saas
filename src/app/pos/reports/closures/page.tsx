@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 
 interface Session { id: string; opened_at: string; closed_at: string | null; opening_float: number | null; closing_float: number | null; total_cash_sales: number | null; total_card_sales: number | null; total_revenue: number | null; transaction_count: number | null; variance: number; duration_mins: number | null; status: string; }
 
-const C = { bg:'rgba(17,15,26,0.95)', card:'rgba(26,23,40,0.9)', border:'#2A2540', text:'#EDE8FF', muted:'#8B85A8', dim:'#4A4565', violet:'#8B5CF6' };
+const C = { bg:'var(--bg-base)', card:'var(--bg-surface)', border:'transparent', text:'var(--text-primary)', muted:'var(--text-secondary)', dim:'var(--text-tertiary)', violet:'#8B5CF6' };
 
 export default function RegisterClosuresPage() {
   const [sessions, setSessions] = useState<Session[]>([]);

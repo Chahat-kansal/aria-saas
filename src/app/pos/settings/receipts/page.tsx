@@ -130,12 +130,12 @@ export default function ReceiptsListPage() {
   }
 
   return (
-    <div style={{ minHeight: '100%', background: 'rgba(17,15,26,0.95)', color: '#EDE8FF', fontFamily: "'Manrope',sans-serif", padding: '28px 32px' }}>
+    <div style={{ minHeight: '100%', background: 'var(--bg-base)', color: 'var(--text-primary)', fontFamily: "'Manrope',sans-serif", padding: '28px 32px' }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 28 }}>
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 800, marginBottom: 4 }}>Receipt Templates</h1>
-          <p style={{ fontSize: 13, color: '#8B85A8' }}>Design the receipts printed at checkout. The template marked <strong style={{ color: '#8B5CF6' }}>Default</strong> is used automatically.</p>
+          <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Design the receipts printed at checkout. The template marked <strong style={{ color: '#8B5CF6' }}>Default</strong> is used automatically.</p>
         </div>
         <button onClick={createNew} disabled={creating}
           style={{ padding: '10px 22px', borderRadius: 10, border: 'none', background: '#8B5CF6', color: '#fff', fontSize: 14, fontWeight: 700, cursor: creating ? 'wait' : 'pointer', fontFamily: 'inherit', opacity: creating ? 0.6 : 1 }}>
@@ -144,7 +144,7 @@ export default function ReceiptsListPage() {
       </div>
 
       {loading ? (
-        <div style={{ color: '#8B85A8', textAlign: 'center', padding: '60px 0' }}>Loading templates…</div>
+        <div style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '60px 0' }}>Loading templates…</div>
       ) : (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24, alignItems: 'flex-start' }}>
           {/* New template card */}
@@ -170,7 +170,7 @@ export default function ReceiptsListPage() {
           ))}
 
           {templates.length === 0 && (
-            <div style={{ color: '#8B85A8', fontSize: 13, marginTop: 20 }}>No templates yet. Click &quot;+ New Template&quot; to get started.</div>
+            <div style={{ color: 'var(--text-secondary)', fontSize: 13, marginTop: 20 }}>No templates yet. Click &quot;+ New Template&quot; to get started.</div>
           )}
         </div>
       )}

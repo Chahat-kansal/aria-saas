@@ -15,7 +15,7 @@ interface Product {
 
 interface MonthRow { period: string; revenue: number; purchases: number; quantity: number; }
 
-const C = { bg:'rgba(17,15,26,0.95)', card:'rgba(26,23,40,0.9)', border:'#2A2540', text:'#EDE8FF', muted:'#8B85A8', dim:'#4A4565', violet:'#8B5CF6', green:'#22C55E', red:'#EF4444' };
+const C = { bg:'var(--bg-base)', card:'var(--bg-surface)', border:'transparent', text:'var(--text-primary)', muted:'var(--text-secondary)', dim:'var(--text-tertiary)', violet:'#8B5CF6', green:'#22C55E', red:'#EF4444' };
 
 const NAV = [
   { label: 'Home', icon: '🏠' },
@@ -153,7 +153,7 @@ export default function ProductDetailPage() {
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
                   <XAxis dataKey="period" tick={{ fill: C.dim, fontSize: 10 }} axisLine={false} tickLine={false} />
                   <YAxis tick={{ fill: C.dim, fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={(v: number) => `$${v}`} />
-                  <Tooltip contentStyle={{ background: '#1A1728', border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, fontSize: 12 }} />
+                  <Tooltip contentStyle={{ background: 'var(--bg-elevated)', border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, fontSize: 12 }} />
                   <Area type="monotone" dataKey="revenue" stroke={C.violet} strokeWidth={2} fill="url(#revGrad)" name="Revenue" />
                   <Area type="monotone" dataKey="purchases" stroke={C.green} strokeWidth={2} fill="url(#costGrad)" name="Purchases" />
                 </AreaChart>

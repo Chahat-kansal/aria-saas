@@ -66,7 +66,7 @@ function MiniBarChart({ data }: { data: ChartData }) {
   const barWidth = Math.max(12, Math.floor(240 / data.values.length) - 4)
   return (
     <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: 10, padding: '12px 14px', marginTop: 8 }}>
-      <p style={{ fontSize: 10, fontWeight: 700, color: 'rgba(130,160,200,0.6)', textTransform: 'uppercase' as const, letterSpacing: '0.05em', marginBottom: 10 }}>{data.label}</p>
+      <p style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' as const, letterSpacing: '0.05em', marginBottom: 10 }}>{data.label}</p>
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: 60, overflowX: 'auto' as const }}>
         {data.values.map((v, i) => (
           <div key={i} style={{ display: 'flex', flexDirection: 'column' as const, alignItems: 'center', gap: 3, flexShrink: 0 }}>
@@ -89,11 +89,11 @@ function MetricCardComp({ card }: { card: MetricCard }) {
     blue:   { bg: 'rgba(59,130,246,0.08)', text: '#3B82F6', border: 'rgba(59,130,246,0.2)' },
   }
   const colors = colorMap[card.color || 'cyan'] || colorMap.cyan
-  const trendColor = card.change_dir === 'up' ? '#22C55E' : card.change_dir === 'down' ? '#EF4444' : 'rgba(130,160,200,0.6)'
+  const trendColor = card.change_dir === 'up' ? '#22C55E' : card.change_dir === 'down' ? '#EF4444' : 'var(--text-secondary)'
   const trendIcon = card.change_dir === 'up' ? '↑' : card.change_dir === 'down' ? '↓' : '—'
   return (
     <div style={{ background: colors.bg, border: `1px solid ${colors.border}`, borderRadius: 12, padding: '12px 14px', minWidth: 110, flex: 1 }}>
-      <p style={{ fontSize: 10, fontWeight: 700, color: 'rgba(130,160,200,0.6)', textTransform: 'uppercase' as const, letterSpacing: '0.05em', marginBottom: 6 }}>{card.label}</p>
+      <p style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' as const, letterSpacing: '0.05em', marginBottom: 6 }}>{card.label}</p>
       <p style={{ fontSize: 20, fontWeight: 800, color: colors.text, lineHeight: 1, fontFamily: "'JetBrains Mono',monospace" }}>
         {card.prefix || ''}{card.value}{card.suffix || ''}
       </p>
@@ -112,7 +112,7 @@ function DataTableComp({ table }: { table: DataTable }) {
     <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: 10, overflow: 'hidden', marginTop: 8 }}>
       {table.title && (
         <div style={{ padding: '8px 12px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-          <p style={{ fontSize: 11, fontWeight: 700, color: 'rgba(130,160,200,0.7)', textTransform: 'uppercase' as const, letterSpacing: '0.05em' }}>{table.title}</p>
+          <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' as const, letterSpacing: '0.05em' }}>{table.title}</p>
         </div>
       )}
       <table style={{ width: '100%', borderCollapse: 'collapse' as const }}>
@@ -181,7 +181,7 @@ function ActionButton({ action, onAction }: { action: AriaAction; onAction?: (ac
 export function AriaChatMessage({ response, onAction, isLoading }: Props) {
   if (isLoading) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 0', color: 'rgba(130,160,200,0.6)', fontSize: 13 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 0', color: 'var(--text-secondary)', fontSize: 13 }}>
         <div style={{ width: 18, height: 18, borderRadius: '50%', border: '2px solid rgba(0,229,255,0.2)', borderTopColor: '#00E5FF', animation: 'spin 0.8s linear infinite', flexShrink: 0 }} />
         <span>Aria is analysing your data...</span>
       </div>

@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 
 interface Item { id: string; name: string; created_at?: string; }
 
-const C = { bg:'rgba(17,15,26,0.95)', card:'rgba(26,23,40,0.9)', border:'#2A2540', text:'#EDE8FF', muted:'#8B85A8', dim:'#4A4565', violet:'#8B5CF6' };
+const C = { bg:'var(--bg-base)', card:'var(--bg-surface)', border:'transparent', text:'var(--text-primary)', muted:'var(--text-secondary)', dim:'var(--text-tertiary)', violet:'#8B5CF6' };
 type TabType = 'brand' | 'family' | 'tag';
 
 const TABS: { key: TabType; label: string; emoji: string }[] = [

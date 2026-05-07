@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 
-const C = { bg: '#080C10', card: '#0A0E1A', border: 'rgba(0,229,255,0.08)', text: '#E8F4F8', muted: 'rgba(130,160,200,0.7)', dim: 'rgba(130,160,200,0.4)', cyan: '#00E5FF', violet: '#8B5CF6', green: '#22C55E', red: '#EF4444', amber: '#F59E0B' };
+const C = { bg: 'var(--bg-base)', card: 'var(--bg-surface)', border: 'rgba(0,229,255,0.08)', text: 'var(--text-primary)', muted: 'var(--text-secondary)', dim: 'var(--text-tertiary)', cyan: '#00E5FF', violet: '#8B5CF6', green: '#22C55E', red: '#EF4444', amber: '#F59E0B' };
 
 const INDUSTRY_COLORS: Record<string, string> = { retail: '#8B5CF6', cafe: '#F59E0B', restaurant: '#EF4444', warehouse: '#3B82F6', professional: '#6B7280', default: '#374151' };
 
@@ -111,7 +111,7 @@ export default function AdminOverview() {
                   </defs>
                   <XAxis dataKey="week" tick={{ fill: C.dim, fontSize: 10 }} axisLine={false} tickLine={false} />
                   <YAxis tick={{ fill: C.dim, fontSize: 10 }} axisLine={false} tickLine={false} allowDecimals={false} />
-                  <Tooltip contentStyle={{ background: '#0A0E1A', border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, fontSize: 12 }} />
+                  <Tooltip contentStyle={{ background: 'var(--bg-surface)', border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, fontSize: 12 }} />
                   <Area type="monotone" dataKey="count" stroke={C.cyan} strokeWidth={2} fill="url(#cyanGrad)" name="New businesses" />
                 </AreaChart>
               </ResponsiveContainer>
@@ -126,7 +126,7 @@ export default function AdminOverview() {
                     {industryData.map(d => <Cell key={d.name} fill={INDUSTRY_COLORS[d.name] || INDUSTRY_COLORS.default} />)}
                   </Pie>
                   <Legend formatter={(v: string) => <span style={{ fontSize: 10, color: C.muted }}>{v}</span>} />
-                  <Tooltip contentStyle={{ background: '#0A0E1A', border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, fontSize: 11 }} />
+                  <Tooltip contentStyle={{ background: 'var(--bg-surface)', border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, fontSize: 11 }} />
                 </PieChart>
               </ResponsiveContainer>
             </div>

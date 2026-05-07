@@ -10,7 +10,7 @@ const iS: React.CSSProperties = {
   background: 'rgba(255,255,255,0.04)',
   border: '1px solid rgba(255,255,255,0.1)',
   borderRadius: 10,
-  color: '#EDE8FF',
+  color: 'var(--text-primary)',
   fontSize: 14,
   fontFamily: 'inherit',
   outline: 'none',
@@ -21,7 +21,7 @@ const lS: React.CSSProperties = {
   display: 'block',
   fontSize: 11,
   fontWeight: 700,
-  color: 'rgba(139,133,168,0.7)',
+  color: 'var(--text-secondary)',
   textTransform: 'uppercase',
   letterSpacing: '0.05em',
   marginBottom: 6,
@@ -118,7 +118,7 @@ export default function OwnerLoginPage() {
   return (
     <div style={{
       minHeight: '100vh',
-      background: '#0A0910',
+      background: 'var(--bg-base)',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
@@ -156,7 +156,7 @@ export default function OwnerLoginPage() {
           }}>
             Aria
           </h1>
-          <p style={{ color: 'rgba(139,133,168,0.6)', fontSize: 13, marginTop: 6 }}>
+          <p style={{ color: 'var(--text-secondary)', fontSize: 13, marginTop: 6 }}>
             Sign in to your dashboard
           </p>
         </div>
@@ -183,7 +183,7 @@ export default function OwnerLoginPage() {
           borderTop: '1px solid rgba(255,255,255,0.06)',
           textAlign: 'center',
         }}>
-          <a href="/pos" style={{ color: 'rgba(139,133,168,0.4)', fontSize: 12, textDecoration: 'none' }}>
+          <a href="/pos" style={{ color: 'var(--text-tertiary)', fontSize: 12, textDecoration: 'none' }}>
             Staff? → Go to POS →
           </a>
         </div>

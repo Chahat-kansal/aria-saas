@@ -1,5 +1,5 @@
 'use client'
-const C = { bg:'rgba(17,15,26,0.95)', text:'#EDE8FF', muted:'#8B85A8' }
+const C = { bg:'var(--bg-base)', text:'var(--text-primary)', muted:'var(--text-secondary)' }
 export default function AdvancedReportsPage() {
   return (
     <div style={{ minHeight:'100%', background:C.bg, color:C.text, fontFamily:"'Manrope',sans-serif", padding:'24px 28px' }}>

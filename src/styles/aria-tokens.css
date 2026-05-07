@@ -1,0 +1,180 @@
+/* ============================================================
+   Aria — Borderless luxury SaaS theme
+   Light & Dark · No 1px lines · Elevation + glow + glass
+   ============================================================ */
+@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Manrope:wght@400;450;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+/* ---------------- DARK (default) ---------------- */
+:root,
+html[data-theme="dark"] {
+  --bg-base:        #08070D;
+  --bg-canvas:      #0D0B16;
+  --bg-surface:     #14111F;
+  --bg-elevated:    #1B1729;
+  --bg-overlay:     #231E36;
+  --bg-hover:       #1F1A30;
+  --bg-active:      #261F3D;
+  --bg-input:       #100D1C;
+  --bg-glass:       rgba(20, 17, 31, 0.72);
+
+  --border-subtle:  transparent;
+  --border-default: transparent;
+  --border-strong:  transparent;
+  --border-violet:  transparent;
+  --divider:        rgba(255, 255, 255, 0.04);
+
+  --text-primary:   #F0EBFF;
+  --text-secondary: #918AAE;
+  --text-tertiary:  #5E5878;
+  --text-violet:    #B49BFB;
+  --text-inverse:   #08070D;
+
+  --violet:         #8B5CF6;
+  --violet-600:     #7C3AED;
+  --violet-700:     #6D28D9;
+  --violet-dim:     rgba(139, 92, 246, 0.16);
+  --violet-glow:    rgba(139, 92, 246, 0.28);
+  --violet-soft:    rgba(139, 92, 246, 0.08);
+
+  --success:        #34D399;
+  --success-bg:     rgba(52, 211, 153, 0.14);
+  --warning:        #FBBF24;
+  --warning-bg:     rgba(251, 191, 36, 0.14);
+  --destructive:    #F87171;
+  --destructive-bg: rgba(248, 113, 113, 0.14);
+  --info:           #60A5FA;
+  --info-bg:        rgba(96, 165, 250, 0.14);
+
+  --shadow-sm:      0 1px 2px rgba(0,0,0,0.4), 0 2px 6px rgba(0,0,0,0.25);
+  --shadow-md:      0 2px 6px rgba(0,0,0,0.35), 0 12px 28px rgba(0,0,0,0.45);
+  --shadow-lg:      0 8px 24px rgba(0,0,0,0.45), 0 24px 56px rgba(0,0,0,0.55);
+  --shadow-card:    0 1px 0 rgba(255,255,255,0.04) inset, 0 1px 2px rgba(0,0,0,0.4), 0 8px 24px rgba(0,0,0,0.32);
+  --shadow-violet:  0 4px 14px rgba(139,92,246,0.32), 0 12px 32px rgba(139,92,246,0.28);
+  --shadow-glow:    0 0 0 1px rgba(255,255,255,0.03) inset, 0 12px 40px rgba(139,92,246,0.18);
+
+  --halo: radial-gradient(80% 60% at 50% 0%, rgba(139,92,246,0.10), transparent 70%);
+  --bg-aurora:
+    radial-gradient(60% 50% at 12% 8%, rgba(139,92,246,0.10), transparent 60%),
+    radial-gradient(50% 40% at 92% 18%, rgba(96,165,250,0.06), transparent 65%),
+    radial-gradient(70% 60% at 78% 92%, rgba(180,155,251,0.06), transparent 65%);
+}
+
+/* ---------------- LIGHT ---------------- */
+html[data-theme="light"] {
+  --bg-base:        #F6F4FB;
+  --bg-canvas:      #F1EEF8;
+  --bg-surface:     #FFFFFF;
+  --bg-elevated:    #FAF8FE;
+  --bg-overlay:     #FFFFFF;
+  --bg-hover:       #F4F0FB;
+  --bg-active:      #ECE5FB;
+  --bg-input:       #F4F1FB;
+  --bg-glass:       rgba(255, 255, 255, 0.78);
+
+  --border-subtle:  transparent;
+  --border-default: transparent;
+  --border-strong:  transparent;
+  --border-violet:  transparent;
+  --divider:        rgba(36, 28, 60, 0.06);
+
+  --text-primary:   #14101E;
+  --text-secondary: #5C5474;
+  --text-tertiary:  #9C95B0;
+  --text-violet:    #7C3AED;
+  --text-inverse:   #FFFFFF;
+
+  --violet:         #7C3AED;
+  --violet-600:     #6D28D9;
+  --violet-700:     #5B21B6;
+  --violet-dim:     rgba(124,58,237,0.10);
+  --violet-glow:    rgba(124,58,237,0.20);
+  --violet-soft:    rgba(124,58,237,0.05);
+
+  --success:        #16A34A;
+  --success-bg:     rgba(22,163,74,0.10);
+  --warning:        #D97706;
+  --warning-bg:     rgba(217,119,6,0.10);
+  --destructive:    #DC2626;
+  --destructive-bg: rgba(220,38,38,0.10);
+  --info:           #2563EB;
+  --info-bg:        rgba(37,99,235,0.10);
+
+  --shadow-sm:      0 1px 2px rgba(36,28,60,0.05), 0 2px 6px rgba(36,28,60,0.04);
+  --shadow-md:      0 2px 4px rgba(36,28,60,0.05), 0 12px 28px rgba(36,28,60,0.08);
+  --shadow-lg:      0 8px 24px rgba(36,28,60,0.08), 0 24px 56px rgba(36,28,60,0.12);
+  --shadow-card:    0 1px 2px rgba(36,28,60,0.04), 0 4px 16px rgba(36,28,60,0.06);
+  --shadow-violet:  0 4px 14px rgba(124,58,237,0.25), 0 12px 32px rgba(124,58,237,0.22);
+  --shadow-glow:    0 12px 40px rgba(124,58,237,0.14);
+
+  --halo: radial-gradient(80% 60% at 50% 0%, rgba(124,58,237,0.06), transparent 70%);
+  --bg-aurora:
+    radial-gradient(60% 50% at 12% 8%, rgba(124,58,237,0.07), transparent 60%),
+    radial-gradient(50% 40% at 92% 18%, rgba(37,99,235,0.04), transparent 65%),
+    radial-gradient(70% 60% at 78% 92%, rgba(180,155,251,0.06), transparent 65%);
+}
+
+/* ---------------- SHARED ---------------- */
+:root {
+  --font-display: 'Instrument Serif', Georgia, serif;
+  --font-ui:      'Manrope', system-ui, -apple-system, sans-serif;
+  --font-mono:    'JetBrains Mono', 'Fira Code', monospace;
+
+  --radius-xs:   6px;
+  --radius-sm:   10px;
+  --radius-md:   14px;
+  --radius-lg:   18px;
+  --radius-xl:   24px;
+  --radius-full: 9999px;
+
+  --ease:          cubic-bezier(0.16, 1, 0.3, 1);
+  --duration-fast: 150ms;
+  --duration-base: 250ms;
+  --duration-slow: 400ms;
+}
+
+* { box-sizing: border-box; }
+
+/* Global border kill-switch */
+* { border-color: transparent; }
+
+/* Aurora ambient background */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background: var(--bg-aurora);
+  z-index: 0;
+  transition: background var(--duration-base) var(--ease);
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: rgba(139,92,246,0.18);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(139,92,246,0.32);
+  background-clip: padding-box;
+}
+html[data-theme="light"] ::-webkit-scrollbar-thumb {
+  background: rgba(124,58,237,0.20);
+  background-clip: padding-box;
+}
+
+/* Divider utility */
+.divider {
+  background: linear-gradient(90deg, transparent, var(--divider), transparent);
+  height: 1px;
+}
+
+button { font-family: inherit; }
+input, textarea, select { font-family: inherit; }
+input:focus, textarea:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--violet-dim);
+}
