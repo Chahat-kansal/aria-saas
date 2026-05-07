@@ -22,7 +22,14 @@ export async function POST(req: Request) {
     .eq('id', business_id)
     .eq('user_id', user.id)
     .maybeSingle()
-  if (!biz) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!biz) return NextResponse.json({
+    message: 'Set up your business first and I\'ll start monitoring your sales automatically.',
+    cards: [],
+    data_tables: null,
+    chart: null,
+    actions: [{ label: 'Complete Setup', action: 'view_setup', data: {}, color: 'violet', icon: '⚙️' }],
+    context_type: 'setup',
+  })
 
   trackUsage({ business_id: biz.id, event_type: 'pos_chat' })
 
@@ -103,6 +110,7 @@ export async function POST(req: Request) {
   yesterdayStart.setDate(yesterdayStart.getDate() - 1)
   const weekStart = new Date(todayStart)
   weekStart.setDate(weekStart.getDate() - 7)
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
   const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1)
   const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59)
@@ -117,6 +125,8 @@ export async function POST(req: Request) {
     { data: lowStock },
     { data: allProducts },
     { data: promotions },
+    { data: salesLast30 },
+    { data: customerActivity },
     weather,
   ] = await Promise.all([
     supabase.from('pos_sales')
@@ -148,6 +158,7 @@ export async function POST(req: Request) {
       .limit(500),
     supabase.from('pos_sale_items')
       .select('product_name,quantity,line_total')
+      .eq('business_id', biz.id)
       .gte('created_at', weekStart.toISOString())
       .limit(500),
     supabase.from('pos_products')
@@ -164,6 +175,17 @@ export async function POST(req: Request) {
       .select('name,active')
       .eq('business_id', biz.id)
       .eq('active', true),
+    supabase.from('pos_sales')
+      .select('total_amount,created_at')
+      .eq('business_id', biz.id)
+      .gte('created_at', thirtyDaysAgo.toISOString())
+      .limit(1000),
+    supabase.from('pos_sales')
+      .select('customer_id,created_at')
+      .eq('business_id', biz.id)
+      .gte('created_at', thirtyDaysAgo.toISOString())
+      .not('customer_id', 'is', null)
+      .limit(1000),
     getWeatherForecast(biz.city || 'Melbourne').catch(() => []),
   ])
 
@@ -210,11 +232,37 @@ export async function POST(req: Request) {
     hourlyToday[hour] = (hourlyToday[hour] || 0) + toCents(sale.total_amount)
   }
 
+  // 30-day aggregations
+  const thirtyDayRevenue = (salesLast30 ?? []).reduce((s, x) => s + toCents(x.total_amount), 0)
+  const thirtyDayCount = (salesLast30 ?? []).length
+  const thirtyDayAvg = thirtyDayCount > 0 ? thirtyDayRevenue / thirtyDayCount : 0
+
+  const uniqueCustomers = new Set((customerActivity ?? []).map((s: any) => s.customer_id)).size
+
+  const dayMap: Record<number, number> = {}
+  for (const sale of (salesLast30 ?? [])) {
+    const dow = new Date(sale.created_at).getDay()
+    dayMap[dow] = (dayMap[dow] ?? 0) + toCents(sale.total_amount)
+  }
+  const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
+  const salesByDay = Object.entries(dayMap)
+    .sort((a, b) => b[1] - a[1])
+    .map(([d, rev]) => `${dayNames[Number(d)]}: A$${fmt(rev)}`)
+
   const hotWeekend = (weather as any[]).slice(0, 7).some((d: any) => d.is_hot)
   const holidays = getUpcomingHolidays(7, 'VIC')
 
   const ctx = `
-REAL-TIME BUSINESS DATA for ${biz.name} (${biz.industry}):
+LIVE BUSINESS DATA for ${biz.name} (${biz.industry}) — pulled right now from the database:
+
+LAST 30 DAYS:
+  Total revenue: A$${fmt(thirtyDayRevenue)}
+  Total transactions: ${thirtyDayCount}
+  Average transaction: A$${fmt(thirtyDayAvg)}
+  Unique customers: ${uniqueCustomers}
+
+  Revenue by day of week (highest first):
+  ${salesByDay.join(', ') || 'No data'}
 
 TODAY (${new Date().toLocaleDateString('en-AU')}):
   Revenue: A$${fmt(todayRevenueCents)} (${revenueChangePct >= 0 ? '+' : ''}${revenueChangePct.toFixed(1)}% vs yesterday)
@@ -233,7 +281,7 @@ LOW STOCK ALERTS (under 10 units):
 ${(lowStock || []).map(p => `  ⚠️ ${p.name}: ${p.stock_quantity} remaining`).join('\n') || '  None — all good'}
 
 TOTAL PRODUCTS: ${(allProducts || []).length}
-ACTIVE PROMOTIONS: ${(promotions || []).map(p => p.name).join(', ') || 'None'}
+ACTIVE PROMOTIONS: ${(promotions || []).map((p: any) => p.name).join(', ') || 'None'}
 
 WEATHER: ${hotWeekend ? '☀️ Hot weekend forecast — expect increased cold drink demand' : '🌤 Mild conditions'}
 UPCOMING: ${holidays.length > 0 ? holidays.slice(0, 2).map((h: any) => `${h.name} in ${h.days_away} days`).join(', ') : 'None this week'}
@@ -241,23 +289,32 @@ UPCOMING: ${holidays.length > 0 ? holidays.slice(0, 2).map((h: any) => `${h.name
 HOURLY TODAY: ${Object.entries(hourlyToday).sort((a, b) => Number(a[0]) - Number(b[0])).map(([h, v]) => `${h}:00=A$${fmt(v)}`).join(', ') || 'No sales yet'}
 `
 
-  const systemPrompt = `${ARIA_VOICE}
+  const systemPrompt = `You are Aria, the autonomous AI brain of ${biz.name}.
+You have ALREADY pulled live data from the database — it is included below.
+You NEVER ask the owner to "show you data" or "give you numbers." You already have it.
+You use it to give specific, actionable answers immediately.
 
-You are Aria, the AI business analyst for ${biz.name}.
-You have access to REAL-TIME business data shown above.
-All monetary values are in Australian dollars (A$).
+${ctx}
 
-YOUR JOB: Give the owner insights like a senior business analyst.
-Use SPECIFIC NUMBERS from the data. Never be vague.
+BEHAVIOUR RULES:
+1. Answer immediately using the data above. NEVER ask for data you already have.
+2. Be specific. Use exact dollar amounts, product names, percentages from the data.
+   Never say "check your X" or "look at your Y" if you can already see it.
+3. If the data shows nothing useful for the question, use what you do have or say
+   "I can see you haven't had any sales recorded yet — once you start selling,
+   I'll give you real insights here."
+4. Australian English (no z's). Confident. Direct. Like a sharp business partner,
+   not a chatbot. Max 3-4 sentences in the message field.
+5. If asked something outside your data (weather excluded — you have that),
+   say "I'm focused on your business data — ask me about sales, stock, customers, or pricing."
 
 RESPONSE FORMAT — return ONLY valid JSON, no other text:
-
 {
-  "message": "1-3 sentences, specific numbers, direct insight",
+  "message": "Your answer here using real data — specific numbers, direct insight",
   "cards": [
     {
       "type": "metric",
-      "label": "Today Revenue",
+      "label": "Label",
       "value": "1,234.50",
       "prefix": "A$",
       "suffix": "",
@@ -283,35 +340,59 @@ RESPONSE FORMAT — return ONLY valid JSON, no other text:
   },
   "actions": [
     {
-      "label": "Create Promotion",
-      "action": "create_promotion",
+      "label": "Button label",
+      "action": "view_report",
       "data": {},
       "color": "violet",
-      "icon": "🎯"
+      "icon": "📈"
     }
   ],
   "context_type": "sales_overview"
 }
 
 CARD RULES:
-- 2-4 metric cards for any sales/revenue question
-- change_dir: "up" green, "down" red, "flat" gray
+- Always include 2-4 metric cards when you have relevant numbers
+- change_dir: "up" (green), "down" (red), "flat" (grey)
 - Colors: "green","red","amber","violet","cyan","blue"
 - All money with A$ prefix
 
 TABLE RULES:
-- Include for product performance or comparisons
-- Max 8 rows, highlight_row: 0 for top row
+- Include when answering product performance, low stock, or comparison questions
+- Max 8 rows. highlight_row: 0 for top row
 
 CHART RULES:
-- Bar chart for hourly data
-- null if no chart adds value
+- Bar chart for hourly/daily data. null if no chart adds value
 
 ACTION RULES:
-- 1-3 relevant actions always
-- Available: create_promotion, reorder_product, view_report, adjust_price, open_orders, view_products, close_register, create_order, adjust_stock, run_autopilot
+- Always include 2-3 relevant action buttons
+- Available: create_promotion, reorder_product, view_report, adjust_price,
+  open_orders, view_products, close_register, create_order, adjust_stock,
+  run_autopilot, view_terminal, view_customers, view_agents, view_setup
 
-TONE: Direct, specific, Australian English, A$ always`
+EXAMPLE — "how can I increase sales?":
+{
+  "message": "Your top earner is [top product] at A$[X] this week. Your best day is [day]
+    (A$[Y] avg) and your worst is [day] (A$[Z] avg). Three moves: 1) Push [slow product]
+    with a promotion — it's barely moving. 2) Roster more staff on [best day]. 3) Your
+    average transaction is A$[avg] — upsell to lift it above A$[target].",
+  "cards": [real numbers from data],
+  "actions": [relevant navigation buttons]
+}
+
+TONE: Direct, specific, Australian English, A$ always.`
+
+  // Zero-data early return — new business with no sales yet
+  if (thirtyDayCount === 0 && todayCount === 0) {
+    return NextResponse.json({
+      message: "I'm watching your business but haven't seen any sales yet. Once your first sale goes through the terminal, I'll start giving you real insights — top products, best times, customer patterns, all of it. Make your first sale and come back.",
+      cards: [],
+      data_tables: null,
+      chart: null,
+      actions: [{ label: 'Open Terminal', action: 'view_terminal', data: {}, color: 'violet', icon: '🏪' }],
+      context_type: 'sales_overview',
+      action_results: [],
+    })
+  }
 
   const client = new Anthropic()
   const response = await client.messages.create({
@@ -325,9 +406,13 @@ TONE: Direct, specific, Australian English, A$ always`
 
   let structured: any
   try {
-    structured = JSON.parse(raw.replace(/```json|```/g, '').trim())
+    const cleaned = raw
+      .replace(/```json\n?/g, '')
+      .replace(/```\n?/g, '')
+      .trim()
+    structured = JSON.parse(cleaned)
   } catch {
-    structured = { message: raw, cards: [], data_tables: [], chart: null, actions: [], context_type: 'general' }
+    structured = { message: raw, cards: [], data_tables: null, chart: null, actions: [], context_type: 'general' }
   }
 
   // Auto-create draft order for low stock if action requests it
