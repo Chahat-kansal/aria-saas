@@ -27,6 +27,8 @@
     "openai": "^4.56.0",
     "papaparse": "^5.5.3",
     "playwright": "^1.52.0",
+    "posthog-js": "^1.372.9",
+    "posthog-node": "^5.33.3",
     "react": "18.2.0",
     "react-dom": "18.2.0",
     "react-hot-toast": "^2.4.1",

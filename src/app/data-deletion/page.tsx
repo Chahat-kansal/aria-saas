@@ -92,6 +92,19 @@ export default function DataDeletionPage() {
           </h2>
           <div style={{ fontSize: 14, color: 'rgba(130,160,200,0.75)', lineHeight: 1.75 }}>
             <p style={{ marginBottom: 12 }}>When you request deletion, we remove all data associated with your account, including:</p>
+            <p style={{ marginBottom: 8, fontWeight: 600, color: 'rgba(220,240,255,0.85)' }}>AI agent data we store:</p>
+            <ul style={{ marginBottom: 16 }}>
+              <li>Agent decision logs (retained 90 days, then auto-purged)</li>
+              <li>Aria Insights cache (retained 1 hour, then auto-purged)</li>
+              <li>Competitor price cache (retained 24 hours)</li>
+              <li>Sales and inventory data used by agents</li>
+            </ul>
+            <p style={{ marginBottom: 8, fontWeight: 600, color: 'rgba(220,240,255,0.85)' }}>To delete AI agent data only:</p>
+            <ul style={{ marginBottom: 16 }}>
+              <li>Email cnkansal1105@gmail.com with subject &quot;Delete Agent Data&quot;</li>
+              <li>Specify your business ID (found in Settings → Business)</li>
+              <li>We will purge all agent decision logs within 5 business days</li>
+            </ul>
             <p style={{ marginBottom: 8, fontWeight: 600, color: 'rgba(220,240,255,0.85)' }}>Facebook / Instagram data we store:</p>
             <ul style={{ marginBottom: 16 }}>
               <li>Facebook OAuth access token</li>

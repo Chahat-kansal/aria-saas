@@ -1,241 +1,131 @@
 import Link from 'next/link';
+import type { Metadata } from 'next';
 
-const BRIEFING_CARDS = [
-  '$2,840 cash trapped in slow stock',
-  '7 products below target margin',
-  '4 items likely to stock out this weekend',
-  '12 products to discount',
-  '6 products not to reorder',
-  '1 supplier price increase detected',
-];
-
-const MORNING_WORK = [
-  ['Live', 'Daily AI briefing', 'Yesterday, today, and the actions waiting for approval.'],
-  ['Live', 'Profit leak detection', 'Low margin products, dead stock, stockouts, and discount mistakes.'],
-  ['Beta', 'Smart reordering', 'What to order, what not to order, and why.'],
-  ['Beta', 'Winback SMS', 'Customers who used to buy but have gone quiet.'],
-];
-
-const LEAKS = [
-  'Cash trapped in slow stock',
-  'Supplier price creep',
-  'Products priced below target margin',
-  'Discounts eating gross profit',
-  'Over-ordering on slow movers',
-  'Stockouts on reliable sellers',
-];
-
-const SETUP = [
-  ['Aria POS', 'Live'],
-  ['Square', 'Beta'],
-  ['Shopfront', 'Coming soon'],
-  ['Historical import', 'Optional'],
-];
-
-const LABEL_CLASS: Record<string, string> = {
-  Live: 'bg-[#1D9E75]/10 text-[#137b5b] border-[#1D9E75]/20',
-  Beta: 'bg-amber-500/10 text-amber-700 border-amber-500/20',
-  'Coming soon': 'bg-slate-500/10 text-slate-600 border-slate-500/20',
-  Optional: 'bg-slate-500/10 text-slate-600 border-slate-500/20',
+export const metadata: Metadata = {
+  title: 'Aria POS — AI for Australian Retail',
+  description: 'The first POS with autonomous AI agents that reorder stock, adjust prices, schedule staff, and answer questions in plain English. Built for Australian retail.',
 };
 
-export default function LandingPage() {
+const AGENTS = [
+  { n: '01', name: 'Reorder', icon: '📦', desc: 'Auto-orders before you run out' },
+  { n: '02', name: 'Pricing', icon: '💰', desc: 'Adjusts margins in real time' },
+  { n: '03', name: 'Demand Forecast', icon: '📈', desc: 'Predicts what you\'ll sell next week' },
+  { n: '04', name: 'Loss Prevention', icon: '🔒', desc: 'Flags unusual voids and overrides' },
+  { n: '05', name: 'Customer Concierge', icon: '💬', desc: 'Answers loyalty questions automatically' },
+  { n: '06', name: 'Churn Defender', icon: '🛡️', desc: 'Reaches out before customers leave' },
+  { n: '07', name: 'Compliance', icon: '✅', desc: 'Tracks RSA, age checks, hour limits' },
+  { n: '08', name: 'Voice POS', icon: '🎙️', desc: 'Serve customers hands-free' },
+  { n: '09', name: 'Screenshot-to-Receipt', icon: '📸', desc: 'Capture supplier invoices instantly' },
+  { n: '10', name: 'Smart Schedule', icon: '📅', desc: 'Rostering tied to demand forecast' },
+  { n: '11', name: 'Conversation Reports', icon: '🗣️', desc: 'Ask Aria anything about your numbers' },
+  { n: '12', name: 'Promotion Engine', icon: '🎯', desc: 'Auto-launches deals when you\'re slow' },
+];
+
+const PLANS = [
+  { name: 'Starter', price: '$59', period: '/outlet/mo', desc: 'POS + Reorder Agent', highlight: false },
+  { name: 'Growth', price: '$129', period: '/outlet/mo', desc: '5 agents + Voice + Concierge', highlight: true },
+  { name: 'Autonomous', price: '$249', period: '/outlet/mo', desc: 'All 12 agents + CCTV vision', highlight: false },
+];
+
+export default function HomePage() {
   return (
-    <main className="min-h-screen bg-[#f6f5f0] text-[#191a16]">
-      <nav className="sticky top-0 z-50 border-b border-black/5 bg-[#f6f5f0]/90 px-5 py-4 backdrop-blur md:px-8">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4">
-          <div className="text-xl font-semibold tracking-tight">aria<span className="text-[#1D9E75]">OS</span></div>
-          <div className="hidden items-center gap-7 text-sm text-black/45 md:flex">
-            <a href="#briefing" className="hover:text-black">Briefing</a>
-            <a href="#ordering" className="hover:text-black">Ordering</a>
-            <a href="#pricing" className="hover:text-black">Pricing</a>
-          </div>
-          <div className="flex items-center gap-2">
-            <Link href="/login" className="rounded-full border border-black/15 px-4 py-2 text-sm hover:border-black/40">Log in</Link>
-            <Link href="/onboarding/industry" className="rounded-full bg-[#191a16] px-4 py-2 text-sm font-medium text-white hover:bg-[#2b2c25]">Get started</Link>
-          </div>
+    <div style={{ background: '#08070D', color: '#F0EBFF', fontFamily: "'Manrope',system-ui,sans-serif", minHeight: '100vh' }}>
+      {/* Nav */}
+      <nav style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 48px', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+        <div style={{ fontSize: 18, fontWeight: 800, color: '#F0EBFF', letterSpacing: '-0.02em' }}>Aria POS</div>
+        <div style={{ display: 'flex', gap: 24, alignItems: 'center' }}>
+          <Link href="/pos" style={{ fontSize: 13, color: '#918AAE', textDecoration: 'none' }}>POS</Link>
+          <Link href="/pos/reports" style={{ fontSize: 13, color: '#918AAE', textDecoration: 'none' }}>Reports</Link>
+          <Link href="/login" style={{ fontSize: 13, color: '#F0EBFF', textDecoration: 'none', background: '#8B5CF6', padding: '7px 18px', borderRadius: 8, fontWeight: 600 }}>Sign in</Link>
         </div>
       </nav>
 
-      <section className="mx-auto grid max-w-6xl gap-10 px-5 pb-16 pt-16 md:grid-cols-[1fr_440px] md:px-8 md:pt-24">
-        <div>
-          <span className="inline-flex rounded-full border border-[#1D9E75]/20 bg-[#1D9E75]/10 px-3 py-1 text-xs font-semibold text-[#137b5b]">
-            Built for Australian shops, cafes, bottle shops and convenience stores
-          </span>
-          <h1 className="mt-6 max-w-3xl text-5xl font-semibold leading-tight tracking-tight md:text-6xl">
-            Run your shop on Aria POS. Let Aria AI watch the business for you.
-          </h1>
-          <p className="mt-6 max-w-2xl text-lg leading-relaxed text-black/58">
-            Aria POS handles every sale. Aria AI watches your data live — stock, margins, customers, suppliers — and tells you what to order, what to discount, and where your profit is going.
-          </p>
-          <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-            <Link href="/onboarding/industry" className="rounded-full bg-[#1D9E75] px-7 py-3 text-center text-sm font-semibold text-white hover:bg-[#188765]">
-              Get your first Aria briefing
-            </Link>
-            <a href="#briefing" className="rounded-full border border-black/15 px-7 py-3 text-center text-sm font-semibold hover:border-black/40">
-              See how it works
-            </a>
-          </div>
-          <p className="mt-4 text-sm text-black/40">A$99/month founding customer pricing. No lock-in. No mystery dashboards.</p>
+      {/* Hero */}
+      <section style={{ textAlign: 'center', padding: '100px 48px 80px', maxWidth: 800, margin: '0 auto' }}>
+        <div style={{ display: 'inline-block', background: 'rgba(139,92,246,0.14)', color: '#B49BFB', padding: '4px 14px', borderRadius: 20, fontSize: 12, fontWeight: 700, marginBottom: 24, border: '1px solid rgba(139,92,246,0.28)' }}>
+          Built for Australian retail
         </div>
+        <h1 style={{ fontSize: 'clamp(36px, 6vw, 64px)', fontWeight: 800, lineHeight: 1.1, marginBottom: 20, letterSpacing: '-0.03em' }}>
+          Square sells.<br />Shopfront manages.<br /><span style={{ color: '#8B5CF6' }}>Aria runs your shop.</span>
+        </h1>
+        <p style={{ fontSize: 18, color: '#918AAE', lineHeight: 1.6, marginBottom: 40, maxWidth: 600, margin: '0 auto 40px' }}>
+          The first POS with autonomous AI agents that reorder stock, adjust prices, schedule staff, and answer questions in plain English.
+        </p>
+        <div style={{ display: 'flex', gap: 14, justifyContent: 'center', flexWrap: 'wrap' }}>
+          <Link href="/signup" style={{ background: '#8B5CF6', color: '#fff', padding: '14px 32px', borderRadius: 10, fontSize: 15, fontWeight: 700, textDecoration: 'none', display: 'inline-block' }}>
+            Start free 14-day trial
+          </Link>
+          <Link href="#demo" style={{ background: 'rgba(139,92,246,0.12)', color: '#B49BFB', padding: '14px 32px', borderRadius: 10, fontSize: 15, fontWeight: 600, textDecoration: 'none', display: 'inline-block', border: '1px solid rgba(139,92,246,0.28)' }}>
+            Watch 2-min demo
+          </Link>
+        </div>
+        <p style={{ fontSize: 12, color: '#5E5878', marginTop: 16 }}>No credit card required · Australian-hosted data</p>
+      </section>
 
-        <div id="briefing" className="rounded-2xl border border-black/10 bg-[#11131a] p-4 shadow-2xl shadow-black/15">
-          <div className="mb-4 flex items-center justify-between">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[.18em] text-[#8ff1c9]">Example briefing</p>
-              <p className="mt-1 text-sm text-white/45">Illustrative only - not a real customer dashboard.</p>
+      {/* 12 Agents */}
+      <section style={{ padding: '60px 48px', maxWidth: 1200, margin: '0 auto' }}>
+        <div style={{ textAlign: 'center', marginBottom: 48 }}>
+          <h2 style={{ fontSize: 32, fontWeight: 800, marginBottom: 10 }}>12 autonomous AI agents</h2>
+          <p style={{ fontSize: 14, color: '#918AAE' }}>Each one works around the clock so you don&apos;t have to.</p>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 14 }}>
+          {AGENTS.map(a => (
+            <div key={a.n} style={{ background: '#14111F', borderRadius: 14, padding: '18px 16px', border: '1px solid rgba(139,92,246,0.10)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                <span style={{ fontSize: 10, color: '#5E5878', fontFamily: "'JetBrains Mono',monospace", fontWeight: 600 }}>#{a.n}</span>
+                <span style={{ fontSize: 18 }}>{a.icon}</span>
+              </div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: '#F0EBFF', marginBottom: 4 }}>{a.name}</div>
+              <div style={{ fontSize: 12, color: '#918AAE', lineHeight: 1.4 }}>{a.desc}</div>
             </div>
-            <span className="h-2 w-2 rounded-full bg-[#1D9E75]" />
-          </div>
-          <div className="grid gap-3">
-            {BRIEFING_CARDS.map((card, index) => (
-              <div key={card} className="rounded-xl border border-white/10 bg-white/[0.04] p-4">
-                <div className="flex items-start gap-3">
-                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#1D9E75]/15 text-xs font-semibold text-[#8ff1c9]">{index + 1}</span>
-                  <p className="text-sm font-medium leading-snug text-white">{card}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section className="border-y border-black/6 bg-white px-5 py-14 md:px-8">
-        <div className="mx-auto max-w-6xl">
-          <h2 className="text-3xl font-semibold tracking-tight">What Aria does every morning</h2>
-          <div className="mt-8 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            {MORNING_WORK.map(([label, title, copy]) => (
-              <div key={title} className="rounded-2xl border border-black/8 bg-[#fbfaf7] p-5">
-                <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${LABEL_CLASS[label]}`}>{label}</span>
-                <h3 className="mt-4 text-base font-semibold">{title}</h3>
-                <p className="mt-2 text-sm leading-relaxed text-black/55">{copy}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section className="mx-auto grid max-w-6xl gap-10 px-5 py-16 md:grid-cols-2 md:px-8">
-        <div>
-          <h2 className="text-3xl font-semibold tracking-tight">Profit leaks Aria finds</h2>
-          <p className="mt-3 text-sm leading-relaxed text-black/55">
-            Aria is direct because owners do not need another pretty graph. It points at cash trapped in stock, supplier cost creep, and products that are quietly wasting shelf space.
-          </p>
-        </div>
-        <div className="grid gap-3 sm:grid-cols-2">
-          {LEAKS.map(leak => (
-            <div key={leak} className="rounded-xl border border-black/8 bg-white p-4 text-sm font-medium shadow-sm">{leak}</div>
           ))}
         </div>
       </section>
 
-      <section id="ordering" className="bg-[#191a16] px-5 py-16 text-white md:px-8">
-        <div className="mx-auto grid max-w-6xl gap-8 md:grid-cols-2">
-          <div>
-            <span className="rounded-full border border-amber-300/20 bg-amber-400/10 px-2 py-1 text-xs font-semibold text-amber-200">Beta</span>
-            <h2 className="mt-4 text-3xl font-semibold tracking-tight">Smart ordering: what to order and what not to order</h2>
-            <p className="mt-3 text-sm leading-relaxed text-white/55">
-              Aria separates urgent stockouts from slow movers. The result is a short approval list, not a spreadsheet marathon.
-            </p>
-          </div>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="rounded-2xl border border-[#1D9E75]/25 bg-[#1D9E75]/10 p-5">
-              <p className="text-sm font-semibold text-[#8ff1c9]">Example order list</p>
-              <p className="mt-1 text-xs text-white/45">Illustrative only</p>
-              <ul className="mt-4 space-y-3 text-sm text-white/75">
-                <li>Coke No Sugar - 6 cartons</li>
-                <li>Great Northern Original - 4 cartons</li>
-                <li>Large oat milk - 12 bottles</li>
-              </ul>
+      {/* Social proof */}
+      <section style={{ padding: '40px 48px', textAlign: 'center', borderTop: '1px solid rgba(255,255,255,0.04)', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+        <p style={{ fontSize: 13, color: '#5E5878' }}>Trusted by Australian bottle shops, grocers, and retailers</p>
+      </section>
+
+      {/* Pricing */}
+      <section style={{ padding: '80px 48px', maxWidth: 900, margin: '0 auto' }}>
+        <h2 style={{ fontSize: 32, fontWeight: 800, textAlign: 'center', marginBottom: 40 }}>Simple pricing</h2>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
+          {PLANS.map(p => (
+            <div key={p.name} style={{ background: p.highlight ? '#1B1729' : '#14111F', borderRadius: 16, padding: '24px 20px', border: `1px solid ${p.highlight ? '#8B5CF6' : 'rgba(139,92,246,0.10)'}`, position: 'relative' }}>
+              {p.highlight && <div style={{ position: 'absolute', top: -10, left: '50%', transform: 'translateX(-50%)', background: '#8B5CF6', color: '#fff', fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 20 }}>MOST POPULAR</div>}
+              <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 8 }}>{p.name}</div>
+              <div style={{ fontSize: 36, fontWeight: 800, color: p.highlight ? '#B49BFB' : '#F0EBFF' }}>{p.price}<span style={{ fontSize: 13, color: '#918AAE', fontWeight: 400 }}>{p.period}</span></div>
+              <p style={{ fontSize: 13, color: '#918AAE', marginTop: 8, marginBottom: 24 }}>{p.desc}</p>
+              <Link href="/signup" style={{ display: 'block', textAlign: 'center', background: p.highlight ? '#8B5CF6' : 'rgba(139,92,246,0.12)', color: p.highlight ? '#fff' : '#B49BFB', padding: '10px', borderRadius: 8, fontSize: 13, fontWeight: 600, textDecoration: 'none', border: p.highlight ? 'none' : '1px solid rgba(139,92,246,0.28)' }}>
+                Get started
+              </Link>
             </div>
-            <div className="rounded-2xl border border-red-300/20 bg-red-500/10 p-5">
-              <p className="text-sm font-semibold text-red-200">Example do-not-order list</p>
-              <p className="mt-1 text-xs text-white/45">Illustrative only</p>
-              <ul className="mt-4 space-y-3 text-sm text-white/75">
-                <li>Imported ginger beer 4-pack</li>
-                <li>Premium tonic 750ml</li>
-                <li>Seasonal muffin mix</li>
-              </ul>
-            </div>
-          </div>
+          ))}
         </div>
       </section>
 
-      <section className="mx-auto grid max-w-6xl gap-10 px-5 py-16 md:grid-cols-[1fr_1fr] md:px-8">
-        <div className="rounded-2xl border border-black/8 bg-white p-6">
-          <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${LABEL_CLASS.Beta}`}>Beta</span>
-          <h2 className="mt-4 text-2xl font-semibold">Supplier watchdog</h2>
-          <p className="mt-3 text-sm leading-relaxed text-black/55">
-            Upload supplier invoices or cost files and Aria looks for price creep, invoice mismatches, late deliveries, and estimated margin impact.
-          </p>
-        </div>
-        <div className="rounded-2xl border border-black/8 bg-white p-6">
-          <h2 className="text-2xl font-semibold">Works with your setup</h2>
-          <div className="mt-5 grid gap-3 sm:grid-cols-2">
-            {SETUP.map(([name, label]) => (
-              <div key={name} className="rounded-xl border border-black/8 bg-[#fbfaf7] p-4">
-                <p className="font-semibold">{name}</p>
-                <span className={`mt-2 inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${LABEL_CLASS[label]}`}>{label}</span>
-              </div>
-            ))}
-          </div>
+      {/* vs comparison */}
+      <section style={{ padding: '40px 48px', borderTop: '1px solid rgba(255,255,255,0.04)', textAlign: 'center' }}>
+        <p style={{ fontSize: 14, color: '#918AAE', marginBottom: 16 }}>Compare Aria with:</p>
+        <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
+          {['/vs/shopfront', '/vs/square', '/vs/lightspeed'].map(href => (
+            <Link key={href} href={href} style={{ fontSize: 13, color: '#B49BFB', textDecoration: 'none', padding: '6px 14px', borderRadius: 6, border: '1px solid rgba(139,92,246,0.20)', background: 'rgba(139,92,246,0.06)' }}>
+              Aria vs {href.split('/')[2].charAt(0).toUpperCase() + href.split('/')[2].slice(1)}
+            </Link>
+          ))}
         </div>
       </section>
 
-      <section className="border-y border-black/6 bg-white px-5 py-16 md:px-8">
-        <div className="mx-auto grid max-w-6xl gap-8 md:grid-cols-2">
-          <div>
-            <h2 className="text-3xl font-semibold tracking-tight">Built by an Australian retail operator</h2>
-            <p className="mt-4 text-sm leading-relaxed text-black/58">
-              Built by an Australian retail operator for real shops, cafes, bottle shops and convenience stores. Aria is designed for the morning decisions owners actually make: order this, do not order that, fix this margin, clear this stock.
-            </p>
-          </div>
-          <div id="pricing" className="rounded-2xl border-2 border-[#1D9E75] bg-[#fbfaf7] p-6">
-            <p className="text-sm font-semibold text-[#137b5b]">Founding customer pricing</p>
-            <p className="mt-3 text-4xl font-bold">A$99<span className="text-base font-normal text-black/45">/month</span></p>
-            <p className="mt-3 text-sm leading-relaxed text-black/55">Daily AI briefing, profit leak detection, Aria POS, Ask Aria, and live business intelligence while founding customer pricing is available.</p>
-          </div>
-        </div>
-      </section>
-
-      <section className="mx-auto max-w-6xl px-5 py-16 md:px-8">
-        <h2 className="text-3xl font-semibold tracking-tight">What is live, beta, and coming soon</h2>
-        <div className="mt-8 grid gap-4 md:grid-cols-3">
-          <FeatureColumn label="Live" items={['Daily AI briefing', 'Profit leak detection', 'Aria POS', 'Ask Aria', 'Team management']} />
-          <FeatureColumn label="Beta" items={['Square sync', 'Smart reordering', 'Supplier watchdog', 'Winback SMS']} />
-          <FeatureColumn label="Coming soon" items={['Shopfront sync', 'Full rostering compliance', 'Cross-business benchmarking', 'Voice stocktake', 'Website AI assistant']} />
-        </div>
-      </section>
-
-      <section className="px-5 pb-16 md:px-8">
-        <div className="mx-auto max-w-4xl rounded-2xl bg-[#191a16] p-8 text-center text-white md:p-12">
-          <h2 className="text-3xl font-semibold tracking-tight">Start with Aria POS. Get your first AI briefing tomorrow.</h2>
-          <p className="mx-auto mt-3 max-w-xl text-sm leading-relaxed text-white/55">
-            Open Aria POS today. Tomorrow morning, Aria AI will have watched your sales overnight and will tell you exactly what to do.
-          </p>
-          <Link href="/onboarding/industry" className="mt-7 inline-flex rounded-full bg-[#1D9E75] px-7 py-3 text-sm font-semibold text-white hover:bg-[#188765]">
-            Get your first Aria briefing
-          </Link>
-        </div>
-      </section>
-
-      <footer className="border-t border-black/7 px-5 py-8 md:px-8">
-        <div className="mx-auto flex max-w-6xl flex-col gap-4 text-sm text-black/40 md:flex-row md:items-center md:justify-between">
-          <div className="text-xl font-semibold tracking-tight text-black">aria<span className="text-[#1D9E75]">OS</span></div>
-          <p>Built in Australia for Australian small businesses.</p>
+      {/* Footer */}
+      <footer style={{ padding: '40px 48px', borderTop: '1px solid rgba(255,255,255,0.04)', display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16 }}>
+        <div style={{ fontSize: 13, color: '#5E5878' }}>© 2026 Aria POS Pty Ltd · ABN pending · Melbourne, Australia</div>
+        <div style={{ display: 'flex', gap: 20 }}>
+          {[['Privacy', '/privacy'], ['Terms', '/terms'], ['Security', '/security'], ['Data Deletion', '/data-deletion']].map(([label, href]) => (
+            <Link key={href} href={href} style={{ fontSize: 12, color: '#5E5878', textDecoration: 'none' }}>{label}</Link>
+          ))}
         </div>
       </footer>
-    </main>
-  );
-}
-
-function FeatureColumn({ label, items }: { label: string; items: string[] }) {
-  return (
-    <div className="rounded-2xl border border-black/8 bg-white p-5">
-      <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${LABEL_CLASS[label]}`}>{label}</span>
-      <ul className="mt-5 space-y-3 text-sm text-black/60">
-        {items.map(item => <li key={item}>{item}</li>)}
-      </ul>
     </div>
   );
 }

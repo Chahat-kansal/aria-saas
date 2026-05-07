@@ -212,6 +212,38 @@ export default function PrivacyPage() {
           </div>
         ))}
 
+        {/* AI Agent data sections */}
+        {[
+          {
+            title: '8. AI Agents — Data Access',
+            content: (
+              <>
+                <p>Aria&apos;s autonomous AI agents (Reorder, Pricing, Demand Forecast, Loss Prevention, Customer Concierge, Churn Defender, Compliance, Voice POS, Screenshot-to-Receipt, Smart Schedule, Conversation Reports, Promotion Engine) access your sales data, inventory records, and customer information to perform their functions.</p>
+                <p style={{ marginTop: 12 }}>Agent actions are logged in <strong>agent_decisions</strong> records, retained for 90 days, then automatically purged. You can opt out of individual agents in Settings → AI Agents → [Agent Name] → Disable.</p>
+                <p style={{ marginTop: 12 }}>Data sent to AI agents is processed via Anthropic&apos;s API under their Data Processing Addendum. Anthropic does not train on your data. See: <a href="https://www.anthropic.com/privacy" style={{ color: '#8B5CF6' }}>anthropic.com/privacy</a>.</p>
+              </>
+            ),
+          },
+          {
+            title: '9. Agent Decision Logs',
+            content: (
+              <>
+                <p>Every action taken by an autonomous agent is logged with: timestamp, agent type, triggering data, decision made, and outcome. These logs are retained for 90 days and are available in your dashboard under Reports → Actions.</p>
+                <p style={{ marginTop: 12 }}>You can request a full export of agent decision logs by emailing <a href="mailto:cnkansal1105@gmail.com" style={{ color: '#8B5CF6' }}>cnkansal1105@gmail.com</a>.</p>
+              </>
+            ),
+          },
+        ].map(section => (
+          <div key={section.title} style={{ background: '#0A0E1E', border: '1px solid #1A2240', borderRadius: 16, padding: '28px 32px', marginBottom: 16 }}>
+            <h2 style={{ fontSize: 17, fontWeight: 700, color: 'rgba(220,240,255,0.93)', marginBottom: 16, letterSpacing: '-0.01em' }}>
+              {section.title}
+            </h2>
+            <div style={{ fontSize: 14, color: 'rgba(130,160,200,0.75)', lineHeight: 1.75 }}>
+              {section.content}
+            </div>
+          </div>
+        ))}
+
         {/* Footer */}
         <p style={{ fontSize: 12, color: 'rgba(130,160,200,0.35)', textAlign: 'center', marginTop: 40 }}>
           © 2026 Aria OS · Australia · <a href="mailto:cnkansal1105@gmail.com" style={{ color: 'rgba(130,160,200,0.5)', textDecoration: 'none' }}>cnkansal1105@gmail.com</a>

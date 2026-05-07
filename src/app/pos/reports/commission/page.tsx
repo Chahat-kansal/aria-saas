@@ -1,169 +1,153 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
+import ReportHeader from '@/components/reports/ReportHeader';
+import ReportTable, { Column } from '@/components/reports/ReportTable';
+import AriaInsightCard from '@/components/reports/AriaInsightCard';
+import DateRangePicker, { DateRange } from '@/components/reports/DateRangePicker';
+import ExportButtons from '@/components/reports/ExportButtons';
+import { fmtAUD, fmtPct } from '@/lib/recharts-theme';
+import { track } from '@/lib/analytics';
 
-interface LeaderboardRow {
-  name: string; sales_count: number; total_sales_cents: number;
-  commission_cents: number; pending: number; paid: number;
-}
-interface Totals { total_commission_cents: number; total_sales_cents: number; pending_cents: number; }
+interface CommRow extends Record<string, unknown> { name: string; total: number; rule: string; commission: number; }
+interface Rule { id: string; staff_id: string | null; rule_type: string; rate_pct: number; flat_cents: number; applies_to: string; effective_from: string; }
 
-function fmt(cents: number) { return `A$${(cents / 100).toFixed(2)}`; }
-function fmtDate(d: Date) { return d.toISOString().split('T')[0]; }
+const iS: React.CSSProperties = { background: 'var(--bg-input)', border: '1px solid var(--border-default)', borderRadius: 8, padding: '5px 10px', fontSize: 12, color: 'var(--text-primary)', outline: 'none', fontFamily: 'inherit' };
+const pBtn = (active: boolean): React.CSSProperties => ({ padding: '5px 12px', borderRadius: 6, border: '1px solid', borderColor: active ? 'var(--violet)' : 'var(--border-default)', background: active ? 'var(--violet-dim)' : 'var(--bg-elevated)', color: active ? 'var(--violet)' : 'var(--text-secondary)', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' });
 
 export default function CommissionReportPage() {
-  const [rows, setRows] = useState<LeaderboardRow[]>([]);
-  const [totals, setTotals] = useState<Totals | null>(null);
+  const [range, setRange] = useState<DateRange>({ from: new Date(Date.now() - 29 * 86400000), to: new Date(), preset: 'This Month' });
+  const [rows, setRows] = useState<CommRow[]>([]);
+  const [rules, setRules] = useState<Rule[]>([]);
   const [loading, setLoading] = useState(true);
-  const [businessId, setBusinessId] = useState<string | null>(null);
-  const [from, setFrom] = useState(() => fmtDate(new Date(Date.now() - 30 * 86400000)));
-  const [to, setTo] = useState(() => fmtDate(new Date()));
-  const [paying, setPaying] = useState<string | null>(null);
-  const [insight, setInsight] = useState<string | null>(null);
-  const [expandedStaff, setExpandedStaff] = useState<string | null>(null);
+  const [insight, setInsight] = useState<string[] | null>(null);
+  const [totalRevenue, setTotalRevenue] = useState(0);
+  const [totalCommission, setTotalCommission] = useState(0);
+  const [commPct, setCommPct] = useState(0);
+  const [showAddRule, setShowAddRule] = useState(false);
+  const [newRule, setNewRule] = useState({ rule_type: 'pct_sale', rate_pct: '5', applies_to: 'all', effective_from: new Date().toISOString().split('T')[0] });
 
-  useEffect(() => {
-    fetch('/api/pos/products').then(r => r.json()).then(d => { if (d.business_id) setBusinessId(d.business_id); });
-  }, []);
-
-  const load = useCallback(async () => {
-    if (!businessId) return;
+  const load = useCallback(() => {
     setLoading(true);
-    const d = await fetch(`/api/pos/reports/commission?business_id=${businessId}&from=${from}&to=${to}`).then(r => r.json());
-    setRows(d.leaderboard ?? []);
-    setTotals(d.totals ?? null);
-    setLoading(false);
+    const from = range.from.toISOString().split('T')[0];
+    const to = range.to.toISOString().split('T')[0];
+    fetch(`/api/pos/reports/commission?from=${from}&to=${to}`)
+      .then(r => r.json())
+      .then(d => {
+        setRows(d.rows ?? []);
+        setRules(d.rules ?? []);
+        setTotalRevenue(d.totalRevenue ?? 0);
+        setTotalCommission(d.totalCommission ?? 0);
+        setCommPct(d.commissionPct ?? 0);
+        setInsight(d.insight?.bullets ?? null);
+        setLoading(false);
+        track('report_viewed', { type: 'commission' });
+      })
+      .catch(() => setLoading(false));
+  }, [range]);
 
-    // Aria insight
-    if (d.leaderboard?.length > 0 && !insight) {
-      const top = d.leaderboard[0] as LeaderboardRow;
-      const avg = (d.totals?.total_sales_cents ?? 0) / Math.max(d.leaderboard.reduce((s: number, r: LeaderboardRow) => s + r.sales_count, 0), 1);
-      setInsight(`${top.name} is your top performer with ${fmt(top.commission_cents)} in commissions from ${top.sales_count} sales. Their average basket is ${fmt(Math.round(top.total_sales_cents / Math.max(top.sales_count, 1)))} vs team average of ${fmt(Math.round(avg))}.`);
-    }
-  }, [businessId, from, to, insight]);
+  useEffect(() => { load(); }, [load]);
 
-  useEffect(() => { if (businessId) load(); }, [businessId, from, to, load]);
+  const columns: Column[] = [
+    { key: 'name', label: 'STAFF', sortable: true, format: (v) => <span style={{ fontWeight: 600 }}>{String(v)}</span> },
+    { key: 'total', label: 'SALES TOTAL', align: 'right', sortable: true, format: (v) => fmtAUD(v as number) },
+    { key: 'rule', label: 'RULE APPLIED' },
+    { key: 'commission', label: 'COMMISSION $', align: 'right', sortable: true, format: (v) => <span style={{ color: '#34D399', fontWeight: 700 }}>{fmtAUD(v as number)}</span> },
+  ];
 
-  async function markPaid(name: string) {
-    if (!businessId) return;
-    setPaying(name);
-    await fetch('/api/pos/reports/commission', {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ business_id: businessId, pos_user_name: name, status: 'paid' }),
-    });
-    setPaying(null);
-    load();
-  }
+  const totals = { total: totalRevenue, commission: totalCommission };
 
   return (
-    <div className="min-h-full bg-gray-50">
-      <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-xl font-semibold text-gray-900">Commission Report</h1>
-          <p className="text-xs text-gray-500 mt-0.5">Staff commission earned by period</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <input type="date" value={from} onChange={e => setFrom(e.target.value)}
-            className="text-sm border border-gray-200 rounded-xl px-3 py-2 outline-none bg-white" />
-          <span className="text-xs text-gray-400">to</span>
-          <input type="date" value={to} onChange={e => setTo(e.target.value)}
-            className="text-sm border border-gray-200 rounded-xl px-3 py-2 outline-none bg-white" />
-        </div>
-      </div>
+    <div style={{ minHeight: '100%', background: 'var(--bg-base)', color: 'var(--text-primary)', fontFamily: "'Manrope',sans-serif" }}>
+      <ReportHeader
+        title="Commission"
+        subtitle="Staff earnings and commission rules"
+        filters={<DateRangePicker value={range} onChange={setRange} />}
+        actions={
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={() => setShowAddRule(true)} style={{ ...pBtn(false), background: 'var(--violet)', color: '#fff', borderColor: 'var(--violet)' }}>+ Add Rule</button>
+            <ExportButtons data={rows} reportType="commission" />
+          </div>
+        }
+      />
+      <div style={{ padding: '0 24px 24px' }}>
+        <AriaInsightCard bullets={insight ?? undefined} loading={loading} />
 
-      <div className="max-w-4xl mx-auto px-6 py-6 space-y-5">
-        {/* Aria insight */}
-        {insight && (
-          <div className="bg-white border border-gray-100 rounded-xl px-4 py-3 border-l-[3px] border-l-[#8B5CF6]">
-            <p className="text-sm text-gray-700"><span className="font-semibold text-[#8B5CF6]">Aria: </span>{insight}</p>
-          </div>
-        )}
-
-        {/* Summary cards */}
-        {totals && (
-          <div className="grid grid-cols-3 gap-4">
-            {[
-              { label: 'Total commission earned', value: fmt(totals.total_commission_cents), color: 'text-gray-900' },
-              { label: 'Pending payment', value: fmt(totals.pending_cents), color: 'text-amber-600' },
-              { label: 'Total sales value', value: fmt(totals.total_sales_cents), color: 'text-gray-900' },
-            ].map(s => (
-              <div key={s.label} className="bg-white border border-gray-200 rounded-xl px-5 py-4">
-                <p className="text-xs text-gray-400 uppercase tracking-wider mb-1">{s.label}</p>
-                <p className={`text-2xl font-bold font-mono ${s.color}`}>{s.value}</p>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Leaderboard */}
-        {loading ? (
-          <div className="flex justify-center py-10">
-            <div className="w-6 h-6 rounded-full border-2 border-gray-300 border-t-gray-600 animate-spin" />
-          </div>
-        ) : rows.length === 0 ? (
-          <div className="bg-white border border-gray-200 rounded-xl p-10 text-center">
-            <p className="text-2xl mb-2">🏆</p>
-            <p className="text-gray-500 text-sm mb-2">No commission data for this period</p>
-            <p className="text-xs text-gray-400">Commission is tracked when staff are attributed to sales at the register</p>
-          </div>
-        ) : (
-          <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
-            <div className="grid px-5 py-3 text-[10px] font-semibold text-gray-400 uppercase tracking-wider bg-gray-50 border-b border-gray-100"
-              style={{ gridTemplateColumns: '2fr 80px 100px 100px 100px 80px' }}>
-              <span>Staff member</span>
-              <span className="text-right">Sales</span>
-              <span className="text-right">Revenue</span>
-              <span className="text-right">Commission</span>
-              <span className="text-right">Pending</span>
-              <span className="text-right">Action</span>
+        {/* Commission summary */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 20 }}>
+          {[
+            { label: 'Total Revenue', value: fmtAUD(totalRevenue), color: 'var(--text-primary)' },
+            { label: 'Total Commission', value: fmtAUD(totalCommission), color: '#34D399' },
+            { label: 'Commission %', value: fmtPct(commPct), color: commPct > 15 ? '#F87171' : '#FBBF24' },
+          ].map(c => (
+            <div key={c.label} style={{ background: 'var(--bg-surface)', borderRadius: 12, padding: '14px 16px', boxShadow: 'var(--shadow-card)' }}>
+              <div style={{ fontSize: 11, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 6 }}>{c.label}</div>
+              <div style={{ fontSize: 24, fontWeight: 700, color: c.color }}>{c.value}</div>
             </div>
-            {rows.map((row, i) => (
-              <div key={row.name}>
-                <button
-                  onClick={() => setExpandedStaff(expandedStaff === row.name ? null : row.name)}
-                  className={`w-full grid px-5 py-3.5 text-sm items-center border-b border-gray-50 last:border-0 hover:bg-gray-50 transition-colors text-left ${i === 0 ? 'bg-amber-50/50' : ''}`}
-                  style={{ gridTemplateColumns: '2fr 80px 100px 100px 100px 80px' }}>
-                  <div className="flex items-center gap-3">
-                    {i === 0 && <span className="text-base">🥇</span>}
-                    {i === 1 && <span className="text-base">🥈</span>}
-                    {i === 2 && <span className="text-base">🥉</span>}
-                    {i > 2 && (
-                      <div className="w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center text-xs font-bold text-gray-600">{row.name[0]?.toUpperCase()}</div>
-                    )}
-                    <span className="font-semibold text-gray-900">{row.name}</span>
-                  </div>
-                  <span className="text-right text-gray-600">{row.sales_count}</span>
-                  <span className="text-right font-mono text-gray-700">{fmt(row.total_sales_cents)}</span>
-                  <span className="text-right font-mono font-semibold text-gray-900">{fmt(row.commission_cents)}</span>
-                  <span className={`text-right font-mono font-medium ${row.pending > 0 ? 'text-amber-600' : 'text-gray-400'}`}>
-                    {row.pending > 0 ? fmt(row.pending) : '—'}
-                  </span>
-                  {row.pending > 0 ? (
-                    <button onClick={e => { e.stopPropagation(); markPaid(row.name); }} disabled={paying === row.name}
-                      className="justify-self-end text-xs px-2.5 py-1.5 rounded-lg text-white disabled:opacity-50"
-                      style={{ background: '#8B5CF6' }}>
-                      {paying === row.name ? '…' : 'Pay'}
-                    </button>
-                  ) : (
-                    <span className="justify-self-end text-[10px] text-gray-300">paid ✓</span>
-                  )}
-                </button>
-              </div>
-            ))}
-            {/* Totals row */}
-            {totals && (
-              <div className="grid px-5 py-3 text-sm items-center border-t-2 border-gray-200 bg-gray-50 font-semibold"
-                style={{ gridTemplateColumns: '2fr 80px 100px 100px 100px 80px' }}>
-                <span className="text-gray-700">Total</span>
-                <span className="text-right text-gray-600">{rows.reduce((s, r) => s + r.sales_count, 0)}</span>
-                <span className="text-right font-mono text-gray-700">{fmt(totals.total_sales_cents)}</span>
-                <span className="text-right font-mono text-gray-900">{fmt(totals.total_commission_cents)}</span>
-                <span className="text-right font-mono text-amber-600">{fmt(totals.pending_cents)}</span>
-                <span />
-              </div>
-            )}
+          ))}
+        </div>
+
+        <ReportTable columns={columns} rows={rows} loading={loading} totalsRow={totals} emptyIcon="💰" emptyMessage="No commission data for this period." />
+
+        {/* Rules list */}
+        {rules.length > 0 && (
+          <div style={{ marginTop: 24 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 10 }}>Active Commission Rules</div>
+            <div style={{ background: 'var(--bg-surface)', borderRadius: 10, overflow: 'hidden', boxShadow: 'var(--shadow-card)' }}>
+              {rules.map((r, i) => (
+                <div key={r.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 14px', borderTop: i > 0 ? '1px solid var(--divider)' : 'none', fontSize: 13 }}>
+                  <span style={{ color: 'var(--text-primary)' }}>{r.staff_id ? `Staff #${r.staff_id.slice(0,8)}` : 'All Staff'} — {r.applies_to}</span>
+                  <span style={{ color: 'var(--violet)', fontWeight: 700 }}>{r.rate_pct}% of sale</span>
+                  <span style={{ color: 'var(--text-secondary)', fontSize: 11 }}>from {r.effective_from}</span>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </div>
+
+      {/* Add Rule Modal */}
+      {showAddRule && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: 'var(--bg-elevated)', borderRadius: 16, padding: 24, width: 400, boxShadow: 'var(--shadow-lg)' }}>
+            <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 16, color: 'var(--text-primary)' }}>Add Commission Rule</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div>
+                <label style={{ fontSize: 11, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>Rule Type</label>
+                <select value={newRule.rule_type} onChange={e => setNewRule(p => ({ ...p, rule_type: e.target.value }))} style={iS}>
+                  <option value="pct_sale">% of Sale</option>
+                  <option value="pct_margin">% of Margin</option>
+                  <option value="flat_per_item">Flat per Item</option>
+                  <option value="tiered">Tiered</option>
+                </select>
+              </div>
+              <div>
+                <label style={{ fontSize: 11, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>Rate %</label>
+                <input type="number" value={newRule.rate_pct} onChange={e => setNewRule(p => ({ ...p, rate_pct: e.target.value }))} style={iS} />
+              </div>
+              <div>
+                <label style={{ fontSize: 11, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>Applies To</label>
+                <select value={newRule.applies_to} onChange={e => setNewRule(p => ({ ...p, applies_to: e.target.value }))} style={iS}>
+                  <option value="all">All</option>
+                  <option value="category">Category</option>
+                  <option value="brand">Brand</option>
+                  <option value="supplier">Supplier</option>
+                </select>
+              </div>
+              <div>
+                <label style={{ fontSize: 11, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>Effective From</label>
+                <input type="date" value={newRule.effective_from} onChange={e => setNewRule(p => ({ ...p, effective_from: e.target.value }))} style={iS} />
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 20, justifyContent: 'flex-end' }}>
+              <button onClick={() => setShowAddRule(false)} style={{ ...pBtn(false), padding: '8px 18px' }}>Cancel</button>
+              <button onClick={() => {
+                fetch('/api/pos/commission-rules', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newRule) })
+                  .then(() => { setShowAddRule(false); load(); }).catch(() => setShowAddRule(false));
+              }} style={{ ...pBtn(true), padding: '8px 18px', background: 'var(--violet)', color: '#fff', borderColor: 'var(--violet)' }}>Save Rule</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
