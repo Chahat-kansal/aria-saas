@@ -1,5 +1,6 @@
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
+export const maxDuration = 45
 
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { ARIA_VOICE } from '@/lib/aria-voice-guide'
@@ -24,6 +25,77 @@ export async function POST(req: Request) {
   if (!biz) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   trackUsage({ business_id: biz.id, event_type: 'pos_chat' })
+
+  // ── Competitor price detection ──────────────────────────────────────────────
+  const competitorKeywords = [
+    'competitor', 'competition', 'competing', 'other shop', 'other store',
+    'price compare', 'am i competitive', 'cheaper', 'more expensive',
+    'market price', 'rival', 'nearby', 'down the road', 'same price',
+    'dan murphy', 'bws', 'woolworths', 'coles', 'aldi',
+  ]
+  const isCompetitorQuery = competitorKeywords.some(k => message.toLowerCase().includes(k))
+
+  let mentionedProduct: string | null = null
+  if (isCompetitorQuery) {
+    const { data: prodNames } = await supabase.from('pos_products')
+      .select('name').eq('business_id', biz.id).eq('is_active', true).limit(100)
+    const lower = message.toLowerCase()
+    mentionedProduct = prodNames?.find(p =>
+      lower.includes(p.name.toLowerCase().split(' ')[0].toLowerCase())
+    )?.name ?? null
+  }
+
+  if (isCompetitorQuery && mentionedProduct) {
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://aria-saas-fot6.vercel.app'
+    const priceRes = await fetch(`${appUrl}/api/aria/competitor-prices`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', cookie: req.headers.get('cookie') || '' },
+      body: JSON.stringify({ business_id: biz.id, product_name: mentionedProduct }),
+    }).catch(() => null)
+
+    if (priceRes?.ok) {
+      const pd = await priceRes.json()
+      const ownPrice = (pd.own_price_cents || 0) / 100
+      const avgPrice = (pd.avg_competitor_price_cents || 0) / 100
+      const diff = ownPrice - avgPrice
+      const diffPct = avgPrice > 0 ? (diff / avgPrice * 100) : 0
+      const posLabel = pd.positioning === 'below_market' ? 'below market — you are the cheapest option'
+        : pd.positioning === 'above_market' ? 'above market — you are more expensive than competitors'
+        : 'at market — you are competitively priced'
+
+      const competitorRows = (pd.competitors || []).map((c: any) => [
+        c.competitor_name,
+        `A$${(c.price_cents / 100).toFixed(2)}`,
+        c.confidence === 'high' ? '✓ Confirmed' : '~ Estimated',
+        c.price_cents < pd.own_price_cents ? '🟢 Cheaper' : '🔴 Pricier',
+      ])
+
+      return NextResponse.json({
+        message: `${mentionedProduct}: you're at A$${ownPrice.toFixed(2)}, ${posLabel}. Market average is A$${avgPrice.toFixed(2)} — you're ${Math.abs(diffPct).toFixed(1)}% ${diff > 0 ? 'above' : 'below'} average.`,
+        cards: [
+          { type: 'metric', label: 'Your Price', value: ownPrice.toFixed(2), prefix: 'A$', change_pct: Math.abs(diffPct), change_dir: diff > 0 ? 'down' : 'up', color: diff > 0 ? 'amber' : 'green' },
+          { type: 'metric', label: 'Market Average', value: avgPrice.toFixed(2), prefix: 'A$', color: 'cyan' },
+          { type: 'metric', label: 'Your Margin', value: (pd.own_margin_pct || 0).toFixed(1), suffix: '%', color: (pd.own_margin_pct || 0) > 20 ? 'green' : 'amber' },
+        ],
+        data_tables: competitorRows.length > 0 ? [{
+          title: `Competitor Prices — ${mentionedProduct}`,
+          columns: ['Competitor', 'Price', 'Confidence', 'vs You'],
+          rows: competitorRows,
+          highlight_row: (pd.competitors || []).findIndex(
+            (c: any) => c.price_cents === Math.min(...(pd.competitors || []).map((x: any) => x.price_cents))
+          ),
+        }] : [],
+        actions: [
+          diff > 0
+            ? { label: 'Lower price to match market', action: 'adjust_price', data: { product: mentionedProduct, suggested_cents: Math.round(avgPrice * 100) }, color: 'amber', icon: '📉' }
+            : { label: 'View all products', action: 'view_products', data: {}, color: 'violet', icon: '📦' },
+          { label: 'Run full competitor scan', action: 'competitor_scan', data: { business_id: biz.id }, color: 'cyan', icon: '🔍' },
+        ],
+        chart: null,
+        context_type: 'competitor_price_comparison',
+      })
+    }
+  }
 
   const now = new Date()
   const todayStart = new Date(now); todayStart.setHours(0, 0, 0, 0)

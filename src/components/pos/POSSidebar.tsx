@@ -71,6 +71,7 @@ const NAV_SECTIONS = [
       { href: '/pos/reports/inventory',  label: 'Inventory',         icon: '📦' },
       { href: '/pos/reports/cashier',    label: 'Cashier',           icon: '👤' },
       { href: '/pos/reports/commission', label: 'Commission',        icon: '%' },
+      { href: '/pos/competitors',        label: 'Competitor Prices', icon: '🔍' },
     ],
   },
   {

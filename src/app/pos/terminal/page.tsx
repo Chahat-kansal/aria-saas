@@ -560,6 +560,7 @@ export default function TerminalPage() {
       case 'adjust_stock': window.location.href = '/pos/stocktake'; break;
       case 'close_register': window.location.href = '/pos/close'; break;
       case 'run_autopilot': window.location.href = '/dashboard/autopilot'; break;
+      case 'competitor_scan': window.location.href = '/pos/competitors'; break;
       default: console.log('[aria action]', action, data);
     }
   }
