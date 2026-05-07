@@ -7,6 +7,8 @@ import type { FlyToCartHandle } from '@/components/pos/FlyToCart';
 import Receipt from '@/components/pos/Receipt';
 import type { ReceiptTemplate } from '@/components/pos/Receipt';
 import { printReceiptWithTemplate } from '@/lib/pos-print';
+import { AriaChatMessage } from '@/components/pos/AriaChatMessage';
+import type { AriaResponse } from '@/components/pos/AriaChatMessage';
 
 const CursorGlow = dynamic(() => import('@/components/pos/CursorGlow'), { ssr: false });
 const AnimatedBg = dynamic(() => import('@/components/pos/AnimatedBg'), { ssr: false });
@@ -36,7 +38,7 @@ interface Customer { id: string; name: string; email: string | null; phone: stri
 interface ParkedSale { id: string; label: string | null; items: CartItem[]; total: number; customer_id: string | null; created_at: string; }
 interface RegisterSession { id: string; status: string; opening_float: number; opened_at: string; opened_by: string | null; }
 interface VariantModalState { product: Product; variantGroups: VariantGroup[]; modifiers: Modifier[]; }
-interface AriaChatMsg { role: 'user' | 'aria'; text: string; ts: number; }
+interface AriaChatMsg { role: 'user' | 'assistant'; content: string; structured?: AriaResponse; ts: number; }
 interface RecentSale { id: string; total: number; items: number; time: Date; }
 
 /* ─── Cash rounding ─────────────────────────────────────────────── */
@@ -532,22 +534,34 @@ export default function TerminalPage() {
     if (!chatInput.trim() || chatLoading || !businessId) return;
     const msg = chatInput.trim();
     setChatInput('');
-    setChatMessages(m => [...m, { role: 'user', text: msg, ts: Date.now() }]);
+    setChatMessages(m => [...m, { role: 'user', content: msg, ts: Date.now() }]);
     setChatLoading(true);
     try {
       const res = await fetch('/api/aria/pos-chat', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          business_id: businessId, message: msg,
-          cart_context: cart.length > 0 ? { items: cart.map(i => ({ name: i.label ?? i.product.name, qty: i.qty, price: i.unitPrice })), total_cents: Math.round(total * 100) } : null,
-        }),
+        body: JSON.stringify({ message: msg, business_id: businessId }),
       });
-      const d = await res.json();
-      setChatMessages(m => [...m, { role: 'aria', text: d.reply ?? 'Could not process that right now.', ts: Date.now() }]);
+      const data = await res.json();
+      setChatMessages(m => [...m, { role: 'assistant', content: data.message || '', structured: data, ts: Date.now() }]);
     } catch {
-      setChatMessages(m => [...m, { role: 'aria', text: 'Connection error — try again.', ts: Date.now() }]);
+      setChatMessages(m => [...m, { role: 'assistant', content: 'Connection error — try again.', ts: Date.now() }]);
     }
     setChatLoading(false);
+  }
+
+  function handleAriaAction(action: string, data: Record<string, unknown>) {
+    switch (action) {
+      case 'create_promotion': window.location.href = '/pos/promotions'; break;
+      case 'reorder_product':
+      case 'open_orders':
+      case 'create_order': window.location.href = '/pos/orders'; break;
+      case 'view_report': window.location.href = '/pos/reports/sales'; break;
+      case 'view_products': window.location.href = '/pos/products'; break;
+      case 'adjust_stock': window.location.href = '/pos/stocktake'; break;
+      case 'close_register': window.location.href = '/pos/close'; break;
+      case 'run_autopilot': window.location.href = '/dashboard/autopilot'; break;
+      default: console.log('[aria action]', action, data);
+    }
   }
 
   /* ─── Custom item / Note ────────────────────────────────────── */
@@ -1829,22 +1843,33 @@ export default function TerminalPage() {
                 Ask about products, GST, stock levels, or today's sales.
               </p>
             )}
-            {chatMessages.slice(-4).map((m, i) => (
-              <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div className="max-w-[90%] rounded-[10px] px-3 py-2 text-xs leading-snug"
-                  style={m.role === 'user'
-                    ? { background: 'rgba(139,92,246,0.12)', border: '1px solid rgba(139,92,246,0.2)', color: '#EDE8FF' }
-                    : { background: 'rgba(255,255,255,0.03)', border: '1px solid #1C1928', color: '#8B85A8' }}>
-                  {m.text}
+            {chatMessages.slice(-6).map((m, i) => (
+              m.role === 'user' ? (
+                <div key={i} className="flex justify-end">
+                  <div className="max-w-[90%] rounded-[10px] px-3 py-2 text-xs leading-snug"
+                    style={{ background: 'rgba(139,92,246,0.12)', border: '1px solid rgba(139,92,246,0.2)', color: '#EDE8FF' }}>
+                    {m.content}
+                  </div>
                 </div>
-              </div>
+              ) : m.structured && (m.structured.cards?.length || m.structured.data_tables?.length || m.structured.chart || m.structured.actions?.length) ? (
+                <div key={i} className="flex justify-start">
+                  <div className="max-w-[98%] rounded-[10px] px-3 py-2" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid #1C1928' }}>
+                    <AriaChatMessage response={m.structured} onAction={handleAriaAction} />
+                  </div>
+                </div>
+              ) : (
+                <div key={i} className="flex justify-start">
+                  <div className="max-w-[90%] rounded-[10px] px-3 py-2 text-xs leading-snug"
+                    style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid #1C1928', color: '#8B85A8' }}>
+                    {m.content}
+                  </div>
+                </div>
+              )
             ))}
             {chatLoading && (
               <div className="flex justify-start">
-                <div className="rounded-[10px] px-3 py-2 flex items-center gap-1" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid #1C1928' }}>
-                  {[0,1,2].map(i => (
-                    <span key={i} className="w-1 h-1 rounded-full" style={{ background: '#8B5CF6', display: 'block', animation: `dot-pulse 1.4s ease-in-out infinite ${i * 0.16}s` }} />
-                  ))}
+                <div className="rounded-[10px] px-3 py-2" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid #1C1928' }}>
+                  <AriaChatMessage response={{ message: '', cards: [] }} isLoading={true} />
                 </div>
               </div>
             )}

@@ -1,357 +1,288 @@
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
+export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
 
-import { createServerSupabaseClient } from '@/lib/supabase-server';
-import Anthropic from '@anthropic-ai/sdk';
-import { NextResponse } from 'next/server';
-
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-
-async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
-  const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle();
-  if (active?.business_id) return active.business_id as string;
-  const { data } = await supabase.from('businesses').select('id').eq('user_id', userId).eq('is_active', true).order('created_at', { ascending: true }).limit(1).maybeSingle();
-  return data?.id ?? null;
-}
+import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { ARIA_VOICE } from '@/lib/aria-voice-guide'
+import Anthropic from '@anthropic-ai/sdk'
+import { NextResponse } from 'next/server'
+import { getWeatherForecast, getUpcomingHolidays } from '@/lib/external-apis'
 
 export async function POST(req: Request) {
-  const supabase = createServerSupabaseClient();
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
-  if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const supabase = createServerSupabaseClient()
+  const { data: { user }, error: authError } = await supabase.auth.getUser()
+  if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const body = await req.json() as {
-    message?: string;
-    business_id?: string;
-    cart_context?: { items: Array<{ name: string; qty: number; price: number }>; total_cents: number } | null;
-    current_sale_total?: number;
-  };
-  const { message, business_id, cart_context } = body;
-  const userMessage = message ?? '';
-  if (!userMessage) return NextResponse.json({ error: 'message required' }, { status: 400 });
+  const { message, business_id } = await req.json()
 
-  const bid = await getBid(supabase, user.id);
-  if (!bid || (business_id && bid !== business_id)) {
-    return NextResponse.json({ error: 'Business not found' }, { status: 404 });
-  }
-  const resolvedBid = business_id ?? bid;
+  const { data: biz } = await supabase
+    .from('businesses')
+    .select('id,name,industry,city')
+    .eq('id', business_id)
+    .eq('user_id', user.id)
+    .maybeSingle()
+  if (!biz) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-  const today = new Date().toISOString().split('T')[0];
-  const nowHHMM = new Date().toLocaleTimeString('en-AU', { timeZone: 'Australia/Sydney', hour: '2-digit', minute: '2-digit' });
+  const now = new Date()
+  const todayStart = new Date(now); todayStart.setHours(0, 0, 0, 0)
+  const yesterdayStart = new Date(todayStart)
+  yesterdayStart.setDate(yesterdayStart.getDate() - 1)
+  const weekStart = new Date(todayStart)
+  weekStart.setDate(weekStart.getDate() - 7)
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+  const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+  const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59)
 
-  const now = new Date();
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-
-  type SaleRow    = { id: string; total_amount: number; payment_method: string; customer_id: string | null };
-  type ProductRow = { name: string; price: number; cost_price: number; stock_quantity: number; low_stock_threshold: number; track_stock: boolean };
-  type ItemRow    = { product_name: string; quantity: number };
-
-  // Fetch all data in parallel
   const [
-    bizRes,
-    salesRes,
-    productsRes,
-    settingsRes,
-    topItemsRes,
     { data: todaySales },
+    { data: yesterdaySales },
+    { data: weekSales },
     { data: monthSales },
-    { data: topItems },
+    { data: lastMonthSales },
+    { data: topProducts },
     { data: lowStock },
+    { data: allProducts },
     { data: promotions },
-    customersRes,
+    weather,
   ] = await Promise.all([
-    supabase.from('businesses').select('name, industry, city').eq('id', resolvedBid).maybeSingle(),
     supabase.from('pos_sales')
-      .select('id, total_amount, payment_method, customer_id')
-      .eq('business_id', resolvedBid).eq('status', 'completed')
-      .gte('created_at', `${today}T00:00:00.000Z`),
-    supabase.from('pos_products')
-      .select('name, price, cost_price, stock_quantity, low_stock_threshold, track_stock')
-      .eq('business_id', resolvedBid).eq('is_active', true)
-      .order('name').limit(30),
-    supabase.from('pos_settings')
-      .select('loyalty_points_per_dollar, loyalty_points_per_dollar_value, gst_inclusive, cash_rounding')
-      .eq('business_id', resolvedBid).maybeSingle(),
+      .select('id,total_amount,payment_method,created_at,served_by')
+      .eq('business_id', biz.id)
+      .gte('created_at', todayStart.toISOString())
+      .limit(200),
+    supabase.from('pos_sales')
+      .select('id,total_amount')
+      .eq('business_id', biz.id)
+      .gte('created_at', yesterdayStart.toISOString())
+      .lt('created_at', todayStart.toISOString())
+      .limit(200),
+    supabase.from('pos_sales')
+      .select('total_amount')
+      .eq('business_id', biz.id)
+      .gte('created_at', weekStart.toISOString())
+      .limit(500),
+    supabase.from('pos_sales')
+      .select('total_amount')
+      .eq('business_id', biz.id)
+      .gte('created_at', monthStart.toISOString())
+      .limit(500),
+    supabase.from('pos_sales')
+      .select('total_amount')
+      .eq('business_id', biz.id)
+      .gte('created_at', lastMonthStart.toISOString())
+      .lte('created_at', lastMonthEnd.toISOString())
+      .limit(500),
     supabase.from('pos_sale_items')
-      .select('product_name, quantity').eq('business_id', resolvedBid)
-      .gte('created_at', `${today}T00:00:00.000Z`).limit(200),
-    supabase.from('pos_sales').select('total_amount').eq('business_id', resolvedBid).gte('created_at', todayStart),
-    supabase.from('pos_sales').select('total_amount').eq('business_id', resolvedBid).gte('created_at', monthStart),
-    supabase.from('pos_sale_items').select('product_name,quantity').eq('business_id', resolvedBid).gte('created_at', monthStart),
-    supabase.from('pos_products').select('name,stock_quantity').eq('business_id', resolvedBid).eq('is_active', true).eq('track_stock', true).lt('stock_quantity', 10).order('stock_quantity').limit(10),
-    supabase.from('pos_promotions').select('name,active').eq('business_id', resolvedBid).eq('active', true).limit(5),
-    supabase.from('pos_customers').select('id', { count: 'exact', head: true }).eq('business_id', resolvedBid),
-  ]);
+      .select('product_name,quantity,line_total')
+      .gte('created_at', weekStart.toISOString())
+      .limit(500),
+    supabase.from('pos_products')
+      .select('id,name,stock_quantity,cost_price,price,category_id')
+      .eq('business_id', biz.id)
+      .eq('is_active', true)
+      .lt('stock_quantity', 10),
+    supabase.from('pos_products')
+      .select('id,name,stock_quantity,price,cost_price,category_id')
+      .eq('business_id', biz.id)
+      .eq('is_active', true)
+      .limit(200),
+    supabase.from('pos_promotions')
+      .select('name,active')
+      .eq('business_id', biz.id)
+      .eq('active', true),
+    getWeatherForecast(biz.city || 'Melbourne').catch(() => []),
+  ])
 
-  const biz      = bizRes.data;
-  const sales     = (salesRes.data ?? []) as SaleRow[];
-  const products  = (productsRes.data ?? []) as ProductRow[];
-  const settings  = settingsRes.data;
-  const topItemsToday = (topItemsRes.data ?? []) as ItemRow[];
+  // All monetary values in DB are dollars — multiply by 100 to work as cents internally
+  const toCents = (dollars: number) => Math.round((dollars || 0) * 100)
+  const getTotal = (sales: any[] | null) =>
+    (sales || []).reduce((s, x) => s + toCents(x.total_amount), 0)
+  const fmt = (cents: number) => (cents / 100).toFixed(2)
 
-  // Aggregate today's stats
-  const txCount   = sales.length;
-  const revenue   = sales.reduce((s: number, r: SaleRow) => s + (r.total_amount ?? 0), 0);
-  const cashSales = sales.filter((s: SaleRow) => s.payment_method === 'cash').length;
-  const cardSales = txCount - cashSales;
+  const todayRevenueCents   = getTotal(todaySales)
+  const todayCount          = (todaySales || []).length
+  const todayAvgCents       = todayCount > 0 ? todayRevenueCents / todayCount : 0
+  const yesterdayRevenueCents = getTotal(yesterdaySales)
+  const weekRevenueCents    = getTotal(weekSales)
+  const monthRevenueCents   = getTotal(monthSales)
+  const lastMonthRevenueCents = getTotal(lastMonthSales)
 
-  // Top items sold today
-  const itemCounts: Record<string, number> = {};
-  for (const i of topItemsToday) {
-    const n = i.product_name ?? 'Unknown';
-    itemCounts[n] = (itemCounts[n] ?? 0) + (i.quantity ?? 1);
+  const revenueChangePct = yesterdayRevenueCents > 0
+    ? ((todayRevenueCents - yesterdayRevenueCents) / yesterdayRevenueCents * 100) : 0
+  const monthChangePct = lastMonthRevenueCents > 0
+    ? ((monthRevenueCents - lastMonthRevenueCents) / lastMonthRevenueCents * 100) : 0
+
+  const productMap: Record<string, { qty: number; revenue: number }> = {}
+  for (const item of (topProducts || [])) {
+    if (!item.product_name) continue
+    if (!productMap[item.product_name]) productMap[item.product_name] = { qty: 0, revenue: 0 }
+    productMap[item.product_name].qty += item.quantity || 0
+    productMap[item.product_name].revenue += toCents(item.line_total)
   }
-  const topSellers = Object.entries(itemCounts).sort((a, b) => b[1] - a[1]).slice(0, 5)
-    .map(([name, qty]) => `${name} (${qty})`).join(', ');
+  const topProductsList = Object.entries(productMap)
+    .sort((a, b) => b[1].revenue - a[1].revenue)
+    .slice(0, 8)
+    .map(([name, d], i) => ({ rank: i + 1, name, qty: d.qty, revenue: d.revenue }))
 
-  // Product inventory summary
-  const outOfStock = products.filter((p: ProductRow) => p.track_stock && (p.stock_quantity ?? 0) <= 0);
-  const lowStockItems = products.filter((p: ProductRow) => p.track_stock && (p.stock_quantity ?? 0) > 0 && (p.stock_quantity ?? 0) <= (p.low_stock_threshold ?? 5));
-
-  const productsList = products.map((p: ProductRow) => {
-    const sq = p.stock_quantity ?? 0;
-    const lt = p.low_stock_threshold ?? 5;
-    const stockInfo = p.track_stock ? ` — ${sq} in stock${sq <= 0 ? ' ⚠ OUT' : sq <= lt ? ' ⚡ low' : ''}` : '';
-    const costInfo  = (p.cost_price ?? 0) > 0 ? ` (cost A$${p.cost_price.toFixed(2)})` : '';
-    const marginInfo = (p.cost_price ?? 0) > 0 && (p.price ?? 0) > 0
-      ? ` margin ${(((p.price) - (p.cost_price)) / (p.price) * 100).toFixed(0)}%` : '';
-    return `${p.name}: A$${(p.price ?? 0).toFixed(2)}${costInfo}${marginInfo}${stockInfo}`;
-  }).join('\n');
-
-  // Cart context
-  const cartText = cart_context?.items?.length
-    ? cart_context.items.map(i => `${i.qty}× ${i.name} @ A$${i.price.toFixed(2)}`).join(', ') +
-      ` — subtotal A$${(cart_context.total_cents / 100).toFixed(2)}`
-    : 'Empty cart';
-
-  // Loyalty settings
-  const loyaltyRate = (settings as any)?.loyalty_points_per_dollar ?? 1;
-  const loyaltyValue = (settings as any)?.loyalty_points_per_dollar_value ?? 100;
-  const gstInclusive = (settings as any)?.gst_inclusive !== false;
-
-  // Rich business context (1A)
-  const todayRevenue = (todaySales || []).reduce((s: number, r: any) => s + (r.total_amount || 0), 0);
-  const monthRevenue = (monthSales || []).reduce((s: number, r: any) => s + (r.total_amount || 0), 0);
-
-  const prodMap: Record<string, number> = {};
-  for (const item of (topItems || [])) {
-    prodMap[item.product_name] = (prodMap[item.product_name] || 0) + item.quantity;
+  const paymentBreakdown: Record<string, number> = {}
+  for (const sale of (todaySales || [])) {
+    const method = sale.payment_method || 'cash'
+    paymentBreakdown[method] = (paymentBreakdown[method] || 0) + toCents(sale.total_amount)
   }
-  const topProductsList = Object.entries(prodMap).sort((a,b)=>b[1]-a[1]).slice(0,5)
-    .map(([name,qty],i)=>`${i+1}. ${name}: ${qty} sold`).join('\n');
 
-  const businessContext = `
-LIVE DATA FOR ${biz?.name}:
-TODAY: A$${todayRevenue.toFixed(2)}, ${(todaySales||[]).length} transactions
-THIS MONTH: A$${monthRevenue.toFixed(2)}, ${(monthSales||[]).length} transactions
-TOP PRODUCTS: ${topProductsList || 'No data yet'}
-LOW STOCK: ${(lowStock||[]).map((p:any)=>`${p.name}: ${p.stock_quantity}`).join(', ') || 'None'}
-ACTIVE PROMOTIONS: ${(promotions||[]).map((p:any)=>p.name).join(', ') || 'None'}
+  const hourlyToday: Record<number, number> = {}
+  for (const sale of (todaySales || [])) {
+    const hour = new Date(sale.created_at).getHours()
+    hourlyToday[hour] = (hourlyToday[hour] || 0) + toCents(sale.total_amount)
+  }
 
-BUSINESS: ${biz?.name ?? 'Unknown'}, ${biz?.industry ?? ''}, ${biz?.city ?? 'Australia'}
-TIME: ${nowHHMM} (Sydney)
-TODAY: A$${revenue.toFixed(2)} from ${txCount} transactions | ${cashSales} cash, ${cardSales} card
-TOTAL CUSTOMERS: ${(customersRes as any)?.count ?? 'unknown'}
-TODAY TOP SELLERS: ${topSellers || 'No sales yet'}
-STOCK OUT: ${outOfStock.map((p: ProductRow) => p.name).join(', ') || 'None'} | LOW: ${lowStockItems.map((p: ProductRow) => `${p.name}(${p.stock_quantity ?? 0})`).join(', ') || 'None'}
-CART: ${cartText}
-LOYALTY: ${loyaltyRate}pt/A$1 | ${loyaltyValue}pts=A$1 | GST ${gstInclusive ? 'inclusive' : 'exclusive'} | Cash rounding ${(settings as any)?.cash_rounding !== false ? 'yes' : 'no'}
-PRODUCTS (${products.length}):
-${productsList}`;
+  const hotWeekend = (weather as any[]).slice(0, 7).some((d: any) => d.is_hot)
+  const holidays = getUpcomingHolidays(7, 'VIC')
 
-  // Action system prompt (1B)
-  const ACTION_PROMPT = `
-You have FULL authority to take actions. When asked to do something, DO IT.
+  const ctx = `
+REAL-TIME BUSINESS DATA for ${biz.name} (${biz.industry}):
 
-NEVER say "I cannot do that automatically" or "please go to X page manually".
+TODAY (${new Date().toLocaleDateString('en-AU')}):
+  Revenue: A$${fmt(todayRevenueCents)} (${revenueChangePct >= 0 ? '+' : ''}${revenueChangePct.toFixed(1)}% vs yesterday)
+  Transactions: ${todayCount} (avg A$${fmt(todayAvgCents)})
+  Yesterday: A$${fmt(yesterdayRevenueCents)}, ${(yesterdaySales || []).length} transactions
+  Payment breakdown: ${Object.entries(paymentBreakdown).map(([m, v]) => `${m}: A$${fmt(v)}`).join(', ') || 'No sales yet'}
 
-When you need to take an action, include it in your response like this:
-ACTION:CREATE_ORDER:{"items":[{"product_name":"NAME","qty":N}],"reason":"WHY"}
-ACTION:GENERATE_CSV:{"type":"sales","period":"month"}
-ACTION:CREATE_PROMOTION:{"name":"NAME","discount_type":"percentage","discount_percent":N}
+THIS WEEK: A$${fmt(weekRevenueCents)}
+THIS MONTH: A$${fmt(monthRevenueCents)} (${monthChangePct >= 0 ? '+' : ''}${monthChangePct.toFixed(1)}% vs last month)
+LAST MONTH: A$${fmt(lastMonthRevenueCents)}
 
-Examples:
-- "order more Coopers" → respond + ACTION:CREATE_ORDER:{"items":[{"product_name":"Coopers Pale Ale","qty":24}],"reason":"Owner request"}
-- "export sales to excel" → respond + ACTION:GENERATE_CSV:{"type":"sales","period":"month"}
-- "create 10% discount on beer" → respond + ACTION:CREATE_PROMOTION:{"name":"10% Beer Special","discount_type":"percentage","discount_percent":10}
-`;
+TOP PRODUCTS THIS WEEK:
+${topProductsList.map(p => `  ${p.rank}. ${p.name}: ${p.qty} sold, A$${fmt(p.revenue)} revenue`).join('\n') || '  No sales data yet'}
 
-  const systemPrompt = `You are Aria — the AI co-pilot built into AriaPOS.
-You know everything about this POS system and this business.
-You help with ANYTHING the staff or owner asks. No restrictions.
+LOW STOCK ALERTS (under 10 units):
+${(lowStock || []).map(p => `  ⚠️ ${p.name}: ${p.stock_quantity} remaining`).join('\n') || '  None — all good'}
 
-You can help with:
-- Where to find any feature or page in the POS
-- Sales reports, inventory reports, cashier reports, commission reports
-  → Direct them to the Reports section in the sidebar
-- How to process refunds, voids, discounts
-- Stock levels and product information
-- Customer loyalty points and history
-- How to open/close the register
-- Commission tracking and staff performance
-- Kitchen display, table management, timesheets
-- Any question about the business data you have access to
-- Keyboard shortcuts (F1=Search, F2=Custom item, F3=Hold, F8=Cash, F9=Card, F10=Complete)
-- How to use any feature in Aria
+TOTAL PRODUCTS: ${(allProducts || []).length}
+ACTIVE PROMOTIONS: ${(promotions || []).map(p => p.name).join(', ') || 'None'}
 
-NAVIGATION — tell staff exactly where to go:
-- Sales reports → sidebar → Reports → Sales Report
-- Inventory report → sidebar → Reports → Inventory
-- Cashier report → sidebar → Reports → Cashier
-- Commission report → sidebar → Reports → Commission
-- Register closures → sidebar → Reports → Closures
-- Products → sidebar → Inventory → Products
-- Categories → sidebar → Inventory → Categories
-- Suppliers → sidebar → Inventory → Suppliers
-- Purchase orders → sidebar → Inventory → Purchase Orders
-- Stocktake → sidebar → Inventory → Stocktake
-- Customers → sidebar → Customers
-- Gift cards → sidebar → Customers → Gift Cards
-- Promotions → sidebar → Customers → Promotions
-- Loyalty → sidebar → Customers → Loyalty
-- Kitchen display → sidebar → Operations → Kitchen (KDS)
-- Tables → sidebar → Operations → Tables
-- Timesheets → sidebar → Operations → Timesheets
-- Cash management → sidebar → Operations → Cash
-- Close register → sidebar → Operations → Close Register
-- Settings → sidebar → Settings
-- Staff PINs → sidebar → Settings → Staff PINs
+WEATHER: ${hotWeekend ? '☀️ Hot weekend forecast — expect increased cold drink demand' : '🌤 Mild conditions'}
+UPCOMING: ${holidays.length > 0 ? holidays.slice(0, 2).map((h: any) => `${h.name} in ${h.days_away} days`).join(', ') : 'None this week'}
 
-BUSINESS DATA:
-${businessContext}
+HOURLY TODAY: ${Object.entries(hourlyToday).sort((a, b) => Number(a[0]) - Number(b[0])).map(([h, v]) => `${h}:00=A$${fmt(v)}`).join(', ') || 'No sales yet'}
+`
 
-RULES:
-- Answer EVERYTHING directly and helpfully
-- NEVER say you cannot help or redirect to a manager
-- NEVER say "check the admin dashboard directly"
-- Give specific answers with exact navigation paths
-- Keep responses under 3 sentences — staff are serving customers
-- For "where is X" questions: give the exact sidebar path
-- For data questions: use the business context above
-- You know this entire POS system inside out
-${ACTION_PROMPT}`;
+  const systemPrompt = `${ARIA_VOICE}
 
+You are Aria, the AI business analyst for ${biz.name}.
+You have access to REAL-TIME business data shown above.
+All monetary values are in Australian dollars (A$).
+
+YOUR JOB: Give the owner insights like a senior business analyst.
+Use SPECIFIC NUMBERS from the data. Never be vague.
+
+RESPONSE FORMAT — return ONLY valid JSON, no other text:
+
+{
+  "message": "1-3 sentences, specific numbers, direct insight",
+  "cards": [
+    {
+      "type": "metric",
+      "label": "Today Revenue",
+      "value": "1,234.50",
+      "prefix": "A$",
+      "suffix": "",
+      "change_pct": 12.5,
+      "change_dir": "up",
+      "color": "green"
+    }
+  ],
+  "data_tables": [
+    {
+      "title": "Top Products This Week",
+      "columns": ["Product", "Sold", "Revenue"],
+      "rows": [["Coopers Pale", "48", "A$264.00"]],
+      "highlight_row": 0
+    }
+  ],
+  "chart": {
+    "type": "bar",
+    "labels": ["9am", "10am", "11am"],
+    "values": [120, 340, 280],
+    "label": "Revenue by Hour",
+    "color": "#00E5FF"
+  },
+  "actions": [
+    {
+      "label": "Create Promotion",
+      "action": "create_promotion",
+      "data": {},
+      "color": "violet",
+      "icon": "🎯"
+    }
+  ],
+  "context_type": "sales_overview"
+}
+
+CARD RULES:
+- 2-4 metric cards for any sales/revenue question
+- change_dir: "up" green, "down" red, "flat" gray
+- Colors: "green","red","amber","violet","cyan","blue"
+- All money with A$ prefix
+
+TABLE RULES:
+- Include for product performance or comparisons
+- Max 8 rows, highlight_row: 0 for top row
+
+CHART RULES:
+- Bar chart for hourly data
+- null if no chart adds value
+
+ACTION RULES:
+- 1-3 relevant actions always
+- Available: create_promotion, reorder_product, view_report, adjust_price, open_orders, view_products, close_register, create_order, adjust_stock, run_autopilot
+
+TONE: Direct, specific, Australian English, A$ always`
+
+  const client = new Anthropic()
+  const response = await client.messages.create({
+    model: 'claude-haiku-4-5-20251001',
+    max_tokens: 1000,
+    system: systemPrompt,
+    messages: [{ role: 'user', content: message }],
+  })
+
+  const raw = response.content[0].type === 'text' ? response.content[0].text : '{}'
+
+  let structured: any
   try {
-    const response = await anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 400,
-      system: systemPrompt,
-      messages: [{ role: 'user', content: userMessage }],
-    });
-
-    // 1C: Parse and execute actions
-    const rawText = response.content[0].type === 'text' ? response.content[0].text : '';
-    const actionResults: any[] = [];
-    let downloadPayload: { filename: string; content: string; type: string } | null = null;
-
-    // Parse ACTION: tags
-    const actionPattern = /ACTION:([A-Z_]+):([\s\S]*?)(?=\nACTION:|$)/gm;
-    let m: RegExpExecArray | null;
-    while ((m = actionPattern.exec(rawText)) !== null) {
-      const [, actionType, jsonStr] = m;
-      let data: any = {};
-      try { data = JSON.parse(jsonStr.trim()); } catch { continue; }
-
-      if (actionType === 'CREATE_ORDER') {
-        try {
-          const orderItems = (data.items || []).map((item: any) => ({
-            product_name: item.product_name || item.name,
-            suggested_qty: item.qty || item.quantity || 1,
-            manual_qty: null,
-            unit_cost_cents: 0,
-            total_cost_cents: 0,
-            reason: data.reason || 'Created by Aria',
-          }));
-          if (orderItems.length > 0) {
-            const { data: draft } = await supabase.from('purchase_order_drafts').insert({
-              business_id: resolvedBid,
-              draft_type: 'ai_generated',
-              status: 'pending_approval',
-              items: orderItems,
-              total_cost_cents: 0,
-              aria_reasoning: data.reason || 'Created by Aria from chat',
-              week_starting: new Date().toISOString().split('T')[0],
-            }).select().single();
-            actionResults.push({
-              type: 'order_created',
-              label: `✓ Purchase order created — ${orderItems.length} item(s)`,
-              url: '/dashboard/orders',
-              link_label: 'Review & approve →',
-              draft_id: (draft as any)?.id,
-            });
-          }
-        } catch (e) { console.error('CREATE_ORDER failed:', e); }
-      }
-
-      if (actionType === 'GENERATE_CSV') {
-        try {
-          const { data: saleItems } = await supabase
-            .from('pos_sale_items')
-            .select('product_name,quantity,unit_price,total_price,cost_price,created_at')
-            .eq('business_id', resolvedBid)
-            .gte('created_at', monthStart);
-
-          const byProd: Record<string, { qty: number; rev: number; cost: number }> = {};
-          for (const item of (saleItems || [])) {
-            const k = (item as any).product_name || 'Unknown';
-            if (!byProd[k]) byProd[k] = { qty: 0, rev: 0, cost: 0 };
-            byProd[k].qty += (item as any).quantity || 0;
-            byProd[k].rev += (item as any).total_price || 0;
-            byProd[k].cost += ((item as any).cost_price || 0) * ((item as any).quantity || 1);
-          }
-
-          const rows = Object.entries(byProd).sort((a,b) => b[1].rev - a[1].rev);
-          let csv = 'Product,Units Sold,Revenue,Cost,Profit,Margin %\n';
-          csv += rows.map(([name, v]) => [
-            `"${name}"`, v.qty,
-            `$${v.rev.toFixed(2)}`, `$${v.cost.toFixed(2)}`,
-            `$${(v.rev-v.cost).toFixed(2)}`,
-            v.rev > 0 ? `${((v.rev-v.cost)/v.rev*100).toFixed(1)}%` : '0%',
-          ].join(',')).join('\n');
-
-          const month = new Date().toISOString().slice(0,7);
-          downloadPayload = { filename: `aria-sales-${month}.csv`, content: csv, type: 'text/csv' };
-          actionResults.push({ type: 'file_ready', label: `✓ ${downloadPayload.filename} ready` });
-        } catch (e) { console.error('GENERATE_CSV failed:', e); }
-      }
-
-      if (actionType === 'CREATE_PROMOTION') {
-        try {
-          await supabase.from('pos_promotions').insert({
-            business_id: resolvedBid,
-            name: data.name,
-            promotion_type: data.promotion_type || 'percentage_discount',
-            discount_type: data.discount_type || 'percentage',
-            discount_percent: data.discount_percent || 0,
-            discount_amount: data.discount_amount || 0,
-            active: true,
-            product_ids: [],
-            category_ids: [],
-          });
-          actionResults.push({ type: 'promotion_created', label: `✓ Promotion "${data.name}" created`, url: '/pos/promotions', link_label: 'View promotions →' });
-        } catch (e) { console.error('CREATE_PROMOTION failed:', e); }
-      }
-    }
-
-    // Strip ACTION: lines from displayed text
-    const cleanText = rawText.replace(/ACTION:[A-Z_]+:[\s\S]*?(?=\nACTION:|\n\n|$)/gm, '').trim();
-
-    // Also detect legacy discount action
-    let action: { type: string; payload: Record<string, unknown> } | undefined;
-    if (/applying|apply.*discount/i.test(cleanText)) {
-      const match = cleanText.match(/(\d+(?:\.\d+)?)\s*%/);
-      if (match) action = { type: 'apply_discount', payload: { percentage: parseFloat(match[1]) } };
-    }
-
-    return NextResponse.json({
-      message: cleanText,
-      reply: cleanText,
-      action,
-      actions_taken: actionResults,
-      ...(downloadPayload ? { download: downloadPayload } : {}),
-    });
-  } catch (err) {
-    console.error('[pos-chat] Claude error:', err);
-    return NextResponse.json({ reply: "Sorry, I couldn't process that right now.", message: "Sorry, I couldn't process that right now." });
+    structured = JSON.parse(raw.replace(/```json|```/g, '').trim())
+  } catch {
+    structured = { message: raw, cards: [], data_tables: [], chart: null, actions: [], context_type: 'general' }
   }
+
+  // Auto-create draft order for low stock if action requests it
+  const actionResults: any[] = []
+  for (const action of (structured.actions || [])) {
+    if (action.auto_execute && action.action === 'create_order') {
+      const items = (lowStock || []).slice(0, 10).map(p => ({
+        product_id: p.id,
+        product_name: p.name,
+        current_stock: p.stock_quantity,
+        suggested_qty: 24,
+        manual_qty: null,
+        unit_cost_cents: toCents(p.cost_price),
+        total_cost_cents: 24 * toCents(p.cost_price),
+        reason: 'Low stock — auto-ordered by Aria',
+      }))
+      if (items.length > 0) {
+        await supabase.from('purchase_order_drafts').insert({
+          business_id: biz.id,
+          draft_type: 'ai_generated',
+          status: 'pending_approval',
+          items,
+          total_cost_cents: items.reduce((s, i) => s + i.total_cost_cents, 0),
+          aria_reasoning: 'Created by Aria chat — low stock detected',
+          week_starting: new Date().toISOString().split('T')[0],
+        })
+        actionResults.push({ type: 'order_created', message: `Draft order created for ${items.length} products` })
+      }
+    }
+  }
+
+  return NextResponse.json({ ...structured, action_results: actionResults })
 }
