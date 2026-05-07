@@ -1,107 +1,115 @@
-import { createServerClient } from '@supabase/ssr';
-import { NextResponse, type NextRequest } from 'next/server';
+import { createServerClient } from '@supabase/ssr'
+import { NextResponse, type NextRequest } from 'next/server'
 
 export async function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl;
+  const { pathname } = request.nextUrl
 
-  // Forward the pathname to server components via a request header
-  // (used by pos/layout.tsx to detect /pos/login without auth check)
-  const requestHeaders = new Headers(request.headers);
-  requestHeaders.set('x-next-pathname', pathname);
+  // Forward pathname for server components that need it (e.g. pos/layout.tsx)
+  const requestHeaders = new Headers(request.headers)
+  requestHeaders.set('x-next-pathname', pathname)
 
-  let response = NextResponse.next({
-    request: { headers: requestHeaders },
-  });
+  let response = NextResponse.next({ request: { headers: requestHeaders } })
 
-  // ── Block dashboard/settings access for active POS employees ─────────────
-  // Cashier or supervisor who logged in via POS PIN cannot reach the
-  // owner dashboard. The cookie is set by POSShell when they log in.
-  if (pathname.startsWith('/dashboard') || pathname.startsWith('/settings')) {
-    const posEmp = request.cookies.get('pos_emp');
-    if (posEmp?.value && ['cashier', 'supervisor'].includes(posEmp.value)) {
-      return NextResponse.redirect(new URL('/pos', request.url));
-    }
+  // One shared factory — recreates response with refreshed cookies when needed
+  function makeSupabase() {
+    return createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll() { return request.cookies.getAll() },
+          setAll(cookiesToSet) {
+            cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
+            response = NextResponse.next({ request: { headers: requestHeaders } })
+            cookiesToSet.forEach(({ name, value, options }) =>
+              response.cookies.set(name, value, options)
+            )
+          },
+        },
+      }
+    )
   }
 
-  // ── Supabase auth client ──────────────────────────────────────────────────
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll();
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value }) =>
-            request.cookies.set(name, value)
-          );
-          response = NextResponse.next({
-            request: { headers: requestHeaders },
-          });
-          cookiesToSet.forEach(({ name, value, options }) =>
-            response.cookies.set(name, value, options)
-          );
-        },
-      },
-    }
-  );
-
-  const { data: { user } } = await supabase.auth.getUser();
-
-  // ── Admin route protection ────────────────────────────────────────────────
+  // ── ADMIN ROUTES — require Supabase auth + admin email ──────────────────────
   if (pathname.startsWith('/admin')) {
-    if (!user) return NextResponse.redirect(new URL('/login', request.url));
-    const adminEmails = (process.env.ADMIN_EMAILS || '').split(',').map(e => e.trim()).filter(Boolean);
-    if (!adminEmails.includes(user.email || '')) {
-      return NextResponse.redirect(new URL('/dashboard', request.url));
+    const { data: { user } } = await makeSupabase().auth.getUser()
+    if (!user) return NextResponse.redirect(new URL('/login', request.url))
+    const adminEmails = (process.env.ADMIN_EMAILS || '')
+      .split(',').map(e => e.trim()).filter(Boolean)
+    if (adminEmails.length > 0 && !adminEmails.includes(user.email || '')) {
+      return NextResponse.redirect(new URL('/dashboard', request.url))
     }
-    return response;
+    return response
   }
 
-  // ── Protected routes ──────────────────────────────────────────────────────
-  // /pos/login is PUBLIC — it handles its own auth state detection
+  // ── PROTECTED ROUTES — require Supabase auth ────────────────────────────────
   const isProtected =
     pathname.startsWith('/dashboard') ||
     pathname.startsWith('/onboarding') ||
-    (pathname.startsWith('/pos') && pathname !== '/pos/login') ||
     pathname.startsWith('/visa') ||
     pathname.startsWith('/businesses') ||
     pathname.startsWith('/chat') ||
-    pathname.startsWith('/settings');
+    pathname.startsWith('/settings')
 
-  if (isProtected && !user) {
-    return NextResponse.redirect(new URL('/login', request.url));
+  if (isProtected) {
+    // Block POS employees from the owner dashboard
+    if (pathname.startsWith('/dashboard') || pathname.startsWith('/settings')) {
+      const posEmp = request.cookies.get('pos_emp')
+      if (posEmp?.value && ['cashier', 'supervisor'].includes(posEmp.value)) {
+        return NextResponse.redirect(new URL('/pos', request.url))
+      }
+    }
+
+    const { data: { user } } = await makeSupabase().auth.getUser()
+    if (!user) {
+      const loginUrl = new URL('/login', request.url)
+      loginUrl.searchParams.set('redirectTo', pathname)
+      return NextResponse.redirect(loginUrl)
+    }
+    return response
   }
 
-  // ── Authenticated users hitting auth pages → redirect away ───────────────
+  // ── AUTH PAGES — redirect already-logged-in owners away ─────────────────────
   const isAuthPage =
     pathname === '/login' ||
     pathname === '/signup' ||
-    pathname === '/forgot-password';
+    pathname === '/forgot-password' ||
+    pathname.startsWith('/auth')
 
-  if (isAuthPage && user) {
-    return NextResponse.redirect(new URL('/businesses', request.url));
+  if (isAuthPage) {
+    const { data: { user } } = await makeSupabase().auth.getUser()
+    if (user) {
+      const redirectTo = request.nextUrl.searchParams.get('redirectTo') || '/dashboard'
+      return NextResponse.redirect(new URL(redirectTo, request.url))
+    }
+    return response
   }
 
-  return response;
+  // ── ROOT — redirect based on auth state ─────────────────────────────────────
+  if (pathname === '/') {
+    const { data: { user } } = await makeSupabase().auth.getUser()
+    return NextResponse.redirect(new URL(user ? '/dashboard' : '/login', request.url))
+  }
+
+  return response
 }
 
 export const config = {
   matcher: [
+    '/',
+    '/login',
+    '/signup',
+    '/forgot-password',
+    '/auth/:path*',
     '/admin/:path*',
     '/admin',
     '/dashboard/:path*',
     '/onboarding/:path*',
     '/businesses/:path*',
     '/businesses',
-    '/pos/:path*',
-    '/pos/login',
     '/visa/:path*',
-    '/login',
-    '/signup',
-    '/forgot-password',
     '/chat/:path*',
     '/settings/:path*',
+    // NOTE: /pos is deliberately NOT here — POSAuthGate handles staff auth client-side
   ],
-};
+}

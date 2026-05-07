@@ -1,146 +1,193 @@
-'use client';
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import Link from 'next/link';
-import { supabase } from '@/lib/supabase';
+'use client'
+import { Suspense, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { supabase } from '@/lib/supabase'
+import LogoMark from '@/components/pos/LogoMark'
 
-export default function LoginPage() {
-  const router = useRouter();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-
-  if (!supabase) {
-    return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', fontFamily: 'sans-serif' }}>
-        <p>Configuration error — please contact support.</p>
-      </div>
-    );
-  }
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    console.log('Form submitted');
-    console.log('Supabase client:', supabase);
-    console.log('Email:', email);
-    setLoading(true);
-    setError('');
-
-    try {
-      console.log('Attempting sign in...');
-      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-      console.log('Sign in result:', { data, error });
-      console.log('Session:', data?.session);
-      console.log('User:', data?.user);
-
-      if (error) {
-        setError(error.message);
-        return;
-      }
-
-      console.log('Redirecting to dashboard...');
-      window.location.href = '/dashboard';
-    } catch (err) {
-      console.log('Caught error:', err);
-      setError('An unexpected error occurred');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  async function handleGoogle() {
-    await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: { redirectTo: `${location.origin}/auth/callback` },
-    });
-  }
-
-  return (
-    <div className="min-h-screen bg-[#f5f4ef] flex items-center justify-center px-4">
-      <div className="w-full max-w-sm">
-        {/* Logo */}
-        <div className="text-center mb-8">
-          <div className="text-2xl font-medium tracking-tight mb-6">
-            aria<span className="text-[#1D9E75]">OS</span>
-          </div>
-          <h1 className="text-xl font-medium text-[#1a1a16]">Welcome back</h1>
-          <p className="text-sm text-[rgba(26,26,22,0.45)] mt-1">Sign in to your Aria account</p>
-        </div>
-
-        <div className="bg-white rounded-2xl border border-[rgba(0,0,0,0.08)] p-8 shadow-sm">
-          {/* Google */}
-          <button
-            onClick={handleGoogle}
-            className="w-full flex items-center justify-center gap-3 border border-[rgba(0,0,0,0.12)] rounded-full py-2.5 text-sm font-medium text-[#1a1a16] hover:bg-[#f5f4ef] transition-colors mb-4"
-          >
-            <GoogleIcon />
-            Continue with Google
-          </button>
-
-          <div className="flex items-center gap-3 mb-4">
-            <div className="flex-1 h-px bg-[rgba(0,0,0,0.08)]" />
-            <span className="text-xs text-[rgba(26,26,22,0.35)]">or</span>
-            <div className="flex-1 h-px bg-[rgba(0,0,0,0.08)]" />
-          </div>
-
-          <form onSubmit={handleSubmit} className="space-y-3">
-            <input
-              type="email"
-              placeholder="Email"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              required
-              className="w-full bg-[#faf9f6] border border-[#eceae3] rounded-xl px-4 py-3 text-sm outline-none focus:border-[#1D9E75] focus:shadow-[0_0_0_3px_rgba(29,158,117,0.08)] transition-all placeholder:text-[rgba(26,26,22,0.3)]"
-            />
-            <input
-              type="password"
-              placeholder="Password"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              required
-              className="w-full bg-[#faf9f6] border border-[#eceae3] rounded-xl px-4 py-3 text-sm outline-none focus:border-[#1D9E75] focus:shadow-[0_0_0_3px_rgba(29,158,117,0.08)] transition-all placeholder:text-[rgba(26,26,22,0.3)]"
-            />
-
-            {error && (
-              <p className="text-xs text-red-500 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</p>
-            )}
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-[#1a1a16] hover:bg-[#2d2d25] disabled:opacity-60 text-white py-3 rounded-full font-medium text-sm transition-colors"
-            >
-              {loading ? 'Signing in…' : 'Sign in'}
-            </button>
-          </form>
-
-          <Link
-            href="/forgot-password"
-            className="block text-center text-xs text-[rgba(26,26,22,0.4)] hover:text-[#1a1a16] mt-3 transition-colors"
-          >
-            Forgot password?
-          </Link>
-        </div>
-
-        <p className="text-center text-sm text-[rgba(26,26,22,0.45)] mt-6">
-          Don&apos;t have an account?{' '}
-          <Link href="/signup" className="text-[#1D9E75] hover:underline font-medium">
-            Start free
-          </Link>
-        </p>
-      </div>
-    </div>
-  );
+const iS: React.CSSProperties = {
+  width: '100%',
+  padding: '10px 14px',
+  background: 'rgba(255,255,255,0.04)',
+  border: '1px solid rgba(255,255,255,0.1)',
+  borderRadius: 10,
+  color: '#EDE8FF',
+  fontSize: 14,
+  fontFamily: 'inherit',
+  outline: 'none',
+  boxSizing: 'border-box',
 }
 
-function GoogleIcon() {
+const lS: React.CSSProperties = {
+  display: 'block',
+  fontSize: 11,
+  fontWeight: 700,
+  color: 'rgba(139,133,168,0.7)',
+  textTransform: 'uppercase',
+  letterSpacing: '0.05em',
+  marginBottom: 6,
+}
+
+function LoginForm() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const [email, setEmail]       = useState('')
+  const [password, setPassword] = useState('')
+  const [loading, setLoading]   = useState(false)
+  const [error, setError]       = useState('')
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setLoading(true)
+    setError('')
+
+    const { error: authError } = await supabase.auth.signInWithPassword({
+      email: email.trim(),
+      password,
+    })
+
+    if (authError) {
+      setError(authError.message)
+      setLoading(false)
+      return
+    }
+
+    const redirectTo = searchParams.get('redirectTo') || '/dashboard'
+    router.push(redirectTo)
+    router.refresh()
+  }
+
   return (
-    <svg className="w-4 h-4" viewBox="0 0 24 24">
-      <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-      <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-      <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-      <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-    </svg>
-  );
+    <form onSubmit={handleLogin}>
+      <div style={{ marginBottom: 16 }}>
+        <label style={lS}>Email</label>
+        <input
+          type="email"
+          value={email}
+          onChange={e => setEmail(e.target.value)}
+          placeholder="you@example.com"
+          required
+          style={iS}
+        />
+      </div>
+
+      <div style={{ marginBottom: 24 }}>
+        <label style={lS}>Password</label>
+        <input
+          type="password"
+          value={password}
+          onChange={e => setPassword(e.target.value)}
+          placeholder="••••••••"
+          required
+          style={iS}
+        />
+      </div>
+
+      {error && (
+        <div style={{
+          background: 'rgba(239,68,68,0.1)',
+          border: '1px solid rgba(239,68,68,0.2)',
+          borderRadius: 8, padding: '10px 14px',
+          color: '#EF4444', fontSize: 13,
+          marginBottom: 16,
+        }}>
+          {error}
+        </div>
+      )}
+
+      <button
+        type="submit"
+        disabled={loading}
+        style={{
+          width: '100%', height: 48,
+          background: loading ? 'rgba(139,92,246,0.5)' : '#8B5CF6',
+          color: 'white', border: 'none', borderRadius: 12,
+          fontSize: 15, fontWeight: 700,
+          cursor: loading ? 'not-allowed' : 'pointer',
+          fontFamily: 'inherit',
+          boxShadow: loading ? 'none' : '0 4px 0 rgba(124,58,237,0.5), 0 6px 20px rgba(139,92,246,0.3)',
+          transition: 'all 150ms',
+        }}
+      >
+        {loading ? 'Signing in…' : 'Sign in'}
+      </button>
+    </form>
+  )
+}
+
+export default function OwnerLoginPage() {
+  return (
+    <div style={{
+      minHeight: '100vh',
+      background: '#0A0910',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      fontFamily: "'Manrope', system-ui, sans-serif",
+    }}>
+      {/* Background orbs */}
+      <div style={{ position: 'fixed', inset: 0, overflow: 'hidden', pointerEvents: 'none' }}>
+        <div style={{ position: 'absolute', top: '-100px', right: '-100px', width: 400, height: 400, borderRadius: '50%', background: 'radial-gradient(circle, rgba(139,92,246,0.12), transparent 70%)', filter: 'blur(40px)' }} />
+        <div style={{ position: 'absolute', bottom: '-50px', left: '-80px', width: 300, height: 300, borderRadius: '50%', background: 'radial-gradient(circle, rgba(99,102,241,0.15), transparent 70%)', filter: 'blur(40px)' }} />
+      </div>
+
+      <div style={{
+        position: 'relative', zIndex: 1,
+        background: 'rgba(26,23,40,0.85)',
+        backdropFilter: 'blur(24px)',
+        border: '1px solid rgba(139,92,246,0.2)',
+        borderRadius: 24,
+        padding: 40,
+        width: '100%',
+        maxWidth: 400,
+        boxShadow: '0 0 60px rgba(139,92,246,0.12)',
+      }}>
+        {/* Logo */}
+        <div style={{ textAlign: 'center', marginBottom: 32 }}>
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}>
+            <LogoMark size={32} />
+          </div>
+          <h1 style={{
+            fontFamily: "'Instrument Serif', Georgia, serif",
+            fontStyle: 'italic',
+            fontSize: 28,
+            color: '#8B5CF6',
+            fontWeight: 400,
+            margin: 0,
+          }}>
+            Aria
+          </h1>
+          <p style={{ color: 'rgba(139,133,168,0.6)', fontSize: 13, marginTop: 6 }}>
+            Sign in to your dashboard
+          </p>
+        </div>
+
+        <Suspense fallback={<div style={{ height: 200 }} />}>
+          <LoginForm />
+        </Suspense>
+
+        <div style={{ textAlign: 'center', marginTop: 20 }}>
+          <a href="/forgot-password" style={{ color: 'rgba(139,92,246,0.7)', fontSize: 13, textDecoration: 'none' }}>
+            Forgot password?
+          </a>
+        </div>
+
+        <div style={{ textAlign: 'center', marginTop: 12 }}>
+          <a href="/signup" style={{ color: 'rgba(139,92,246,0.7)', fontSize: 13, textDecoration: 'none' }}>
+            Don&apos;t have an account? Sign up
+          </a>
+        </div>
+
+        {/* Staff separator */}
+        <div style={{
+          marginTop: 24, paddingTop: 20,
+          borderTop: '1px solid rgba(255,255,255,0.06)',
+          textAlign: 'center',
+        }}>
+          <a href="/pos" style={{ color: 'rgba(139,133,168,0.4)', fontSize: 12, textDecoration: 'none' }}>
+            Staff? → Go to POS →
+          </a>
+        </div>
+      </div>
+    </div>
+  )
 }
