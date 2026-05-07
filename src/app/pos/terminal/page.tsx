@@ -162,6 +162,7 @@ export default function TerminalPage() {
   const [mobileTab,      setMobileTab]      = useState<'products' | 'cart' | 'aria'>('products');
 
   /* ── Aria chat ────────────────────────────────────────────────── */
+  const [ariaOpen,       setAriaOpen]       = useState(false);
   const [chatInput,      setChatInput]      = useState('');
   const [chatMessages,   setChatMessages]   = useState<AriaChatMsg[]>([]);
   const [chatLoading,    setChatLoading]    = useState(false);
@@ -294,7 +295,7 @@ export default function TerminalPage() {
   /* ── Keyboard shortcuts ───────────────────────────────────────── */
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'k') { e.preventDefault(); setMobileTab('aria'); }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') { e.preventDefault(); if (window.innerWidth >= 768) setAriaOpen(prev => !prev); else setMobileTab('aria'); }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
@@ -1256,8 +1257,8 @@ export default function TerminalPage() {
         </button>
       </div>
 
-      {/* 3-column grid */}
-      <div className="flex-1 min-h-0 grid overflow-hidden" style={{ gridTemplateColumns: '300px 1fr 296px', position: 'relative', zIndex: 1 }}>
+      {/* 2-column grid — Aria panel is now floating */}
+      <div className="flex-1 min-h-0 grid overflow-hidden" style={{ gridTemplateColumns: '300px 1fr', position: 'relative', zIndex: 1 }}>
 
         {/* ── LEFT: Product browser ──────────────────────────────── */}
         <div className={`relative flex flex-col overflow-hidden ${mobileTab !== 'products' ? 'hidden md:flex' : 'flex'}`}
@@ -1781,186 +1782,244 @@ export default function TerminalPage() {
           )}
         </div>
 
-        {/* ── RIGHT: Aria panel ─────────────────────────────────── */}
-        <div className={`flex flex-col overflow-hidden ${mobileTab !== 'aria' ? 'hidden md:flex' : 'flex'}`}
-          style={{ background: 'var(--bg-surface)', backdropFilter: 'blur(24px)', borderLeft: '1px solid rgba(0,229,255,0.06)' }}>
+      </div>
 
-          {/* Aria header */}
-          <div className="flex-shrink-0 px-4 py-3.5 flex items-center justify-between relative overflow-hidden"
-            style={{ borderBottom: '1px solid rgba(139,92,246,0.1)' }}>
-            {/* Background orbs */}
-            <div style={{ position: 'absolute', top: -30, right: -20, width: 80, height: 80, borderRadius: '50%', background: 'radial-gradient(circle,rgba(139,92,246,0.3),transparent 70%)', filter: 'blur(20px)', animation: 'orb-breathe 4s ease-in-out infinite', pointerEvents: 'none' }} />
-            <div style={{ position: 'absolute', bottom: -20, left: 20, width: 60, height: 60, borderRadius: '50%', background: 'radial-gradient(circle,rgba(99,102,241,0.2),transparent 70%)', filter: 'blur(16px)', animation: 'orb-breathe 5s ease-in-out infinite 1s', pointerEvents: 'none' }} />
-            <div className="flex items-center gap-2 relative z-10">
-              <span style={{ fontSize: 13, fontFamily: "'Instrument Serif',serif", fontStyle: 'italic', color: '#8B5CF6' }}>Aria</span>
-              <div className="relative">
-                <span className="w-1.5 h-1.5 rounded-full block" style={{ background: '#22C55E' }} />
-                <span className="absolute inset-0 w-1.5 h-1.5 rounded-full animate-ping" style={{ background: '#22C55E', opacity: 0.75 }} />
-              </div>
-            </div>
-            <kbd className="text-[10px] rounded px-1.5 py-0.5 relative z-10" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', fontFamily: "'JetBrains Mono',monospace", color: 'var(--text-tertiary)' }}>⌘K</kbd>
-          </div>
+      {/* ── ARIA FLOATING PANEL ────────────────────────────────────── */}
 
-          {/* Proactive alerts */}
-          <div className="flex-shrink-0 px-3 py-2 space-y-1.5">
-            {ageRestrictedInCart && (
-              <div className="rounded-[10px] px-2.5 py-1.5 text-xs flex items-center gap-1.5 font-semibold" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.15)', color: '#EF4444' }}>
-                🔞 ID check required
-              </div>
-            )}
-            {loyaltyCustomer && (
-              <div className="rounded-[10px] px-2.5 py-1.5 text-xs flex items-center gap-1.5 font-semibold" style={{ background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.15)', color: '#8B5CF6' }}>
-                ⭐ {customer!.name} has {customer!.loyalty_points} loyalty points
-              </div>
-            )}
-            {lowStockItems.slice(0, 2).map(p => (
-              <div key={p.id} className="rounded-[10px] px-2.5 py-1.5 text-xs flex items-center gap-1.5 font-semibold" style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.15)', color: '#F59E0B' }}>
-                ⚠️ {p.name} at {p.stock_quantity} units
-              </div>
-            ))}
-          </div>
+      {/* Backdrop — desktop only when ariaOpen */}
+      {ariaOpen && (
+        <div
+          className="hidden md:block"
+          onClick={() => setAriaOpen(false)}
+          style={{ position: 'fixed', inset: 0, zIndex: 98, background: 'rgba(0,0,0,0.2)', backdropFilter: 'blur(2px)' }}
+        />
+      )}
 
-          {/* Product suggestions */}
-          {(suggestions.length > 0 || suggestionsLoading) && (
-            <div className="flex-shrink-0 px-3 pb-2">
-              <p className="text-[10px] uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-tertiary)' }}>Often bought together</p>
-              {suggestionsLoading ? (
-                <div className="h-6 rounded animate-pulse w-2/3" style={{ background: 'rgba(255,255,255,0.04)' }} />
-              ) : (
-                <div className="flex flex-wrap gap-1.5">
-                  {suggestions.map(s => {
-                    const prod = products.find(p => p.id === s.id);
-                    return (
-                      <button key={s.id}
-                        onClick={() => prod && checkAndAddToCart(prod)}
-                        disabled={!prod}
-                        className="text-xs rounded-lg px-2.5 py-1.5 disabled:opacity-40 transition-all"
-                        style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid #2A2540', color: 'var(--text-secondary)' }}
-                        onMouseEnter={e => { const el = e.currentTarget as HTMLButtonElement; el.style.border = '1px solid rgba(139,92,246,0.3)'; el.style.background = 'rgba(139,92,246,0.06)'; }}
-                        onMouseLeave={e => { const el = e.currentTarget as HTMLButtonElement; el.style.border = '1px solid #2A2540'; el.style.background = 'rgba(255,255,255,0.04)'; }}>
-                        {s.name} <span style={{ color: '#8B5CF6', fontFamily: "'JetBrains Mono',monospace" }}>+A${s.price?.toFixed(2)}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
+      {/* Panel — mobile: shows as mobileTab, desktop: floating */}
+      <div
+        className={`flex flex-col overflow-hidden ${mobileTab !== 'aria' ? 'hidden md:flex' : 'flex'}`}
+        style={{
+          position: 'fixed',
+          top: 0, right: 0, bottom: 0,
+          width: 340,
+          zIndex: 99,
+          background: 'var(--bg-surface)',
+          boxShadow: 'var(--shadow-lg)',
+          transform: ariaOpen || mobileTab === 'aria' ? 'translateX(0)' : 'translateX(100%)',
+          transition: 'transform 300ms cubic-bezier(0.16,1,0.3,1)',
+          visibility: ariaOpen || mobileTab === 'aria' ? 'visible' : 'hidden',
+        }}>
 
-          {/* Aria chat */}
-          <div className="flex-1 overflow-y-auto px-3 pb-2 space-y-2 min-h-0">
-            {chatMessages.length === 0 && (
-              <p className="text-xs text-center pt-4 px-2" style={{ color: 'var(--text-tertiary)' }}>
-                Ask about products, GST, stock levels, or today's sales.
-              </p>
-            )}
-            {chatMessages.slice(-6).map((m, i) => (
-              m.role === 'user' ? (
-                <div key={i} className="flex justify-end">
-                  <div className="max-w-[90%] rounded-[10px] px-3 py-2 text-xs leading-snug"
-                    style={{ background: 'rgba(139,92,246,0.12)', border: '1px solid rgba(139,92,246,0.2)', color: 'var(--text-primary)' }}>
-                    {m.content}
-                  </div>
-                </div>
-              ) : m.structured && (m.structured.cards?.length || m.structured.data_tables?.length || m.structured.chart || m.structured.actions?.length) ? (
-                <div key={i} className="flex justify-start">
-                  <div className="max-w-[98%] rounded-[10px] px-3 py-2" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid #1C1928' }}>
-                    <AriaChatMessage response={m.structured} onAction={handleAriaAction} />
-                  </div>
-                </div>
-              ) : (
-                <div key={i} className="flex justify-start">
-                  <div className="max-w-[90%] rounded-[10px] px-3 py-2 text-xs leading-snug"
-                    style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid #1C1928', color: 'var(--text-secondary)' }}>
-                    {m.content}
-                  </div>
-                </div>
-              )
-            ))}
-            {chatLoading && (
-              <div className="flex justify-start">
-                <div className="rounded-[10px] px-3 py-2" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid #1C1928' }}>
-                  <AriaChatMessage response={{ message: '', cards: [] }} isLoading={true} />
-                </div>
-              </div>
-            )}
-            <div ref={chatEndRef} />
-          </div>
-
-          {/* Aria input */}
-          <div className="flex-shrink-0 px-3 pb-2">
-            <div className="flex gap-1.5 items-center rounded-[10px] px-3 py-2.5" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid #2A2540' }}>
-              <input value={chatInput} onChange={e => setChatInput(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendAriaChat(); } }}
-                placeholder="Ask Aria…"
-                className="flex-1 text-xs bg-transparent outline-none"
-                style={{ color: 'var(--text-primary)' }} />
-              <button onClick={sendAriaChat} disabled={!chatInput.trim() || chatLoading}
-                className="w-7 h-7 rounded-lg text-xs disabled:opacity-40 flex items-center justify-center flex-shrink-0 text-white"
-                style={{ background: '#8B5CF6' }}>↑</button>
+        {/* Panel header */}
+        <div className="flex-shrink-0 px-4 py-3.5 flex items-center justify-between relative overflow-hidden"
+          style={{ borderBottom: '1px solid rgba(139,92,246,0.1)' }}>
+          <div style={{ position: 'absolute', top: -30, right: -20, width: 80, height: 80, borderRadius: '50%', background: 'radial-gradient(circle,rgba(139,92,246,0.3),transparent 70%)', filter: 'blur(20px)', animation: 'orb-breathe 4s ease-in-out infinite', pointerEvents: 'none' }} />
+          <div className="flex items-center gap-2 relative z-10">
+            <span style={{ fontFamily: "'Instrument Serif',serif", fontStyle: 'italic', fontSize: 18, color: '#8B5CF6' }}>Aria</span>
+            <div className="relative">
+              <span className="w-1.5 h-1.5 rounded-full block" style={{ background: '#22C55E' }} />
+              <span className="absolute inset-0 w-1.5 h-1.5 rounded-full animate-ping" style={{ background: '#22C55E', opacity: 0.75 }} />
             </div>
           </div>
-
-          {/* Log missed sale */}
-          <div className="flex-shrink-0 px-3 pb-2">
-            <button onClick={() => setShowMissedModal(true)}
-              className="w-full rounded-[10px] py-2 text-xs transition-all"
-              style={{ border: '1px dashed #2A2540', color: 'var(--text-tertiary)' }}>
-              Log missed sale
-            </button>
-          </div>
-
-          {/* Parked sales */}
-          {parkedSales.length > 0 && (
-            <div className="flex-shrink-0 px-3 py-2" style={{ borderTop: '1px solid #1C1928' }}>
-              <p className="text-[10px] uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-tertiary)' }}>Held sales ({parkedSales.length})</p>
-              <div className="space-y-1">
-                {parkedSales.slice(0, 3).map(p => (
-                  <button key={p.id} onClick={() => restoreParked(p)}
-                    className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-left transition-colors"
-                    style={{ background: 'var(--bg-input)', border: '1px solid #1C1928' }}>
-                    <span className="text-xs truncate" style={{ color: 'var(--text-secondary)' }}>{p.label || 'Sale'} · {Array.isArray(p.items) ? p.items.length : 0} items</span>
-                    <span className="text-xs font-medium flex-shrink-0 ml-2" style={{ fontFamily: "'JetBrains Mono',monospace", color: 'var(--text-primary)' }}>A${(p.total || 0).toFixed(2)}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Recent sales */}
-          <div className="flex-shrink-0" style={{ borderTop: '1px solid #1C1928' }}>
-            <div className="px-4 py-2">
-              <p className="text-[10px] font-medium uppercase tracking-wider" style={{ color: 'var(--text-tertiary)' }}>Recent sales</p>
-            </div>
-          </div>
-          <div className="flex-1 overflow-y-auto px-3 min-h-0" style={{ maxHeight: '140px' }}>
-            {recentSales.length === 0 ? (
-              <p className="text-xs text-center py-4" style={{ color: 'var(--text-tertiary)' }}>No sales yet this session</p>
-            ) : (
-              <div>
-                {recentSales.map(s => (
-                  <div key={s.id} className="py-2 group flex items-center gap-2" style={{ borderBottom: '1px solid #1C1928' }}>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex justify-between text-[10px] mb-0.5" style={{ color: 'var(--text-tertiary)' }}>
-                        <span>#{s.id.slice(-6).toUpperCase()}</span>
-                        <span>{s.time.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{s.items} item{s.items !== 1 ? 's' : ''}</span>
-                        <span className="text-xs font-semibold" style={{ fontFamily: "'JetBrains Mono',monospace", color: 'var(--text-primary)' }}>A${s.total.toFixed(2)}</span>
-                      </div>
-                    </div>
-                    <button onClick={() => setReprintSale(s)}
-                      className="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 text-base"
-                      title="Reprint receipt">
-                      🖨️
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <kbd className="text-[10px] rounded px-1.5 py-0.5" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', fontFamily: "'JetBrains Mono',monospace", color: 'var(--text-tertiary)' }}>⌘K</kbd>
+            <div
+              onClick={() => { setAriaOpen(false); setMobileTab('products'); }}
+              style={{ cursor: 'pointer', fontSize: 18, color: 'var(--text-tertiary)', lineHeight: 1, padding: '0 2px' }}>×</div>
           </div>
         </div>
+
+        {/* Proactive alerts */}
+        <div className="flex-shrink-0 px-3 py-2 space-y-1.5">
+          {ageRestrictedInCart && (
+            <div className="rounded-[10px] px-2.5 py-1.5 text-xs flex items-center gap-1.5 font-semibold" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.15)', color: '#EF4444' }}>
+              🔞 ID check required
+            </div>
+          )}
+          {loyaltyCustomer && (
+            <div className="rounded-[10px] px-2.5 py-1.5 text-xs flex items-center gap-1.5 font-semibold" style={{ background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.15)', color: '#8B5CF6' }}>
+              ⭐ {customer!.name} has {customer!.loyalty_points} loyalty points
+            </div>
+          )}
+          {lowStockItems.slice(0, 2).map(p => (
+            <div key={p.id} className="rounded-[10px] px-2.5 py-1.5 text-xs flex items-center gap-1.5 font-semibold" style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.15)', color: '#F59E0B' }}>
+              ⚠️ {p.name} at {p.stock_quantity} units
+            </div>
+          ))}
+        </div>
+
+        {/* Product suggestions */}
+        {(suggestions.length > 0 || suggestionsLoading) && (
+          <div className="flex-shrink-0 px-3 pb-2">
+            <p className="text-[10px] uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-tertiary)' }}>Often bought together</p>
+            {suggestionsLoading ? (
+              <div className="h-6 rounded animate-pulse w-2/3" style={{ background: 'rgba(255,255,255,0.04)' }} />
+            ) : (
+              <div className="flex flex-wrap gap-1.5">
+                {suggestions.map(s => {
+                  const prod = products.find(p => p.id === s.id);
+                  return (
+                    <button key={s.id}
+                      onClick={() => prod && checkAndAddToCart(prod)}
+                      disabled={!prod}
+                      className="text-xs rounded-lg px-2.5 py-1.5 disabled:opacity-40 transition-all"
+                      style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid #2A2540', color: 'var(--text-secondary)' }}
+                      onMouseEnter={e => { const el = e.currentTarget as HTMLButtonElement; el.style.border = '1px solid rgba(139,92,246,0.3)'; el.style.background = 'rgba(139,92,246,0.06)'; }}
+                      onMouseLeave={e => { const el = e.currentTarget as HTMLButtonElement; el.style.border = '1px solid #2A2540'; el.style.background = 'rgba(255,255,255,0.04)'; }}>
+                      {s.name} <span style={{ color: '#8B5CF6', fontFamily: "'JetBrains Mono',monospace" }}>+A${s.price?.toFixed(2)}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Aria chat */}
+        <div className="flex-1 overflow-y-auto px-3 pb-2 space-y-2 min-h-0">
+          {chatMessages.length === 0 && (
+            <p className="text-xs text-center pt-4 px-2" style={{ color: 'var(--text-tertiary)' }}>
+              Ask about products, GST, stock levels, or today's sales.
+            </p>
+          )}
+          {chatMessages.slice(-6).map((m, i) => (
+            m.role === 'user' ? (
+              <div key={i} className="flex justify-end">
+                <div className="max-w-[90%] rounded-[10px] px-3 py-2 text-xs leading-snug"
+                  style={{ background: 'rgba(139,92,246,0.12)', border: '1px solid rgba(139,92,246,0.2)', color: 'var(--text-primary)' }}>
+                  {m.content}
+                </div>
+              </div>
+            ) : m.structured && (m.structured.cards?.length || m.structured.data_tables?.length || m.structured.chart || m.structured.actions?.length) ? (
+              <div key={i} className="flex justify-start">
+                <div className="max-w-[98%] rounded-[10px] px-3 py-2" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid #1C1928' }}>
+                  <AriaChatMessage response={m.structured} onAction={handleAriaAction} />
+                </div>
+              </div>
+            ) : (
+              <div key={i} className="flex justify-start">
+                <div className="max-w-[90%] rounded-[10px] px-3 py-2 text-xs leading-snug"
+                  style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid #1C1928', color: 'var(--text-secondary)' }}>
+                  {m.content}
+                </div>
+              </div>
+            )
+          ))}
+          {chatLoading && (
+            <div className="flex justify-start">
+              <div className="rounded-[10px] px-3 py-2" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid #1C1928' }}>
+                <AriaChatMessage response={{ message: '', cards: [] }} isLoading={true} />
+              </div>
+            </div>
+          )}
+          <div ref={chatEndRef} />
+        </div>
+
+        {/* Ask Aria input */}
+        <div className="flex-shrink-0 px-3 pb-2">
+          <div className="flex gap-1.5 items-center rounded-[10px] px-3 py-2.5" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid #2A2540' }}>
+            <input value={chatInput} onChange={e => setChatInput(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendAriaChat(); } }}
+              placeholder="Ask Aria…"
+              className="flex-1 text-xs bg-transparent outline-none"
+              style={{ color: 'var(--text-primary)' }} />
+            <button onClick={sendAriaChat} disabled={!chatInput.trim() || chatLoading}
+              className="w-7 h-7 rounded-lg text-xs disabled:opacity-40 flex items-center justify-center flex-shrink-0 text-white"
+              style={{ background: '#8B5CF6' }}>↑</button>
+          </div>
+        </div>
+
+        {/* Log missed sale */}
+        <div className="flex-shrink-0 px-3 pb-2">
+          <button onClick={() => setShowMissedModal(true)}
+            className="w-full rounded-[10px] py-2 text-xs transition-all"
+            style={{ border: '1px dashed #2A2540', color: 'var(--text-tertiary)' }}>
+            Log missed sale
+          </button>
+        </div>
+
+        {/* Parked sales */}
+        {parkedSales.length > 0 && (
+          <div className="flex-shrink-0 px-3 py-2" style={{ borderTop: '1px solid #1C1928' }}>
+            <p className="text-[10px] uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-tertiary)' }}>Held sales ({parkedSales.length})</p>
+            <div className="space-y-1">
+              {parkedSales.slice(0, 3).map(p => (
+                <button key={p.id} onClick={() => restoreParked(p)}
+                  className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-left transition-colors"
+                  style={{ background: 'var(--bg-input)', border: '1px solid #1C1928' }}>
+                  <span className="text-xs truncate" style={{ color: 'var(--text-secondary)' }}>{p.label || 'Sale'} · {Array.isArray(p.items) ? p.items.length : 0} items</span>
+                  <span className="text-xs font-medium flex-shrink-0 ml-2" style={{ fontFamily: "'JetBrains Mono',monospace", color: 'var(--text-primary)' }}>A${(p.total || 0).toFixed(2)}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Recent sales */}
+        <div className="flex-shrink-0" style={{ borderTop: '1px solid #1C1928' }}>
+          <div className="px-4 py-2">
+            <p className="text-[10px] font-medium uppercase tracking-wider" style={{ color: 'var(--text-tertiary)' }}>Recent sales</p>
+          </div>
+        </div>
+        <div className="flex-1 overflow-y-auto px-3 min-h-0" style={{ maxHeight: '140px' }}>
+          {recentSales.length === 0 ? (
+            <p className="text-xs text-center py-4" style={{ color: 'var(--text-tertiary)' }}>No sales yet this session</p>
+          ) : (
+            <div>
+              {recentSales.map(s => (
+                <div key={s.id} className="py-2 group flex items-center gap-2" style={{ borderBottom: '1px solid #1C1928' }}>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex justify-between text-[10px] mb-0.5" style={{ color: 'var(--text-tertiary)' }}>
+                      <span>#{s.id.slice(-6).toUpperCase()}</span>
+                      <span>{s.time.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{s.items} item{s.items !== 1 ? 's' : ''}</span>
+                      <span className="text-xs font-semibold" style={{ fontFamily: "'JetBrains Mono',monospace", color: 'var(--text-primary)' }}>A${s.total.toFixed(2)}</span>
+                    </div>
+                  </div>
+                  <button onClick={() => setReprintSale(s)}
+                    className="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 text-base"
+                    title="Reprint receipt">
+                    🖨️
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── FLOATING ASK ARIA BUTTON — desktop only ────────────────── */}
+      <div
+        className="hidden md:flex"
+        onClick={() => setAriaOpen(prev => !prev)}
+        style={{
+          position: 'fixed',
+          bottom: 24, right: 24,
+          zIndex: 100,
+          alignItems: 'center',
+          gap: 8,
+          padding: '10px 20px',
+          borderRadius: 99,
+          background: ariaOpen
+            ? 'linear-gradient(135deg, #8B5CF6, #7C3AED)'
+            : 'var(--bg-elevated)',
+          boxShadow: ariaOpen
+            ? '0 4px 14px rgba(139,92,246,0.4), 0 12px 32px rgba(139,92,246,0.28)'
+            : 'var(--shadow-md)',
+          cursor: 'pointer',
+          transition: 'all 250ms cubic-bezier(0.16,1,0.3,1)',
+          userSelect: 'none',
+        }}
+      >
+        <span style={{ fontSize: 16 }}>✨</span>
+        <span style={{ fontSize: 13, fontWeight: 700, color: ariaOpen ? '#fff' : 'var(--text-primary)' }}>
+          {ariaOpen ? 'Close Aria' : 'Ask Aria'}
+        </span>
+        {!ariaOpen && lowStockItems.length > 0 && (
+          <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#F59E0B', boxShadow: '0 0 6px #F59E0B' }} />
+        )}
       </div>
 
       {/* Keyboard shortcuts bar — desktop only */}

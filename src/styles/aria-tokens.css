@@ -71,11 +71,11 @@ html[data-theme="light"] {
   --bg-input:       #1E1A2E;
   --bg-glass:       rgba(35, 30, 54, 0.85);
 
-  --border-subtle:  transparent;
-  --border-default: transparent;
-  --border-strong:  transparent;
-  --border-violet:  transparent;
-  --divider:        rgba(255, 255, 255, 0.06);
+  --border-subtle:  rgba(167, 139, 250, 0.10);
+  --border-default: rgba(167, 139, 250, 0.14);
+  --border-strong:  rgba(167, 139, 250, 0.22);
+  --border-violet:  rgba(167, 139, 250, 0.28);
+  --divider:        rgba(167, 139, 250, 0.08);
 
   --text-primary:   #EDE8FF;
   --text-secondary: #9B94C0;
@@ -177,4 +177,24 @@ input, textarea, select { font-family: inherit; }
 input:focus, textarea:focus {
   outline: none;
   box-shadow: 0 0 0 2px var(--violet-dim);
+}
+
+/* Light mode — restore subtle visible borders (dark mode stays borderless) */
+html[data-theme="light"] input,
+html[data-theme="light"] textarea,
+html[data-theme="light"] select {
+  border: 1px solid var(--border-default) !important;
+  box-shadow: none !important;
+}
+html[data-theme="light"] input:focus,
+html[data-theme="light"] textarea:focus {
+  border-color: var(--violet) !important;
+  box-shadow: 0 0 0 3px var(--violet-dim) !important;
+}
+html[data-theme="light"] td {
+  border-bottom: 1px solid var(--divider) !important;
+}
+html[data-theme="light"] nav {
+  box-shadow: 2px 0 12px rgba(167,139,250,0.06),
+    1px 0 0 rgba(167,139,250,0.12);
 }
