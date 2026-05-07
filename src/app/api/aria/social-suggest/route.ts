@@ -2,6 +2,7 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 import { createServerSupabaseClient } from '@/lib/supabase-server';
+import { createClient } from '@supabase/supabase-js';
 import { ARIA_VOICE } from '@/lib/aria-voice-guide';
 import { getWeatherForecast, getUpcomingHolidays } from '@/lib/external-apis';
 import { trackUsage } from '@/lib/track-usage';
@@ -163,25 +164,96 @@ Return ONLY a valid JSON array, no other text:
     return NextResponse.json({ error: 'Failed to parse AI response' }, { status: 500 });
   }
 
-  // Fetch Unsplash images if API key is configured
-  const unsplashKey = process.env.UNSPLASH_ACCESS_KEY;
-  async function fetchUnsplashImage(query: string): Promise<{ url: string; credit: string } | null> {
-    if (!unsplashKey || !query) return null;
-    try {
-      const res = await fetch(
-        `https://api.unsplash.com/search/photos?query=${encodeURIComponent(query)}&per_page=1&orientation=square`,
-        { headers: { Authorization: `Client-ID ${unsplashKey}` } }
-      );
-      const d = await res.json();
-      const photo = d.results?.[0];
-      if (!photo) return null;
-      return { url: photo.urls?.regular ?? photo.urls?.small, credit: photo.user?.name ?? 'Unsplash' };
-    } catch { return null; }
+  const sbService = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+
+  async function generatePostImage(prompt: string, searchQuery: string, prefix: string): Promise<{ url: string | null; credit: string | null; provider: string }> {
+    // 1. Stability AI
+    const stabilityKey = process.env.STABILITY_AI_KEY;
+    if (stabilityKey && prompt) {
+      try {
+        const res = await fetch(
+          'https://api.stability.ai/v1/generation/stable-diffusion-xl-1024-v1-0/text-to-image',
+          {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${stabilityKey}`, 'Content-Type': 'application/json', Accept: 'application/json' },
+            body: JSON.stringify({ text_prompts: [{ text: prompt, weight: 1 }], cfg_scale: 7, height: 1024, width: 1024, steps: 30, samples: 1 }),
+          }
+        );
+        if (res.ok) {
+          const d = await res.json();
+          const buf = d.artifacts?.[0]?.base64 ? Buffer.from(d.artifacts[0].base64, 'base64') : null;
+          if (buf) {
+            const path = `social/${prefix}_sdxl.png`;
+            const { error } = await sbService.storage.from('media').upload(path, buf, { contentType: 'image/png', upsert: true });
+            if (!error) {
+              const url = sbService.storage.from('media').getPublicUrl(path).data.publicUrl;
+              return { url, credit: null, provider: 'stability_ai' };
+            }
+          }
+        }
+      } catch { /* fall through */ }
+    }
+
+    // 2. DALL-E 3
+    const openaiKey = process.env.OPENAI_API_KEY;
+    if (openaiKey && prompt) {
+      try {
+        const res = await fetch('https://api.openai.com/v1/images/generations', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${openaiKey}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ model: 'dall-e-3', prompt: prompt.slice(0, 1000), n: 1, size: '1024x1024', quality: 'standard' }),
+        });
+        if (res.ok) {
+          const d = await res.json();
+          const imgUrl = d.data?.[0]?.url;
+          if (imgUrl) {
+            const imgRes = await fetch(imgUrl);
+            if (imgRes.ok) {
+              const buf = Buffer.from(await imgRes.arrayBuffer());
+              const path = `social/${prefix}_dalle3.png`;
+              const { error } = await sbService.storage.from('media').upload(path, buf, { contentType: 'image/png', upsert: true });
+              if (!error) {
+                const url = sbService.storage.from('media').getPublicUrl(path).data.publicUrl;
+                return { url, credit: null, provider: 'dalle3' };
+              }
+            }
+          }
+        }
+      } catch { /* fall through */ }
+    }
+
+    // 3. Unsplash fallback
+    const unsplashKey = process.env.UNSPLASH_ACCESS_KEY;
+    if (unsplashKey) {
+      const q = searchQuery || prompt?.split(' ').slice(0, 3).join(' ') || '';
+      try {
+        const res = await fetch(
+          `https://api.unsplash.com/search/photos?query=${encodeURIComponent(q)}&per_page=1&orientation=square`,
+          { headers: { Authorization: `Client-ID ${unsplashKey}` } }
+        );
+        const d = await res.json();
+        const photo = d.results?.[0];
+        if (photo) return { url: photo.urls?.regular ?? photo.urls?.small, credit: photo.user?.name ?? 'Unsplash', provider: 'unsplash' };
+      } catch { /* fall through */ }
+    }
+
+    return { url: null, credit: null, provider: 'none' };
   }
 
+  // Generate images in parallel across all suggestions
+  const imageResults = await Promise.all(
+    suggestions.map((s: any, i: number) =>
+      generatePostImage(s.image_prompt || '', s.image_search_query || '', `${business_id}/${Date.now()}_${i}`)
+    )
+  );
+
   const saved: any[] = [];
-  for (const s of suggestions) {
-    const img = await fetchUnsplashImage(s.image_search_query || s.image_prompt?.split(' ').slice(0, 3).join(' ') || '');
+  for (let i = 0; i < suggestions.length; i++) {
+    const s = suggestions[i];
+    const img = imageResults[i];
     const { data: post } = await supabase.from('social_posts').insert({
       business_id,
       platform: s.platform,
@@ -189,8 +261,8 @@ Return ONLY a valid JSON array, no other text:
       caption: s.caption,
       hashtags: [...(s.hashtags || []), ...(prefs?.auto_hashtags || [])],
       image_prompt: s.image_prompt,
-      image_url: img?.url ?? null,
-      image_credit: img?.credit ?? null,
+      image_url: img.url,
+      image_credit: img.credit,
       reel_concept: s.reel_concept ?? null,
       reel_script: s.reel_script ?? null,
       aria_reasoning: s.why,
