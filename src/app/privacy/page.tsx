@@ -144,7 +144,7 @@ export default function PrivacyPage() {
                   <li><strong>Right to withdraw consent</strong> — you may withdraw consent for any data processing at any time by contacting us. Note that withdrawing consent for core processing may affect your ability to use the platform.</li>
                   <li><strong>Right to complain</strong> — if you believe we have breached the Privacy Act, you may lodge a complaint with the Office of the Australian Information Commissioner (OAIC) at <a href="https://www.oaic.gov.au" style={{ color: '#8B5CF6' }}>oaic.gov.au</a>.</li>
                 </ul>
-                <p>To exercise any of these rights, contact us at <a href="mailto:privacy@aria-os.com" style={{ color: '#8B5CF6' }}>privacy@aria-os.com</a>. We will respond within 30 days.</p>
+                <p>To exercise any of these rights, contact us at <a href="mailto:cnkansal1105@gmail.com" style={{ color: '#8B5CF6' }}>cnkansal1105@gmail.com</a>. We will respond within 30 days.</p>
               </>
             ),
           },
@@ -194,7 +194,7 @@ export default function PrivacyPage() {
               <>
                 <p>For any privacy-related questions, requests, or complaints:</p>
                 <ul>
-                  <li><strong>Email:</strong> <a href="mailto:privacy@aria-os.com" style={{ color: '#8B5CF6' }}>privacy@aria-os.com</a></li>
+                  <li><strong>Email:</strong> <a href="mailto:cnkansal1105@gmail.com" style={{ color: '#8B5CF6' }}>cnkansal1105@gmail.com</a></li>
                   <li><strong>Business:</strong> Aria OS, Australia</li>
                   <li><strong>Response time:</strong> Within 5 business days for enquiries; within 30 days for formal access or deletion requests.</li>
                 </ul>
@@ -214,7 +214,7 @@ export default function PrivacyPage() {
 
         {/* Footer */}
         <p style={{ fontSize: 12, color: 'rgba(130,160,200,0.35)', textAlign: 'center', marginTop: 40 }}>
-          © 2026 Aria OS · Australia · <a href="mailto:privacy@aria-os.com" style={{ color: 'rgba(130,160,200,0.5)', textDecoration: 'none' }}>privacy@aria-os.com</a>
+          © 2026 Aria OS · Australia · <a href="mailto:cnkansal1105@gmail.com" style={{ color: 'rgba(130,160,200,0.5)', textDecoration: 'none' }}>cnkansal1105@gmail.com</a>
         </p>
       </div>
     </div>

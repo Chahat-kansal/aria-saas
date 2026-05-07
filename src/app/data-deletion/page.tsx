@@ -36,12 +36,25 @@ export default function DataDeletionPage() {
             1. How to Request Deletion
           </h2>
           <div style={{ fontSize: 14, color: 'rgba(130,160,200,0.75)', lineHeight: 1.75 }}>
-            <p style={{ marginBottom: 16 }}>
-              <strong style={{ color: 'rgba(220,240,255,0.85)' }}>Option A — Email request (recommended):</strong>
+            <p style={{ marginBottom: 12 }}>
+              <strong style={{ color: 'rgba(220,240,255,0.85)' }}>Option 1 — Delete from within Aria:</strong>
+            </p>
+            <div style={{ background: '#030510', border: '1px solid #1A2240', borderRadius: 10, padding: '16px 18px', marginBottom: 20 }}>
+              <ol style={{ margin: 0 }}>
+                <li>Log in to your Aria account</li>
+                <li>Go to <strong style={{ color: 'rgba(220,240,255,0.85)' }}>Settings</strong> → <strong style={{ color: 'rgba(220,240,255,0.85)' }}>Connected Accounts</strong></li>
+                <li>Click <strong style={{ color: 'rgba(220,240,255,0.85)' }}>Disconnect</strong> next to each connected platform</li>
+                <li>To delete your entire account and all data, contact us at the email below</li>
+              </ol>
+              <p style={{ marginTop: 10 }}>Disconnecting removes your OAuth tokens immediately. Full account deletion is completed within 30 days.</p>
+            </div>
+
+            <p style={{ marginBottom: 12 }}>
+              <strong style={{ color: 'rgba(220,240,255,0.85)' }}>Option 2 — Email request:</strong>
             </p>
             <div style={{ background: '#030510', border: '1px solid #1A2240', borderRadius: 10, padding: '16px 18px', marginBottom: 20 }}>
               <p>Send an email to{' '}
-                <a href="mailto:privacy@aria-os.com" style={{ color: '#8B5CF6' }}>privacy@aria-os.com</a>
+                <a href="mailto:cnkansal1105@gmail.com" style={{ color: '#8B5CF6' }}>cnkansal1105@gmail.com</a>
                 {' '}with:
               </p>
               <ul style={{ marginTop: 8 }}>
@@ -53,7 +66,7 @@ export default function DataDeletionPage() {
             </div>
 
             <p style={{ marginBottom: 12 }}>
-              <strong style={{ color: 'rgba(220,240,255,0.85)' }}>Option B — Facebook / Instagram app removal:</strong>
+              <strong style={{ color: 'rgba(220,240,255,0.85)' }}>Option 3 — Facebook / Instagram app removal:</strong>
             </p>
             <p>
               If you connected Aria OS to your Facebook or Instagram account, you can remove the
@@ -78,20 +91,30 @@ export default function DataDeletionPage() {
             2. What Gets Deleted
           </h2>
           <div style={{ fontSize: 14, color: 'rgba(130,160,200,0.75)', lineHeight: 1.75 }}>
-            <p style={{ marginBottom: 12 }}>Upon a confirmed deletion request, the following data is permanently removed:</p>
+            <p style={{ marginBottom: 12 }}>When you request deletion, we remove all data associated with your account, including:</p>
+            <p style={{ marginBottom: 8, fontWeight: 600, color: 'rgba(220,240,255,0.85)' }}>Facebook / Instagram data we store:</p>
+            <ul style={{ marginBottom: 16 }}>
+              <li>Facebook OAuth access token</li>
+              <li>Instagram account ID and account name</li>
+              <li>Social media posts created through Aria</li>
+              <li>Post performance data (likes, reach, engagement)</li>
+              <li>Page connection metadata</li>
+            </ul>
+            <p style={{ marginBottom: 8, fontWeight: 600, color: 'rgba(220,240,255,0.85)' }}>All other account data:</p>
             <ul>
               <li>Your business profile and all account settings</li>
               <li>All sales transaction records and receipts</li>
               <li>Your complete product and inventory catalogue</li>
               <li>All customer records and loyalty data</li>
               <li>All staff records and access details</li>
-              <li>Social media connection tokens (Facebook, Instagram, Google)</li>
               <li>All AI-generated insights, daily briefings, and recommendations</li>
-              <li>Social media post history and drafts</li>
               <li>Usage logs and activity history</li>
               <li>All files and uploaded content</li>
               <li>Your authentication credentials and account</li>
             </ul>
+            <p style={{ marginTop: 12, padding: '10px 14px', background: 'rgba(139,92,246,0.06)', border: '1px solid rgba(139,92,246,0.2)', borderRadius: 8 }}>
+              Complies with Meta Platform Terms and Australian Privacy Act 1988.
+            </p>
           </div>
         </div>
 
@@ -161,7 +184,7 @@ export default function DataDeletionPage() {
           <div style={{ fontSize: 14, color: 'rgba(130,160,200,0.75)', lineHeight: 1.75 }}>
             <ul>
               <li><strong style={{ color: 'rgba(220,240,255,0.85)' }}>Email:</strong>{' '}
-                <a href="mailto:privacy@aria-os.com" style={{ color: '#8B5CF6' }}>privacy@aria-os.com</a>
+                <a href="mailto:cnkansal1105@gmail.com" style={{ color: '#8B5CF6' }}>cnkansal1105@gmail.com</a>
               </li>
               <li><strong style={{ color: 'rgba(220,240,255,0.85)' }}>Initial response time:</strong> Within 5 business days</li>
               <li><strong style={{ color: 'rgba(220,240,255,0.85)' }}>Deletion completion time:</strong> Within 30 days of identity confirmation</li>
@@ -177,7 +200,7 @@ export default function DataDeletionPage() {
         {/* Footer */}
         <p style={{ fontSize: 12, color: 'rgba(130,160,200,0.35)', textAlign: 'center', marginTop: 40 }}>
           © 2026 Aria OS · Australia ·{' '}
-          <a href="mailto:privacy@aria-os.com" style={{ color: 'rgba(130,160,200,0.5)', textDecoration: 'none' }}>privacy@aria-os.com</a>
+          <a href="mailto:cnkansal1105@gmail.com" style={{ color: 'rgba(130,160,200,0.5)', textDecoration: 'none' }}>cnkansal1105@gmail.com</a>
         </p>
       </div>
     </div>
