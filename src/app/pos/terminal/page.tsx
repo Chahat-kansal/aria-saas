@@ -1251,7 +1251,7 @@ export default function TerminalPage() {
 
         {/* ── LEFT: Product browser ──────────────────────────────── */}
         <div className={`relative flex flex-col overflow-hidden ${mobileTab !== 'products' ? 'hidden md:flex' : 'flex'}`}
-          style={{ borderRight: '1px solid rgba(0,229,255,0.06)', background: 'rgba(10,14,30,0.85)' }}>
+          style={{ borderRight: '1px solid rgba(0,229,255,0.06)', background: 'var(--bg-surface)' }}>
 
           {/* Quick panel slide-out */}
           {showQuickPanel && (
@@ -1468,8 +1468,8 @@ export default function TerminalPage() {
                         }}
                         onContextMenu={e => { e.preventDefault(); setContextMenu({ product: p, x: e.clientX, y: e.clientY }); }}
                         style={{
-                          background: 'var(--bg-base)',
-                          border: `1px solid rgba(0,229,255,0.08)`,
+                          background: 'var(--bg-elevated)',
+                          boxShadow: 'var(--shadow-card)',
                           borderRadius: 18,
                           padding: 14,
                           cursor: 'pointer',
@@ -1501,8 +1501,8 @@ export default function TerminalPage() {
                             : <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 22, fontWeight: 800, color: m.a, letterSpacing: '-0.02em', position: 'relative' }}>{initials}</span>
                           }
                           {isOut && (
-                            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.55)' }}>
-                              <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 99, background: 'rgba(239,68,68,0.22)', border: '1px solid rgba(239,68,68,0.5)', color: '#EF4444' }}>Out of Stock</span>
+                            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--destructive-bg)' }}>
+                              <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 99, background: 'var(--destructive-bg)', color: 'var(--destructive)' }}>Out of Stock</span>
                             </div>
                           )}
                         </div>
@@ -1533,7 +1533,7 @@ export default function TerminalPage() {
 
         {/* ── CENTRE: Cart ──────────────────────────────────────── */}
         <div className={`flex flex-col overflow-hidden ${mobileTab !== 'cart' ? 'hidden md:flex' : 'flex'}`}
-          style={{ background: 'rgba(10,14,30,0.88)', borderRight: '1px solid rgba(0,229,255,0.06)' }}>
+          style={{ background: 'var(--bg-surface)', borderRight: '1px solid rgba(0,229,255,0.06)' }}>
 
           {showReceipt && terminalView !== 'confirm' ? (
             /* ── RECEIPT VIEW (non-confirm, e.g. reprint) ─────── */
@@ -1773,7 +1773,7 @@ export default function TerminalPage() {
 
         {/* ── RIGHT: Aria panel ─────────────────────────────────── */}
         <div className={`flex flex-col overflow-hidden ${mobileTab !== 'aria' ? 'hidden md:flex' : 'flex'}`}
-          style={{ background: 'rgba(10,14,30,0.88)', backdropFilter: 'blur(24px)', borderLeft: '1px solid rgba(0,229,255,0.06)' }}>
+          style={{ background: 'var(--bg-surface)', backdropFilter: 'blur(24px)', borderLeft: '1px solid rgba(0,229,255,0.06)' }}>
 
           {/* Aria header */}
           <div className="flex-shrink-0 px-4 py-3.5 flex items-center justify-between relative overflow-hidden"

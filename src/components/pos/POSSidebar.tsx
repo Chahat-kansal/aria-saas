@@ -184,8 +184,12 @@ export default function POSSidebar({
     })
   }
 
-  const isActive = (href: string) =>
-    href === '/pos' ? pathname === '/pos' : pathname.startsWith(href)
+  const isActive = (href: string) => {
+    if (href === '/pos') return pathname === '/pos'
+    if (href === '/pos/display') return pathname === '/pos/display'
+    if (href === '/pos/terminal') return pathname === '/pos/terminal'
+    return pathname.startsWith(href)
+  }
 
   const navigate = (href: string) => {
     router.push(href)
