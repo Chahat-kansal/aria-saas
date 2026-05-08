@@ -59,7 +59,17 @@ export async function GET(req: Request, { params }: Params) {
     .eq('agent_type', type)
     .maybeSingle();
 
-  return NextResponse.json({ decisions: decisions ?? [], last_run: lastRun, settings });
+  let roster = null;
+  if (type === 'schedule') {
+    const { data: rosterRows } = await supabase.from('pos_rosters')
+      .select('outlet_id,week_start,shifts,total_hours,total_cost_cents,published')
+      .eq('business_id', bid)
+      .order('week_start', { ascending: false })
+      .limit(5);
+    roster = rosterRows;
+  }
+
+  return NextResponse.json({ decisions: decisions ?? [], last_run: lastRun, settings, roster });
 }
 
 export async function POST(req: Request, { params }: Params) {

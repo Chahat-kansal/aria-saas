@@ -2,22 +2,52 @@
 import { useState, useEffect, useCallback } from 'react';
 import { track } from '@/lib/analytics';
 
-interface ShiftRow { staff_id: string; staff_name: string; hour: number; day: string; hourly_rate_cents: number; reasoning: string; }
+interface Shift { staff_id: string; staff_name: string; hour: number; day: string; hourly_rate_cents: number; }
+interface RosterRow { outlet_id: string; week_start: string; shifts: Shift[]; total_hours: number; total_cost_cents: number; published: boolean; }
 interface ScheduleData { outlet_id: string; outlet_name: string; week_start: string; shift_count: number; total_hours: number; total_cost_cents: number; }
 interface Decision { id: string; reasoning: string; projected_impact_cents: number; confidence_score: number; created_at: string; status: string; decision_data: ScheduleData; }
 
-const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const HOURS = Array.from({ length: 13 }, (_, i) => i + 9);
+const PALETTE = ['#7C3AED', '#2563EB', '#059669', '#D97706', '#DC2626', '#0891B2', '#9333EA', '#DB2777'];
+const fmtHour = (h: number) => h < 12 ? `${h}am` : h === 12 ? '12pm' : `${h - 12}pm`;
+
+function buildGrid(roster: RosterRow) {
+  const dates = [...new Set(roster.shifts.map(s => s.day))].sort();
+  const nameColorMap = new Map<string, string>();
+  let ci = 0;
+  for (const s of roster.shifts) {
+    if (!nameColorMap.has(s.staff_name)) nameColorMap.set(s.staff_name, PALETTE[ci++ % PALETTE.length]);
+  }
+  const grid = new Map<string, Map<number, string[]>>();
+  for (const s of roster.shifts) {
+    if (!grid.has(s.day)) grid.set(s.day, new Map());
+    const hm = grid.get(s.day)!;
+    if (!hm.has(s.hour)) hm.set(s.hour, []);
+    if (!hm.get(s.hour)!.includes(s.staff_name)) hm.get(s.hour)!.push(s.staff_name);
+  }
+  return { dates, nameColorMap, grid };
+}
 
 export default function ScheduleAgentPage() {
   const [decisions, setDecisions] = useState<Decision[]>([]);
+  const [rosters, setRosters] = useState<RosterRow[]>([]);
+  const [selected, setSelected] = useState<RosterRow | null>(null);
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
-  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [confirmPublish, setConfirmPublish] = useState(false);
+  const [publishing, setPublishing] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
     fetch('/api/pos/agents/schedule?status=pending').then(r => r.json()).then(d => {
-      setDecisions(d.decisions ?? []);
+      const decs: Decision[] = d.decisions ?? [];
+      const rs: RosterRow[] = (d.roster ?? []).map((r: Record<string, unknown>) => ({
+        ...r,
+        shifts: Array.isArray(r.shifts) ? (r.shifts as Shift[]) : [],
+      }));
+      setDecisions(decs);
+      setRosters(rs);
+      setSelected(prev => prev ? (rs.find(r => r.outlet_id === prev.outlet_id) ?? rs[0] ?? null) : (rs[0] ?? null));
       setLoading(false);
     }).catch(() => setLoading(false));
   }, []);
@@ -26,97 +56,196 @@ export default function ScheduleAgentPage() {
 
   async function runNow() {
     setRunning(true);
-    await fetch('/api/pos/agents/schedule', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'run_now' }) });
-    setRunning(false); load();
+    await fetch('/api/pos/agents/schedule', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'run_now' }),
+    });
+    setRunning(false);
+    load();
   }
 
-  async function doAction(id: string, action: 'approve' | 'reject' | 'snooze') {
-    setActionLoading(id);
-    await fetch('/api/pos/agents/schedule', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, decision_id: id }) });
-    const dec = decisions.find(d => d.id === id);
-    if (action === 'approve') track('roster_published', { week_start: dec?.decision_data?.week_start, total_hours: dec?.decision_data?.total_hours, total_cost_cents: dec?.decision_data?.total_cost_cents });
-    track(`agent_decision_${action}`, { agent_type: 'schedule', projected_impact_cents: dec?.projected_impact_cents ?? 0 });
-    setActionLoading(null); load();
+  async function publish(decId: string) {
+    setPublishing(true);
+    await fetch('/api/pos/agents/schedule', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'approve', decision_id: decId }),
+    });
+    const dec = decisions.find(d => d.id === decId);
+    track('roster_published', { week_start: dec?.decision_data?.week_start, total_hours: dec?.decision_data?.total_hours, total_cost_cents: dec?.decision_data?.total_cost_cents });
+    track('agent_decision_approved', { agent_type: 'schedule', projected_impact_cents: dec?.projected_impact_cents ?? 0 });
+    setPublishing(false);
+    setConfirmPublish(false);
+    load();
   }
+
+  const outletNames = new Map(decisions.map(d => [d.decision_data.outlet_id, d.decision_data.outlet_name]));
+  const pendingDec = decisions.find(d => selected && d.decision_data.outlet_id === selected.outlet_id) ?? decisions[0] ?? null;
+  const gridData = selected && selected.shifts.length > 0 ? buildGrid(selected) : null;
+  const staffNames = gridData ? [...gridData.nameColorMap.keys()] : [];
 
   return (
     <div style={{ minHeight: '100%', background: 'var(--bg-base)', color: 'var(--text-primary)', fontFamily: "'Manrope',sans-serif", padding: '24px 28px' }}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
+
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 700, margin: 0 }}>📅 Smart Schedule</h1>
           <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>
-            {decisions.length > 0 ? `${decisions.length} roster${decisions.length > 1 ? 's' : ''} awaiting approval` : 'No pending rosters'}
+            {selected
+              ? `${outletNames.get(selected.outlet_id) ?? 'Outlet'} · Week of ${selected.week_start}${selected.published ? ' · Published' : ''}`
+              : 'No roster yet'}
           </p>
         </div>
-        <button onClick={runNow} disabled={running} style={{ padding: '8px 18px', borderRadius: 9, border: 'none', background: running ? 'var(--bg-elevated)' : 'var(--violet)', color: running ? 'var(--text-tertiary)' : '#fff', fontSize: 13, fontWeight: 700, cursor: running ? 'not-allowed' : 'pointer', fontFamily: 'inherit' }}>
-          {running ? 'Running…' : '⚡ Generate roster'}
+        <button onClick={runNow} disabled={running} style={{
+          padding: '8px 18px', borderRadius: 9, border: 'none',
+          background: running ? 'var(--bg-elevated)' : 'var(--violet)',
+          color: running ? 'var(--text-tertiary)' : '#fff',
+          fontSize: 13, fontWeight: 700, cursor: running ? 'not-allowed' : 'pointer', fontFamily: 'inherit',
+          display: 'flex', alignItems: 'center', gap: 6,
+        }}>
+          {running
+            ? <><span style={{ display: 'inline-block', width: 12, height: 12, borderRadius: '50%', border: '2px solid var(--violet)', borderTopColor: 'transparent', animation: 'spin 0.7s linear infinite' }} />Generating…</>
+            : '⚡ Generate from Aria'}
         </button>
       </div>
 
-      {loading ? (
-        Array.from({ length: 2 }).map((_, i) => <div key={i} style={{ height: 200, background: 'var(--bg-surface)', borderRadius: 14, marginBottom: 12 }} />)
-      ) : decisions.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '48px 24px', background: 'var(--bg-surface)', borderRadius: 14 }}>
-          <div style={{ fontSize: 40, marginBottom: 12 }}>📋</div>
-          <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 8 }}>No roster pending</div>
-          <p style={{ fontSize: 13, color: 'var(--text-secondary)', maxWidth: 400, margin: '0 auto 20px' }}>Aria generates a roster every Sunday at 8am AEST for the coming week. Click Generate to create one now.</p>
-          <p style={{ fontSize: 12, color: 'var(--text-tertiary)', maxWidth: 400, margin: '0 auto' }}>Make sure you&apos;ve added your staff in Settings → Staff & Users for Aria to schedule them.</p>
+      {rosters.length > 1 && (
+        <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+          {rosters.map(r => (
+            <button key={r.outlet_id} onClick={() => setSelected(r)} style={{
+              padding: '6px 14px', borderRadius: 8, border: '1px solid var(--border-default)',
+              cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'inherit',
+              background: selected?.outlet_id === r.outlet_id ? 'var(--violet)' : 'var(--bg-surface)',
+              color: selected?.outlet_id === r.outlet_id ? '#fff' : 'var(--text-secondary)',
+            }}>
+              {outletNames.get(r.outlet_id) ?? r.outlet_id}
+            </button>
+          ))}
         </div>
-      ) : (
-        decisions.map(d => {
-          const data = d.decision_data;
-          return (
-            <div key={d.id} style={{ background: 'var(--bg-surface)', borderRadius: 14, marginBottom: 14, overflow: 'hidden', border: '1px solid rgba(96,165,250,0.2)', boxShadow: 'var(--shadow-card)' }}>
-              <div style={{ padding: '16px 20px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-                  <div>
-                    <span style={{ fontSize: 15, fontWeight: 700 }}>{data.outlet_name}</span>
-                    <span style={{ marginLeft: 10, fontSize: 12, color: 'var(--text-secondary)' }}>Week of {data.week_start}</span>
-                  </div>
-                  <span style={{ fontSize: 11, padding: '3px 9px', borderRadius: 99, background: 'rgba(96,165,250,0.14)', color: '#60A5FA', fontWeight: 700 }}>
-                    {(d.confidence_score * 100).toFixed(0)}% confidence
-                  </span>
-                </div>
+      )}
 
-                {/* Summary metrics */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10, marginBottom: 14 }}>
-                  {[
-                    ['Shifts', String(data.shift_count)],
-                    ['Total hours', `${data.total_hours}h`],
-                    ['Labour cost', `A$${(data.total_cost_cents / 100).toFixed(0)}`],
-                  ].map(([l, v]) => (
-                    <div key={l} style={{ background: 'var(--bg-elevated)', borderRadius: 10, padding: '10px 12px' }}>
-                      <div style={{ fontSize: 10, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>{l}</div>
-                      <div style={{ fontSize: 16, fontWeight: 700, fontFamily: "'JetBrains Mono',monospace" }}>{v}</div>
+      {pendingDec && !selected?.published && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(52,211,153,0.08)', border: '1px solid rgba(52,211,153,0.25)', borderRadius: 12, padding: '12px 18px', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
+          <div>
+            <span style={{ fontSize: 13, fontWeight: 700, color: '#34D399' }}>✨ Aria generated this roster</span>
+            <span style={{ fontSize: 12, color: 'var(--text-secondary)', marginLeft: 10 }}>
+              {pendingDec.decision_data.total_hours}h · A${(pendingDec.decision_data.total_cost_cents / 100).toFixed(0)} labour · {(pendingDec.confidence_score * 100).toFixed(0)}% confidence
+            </span>
+            {pendingDec.reasoning && (
+              <div style={{ fontSize: 12, color: 'var(--text-secondary)', fontStyle: 'italic', marginTop: 4 }}>
+                {pendingDec.reasoning}
+              </div>
+            )}
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={() => setConfirmPublish(true)} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: '#34D399', color: '#000', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+              ✓ Publish & Email Staff
+            </button>
+            <button onClick={async () => {
+              await fetch('/api/pos/agents/schedule', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'reject', decision_id: pendingDec.id }) });
+              load();
+            }} style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid rgba(248,113,113,0.3)', background: 'rgba(248,113,113,0.08)', color: '#F87171', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+              Reject
+            </button>
+          </div>
+        </div>
+      )}
+
+      {loading ? (
+        Array.from({ length: 6 }).map((_, i) => (
+          <div key={i} style={{ height: 36, background: 'var(--bg-surface)', borderRadius: 6, marginBottom: 3 }} />
+        ))
+      ) : gridData ? (
+        <>
+          <div style={{ overflowX: 'auto', borderRadius: 12, border: '1px solid var(--border-default)', background: 'var(--bg-surface)' }}>
+            <div style={{ minWidth: 560 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: `72px repeat(${gridData.dates.length}, 1fr)`, background: 'var(--bg-elevated)', borderBottom: '1px solid var(--divider)' }}>
+                <div style={{ padding: '8px 10px', fontSize: 10, color: 'var(--text-tertiary)', fontWeight: 700 }}>TIME</div>
+                {gridData.dates.map(d => {
+                  const dt = new Date(d + 'T00:00:00');
+                  return (
+                    <div key={d} style={{ padding: '8px 4px', textAlign: 'center', borderLeft: '1px solid var(--divider)' }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-primary)' }}>
+                        {dt.toLocaleDateString('en-AU', { weekday: 'short' })}
+                      </div>
+                      <div style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>{dt.getDate()}</div>
                     </div>
-                  ))}
-                </div>
+                  );
+                })}
+              </div>
 
-                {/* Week grid placeholder */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 4, marginBottom: 14 }}>
-                  {DAYS.map(day => (
-                    <div key={day} style={{ textAlign: 'center', fontSize: 10, color: 'var(--text-tertiary)', fontWeight: 700, padding: '4px 0', background: 'var(--bg-elevated)', borderRadius: 6 }}>{day}</div>
-                  ))}
-                </div>
-
-                {/* Aria reasoning */}
-                {d.reasoning && (
-                  <div style={{ background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.16)', borderRadius: 8, padding: '8px 12px', marginBottom: 10 }}>
-                    <span style={{ fontSize: 12, color: 'var(--text-secondary)', fontStyle: 'italic' }}>✨ {d.reasoning}</span>
+              {HOURS.map(hour => (
+                <div key={hour} style={{ display: 'grid', gridTemplateColumns: `72px repeat(${gridData.dates.length}, 1fr)`, borderBottom: '1px solid var(--divider)' }}>
+                  <div style={{ padding: '4px 10px', fontSize: 10, color: 'var(--text-tertiary)', fontWeight: 600, background: 'var(--bg-elevated)', borderRight: '1px solid var(--divider)', display: 'flex', alignItems: 'center' }}>
+                    {fmtHour(hour)}
                   </div>
-                )}
-              </div>
-
-              <div style={{ padding: '12px 20px', borderTop: '1px solid var(--divider)', display: 'flex', gap: 8 }}>
-                <button onClick={() => doAction(d.id, 'approve')} disabled={actionLoading === d.id} style={{ padding: '8px 18px', borderRadius: 8, border: 'none', background: '#34D399', color: '#000', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
-                  ✓ Publish & Email Staff
-                </button>
-                <button onClick={() => doAction(d.id, 'snooze')} style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border-default)', background: 'var(--bg-elevated)', color: 'var(--text-secondary)', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Snooze 7d</button>
-                <button onClick={() => doAction(d.id, 'reject')} style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid rgba(248,113,113,0.3)', background: 'rgba(248,113,113,0.08)', color: '#F87171', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Reject</button>
-              </div>
+                  {gridData.dates.map(d => {
+                    const staff = gridData.grid.get(d)?.get(hour) ?? [];
+                    return (
+                      <div key={d} style={{ padding: '3px 4px', minHeight: 32, borderLeft: '1px solid var(--divider)', background: staff.length === 0 ? 'rgba(248,113,113,0.04)' : 'transparent' }}>
+                        {staff.map(name => {
+                          const color = gridData.nameColorMap.get(name) ?? '#7C3AED';
+                          return (
+                            <span key={name} style={{ display: 'block', background: color + '22', color, borderRadius: 3, padding: '1px 5px', fontSize: 10, fontWeight: 600, marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {name.split(' ')[0]}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
             </div>
-          );
-        })
+          </div>
+
+          {staffNames.length > 0 && (
+            <div style={{ display: 'flex', gap: 8, marginTop: 14, flexWrap: 'wrap' }}>
+              {staffNames.map(name => {
+                const color = gridData.nameColorMap.get(name) ?? '#7C3AED';
+                return (
+                  <span key={name} style={{ background: color + '22', color, borderRadius: 6, padding: '4px 10px', fontSize: 11, fontWeight: 600 }}>
+                    {name}
+                  </span>
+                );
+              })}
+            </div>
+          )}
+        </>
+      ) : (
+        <div style={{ textAlign: 'center', padding: '60px 20px', background: 'var(--bg-surface)', borderRadius: 14 }}>
+          <div style={{ fontSize: 48, marginBottom: 16 }}>📋</div>
+          <h3 style={{ color: 'var(--text-primary)', margin: '0 0 8px', fontSize: 16, fontWeight: 700 }}>No roster yet</h3>
+          <p style={{ color: 'var(--text-tertiary)', fontSize: 14, maxWidth: 400, margin: '0 auto 12px' }}>
+            Click Generate to let Aria create an optimised roster based on your sales patterns.
+          </p>
+          <p style={{ color: 'var(--text-tertiary)', fontSize: 12, maxWidth: 400, margin: '0 auto' }}>
+            Make sure you&apos;ve added your staff in Settings → Staff & Users.
+          </p>
+        </div>
+      )}
+
+      {confirmPublish && pendingDec && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: 'var(--bg-elevated)', borderRadius: 16, padding: 28, maxWidth: 400, width: '90%', boxShadow: 'var(--shadow-lg)' }}>
+            <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 12 }}>
+              Publish roster for {pendingDec.decision_data.outlet_name}?
+            </h3>
+            <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 8 }}>
+              Week of {pendingDec.decision_data.week_start} · {pendingDec.decision_data.total_hours}h · A${(pendingDec.decision_data.total_cost_cents / 100).toFixed(0)} labour
+            </p>
+            <p style={{ fontSize: 12, color: 'var(--text-tertiary)', marginBottom: 20 }}>
+              All active staff with email addresses will receive a roster notification.
+            </p>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => setConfirmPublish(false)} style={{ flex: 1, padding: '10px', borderRadius: 9, border: '1px solid var(--border-default)', background: 'transparent', color: 'var(--text-primary)', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+                Cancel
+              </button>
+              <button onClick={() => publish(pendingDec.id)} disabled={publishing} style={{ flex: 2, padding: '10px', borderRadius: 9, border: 'none', background: '#34D399', color: '#000', fontSize: 13, fontWeight: 700, cursor: publishing ? 'not-allowed' : 'pointer', fontFamily: 'inherit' }}>
+                {publishing ? 'Sending…' : '✓ Publish & Email'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

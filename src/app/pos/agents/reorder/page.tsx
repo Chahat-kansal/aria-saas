@@ -15,6 +15,7 @@ const relTime = (d: string) => { const days = Math.floor((Date.now() - new Date(
 
 export default function ReorderAgentPage() {
   const [decisions, setDecisions] = useState<Decision[]>([]);
+  const [lastRun, setLastRun] = useState<{ started_at: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -25,6 +26,7 @@ export default function ReorderAgentPage() {
     setLoading(true);
     fetch('/api/pos/agents/reorder?status=pending').then(r => r.json()).then(d => {
       setDecisions(d.decisions ?? []);
+      setLastRun(d.last_run ?? null);
       setLoading(false);
     }).catch(() => setLoading(false));
   }, []);
@@ -67,10 +69,26 @@ export default function ReorderAgentPage() {
       {loading ? (
         Array.from({ length: 3 }).map((_, i) => <div key={i} style={{ height: 120, background: 'var(--bg-surface)', borderRadius: 14, marginBottom: 12 }} />)
       ) : decisions.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '48px 24px', background: 'var(--bg-surface)', borderRadius: 14 }}>
-          <div style={{ fontSize: 40, marginBottom: 12 }}>✅</div>
-          <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 8 }}>Stock levels look healthy</div>
-          <p style={{ fontSize: 13, color: 'var(--text-secondary)', maxWidth: 360, margin: '0 auto' }}>No reorders needed right now. Aria checks daily at 6am AEST.</p>
+        <div style={{ textAlign: 'center', padding: '60px 20px' }}>
+          <div style={{ fontSize: 48, marginBottom: 16 }}>✅</div>
+          <h3 style={{ color: 'var(--text-primary)', marginBottom: 8, fontSize: 16, fontWeight: 700, margin: '0 0 8px' }}>
+            Stock levels look healthy
+          </h3>
+          <p style={{ color: 'var(--text-tertiary)', fontSize: 14, maxWidth: 360, margin: '0 auto' }}>
+            Aria checked your inventory — nothing needs reordering right now.
+            She&apos;ll notify you when stock drops below reorder points.
+          </p>
+          <p style={{ color: 'var(--text-tertiary)', fontSize: 12, marginTop: 8 }}>
+            Last checked: {lastRun ? new Date(lastRun.started_at).toLocaleString('en-AU') : 'Not run yet'}
+          </p>
+          <button onClick={runNow} style={{
+            marginTop: 20, padding: '10px 20px',
+            background: 'var(--violet)', color: '#fff',
+            border: 'none', borderRadius: 10, cursor: 'pointer',
+            fontSize: 13, fontWeight: 600, fontFamily: 'inherit',
+          }}>
+            ⚡ Check now
+          </button>
         </div>
       ) : (
         decisions.map(d => {

@@ -7,6 +7,7 @@ interface Decision { id: string; reasoning: string; projected_impact_cents: numb
 
 export default function PricingAgentPage() {
   const [decisions, setDecisions] = useState<Decision[]>([]);
+  const [lastRun, setLastRun] = useState<{ started_at: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -16,6 +17,7 @@ export default function PricingAgentPage() {
     setLoading(true);
     fetch('/api/pos/agents/pricing?status=pending').then(r => r.json()).then(d => {
       setDecisions(d.decisions ?? []);
+      setLastRun(d.last_run ?? null);
       setLoading(false);
     }).catch(() => setLoading(false));
   }, []);
@@ -53,11 +55,37 @@ export default function PricingAgentPage() {
       {loading ? (
         Array.from({ length: 4 }).map((_, i) => <div key={i} style={{ height: 140, background: 'var(--bg-surface)', borderRadius: 14, marginBottom: 12 }} />)
       ) : decisions.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '48px 24px', background: 'var(--bg-surface)', borderRadius: 14 }}>
-          <div style={{ fontSize: 40, marginBottom: 12 }}>📊</div>
-          <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 8 }}>All prices look optimal</div>
-          <p style={{ fontSize: 13, color: 'var(--text-secondary)', maxWidth: 360, margin: '0 auto' }}>Aria checks prices daily at 7am AEST against competitor data.</p>
-        </div>
+        lastRun ? (
+          <div style={{ textAlign: 'center', padding: '60px 20px' }}>
+            <div style={{ fontSize: 48, marginBottom: 16 }}>📊</div>
+            <h3 style={{ color: 'var(--text-primary)', margin: '0 0 8px', fontSize: 16, fontWeight: 700 }}>
+              Your prices look competitive
+            </h3>
+            <p style={{ color: 'var(--text-tertiary)', fontSize: 14, maxWidth: 380, margin: '0 auto' }}>
+              Aria will flag opportunities when she spots them.
+            </p>
+            <p style={{ color: 'var(--text-tertiary)', fontSize: 12, marginTop: 8 }}>
+              Last checked: {new Date(lastRun.started_at).toLocaleString('en-AU')}
+            </p>
+          </div>
+        ) : (
+          <div style={{ textAlign: 'center', padding: '60px 20px', background: 'var(--bg-surface)', borderRadius: 14 }}>
+            <div style={{ fontSize: 48, marginBottom: 16 }}>🔍</div>
+            <h3 style={{ color: 'var(--text-primary)', margin: '0 0 8px', fontSize: 16, fontWeight: 700 }}>
+              Aria needs competitor prices to make suggestions
+            </h3>
+            <p style={{ color: 'var(--text-tertiary)', fontSize: 14, maxWidth: 400, margin: '0 auto 20px' }}>
+              Go to Competitor Prices to scan your area, then Aria can identify pricing opportunities.
+            </p>
+            <a href="/pos/competitors" style={{
+              display: 'inline-block', padding: '10px 20px',
+              background: 'var(--violet)', color: '#fff',
+              borderRadius: 10, fontSize: 13, fontWeight: 600, textDecoration: 'none',
+            }}>
+              View Competitor Prices →
+            </a>
+          </div>
+        )
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(300px,1fr))', gap: 14 }}>
           {decisions.map(d => {
