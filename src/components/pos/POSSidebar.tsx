@@ -99,6 +99,17 @@ const SECTIONS = [
     ],
   },
   {
+    id: 'agents',
+    label: 'AI Agents',
+    icon: '🤖',
+    items: [
+      { label: 'Agent Dashboard', href: '/pos/agents' },
+      { label: 'Reorder Agent', href: '/pos/agents/reorder' },
+      { label: 'Pricing Agent', href: '/pos/agents/pricing' },
+      { label: 'Smart Schedule', href: '/pos/agents/schedule' },
+    ],
+  },
+  {
     id: 'utilities',
     label: 'Utilities',
     icon: '🔧',
