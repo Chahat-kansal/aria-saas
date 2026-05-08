@@ -223,6 +223,21 @@ export default function TerminalPage() {
   /* ── Context menu ─────────────────────────────────────────────── */
   const [contextMenu,      setContextMenu]      = useState<{ product: Product; x: number; y: number } | null>(null);
 
+  // Training mode — additive
+  const [trainingMode, setTrainingMode] = useState(false);
+  const [trainingOffTimer, setTrainingOffTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
+
+  function toggleTrainingMode() {
+    const newVal = !trainingMode;
+    setTrainingMode(newVal);
+    if (trainingOffTimer) clearTimeout(trainingOffTimer);
+    if (newVal) {
+      // Auto-off after 4 hours
+      const t = setTimeout(() => setTrainingMode(false), 4 * 60 * 60 * 1000);
+      setTrainingOffTimer(t);
+    }
+  }
+
   const searchRef   = useRef<HTMLInputElement>(null);
   const chatEndRef  = useRef<HTMLDivElement>(null);
   const flyRef      = useRef<FlyToCartHandle>(null);
@@ -865,6 +880,13 @@ export default function TerminalPage() {
 
   return (
     <div className="flex flex-col overflow-hidden" style={{ height: '100%', background: 'var(--bg-base)', position: 'relative' }}>
+      {/* Training mode amber banner — additive */}
+      {trainingMode && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 200, background: 'rgba(245,158,11,0.95)', color: '#000', fontSize: 13, fontWeight: 800, textAlign: 'center', padding: '6px 0', letterSpacing: '0.04em', backdropFilter: 'blur(4px)' }}>
+          🎓 TRAINING MODE — sales not recorded
+          <button onClick={toggleTrainingMode} style={{ marginLeft: 16, padding: '2px 10px', borderRadius: 6, border: 'none', background: 'rgba(0,0,0,0.2)', color: '#000', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>Turn off</button>
+        </div>
+      )}
       {/* Full-screen animated dot grid */}
       <AnimatedBg />
       <CursorGlow />
@@ -1223,6 +1245,10 @@ export default function TerminalPage() {
                 {registerSession?.opened_by ? `👤 ${registerSession.opened_by}` : 'Switch cashier'}
               </button>
             )}
+            {/* Training mode toggle — additive */}
+            <button onClick={toggleTrainingMode} className="px-2 py-0.5 rounded text-xs" style={{ color: trainingMode ? '#F59E0B' : 'var(--text-secondary)', border: `1px solid ${trainingMode ? 'rgba(245,158,11,0.4)' : '#2A2540'}`, background: trainingMode ? 'rgba(245,158,11,0.08)' : 'rgba(255,255,255,0.03)' }}>
+              {trainingMode ? '🎓 Training ON' : '🎓 Training'}
+            </button>
             {registerIsOpen
               ? <button onClick={() => setShowCloseModal(true)} className="px-2 py-0.5 rounded text-xs" style={{ color: '#EF4444', border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.06)' }}>Close register</button>
               : <button onClick={() => setShowRegisterModal(true)} className="px-2 py-0.5 rounded text-xs" style={{ color: '#22C55E', border: '1px solid rgba(34,197,94,0.3)', background: 'rgba(34,197,94,0.06)' }}>Open register</button>

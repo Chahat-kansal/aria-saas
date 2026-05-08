@@ -36,6 +36,8 @@ const SECTIONS = [
       { label: 'Suppliers', href: '/pos/suppliers' },
       { label: 'Orders & Invoices', href: '/pos/orders' },
       { label: 'Stocktake', href: '/pos/stocktake' },
+      { label: 'New Stocktake', href: '/pos/inventory/stocktake/new' },
+      { label: 'Dead Stock', href: '/pos/inventory/dead-stock' },
       { label: 'Transfers', href: '/pos/transfers' },
       { label: 'Import Products', href: '/pos/import' },
     ],
@@ -46,6 +48,7 @@ const SECTIONS = [
     icon: '👥',
     items: [
       { label: 'Customers', href: '/pos/customers' },
+      { label: 'Segments', href: '/pos/customers/segments' },
       { label: 'Customer Groups', href: '/pos/customer-groups' },
       { label: 'Price Sets', href: '/pos/price-sets' },
       { label: 'Balances', href: '/pos/balances' },
@@ -58,6 +61,8 @@ const SECTIONS = [
     icon: '🎯',
     items: [
       { label: 'Promotions', href: '/pos/promotions' },
+      { label: 'New Promotion', href: '/pos/promotions/new' },
+      { label: 'Laybys', href: '/pos/laybys' },
       { label: 'Shelf Tickets', href: '/pos/shelf-tickets' },
       { label: 'Loyalty', href: '/pos/loyalty' },
     ],

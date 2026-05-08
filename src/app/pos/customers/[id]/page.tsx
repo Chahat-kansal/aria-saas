@@ -1,138 +1,225 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
+import { LineChart, Line, ResponsiveContainer, Tooltip } from 'recharts';
+import AriaInsightCard from '@/components/reports/AriaInsightCard';
 
 interface Customer {
   id: string; name: string; email: string | null; phone: string | null;
   loyalty_points: number; total_spent: number; created_at: string;
   address: string | null; notes: string | null;
+  rfm_score?: string | null; customer_segment?: string | null;
+  churn_risk?: number | null; predicted_next_visit?: string | null;
+  group_name?: string | null;
 }
+interface Sale { id: string; created_at: string; total_amount: number; payment_method: string; sale_number?: string; }
 
-const C = { bg: 'var(--bg-base)', card: 'var(--bg-surface)', border: 'transparent', text: 'var(--text-primary)', muted: 'var(--text-secondary)', dim: 'var(--text-tertiary)', violet: '#8B5CF6', green: '#22C55E' };
+const C = { bg: 'var(--bg-base)', card: 'var(--bg-surface)', border: 'transparent', text: 'var(--text-primary)', muted: 'var(--text-secondary)', dim: 'var(--text-tertiary)', violet: '#8B5CF6', green: '#22C55E', red: '#EF4444', amber: '#F59E0B' };
+const TABS = ['Purchase History','Loyalty','Notes'];
+
+const SEGMENT_COLORS: Record<string, string> = {
+  Champions: '#34D399', Loyal: '#60A5FA', Promising: '#A78BFA',
+  'At Risk': '#FBBF24', Lost: '#F87171', New: '#94A3B8',
+};
+
+function initials(name: string) { return name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase(); }
+function relTime(d: string) {
+  const days = Math.floor((Date.now() - new Date(d).getTime()) / 86400000);
+  if (days === 0) return 'Today';
+  if (days === 1) return 'Yesterday';
+  if (days < 30) return `${days}d ago`;
+  if (days < 365) return `${Math.floor(days / 30)}mo ago`;
+  return `${Math.floor(days / 365)}y ago`;
+}
 
 export default function CustomerDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [customer, setCustomer] = useState<Customer | null>(null);
+  const [sales, setSales] = useState<Sale[]>([]);
   const [loading, setLoading] = useState(true);
-  const [editing, setEditing] = useState(false);
-  const [form, setForm] = useState({ name: '', email: '', phone: '', address: '', notes: '' });
-  const [saving, setSaving] = useState(false);
+  const [activeTab, setActiveTab] = useState('Purchase History');
+  const [notes, setNotes] = useState('');
+  const [notesSaving, setNotesSaving] = useState(false);
+  const [insight, setInsight] = useState<string[] | null>(null);
+  const [insightLoading, setInsightLoading] = useState(true);
 
-  useEffect(() => {
+  const load = useCallback(() => {
     if (!id) return;
-    fetch(`/api/pos/customers?id=${id}`)
-      .then(r => r.json())
-      .then(d => {
-        const c = d.customer ?? null;
-        setCustomer(c);
-        if (c) setForm({ name: c.name, email: c.email ?? '', phone: c.phone ?? '', address: c.address ?? '', notes: c.notes ?? '' });
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
+    fetch(`/api/pos/customers?id=${id}`).then(r => r.json()).then(d => {
+      const c = d.customer ?? null;
+      setCustomer(c);
+      setNotes(c?.notes ?? '');
+      setInsightLoading(false);
+      setLoading(false);
+    }).catch(() => setLoading(false));
+
+    fetch(`/api/pos/sales?customer_id=${id}&limit=24`).then(r => r.json()).then(d => {
+      setSales(d.sales ?? []);
+    }).catch(() => {});
   }, [id]);
 
-  async function save() {
+  useEffect(() => { load(); }, [load]);
+
+  async function saveNotes() {
     if (!customer) return;
-    setSaving(true);
-    await fetch(`/api/pos/customers?id=${customer.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(form),
-    });
-    setCustomer(prev => prev ? { ...prev, ...form } : prev);
-    setSaving(false);
-    setEditing(false);
+    setNotesSaving(true);
+    await fetch(`/api/pos/customers?id=${customer.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ notes }) }).catch(() => {});
+    setNotesSaving(false);
   }
 
-  if (loading) {
-    return (
-      <div style={{ padding: 32, background: C.bg, minHeight: '100%', color: C.text, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-        <div style={{ width: 28, height: 28, borderRadius: '50%', border: `2px solid rgba(139,92,246,0.3)`, borderTopColor: C.violet, animation: 'spin 0.7s linear infinite' }} />
-      </div>
-    );
-  }
+  if (loading) return (
+    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', background: C.bg }}>
+      <div style={{ width: 28, height: 28, borderRadius: '50%', border: `2px solid rgba(139,92,246,0.3)`, borderTopColor: C.violet, animation: 'spin 0.7s linear infinite' }} />
+    </div>
+  );
 
-  if (!customer) {
-    return (
-      <div style={{ padding: 32, background: C.bg, minHeight: '100%', color: C.text }}>
-        <Link href="/pos/customers" style={{ color: C.muted, textDecoration: 'none', fontSize: 13 }}>← Customers</Link>
-        <p style={{ marginTop: 24, color: C.muted }}>Customer not found.</p>
-      </div>
-    );
-  }
+  if (!customer) return (
+    <div style={{ padding: 32, background: C.bg, minHeight: '100%', color: C.text }}>
+      <Link href="/pos/customers" style={{ color: C.muted, textDecoration: 'none', fontSize: 13 }}>← Customers</Link>
+      <p style={{ marginTop: 24, color: C.muted }}>Customer not found.</p>
+    </div>
+  );
+
+  const seg = customer.customer_segment ?? 'New';
+  const segColor = SEGMENT_COLORS[seg] ?? '#94A3B8';
+  const churnRisk = customer.churn_risk ?? 0;
+  const churnColor = churnRisk > 66 ? C.red : churnRisk > 33 ? C.amber : C.green;
+  const totalOrders = sales.length;
+  const ltv = customer.total_spent ?? 0;
+  const avgOrder = totalOrders > 0 ? ltv / totalOrders : 0;
+  const lastSale = sales[0];
+  const sparkData = [...sales].reverse().map((s, i) => ({ i, v: s.total_amount }));
 
   return (
-    <div style={{ minHeight: '100%', background: C.bg, color: C.text, fontFamily: "'Manrope',sans-serif", padding: '24px 28px' }}>
+    <div style={{ minHeight: '100%', background: C.bg, color: C.text, fontFamily: "'Manrope',sans-serif" }}>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+      <div style={{ padding: '16px 24px', background: 'var(--bg-surface)', borderBottom: '1px solid var(--divider)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <Link href="/pos/customers" style={{ color: C.muted, textDecoration: 'none', fontSize: 13 }}>← Customers</Link>
-          <span style={{ color: C.dim }}>/</span>
-          <h1 style={{ fontSize: 18, fontWeight: 700, color: C.text }}>{customer.name}</h1>
-        </div>
-        <button onClick={() => setEditing(e => !e)}
-          style={{ padding: '8px 16px', borderRadius: 8, border: `1px solid ${C.border}`, background: editing ? 'rgba(139,92,246,0.1)' : 'transparent', color: editing ? C.violet : C.muted, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
-          {editing ? 'Cancel' : '✏ Edit'}
-        </button>
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, maxWidth: 800 }}>
-        {/* Stats */}
-        <div style={{ background: 'rgba(0,229,255,0.07)', border: '1px solid rgba(0,229,255,0.15)', borderRadius: 14, padding: '18px 20px' }}>
-          <p style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: C.dim, marginBottom: 6 }}>Loyalty Points</p>
-          <p style={{ fontSize: 28, fontWeight: 800, fontFamily: 'monospace', color: '#00E5FF' }}>{customer.loyalty_points ?? 0}</p>
-        </div>
-        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '18px 20px' }}>
-          <p style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: C.dim, marginBottom: 6 }}>Total Spent</p>
-          <p style={{ fontSize: 28, fontWeight: 800, fontFamily: 'monospace', color: C.green }}>A${(customer.total_spent ?? 0).toFixed(2)}</p>
-        </div>
-      </div>
-
-      {/* Details */}
-      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '18px 20px', marginTop: 16, maxWidth: 800 }}>
-        <p style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: C.dim, marginBottom: 16 }}>Contact Details</p>
-        {editing ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {(['name', 'email', 'phone', 'address'] as const).map(field => (
-              <div key={field}>
-                <label style={{ display: 'block', fontSize: 11, color: C.muted, marginBottom: 4, textTransform: 'capitalize' }}>{field}</label>
-                <input
-                  value={form[field]}
-                  onChange={e => setForm(f => ({ ...f, [field]: e.target.value }))}
-                  style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: `1px solid ${C.border}`, color: C.text, borderRadius: 8, padding: '8px 12px', fontSize: 13, outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' }}
-                />
-              </div>
-            ))}
-            <div>
-              <label style={{ display: 'block', fontSize: 11, color: C.muted, marginBottom: 4 }}>Notes</label>
-              <textarea
-                value={form.notes}
-                onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
-                rows={3}
-                style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: `1px solid ${C.border}`, color: C.text, borderRadius: 8, padding: '8px 12px', fontSize: 13, outline: 'none', fontFamily: 'inherit', resize: 'vertical', boxSizing: 'border-box' }}
-              />
+          <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--violet-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 800, color: C.violet }}>{initials(customer.name)}</div>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <h1 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>{customer.name}</h1>
+              {customer.group_name && <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 99, background: 'var(--violet-dim)', color: C.violet, fontWeight: 700 }}>{customer.group_name}</span>}
+              <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 99, background: `${segColor}22`, color: segColor, fontWeight: 700 }}>{seg}</span>
             </div>
-            <button onClick={save} disabled={saving}
-              style={{ padding: '10px 24px', borderRadius: 8, border: 'none', background: C.violet, color: '#fff', fontSize: 13, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', fontFamily: 'inherit', opacity: saving ? 0.6 : 1, alignSelf: 'flex-start' }}>
-              {saving ? 'Saving…' : 'Save Changes'}
-            </button>
+            <div style={{ fontSize: 12, color: C.muted }}>Member since {new Date(customer.created_at).toLocaleDateString('en-AU')}</div>
           </div>
-        ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-            {[
-              ['Name', customer.name],
-              ['Email', customer.email ?? '—'],
-              ['Phone', customer.phone ?? '—'],
-              ['Address', customer.address ?? '—'],
-              ['Member Since', new Date(customer.created_at).toLocaleDateString('en-AU')],
-              ['Notes', customer.notes ?? '—'],
-            ].map(([label, value]) => (
-              <div key={label as string}>
-                <p style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: C.dim, marginBottom: 3 }}>{label}</p>
-                <p style={{ fontSize: 13, color: C.text }}>{value}</p>
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <Link href={`/pos/customers/${id}/edit`} style={{ padding: '7px 14px', borderRadius: 8, border: '1px solid var(--border-default)', background: 'var(--bg-elevated)', color: C.muted, fontSize: 12, fontWeight: 600, textDecoration: 'none' }}>✏️ Edit</Link>
+          <Link href={`/pos/terminal?customer_id=${id}`} style={{ padding: '7px 14px', borderRadius: 8, border: `1px solid ${C.violet}`, background: 'rgba(139,92,246,0.12)', color: C.violet, fontSize: 12, fontWeight: 600, textDecoration: 'none' }}>🛒 New Sale</Link>
+        </div>
+      </div>
+
+      <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 18, maxWidth: 1100 }}>
+        <AriaInsightCard bullets={insight ?? undefined} loading={insightLoading} />
+
+        {/* 5 metric cards */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(160px,1fr))', gap: 12 }}>
+          {[
+            { label: 'Lifetime Value', value: `A$${ltv.toFixed(0)}`, color: C.violet },
+            { label: 'Total Orders', value: String(totalOrders), color: C.text },
+            { label: 'Avg Order', value: `A$${avgOrder.toFixed(2)}`, color: C.text },
+            { label: 'Last Visit', value: lastSale ? relTime(lastSale.created_at) : 'Never', color: C.text },
+            { label: 'Predicted Next', value: customer.predicted_next_visit ? relTime(customer.predicted_next_visit) : '—', color: C.muted },
+          ].map(m => (
+            <div key={m.label} style={{ background: 'var(--bg-surface)', borderRadius: 12, padding: '13px 16px' }}>
+              <p style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: C.dim, marginBottom: 5 }}>{m.label}</p>
+              <p style={{ fontSize: 18, fontWeight: 700, color: m.color, fontFamily: "'JetBrains Mono',monospace" }}>{m.value}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Churn risk */}
+        <div style={{ background: 'var(--bg-surface)', borderRadius: 12, padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 20 }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: C.text }}>Churn Risk</span>
+              <span style={{ fontSize: 12, fontWeight: 700, color: churnColor }}>{churnRisk > 66 ? 'High' : churnRisk > 33 ? 'Medium' : 'Low'} ({churnRisk}%)</span>
+            </div>
+            <div style={{ height: 8, borderRadius: 4, background: 'var(--bg-overlay)', overflow: 'hidden' }}>
+              <div style={{ height: 8, borderRadius: 4, width: `${churnRisk}%`, background: churnColor, transition: 'width 600ms' }} />
+            </div>
+          </div>
+          {sparkData.length >= 2 && (
+            <div style={{ width: 120, height: 40, flexShrink: 0 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={sparkData}>
+                  <Line type="monotone" dataKey="v" stroke={C.violet} strokeWidth={2} dot={false} isAnimationActive={false} />
+                  <Tooltip contentStyle={{ background: 'var(--bg-elevated)', border: 'none', fontSize: 11 }} formatter={(v: unknown) => [`A$${Number(v).toFixed(2)}`, 'Sale']} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </div>
+
+        {/* Tabs */}
+        <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid var(--divider)' }}>
+          {TABS.map(tab => (
+            <button key={tab} onClick={() => setActiveTab(tab)} style={{ padding: '9px 18px', border: 'none', borderBottom: `2px solid ${activeTab === tab ? C.violet : 'transparent'}`, background: 'transparent', color: activeTab === tab ? C.violet : C.muted, fontSize: 13, fontWeight: activeTab === tab ? 700 : 400, cursor: 'pointer', fontFamily: 'inherit' }}>
+              {tab}
+            </button>
+          ))}
+        </div>
+
+        {/* Purchase History */}
+        {activeTab === 'Purchase History' && (
+          <div style={{ background: 'var(--bg-surface)', borderRadius: 12, overflow: 'hidden' }}>
+            {sales.length === 0 ? (
+              <div style={{ padding: 40, textAlign: 'center', color: C.dim, fontSize: 13 }}>No purchases on record.</div>
+            ) : (
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ background: '#29b6f6' }}>
+                    {['Date','Sale #','Payment','Total'].map(h => (
+                      <th key={h} style={{ padding: '10px 14px', fontSize: 12, fontWeight: 700, color: '#fff', textAlign: 'left' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {sales.map((s, i) => (
+                    <tr key={s.id} style={{ background: i % 2 === 0 ? 'var(--bg-surface)' : 'var(--bg-elevated)' }}>
+                      <td style={{ padding: '10px 14px', fontSize: 13 }}>{new Date(s.created_at).toLocaleDateString('en-AU')}</td>
+                      <td style={{ padding: '10px 14px', fontSize: 12, fontFamily: "'JetBrains Mono',monospace", color: C.violet }}>{s.sale_number ?? s.id.slice(-8)}</td>
+                      <td style={{ padding: '10px 14px', fontSize: 12, color: C.muted, textTransform: 'capitalize' }}>{s.payment_method ?? '—'}</td>
+                      <td style={{ padding: '10px 14px', fontSize: 13, fontWeight: 700, fontFamily: "'JetBrains Mono',monospace" }}>A${(s.total_amount ?? 0).toFixed(2)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        )}
+
+        {/* Loyalty */}
+        {activeTab === 'Loyalty' && (
+          <div style={{ background: 'var(--bg-surface)', borderRadius: 12, padding: 24 }}>
+            <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
+              <div>
+                <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: C.dim, marginBottom: 4 }}>Points Balance</div>
+                <div style={{ fontSize: 36, fontWeight: 800, color: '#00E5FF', fontFamily: "'JetBrains Mono',monospace" }}>{customer.loyalty_points ?? 0}</div>
               </div>
-            ))}
+              <div>
+                <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: C.dim, marginBottom: 4 }}>RFM Segment</div>
+                <div style={{ fontSize: 24, fontWeight: 800, color: segColor }}>{seg}</div>
+                {customer.rfm_score && <div style={{ fontSize: 11, color: C.dim, marginTop: 2 }}>Score: {customer.rfm_score}</div>}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Notes */}
+        {activeTab === 'Notes' && (
+          <div style={{ background: 'var(--bg-surface)', borderRadius: 12, padding: 20 }}>
+            <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={6}
+              placeholder="Add notes about this customer…"
+              style={{ width: '100%', background: 'var(--bg-input)', border: '1px solid var(--border-default)', color: C.text, borderRadius: 8, padding: '10px 12px', fontSize: 13, outline: 'none', fontFamily: 'inherit', resize: 'vertical', boxSizing: 'border-box', marginBottom: 12 }} />
+            <button onClick={saveNotes} disabled={notesSaving}
+              style={{ padding: '8px 20px', borderRadius: 8, border: 'none', background: C.violet, color: '#fff', fontSize: 13, fontWeight: 700, cursor: notesSaving ? 'not-allowed' : 'pointer', fontFamily: 'inherit', opacity: notesSaving ? 0.6 : 1 }}>
+              {notesSaving ? 'Saving…' : 'Save Notes'}
+            </button>
           </div>
         )}
       </div>
