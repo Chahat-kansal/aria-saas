@@ -54,7 +54,7 @@ export default function CustomerDetailPage() {
       setLoading(false);
     }).catch(() => setLoading(false));
 
-    fetch(`/api/pos/sales?customer_id=${id}&limit=24`).then(r => r.json()).then(d => {
+    fetch(`/api/pos/sales?customer_id=${id}&limit=200`).then(r => r.json()).then(d => {
       setSales(d.sales ?? []);
     }).catch(() => {});
   }, [id]);
@@ -86,7 +86,8 @@ export default function CustomerDetailPage() {
   const churnRisk = customer.churn_risk ?? 0;
   const churnColor = churnRisk > 66 ? C.red : churnRisk > 33 ? C.amber : C.green;
   const totalOrders = sales.length;
-  const ltv = customer.total_spent ?? 0;
+  // Compute LTV directly from fetched sales using total_amount (dollars, no /100)
+  const ltv = sales.reduce((sum, s) => sum + (s.total_amount ?? 0), 0);
   const avgOrder = totalOrders > 0 ? ltv / totalOrders : 0;
   const lastSale = sales[0];
   const sparkData = [...sales].reverse().map((s, i) => ({ i, v: s.total_amount }));

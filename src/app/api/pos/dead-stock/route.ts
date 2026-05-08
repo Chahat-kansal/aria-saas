@@ -35,10 +35,11 @@ export async function GET(req: Request) {
 
   if (!products?.length) return NextResponse.json({ items: [] });
 
-  // Get last sale date per product in the cutoff window
+  // Get last sale date per product in the cutoff window.
+  // pos_sale_items has no business_id column — product_ids are already
+  // scoped to the business via the products query above.
   const { data: recentSales } = await supabase.from('pos_sale_items')
     .select('product_id,created_at')
-    .eq('business_id', bid)
     .gte('created_at', cutoff)
     .in('product_id', products.map(p => p.id))
     .limit(5000);
@@ -52,7 +53,6 @@ export async function GET(req: Request) {
   if (deadProductIds.length > 0) {
     const { data: lastSales } = await supabase.from('pos_sale_items')
       .select('product_id,created_at')
-      .eq('business_id', bid)
       .in('product_id', deadProductIds)
       .order('created_at', { ascending: false })
       .limit(deadProductIds.length * 2);

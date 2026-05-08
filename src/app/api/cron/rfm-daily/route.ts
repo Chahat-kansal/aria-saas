@@ -89,17 +89,21 @@ export async function GET(req: Request) {
     processed++;
   }
 
-  // Batch upsert in chunks of 100
-  for (let i = 0; i < updates.length; i += 100) {
-    const chunk = updates.slice(i, i + 100);
-    for (const u of chunk) {
-      await supabase.from('customers').update({
+  // Upsert in batches of 500 — individual updates at 5k scale would timeout
+  for (let i = 0; i < updates.length; i += 500) {
+    const batch = updates.slice(i, i + 500);
+    const { error } = await supabase.from('customers').upsert(
+      batch.map(u => ({
+        id: u.id,
         rfm_score: u.rfm_score,
         rfm_score_numeric: u.rfm_score_numeric,
         customer_segment: u.customer_segment,
         churn_risk: u.churn_risk,
-      }).eq('id', u.id);
-    }
+        predicted_next_visit: (u as any).predicted_next_visit ?? null,
+      })),
+      { onConflict: 'id' }
+    );
+    if (error) console.error(`[rfm-daily] batch upsert failed (offset ${i}):`, error.message);
   }
 
   return NextResponse.json({ processed, total: customers.length, segments: updates.reduce((acc: Record<string, number>, u) => { acc[u.customer_segment] = (acc[u.customer_segment] ?? 0) + 1; return acc; }, {}) });
