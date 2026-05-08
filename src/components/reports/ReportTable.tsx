@@ -45,12 +45,30 @@ const shimmerBar: React.CSSProperties = {
   backgroundSize: '200% 100%', animation: 'rt-shimmer 1.4s infinite',
 };
 
+// Sticky first-column styles — background must be set per-row to match alternating colors
+const stickyHdr: React.CSSProperties = {
+  position: 'sticky',
+  left: 0,
+  zIndex: 2,
+  background: '#29b6f6', // same as header
+  boxShadow: '2px 0 6px rgba(0,0,0,0.18)',
+};
+
+function stickyTd(rowBg: string): React.CSSProperties {
+  return {
+    position: 'sticky',
+    left: 0,
+    zIndex: 1,
+    background: rowBg,
+    boxShadow: '2px 0 4px rgba(0,0,0,0.08)',
+  };
+}
+
 export default function ReportTable({
   columns, rows, groupBy, totalsRow, onRowClick, loading,
   emptyIcon = '📋', emptyMessage = 'No data found.',
   sortField: extSortField, sortDir: extSortDir, onSort,
 }: ReportTableProps) {
-  // Internal sort state — used when no external props provided
   const [intSortKey, setIntSortKey] = useState<string | null>(null);
   const [intSortAsc, setIntSortAsc] = useState(true);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -90,34 +108,36 @@ export default function ReportTable({
     return map;
   }, [sorted, groupBy]);
 
-  function renderCell(col: Column, row: Record<string, unknown>) {
+  function renderCell(col: Column, row: Record<string, unknown>, ci: number, rowBg: string) {
     const v = row[col.key];
     const content = col.format ? col.format(v, row) : (v == null ? '—' : String(v));
+    const extra = ci === 0 ? stickyTd(rowBg) : {};
     return (
-      <td key={col.key} style={{ ...cell, textAlign: col.align ?? 'left', width: col.width }} onClick={() => onRowClick?.(row)}>
+      <td key={col.key} className="rpt-cell" style={{ ...cell, textAlign: col.align ?? 'left', width: col.width, ...extra }} onClick={() => onRowClick?.(row)}>
         {content}
       </td>
     );
   }
 
   function renderRow(row: Record<string, unknown>, i: number, indent?: boolean) {
+    const rowBg = i % 2 === 0 ? 'var(--bg-surface)' : 'var(--bg-elevated)';
     return (
       <tr key={i}
         onClick={() => onRowClick?.(row)}
-        style={{ background: i % 2 === 0 ? 'var(--bg-surface)' : 'var(--bg-elevated)', cursor: onRowClick ? 'pointer' : 'default' }}
+        style={{ background: rowBg, cursor: onRowClick ? 'pointer' : 'default' }}
         onMouseEnter={e => { if (onRowClick) (e.currentTarget as HTMLTableRowElement).style.background = 'var(--bg-hover)'; }}
-        onMouseLeave={e => { (e.currentTarget as HTMLTableRowElement).style.background = i % 2 === 0 ? 'var(--bg-surface)' : 'var(--bg-elevated)'; }}>
+        onMouseLeave={e => { (e.currentTarget as HTMLTableRowElement).style.background = rowBg; }}>
         {columns.map((col, ci) => {
           if (indent && ci === 0) {
             const v = row[col.key];
             const content = col.format ? col.format(v, row) : (v == null ? '—' : String(v));
             return (
-              <td key={col.key} style={{ ...cell, textAlign: col.align ?? 'left', width: col.width, paddingLeft: 24 }}>
+              <td key={col.key} className="rpt-cell" style={{ ...cell, ...stickyTd(rowBg), textAlign: col.align ?? 'left', width: col.width, paddingLeft: 24 }}>
                 <span style={{ color: 'var(--text-tertiary)', marginRight: 4 }}>├</span>{content}
               </td>
             );
           }
-          return renderCell(col, row);
+          return renderCell(col, row, ci, rowBg);
         })}
       </tr>
     );
@@ -125,67 +145,77 @@ export default function ReportTable({
 
   return (
     <>
-      <style>{`@keyframes rt-shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }`}</style>
+      <style>{`
+        @keyframes rt-shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+        @media (max-width: 768px) {
+          .rpt-cell { font-size: 12px !important; padding: 6px 8px !important; }
+          .rpt-hdr  { font-size: 11px !important; padding: 8px !important; }
+        }
+      `}</style>
       <div style={{ background: 'var(--bg-surface)', borderRadius: 10, overflow: 'hidden', boxShadow: 'var(--shadow-card)' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr>
-              {columns.map(col => (
-                <th key={col.key} style={{ ...hdr, textAlign: col.align ?? 'left', cursor: col.sortable ? 'pointer' : 'default', width: col.width }}
-                  onClick={() => col.sortable && handleSort(col.key)}>
-                  {col.label}
-                  {col.sortable && (
-                    <span style={{ marginLeft: 4, opacity: sortKey === col.key ? 1 : 0.4 }}>
-                      {sortKey === col.key ? (sortAsc ? '↑' : '↓') : '↕'}
-                    </span>
-                  )}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              Array.from({ length: 5 }).map((_, i) => (
-                <tr key={i} style={{ background: i % 2 === 0 ? 'var(--bg-surface)' : 'var(--bg-elevated)' }}>
-                  {columns.map(col => (
-                    <td key={col.key} style={cell}>
-                      <div style={{ ...shimmerBar, width: `${50 + Math.random() * 40}%` }} />
+        {/* Horizontal scroll wrapper — enables mobile swipe */}
+        <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' } as React.CSSProperties}>
+          <table style={{ minWidth: 700, width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr>
+                {columns.map((col, ci) => (
+                  <th key={col.key} className="rpt-hdr"
+                    style={{ ...hdr, textAlign: col.align ?? 'left', cursor: col.sortable ? 'pointer' : 'default', width: col.width, ...(ci === 0 ? stickyHdr : {}) }}
+                    onClick={() => col.sortable && handleSort(col.key)}>
+                    {col.label}
+                    {col.sortable && (
+                      <span style={{ marginLeft: 4, opacity: sortKey === col.key ? 1 : 0.4 }}>
+                        {sortKey === col.key ? (sortAsc ? '↑' : '↓') : '↕'}
+                      </span>
+                    )}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                Array.from({ length: 5 }).map((_, i) => (
+                  <tr key={i} style={{ background: i % 2 === 0 ? 'var(--bg-surface)' : 'var(--bg-elevated)' }}>
+                    {columns.map(col => (
+                      <td key={col.key} className="rpt-cell" style={cell}>
+                        <div style={{ ...shimmerBar, width: `${50 + Math.random() * 40}%` }} />
+                      </td>
+                    ))}
+                  </tr>
+                ))
+              ) : sorted.length === 0 ? (
+                <tr>
+                  <td colSpan={columns.length} style={{ padding: 48, textAlign: 'center', color: 'var(--text-tertiary)', fontSize: 13 }}>
+                    <div style={{ fontSize: 28, marginBottom: 8 }}>{emptyIcon}</div>
+                    {emptyMessage}
+                  </td>
+                </tr>
+              ) : grouped ? (
+                Array.from(grouped.entries()).map(([groupName, groupRows]) => (
+                  <React.Fragment key={groupName}>
+                    <tr style={{ background: 'var(--bg-overlay)', cursor: 'pointer' }} onClick={() => setCollapsed(c => { const n = new Set(c); n.has(groupName) ? n.delete(groupName) : n.add(groupName); return n; })}>
+                      <td colSpan={columns.length} style={{ ...cell, fontWeight: 700, color: 'var(--text-primary)' }}>
+                        {collapsed.has(groupName) ? '▶' : '▼'} {groupName} <span style={{ fontWeight: 400, color: 'var(--text-secondary)', fontSize: 11 }}>({groupRows.length})</span>
+                      </td>
+                    </tr>
+                    {!collapsed.has(groupName) && groupRows.map((row, i) => renderRow(row, i, true))}
+                  </React.Fragment>
+                ))
+              ) : (
+                sorted.map((row, i) => renderRow(row, i))
+              )}
+              {totalsRow && !loading && (
+                <tr>
+                  {columns.map((col, i) => (
+                    <td key={col.key} className="rpt-cell" style={{ ...totalsCell, textAlign: col.align ?? 'left', ...(i === 0 ? { position: 'sticky', left: 0, background: 'rgba(41,182,246,0.18)', zIndex: 1 } : {}) }}>
+                      {i === 0 ? 'Total' : (totalsRow[col.key] != null ? (col.format ? col.format(totalsRow[col.key], totalsRow) : String(totalsRow[col.key])) : '')}
                     </td>
                   ))}
                 </tr>
-              ))
-            ) : sorted.length === 0 ? (
-              <tr>
-                <td colSpan={columns.length} style={{ padding: 48, textAlign: 'center', color: 'var(--text-tertiary)', fontSize: 13 }}>
-                  <div style={{ fontSize: 28, marginBottom: 8 }}>{emptyIcon}</div>
-                  {emptyMessage}
-                </td>
-              </tr>
-            ) : grouped ? (
-              Array.from(grouped.entries()).map(([groupName, groupRows]) => (
-                <React.Fragment key={groupName}>
-                  <tr style={{ background: 'var(--bg-overlay)', cursor: 'pointer' }} onClick={() => setCollapsed(c => { const n = new Set(c); n.has(groupName) ? n.delete(groupName) : n.add(groupName); return n; })}>
-                    <td colSpan={columns.length} style={{ ...cell, fontWeight: 700, color: 'var(--text-primary)' }}>
-                      {collapsed.has(groupName) ? '▶' : '▼'} {groupName} <span style={{ fontWeight: 400, color: 'var(--text-secondary)', fontSize: 11 }}>({groupRows.length})</span>
-                    </td>
-                  </tr>
-                  {!collapsed.has(groupName) && groupRows.map((row, i) => renderRow(row, i, true))}
-                </React.Fragment>
-              ))
-            ) : (
-              sorted.map((row, i) => renderRow(row, i))
-            )}
-            {totalsRow && !loading && (
-              <tr>
-                {columns.map((col, i) => (
-                  <td key={col.key} style={{ ...totalsCell, textAlign: col.align ?? 'left' }}>
-                    {i === 0 ? 'Total' : (totalsRow[col.key] != null ? (col.format ? col.format(totalsRow[col.key], totalsRow) : String(totalsRow[col.key])) : '')}
-                  </td>
-                ))}
-              </tr>
-            )}
-          </tbody>
-        </table>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </>
   );
