@@ -6,12 +6,12 @@ import { track } from '@/lib/analytics';
 interface Decision { id: string; agent_type: string; reasoning: string; projected_impact_cents: number; confidence_score: number; created_at: string; status: string; decision_data: Record<string, unknown>; }
 interface AgentSummary { type: string; label: string; icon: string; desc: string; href: string; pending: number; last_run: string | null; enabled: boolean; }
 
-const TRUST_COPY = [
-  { days: 7, text: 'All decisions need your approval. Building trust.' },
-  { days: 30, text: 'Auto-approving decisions under $200 impact.' },
-  { days: 90, text: 'You set the thresholds.', link: '/pos/agents' },
-  { days: 180, text: 'Full autonomy mode available.' },
-];
+function getTrustMessage(daysSince: number, decisionCount: number): string {
+  if (daysSince < 7) return `Week 1: Every decision needs your approval. Aria is learning your business.`;
+  if (daysSince < 30) return `Building trust: Aria has made ${decisionCount} decisions. Auto-approve under A$200 when ready.`;
+  if (daysSince < 90) return 'Trusted: Set your auto-approve thresholds in Settings to run hands-free.';
+  return 'Full autonomy available: Aria can run with daily summaries only. Set thresholds to enable.';
+}
 
 const impactFmt = (cents: number) => cents >= 0 ? `+A$${(cents / 100).toFixed(0)}` : `-A$${(Math.abs(cents) / 100).toFixed(0)}`;
 const relTime = (d: string) => { const days = Math.floor((Date.now() - new Date(d).getTime()) / 86400000); return days === 0 ? 'Today' : `${days}d ago`; };
@@ -32,12 +32,18 @@ export default function AgentsDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [settingsDrawer, setSettingsDrawer] = useState<string | null>(null);
   const [settingsData, setSettingsData] = useState<Record<string, { enabled: boolean; auto_approve_below_cents: number }>>({});
+  const [businessCreatedAt, setBusinessCreatedAt] = useState<string | null>(null);
+  const [totalDecisionCount, setTotalDecisionCount] = useState(0);
 
   const loadAll = useCallback(async () => {
     setLoading(true);
-    const results = await Promise.all(
-      AGENT_DEFS.map(a => fetch(`/api/pos/agents/${a.type}?status=pending`).then(r => r.json()).catch(() => ({ decisions: [], last_run: null, settings: null })))
-    );
+    const [bizRes, ...results] = await Promise.all([
+      fetch('/api/pos/business').then(r => r.json()).catch(() => null),
+      ...AGENT_DEFS.map(a => fetch(`/api/pos/agents/${a.type}?status=pending`).then(r => r.json()).catch(() => ({ decisions: [], last_run: null, settings: null }))),
+    ]);
+    if (bizRes?.business?.created_at) setBusinessCreatedAt(bizRes.business.created_at);
+    const allCount = await fetch('/api/pos/agents/all?status=all').then(r => r.json()).then(d => (d.decisions ?? []).length).catch(() => 0);
+    setTotalDecisionCount(allCount);
     const sums: AgentSummary[] = AGENT_DEFS.map((a, i) => ({
       ...a, pending: results[i].decisions?.length ?? 0,
       last_run: results[i].last_run?.started_at ?? null,
@@ -72,15 +78,18 @@ export default function AgentsDashboardPage() {
     loadAll();
   }
 
-  // Trust ladder — compute from business creation (simplified)
-  const trustLevel = TRUST_COPY[0]; // default week 1; Phase 2 uses real business_age
+  const daysSinceBusiness = businessCreatedAt
+    ? Math.floor((Date.now() - new Date(businessCreatedAt).getTime()) / (86400000))
+    : 0;
+  const trustMessage = getTrustMessage(daysSinceBusiness, totalDecisionCount);
+  const trustIcon = daysSinceBusiness < 7 ? '🔒' : daysSinceBusiness < 30 ? '🌱' : daysSinceBusiness < 90 ? '✅' : '🤖';
 
   return (
     <div style={{ minHeight: '100%', background: 'var(--bg-base)', color: 'var(--text-primary)', fontFamily: "'Manrope',sans-serif", padding: '24px 28px' }}>
       {/* Trust ladder banner */}
       <div style={{ background: 'linear-gradient(135deg, rgba(124,58,237,0.14) 0%, rgba(167,139,250,0.07) 100%)', border: '1px solid rgba(167,139,250,0.2)', borderRadius: 12, padding: '12px 18px', marginBottom: 24, display: 'flex', alignItems: 'center', gap: 10 }}>
-        <span style={{ fontSize: 18 }}>🔒</span>
-        <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}><strong style={{ color: 'var(--text-primary)' }}>Trust mode:</strong> {trustLevel.text}</span>
+        <span style={{ fontSize: 18 }}>{trustIcon}</span>
+        <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}><strong style={{ color: 'var(--text-primary)' }}>Trust mode:</strong> {trustMessage}</span>
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>

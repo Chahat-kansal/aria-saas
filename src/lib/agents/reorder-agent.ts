@@ -34,17 +34,26 @@ export class ReorderAgent extends BaseAgent {
 
       if (!products?.length) return { decisions: [], errors: [], duration_ms: Date.now() - started };
 
-      // Fetch 30-day sales per product
+      // Fetch 30-day sales per product — two-step to exclude voided sales
       const cutoff = new Date(Date.now() - 30 * 86400000).toISOString();
-      const { data: saleItems } = await this.supabase.from('pos_sale_items')
-        .select('product_id,quantity')
+      const { data: recentSales } = await this.supabase.from('pos_sales')
+        .select('id')
+        .eq('business_id', business_id)
+        .neq('status', 'voided')
         .gte('created_at', cutoff)
-        .in('product_id', products.map(p => p.id))
-        .limit(10000);
+        .limit(2000);
+      const recentSaleIds = (recentSales ?? []).map(s => s.id);
 
       const sold30d = new Map<string, number>();
-      for (const si of (saleItems ?? [])) {
-        sold30d.set(si.product_id, (sold30d.get(si.product_id) ?? 0) + (si.quantity ?? 0));
+      if (recentSaleIds.length > 0) {
+        const { data: saleItems } = await this.supabase.from('pos_sale_items')
+          .select('product_id,quantity')
+          .in('sale_id', recentSaleIds)
+          .in('product_id', products.map(p => p.id))
+          .limit(10000);
+        for (const si of (saleItems ?? [])) {
+          sold30d.set(si.product_id, (sold30d.get(si.product_id) ?? 0) + (si.quantity ?? 0));
+        }
       }
 
       // Fetch suppliers

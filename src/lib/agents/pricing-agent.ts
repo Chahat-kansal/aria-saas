@@ -26,14 +26,28 @@ export class PricingAgent extends BaseAgent {
     if (!settings.enabled) return { decisions: [], errors: [], duration_ms: Date.now() - started };
 
     try {
-      // Fetch competitor cache for this business
-      const { data: compCache } = await this.supabase.from('competitor_price_cache')
-        .select('product_name,competitor_prices,own_price_cents,own_margin_pct')
+      // Fetch competitor cache — one row per competitor per product
+      const { data: compRows } = await this.supabase.from('competitor_price_cache')
+        .select('product_name,competitor_name,competitor_price_cents,own_price_cents,own_margin_pct')
         .eq('business_id', business_id)
         .gt('expires_at', new Date().toISOString())
-        .limit(500);
+        .limit(2000);
 
-      if (!compCache?.length) return { decisions: [], errors: [], duration_ms: Date.now() - started };
+      if (!compRows?.length) {
+        await this.logRun(business_id, { decisions: [], errors: [], duration_ms: Date.now() - started });
+        return { decisions: [], errors: [], duration_ms: Date.now() - started };
+      }
+
+      // Aggregate competitor prices per product
+      const productCompMap = new Map<string, { competitor_prices: number[]; own_price_cents: number; own_margin_pct: number }>();
+      for (const row of (compRows as Array<{ product_name: string; competitor_name: string; competitor_price_cents: number; own_price_cents: number; own_margin_pct: number }>)) {
+        if (!productCompMap.has(row.product_name)) {
+          productCompMap.set(row.product_name, { competitor_prices: [], own_price_cents: row.own_price_cents ?? 0, own_margin_pct: row.own_margin_pct ?? 0 });
+        }
+        if (row.competitor_price_cents) {
+          productCompMap.get(row.product_name)!.competitor_prices.push(row.competitor_price_cents / 100);
+        }
+      }
 
       // Get our products
       const { data: products } = await this.supabase.from('pos_products')
@@ -41,14 +55,14 @@ export class PricingAgent extends BaseAgent {
         .eq('business_id', business_id).eq('is_active', true).limit(500);
 
       const productByName = new Map((products ?? []).map(p => [p.name.toLowerCase(), p]));
+      const productIds = (products ?? []).map(p => p.id);
 
-      // 30-day velocity
+      // 30-day velocity — scope via product_ids (pos_sale_items has no business_id column)
       const cutoff14 = new Date(Date.now() - 14 * 86400000).toISOString();
       const cutoff28 = new Date(Date.now() - 28 * 86400000).toISOString();
-      const cutoff30 = new Date(Date.now() - 30 * 86400000).toISOString();
 
-      const { data: recent14 } = await this.supabase.from('pos_sale_items').select('product_id,quantity').gte('created_at', cutoff14).eq('business_id', business_id).limit(5000);
-      const { data: prev14 } = await this.supabase.from('pos_sale_items').select('product_id,quantity').gte('created_at', cutoff28).lt('created_at', cutoff14).eq('business_id', business_id).limit(5000);
+      const { data: recent14 } = await this.supabase.from('pos_sale_items').select('product_id,quantity').gte('created_at', cutoff14).in('product_id', productIds).limit(5000);
+      const { data: prev14 } = await this.supabase.from('pos_sale_items').select('product_id,quantity').gte('created_at', cutoff28).lt('created_at', cutoff14).in('product_id', productIds).limit(5000);
 
       const vel14 = new Map<string, number>();
       const vel14Prev = new Map<string, number>();
@@ -57,14 +71,15 @@ export class PricingAgent extends BaseAgent {
 
       const decisions: AgentDecisionInput[] = [];
 
-      for (const cc of (compCache as Array<{ product_name: string; competitor_prices: unknown; own_price_cents: number; own_margin_pct: number }>)) {
-        const compPrices: number[] = Array.isArray(cc.competitor_prices) ? cc.competitor_prices.map((c: { price_cents?: number }) => (c.price_cents ?? 0) / 100).filter(Boolean) : [];
+      for (const [productName, aggData] of productCompMap) {
+        const compPrices = aggData.competitor_prices;
         if (compPrices.length < MIN_COMPETITOR_POINTS) continue;
+        const cc = { product_name: productName, own_price_cents: aggData.own_price_cents, own_margin_pct: aggData.own_margin_pct };
 
         const product = productByName.get(cc.product_name.toLowerCase());
         if (!product) continue;
 
-        const ourPrice = product.price ?? (cc.own_price_cents / 100);
+        const ourPrice = (product.price as number | null) ?? (cc.own_price_cents / 100);
         const median = quantile(compPrices, 0.5);
         const p25 = quantile(compPrices, 0.25);
         const p75 = quantile(compPrices, 0.75);
