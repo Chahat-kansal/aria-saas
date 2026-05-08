@@ -46,17 +46,51 @@ export default function CustomerDetailPage() {
 
   const load = useCallback(() => {
     if (!id) return;
+    // Coordinate both fetches; generate insight after both complete
+    let custRef: Customer | null = null;
+    let salesRef: Sale[] = [];
+    let done = 0;
+
+    function tryInsight() {
+      done++;
+      if (done < 2 || !custRef) return;
+      const lastDate = salesRef[0]?.created_at ?? null;
+      const daysSince = lastDate ? Math.floor((Date.now() - new Date(lastDate).getTime()) / 86400000) : null;
+      const ltvComp = salesRef.reduce((s, sale) => s + (sale.total_amount ?? 0), 0);
+      const avgOrd = salesRef.length > 0 ? ltvComp / salesRef.length : 0;
+      const predictedDays = custRef.predicted_next_visit
+        ? Math.ceil((new Date(custRef.predicted_next_visit).getTime() - Date.now()) / 86400000)
+        : null;
+      fetch('/api/pos/customers/insight', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customer_name: custRef.name,
+          total_orders: salesRef.length,
+          ltv: ltvComp,
+          avg_order: avgOrd,
+          days_since_last_visit: daysSince,
+          segment: custRef.customer_segment ?? 'New',
+          churn_risk: custRef.churn_risk ?? 0,
+          predicted_next_visit_days: predictedDays,
+        }),
+      }).then(r => r.json()).then(d => { setInsight(d.bullets ?? null); setInsightLoading(false); })
+        .catch(() => setInsightLoading(false));
+    }
+
     fetch(`/api/pos/customers?id=${id}`).then(r => r.json()).then(d => {
-      const c = d.customer ?? null;
-      setCustomer(c);
-      setNotes(c?.notes ?? '');
-      setInsightLoading(false);
+      custRef = d.customer ?? null;
+      setCustomer(custRef);
+      setNotes(custRef?.notes ?? '');
       setLoading(false);
-    }).catch(() => setLoading(false));
+      tryInsight();
+    }).catch(() => { setLoading(false); tryInsight(); });
 
     fetch(`/api/pos/sales?customer_id=${id}&limit=200`).then(r => r.json()).then(d => {
-      setSales(d.sales ?? []);
-    }).catch(() => {});
+      salesRef = d.sales ?? [];
+      setSales(salesRef);
+      tryInsight();
+    }).catch(() => tryInsight());
   }, [id]);
 
   useEffect(() => { load(); }, [load]);
@@ -84,12 +118,14 @@ export default function CustomerDetailPage() {
   const seg = customer.customer_segment ?? 'New';
   const segColor = SEGMENT_COLORS[seg] ?? '#94A3B8';
   const churnRisk = customer.churn_risk ?? 0;
-  const churnColor = churnRisk > 66 ? C.red : churnRisk > 33 ? C.amber : C.green;
+  const churnCssVar = churnRisk > 60 ? 'var(--destructive)' : churnRisk > 30 ? 'var(--warning)' : 'var(--success)';
+  const churnLabel = churnRisk > 60 ? 'High' : churnRisk > 30 ? 'Medium' : 'Low';
   const totalOrders = sales.length;
   // Compute LTV directly from fetched sales using total_amount (dollars, no /100)
   const ltv = sales.reduce((sum, s) => sum + (s.total_amount ?? 0), 0);
   const avgOrder = totalOrders > 0 ? ltv / totalOrders : 0;
   const lastSale = sales[0];
+  const daysSinceLast = lastSale ? Math.floor((Date.now() - new Date(lastSale.created_at).getTime()) / 86400000) : null;
   const sparkData = [...sales].reverse().map((s, i) => ({ i, v: s.total_amount }));
 
   return (
@@ -124,7 +160,11 @@ export default function CustomerDetailPage() {
             { label: 'Total Orders', value: String(totalOrders), color: C.text },
             { label: 'Avg Order', value: `A$${avgOrder.toFixed(2)}`, color: C.text },
             { label: 'Last Visit', value: lastSale ? relTime(lastSale.created_at) : 'Never', color: C.text },
-            { label: 'Predicted Next', value: customer.predicted_next_visit ? relTime(customer.predicted_next_visit) : '—', color: C.muted },
+            {
+              label: 'Predicted Next',
+              value: customer.predicted_next_visit ? relTime(customer.predicted_next_visit) : 'Not enough visits',
+              color: customer.predicted_next_visit ? C.text : C.dim,
+            },
           ].map(m => (
             <div key={m.label} style={{ background: 'var(--bg-surface)', borderRadius: 12, padding: '13px 16px' }}>
               <p style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: C.dim, marginBottom: 5 }}>{m.label}</p>
@@ -138,10 +178,16 @@ export default function CustomerDetailPage() {
           <div style={{ flex: 1 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
               <span style={{ fontSize: 12, fontWeight: 700, color: C.text }}>Churn Risk</span>
-              <span style={{ fontSize: 12, fontWeight: 700, color: churnColor }}>{churnRisk > 66 ? 'High' : churnRisk > 33 ? 'Medium' : 'Low'} ({churnRisk}%)</span>
+              <span style={{ fontSize: 12, fontWeight: 700, color: churnCssVar }}>{churnLabel} ({churnRisk}%)</span>
             </div>
             <div style={{ height: 8, borderRadius: 4, background: 'var(--bg-overlay)', overflow: 'hidden' }}>
-              <div style={{ height: 8, borderRadius: 4, width: `${churnRisk}%`, background: churnColor, transition: 'width 600ms' }} />
+              <div style={{ height: 8, borderRadius: 4, width: `${churnRisk}%`, background: churnCssVar, transition: 'width 600ms' }} />
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 6 }}>
+              {churnRisk <= 30 && daysSinceLast !== null && `Risk: Low — likely to return soon · ${daysSinceLast}d since last visit`}
+              {churnRisk > 30 && churnRisk <= 60 && daysSinceLast !== null && `Risk: Medium — hasn't visited in ${daysSinceLast} days`}
+              {churnRisk > 60 && daysSinceLast !== null && `Risk: High — ${daysSinceLast} days since last visit, intervention needed`}
+              {daysSinceLast === null && 'No purchase history'}
             </div>
           </div>
           {sparkData.length >= 2 && (
