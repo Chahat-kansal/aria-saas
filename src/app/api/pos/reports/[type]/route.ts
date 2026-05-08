@@ -80,6 +80,7 @@ async function getDashboard(
   let q = supabase.from('pos_sales')
     .select('id,total_amount,tax_amount,discount_amount,payment_method,created_at,outlet_id,served_by,pos_customers(name)')
     .eq('business_id', bid)
+    .neq('status', 'voided')
     .gte('created_at', fromISO)
     .lte('created_at', toISO);
   if (outletId) q = q.eq('outlet_id', outletId);
@@ -246,6 +247,7 @@ async function getCashier(
   const { data: sales } = await supabase.from('pos_sales')
     .select('id,total_amount,served_by,payment_method,created_at')
     .eq('business_id', bid)
+    .neq('status', 'voided')
     .gte('created_at', fromISO).lte('created_at', toISO)
     .limit(2000);
 
@@ -256,47 +258,8 @@ async function getCashier(
     .in('action_type', ['void','refund','no_sale_open','discount_apply'])
     .limit(2000);
 
-  // Resolve cashier IDs → display names
+  // served_by is already a text display name — no join needed
   const salesTyped = (sales ?? []) as Array<{ id: string; total_amount: number; served_by: string; payment_method: string; created_at: string }>;
-  const rawIds = [...new Set(salesTyped.map(s => s.served_by).filter(Boolean))];
-
-  const profileMap: Record<string, string> = {};
-  if (rawIds.length > 0) {
-    let profilesResolved = false;
-    // Try profiles table (standard Supabase pattern)
-    try {
-      const { data: profiles } = await supabase
-        .from('profiles')
-        .select('id,full_name,display_name,email')
-        .in('id', rawIds);
-      if (profiles && profiles.length > 0) {
-        for (const p of (profiles as Array<{ id: string; full_name?: string; display_name?: string; email?: string }>)) {
-          profileMap[p.id] = p.full_name || p.display_name || (p.email ? p.email.split('@')[0] : p.id.slice(0, 8));
-        }
-        profilesResolved = true;
-      }
-    } catch {}
-
-    if (!profilesResolved) {
-      // Fallback: try pos_users table
-      try {
-        const { data: posUsers } = await supabase
-          .from('pos_users')
-          .select('id,name,display_name,pin_label')
-          .in('id', rawIds);
-        if (posUsers && posUsers.length > 0) {
-          for (const u of (posUsers as Array<{ id: string; name?: string; display_name?: string; pin_label?: string }>)) {
-            profileMap[u.id] = u.name || u.display_name || u.pin_label || u.id.slice(0, 8);
-          }
-        }
-      } catch {}
-    }
-  }
-
-  function resolveName(id: string | null | undefined): string {
-    if (!id) return 'Unknown';
-    return profileMap[id] ?? (id.length === 36 ? id.slice(0, 8) : id);
-  }
 
   const cashierMap = new Map<string, {
     name: string; sales: number; transactions: number;
@@ -305,9 +268,7 @@ async function getCashier(
 
   for (const s of salesTyped) {
     const key = s.served_by ?? 'Unknown';
-    const displayName = resolveName(s.served_by);
-    const e = cashierMap.get(key) ?? { name: displayName, sales: 0, transactions: 0, voids: 0, refunds: 0, noSaleOpens: 0, discountTotal: 0 };
-    e.name = displayName;
+    const e = cashierMap.get(key) ?? { name: key, sales: 0, transactions: 0, voids: 0, refunds: 0, noSaleOpens: 0, discountTotal: 0 };
     e.sales += s.total_amount ?? 0;
     e.transactions += 1;
     cashierMap.set(key, e);
@@ -315,7 +276,7 @@ async function getCashier(
 
   for (const a of (actions ?? []) as Array<{ action_type: string; user_id: string; created_at: string }>) {
     const key = a.user_id ?? 'Unknown';
-    const e = cashierMap.get(key) ?? { name: resolveName(a.user_id), sales: 0, transactions: 0, voids: 0, refunds: 0, noSaleOpens: 0, discountTotal: 0 };
+    const e = cashierMap.get(key) ?? { name: key, sales: 0, transactions: 0, voids: 0, refunds: 0, noSaleOpens: 0, discountTotal: 0 };
     if (a.action_type === 'void')        e.voids += 1;
     else if (a.action_type === 'refund') e.refunds += 1;
     else if (a.action_type === 'no_sale_open') e.noSaleOpens += 1;
@@ -348,7 +309,7 @@ async function getCommission(
   const toISO   = toAESTEnd(to);
 
   const { data: rules } = await supabase.from('pos_commission_rules').select('*').eq('business_id', bid).is('effective_until', null).limit(50);
-  const { data: sales }  = await supabase.from('pos_sales').select('id,total_amount,served_by,created_at').eq('business_id', bid).gte('created_at', fromISO).lte('created_at', toISO).limit(2000);
+  const { data: sales }  = await supabase.from('pos_sales').select('id,total_amount,served_by,created_at').eq('business_id', bid).neq('status', 'voided').gte('created_at', fromISO).lte('created_at', toISO).limit(2000);
 
   const staffMap = new Map<string, { name: string; total: number }>();
   for (const s of (sales ?? []) as Array<{ id: string; total_amount: number; served_by: string }>) {
@@ -525,7 +486,7 @@ async function getBriefing(supabase: ReturnType<typeof createServerSupabaseClien
   if (cached) return NextResponse.json({ bullets: cached.bullets });
 
   const from7d = buildDateRange('week').from;
-  const { data: salesW } = await supabase.from('pos_sales').select('total_amount,created_at').eq('business_id', bid).gte('created_at', from7d).limit(500);
+  const { data: salesW } = await supabase.from('pos_sales').select('total_amount,created_at').eq('business_id', bid).neq('status', 'voided').gte('created_at', from7d).limit(500);
   const revenue7d = ((salesW ?? []) as Array<{ total_amount: number }>).reduce((s, r) => s + (r.total_amount ?? 0), 0);
 
   const { data: lowStock } = await supabase.from('pos_products').select('name,stock_quantity,low_stock_threshold').eq('business_id', bid).eq('is_active', true).lt('stock_quantity', 5).limit(5);

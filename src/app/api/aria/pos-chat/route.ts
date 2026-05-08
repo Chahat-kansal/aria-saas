@@ -132,27 +132,32 @@ export async function POST(req: Request) {
     supabase.from('pos_sales')
       .select('id,total_amount,payment_method,created_at,served_by')
       .eq('business_id', biz.id)
+      .neq('status', 'voided')
       .gte('created_at', todayStart.toISOString())
       .limit(200),
     supabase.from('pos_sales')
       .select('id,total_amount')
       .eq('business_id', biz.id)
+      .neq('status', 'voided')
       .gte('created_at', yesterdayStart.toISOString())
       .lt('created_at', todayStart.toISOString())
       .limit(200),
     supabase.from('pos_sales')
       .select('total_amount')
       .eq('business_id', biz.id)
+      .neq('status', 'voided')
       .gte('created_at', weekStart.toISOString())
       .limit(500),
     supabase.from('pos_sales')
       .select('total_amount')
       .eq('business_id', biz.id)
+      .neq('status', 'voided')
       .gte('created_at', monthStart.toISOString())
       .limit(500),
     supabase.from('pos_sales')
       .select('total_amount')
       .eq('business_id', biz.id)
+      .neq('status', 'voided')
       .gte('created_at', lastMonthStart.toISOString())
       .lte('created_at', lastMonthEnd.toISOString())
       .limit(500),
@@ -178,42 +183,43 @@ export async function POST(req: Request) {
     supabase.from('pos_sales')
       .select('total_amount,created_at')
       .eq('business_id', biz.id)
+      .neq('status', 'voided')
       .gte('created_at', thirtyDaysAgo.toISOString())
       .limit(1000),
     supabase.from('pos_sales')
       .select('customer_id,created_at')
       .eq('business_id', biz.id)
+      .neq('status', 'voided')
       .gte('created_at', thirtyDaysAgo.toISOString())
       .not('customer_id', 'is', null)
       .limit(1000),
     getWeatherForecast(biz.city || 'Melbourne').catch(() => []),
   ])
 
-  // All monetary values in DB are dollars — multiply by 100 to work as cents internally
-  const toCents = (dollars: number) => Math.round((dollars || 0) * 100)
-  const getTotal = (sales: any[] | null) =>
-    (sales || []).reduce((s, x) => s + toCents(x.total_amount), 0)
-  const fmt = (cents: number) => (cents / 100).toFixed(2)
+  // All values are already in dollars — no conversion needed
+  const sumRevenue = (sales: any[] | null) =>
+    (sales || []).reduce((s, x) => s + (x.total_amount ?? 0), 0)
+  const fmt = (n: number) => (n ?? 0).toFixed(2)
 
-  const todayRevenueCents   = getTotal(todaySales)
-  const todayCount          = (todaySales || []).length
-  const todayAvgCents       = todayCount > 0 ? todayRevenueCents / todayCount : 0
-  const yesterdayRevenueCents = getTotal(yesterdaySales)
-  const weekRevenueCents    = getTotal(weekSales)
-  const monthRevenueCents   = getTotal(monthSales)
-  const lastMonthRevenueCents = getTotal(lastMonthSales)
+  const todayRevenue      = sumRevenue(todaySales)
+  const todayCount        = (todaySales || []).length
+  const todayAvg          = todayCount > 0 ? todayRevenue / todayCount : 0
+  const yesterdayRevenue  = sumRevenue(yesterdaySales)
+  const weekRevenue       = sumRevenue(weekSales)
+  const monthRevenue      = sumRevenue(monthSales)
+  const lastMonthRevenue  = sumRevenue(lastMonthSales)
 
-  const revenueChangePct = yesterdayRevenueCents > 0
-    ? ((todayRevenueCents - yesterdayRevenueCents) / yesterdayRevenueCents * 100) : 0
-  const monthChangePct = lastMonthRevenueCents > 0
-    ? ((monthRevenueCents - lastMonthRevenueCents) / lastMonthRevenueCents * 100) : 0
+  const revenueChangePct = yesterdayRevenue > 0
+    ? ((todayRevenue - yesterdayRevenue) / yesterdayRevenue * 100) : 0
+  const monthChangePct = lastMonthRevenue > 0
+    ? ((monthRevenue - lastMonthRevenue) / lastMonthRevenue * 100) : 0
 
   const productMap: Record<string, { qty: number; revenue: number }> = {}
   for (const item of (topProducts || [])) {
     if (!item.product_name) continue
     if (!productMap[item.product_name]) productMap[item.product_name] = { qty: 0, revenue: 0 }
     productMap[item.product_name].qty += item.quantity || 0
-    productMap[item.product_name].revenue += toCents(item.line_total)
+    productMap[item.product_name].revenue += item.line_total ?? 0
   }
   const topProductsList = Object.entries(productMap)
     .sort((a, b) => b[1].revenue - a[1].revenue)
@@ -223,26 +229,26 @@ export async function POST(req: Request) {
   const paymentBreakdown: Record<string, number> = {}
   for (const sale of (todaySales || [])) {
     const method = sale.payment_method || 'cash'
-    paymentBreakdown[method] = (paymentBreakdown[method] || 0) + toCents(sale.total_amount)
+    paymentBreakdown[method] = (paymentBreakdown[method] || 0) + (sale.total_amount ?? 0)
   }
 
   const hourlyToday: Record<number, number> = {}
   for (const sale of (todaySales || [])) {
     const hour = new Date(sale.created_at).getHours()
-    hourlyToday[hour] = (hourlyToday[hour] || 0) + toCents(sale.total_amount)
+    hourlyToday[hour] = (hourlyToday[hour] || 0) + (sale.total_amount ?? 0)
   }
 
   // 30-day aggregations
-  const thirtyDayRevenue = (salesLast30 ?? []).reduce((s, x) => s + toCents(x.total_amount), 0)
-  const thirtyDayCount = (salesLast30 ?? []).length
-  const thirtyDayAvg = thirtyDayCount > 0 ? thirtyDayRevenue / thirtyDayCount : 0
+  const thirtyDayRevenue = (salesLast30 ?? []).reduce((s, x) => s + (x.total_amount ?? 0), 0)
+  const thirtyDayCount   = (salesLast30 ?? []).length
+  const thirtyDayAvg     = thirtyDayCount > 0 ? thirtyDayRevenue / thirtyDayCount : 0
 
   const uniqueCustomers = new Set((customerActivity ?? []).map((s: any) => s.customer_id)).size
 
   const dayMap: Record<number, number> = {}
   for (const sale of (salesLast30 ?? [])) {
     const dow = new Date(sale.created_at).getDay()
-    dayMap[dow] = (dayMap[dow] ?? 0) + toCents(sale.total_amount)
+    dayMap[dow] = (dayMap[dow] ?? 0) + (sale.total_amount ?? 0)
   }
   const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
   const salesByDay = Object.entries(dayMap)
@@ -265,14 +271,14 @@ LAST 30 DAYS:
   ${salesByDay.join(', ') || 'No data'}
 
 TODAY (${new Date().toLocaleDateString('en-AU')}):
-  Revenue: A$${fmt(todayRevenueCents)} (${revenueChangePct >= 0 ? '+' : ''}${revenueChangePct.toFixed(1)}% vs yesterday)
-  Transactions: ${todayCount} (avg A$${fmt(todayAvgCents)})
-  Yesterday: A$${fmt(yesterdayRevenueCents)}, ${(yesterdaySales || []).length} transactions
+  Revenue: A$${fmt(todayRevenue)} (${revenueChangePct >= 0 ? '+' : ''}${revenueChangePct.toFixed(1)}% vs yesterday)
+  Transactions: ${todayCount} (avg A$${fmt(todayAvg)})
+  Yesterday: A$${fmt(yesterdayRevenue)}, ${(yesterdaySales || []).length} transactions
   Payment breakdown: ${Object.entries(paymentBreakdown).map(([m, v]) => `${m}: A$${fmt(v)}`).join(', ') || 'No sales yet'}
 
-THIS WEEK: A$${fmt(weekRevenueCents)}
-THIS MONTH: A$${fmt(monthRevenueCents)} (${monthChangePct >= 0 ? '+' : ''}${monthChangePct.toFixed(1)}% vs last month)
-LAST MONTH: A$${fmt(lastMonthRevenueCents)}
+THIS WEEK: A$${fmt(weekRevenue)}
+THIS MONTH: A$${fmt(monthRevenue)} (${monthChangePct >= 0 ? '+' : ''}${monthChangePct.toFixed(1)}% vs last month)
+LAST MONTH: A$${fmt(lastMonthRevenue)}
 
 TOP PRODUCTS THIS WEEK:
 ${topProductsList.map(p => `  ${p.rank}. ${p.name}: ${p.qty} sold, A$${fmt(p.revenue)} revenue`).join('\n') || '  No sales data yet'}
@@ -425,8 +431,8 @@ TONE: Direct, specific, Australian English, A$ always.`
         current_stock: p.stock_quantity,
         suggested_qty: 24,
         manual_qty: null,
-        unit_cost_cents: toCents(p.cost_price),
-        total_cost_cents: 24 * toCents(p.cost_price),
+        unit_cost_cents: Math.round((p.cost_price ?? 0) * 100),
+        total_cost_cents: 24 * Math.round((p.cost_price ?? 0) * 100),
         reason: 'Low stock — auto-ordered by Aria',
       }))
       if (items.length > 0) {
