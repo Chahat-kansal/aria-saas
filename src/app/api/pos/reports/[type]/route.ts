@@ -156,7 +156,10 @@ async function getDashboard(
 
   let insight: { bullets: string[] } | null = null;
   if (withInsight) {
-    const res = await generateInsight({ business_id: bid, context: `sales dashboard ${from} to ${to}`, data: { revenue, count, customers, daily: daily.slice(-7), topProducts: topProducts.slice(0, 5) }, maxBullets: 2 });
+    const bestDay  = daily.length > 0 ? daily.reduce((b, d) => d.revenue > b.revenue ? d : b) : null;
+    const worstDay = daily.length > 0 ? daily.reduce((w, d) => d.revenue < w.revenue ? d : w) : null;
+    const ctx = `sales_dashboard period=${from}_to_${to} revenue=$${revenue.toFixed(0)} transactions=${count} avg_sale=$${avgSale.toFixed(2)} top_product="${topProducts[0]?.name ?? ''}" top_product_revenue=$${(topProducts[0]?.revenue ?? 0).toFixed(0)} best_day="${bestDay?.date ?? ''}" worst_day="${worstDay?.date ?? ''}"`;
+    const res = await generateInsight({ business_id: bid, context: ctx, data: { revenue, count, topProducts: topProducts.slice(0, 5) }, maxBullets: 2 });
     insight = { bullets: res.bullets };
   }
 
@@ -223,13 +226,17 @@ async function getInventory(
     return (a.days_of_stock ?? 999) - (b.days_of_stock ?? 999);
   });
 
-  const criticalCount = inventory.filter(i => i.status === 'critical').length;
-  const deadValue     = inventory.filter(i => i.status === 'dead').reduce((s, i) => s + i.value_cost, 0);
-  const reorderTop    = inventory.filter(i => i.status === 'critical').slice(0, 3).map(i => i.name);
+  const criticalItems = inventory.filter(i => i.status === 'critical');
+  const amberItems    = inventory.filter(i => i.status === 'low');
+  const deadItems     = inventory.filter(i => i.status === 'dead');
+  const criticalCount = criticalItems.length;
+  const deadValue     = deadItems.reduce((s, i) => s + i.value_cost, 0);
+  const reorderTop    = criticalItems.slice(0, 3).map(i => i.name);
 
   let insight: { bullets: string[] } | null = null;
   if (bid) {
-    const res = await generateInsight({ business_id: bid, context: 'inventory report', data: { criticalCount, deadValue, reorderTop }, maxBullets: 2 });
+    const ctx = `inventory_report critical_count=${criticalCount} amber_count=${amberItems.length} dead_stock_count=${deadItems.length} dead_stock_value=$${deadValue.toFixed(0)} top_critical="${criticalItems[0]?.name ?? ''}" days_left=${criticalItems[0]?.days_of_stock?.toFixed(1) ?? 'N/A'} top_dead="${deadItems[0]?.name ?? ''}" dead_value_each=$${(deadItems[0]?.value_cost ?? 0).toFixed(0)}`;
+    const res = await generateInsight({ business_id: bid, context: ctx, data: { criticalCount, deadValue, reorderTop, count: inventory.length }, maxBullets: 2 });
     insight = { bullets: res.bullets };
   }
 
@@ -290,10 +297,13 @@ async function getCashier(
   const top = rows[0];
   const avgVoids = rows.reduce((s, r) => s + r.voids, 0) / Math.max(rows.length, 1);
   const watch = rows.filter(r => r.voids > avgVoids * 2 && r.voids >= 3)[0];
+  const mostVoidsRow = rows.reduce((m, r) => (m && m.voids >= r.voids) ? m : r, rows[0]);
+  const avgTransaction = rows.length > 0 ? rows.reduce((s, r) => s + r.avg_sale, 0) / rows.length : 0;
 
   let insight: { bullets: string[] } | null = null;
   if (bid) {
-    const res = await generateInsight({ business_id: bid, context: 'cashier report', data: { top: top ? { name: top.name, sales: top.sales, transactions: top.transactions } : null, watch: watch ? { name: watch.name, voids: watch.voids, avg: Math.round(avgVoids) } : null }, maxBullets: 2 });
+    const ctx = `cashier_report top_cashier="${top?.name ?? ''}" revenue=$${(top?.sales ?? 0).toFixed(0)} top_transactions=${top?.transactions ?? 0} most_voids="${mostVoidsRow?.name ?? ''}" void_count=${mostVoidsRow?.voids ?? 0} avg_void_benchmark=${avgVoids.toFixed(1)} avg_transaction=$${avgTransaction.toFixed(2)} cashier_count=${rows.length}`;
+    const res = await generateInsight({ business_id: bid, context: ctx, data: { top_cashier: top?.name, revenue: top?.sales, count: rows.length }, maxBullets: 2 });
     insight = { bullets: res.bullets };
   }
 
@@ -462,7 +472,12 @@ async function getAdvanced(
 
   let insight: { bullets: string[] } | null = null;
   if (bid && data.length > 0) {
-    const res = await generateInsight({ business_id: bid, context: `advanced report ${reportType}`, data: { reportType, groupBy, topRows: data.slice(0, 5) }, maxBullets: 3 });
+    const typedData = data as Array<{ revenue?: number; profit?: number; name?: string }>;
+    const totRevenue = typedData.reduce((s, r) => s + (r.revenue ?? 0), 0);
+    const totProfit  = typedData.reduce((s, r) => s + (r.profit ?? 0), 0);
+    const profitPct  = totRevenue > 0 ? (totProfit / totRevenue * 100) : 0;
+    const ctx = `advanced_report type=${reportType} group_by=${groupBy ?? 'none'} row_count=${data.length} total_revenue=$${totRevenue.toFixed(0)} total_profit=$${totProfit.toFixed(0)} profit_pct=${profitPct.toFixed(1)}% top_row="${typedData[0]?.name ?? ''}" top_revenue=$${(typedData[0]?.revenue ?? 0).toFixed(0)}`;
+    const res = await generateInsight({ business_id: bid, context: ctx, data: { revenue: totRevenue, count: data.length, topProducts: typedData.slice(0, 3) }, maxBullets: 3 });
     insight = { bullets: res.bullets };
   }
 

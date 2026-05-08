@@ -17,10 +17,36 @@ interface InsightOpts {
   style?: 'concise' | 'narrative';
 }
 
-const SYSTEM = `You are Aria, an AI advisor for an Australian retail business (focus: liquor/bottle shops). Be specific, use numbers from the data, max 18 words per bullet, Australian English (no z's). Reference exact figures, dates, names where present. Tone: confident, not corporate. Like a sharp friend who knows retail, not a consultant. Return ONLY valid JSON: {"bullets": ["...", "..."]}. No preamble. No markdown. No code fences.`;
+const SYSTEM = `You are Aria, an AI advisor for an Australian retail business (focus: liquor/bottle shops). Be specific, use numbers from the data, max 20 words per bullet, Australian English (no z's). Reference exact figures, dates, names where present. Tone: confident, not corporate. Like a sharp friend who knows retail, not a consultant.
+
+Each bullet MUST contain:
+1. A specific observation with a number.
+2. The implication or recommended action.
+
+Examples of GOOD bullets:
+"Carlton Dry earned $2,840 last month — your #1 earner, consider featuring it in promotions."
+"Dead stock worth $4,200 is tying up cash — run a clearance before end of quarter."
+
+Examples of BAD bullets (too vague, never produce these):
+"Consider reviewing your inventory levels."
+"Sales performance shows mixed results across categories."
+
+Return ONLY valid JSON: {"bullets": ["...", "..."]}. No preamble. No markdown. No code fences.`;
+
+// Extracts the key metrics that determine insight quality so the cache busts
+// when meaningful data changes (new sale, stock change) but not on noise.
+function dataFingerprint(data: unknown): string {
+  const d = (data ?? {}) as Record<string, unknown>;
+  const topProds = (d.top_products ?? d.topProducts) as Array<{ name?: string }> | undefined;
+  return JSON.stringify({
+    total: Math.round(Number(d.total_revenue ?? d.revenue ?? d.total_transactions ?? d.count ?? 0)),
+    top: String(topProds?.[0]?.name ?? d.top_cashier ?? ''),
+    count: Number(d.row_count ?? d.count ?? (d.items as unknown[] | undefined)?.length ?? 0),
+  });
+}
 
 function cacheKey(business_id: string, context: string, data: unknown): string {
-  const raw = business_id + context + JSON.stringify(data);
+  const raw = business_id + context + dataFingerprint(data);
   return createHash('sha256').update(raw).digest('hex');
 }
 
@@ -57,7 +83,7 @@ export async function generateInsight(opts: InsightOpts): Promise<InsightResult>
 
     const msg = await client.messages.create({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 256,
+      max_tokens: 300,
       system: SYSTEM,
       messages: [{
         role: 'user',
