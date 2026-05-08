@@ -10,6 +10,7 @@ export default function PricingAgentPage() {
   const [lastRun, setLastRun] = useState<{ started_at: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
+  const [toast, setToast] = useState<{ message: string; ok: boolean } | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [confirmId, setConfirmId] = useState<string | null>(null);
 
@@ -26,8 +27,19 @@ export default function PricingAgentPage() {
 
   async function runNow() {
     setRunning(true);
-    await fetch('/api/pos/agents/pricing', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'run_now' }) });
-    setRunning(false); load();
+    try {
+      const res = await fetch('/api/pos/agents/pricing', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'run_now' }) });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Run failed');
+      const n = (data.decisions ?? []).length;
+      setToast({ message: n > 0 ? `Aria found ${n} suggestion${n !== 1 ? 's' : ''}` : 'Prices check complete — all optimal', ok: true });
+    } catch {
+      setToast({ message: 'Run failed — check logs', ok: false });
+    } finally {
+      setRunning(false);
+      load();
+      setTimeout(() => setToast(null), 3500);
+    }
   }
 
   async function doAction(id: string, action: 'approve' | 'reject' | 'snooze') {
@@ -148,6 +160,12 @@ export default function PricingAgentPage() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {toast && (
+        <div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 100, background: toast.ok ? '#34D399' : '#F87171', color: '#000', padding: '12px 20px', borderRadius: 12, fontSize: 13, fontWeight: 600, boxShadow: '0 4px 20px rgba(0,0,0,0.3)', maxWidth: 300 }}>
+          {toast.message}
         </div>
       )}
 

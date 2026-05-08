@@ -4,6 +4,7 @@ export const maxDuration = 300;
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { runAgent } from '@/lib/agents/orchestrator';
+import { generateInsight } from '@/lib/aria-insights';
 import type { AgentType } from '@/lib/agents/types';
 
 type Params = { params: Promise<{ task: string }> };
@@ -12,15 +13,15 @@ const TASK_TO_AGENT: Record<string, AgentType | null> = {
   'reorder-daily': 'reorder',
   'pricing-daily': 'pricing',
   'schedule-weekly': 'schedule',
-  'briefing-daily': null, // handled separately
+  'briefing-daily': null,
 };
 
 export async function GET(req: Request, { params }: Params) {
   const { task } = await params;
 
-  // Verify cron secret
-  const auth = req.headers.get('authorization');
-  if (auth !== `Bearer ${process.env.CRON_SECRET}` && process.env.NODE_ENV !== 'development') {
+  const cronSecret = req.headers.get('x-cron-secret')
+    ?? req.headers.get('authorization')?.replace('Bearer ', '');
+  if (cronSecret !== process.env.CRON_SECRET && process.env.NODE_ENV !== 'development') {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -31,54 +32,85 @@ export async function GET(req: Request, { params }: Params) {
   const agentType = TASK_TO_AGENT[task];
   const supabase = createServerSupabaseClient();
 
-  // Fetch all businesses with this agent enabled
-  let businessIds: string[] = [];
-
-  if (agentType) {
-    const { data: settings } = await supabase.from('agent_settings')
-      .select('business_id')
-      .eq('agent_type', agentType)
-      .eq('enabled', true);
-
-    if (settings?.length) {
-      businessIds = settings.map(s => s.business_id);
-    } else {
-      // If no settings, run for all active businesses (default enabled)
-      const { data: bizList } = await supabase.from('businesses').select('id').eq('is_active', true).limit(1000);
-      businessIds = (bizList ?? []).map(b => b.id);
-    }
-  }
-
   if (task === 'briefing-daily') {
-    // Trigger briefing cache refresh for all businesses
     const { data: bizList } = await supabase.from('businesses').select('id').eq('is_active', true).limit(1000);
-    const ids = (bizList ?? []).map(b => b.id);
-    for (const bid of ids) {
-      await supabase.from('aria_briefings_cache').delete()
-        .eq('business_id', bid)
-        .eq('briefing_date', new Date().toISOString().split('T')[0]); // clear cache so next request generates fresh
+    const businesses = bizList ?? [];
+    let processed = 0;
+    let errors = 0;
+
+    for (const business of businesses) {
+      try {
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        const from = new Date(yesterday.setHours(0, 0, 0, 0)).toISOString();
+        const to = new Date(yesterday.setHours(23, 59, 59, 999)).toISOString();
+
+        const { data: sales } = await supabase
+          .from('pos_sales')
+          .select('total_amount, served_by, outlet_id')
+          .eq('business_id', business.id)
+          .neq('status', 'voided')
+          .gte('created_at', from)
+          .lte('created_at', to);
+
+        const revenue = (sales ?? []).reduce((s, r) => s + (r.total_amount ?? 0), 0);
+
+        const { bullets } = await generateInsight({
+          business_id: business.id,
+          context: `daily_briefing date=${from.split('T')[0]} revenue=$${revenue.toFixed(0)} transactions=${sales?.length ?? 0}`,
+          data: { revenue, transactions: sales?.length ?? 0 },
+          maxBullets: 3,
+          realtime: true,
+        });
+
+        await supabase.from('aria_briefings_cache').upsert({
+          business_id: business.id,
+          briefing_date: from.split('T')[0],
+          bullets,
+        }, { onConflict: 'business_id,briefing_date' });
+
+        processed++;
+      } catch (err) {
+        console.error('[briefing-daily] failed for', business.id, err);
+        errors++;
+      }
     }
-    return NextResponse.json({ task, cleared_briefings: ids.length });
+
+    return NextResponse.json({ task, processed, errors });
   }
 
   if (!agentType) {
     return NextResponse.json({ task, skipped: true });
   }
 
-  // Run agent for each business
-  let totalDecisions = 0;
+  const { data: settings } = await supabase.from('agent_settings')
+    .select('business_id')
+    .eq('agent_type', agentType)
+    .eq('enabled', true);
+
+  let businessIds: string[];
+  if (settings?.length) {
+    businessIds = settings.map(s => s.business_id);
+  } else {
+    const { data: bizList } = await supabase.from('businesses').select('id').eq('is_active', true).limit(1000);
+    businessIds = (bizList ?? []).map(b => b.id);
+  }
+
+  let processed = 0;
+  let errors = 0;
   const results: Array<{ business_id: string; decisions: number; errors: number }> = [];
 
   for (const bid of businessIds) {
     try {
       const result = await runAgent(agentType, bid);
-      totalDecisions += result.decisions.length;
       results.push({ business_id: bid, decisions: result.decisions.length, errors: result.errors.length });
+      processed++;
     } catch (e) {
       console.error(`[cron/${task}] failed for ${bid}:`, e);
       results.push({ business_id: bid, decisions: 0, errors: 1 });
+      errors++;
     }
   }
 
-  return NextResponse.json({ task, agent_type: agentType, businesses: results.length, total_decisions: totalDecisions, results });
+  return NextResponse.json({ task, agent_type: agentType, processed, errors, results });
 }

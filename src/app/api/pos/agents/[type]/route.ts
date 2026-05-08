@@ -97,7 +97,12 @@ export async function POST(req: Request, { params }: Params) {
     RUN_RATE_CACHE.set(rateKey, Date.now());
 
     track('agent_run_started', { agent_type: type, manual: true });
-    const result = await runAgent(type as AgentType, bid);
+    const result = await Promise.race([
+      runAgent(type as AgentType, bid),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('timeout')), 55_000)
+      ),
+    ]);
     track('agent_run_completed', { agent_type: type, decisions: result.decisions.length, duration_ms: result.duration_ms, errors_count: result.errors.length });
     return NextResponse.json({ decisions: result.decisions, errors: result.errors.map(e => e.message), duration_ms: result.duration_ms });
   }

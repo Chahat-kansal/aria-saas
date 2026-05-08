@@ -36,6 +36,7 @@ export default function ScheduleAgentPage() {
   const [running, setRunning] = useState(false);
   const [confirmPublish, setConfirmPublish] = useState(false);
   const [publishing, setPublishing] = useState(false);
+  const [toast, setToast] = useState<{ message: string; ok: boolean } | null>(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -56,12 +57,22 @@ export default function ScheduleAgentPage() {
 
   async function runNow() {
     setRunning(true);
-    await fetch('/api/pos/agents/schedule', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'run_now' }),
-    });
-    setRunning(false);
-    load();
+    try {
+      const res = await fetch('/api/pos/agents/schedule', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'run_now' }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Run failed');
+      const n = (data.decisions ?? []).length;
+      setToast({ message: n > 0 ? `Aria generated ${n} roster${n !== 1 ? 's' : ''}` : 'No rosters generated — add staff first', ok: n > 0 });
+    } catch {
+      setToast({ message: 'Run failed — check logs', ok: false });
+    } finally {
+      setRunning(false);
+      load();
+      setTimeout(() => setToast(null), 3500);
+    }
   }
 
   async function publish(decId: string) {
@@ -221,6 +232,12 @@ export default function ScheduleAgentPage() {
           <p style={{ color: 'var(--text-tertiary)', fontSize: 12, maxWidth: 400, margin: '0 auto' }}>
             Make sure you&apos;ve added your staff in Settings → Staff & Users.
           </p>
+        </div>
+      )}
+
+      {toast && (
+        <div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 100, background: toast.ok ? '#34D399' : '#F87171', color: '#000', padding: '12px 20px', borderRadius: 12, fontSize: 13, fontWeight: 600, boxShadow: '0 4px 20px rgba(0,0,0,0.3)', maxWidth: 300 }}>
+          {toast.message}
         </div>
       )}
 
