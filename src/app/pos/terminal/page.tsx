@@ -238,6 +238,13 @@ export default function TerminalPage() {
     }
   }
 
+  // Layby modal state — additive
+  const [showLaybyModal, setShowLaybyModal] = useState(false);
+  const [laybyDeposit, setLaybyDeposit] = useState('');
+  const [laybyDueDate, setLaybyDueDate] = useState('');
+  const [laybyNotes, setLaybyNotes] = useState('');
+  const [laybyLoading, setLaybyLoading] = useState(false);
+
   const searchRef   = useRef<HTMLInputElement>(null);
   const chatEndRef  = useRef<HTMLDivElement>(null);
   const flyRef      = useRef<FlyToCartHandle>(null);
@@ -678,6 +685,34 @@ export default function TerminalPage() {
     setParkedSales(r.parked_sales || []);
     clearSale();
   }
+
+  /* ─── Save as Layby — additive ───────────────────────────────── */
+  async function saveLayby() {
+    if (!customer) { alert('Please select a customer before creating a layby.'); return; }
+    if (!cart.length) return;
+    setLaybyLoading(true);
+    const depositAmt = parseFloat(laybyDeposit) || total * 0.2;
+    const dueDefault = new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0];
+    await fetch('/api/pos/laybys', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        customer_id: customer.id,
+        deposit_cents: Math.round(depositAmt * 100),
+        paid_cents: Math.round(depositAmt * 100),
+        total_cents: Math.round(total * 100),
+        due_date: laybyDueDate || dueDefault,
+        notes: laybyNotes || null,
+        items: cart.map(i => ({ product_id: i.product.id, product_name: i.label ?? i.product.name, qty: i.qty, unit_price: i.unitPrice })),
+        status: 'active',
+      }),
+    }).catch(() => {});
+    setLaybyLoading(false);
+    setShowLaybyModal(false);
+    setLaybyDeposit('');
+    setLaybyDueDate('');
+    setLaybyNotes('');
+    clearSale();
+  }
   async function restoreParked(p: ParkedSale) {
     setCart(p.items);
     await fetch(`/api/pos/park?id=${p.id}`, { method: 'DELETE' });
@@ -739,6 +774,28 @@ export default function TerminalPage() {
       return;
     }
     setProcessing(true);
+
+    // Training mode — skip API entirely, show success animation only
+    if (trainingMode) {
+      SFX.ching();
+      const cartSnapshot = [...cart];
+      const customerSnapshot = customer;
+      setShowReceipt({
+        id: 'TRAINING-' + Date.now(),
+        total_amount: roundedTotal,
+        payment_method: 'training',
+        sale_number: 'TRAINING',
+        cartSnapshot,
+        customerSnapshot,
+        businessName,
+        is_training: true,
+      });
+      setTerminalView('confirm');
+      clearSale();
+      setProcessing(false);
+      return;
+    }
+
     try {
       const outletId = typeof window !== 'undefined' ? localStorage.getItem('pos_outlet_id') || null : null;
       const r = await fetch('/api/pos/sale', {
@@ -781,6 +838,15 @@ export default function TerminalPage() {
         items: cartSnapshot.reduce((s, i) => s + i.qty, 0),
         time: new Date(),
       }, ...prev].slice(0, 5));
+      // Split payment — record both tenders in pos_sale_payments (non-blocking)
+      if (payMethod === 'split' && d.sale?.id) {
+        const cashAmt = parseFloat(splitCash) || 0;
+        const cardAmt = +splitCardAmt.toFixed(2);
+        Promise.all([
+          cashAmt > 0 && fetch('/api/pos/sale-payments', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sale_id: d.sale.id, method: 'cash', amount_cents: Math.round(cashAmt * 100) }) }),
+          cardAmt > 0 && fetch('/api/pos/sale-payments', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sale_id: d.sale.id, method: 'card', amount_cents: Math.round(cardAmt * 100) }) }),
+        ]).catch(() => {});
+      }
       // Calculate commission (non-blocking)
       if (servedBy && businessId) {
         fetch('/api/pos/commission-rules?business_id=' + businessId).then(r => r.json()).then(async data => {
@@ -1130,9 +1196,13 @@ export default function TerminalPage() {
             </div>
             {/* Title */}
             <div style={{ textAlign: 'center', animation: 'fade-up 0.4s 0.1s cubic-bezier(0.16,1,0.3,1) both' }}>
-              <div style={{ fontSize: 38, fontWeight: 900, color: 'var(--text-primary)', letterSpacing: '-0.04em', lineHeight: 1 }}>Payment approved</div>
+              <div style={{ fontSize: 38, fontWeight: 900, color: showReceipt.is_training ? '#F59E0B' : 'var(--text-primary)', letterSpacing: '-0.04em', lineHeight: 1 }}>
+                {showReceipt.is_training ? '🎓 Training sale' : 'Payment approved'}
+              </div>
               <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 6 }}>
-                via {showReceipt.payment_method ?? 'card'} · R{(showReceipt.sale_number ?? String(showReceipt.id ?? '')).slice(-5).toUpperCase() || Math.floor(Math.random()*90000+10000)}
+                {showReceipt.is_training
+                  ? 'Not recorded · Training mode is on'
+                  : `via ${showReceipt.payment_method ?? 'card'} · R${(showReceipt.sale_number ?? String(showReceipt.id ?? '')).slice(-5).toUpperCase() || Math.floor(Math.random()*90000+10000)}`}
               </div>
             </div>
             {/* Receipt card */}
@@ -1594,6 +1664,13 @@ export default function TerminalPage() {
                   </span>
                 )}
                 <span className="flex-1" />
+                {cart.length > 0 && (
+                  <button onClick={() => setShowLaybyModal(true)}
+                    className="text-xs px-2.5 py-1.5 rounded-lg transition-colors"
+                    style={{ border: '1px solid rgba(139,92,246,0.35)', color: 'var(--violet)' }}>
+                    Layby
+                  </button>
+                )}
                 {cart.length > 0 && (
                   <button onClick={() => parkSale()}
                     className="text-xs px-2.5 py-1.5 rounded-lg transition-colors"
@@ -2237,6 +2314,57 @@ export default function TerminalPage() {
                   </div>
                 </button>
               ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Layby modal — additive */}
+      {showLaybyModal && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 55, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, background: 'rgba(8,6,16,0.88)' }}>
+          <div style={{ background: 'var(--bg-elevated)', border: '1px solid rgba(139,92,246,0.3)', borderRadius: 20, width: '100%', maxWidth: 420, overflow: 'hidden', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
+            <div style={{ padding: '18px 22px', borderBottom: '1px solid #1C1928', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>Save as Layby</div>
+                {customer && <div style={{ fontSize: 12, color: 'var(--violet)', marginTop: 2 }}>{customer.name}</div>}
+                {!customer && <div style={{ fontSize: 12, color: '#F87171', marginTop: 2 }}>⚠ No customer selected</div>}
+              </div>
+              <button onClick={() => setShowLaybyModal(false)} style={{ background: 'none', border: 'none', color: 'var(--text-tertiary)', fontSize: 20, cursor: 'pointer' }}>×</button>
+            </div>
+            <div style={{ padding: '18px 22px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: 'var(--text-secondary)' }}>
+                <span>Cart total</span>
+                <span style={{ fontFamily: "'JetBrains Mono',monospace", fontWeight: 700, color: 'var(--text-primary)' }}>A${total.toFixed(2)}</span>
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 11, color: 'var(--text-secondary)', marginBottom: 6, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                  Deposit (default 20% = A${(total * 0.2).toFixed(2)})
+                </label>
+                <input type="number" value={laybyDeposit} onChange={e => setLaybyDeposit(e.target.value)}
+                  placeholder={`${(total * 0.2).toFixed(2)}`}
+                  style={{ width: '100%', background: 'var(--bg-input)', border: '1px solid var(--border-default)', borderRadius: 9, padding: '10px 13px', fontSize: 14, color: 'var(--text-primary)', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' }} />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 11, color: 'var(--text-secondary)', marginBottom: 6, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                  Due date (default +30 days)
+                </label>
+                <input type="date" value={laybyDueDate} onChange={e => setLaybyDueDate(e.target.value)}
+                  defaultValue={new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0]}
+                  style={{ width: '100%', background: 'var(--bg-input)', border: '1px solid var(--border-default)', borderRadius: 9, padding: '10px 13px', fontSize: 14, color: 'var(--text-primary)', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' }} />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 11, color: 'var(--text-secondary)', marginBottom: 6, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Notes (optional)</label>
+                <input type="text" value={laybyNotes} onChange={e => setLaybyNotes(e.target.value)}
+                  placeholder="Customer notes…"
+                  style={{ width: '100%', background: 'var(--bg-input)', border: '1px solid var(--border-default)', borderRadius: 9, padding: '10px 13px', fontSize: 14, color: 'var(--text-primary)', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' }} />
+              </div>
+            </div>
+            <div style={{ padding: '14px 22px', borderTop: '1px solid #1C1928', display: 'flex', gap: 10 }}>
+              <button onClick={() => setShowLaybyModal(false)} style={{ flex: 1, padding: '11px', borderRadius: 10, border: '1px solid #2A2540', background: 'transparent', color: 'var(--text-secondary)', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>
+              <button onClick={saveLayby} disabled={laybyLoading || !customer}
+                style={{ flex: 2, padding: '11px', borderRadius: 10, border: 'none', background: customer ? 'var(--violet)' : 'var(--bg-elevated)', color: customer ? '#fff' : 'var(--text-tertiary)', fontSize: 13, fontWeight: 700, cursor: (laybyLoading || !customer) ? 'not-allowed' : 'pointer', fontFamily: 'inherit' }}>
+                {laybyLoading ? 'Saving…' : '🛍️ Save Layby'}
+              </button>
             </div>
           </div>
         </div>
