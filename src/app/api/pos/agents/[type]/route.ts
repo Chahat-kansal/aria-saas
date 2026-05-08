@@ -123,17 +123,23 @@ export async function POST(req: Request, { params }: Params) {
           .eq('business_id', bid).eq('draft_type', 'agent_reorder').eq('status', 'pending_approval');
 
         // Send PO email via Resend if supplier email is available
-        const poData = dec.decision_data as { supplier_name: string; supplier_email: string | null; lines: Array<{ product_name: string; qty: number; unit_cost: number; total: number }>; total_cost: number };
-        if (resendKey && poData.supplier_email) {
-          const lineRows = poData.lines.map(l => `<tr><td style="padding:6px 12px">${l.product_name}</td><td style="padding:6px 12px;text-align:center">${l.qty}</td><td style="padding:6px 12px;text-align:right">A$${l.unit_cost.toFixed(2)}</td><td style="padding:6px 12px;text-align:right">A$${l.total.toFixed(2)}</td></tr>`).join('');
+        const poData = dec.decision_data as { supplier_name?: string; supplier_email?: string | null; lines?: Array<{ product_name?: string; qty?: number; unit_cost?: number; total?: number }>; total_cost?: number };
+        const poLines = Array.isArray(poData?.lines) ? poData.lines : [];
+        const poTotal = Number(poData?.total_cost ?? 0);
+        if (resendKey && poData?.supplier_email) {
+          const lineRows = poLines.map(l => {
+            const unitCost = Number(l.unit_cost ?? 0);
+            const lineTotal = Number(l.total ?? 0);
+            return `<tr><td style="padding:6px 12px">${l.product_name ?? '—'}</td><td style="padding:6px 12px;text-align:center">${l.qty ?? 0}</td><td style="padding:6px 12px;text-align:right">A$${unitCost.toFixed(2)}</td><td style="padding:6px 12px;text-align:right">A$${lineTotal.toFixed(2)}</td></tr>`;
+          }).join('');
           const { data: biz } = await supabase.from('businesses').select('name').eq('id', bid).single();
-          const html = `<h2>Purchase Order from ${biz?.name ?? 'Aria POS'}</h2><table border="1" cellpadding="0" cellspacing="0" style="border-collapse:collapse;width:100%"><tr><th style="padding:8px 12px">Product</th><th style="padding:8px 12px">Qty</th><th style="padding:8px 12px">Unit</th><th style="padding:8px 12px">Total</th></tr>${lineRows}<tr><td colspan="3" style="padding:8px 12px;text-align:right;font-weight:bold">Total</td><td style="padding:8px 12px;text-align:right;font-weight:bold">A$${poData.total_cost.toFixed(2)}</td></tr></table><p>Required by: ${new Date(Date.now() + 7 * 86400000).toLocaleDateString('en-AU')}</p><p>Reply to confirm receipt of this order.</p>`;
+          const html = `<h2>Purchase Order from ${biz?.name ?? 'Aria POS'}</h2><table border="1" cellpadding="0" cellspacing="0" style="border-collapse:collapse;width:100%"><tr><th style="padding:8px 12px">Product</th><th style="padding:8px 12px">Qty</th><th style="padding:8px 12px">Unit</th><th style="padding:8px 12px">Total</th></tr>${lineRows}<tr><td colspan="3" style="padding:8px 12px;text-align:right;font-weight:bold">Total</td><td style="padding:8px 12px;text-align:right;font-weight:bold">A$${poTotal.toFixed(2)}</td></tr></table><p>Required by: ${new Date(Date.now() + 7 * 86400000).toLocaleDateString('en-AU')}</p><p>Reply to confirm receipt of this order.</p>`;
           await fetch('https://api.resend.com/emails', {
             method: 'POST',
             headers: { Authorization: `Bearer ${resendKey}`, 'Content-Type': 'application/json' },
             body: JSON.stringify({ from: 'orders@ariaos.site', to: poData.supplier_email, subject: `Purchase Order from ${biz?.name ?? 'Aria POS'}`, html }),
           }).catch(e => console.warn('[approve/reorder] email failed:', e));
-          track('po_email_sent', { supplier_name: poData.supplier_name, line_count: poData.lines.length, total_cents: Math.round(poData.total_cost * 100) });
+          track('po_email_sent', { supplier_name: poData.supplier_name, line_count: poLines.length, total_cents: Math.round(poTotal * 100) });
         }
 
       } else if (dec.agent_type === 'schedule') {

@@ -50,6 +50,20 @@ function cacheKey(business_id: string, context: string, data: unknown): string {
   return createHash('sha256').update(raw).digest('hex');
 }
 
+function extractJson(raw: string): { bullets?: unknown[] } {
+  let cleaned = raw
+    .replace(/^```json\s*/i, '')
+    .replace(/^```\s*/i, '')
+    .replace(/```\s*$/i, '')
+    .trim();
+  const firstBrace = cleaned.indexOf('{');
+  const lastBrace = cleaned.lastIndexOf('}');
+  if (firstBrace !== -1 && lastBrace !== -1) {
+    cleaned = cleaned.slice(firstBrace, lastBrace + 1);
+  }
+  return JSON.parse(cleaned);
+}
+
 const FALLBACK: InsightResult = {
   bullets: ['Insights temporarily unavailable.', 'Try refresh.'],
   generated_at: new Date().toISOString(),
@@ -92,11 +106,20 @@ export async function generateInsight(opts: InsightOpts): Promise<InsightResult>
     });
 
     const text = msg.content[0]?.type === 'text' ? msg.content[0].text : '';
-    const parsed = JSON.parse(text) as { bullets: string[] };
-    const result: InsightResult = {
-      bullets: (parsed.bullets ?? []).slice(0, maxBullets),
-      generated_at: new Date().toISOString(),
-    };
+
+    let result: InsightResult;
+    try {
+      const parsed = extractJson(text);
+      result = {
+        bullets: Array.isArray(parsed?.bullets)
+          ? (parsed.bullets as unknown[]).filter(b => typeof b === 'string').slice(0, maxBullets) as string[]
+          : [text.slice(0, 120)],
+        generated_at: new Date().toISOString(),
+      };
+    } catch {
+      console.warn('[aria-insights] parse failed, using raw text');
+      result = { bullets: [text.slice(0, 120)], generated_at: new Date().toISOString() };
+    }
 
     try {
       const { createServerSupabaseClient } = await import('@/lib/supabase-server');
