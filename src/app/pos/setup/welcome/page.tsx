@@ -96,9 +96,10 @@ export default function WelcomePage() {
               </select>
               <button onClick={() => { if (newStaff.name) { setStaff(ss => [...ss, { ...newStaff }]); setNewStaff({ name: '', email: '', role: 'Cashier' }); } }} style={{ width: '100%', padding: '10px', borderRadius: 9, border: '1px dashed var(--border-default)', background: 'transparent', color: 'var(--text-secondary)', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>+ Add staff member</button>
             </div>
-            <div style={{ display: 'flex', gap: 10 }}>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
               <button onClick={() => setStep(2)} style={{ padding: '12px 24px', borderRadius: 10, border: '1px solid var(--border-default)', background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>← Back</button>
-              <button onClick={() => { setStep(4); track('onboarding_step', { step: 3, completed: true }); }} style={{ flex: 1, padding: '12px', borderRadius: 10, border: 'none', background: 'var(--violet)', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>Continue →</button>
+              <button onClick={() => { track('onboarding_step', { step: 3, completed: false }); setStep(4); }} style={{ padding: '12px 20px', borderRadius: 10, border: '1px solid var(--border-default)', background: 'transparent', color: 'var(--text-secondary)', fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>Skip for now</button>
+              <button onClick={() => { setStep(4); track('onboarding_step', { step: 3, completed: true }); }} style={{ flex: 1, padding: '12px', borderRadius: 10, border: 'none', background: 'var(--violet)', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>Add team & continue →</button>
             </div>
           </div>
         )}
