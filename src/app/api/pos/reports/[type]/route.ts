@@ -4,6 +4,7 @@ export const maxDuration = 60;
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { generateInsight } from '@/lib/aria-insights';
+import { toAESTStart, toAESTEnd, todayAEST, thirtyDaysAgoAEST, buildDateRange } from '@/lib/date-au';
 
 type Params = { params: Promise<{ type: string }> };
 
@@ -24,21 +25,25 @@ export async function GET(req: Request, { params }: Params) {
   if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 });
 
   const { searchParams } = new URL(req.url);
-  const from = searchParams.get('from') ?? new Date(Date.now() - 29 * 86400000).toISOString().split('T')[0];
-  const to = searchParams.get('to') ?? new Date().toISOString().split('T')[0];
-  const outletId = searchParams.get('outlet_id');
+
+  // Default to last 30 days in AEST if not supplied
+  const defaultRange = buildDateRange('month');
+  const from = searchParams.get('from') ?? defaultRange.from.split('T')[0];
+  const to   = searchParams.get('to')   ?? defaultRange.to.split('T')[0];
+
+  const outletId  = searchParams.get('outlet_id');
   const withInsight = searchParams.get('insight') !== '0';
 
   try {
     switch (type) {
       case 'dashboard': return await getDashboard(supabase, bid, from, to, outletId, withInsight);
       case 'inventory': return await getInventory(supabase, bid, from, to, searchParams);
-      case 'cashier': return await getCashier(supabase, bid, from, to, searchParams);
-      case 'commission': return await getCommission(supabase, bid, from, to, searchParams);
-      case 'closures': return await getClosures(supabase, bid, from, to, searchParams);
-      case 'actions': return await getActions(supabase, bid, from, to, searchParams);
-      case 'advanced': return await getAdvanced(supabase, bid, from, to, searchParams);
-      case 'briefing': return await getBriefing(supabase, bid);
+      case 'cashier':   return await getCashier(supabase, bid, from, to, searchParams);
+      case 'commission':return await getCommission(supabase, bid, from, to, searchParams);
+      case 'closures':  return await getClosures(supabase, bid, from, to, searchParams);
+      case 'actions':   return await getActions(supabase, bid, from, to, searchParams);
+      case 'advanced':  return await getAdvanced(supabase, bid, from, to, searchParams);
+      case 'briefing':  return await getBriefing(supabase, bid);
       default: return NextResponse.json({ error: 'Unknown report type' }, { status: 400 });
     }
   } catch (e) {
@@ -69,8 +74,14 @@ async function getDashboard(
   supabase: ReturnType<typeof createServerSupabaseClient>,
   bid: string, from: string, to: string, outletId: string | null, withInsight: boolean
 ) {
-  let q = supabase.from('pos_sales').select('id,total_amount,tax_amount,discount_amount,payment_method,created_at,outlet_id,served_by,pos_customers(name)')
-    .eq('business_id', bid).gte('created_at', from).lte('created_at', to + 'T23:59:59');
+  const fromISO = toAESTStart(from);
+  const toISO   = toAESTEnd(to);
+
+  let q = supabase.from('pos_sales')
+    .select('id,total_amount,tax_amount,discount_amount,payment_method,created_at,outlet_id,served_by,pos_customers(name)')
+    .eq('business_id', bid)
+    .gte('created_at', fromISO)
+    .lte('created_at', toISO);
   if (outletId) q = q.eq('outlet_id', outletId);
   const { data: sales } = await q.order('created_at');
 
@@ -80,11 +91,10 @@ async function getDashboard(
     pos_customers: { name: string } | null;
   }>;
 
-  const revenue = rows.reduce((s, r) => s + (r.total_amount ?? 0), 0);
-  const count = rows.length;
+  const revenue  = rows.reduce((s, r) => s + (r.total_amount ?? 0), 0);
+  const count    = rows.length;
   const customers = new Set(rows.map(r => r.pos_customers?.name).filter(Boolean)).size;
-  const avgSale = count ? revenue / count : 0;
-  const totalItems = rows.length; // approximate basket size from count
+  const avgSale  = count ? revenue / count : 0;
 
   // Daily breakdown
   const dayMap = new Map<string, { revenue: number; count: number }>();
@@ -95,34 +105,56 @@ async function getDashboard(
     e.count += 1;
     dayMap.set(day, e);
   }
-  const daily = Array.from(dayMap.entries()).map(([date, v]) => ({ date, ...v })).sort((a, b) => a.date.localeCompare(b.date));
+  const daily = Array.from(dayMap.entries())
+    .map(([date, v]) => ({ date, ...v }))
+    .sort((a, b) => a.date.localeCompare(b.date));
 
-  // Top 20 products
-  const { data: topItems } = await supabase.from('pos_sale_items')
-    .select('product_name,quantity,line_total')
-    .in('sale_id', rows.map(r => r.id).slice(0, 500))
-    .order('line_total', { ascending: false });
+  // Top 20 products — try RPC first, fall back to JS aggregation
+  let topProducts: Array<{ name: string; revenue: number; quantity: number }> = [];
+  try {
+    const { data: rpcResult, error: rpcErr } = await supabase.rpc('get_top_products', {
+      p_business_id: bid,
+      p_from: fromISO,
+      p_to: toISO,
+      p_limit: 20,
+    });
+    if (!rpcErr && rpcResult && Array.isArray(rpcResult) && rpcResult.length > 0) {
+      topProducts = (rpcResult as Array<{ product_name: string; revenue: number; quantity: number }>)
+        .map(r => ({ name: r.product_name, revenue: Number(r.revenue), quantity: Number(r.quantity) }));
+    }
+  } catch {}
 
-  const prodMap = new Map<string, { revenue: number; qty: number }>();
-  for (const item of (topItems ?? []) as Array<{ product_name: string; quantity: number; line_total: number }>) {
-    const e = prodMap.get(item.product_name) ?? { revenue: 0, qty: 0 };
-    e.revenue += item.line_total ?? 0;
-    e.qty += item.quantity ?? 0;
-    prodMap.set(item.product_name, e);
+  // Fallback: JS-side aggregation from fetched sales
+  if (topProducts.length === 0 && rows.length > 0) {
+    const { data: topItems } = await supabase.from('pos_sale_items')
+      .select('product_name,quantity,line_total')
+      .eq('business_id', bid)
+      .gte('created_at', fromISO)
+      .lte('created_at', toISO)
+      .limit(2000);
+
+    const prodMap = new Map<string, { revenue: number; qty: number }>();
+    for (const item of (topItems ?? []) as Array<{ product_name: string; quantity: number; line_total: number }>) {
+      const e = prodMap.get(item.product_name) ?? { revenue: 0, qty: 0 };
+      e.revenue += item.line_total ?? 0;
+      e.qty += item.quantity ?? 0;
+      prodMap.set(item.product_name, e);
+    }
+    topProducts = Array.from(prodMap.entries())
+      .map(([name, v]) => ({ name, revenue: v.revenue, quantity: v.qty }))
+      .sort((a, b) => b.revenue - a.revenue)
+      .slice(0, 20);
   }
-  const topProducts = Array.from(prodMap.entries())
-    .map(([name, v]) => ({ name, revenue: v.revenue, quantity: v.qty }))
-    .sort((a, b) => b.revenue - a.revenue).slice(0, 20);
 
   // Outlet breakdown
   const outletMap = new Map<string, number>();
   for (const r of rows) {
     outletMap.set(r.outlet_id, (outletMap.get(r.outlet_id) ?? 0) + (r.total_amount ?? 0));
   }
-  const byOutlet = Array.from(outletMap.entries()).map(([outlet_id, revenue]) => ({ outlet_id, revenue }));
+  const byOutlet = Array.from(outletMap.entries()).map(([outlet_id, rev]) => ({ outlet_id, revenue: rev }));
 
   let insight: { bullets: string[] } | null = null;
-  if (withInsight && bid) {
+  if (withInsight) {
     const res = await generateInsight({ business_id: bid, context: `sales dashboard ${from} to ${to}`, data: { revenue, count, customers, daily: daily.slice(-7), topProducts: topProducts.slice(0, 5) }, maxBullets: 2 });
     insight = { bullets: res.bullets };
   }
@@ -136,10 +168,11 @@ async function getInventory(
   bid: string, from: string, to: string, params: URLSearchParams
 ) {
   const lowStockOnly = params.get('low_stock') === '1';
-  const deadStock = params.get('dead_stock') === '1';
-  const search = params.get('search') ?? '';
+  const deadStock    = params.get('dead_stock') === '1';
+  const search       = params.get('search') ?? '';
 
-  let q = supabase.from('pos_products').select('id,name,sku,stock_quantity,low_stock_threshold,cost_price,price,track_stock,pos_categories(name)')
+  let q = supabase.from('pos_products')
+    .select('id,name,sku,stock_quantity,low_stock_threshold,cost_price,price,track_stock,pos_categories(name)')
     .eq('business_id', bid).eq('is_active', true);
   if (search) q = q.ilike('name', `%${search}%`);
   const { data: products } = await q.limit(500);
@@ -150,8 +183,8 @@ async function getInventory(
     pos_categories: { name: string } | null;
   }>;
 
-  // Fetch last 30d sales for daily velocity
-  const fromDate = new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0];
+  // 30-day velocity using AEST-aware cutoff
+  const fromDate = thirtyDaysAgoAEST();
   const { data: saleItems } = await supabase.from('pos_sale_items')
     .select('product_id,quantity,created_at')
     .eq('business_id', bid)
@@ -175,7 +208,7 @@ async function getInventory(
       avg_daily: avgDaily,
       days_of_stock: daysOfStock,
       status,
-      value_cost: (p.stock_quantity ?? 0) * (p.cost_price ?? 0),
+      value_cost:   (p.stock_quantity ?? 0) * (p.cost_price ?? 0),
       value_retail: (p.stock_quantity ?? 0) * (p.price ?? 0),
     };
   }).filter(p => {
@@ -190,8 +223,8 @@ async function getInventory(
   });
 
   const criticalCount = inventory.filter(i => i.status === 'critical').length;
-  const deadValue = inventory.filter(i => i.status === 'dead').reduce((s, i) => s + i.value_cost, 0);
-  const reorderTop = inventory.filter(i => i.status === 'critical').slice(0, 3).map(i => i.name);
+  const deadValue     = inventory.filter(i => i.status === 'dead').reduce((s, i) => s + i.value_cost, 0);
+  const reorderTop    = inventory.filter(i => i.status === 'critical').slice(0, 3).map(i => i.name);
 
   let insight: { bullets: string[] } | null = null;
   if (bid) {
@@ -207,27 +240,74 @@ async function getCashier(
   supabase: ReturnType<typeof createServerSupabaseClient>,
   bid: string, from: string, to: string, params: URLSearchParams
 ) {
+  const fromISO = toAESTStart(from);
+  const toISO   = toAESTEnd(to);
+
   const { data: sales } = await supabase.from('pos_sales')
     .select('id,total_amount,served_by,payment_method,created_at')
     .eq('business_id', bid)
-    .gte('created_at', from).lte('created_at', to + 'T23:59:59')
+    .gte('created_at', fromISO).lte('created_at', toISO)
     .limit(2000);
 
   const { data: actions } = await supabase.from('pos_action_log')
     .select('action_type,user_id,created_at')
     .eq('business_id', bid)
-    .gte('created_at', from).lte('created_at', to + 'T23:59:59')
+    .gte('created_at', fromISO).lte('created_at', toISO)
     .in('action_type', ['void','refund','no_sale_open','discount_apply'])
     .limit(2000);
 
+  // Resolve cashier IDs → display names
+  const salesTyped = (sales ?? []) as Array<{ id: string; total_amount: number; served_by: string; payment_method: string; created_at: string }>;
+  const rawIds = [...new Set(salesTyped.map(s => s.served_by).filter(Boolean))];
+
+  const profileMap: Record<string, string> = {};
+  if (rawIds.length > 0) {
+    let profilesResolved = false;
+    // Try profiles table (standard Supabase pattern)
+    try {
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id,full_name,display_name,email')
+        .in('id', rawIds);
+      if (profiles && profiles.length > 0) {
+        for (const p of (profiles as Array<{ id: string; full_name?: string; display_name?: string; email?: string }>)) {
+          profileMap[p.id] = p.full_name || p.display_name || (p.email ? p.email.split('@')[0] : p.id.slice(0, 8));
+        }
+        profilesResolved = true;
+      }
+    } catch {}
+
+    if (!profilesResolved) {
+      // Fallback: try pos_users table
+      try {
+        const { data: posUsers } = await supabase
+          .from('pos_users')
+          .select('id,name,display_name,pin_label')
+          .in('id', rawIds);
+        if (posUsers && posUsers.length > 0) {
+          for (const u of (posUsers as Array<{ id: string; name?: string; display_name?: string; pin_label?: string }>)) {
+            profileMap[u.id] = u.name || u.display_name || u.pin_label || u.id.slice(0, 8);
+          }
+        }
+      } catch {}
+    }
+  }
+
+  function resolveName(id: string | null | undefined): string {
+    if (!id) return 'Unknown';
+    return profileMap[id] ?? (id.length === 36 ? id.slice(0, 8) : id);
+  }
+
   const cashierMap = new Map<string, {
-    name: string; sales: number; transactions: number; voids: number;
-    refunds: number; noSaleOpens: number; discountTotal: number;
+    name: string; sales: number; transactions: number;
+    voids: number; refunds: number; noSaleOpens: number; discountTotal: number;
   }>();
 
-  for (const s of (sales ?? []) as Array<{ id: string; total_amount: number; served_by: string; payment_method: string; created_at: string }>) {
+  for (const s of salesTyped) {
     const key = s.served_by ?? 'Unknown';
-    const e = cashierMap.get(key) ?? { name: key, sales: 0, transactions: 0, voids: 0, refunds: 0, noSaleOpens: 0, discountTotal: 0 };
+    const displayName = resolveName(s.served_by);
+    const e = cashierMap.get(key) ?? { name: displayName, sales: 0, transactions: 0, voids: 0, refunds: 0, noSaleOpens: 0, discountTotal: 0 };
+    e.name = displayName;
     e.sales += s.total_amount ?? 0;
     e.transactions += 1;
     cashierMap.set(key, e);
@@ -235,17 +315,16 @@ async function getCashier(
 
   for (const a of (actions ?? []) as Array<{ action_type: string; user_id: string; created_at: string }>) {
     const key = a.user_id ?? 'Unknown';
-    const e = cashierMap.get(key) ?? { name: key, sales: 0, transactions: 0, voids: 0, refunds: 0, noSaleOpens: 0, discountTotal: 0 };
-    if (a.action_type === 'void') e.voids += 1;
+    const e = cashierMap.get(key) ?? { name: resolveName(a.user_id), sales: 0, transactions: 0, voids: 0, refunds: 0, noSaleOpens: 0, discountTotal: 0 };
+    if (a.action_type === 'void')        e.voids += 1;
     else if (a.action_type === 'refund') e.refunds += 1;
     else if (a.action_type === 'no_sale_open') e.noSaleOpens += 1;
     cashierMap.set(key, e);
   }
 
-  const rows = Array.from(cashierMap.values()).map(r => ({
-    ...r,
-    avg_sale: r.transactions ? r.sales / r.transactions : 0,
-  })).sort((a, b) => b.sales - a.sales);
+  const rows = Array.from(cashierMap.values())
+    .map(r => ({ ...r, avg_sale: r.transactions ? r.sales / r.transactions : 0 }))
+    .sort((a, b) => b.sales - a.sales);
 
   const top = rows[0];
   const avgVoids = rows.reduce((s, r) => s + r.voids, 0) / Math.max(rows.length, 1);
@@ -265,8 +344,11 @@ async function getCommission(
   supabase: ReturnType<typeof createServerSupabaseClient>,
   bid: string, from: string, to: string, _params: URLSearchParams
 ) {
+  const fromISO = toAESTStart(from);
+  const toISO   = toAESTEnd(to);
+
   const { data: rules } = await supabase.from('pos_commission_rules').select('*').eq('business_id', bid).is('effective_until', null).limit(50);
-  const { data: sales } = await supabase.from('pos_sales').select('id,total_amount,served_by,created_at').eq('business_id', bid).gte('created_at', from).lte('created_at', to + 'T23:59:59').limit(2000);
+  const { data: sales }  = await supabase.from('pos_sales').select('id,total_amount,served_by,created_at').eq('business_id', bid).gte('created_at', fromISO).lte('created_at', toISO).limit(2000);
 
   const staffMap = new Map<string, { name: string; total: number }>();
   for (const s of (sales ?? []) as Array<{ id: string; total_amount: number; served_by: string }>) {
@@ -285,7 +367,7 @@ async function getCommission(
     return { name: s.name, total: s.total, rule: rule ? `${rule.rate_pct}% of sale` : 'No rule', commission };
   }).sort((a, b) => b.commission - a.commission);
 
-  const totalRevenue = rows.reduce((s, r) => s + r.total, 0);
+  const totalRevenue    = rows.reduce((s, r) => s + r.total, 0);
   const totalCommission = rows.reduce((s, r) => s + r.commission, 0);
   const pct = totalRevenue ? (totalCommission / totalRevenue * 100) : 0;
 
@@ -304,10 +386,13 @@ async function getClosures(
   supabase: ReturnType<typeof createServerSupabaseClient>,
   bid: string, from: string, to: string, _params: URLSearchParams
 ) {
+  const fromISO = toAESTStart(from);
+  const toISO   = toAESTEnd(to);
+
   const { data: closures } = await supabase.from('pos_closures')
     .select('*')
     .eq('business_id', bid)
-    .gte('opened_at', from).lte('opened_at', to + 'T23:59:59')
+    .gte('opened_at', fromISO).lte('opened_at', toISO)
     .order('opened_at', { ascending: false })
     .limit(200);
 
@@ -317,7 +402,7 @@ async function getClosures(
   }));
 
   const totalVariance = rows.reduce((s, r) => s + r.variance_cents, 0);
-  const worstRow = rows.sort((a, b) => Math.abs(b.variance_cents) - Math.abs(a.variance_cents))[0];
+  const worstRow = [...rows].sort((a, b) => Math.abs(b.variance_cents) - Math.abs(a.variance_cents))[0];
 
   let insight: { bullets: string[] } | null = null;
   if (bid) {
@@ -334,19 +419,20 @@ async function getActions(
   bid: string, from: string, to: string, params: URLSearchParams
 ) {
   const actionType = params.get('action_type');
-  const page = parseInt(params.get('page') ?? '1');
-  const pageSize = 100;
+  const page       = parseInt(params.get('page') ?? '1');
+  const pageSize   = 100;
+  const fromISO    = toAESTStart(from);
+  const toISO      = toAESTEnd(to);
 
   let q = supabase.from('pos_action_log').select('*', { count: 'exact' })
     .eq('business_id', bid)
-    .gte('created_at', from).lte('created_at', to + 'T23:59:59')
+    .gte('created_at', fromISO).lte('created_at', toISO)
     .order('created_at', { ascending: false })
     .range((page - 1) * pageSize, page * pageSize - 1);
   if (actionType) q = q.eq('action_type', actionType);
   const { data: actions, count } = await q;
 
   const rows = (actions ?? []) as Record<string, unknown>[];
-
   const typeCounts = new Map<string, number>();
   for (const a of rows) { const t = String(a.action_type); typeCounts.set(t, (typeCounts.get(t) ?? 0) + 1); }
   const topAction = Array.from(typeCounts.entries()).sort((a, b) => b[1] - a[1])[0];
@@ -365,9 +451,11 @@ async function getAdvanced(
   supabase: ReturnType<typeof createServerSupabaseClient>,
   bid: string, from: string, to: string, params: URLSearchParams
 ) {
-  const reportType = params.get('report_type') ?? 'Product';
-  const groupBy = params.get('group_by');
+  const reportType    = params.get('report_type') ?? 'Product';
+  const groupBy       = params.get('group_by');
   const includeDeleted = params.get('include_deleted') === '1';
+  const fromISO = toAESTStart(from);
+  const toISO   = toAESTEnd(to);
 
   let data: Record<string, unknown>[] = [];
 
@@ -375,11 +463,11 @@ async function getAdvanced(
     let q = supabase.from('pos_products').select('id,name,sku,price,cost_price,pos_categories(name)').eq('business_id', bid);
     if (!includeDeleted) q = q.eq('is_active', true);
     const { data: prods } = await q.limit(500);
-    const ids = ((prods ?? []) as Array<{ id: string }>).map(p => p.id);
 
+    const { data: salesIds } = await supabase.from('pos_sales').select('id').eq('business_id', bid).gte('created_at', fromISO).lte('created_at', toISO).limit(1000);
     const { data: si } = await supabase.from('pos_sale_items')
       .select('product_id,quantity,line_total,discount_percent')
-      .in('sale_id', (await supabase.from('pos_sales').select('id').eq('business_id', bid).gte('created_at', from).lte('created_at', to + 'T23:59:59').limit(1000)).data?.map((s: { id: string }) => s.id) ?? [])
+      .in('sale_id', (salesIds ?? []).map((s: { id: string }) => s.id))
       .limit(5000);
 
     const salesByProd = new Map<string, { revenue: number; qty: number; discount: number }>();
@@ -394,19 +482,22 @@ async function getAdvanced(
 
     data = ((prods ?? []) as unknown as Array<{ id: string; name: string; sku: string; price: number; cost_price: number; pos_categories: { name: string } | null }>).map(p => {
       const s = salesByProd.get(p.id) ?? { revenue: 0, qty: 0, discount: 0 };
-      const cogs = s.qty * (p.cost_price ?? 0);
+      const cogs   = s.qty * (p.cost_price ?? 0);
       const profit = s.revenue - cogs;
       return {
-        name: p.name, sku: p.sku, category: (p.pos_categories as unknown as { name: string } | null)?.name ?? '—',
-        revenue: s.revenue, cogs, transaction_count: s.qty, avg_sale: s.qty ? s.revenue / s.qty : 0,
+        name: p.name, sku: p.sku,
+        category: (p.pos_categories as unknown as { name: string } | null)?.name ?? '—',
+        revenue: s.revenue, cogs, transaction_count: s.qty,
+        avg_sale: s.qty ? s.revenue / s.qty : 0,
         profit, profit_pct: s.revenue ? (profit / s.revenue * 100) : 0,
-        discount_amount: s.discount, revenue_pct: totalRevAll ? (s.revenue / totalRevAll * 100) : 0,
+        discount_amount: s.discount,
+        revenue_pct: totalRevAll ? (s.revenue / totalRevAll * 100) : 0,
         items_sold: s.qty,
       };
     }).sort((a, b) => (b.revenue as number) - (a.revenue as number));
   }
 
-  const sql = `SELECT name, SUM(line_total) as revenue FROM pos_products JOIN pos_sale_items ... WHERE business_id='${bid}' AND created_at BETWEEN '${from}' AND '${to}' GROUP BY name ORDER BY revenue DESC LIMIT 500`;
+  const sql = `SELECT name, SUM(line_total) as revenue FROM pos_products JOIN pos_sale_items USING(product_id) JOIN pos_sales USING(id) WHERE business_id='${bid}' AND created_at BETWEEN '${fromISO}' AND '${toISO}' GROUP BY name ORDER BY revenue DESC LIMIT 500`;
 
   let insight: { bullets: string[] } | null = null;
   if (bid && data.length > 0) {
@@ -423,7 +514,7 @@ async function getAdvancedPost(supabase: ReturnType<typeof createServerSupabaseC
 
 // ── BRIEFING ───────────────────────────────────────────────────
 async function getBriefing(supabase: ReturnType<typeof createServerSupabaseClient>, bid: string) {
-  const today = new Date().toISOString().split('T')[0];
+  const today = todayAEST();
 
   const { data: cached } = await supabase.from('aria_briefings_cache')
     .select('bullets')
@@ -433,13 +524,13 @@ async function getBriefing(supabase: ReturnType<typeof createServerSupabaseClien
 
   if (cached) return NextResponse.json({ bullets: cached.bullets });
 
-  const from = new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0];
-  const { data: sales } = await supabase.from('pos_sales').select('total_amount,created_at').eq('business_id', bid).gte('created_at', from).limit(500);
-  const revenue7d = ((sales ?? []) as Array<{ total_amount: number }>).reduce((s, r) => s + (r.total_amount ?? 0), 0);
+  const from7d = buildDateRange('week').from;
+  const { data: salesW } = await supabase.from('pos_sales').select('total_amount,created_at').eq('business_id', bid).gte('created_at', from7d).limit(500);
+  const revenue7d = ((salesW ?? []) as Array<{ total_amount: number }>).reduce((s, r) => s + (r.total_amount ?? 0), 0);
 
   const { data: lowStock } = await supabase.from('pos_products').select('name,stock_quantity,low_stock_threshold').eq('business_id', bid).eq('is_active', true).lt('stock_quantity', 5).limit(5);
 
-  const res = await generateInsight({ business_id: bid, context: 'daily briefing — cross-report', data: { revenue7d, lowStockItems: (lowStock ?? []).length, from, to: today }, maxBullets: 3, realtime: true });
+  const res = await generateInsight({ business_id: bid, context: 'daily briefing — cross-report', data: { revenue7d, lowStockItems: (lowStock ?? []).length, date: today }, maxBullets: 3, realtime: true });
 
   await supabase.from('aria_briefings_cache').upsert({ business_id: bid, briefing_date: today, bullets: res.bullets }, { onConflict: 'business_id,briefing_date' });
 
