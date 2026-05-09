@@ -111,7 +111,7 @@ export default function WelcomePage() {
             <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 24 }}>Choose how to get started with inventory.</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 28 }}>
               {[
-                { label: 'Import from existing POS', desc: 'Square, Shopify, Lightspeed, or Shopfront CSV', href: '/pos/products/import', icon: '📤' },
+                { label: 'Import from existing POS', desc: 'Shopfront, Square, Lightspeed, or any CSV', href: '/pos/setup/migrate', icon: '📤' },
                 { label: 'Upload CSV', desc: 'Use our template to bulk-import products', href: '/pos/products/import', icon: '📋' },
                 { label: 'Start blank', desc: 'Add products as you sell them at the terminal', href: null, icon: '🏪' },
               ].map(opt => (
