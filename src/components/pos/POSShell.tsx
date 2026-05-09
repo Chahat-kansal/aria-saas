@@ -327,6 +327,20 @@ export default function POSShell({ children, businessId, businessName }: {
   const [posUser, setPosUser] = useState<PosUser | null>(null);
   const [ready,   setReady]   = useState(false);
   const [ariaOpen, setAriaOpen] = useState(false);
+  const [trialDaysLeft, setTrialDaysLeft] = useState<number | null>(null);
+  const [trialDismissed, setTrialDismissed] = useState(false);
+
+  useEffect(() => {
+    const key = `aria_trial_banner_dismissed_${new Date().toISOString().split('T')[0]}`
+    if (sessionStorage.getItem(key)) setTrialDismissed(true)
+    fetch('/api/stripe').then(r => r.json()).then(d => {
+      const sub = d.subscription
+      if (sub?.status === 'trialing' && sub.trial_ends_at) {
+        const days = Math.ceil((new Date(sub.trial_ends_at).getTime() - Date.now()) / 86400000)
+        if (days <= 3) setTrialDaysLeft(days)
+      }
+    }).catch(() => {})
+  }, [])
 
   useEffect(() => {
     try {
@@ -387,6 +401,18 @@ export default function POSShell({ children, businessId, businessName }: {
         }}
       />
       <main style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', minWidth: 0, height: '100dvh' }}>
+        {trialDaysLeft !== null && !trialDismissed && (
+          <div style={{ background: 'rgba(251,191,36,0.15)', borderBottom: '1px solid rgba(251,191,36,0.3)', padding: '8px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, fontSize: 13, color: '#FBBF24', fontFamily: 'var(--font-ui)', flexShrink: 0 }}>
+            <span style={{ fontWeight: 600 }}>
+              Your free trial ends in {trialDaysLeft} day{trialDaysLeft !== 1 ? 's' : ''}.
+              {' '}<a href="/pos/settings/billing" style={{ color: '#FBBF24', fontWeight: 700 }}>Choose a plan →</a>
+            </span>
+            <button onClick={() => {
+              setTrialDismissed(true)
+              sessionStorage.setItem(`aria_trial_banner_dismissed_${new Date().toISOString().split('T')[0]}`, '1')
+            }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(251,191,36,0.6)', fontSize: 16, lineHeight: 1, padding: 0 }}>×</button>
+          </div>
+        )}
         {children}
       </main>
     </div>
