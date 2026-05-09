@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /admin/
+Disallow: /pos/
+
+Sitemap: https://ariaos.site/sitemap.xml
