@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
+import Link from 'next/link';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import ReportHeader from '@/components/reports/ReportHeader';
 import ReportTable from '@/components/reports/ReportTable';
@@ -141,7 +142,21 @@ export default function SalesDashboardPage() {
       />
 
       {loading ? <SkeletonLoader /> : null}
-      <div style={{ padding: '0 24px 24px', display: loading ? 'none' : undefined }}>
+
+      {!loading && revenue === 0 && count === 0 && daily.length === 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '80px 24px', gap: 16, textAlign: 'center' }}>
+          <span style={{ fontSize: 48 }}>📊</span>
+          <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)' }}>No data for this period</div>
+          <div style={{ fontSize: 14, color: 'var(--text-secondary)', maxWidth: 360, lineHeight: 1.6 }}>
+            Make some sales and Aria will start analysing your business here.
+          </div>
+          <Link href="/pos/terminal" style={{ marginTop: 8, padding: '10px 24px', borderRadius: 10, background: 'var(--violet)', color: '#fff', textDecoration: 'none', fontSize: 14, fontWeight: 700 }}>
+            Open Terminal →
+          </Link>
+        </div>
+      )}
+
+      <div style={{ padding: '0 24px 24px', display: loading || (revenue === 0 && count === 0 && daily.length === 0) ? 'none' : undefined }}>
         <AriaInsightCard bullets={insight ?? undefined} loading={insightLoading} />
 
         {/* Stacked bar chart */}

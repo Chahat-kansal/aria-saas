@@ -498,7 +498,7 @@ async function getBriefing(supabase: ReturnType<typeof createServerSupabaseClien
     .eq('briefing_date', today)
     .maybeSingle();
 
-  if (cached) return NextResponse.json({ bullets: cached.bullets });
+  if (cached) return NextResponse.json({ bullets: cached.bullets, generated_at: new Date().toISOString() });
 
   const from7d = buildDateRange('week').from;
   const { data: salesW } = await supabase.from('pos_sales').select('total_amount,created_at').eq('business_id', bid).neq('status', 'voided').gte('created_at', from7d).limit(500);
@@ -510,5 +510,5 @@ async function getBriefing(supabase: ReturnType<typeof createServerSupabaseClien
 
   await supabase.from('aria_briefings_cache').upsert({ business_id: bid, briefing_date: today, bullets: res.bullets }, { onConflict: 'business_id,briefing_date' });
 
-  return NextResponse.json({ bullets: res.bullets });
+  return NextResponse.json({ bullets: res.bullets, generated_at: new Date().toISOString() });
 }

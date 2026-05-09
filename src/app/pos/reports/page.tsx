@@ -13,25 +13,39 @@ const CARDS = [
   { label: 'Advanced', desc: 'Custom builder with group-by and export', href: '/pos/reports/advanced', icon: '🎯' },
 ];
 
+function timeAgo(isoStr: string): string {
+  const diff = Date.now() - new Date(isoStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'just now';
+  if (mins === 1) return '1 minute ago';
+  if (mins < 60) return `${mins} minutes ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs === 1) return '1 hour ago';
+  if (hrs < 24) return `${hrs} hours ago`;
+  return `${Math.floor(hrs / 24)} days ago`;
+}
+
 export default function ReportsIndexPage() {
   const [briefing, setBriefing] = useState<string[] | null>(null);
   const [briefingLoading, setBriefingLoading] = useState(true);
   const [briefingError, setBriefingError] = useState(false);
+  const [generatedAt, setGeneratedAt] = useState<string | null>(null);
 
   function loadBriefing() {
     setBriefingLoading(true);
     setBriefingError(false);
     setBriefing(null);
+    setGeneratedAt(null);
     fetch('/api/pos/reports/briefing')
       .then(r => { if (!r.ok) throw new Error('failed'); return r.json(); })
       .then(d => {
         const bullets: string[] = d.bullets ?? [];
-        // Sunday with no sales — surface a specific message
         if (bullets.length === 0 && new Date().getDay() === 0) {
           setBriefing(['No sales data recorded yet this week. Check back Monday.']);
         } else {
           setBriefing(bullets.length > 0 ? bullets : null);
         }
+        if (d.generated_at) setGeneratedAt(d.generated_at);
         setBriefingLoading(false);
       })
       .catch(() => { setBriefingError(true); setBriefingLoading(false); });
@@ -53,8 +67,13 @@ export default function ReportsIndexPage() {
             onMouseLeave={e => (e.currentTarget.style.boxShadow = 'var(--shadow-card)')}>
             <div style={{ fontSize: 28, marginBottom: 10 }}>{c.icon}</div>
             <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>{c.label}</div>
-            <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.4, marginBottom: 12 }}>{c.desc}</div>
-            <div style={{ fontSize: 12, color: 'var(--violet)', fontWeight: 600 }}>View →</div>
+            <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.4, marginBottom: 8 }}>{c.desc}</div>
+            {generatedAt ? (
+              <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>Updated {timeAgo(generatedAt)}</div>
+            ) : briefingLoading ? (
+              <div style={{ height: 12, width: 80, borderRadius: 4, background: 'var(--bg-elevated)', animation: 'shimmer 1.4s infinite' }} />
+            ) : null}
+            <div style={{ fontSize: 12, color: 'var(--violet)', fontWeight: 600, marginTop: 8 }}>View →</div>
           </Link>
         ))}
       </div>
