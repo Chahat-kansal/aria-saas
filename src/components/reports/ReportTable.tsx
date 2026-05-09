@@ -1,5 +1,5 @@
 'use client';
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useCallback } from 'react';
 
 export interface Column {
   key: string;
@@ -64,6 +64,11 @@ function stickyTd(rowBg: string): React.CSSProperties {
   };
 }
 
+const ROW_HEIGHT = 44;
+const VIRTUAL_THRESHOLD = 500;
+const VIRTUAL_PADDING = 5;
+const VIRTUAL_CONTAINER_H = 560;
+
 export default function ReportTable({
   columns, rows, groupBy, totalsRow, onRowClick, loading,
   emptyIcon = '📋', emptyMessage = 'No data found.',
@@ -72,6 +77,9 @@ export default function ReportTable({
   const [intSortKey, setIntSortKey] = useState<string | null>(null);
   const [intSortAsc, setIntSortAsc] = useState(true);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [scrollTop, setScrollTop] = useState(0);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const handleScroll = useCallback(() => setScrollTop(scrollRef.current?.scrollTop ?? 0), []);
 
   const controlled = onSort !== undefined;
   const sortKey = controlled ? (extSortField ?? null) : intSortKey;
@@ -107,6 +115,10 @@ export default function ReportTable({
     }
     return map;
   }, [sorted, groupBy]);
+
+  const useVirtual = !groupBy && sorted.length > VIRTUAL_THRESHOLD && !loading;
+  const visibleStart = useVirtual ? Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - VIRTUAL_PADDING) : 0;
+  const visibleEnd = useVirtual ? Math.min(sorted.length, Math.ceil((scrollTop + VIRTUAL_CONTAINER_H) / ROW_HEIGHT) + VIRTUAL_PADDING) : sorted.length;
 
   function renderCell(col: Column, row: Record<string, unknown>, ci: number, rowBg: string) {
     const v = row[col.key];
@@ -153,8 +165,16 @@ export default function ReportTable({
         }
       `}</style>
       <div style={{ background: 'var(--bg-surface)', borderRadius: 10, overflow: 'hidden', boxShadow: 'var(--shadow-card)' }}>
-        {/* Horizontal scroll wrapper — enables mobile swipe */}
-        <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' } as React.CSSProperties}>
+        {useVirtual && (
+          <div style={{ padding: '6px 14px', fontSize: 12, color: 'var(--text-secondary)', borderBottom: '1px solid var(--divider)', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ color: 'var(--violet)', fontWeight: 700 }}>{sorted.length.toLocaleString()} rows</span>
+            <span>— Export CSV for full data</span>
+          </div>
+        )}
+        <div
+          ref={scrollRef}
+          onScroll={useVirtual ? handleScroll : undefined}
+          style={{ overflowX: 'auto', overflowY: useVirtual ? 'auto' : 'visible', maxHeight: useVirtual ? VIRTUAL_CONTAINER_H : undefined, WebkitOverflowScrolling: 'touch' } as React.CSSProperties}>
           <table style={{ minWidth: 700, width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr>
@@ -201,6 +221,12 @@ export default function ReportTable({
                     {!collapsed.has(groupName) && groupRows.map((row, i) => renderRow(row, i, true))}
                   </React.Fragment>
                 ))
+              ) : useVirtual ? (
+                <>
+                  <tr><td colSpan={columns.length} style={{ height: visibleStart * ROW_HEIGHT, padding: 0 }} /></tr>
+                  {sorted.slice(visibleStart, visibleEnd).map((row, i) => renderRow(row, visibleStart + i))}
+                  <tr><td colSpan={columns.length} style={{ height: Math.max(0, sorted.length - visibleEnd) * ROW_HEIGHT, padding: 0 }} /></tr>
+                </>
               ) : (
                 sorted.map((row, i) => renderRow(row, i))
               )}

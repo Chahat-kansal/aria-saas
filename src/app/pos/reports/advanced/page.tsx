@@ -8,6 +8,17 @@ import ExportButtons from '@/components/reports/ExportButtons';
 import { fmtAUD, fmtCount, fmtPct } from '@/lib/recharts-theme';
 import { track } from '@/lib/analytics';
 
+function SkeletonLoader() {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: '0 24px 24px' }}>
+      <div style={{ height: 320, borderRadius: 16, background: 'linear-gradient(90deg, var(--bg-elevated) 25%, var(--bg-hover) 50%, var(--bg-elevated) 75%)', backgroundSize: '200% 100%', animation: 'shimmer 1.4s infinite' }} />
+      {[1,2,3,4,5].map(i => (
+        <div key={i} style={{ height: 44, borderRadius: 8, background: 'var(--bg-elevated)', opacity: 1 - i * 0.12, animation: 'shimmer 1.4s infinite', animationDelay: `${i * 0.1}s` }} />
+      ))}
+    </div>
+  );
+}
+
 const REPORT_TYPES = {
   General: ['Outlet','Register','Product','User','User Role','Customer','Customer Group'],
   Classifications: ['Brand','Category','Family','Tag'],
@@ -16,7 +27,7 @@ const REPORT_TYPES = {
   Payments: ['Payment Method','Payment Method Type'],
   Misc: ['Tax Rate'],
 };
-const GROUP_BY_OPTIONS = ['None', 'Outlet', 'Category', 'Brand', 'Month', 'Week'];
+const GROUP_BY_OPTIONS_ALL = ['None', 'Outlet', 'Category', 'Brand', 'Month', 'Week'];
 const AVAILABLE_COLUMNS = ['name','sku','category','revenue','cogs','transaction_count','avg_sale','profit','profit_pct','discount_amount','revenue_pct','items_sold'];
 
 const iS: React.CSSProperties = { background: 'var(--bg-input)', border: '1px solid var(--border-default)', borderRadius: 8, padding: '5px 10px', fontSize: 12, color: 'var(--text-primary)', outline: 'none', fontFamily: 'inherit' };
@@ -37,6 +48,19 @@ export default function AdvancedReportPage() {
   const [sql, setSql] = useState('');
   const [insight, setInsight] = useState<string[] | null>(null);
   const [loading, setLoading] = useState(false);
+  const [outletCount, setOutletCount] = useState<number>(2);
+
+  const GROUP_BY_OPTIONS = outletCount <= 1
+    ? GROUP_BY_OPTIONS_ALL.filter(o => o !== 'Outlet')
+    : GROUP_BY_OPTIONS_ALL;
+
+  const exportFilename = [
+    'report',
+    reportType.toLowerCase().replace(/\s+/g, '-'),
+    groupBy !== 'None' ? groupBy.toLowerCase().replace(/\s+/g, '-') : null,
+    range.preset !== 'Custom' ? range.preset.toLowerCase().replace(/\s+/g, '-') : null,
+    new Date().toISOString().split('T')[0],
+  ].filter(Boolean).join('-');
 
   const load = useCallback(() => {
     setLoading(true);
@@ -56,6 +80,12 @@ export default function AdvancedReportPage() {
   }, [range, reportType, groupBy, includeDeleted, selectedCols.size]);
 
   useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    fetch('/api/pos/outlets').then(r => r.json()).then(d => {
+      if (Array.isArray(d.outlets)) setOutletCount(d.outlets.length);
+    }).catch(() => {});
+  }, []);
 
   const COL_FORMATS: Record<string, (v: unknown) => React.ReactNode> = {
     revenue: (v) => fmtAUD(v as number),
@@ -111,7 +141,7 @@ export default function AdvancedReportPage() {
         }
         actions={
           <div style={{ display: 'flex', gap: 6 }}>
-            <ExportButtons data={data} reportType="advanced" />
+            <ExportButtons data={data} reportType="advanced" filename={exportFilename} config={{ report_type: reportType, group_by: groupBy, period: range.preset, columns: [...selectedCols] }} />
             <button style={tBtn(false)} onClick={() => setShowColsModal(true)}>⊞ Columns</button>
           </div>
         }
@@ -137,16 +167,27 @@ export default function AdvancedReportPage() {
         </div>
       )}
 
-      <div style={{ padding: '0 24px 24px' }}>
-        <AriaInsightCard bullets={insight ?? undefined} loading={loading} />
+      {loading && <SkeletonLoader />}
+      <div style={{ padding: '0 24px 24px', display: loading ? 'none' : undefined }}>
+        <AriaInsightCard bullets={insight ?? undefined} loading={false} />
+        {!loading && data.length === 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, padding: '60px 24px', color: 'var(--text-tertiary)', textAlign: 'center' }}>
+            <span style={{ fontSize: 40 }}>📊</span>
+            <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-secondary)' }}>No data for this period</div>
+            <div style={{ fontSize: 13 }}>Make some sales and Aria will start analysing your business here.</div>
+            <a href="/pos/terminal" style={{ marginTop: 8, fontSize: 13, fontWeight: 700, color: 'var(--violet)', textDecoration: 'none', padding: '8px 18px', border: '1px solid var(--violet)', borderRadius: 8 }}>Open Terminal →</a>
+          </div>
+        )}
+        {!loading && data.length > 0 && (
         <ReportTable
           columns={columns}
           rows={data}
-          loading={loading}
+          loading={false}
           groupBy={groupBy !== 'None' ? groupBy.toLowerCase() : undefined}
           emptyIcon="🎯"
           emptyMessage="Select a report type and run."
         />
+        )}
       </div>
 
       {/* Columns modal */}

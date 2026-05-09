@@ -31,7 +31,10 @@ interface CalendarProps {
   month: Date;
   from: Date | null;
   to: Date | null;
+  selecting: 'start' | 'end';
+  hoverDate: Date | null;
   onSelect: (d: Date) => void;
+  onHover: (d: Date | null) => void;
   onPrev: () => void;
   onNext: () => void;
   onToday: () => void;
@@ -41,16 +44,18 @@ function sameDay(a: Date, b: Date) {
   return a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate();
 }
 
-function Calendar({ month, from, to, onSelect, onPrev, onNext, onToday }: CalendarProps) {
+function Calendar({ month, from, to, selecting, hoverDate, onSelect, onHover, onPrev, onNext, onToday }: CalendarProps) {
   const first = new Date(month.getFullYear(), month.getMonth(), 1);
-  const startDow = (first.getDay() + 6) % 7; // Mon=0
+  const startDow = (first.getDay() + 6) % 7;
   const daysInMonth = new Date(month.getFullYear(), month.getMonth()+1, 0).getDate();
   const cells: (Date|null)[] = Array(startDow).fill(null);
   for (let d=1;d<=daysInMonth;d++) cells.push(new Date(month.getFullYear(), month.getMonth(), d));
   const t = today();
 
+  const previewEnd = selecting === 'end' && from && hoverDate ? hoverDate : to;
+
   return (
-    <div style={{ width: 220 }}>
+    <div style={{ width: 220 }} onMouseLeave={() => onHover(null)}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
         <button onClick={onPrev} style={navBtn}>←</button>
         <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
@@ -68,16 +73,30 @@ function Calendar({ month, from, to, onSelect, onPrev, onNext, onToday }: Calend
         {cells.map((d, i) => {
           if (!d) return <div key={i} />;
           const isFrom = from && sameDay(d, from);
-          const isTo = to && sameDay(d, to);
-          const inRange = from && to && d > from && d < to;
+          const isTo = previewEnd && sameDay(d, previewEnd);
+          const rangeEnd = previewEnd && from ? (previewEnd > from ? previewEnd : from) : null;
+          const rangeStart = previewEnd && from ? (previewEnd > from ? from : previewEnd) : from;
+          const inRange = rangeStart && rangeEnd && d > rangeStart && d < rangeEnd;
+          const isPreview = selecting === 'end' && from && hoverDate && inRange;
           const isToday = sameDay(d, t);
           return (
-            <div key={i} onClick={() => onSelect(d)} style={{
-              padding: '4px 2px', fontSize: 11, cursor: 'pointer', borderRadius: 4,
-              background: (isFrom||isTo) ? 'var(--violet)' : inRange ? 'var(--violet-dim)' : 'transparent',
-              color: (isFrom||isTo) ? '#fff' : isToday ? 'var(--violet)' : 'var(--text-primary)',
-              fontWeight: (isFrom||isTo||isToday) ? 700 : 400,
-            }}>
+            <div
+              key={i}
+              onClick={() => onSelect(d)}
+              onMouseEnter={() => onHover(d)}
+              style={{
+                padding: '4px 2px', fontSize: 11, cursor: 'pointer', borderRadius: 4,
+                background: (isFrom||isTo)
+                  ? 'var(--violet)'
+                  : inRange && !selecting
+                    ? 'var(--violet-dim)'
+                    : isPreview
+                      ? 'rgba(124,58,237,0.12)'
+                      : 'transparent',
+                color: (isFrom||isTo) ? '#fff' : isToday ? 'var(--violet)' : 'var(--text-primary)',
+                fontWeight: (isFrom||isTo||isToday) ? 700 : 400,
+                transition: 'background 80ms',
+              }}>
               {d.getDate()}
             </div>
           );
@@ -96,40 +115,63 @@ interface Props {
 
 export default function DateRangePicker({ value, onChange }: Props) {
   const [open, setOpen] = useState(false);
+  const [selecting, setSelecting] = useState<'start' | 'end'>('start');
   const [customFrom, setCustomFrom] = useState<Date | null>(null);
+  const [hoverDate, setHoverDate] = useState<Date | null>(null);
   const [month1, setMonth1] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth()-1, 1));
   const [month2, setMonth2] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    function handler(e: MouseEvent) { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); }
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+        setCustomFrom(null);
+        setSelecting('start');
+        setHoverDate(null);
+      }
+    }
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
   function selectPreset(p: string) {
-    if (p === 'Custom') { setOpen(true); return; }
+    if (p === 'Custom') {
+      setOpen(true);
+      setCustomFrom(null);
+      setSelecting('start');
+      return;
+    }
     const r = presetRange(p);
     onChange({ ...r, preset: p });
+    setOpen(false);
   }
 
   function handleCalendarSelect(d: Date) {
-    if (!customFrom) {
+    if (selecting === 'start' || !customFrom) {
       setCustomFrom(d);
+      setSelecting('end');
+      setHoverDate(null);
     } else {
       const from = d < customFrom ? d : customFrom;
       const to = d < customFrom ? customFrom : d;
       onChange({ from, to: endOfDay(to), preset: 'Custom' });
       setCustomFrom(null);
+      setSelecting('start');
+      setHoverDate(null);
       setOpen(false);
     }
   }
 
   const fmtShort = (d: Date) => d.toLocaleDateString('en-AU', { day: '2-digit', month: 'short' });
 
+  const selectionHint = open
+    ? (selecting === 'start' ? 'Click start date' : customFrom ? `From ${fmtShort(customFrom)} → click end date` : '')
+    : null;
+
   return (
     <div ref={ref} style={{ position: 'relative' }}>
-      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' }}>
         {PRESETS.map(p => (
           <button key={p} onClick={() => selectPreset(p)} style={{
             padding: '5px 10px', borderRadius: 6, border: '1px solid',
@@ -143,6 +185,9 @@ export default function DateRangePicker({ value, onChange }: Props) {
           {fmtShort(value.from)} – {fmtShort(value.to)}
         </span>
       </div>
+      {selectionHint && (
+        <div style={{ fontSize: 11, color: 'var(--violet)', marginTop: 4, fontWeight: 600 }}>{selectionHint}</div>
+      )}
       {open && (
         <div style={{
           position: 'absolute', top: '100%', left: 0, marginTop: 8, zIndex: 50,
@@ -150,16 +195,30 @@ export default function DateRangePicker({ value, onChange }: Props) {
           boxShadow: 'var(--shadow-lg)', display: 'flex', gap: 20,
           border: '1px solid var(--border-default)',
         }}>
-          <Calendar month={month1} from={customFrom ?? value.from} to={customFrom ? null : value.to}
+          <Calendar
+            month={month1}
+            from={customFrom ?? value.from}
+            to={customFrom ? null : value.to}
+            selecting={selecting}
+            hoverDate={hoverDate}
             onSelect={handleCalendarSelect}
+            onHover={setHoverDate}
             onPrev={() => setMonth1(new Date(month1.getFullYear(), month1.getMonth()-1, 1))}
             onNext={() => setMonth1(new Date(month1.getFullYear(), month1.getMonth()+1, 1))}
-            onToday={() => setMonth1(new Date(new Date().getFullYear(), new Date().getMonth()-1, 1))} />
-          <Calendar month={month2} from={customFrom ?? value.from} to={customFrom ? null : value.to}
+            onToday={() => setMonth1(new Date(new Date().getFullYear(), new Date().getMonth()-1, 1))}
+          />
+          <Calendar
+            month={month2}
+            from={customFrom ?? value.from}
+            to={customFrom ? null : value.to}
+            selecting={selecting}
+            hoverDate={hoverDate}
             onSelect={handleCalendarSelect}
+            onHover={setHoverDate}
             onPrev={() => setMonth2(new Date(month2.getFullYear(), month2.getMonth()-1, 1))}
             onNext={() => setMonth2(new Date(month2.getFullYear(), month2.getMonth()+1, 1))}
-            onToday={() => setMonth2(new Date(new Date().getFullYear(), new Date().getMonth(), 1))} />
+            onToday={() => setMonth2(new Date(new Date().getFullYear(), new Date().getMonth(), 1))}
+          />
         </div>
       )}
     </div>

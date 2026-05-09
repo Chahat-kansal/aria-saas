@@ -20,6 +20,17 @@ function presetToISO(range: DateRange) {
   return { from: range.from.toISOString().split('T')[0], to: range.to.toISOString().split('T')[0] };
 }
 
+function SkeletonLoader() {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: '0 24px 24px' }}>
+      <div style={{ height: 320, borderRadius: 16, background: 'linear-gradient(90deg, var(--bg-elevated) 25%, var(--bg-hover) 50%, var(--bg-elevated) 75%)', backgroundSize: '200% 100%', animation: 'shimmer 1.4s infinite' }} />
+      {[1,2,3,4,5].map(i => (
+        <div key={i} style={{ height: 44, borderRadius: 8, background: 'var(--bg-elevated)', opacity: 1 - i * 0.12, animation: 'shimmer 1.4s infinite', animationDelay: `${i * 0.1}s` }} />
+      ))}
+    </div>
+  );
+}
+
 function EmptyChart() {
   return (
     <div style={{
@@ -90,6 +101,12 @@ export default function SalesDashboardPage() {
 
   const periodStart = range.from.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' });
 
+  const exportFilename = [
+    'report', 'sales',
+    range.preset !== 'Custom' ? range.preset.toLowerCase().replace(/\s+/g, '-') : null,
+    new Date().toISOString().split('T')[0],
+  ].filter(Boolean).join('-');
+
   const prodCols = [
     { key: 'name', label: 'PRODUCT', sortable: true, format: (v: unknown) => <span style={{ textTransform: 'uppercase', fontWeight: 600, fontSize: 12 }}>{String(v)}</span> },
     { key: 'revenue', label: 'REVENUE', align: 'right' as const, sortable: true, format: (v: unknown) => fmtAUD(v as number) },
@@ -120,10 +137,11 @@ export default function SalesDashboardPage() {
             </div>
           </div>
         }
-        actions={<ExportButtons data={topProducts} reportType="sales" columns={[{ key: 'name', label: 'Product' }, { key: 'revenue', label: 'Revenue' }, { key: 'quantity', label: 'Qty' }]} />}
+        actions={<ExportButtons data={topProducts} reportType="sales" columns={[{ key: 'name', label: 'Product' }, { key: 'revenue', label: 'Revenue' }, { key: 'quantity', label: 'Qty' }]} filename={exportFilename} config={{ period: range.preset }} />}
       />
 
-      <div style={{ padding: '0 24px 24px' }}>
+      {loading ? <SkeletonLoader /> : null}
+      <div style={{ padding: '0 24px 24px', display: loading ? 'none' : undefined }}>
         <AriaInsightCard bullets={insight ?? undefined} loading={insightLoading} />
 
         {/* Stacked bar chart */}

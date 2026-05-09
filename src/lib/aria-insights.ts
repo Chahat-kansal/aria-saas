@@ -46,7 +46,7 @@ function dataFingerprint(data: unknown): string {
 }
 
 function cacheKey(business_id: string, context: string, data: unknown): string {
-  const raw = business_id + context + dataFingerprint(data);
+  const raw = business_id + '::' + context + '::' + dataFingerprint(data);
   return createHash('sha256').update(raw).digest('hex');
 }
 
