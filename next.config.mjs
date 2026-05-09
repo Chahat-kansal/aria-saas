@@ -1,6 +1,10 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  experimental: { serverComponentsExternalPackages: ['mongoose'] },
+  productionBrowserSourceMaps: true,
+  experimental: {
+    serverComponentsExternalPackages: ['mongoose'],
+    serverSourceMaps: true,
+  },
   images: {
     domains: [
       'lh3.googleusercontent.com',
