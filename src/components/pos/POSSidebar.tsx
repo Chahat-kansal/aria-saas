@@ -72,6 +72,7 @@ const SECTIONS = [
     label: 'Reporting',
     icon: '📊',
     items: [
+      { label: '✦ Ask Aria', href: '/pos/ask' },
       { label: 'Sales Reports', href: '/pos/reports/sales' },
       { label: 'Inventory', href: '/pos/reports/inventory' },
       { label: 'Cashier', href: '/pos/reports/cashier' },
@@ -124,7 +125,7 @@ const SECTIONS = [
 
 function getActiveSection(pathname: string): string {
   if (pathname === '/pos/terminal') return 'sell'
-  if (pathname.startsWith('/pos/reports') || pathname.startsWith('/pos/competitors')) return 'reporting'
+  if (pathname.startsWith('/pos/reports') || pathname.startsWith('/pos/competitors') || pathname.startsWith('/pos/ask')) return 'reporting'
   if (pathname.startsWith('/pos/settings') || pathname.startsWith('/pos/sale-keys') ||
       pathname.startsWith('/pos/receipt-templates') || pathname.startsWith('/pos/barcodes') ||
       pathname.startsWith('/pos/price-sets')) return 'setup'

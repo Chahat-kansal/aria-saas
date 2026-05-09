@@ -1,406 +1,365 @@
-'use client';
+'use client'
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
+import {
+  ResponsiveContainer, BarChart, Bar, LineChart, Line, AreaChart, Area,
+  PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip,
+} from 'recharts'
 
-import { useState, useEffect, useRef, useCallback } from 'react';
-import AriaMessage from '@/components/aria/AriaMessage';
-import AriaChart, { ChartSpec } from '@/components/aria/AriaChart';
+const COLORS = ['#8B5CF6', '#60A5FA', '#34D399', '#F59E0B', '#F87171']
 
-interface Message {
-  role: 'user' | 'aria' | 'tool' | 'error';
-  content: string;
-  toolName?: string;
-  streaming?: boolean;
+const SUGGESTED = [
+  'How much did we sell last Friday vs the Friday before?',
+  'Who are my top 10 customers this month?',
+  'What products are running low on stock?',
+  'Show me staff performance this week',
+  'Which products have the lowest margins?',
+  'Compare this month\'s revenue to last month',
+]
+
+interface ConvMeta { id: string; title: string; last_message_at: string }
+type DisplayMsg =
+  | { type: 'user'; text: string }
+  | { type: 'aria'; text: string; streaming: boolean }
+  | { type: 'tool'; toolName: string; status: 'running' | 'done'; count?: number }
+  | { type: 'error'; text: string }
+
+interface ParsedChart { type: string; title: string; data: { label: string; value: number }[]; compare_data?: { label: string; value: number }[] }
+interface ParsedAction { label: string; href: string; style: string }
+
+function parseChartHint(raw: string): ParsedChart | null {
+  const lines = raw.trim().split('\n').map(l => l.trim())
+  let type = 'bar', title = '', data: ParsedChart['data'] = [], compare_data: ParsedChart['compare_data']
+  for (const line of lines) {
+    if (line.startsWith('type=')) type = line.slice(5).split('|')[0].trim()
+    else if (line.startsWith('title=')) title = line.slice(6).trim()
+    else if (line.startsWith('data=')) { try { data = JSON.parse(line.slice(5)) } catch {} }
+    else if (line.startsWith('compare_data=')) { try { compare_data = JSON.parse(line.slice(13)) } catch {} }
+  }
+  return data.length > 0 ? { type, title, data, compare_data } : null
 }
 
-interface VizBlock {
-  type: 'chart' | 'table';
-  id: string;
-  tool?: string;
-  data?: unknown;
-  chart_spec?: ChartSpec;
+function parseActionHint(raw: string): ParsedAction | null {
+  const lines = raw.trim().split('\n').map(l => l.trim())
+  let label = '', href = '', style = 'primary'
+  for (const line of lines) {
+    if (line.startsWith('label=')) label = line.slice(6).trim()
+    else if (line.startsWith('href=')) href = line.slice(5).trim()
+    else if (line.startsWith('style=')) style = line.slice(6).trim()
+  }
+  return label && href ? { label, href, style } : null
 }
 
-interface ChatHistory {
-  role: 'user' | 'assistant';
-  content: string;
-}
+function InlineChart({ spec }: { spec: ParsedChart }) {
+  const merged = spec.data.map((d, i) => ({ label: d.label, value: d.value, prev: spec.compare_data?.[i]?.value }))
+  const hasPrev = merged.some(d => d.prev !== undefined)
+  const yFmt = (v: number) => v >= 1000 ? `$${(v / 1000).toFixed(0)}k` : `$${v}`
 
-const SUGGESTED_PROMPTS = [
-  'Show me Friday afternoon revenue vs last 4 Fridays',
-  'Which products lost margin this month?',
-  'Top 10 customers — what should I send them?',
-  'Compare this outlet vs last week by category',
-  'Why is wine slow this week?',
-  'Build me a clearance promo for dead stock',
-];
+  if (spec.type === 'pie') {
+    return (
+      <div>
+        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8 }}>{spec.title}</div>
+        <ResponsiveContainer width="100%" height={200}>
+          <PieChart><Pie data={merged} dataKey="value" nameKey="label" cx="50%" cy="50%" outerRadius={75} label={({ name, percent }: { name?: string; percent?: number }) => `${name ?? ''} ${((percent ?? 0) * 100).toFixed(0)}%`} labelLine={false}>
+            {merged.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+          </Pie><Tooltip formatter={(v) => `$${Number(v ?? 0).toFixed(2)}`} /></PieChart>
+        </ResponsiveContainer>
+      </div>
+    )
+  }
 
-function TableViz({ tool, data }: { tool?: string; data: unknown }) {
-  const label = tool?.replace(/_/g, ' ') ?? 'Results';
-  const result = data as Record<string, unknown>;
-
-  const getRows = (): Record<string, unknown>[] => {
-    if (Array.isArray(result)) return (result as Record<string, unknown>[]).slice(0, 20);
-    if (result?.rows && Array.isArray(result.rows)) return (result.rows as Record<string, unknown>[]).slice(0, 20);
-    if (result?.products && Array.isArray(result.products)) return (result.products as Record<string, unknown>[]).slice(0, 20);
-    if (result?.customers && Array.isArray(result.customers)) return (result.customers as Record<string, unknown>[]).slice(0, 20);
-    return [];
-  };
-
-  const rows = getRows();
-  if (rows.length === 0) return null;
-  const cols = Object.keys(rows[0]);
-
-  const cellStyle: React.CSSProperties = {
-    padding: '6px 10px',
-    fontSize: 12,
-    borderBottom: '1px solid var(--divider)',
-    color: 'var(--text-primary)',
-    fontFamily: 'Manrope, sans-serif',
-    whiteSpace: 'nowrap',
-  };
-
-  const headStyle: React.CSSProperties = {
-    ...cellStyle,
-    color: 'var(--text-secondary)',
-    fontWeight: 600,
-    fontSize: 11,
-    textTransform: 'uppercase',
-    letterSpacing: '0.04em',
-  };
+  const commonAxes = (
+    <>
+      <CartesianGrid strokeDasharray="3 3" stroke="var(--divider)" />
+      <XAxis dataKey="label" tick={{ fontSize: 10, fill: 'var(--text-tertiary)' }} />
+      <YAxis tickFormatter={yFmt} tick={{ fontSize: 10, fill: 'var(--text-tertiary)' }} width={48} />
+      <Tooltip formatter={(v) => [`$${Number(v ?? 0).toFixed(2)}`, '']} contentStyle={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: 8, fontSize: 12 }} />
+    </>
+  )
 
   return (
-    <div style={{ marginBottom: 16 }}>
-      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8, textTransform: 'capitalize', fontFamily: 'Manrope, sans-serif' }}>
-        {label}
-      </div>
-      <div style={{ overflowX: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 300 }}>
-          <thead>
-            <tr>
-              {cols.map(c => (
-                <th key={c} style={headStyle}>{c.replace(/_/g, ' ')}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row, i) => (
-              <tr key={i}>
-                {cols.map(c => (
-                  <td key={c} style={cellStyle}>
-                    {typeof row[c] === 'number'
-                      ? (c.includes('amount') || c.includes('revenue') || c.includes('spent') || c.includes('price'))
-                        ? `$${Number(row[c]).toFixed(2)}`
-                        : c.includes('pct')
-                          ? `${Number(row[c]).toFixed(1)}%`
-                          : String(row[c])
-                      : String(row[c] ?? '')}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+    <div>
+      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8 }}>{spec.title}</div>
+      <ResponsiveContainer width="100%" height={220}>
+        {spec.type === 'line' || spec.type === 'area' ? (
+          spec.type === 'area' ? (
+            <AreaChart data={merged}>{commonAxes}
+              <Area type="monotone" dataKey="value" fill={COLORS[0] + '33'} stroke={COLORS[0]} name="This period" strokeWidth={2} />
+              {hasPrev && <Area type="monotone" dataKey="prev" fill={COLORS[1] + '22'} stroke={COLORS[1]} name="Previous" strokeWidth={2} strokeDasharray="4 4" />}
+            </AreaChart>
+          ) : (
+            <LineChart data={merged}>{commonAxes}
+              <Line type="monotone" dataKey="value" stroke={COLORS[0]} name="This period" strokeWidth={2} dot={false} />
+              {hasPrev && <Line type="monotone" dataKey="prev" stroke={COLORS[1]} name="Previous" strokeWidth={2} strokeDasharray="4 4" dot={false} />}
+            </LineChart>
+          )
+        ) : (
+          <BarChart data={merged}>{commonAxes}
+            <Bar dataKey="value" fill={COLORS[0]} name="This period" radius={[3, 3, 0, 0]} />
+            {hasPrev && <Bar dataKey="prev" fill={COLORS[1]} name="Previous" radius={[3, 3, 0, 0]} />}
+          </BarChart>
+        )}
+      </ResponsiveContainer>
     </div>
-  );
+  )
+}
+
+function renderText(text: string) {
+  return text
+    .split(/\*\*(.+?)\*\*/g)
+    .map((part, i) => i % 2 === 1 ? <strong key={i}>{part}</strong> : part.split('`').map((s, j) => j % 2 === 1 ? <code key={j} style={{ background: 'var(--bg-elevated)', borderRadius: 3, padding: '1px 5px', fontSize: '0.9em', fontFamily: 'monospace' }}>{s}</code> : s))
+}
+
+function renderAriaContent(text: string) {
+  const nodes: React.ReactNode[] = []
+  const blockRe = /\[(chart|action):([\s\S]*?)\n\]/g
+  let last = 0; let key = 0; let m
+  while ((m = blockRe.exec(text)) !== null) {
+    const before = text.slice(last, m.index)
+    if (before) nodes.push(<span key={key++}>{before.split('\n').map((l, i) => <span key={i}>{i > 0 && <br />}{renderText(l)}</span>)}</span>)
+    if (m[1] === 'chart') {
+      const spec = parseChartHint(m[2])
+      if (spec) nodes.push(<div key={key++} style={{ margin: '12px 0', background: 'var(--bg-elevated)', borderRadius: 10, padding: '14px 16px', border: '1px solid var(--divider)' }}><InlineChart spec={spec} /></div>)
+    } else if (m[1] === 'action') {
+      const act = parseActionHint(m[2])
+      if (act) nodes.push(
+        <div key={key++} style={{ marginTop: 12 }}>
+          <a href={act.href} style={{ display: 'inline-block', padding: '8px 18px', borderRadius: 9, background: act.style === 'primary' ? 'var(--violet)' : 'var(--bg-elevated)', color: act.style === 'primary' ? '#fff' : 'var(--text-primary)', fontSize: 13, fontWeight: 600, textDecoration: 'none', border: act.style === 'primary' ? 'none' : '1px solid var(--border-default)' }}>
+            {act.label} →
+          </a>
+        </div>
+      )
+    }
+    last = m.index + m[0].length
+  }
+  const rest = text.slice(last)
+  if (rest) nodes.push(<span key={key++}>{rest.split('\n').map((l, i) => <span key={i}>{i > 0 && <br />}{renderText(l)}</span>)}</span>)
+  return nodes
+}
+
+function getResultCount(result: unknown): number | undefined {
+  if (!result || typeof result !== 'object') return undefined
+  const r = result as Record<string, unknown>
+  if (typeof r.rows === 'number') return r.rows
+  if (Array.isArray(r.staff)) return r.staff.length
+  if (Array.isArray(r.customers)) return r.customers.length
+  if (typeof r.transactions === 'number') return r.transactions
+  return undefined
 }
 
 export default function AskAriaPage() {
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [vizBlocks, setVizBlocks] = useState<VizBlock[]>([]);
-  const [chatHistory, setChatHistory] = useState<ChatHistory[]>([]);
-  const [convId, setConvId] = useState<string | null>(null);
-  const [input, setInput] = useState('');
-  const [streaming, setStreaming] = useState(false);
-  const threadRef = useRef<HTMLDivElement>(null);
+  const router = useRouter()
+  const [conversations, setConversations] = useState<ConvMeta[]>([])
+  const [messages, setMessages] = useState<DisplayMsg[]>([])
+  const [history, setHistory] = useState<{ role: 'user' | 'assistant'; content: string }[]>([])
+  const [convId, setConvId] = useState<string | null>(null)
+  const [input, setInput] = useState('')
+  const [streaming, setStreaming] = useState(false)
+  const threadRef = useRef<HTMLDivElement>(null)
+  const ariaIdxRef = useRef(-1)
+  const toolIdxRef = useRef<Record<string, number>>({})
+
+  const fetchConvs = useCallback(() => {
+    fetch('/api/pos/ask').then(r => r.json()).then(d => setConversations(d.conversations ?? [])).catch(() => {})
+  }, [])
+
+  useEffect(() => { fetchConvs() }, [fetchConvs])
 
   useEffect(() => {
-    if (threadRef.current) {
-      threadRef.current.scrollTop = threadRef.current.scrollHeight;
-    }
-  }, [messages]);
+    if (threadRef.current) threadRef.current.scrollTop = threadRef.current.scrollHeight
+  }, [messages])
 
-  const addMessage = useCallback((msg: Message) => {
-    setMessages(prev => [...prev, msg]);
-  }, []);
+  const loadConversation = useCallback(async (id: string) => {
+    const res = await fetch(`/api/pos/ask?id=${id}`)
+    const { messages: stored } = await res.json() as { messages: { role: string; content: unknown }[] }
+    setConvId(id)
+    setMessages(
+      (stored ?? [])
+        .filter(m => m.role === 'user' || m.role === 'assistant')
+        .map(m => ({
+          type: m.role === 'user' ? 'user' : 'aria',
+          text: typeof m.content === 'string' ? m.content
+            : Array.isArray(m.content) ? (m.content as { type: string; text?: string }[]).filter(b => b.type === 'text').map(b => b.text ?? '').join('') : '',
+          streaming: false,
+        } as DisplayMsg))
+    )
+    setHistory([])
+  }, [])
 
-  const addViz = useCallback((viz: VizBlock) => {
-    setVizBlocks(prev => [viz, ...prev]);
-  }, []);
+  const newChat = useCallback(() => {
+    setMessages([]); setHistory([]); setConvId(null); ariaIdxRef.current = -1
+  }, [])
 
   const sendMessage = useCallback(async (content: string) => {
-    if (!content.trim() || streaming) return;
-    setStreaming(true);
-    setInput('');
-    addMessage({ role: 'user', content });
+    if (!content.trim() || streaming) return
+    setStreaming(true); setInput('')
+    ariaIdxRef.current = -1; toolIdxRef.current = {}
+
+    setMessages(prev => [...prev, { type: 'user', text: content }])
+    const nextHistory = [...history, { role: 'user' as const, content }]
 
     const res = await fetch('/api/pos/ask', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: content, history: chatHistory, conversation_id: convId }),
-    });
+      body: JSON.stringify({ messages: nextHistory, conversation_id: convId }),
+    })
 
-    if (!res.body) {
-      addMessage({ role: 'error', content: 'No response from server.' });
-      setStreaming(false);
-      return;
-    }
+    if (!res.body) { setStreaming(false); return }
 
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
-    let currentText = '';
-    let ariaMessageIdx = -1;
+    const reader = res.body.getReader(); const decoder = new TextDecoder()
+    let buffer = ''; let accumulated = ''
 
     while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop() ?? '';
+      const { value, done } = await reader.read(); if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n'); buffer = lines.pop() ?? ''
       for (const line of lines) {
-        if (!line.startsWith('data: ')) continue;
+        if (!line.startsWith('data: ')) continue
         try {
-          const event = JSON.parse(line.slice(6));
-          if (event.type === 'text') {
-            currentText += event.chunk;
+          const ev = JSON.parse(line.slice(6)) as Record<string, unknown>
+          if (ev.type === 'text') {
+            accumulated += ev.value as string
             setMessages(prev => {
-              if (ariaMessageIdx >= 0) {
-                const next = [...prev];
-                next[ariaMessageIdx] = { role: 'aria', content: currentText, streaming: true };
-                return next;
+              if (ariaIdxRef.current >= 0) {
+                const next = [...prev]; (next[ariaIdxRef.current] as { type: 'aria'; text: string; streaming: boolean }).text = accumulated; return next
               }
-              ariaMessageIdx = prev.length;
-              return [...prev, { role: 'aria', content: currentText, streaming: true }];
-            });
-          } else if (event.type === 'tool_start') {
-            addMessage({ role: 'tool', content: '', toolName: event.tool });
-          } else if (event.type === 'tool_result') {
-            if (event.tool === 'generate_chart' && event.result?.chart_spec) {
-              addViz({ type: 'chart', id: event.id, chart_spec: event.result.chart_spec as ChartSpec });
-            } else if (['query_sales', 'query_inventory', 'query_customers', 'compare_periods'].includes(event.tool)) {
-              addViz({ type: 'table', id: event.id, tool: event.tool, data: event.result });
-            }
-          } else if (event.type === 'done') {
-            setConvId(event.conversation_id);
-            setChatHistory(prev => [...prev, { role: 'user', content }, { role: 'assistant', content: currentText }]);
-            setMessages(prev => prev.map(m => ({ ...m, streaming: false })));
-            setStreaming(false);
-          } else if (event.type === 'error') {
-            addMessage({ role: 'error', content: event.message });
-            setStreaming(false);
+              ariaIdxRef.current = prev.length
+              return [...prev, { type: 'aria', text: accumulated, streaming: true }]
+            })
+          } else if (ev.type === 'tool_use') {
+            const toolName = ev.name as string
+            setMessages(prev => {
+              toolIdxRef.current[toolName] = prev.length
+              return [...prev, { type: 'tool', toolName, status: 'running' }]
+            })
+          } else if (ev.type === 'tool_result') {
+            const toolName = ev.name as string
+            const count = getResultCount(ev.result)
+            setMessages(prev => {
+              const idx = toolIdxRef.current[toolName] ?? -1
+              if (idx < 0) return prev
+              const next = [...prev]; (next[idx] as { type: 'tool'; toolName: string; status: 'running' | 'done'; count?: number }).status = 'done'; if (count !== undefined) (next[idx] as { count?: number }).count = count; return next
+            })
+          } else if (ev.type === 'done') {
+            setConvId(ev.conversation_id as string)
+            setHistory(h => [...h, { role: 'user', content }, { role: 'assistant', content: accumulated }])
+            setMessages(prev => prev.map(m => m.type === 'aria' ? { ...m, streaming: false } : m))
+            setStreaming(false)
+            if (!convId) fetchConvs()
+          } else if (ev.type === 'error') {
+            setMessages(prev => [...prev, { type: 'error', text: ev.value as string }])
+            setStreaming(false)
           }
         } catch {}
       }
     }
-    setStreaming(false);
-  }, [streaming, chatHistory, convId, addMessage, addViz]);
+    setStreaming(false)
+  }, [streaming, history, convId, fetchConvs])
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      sendMessage(input);
-    }
-  };
-
-  const isEmpty = messages.length === 0;
-
-  const panelStyle: React.CSSProperties = {
-    display: 'flex',
-    flexDirection: 'column',
-    height: '100%',
-    overflow: 'hidden',
-  };
-
-  const inputAreaStyle: React.CSSProperties = {
-    padding: '12px 16px',
-    borderTop: '1px solid var(--divider)',
-    background: 'var(--bg-surface)',
-    display: 'flex',
-    gap: 8,
-    alignItems: 'flex-end',
-    flexShrink: 0,
-  };
-
-  const textareaStyle: React.CSSProperties = {
-    flex: 1,
-    resize: 'none',
-    background: 'var(--bg-elevated)',
-    border: '1px solid var(--divider)',
-    borderRadius: 12,
-    padding: '10px 14px',
-    fontSize: 14,
-    color: 'var(--text-primary)',
-    fontFamily: 'Manrope, sans-serif',
-    outline: 'none',
-    lineHeight: 1.5,
-    minHeight: 42,
-    maxHeight: 120,
-  };
-
-  const sendBtnStyle: React.CSSProperties = {
-    background: 'var(--violet)',
-    color: '#fff',
-    border: 'none',
-    borderRadius: 10,
-    padding: '10px 18px',
-    fontSize: 13,
-    fontWeight: 600,
-    cursor: streaming ? 'not-allowed' : 'pointer',
-    opacity: streaming ? 0.6 : 1,
-    fontFamily: 'Manrope, sans-serif',
-    flexShrink: 0,
-    height: 42,
-  };
+  const isEmpty = messages.length === 0
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        flexDirection: 'row',
-        height: 'calc(100vh - 64px)',
-        background: 'var(--bg-base)',
-        fontFamily: 'Manrope, sans-serif',
-        overflow: 'hidden',
-      }}
-    >
-      <div style={{ flex: '0 0 45%', display: 'flex', flexDirection: 'column', borderRight: '1px solid var(--divider)', ...panelStyle }}>
+    <div style={{ display: 'flex', height: 'calc(100vh - 64px)', fontFamily: "'Manrope',sans-serif", background: 'var(--bg-base)', overflow: 'hidden' }}>
+
+      {/* Left rail */}
+      <div style={{ width: 240, flexShrink: 0, borderRight: '1px solid var(--divider)', display: 'flex', flexDirection: 'column', background: 'var(--bg-surface)' }}>
+        <div style={{ padding: '16px 12px', borderBottom: '1px solid var(--divider)' }}>
+          <button onClick={newChat} style={{ width: '100%', padding: '8px 14px', borderRadius: 9, border: '1px solid var(--border-default)', background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'center' }}>
+            <span style={{ fontSize: 16 }}>+</span> New chat
+          </button>
+        </div>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '8px 4px' }}>
+          {conversations.map(c => (
+            <div key={c.id} onClick={() => loadConversation(c.id)} style={{ padding: '9px 10px', borderRadius: 8, cursor: 'pointer', background: convId === c.id ? 'var(--violet-soft)' : 'transparent', borderLeft: convId === c.id ? '2px solid var(--violet)' : '2px solid transparent', marginBottom: 2 }}
+              onMouseEnter={e => { if (convId !== c.id) (e.currentTarget as HTMLElement).style.background = 'var(--bg-elevated)' }}
+              onMouseLeave={e => { if (convId !== c.id) (e.currentTarget as HTMLElement).style.background = 'transparent' }}>
+              <div style={{ fontSize: 12, fontWeight: 500, color: convId === c.id ? 'var(--text-violet)' : 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.title || 'Untitled'}</div>
+              <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: 2 }}>{new Date(c.last_message_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Chat area */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+
         {isEmpty ? (
-          <div style={{ flex: 1, overflowY: 'auto', padding: '40px 32px', display: 'flex', flexDirection: 'column', gap: 24 }}>
-            <h2 style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
-              Ask Aria anything about your business.
-            </h2>
-            <p style={{ fontSize: 15, color: 'var(--text-secondary)', margin: 0, lineHeight: 1.6 }}>
-              She has access to every sale, every product, every customer. Ask in plain English.
-            </p>
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(3, 1fr)',
-                gap: 10,
-              }}
-            >
-              {SUGGESTED_PROMPTS.map((prompt, i) => (
-                <button
-                  key={i}
-                  onClick={() => sendMessage(prompt)}
-                  style={{
-                    background: 'var(--bg-surface)',
-                    border: '1px solid var(--divider)',
-                    borderRadius: 10,
-                    padding: '10px 12px',
-                    fontSize: 12,
-                    color: 'var(--text-primary)',
-                    cursor: 'pointer',
-                    textAlign: 'left',
-                    fontFamily: 'Manrope, sans-serif',
-                    lineHeight: 1.4,
-                    transition: 'border-color 0.15s',
-                  }}
+          <div style={{ flex: 1, overflowY: 'auto', padding: '48px 48px 24px', maxWidth: 720, margin: '0 auto', width: '100%' }}>
+            <div style={{ fontSize: 28, fontWeight: 800, color: 'var(--text-primary)', marginBottom: 10 }}>Ask Aria anything.</div>
+            <div style={{ fontSize: 15, color: 'var(--text-secondary)', marginBottom: 36, lineHeight: 1.6 }}>She has access to every sale, every product, every customer. Ask in plain English.</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(200px,1fr))', gap: 10 }}>
+              {SUGGESTED.map((p, i) => (
+                <button key={i} onClick={() => sendMessage(p)} style={{ background: 'var(--bg-surface)', border: '1px solid var(--divider)', borderRadius: 10, padding: '12px 14px', fontSize: 13, color: 'var(--text-primary)', cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit', lineHeight: 1.4 }}
                   onMouseEnter={e => (e.currentTarget.style.borderColor = 'var(--violet)')}
-                  onMouseLeave={e => (e.currentTarget.style.borderColor = 'var(--divider)')}
-                >
-                  {prompt}
+                  onMouseLeave={e => (e.currentTarget.style.borderColor = 'var(--divider)')}>
+                  {p}
                 </button>
               ))}
             </div>
           </div>
         ) : (
-          <div
-            ref={threadRef}
-            style={{ flex: 1, overflowY: 'auto', padding: '20px 20px 8px' }}
-          >
-            {messages.map((msg, i) => (
-              <AriaMessage
-                key={i}
-                role={msg.role}
-                content={msg.content}
-                toolName={msg.toolName}
-                streaming={msg.streaming}
-              />
-            ))}
+          <div ref={threadRef} style={{ flex: 1, overflowY: 'auto', padding: '24px 48px', maxWidth: 760, margin: '0 auto', width: '100%' }}>
+            {messages.map((msg, i) => {
+              if (msg.type === 'user') return (
+                <div key={i} style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
+                  <div style={{ background: 'var(--violet)', color: '#fff', borderRadius: '14px 14px 3px 14px', padding: '10px 16px', fontSize: 14, maxWidth: '70%', lineHeight: 1.5 }}>{msg.text}</div>
+                </div>
+              )
+              if (msg.type === 'tool') return (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                  <div style={{ fontSize: 12, padding: '4px 12px', borderRadius: 99, background: msg.status === 'running' ? 'rgba(139,92,246,0.1)' : 'rgba(52,211,153,0.1)', color: msg.status === 'running' ? 'var(--violet)' : '#34D399', border: `1px solid ${msg.status === 'running' ? 'rgba(139,92,246,0.2)' : 'rgba(52,211,153,0.2)'}`, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 5 }}>
+                    {msg.status === 'running' ? (
+                      <><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', border: '1.5px solid var(--violet)', borderTopColor: 'transparent', animation: 'spin 0.7s linear infinite' }} />Looking at {msg.toolName.replace(/_/g, ' ')}…</>
+                    ) : (
+                      <><span style={{ color: '#34D399' }}>✓</span> {msg.count !== undefined ? `Found ${msg.count} results` : msg.toolName.replace(/_/g, ' ')}</>
+                    )}
+                  </div>
+                </div>
+              )
+              if (msg.type === 'error') return (
+                <div key={i} style={{ marginBottom: 16, padding: '10px 16px', borderRadius: 10, background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.2)', fontSize: 13, color: '#F87171' }}>⚠ {msg.text}</div>
+              )
+              return (
+                <div key={i} style={{ marginBottom: 20 }}>
+                  <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                    <div style={{ width: 24, height: 24, borderRadius: '50%', background: 'linear-gradient(135deg,#A78BFA,#7C3AED)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: '#fff', fontWeight: 800, flexShrink: 0, marginTop: 2 }}>✦</div>
+                    <div style={{ flex: 1, fontSize: 14, color: 'var(--text-primary)', lineHeight: 1.7 }}>
+                      {msg.streaming ? msg.text : renderAriaContent(msg.text)}
+                      {msg.streaming && <span style={{ display: 'inline-block', width: 2, height: 14, background: 'var(--violet)', marginLeft: 2, animation: 'blink 1s step-end infinite', verticalAlign: 'middle' }} />}
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+            {streaming && messages.at(-1)?.type !== 'aria' && (
+              <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 12 }}>
+                <div style={{ width: 24, height: 24, borderRadius: '50%', background: 'linear-gradient(135deg,#A78BFA,#7C3AED)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: '#fff', fontWeight: 800, flexShrink: 0 }}>✦</div>
+                <div style={{ fontSize: 13, color: 'var(--text-tertiary)' }}>Aria is thinking<span style={{ letterSpacing: 2 }}>...</span></div>
+              </div>
+            )}
           </div>
         )}
 
-        <div style={inputAreaStyle}>
-          <textarea
-            style={textareaStyle}
-            value={input}
-            onChange={e => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Ask about sales, inventory, customers..."
-            disabled={streaming}
-            rows={1}
-          />
-          <button
-            style={sendBtnStyle}
-            onClick={() => sendMessage(input)}
-            disabled={streaming}
-          >
-            {streaming ? '...' : 'Send'}
-          </button>
+        <div style={{ borderTop: '1px solid var(--divider)', padding: '14px 48px', background: 'var(--bg-surface)' }}>
+          <div style={{ maxWidth: 760, margin: '0 auto', display: 'flex', gap: 10 }}>
+            <textarea
+              value={input} onChange={e => setInput(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(input) } }}
+              placeholder="Ask about sales, inventory, customers, staff…"
+              disabled={streaming} rows={1}
+              style={{ flex: 1, resize: 'none', background: 'var(--bg-elevated)', border: '1px solid var(--divider)', borderRadius: 12, padding: '10px 14px', fontSize: 14, color: 'var(--text-primary)', fontFamily: 'inherit', outline: 'none', lineHeight: 1.5, minHeight: 44, maxHeight: 120 }}
+            />
+            <button onClick={() => sendMessage(input)} disabled={streaming || !input.trim()} style={{ padding: '10px 20px', borderRadius: 10, border: 'none', background: streaming || !input.trim() ? 'var(--bg-elevated)' : 'var(--violet)', color: streaming || !input.trim() ? 'var(--text-tertiary)' : '#fff', fontSize: 13, fontWeight: 600, cursor: streaming || !input.trim() ? 'not-allowed' : 'pointer', fontFamily: 'inherit', flexShrink: 0, height: 44 }}>
+              {streaming ? '…' : 'Send'}
+            </button>
+          </div>
         </div>
       </div>
 
-      <div
-        style={{
-          flex: '0 0 55%',
-          display: 'flex',
-          flexDirection: 'column',
-          background: 'var(--bg-surface)',
-          overflow: 'hidden',
-        }}
-      >
-        {vizBlocks.length > 0 ? (
-          <>
-            <div
-              style={{
-                padding: '16px 20px',
-                borderBottom: '1px solid var(--divider)',
-                fontSize: 13,
-                fontWeight: 600,
-                color: 'var(--text-secondary)',
-                flexShrink: 0,
-              }}
-            >
-              Visualisation
-            </div>
-            <div style={{ flex: 1, overflowY: 'auto', padding: 20, display: 'flex', flexDirection: 'column', gap: 20 }}>
-              {vizBlocks.map((viz) => (
-                <div
-                  key={viz.id}
-                  style={{
-                    background: 'var(--bg-elevated)',
-                    borderRadius: 12,
-                    padding: 16,
-                    border: '1px solid var(--divider)',
-                  }}
-                >
-                  {viz.type === 'chart' && viz.chart_spec ? (
-                    <AriaChart chart_spec={viz.chart_spec} />
-                  ) : viz.type === 'table' ? (
-                    <TableViz tool={viz.tool} data={viz.data} />
-                  ) : null}
-                </div>
-              ))}
-            </div>
-          </>
-        ) : (
-          <div
-            style={{
-              flex: 1,
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 8,
-              color: 'var(--text-secondary)',
-            }}
-          >
-            <div style={{ fontSize: 32, opacity: 0.4 }}>📊</div>
-            <div style={{ fontSize: 13, opacity: 0.6 }}>Charts and data will appear here</div>
-          </div>
-        )}
-      </div>
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg) } }
+        @keyframes blink { 50% { opacity: 0 } }
+      `}</style>
     </div>
-  );
+  )
 }
