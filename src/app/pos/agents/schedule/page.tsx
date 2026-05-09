@@ -139,7 +139,7 @@ export default function ScheduleAgentPage() {
           <div>
             <span style={{ fontSize: 13, fontWeight: 700, color: '#34D399' }}>✨ Aria generated this roster</span>
             <span style={{ fontSize: 12, color: 'var(--text-secondary)', marginLeft: 10 }}>
-              {pendingDec.decision_data.total_hours}h · A${(pendingDec.decision_data.total_cost_cents / 100).toFixed(0)} labour · {(pendingDec.confidence_score * 100).toFixed(0)}% confidence
+              {pendingDec.decision_data.total_hours ?? 0}h · A${((pendingDec.decision_data.total_cost_cents ?? 0) / 100).toFixed(0)} labour · {((pendingDec.confidence_score ?? 0) * 100).toFixed(0)}% confidence
             </span>
             {pendingDec.reasoning && (
               <div style={{ fontSize: 12, color: 'var(--text-secondary)', fontStyle: 'italic', marginTop: 4 }}>
@@ -245,10 +245,10 @@ export default function ScheduleAgentPage() {
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div style={{ background: 'var(--bg-elevated)', borderRadius: 16, padding: 28, maxWidth: 400, width: '90%', boxShadow: 'var(--shadow-lg)' }}>
             <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 12 }}>
-              Publish roster for {pendingDec.decision_data.outlet_name}?
+              Publish roster for {pendingDec.decision_data.outlet_name ?? 'outlet'}?
             </h3>
             <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 8 }}>
-              Week of {pendingDec.decision_data.week_start} · {pendingDec.decision_data.total_hours}h · A${(pendingDec.decision_data.total_cost_cents / 100).toFixed(0)} labour
+              Week of {pendingDec.decision_data.week_start} · {pendingDec.decision_data.total_hours ?? 0}h · A${((pendingDec.decision_data.total_cost_cents ?? 0) / 100).toFixed(0)} labour
             </p>
             <p style={{ fontSize: 12, color: 'var(--text-tertiary)', marginBottom: 20 }}>
               All active staff with email addresses will receive a roster notification.

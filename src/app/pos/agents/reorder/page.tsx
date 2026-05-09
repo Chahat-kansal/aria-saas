@@ -133,7 +133,7 @@ export default function ReorderAgentPage() {
                   <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 0', borderTop: i > 0 ? '1px solid var(--divider)' : 'none', fontSize: 13 }}>
                     <span style={{ flex: 1, color: 'var(--text-primary)', fontWeight: 500 }}>{l.product_name}</span>
                     <span style={{ color: 'var(--text-secondary)', marginRight: 16 }}>{l.qty} units</span>
-                    <span style={{ fontFamily: "'JetBrains Mono',monospace", color: 'var(--text-primary)' }}>A${l.total.toFixed(2)}</span>
+                    <span style={{ fontFamily: "'JetBrains Mono',monospace", color: 'var(--text-primary)' }}>A${(l.total ?? 0).toFixed(2)}</span>
                     <span style={{ marginLeft: 10, fontSize: 10, padding: '2px 6px', borderRadius: 99, background: `${urgencyColor(l.urgency)}22`, color: urgencyColor(l.urgency), fontWeight: 700 }}>{urgencyLabel(l.urgency)}</span>
                   </div>
                 ))}
@@ -176,7 +176,7 @@ export default function ReorderAgentPage() {
             <div style={{ background: 'var(--bg-elevated)', borderRadius: 16, padding: 28, maxWidth: 400, boxShadow: 'var(--shadow-lg)' }}>
               <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 12 }}>Send PO to {dec.decision_data.supplier_name}?</h3>
               <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 8 }}>
-                A$${dec.decision_data.total_cost.toFixed(2)} · {dec.decision_data.lines?.length} lines
+                A$${(dec.decision_data.total_cost ?? 0).toFixed(2)} · {dec.decision_data.lines?.length ?? 0} lines
               </p>
               {dec.decision_data.supplier_email && (
                 <p style={{ fontSize: 12, color: 'var(--text-tertiary)', marginBottom: 20 }}>Will email to: {dec.decision_data.supplier_email}</p>

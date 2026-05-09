@@ -16,17 +16,23 @@ export async function runAgent(type: AgentType, business_id: string): Promise<Ag
   return agent.run(business_id);
 }
 
-// Simple intent routing — used by Conversation Reports
-const INTENT_MAP: Record<string, AgentType> = {
-  reorder: 'reorder', 'purchase order': 'reorder', stock: 'reorder', 'run out': 'reorder',
-  pric: 'pricing', cheaper: 'pricing', competitor: 'pricing', margin: 'pricing',
-  roster: 'schedule', staff: 'schedule', schedule: 'schedule', shift: 'schedule',
-};
+export interface IntentResult {
+  agent: AgentType | null;
+  confidence: number;
+  reason: string;
+}
 
-export function routeIntent(message: string): AgentType | null {
+export function routeIntent(message: string, _business_id: string): IntentResult {
   const lower = message.toLowerCase();
-  for (const [keyword, type] of Object.entries(INTENT_MAP)) {
-    if (lower.includes(keyword)) return type;
+
+  if (/reorder|stock|order|supplier/.test(lower)) {
+    return { agent: 'reorder', confidence: 0.75, reason: 'inventory/reorder keywords detected' };
   }
-  return null;
+  if (/price|pricing|competitor|margin|cheaper/.test(lower)) {
+    return { agent: 'pricing', confidence: 0.75, reason: 'pricing keywords detected' };
+  }
+  if (/staff|roster|schedule|shift/.test(lower)) {
+    return { agent: 'schedule', confidence: 0.75, reason: 'scheduling keywords detected' };
+  }
+  return { agent: null, confidence: 0, reason: 'no matching keywords' };
 }

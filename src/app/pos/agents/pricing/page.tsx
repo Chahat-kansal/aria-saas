@@ -104,8 +104,8 @@ export default function PricingAgentPage() {
             const data = d.decision_data;
             const isDrop = data.direction === 'drop';
             const accentColor = isDrop ? '#FBBF24' : '#34D399';
-            const delta = data.suggested_price - data.current_price;
-            const impact = Math.abs(d.projected_impact_cents);
+            const delta = (data.suggested_price ?? 0) - (data.current_price ?? 0);
+            const impact = Math.abs(d.projected_impact_cents ?? 0);
 
             return (
               <div key={d.id} style={{ background: 'var(--bg-surface)', borderRadius: 14, overflow: 'hidden', border: `1px solid ${accentColor}30`, boxShadow: 'var(--shadow-card)' }}>
@@ -114,9 +114,9 @@ export default function PricingAgentPage() {
 
                   {/* Price change */}
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 12 }}>
-                    <span style={{ fontSize: 22, fontWeight: 800, color: 'var(--text-tertiary)', textDecoration: 'line-through', fontFamily: "'JetBrains Mono',monospace" }}>A${data.current_price.toFixed(2)}</span>
+                    <span style={{ fontSize: 22, fontWeight: 800, color: 'var(--text-tertiary)', textDecoration: 'line-through', fontFamily: "'JetBrains Mono',monospace" }}>A${(data.current_price ?? 0).toFixed(2)}</span>
                     <span style={{ fontSize: 9, color: 'var(--text-tertiary)' }}>→</span>
-                    <span style={{ fontSize: 28, fontWeight: 900, color: accentColor, fontFamily: "'JetBrains Mono',monospace" }}>A${data.suggested_price.toFixed(2)}</span>
+                    <span style={{ fontSize: 28, fontWeight: 900, color: accentColor, fontFamily: "'JetBrains Mono',monospace" }}>A${(data.suggested_price ?? 0).toFixed(2)}</span>
                     <span style={{ fontSize: 12, color: accentColor, fontWeight: 700 }}>{isDrop ? '▼' : '▲'} {Math.abs(delta).toFixed(2)}</span>
                   </div>
 
@@ -125,7 +125,7 @@ export default function PricingAgentPage() {
                     {[['P25', data.market?.p25], ['Med', data.market?.median], ['P75', data.market?.p75]].map(([l, v]) => (
                       <div key={l as string} style={{ background: 'var(--bg-elevated)', borderRadius: 6, padding: '3px 8px', fontSize: 11, color: 'var(--text-secondary)' }}>
                         <span style={{ color: 'var(--text-tertiary)' }}>{l}: </span>
-                        <span style={{ fontFamily: "'JetBrains Mono',monospace", fontWeight: 600 }}>A${(v as number).toFixed(2)}</span>
+                        <span style={{ fontFamily: "'JetBrains Mono',monospace", fontWeight: 600 }}>A${((v as number) ?? 0).toFixed(2)}</span>
                       </div>
                     ))}
                   </div>
@@ -178,7 +178,7 @@ export default function PricingAgentPage() {
             <div style={{ background: 'var(--bg-elevated)', borderRadius: 16, padding: 28, maxWidth: 380, boxShadow: 'var(--shadow-lg)' }}>
               <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 12 }}>Apply new price?</h3>
               <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 20 }}>
-                Set <strong>{dec.decision_data.product_name}</strong> to <strong>A${dec.decision_data.suggested_price.toFixed(2)}</strong> effective {tomorrow}.
+                Set <strong>{dec.decision_data.product_name ?? '—'}</strong> to <strong>A${(dec.decision_data.suggested_price ?? 0).toFixed(2)}</strong> effective {tomorrow}.
               </p>
               <div style={{ display: 'flex', gap: 10 }}>
                 <button onClick={() => setConfirmId(null)} style={{ flex: 1, padding: '10px', borderRadius: 9, border: '1px solid var(--border-default)', background: 'transparent', color: 'var(--text-primary)', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>
