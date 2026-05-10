@@ -1,134 +1,129 @@
-'use client';
-import { POSAriaInsight } from '@/components/pos/POSAriaInsight';
-import { useState, useEffect } from 'react';
+'use client'
+import { useState, useEffect } from 'react'
+import Link from 'next/link'
+import { Package, Plus, Trash2, Eye, Pencil } from 'lucide-react'
 
-interface Supplier { id: string; name: string; }
 interface Order {
-  id: string; order_number: string; supplier_id: string | null; status: string;
-  total_amount: number; expected_date: string | null; created_at: string;
-  pos_suppliers?: { name: string } | null;
+  id: string; order_number: string; status: string; source: string;
+  supplier_name: string | null; total_estimated: number | null;
+  created_by: string | null; created_at: string;
 }
 
-const STATUSES = ['draft', 'sent', 'received', 'partial', 'cancelled'];
-const EMPTY = { supplier_id: '', expected_date: '', notes: '', status: 'draft' };
+const STATUS_STYLE: Record<string, { bg: string; color: string }> = {
+  draft:     { bg: 'rgba(212,169,94,0.12)', color: 'var(--warning,#D4A95E)' },
+  sent:      { bg: 'rgba(107,150,176,0.12)', color: 'var(--info,#6B96B0)' },
+  received:  { bg: 'rgba(127,184,151,0.12)', color: 'var(--success,#65B179)' },
+  cancelled: { bg: 'rgba(201,112,112,0.12)', color: 'var(--destructive,#C97070)' },
+}
+const SOURCE_LABEL: Record<string, string> = { manual: 'Manual', auto_reorder: 'Auto-Reorder', agent: 'Agent' }
+
+const TABS = ['all', 'draft', 'sent', 'received', 'cancelled'] as const
 
 export default function OrdersPage() {
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [modal, setModal] = useState(false);
-  const [form, setForm] = useState({ ...EMPTY });
-  const [saving, setSaving] = useState(false);
+  const [orders, setOrders] = useState<Order[]>([])
+  const [loading, setLoading] = useState(true)
+  const [activeTab, setActiveTab] = useState<typeof TABS[number]>('all')
+  const [deleting, setDeleting] = useState<string | null>(null)
 
   useEffect(() => {
-    Promise.all([
-      fetch('/api/pos/orders').then(r => r.json()),
-      fetch('/api/pos/suppliers').then(r => r.json()),
-    ]).then(([o, s]) => { setOrders(o.orders ?? []); setSuppliers(s.suppliers ?? []); setLoading(false); });
-  }, []);
+    fetch('/api/pos/orders').then(r => r.json()).then(d => {
+      setOrders(d.orders ?? [])
+      setLoading(false)
+    }).catch(() => setLoading(false))
+  }, [])
 
-  async function create() {
-    setSaving(true);
-    const res = await fetch('/api/pos/orders', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ supplier_id: form.supplier_id || null, expected_date: form.expected_date || null, notes: form.notes || null, status: form.status }),
-    });
-    const d = await res.json();
-    if (d.order) setOrders(os => [d.order, ...os]);
-    setSaving(false); setModal(false); setForm({ ...EMPTY });
+  async function deleteOrder(id: string) {
+    if (!confirm('Delete this draft order? This cannot be undone.')) return
+    setDeleting(id)
+    await fetch(`/api/pos/orders/${id}`, { method: 'DELETE' })
+    setOrders(os => os.filter(o => o.id !== id))
+    setDeleting(null)
   }
 
-  const STATUS_COLORS: Record<string, string> = {
-    draft: 'bg-[rgba(0,0,0,.05)] text-[rgba(26,26,22,.5)]',
-    sent: 'bg-blue-50 text-blue-700',
-    received: 'bg-violet-50 text-violet-700',
-    partial: 'bg-amber-50 text-amber-700',
-    cancelled: 'bg-red-50 text-red-600',
-  };
+  const filtered = activeTab === 'all' ? orders : orders.filter(o => o.status === activeTab)
 
   return (
-    <div className="min-h-full">
-      <POSAriaInsight page="pos/orders" />
-      <div className="p-6">
-      <div className="flex items-center justify-between mb-6">
+    <div style={{ minHeight: '100%', background: 'var(--bg-base)', color: 'var(--text-primary)', fontFamily: "'Manrope',sans-serif" }}>
+      <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--divider)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div>
-          <h1 className="text-xl font-semibold text-[#1a1a16]">Orders &amp; Invoices</h1>
-          <p className="text-xs text-[rgba(26,26,22,.45)] mt-0.5">{orders.length} purchase orders</p>
+          <h1 style={{ fontSize: 20, fontWeight: 700, margin: '0 0 2px' }}>Purchase Orders</h1>
+          <p style={{ fontSize: 12, color: 'var(--text-tertiary)', margin: 0 }}>{orders.length} total</p>
         </div>
-        <button onClick={() => setModal(true)} className="px-4 py-2 rounded-lg text-sm font-medium text-white" style={{ background: 'linear-gradient(135deg,#2563eb,#1d4ed8)' }}>
-          + New Order
-        </button>
+        <Link href="/pos/orders/new" style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '9px 18px', borderRadius: 9, background: 'var(--violet)', color: '#fff', textDecoration: 'none', fontSize: 13, fontWeight: 700 }}>
+          <Plus size={14} /> New Order
+        </Link>
       </div>
 
-      <div className="bg-white rounded-2xl border border-[rgba(0,0,0,.08)] overflow-hidden shadow-sm">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-[rgba(0,0,0,.06)]" style={{ background: '#fafaf8' }}>
-              {['Order #', 'Supplier', 'Status', 'Expected', 'Total', 'Created'].map(h => (
-                <th key={h} className="text-left text-[10px] text-[rgba(26,26,22,.4)] uppercase tracking-wider px-4 py-3 font-medium">{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr><td colSpan={6} className="text-center py-12 text-xs text-[rgba(26,26,22,.3)]">Loading…</td></tr>
-            ) : !orders.length ? (
-              <tr><td colSpan={6} className="text-center py-16 text-xs text-[rgba(26,26,22,.3)]">No orders yet</td></tr>
-            ) : orders.map(o => (
-              <tr key={o.id} className="border-b border-[rgba(0,0,0,.04)] last:border-0 hover:bg-[rgba(0,0,0,.01)]">
-                <td className="px-4 py-3 text-xs font-mono font-medium text-[#2563eb]">{o.order_number}</td>
-                <td className="px-4 py-3 text-xs text-[rgba(26,26,22,.7)]">{o.pos_suppliers?.name ?? '—'}</td>
-                <td className="px-4 py-3">
-                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium capitalize ${STATUS_COLORS[o.status] ?? ''}`}>{o.status}</span>
-                </td>
-                <td className="px-4 py-3 text-xs text-[rgba(26,26,22,.55)]">{o.expected_date ?? '—'}</td>
-                <td className="px-4 py-3 text-sm font-semibold text-[#1a1a16]">${(o.total_amount ?? 0).toFixed(2)}</td>
-                <td className="px-4 py-3 text-xs text-[rgba(26,26,22,.45)]">{new Date(o.created_at).toLocaleDateString()}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div style={{ display: 'flex', borderBottom: '1px solid var(--divider)', padding: '0 24px' }}>
+        {TABS.map(t => (
+          <button key={t} onClick={() => setActiveTab(t)}
+            style={{ padding: '11px 16px', background: 'none', border: 'none', borderBottom: `2px solid ${activeTab === t ? 'var(--violet)' : 'transparent'}`, color: activeTab === t ? 'var(--violet)' : 'var(--text-secondary)', fontSize: 13, fontWeight: activeTab === t ? 700 : 400, cursor: 'pointer', fontFamily: 'inherit', textTransform: 'capitalize' }}>
+            {t === 'all' ? 'All' : t.charAt(0).toUpperCase() + t.slice(1)}
+          </button>
+        ))}
       </div>
 
-      {modal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,.45)' }}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
-            <div className="px-6 py-5 border-b border-[rgba(0,0,0,.08)] flex items-center justify-between">
-              <h2 className="text-base font-semibold text-[#1a1a16]">New Purchase Order</h2>
-              <button onClick={() => setModal(false)} className="text-[rgba(26,26,22,.4)] text-xl leading-none">&times;</button>
-            </div>
-            <div className="px-6 py-5 space-y-3">
-              <div>
-                <label className="block text-xs font-medium text-[rgba(26,26,22,.6)] mb-1.5">Supplier</label>
-                <select value={form.supplier_id} onChange={e => setForm(f => ({ ...f, supplier_id: e.target.value }))}
-                  className="w-full bg-[#fafaf8] border border-[rgba(0,0,0,.1)] rounded-lg px-3 py-2.5 text-sm text-[#1a1a16] focus:outline-none focus:border-[#2563eb]">
-                  <option value="">No supplier</option>
-                  {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-[rgba(26,26,22,.6)] mb-1.5">Expected Date</label>
-                <input type="date" value={form.expected_date} onChange={e => setForm(f => ({ ...f, expected_date: e.target.value }))}
-                  className="w-full bg-[#fafaf8] border border-[rgba(0,0,0,.1)] rounded-lg px-3 py-2.5 text-sm text-[#1a1a16] focus:outline-none focus:border-[#2563eb]" />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-[rgba(26,26,22,.6)] mb-1.5">Status</label>
-                <select value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))}
-                  className="w-full bg-[#fafaf8] border border-[rgba(0,0,0,.1)] rounded-lg px-3 py-2.5 text-sm text-[#1a1a16] focus:outline-none focus:border-[#2563eb]">
-                  {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
-              </div>
-            </div>
-            <div className="px-6 py-4 border-t border-[rgba(0,0,0,.08)] flex justify-end gap-2">
-              <button onClick={() => setModal(false)} className="px-4 py-2 rounded-lg text-sm font-medium text-[rgba(26,26,22,.6)] border border-[rgba(0,0,0,.1)] hover:bg-[rgba(0,0,0,.04)]">Cancel</button>
-              <button onClick={create} disabled={saving} className="px-4 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-50" style={{ background: 'linear-gradient(135deg,#2563eb,#1d4ed8)' }}>
-                {saving ? 'Creating…' : 'Create Order'}
-              </button>
-            </div>
+      {loading ? (
+        <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-tertiary)' }}>Loading…</div>
+      ) : filtered.length === 0 ? (
+        <div style={{ padding: '60px 20px', textAlign: 'center', color: 'var(--text-tertiary)' }}>
+          <Package size={48} style={{ marginBottom: 16, opacity: 0.3 }} />
+          <p style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 8px' }}>No purchase orders yet</p>
+          <p style={{ fontSize: 13, margin: '0 0 20px' }}>Create your first order or set up auto-reorder to let Aria prepare weekly orders.</p>
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+            <Link href="/pos/orders/new" style={{ padding: '9px 18px', borderRadius: 9, background: 'var(--violet)', color: '#fff', textDecoration: 'none', fontSize: 13, fontWeight: 700 }}>New Order</Link>
+            <Link href="/pos/settings/reorder-schedule" style={{ padding: '9px 18px', borderRadius: 9, border: '1px solid var(--divider)', color: 'var(--text-secondary)', textDecoration: 'none', fontSize: 13, fontWeight: 600 }}>Set up Schedule</Link>
           </div>
         </div>
+      ) : (
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid var(--divider)' }}>
+                {['Order #', 'Date', 'Supplier', 'Est. Total', 'Source', 'Status', ''].map(h => (
+                  <th key={h} style={{ padding: '10px 16px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.06em', whiteSpace: 'nowrap' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map(o => {
+                const ss = STATUS_STYLE[o.status] ?? STATUS_STYLE.draft
+                return (
+                  <tr key={o.id} style={{ borderBottom: '1px solid var(--divider)' }}>
+                    <td style={{ padding: '12px 16px', fontWeight: 700 }}>
+                      <Link href={`/pos/orders/${o.id}`} style={{ color: 'var(--text-primary)', textDecoration: 'none' }}>{o.order_number}</Link>
+                    </td>
+                    <td style={{ padding: '12px 16px', color: 'var(--text-secondary)' }}>{new Date(o.created_at).toLocaleDateString('en-AU', { day: '2-digit', month: 'short', year: '2-digit' })}</td>
+                    <td style={{ padding: '12px 16px', color: 'var(--text-secondary)' }}>{o.supplier_name ?? '—'}</td>
+                    <td style={{ padding: '12px 16px', fontFamily: "'JetBrains Mono',monospace" }}>{o.total_estimated != null ? `$${Number(o.total_estimated).toFixed(2)}` : '—'}</td>
+                    <td style={{ padding: '12px 16px', color: 'var(--text-tertiary)', fontSize: 11 }}>{SOURCE_LABEL[o.source] ?? o.source}</td>
+                    <td style={{ padding: '12px 16px' }}>
+                      <span style={{ padding: '2px 10px', borderRadius: 99, fontSize: 11, fontWeight: 600, background: ss.bg, color: ss.color, textTransform: 'capitalize' }}>{o.status}</span>
+                    </td>
+                    <td style={{ padding: '12px 16px' }}>
+                      <div style={{ display: 'flex', gap: 4 }}>
+                        <Link href={`/pos/orders/${o.id}`} style={{ padding: '5px 10px', borderRadius: 6, border: '1px solid var(--divider)', color: 'var(--text-secondary)', textDecoration: 'none', fontSize: 11, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <Eye size={11} /> View
+                        </Link>
+                        {o.status === 'draft' && (
+                          <>
+                            <Link href={`/pos/orders/new?edit=${o.id}`} style={{ padding: '5px 10px', borderRadius: 6, border: '1px solid rgba(127,184,151,0.3)', color: 'var(--violet)', textDecoration: 'none', fontSize: 11, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
+                              <Pencil size={11} /> Edit
+                            </Link>
+                            <button onClick={() => deleteOrder(o.id)} disabled={deleting === o.id} style={{ padding: '5px 8px', borderRadius: 6, border: '1px solid rgba(201,112,112,0.25)', background: 'rgba(201,112,112,0.06)', color: 'var(--destructive)', fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' }}>
+                              {deleting === o.id ? '…' : <Trash2 size={11} />}
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
       )}
-      </div>
     </div>
-  );
+  )
 }

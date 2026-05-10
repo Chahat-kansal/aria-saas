@@ -1,0 +1,27 @@
+export const dynamic = 'force-dynamic'
+import { NextRequest, NextResponse } from 'next/server'
+import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { fetchMarketPrices } from '@/lib/orders/market-prices'
+
+export async function GET(req: NextRequest) {
+  const supabase = createServerSupabaseClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+
+  const sp = req.nextUrl.searchParams
+  const productId = sp.get('productId')
+  const businessId = sp.get('businessId')
+  const barcode = sp.get('barcode')
+  const productName = sp.get('productName') ?? ''
+
+  if (!productId || !businessId) {
+    return NextResponse.json({ error: 'productId and businessId required' }, { status: 400 })
+  }
+
+  try {
+    const results = await fetchMarketPrices(supabase, productId, businessId, barcode, productName)
+    return NextResponse.json({ results, cached: results.some(r => r.is_cached) })
+  } catch {
+    return NextResponse.json({ results: [], cached: false })
+  }
+}

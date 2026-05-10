@@ -28,12 +28,13 @@
     "src/app/api/pos/sync-offline/route.ts":                   { "maxDuration": 30 }
   },
   "crons": [
-    { "path": "/api/cron/nightly-sync",     "schedule": "0 2 * * *"   },
-    { "path": "/api/cron/rfm-daily",         "schedule": "0 16 * * *"  },
-    { "path": "/api/cron/reorder-daily",     "schedule": "0 19 * * *"  },
-    { "path": "/api/cron/pricing-daily",     "schedule": "0 20 * * *"  },
-    { "path": "/api/cron/schedule-weekly",   "schedule": "0 21 * * 0"  },
-    { "path": "/api/cron/briefing-daily",    "schedule": "0 18 * * *"  },
-    { "path": "/api/cron/promo-cleanup",     "schedule": "0 14 * * *"  }
+    { "path": "/api/cron/nightly-sync",                "schedule": "0 2 * * *"   },
+    { "path": "/api/cron/rfm-daily",                    "schedule": "0 16 * * *"  },
+    { "path": "/api/cron/reorder-daily",                "schedule": "0 19 * * *"  },
+    { "path": "/api/cron/pricing-daily",                "schedule": "0 20 * * *"  },
+    { "path": "/api/cron/schedule-weekly",              "schedule": "0 21 * * 0"  },
+    { "path": "/api/cron/briefing-daily",               "schedule": "0 18 * * *"  },
+    { "path": "/api/cron/promo-cleanup",                "schedule": "0 14 * * *"  },
+    { "path": "/api/cron/run-scheduled-reorders",       "schedule": "0 * * * *"   }
   ]
 }

@@ -46,13 +46,19 @@ export async function POST(req: Request) {
   const bid = await getBid(supabase, user.id);
   if (!bid) return NextResponse.json({ error: 'No business found' }, { status: 400 });
 
-  const { count } = await supabase.from('pos_purchase_orders').select('id', { count: 'exact', head: true }).eq('business_id', bid);
-  const orderNumber = `PO-${String((count ?? 0) + 1).padStart(4, '0')}`;
+  // Try the generate_po_number RPC first, fall back to count-based
+  const { data: numData } = await supabase.rpc('generate_po_number', { p_business_id: bid });
+  let orderNumber = numData as string | null;
+  if (!orderNumber) {
+    const { count } = await supabase.from('pos_purchase_orders').select('id', { count: 'exact', head: true }).eq('business_id', bid);
+    const year = new Date().getFullYear();
+    orderNumber = `PO-${year}-${String((count ?? 0) + 1).padStart(4, '0')}`;
+  }
 
   const body = await req.json();
   const { data: order, error } = await supabase
     .from('pos_purchase_orders')
-    .insert({ ...body, business_id: bid, order_number: orderNumber, total_amount: 0 })
+    .insert({ status: 'draft', source: 'manual', ...body, business_id: bid, order_number: orderNumber })
     .select('*, pos_suppliers(name)')
     .single();
 
