@@ -109,6 +109,7 @@ const SECTIONS = [
       { label: 'Registers & Outlets', href: '/pos/settings/registers' },
       { label: 'Barcodes', href: '/pos/barcodes' },
       { label: 'Price Sets', href: '/pos/price-sets' },
+      { label: 'Supplier Integrations', href: '/pos/setup/suppliers' },
       { label: 'Migrate Data', href: '/pos/setup/migrate' },
       { label: 'Billing', href: '/pos/settings/billing' },
     ],

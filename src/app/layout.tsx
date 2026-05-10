@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { Sora, JetBrains_Mono } from 'next/font/google';
+import { Sora, JetBrains_Mono, Fraunces, Inter } from 'next/font/google';
 import './globals.css';
 import '@/styles/aria-tokens.css';
 import { Providers } from './providers';
@@ -8,6 +8,19 @@ import PostHogProvider from '@/components/PostHogProvider';
 
 const sora = Sora({ subsets: ['latin'], variable: '--font-sora' });
 const mono = JetBrains_Mono({ subsets: ['latin'], variable: '--font-mono' });
+const fraunces = Fraunces({
+  subsets: ['latin'],
+  variable: '--font-display',
+  style: ['normal', 'italic'],
+  weight: ['400', '500', '600', '700', '900'],
+  display: 'swap',
+});
+const inter = Inter({
+  subsets: ['latin'],
+  variable: '--font-body',
+  weight: ['300', '400', '500', '600', '700'],
+  display: 'swap',
+});
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://ariaos.site'),
@@ -39,7 +52,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" data-theme="dark" suppressHydrationWarning>
-      <body className={`${sora.variable} ${mono.variable} font-sans antialiased`}>
+      <body className={`${sora.variable} ${mono.variable} ${fraunces.variable} ${inter.variable} font-sans antialiased`}>
         <PostHogProvider>
           <ThemeProvider>
             <Providers>{children}</Providers>
