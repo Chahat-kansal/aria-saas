@@ -43,7 +43,10 @@ function downloadCSV(data: any[], filename: string, columns?: { key: string; lab
 }
 
 function loadSaved(): SavedConfig[] {
-  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '[]'); } catch { return []; }
+  try {
+    const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '[]');
+    return Array.isArray(parsed) ? parsed : [];
+  } catch { return []; }
 }
 
 function saveToDB(cfg: SavedConfig) {
