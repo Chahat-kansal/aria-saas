@@ -1,490 +1,707 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
-import LogoMark from './LogoMark'
-import { ThemeToggle } from '@/components/ThemeProvider'
+import Link from 'next/link'
+import { motion, AnimatePresence } from 'framer-motion'
+import {
+  ChevronDown, ChevronRight, ChevronLeft,
+  Search, Building2, User, LogOut,
+} from 'lucide-react'
+import { AriaMark } from '@/components/ui/AriaMark'
+import { PulseDot } from '@/components/ui/PulseDot'
+import { NAV_STRUCTURE, findActiveSection, findActiveItem } from './sidebar-nav'
+import { springs } from '@/lib/motion'
+import { supabase } from '@/lib/supabase'
 
-const COLLAPSED_W = 60
-const EXPANDED_W  = 236
-
-const SECTIONS = [
-  {
-    id: 'sell',
-    label: 'Sell',
-    icon: '🛒',
-    directHref: '/pos/terminal',
-  },
-  {
-    id: 'register',
-    label: 'Register',
-    icon: '🏠',
-    items: [
-      { label: 'Open / Close', href: '/pos' },
-      { label: 'Manage Cash', href: '/pos/cash' },
-      { label: 'Close Register', href: '/pos/close' },
-      { label: 'Sales History', href: '/pos/reports/sales' },
-      { label: 'Customer Display', href: '/pos/display', external: true },
-    ],
-  },
-  {
-    id: 'stock',
-    label: 'Stock Management',
-    icon: '📦',
-    items: [
-      { label: 'Products', href: '/pos/products' },
-      { label: 'Classifications', href: '/pos/categories' },
-      { label: 'Suppliers', href: '/pos/suppliers' },
-      { label: 'Orders & Invoices', href: '/pos/orders' },
-      { label: 'Stocktake', href: '/pos/stocktake' },
-      { label: 'New Stocktake', href: '/pos/inventory/stocktake/new' },
-      { label: 'Dead Stock', href: '/pos/inventory/dead-stock' },
-      { label: 'Transfers', href: '/pos/transfers' },
-      { label: 'Import Products', href: '/pos/import' },
-    ],
-  },
-  {
-    id: 'customers',
-    label: 'Customer Management',
-    icon: '👥',
-    items: [
-      { label: 'Customers', href: '/pos/customers' },
-      { label: 'Segments', href: '/pos/customers/segments' },
-      { label: 'Customer Groups', href: '/pos/customer-groups' },
-      { label: 'Price Sets', href: '/pos/price-sets' },
-      { label: 'Balances', href: '/pos/balances' },
-      { label: 'Gift Cards', href: '/pos/gift-cards' },
-    ],
-  },
-  {
-    id: 'marketing',
-    label: 'Marketing',
-    icon: '🎯',
-    items: [
-      { label: 'Promotions', href: '/pos/promotions' },
-      { label: 'New Promotion', href: '/pos/promotions/new' },
-      { label: 'Laybys', href: '/pos/laybys' },
-      { label: 'Shelf Tickets', href: '/pos/shelf-tickets' },
-      { label: 'Loyalty', href: '/pos/loyalty' },
-    ],
-  },
-  {
-    id: 'reporting',
-    label: 'Reporting',
-    icon: '📊',
-    items: [
-      { label: '✦ Ask Aria', href: '/pos/ask' },
-      { label: 'Sales Reports', href: '/pos/reports/sales' },
-      { label: 'Inventory', href: '/pos/reports/inventory' },
-      { label: 'Cashier', href: '/pos/reports/cashier' },
-      { label: 'Commission', href: '/pos/reports/commission' },
-      { label: 'Closures', href: '/pos/reports/closures' },
-      { label: 'Actions Report', href: '/pos/reports/actions' },
-      { label: 'Advanced', href: '/pos/reports/advanced' },
-      { label: 'Competitor Prices', href: '/pos/competitors' },
-    ],
-  },
-  {
-    id: 'agents',
-    label: 'AI Agents',
-    icon: '✦',
-    items: [
-      { label: 'Overview', href: '/pos/agents' },
-      { label: 'Reorder', href: '/pos/agents/reorder' },
-      { label: 'Pricing', href: '/pos/agents/pricing' },
-      { label: 'Schedule', href: '/pos/agents/schedule' },
-      { label: 'Activity Log', href: '/pos/agents/activity' },
-    ],
-  },
-  {
-    id: 'setup',
-    label: 'Setup',
-    icon: '⚙️',
-    items: [
-      { label: 'General', href: '/pos/settings' },
-      { label: 'Sale Keys', href: '/pos/sale-keys' },
-      { label: 'Receipt Templates', href: '/pos/receipt-templates' },
-      { label: 'Staff & Users', href: '/pos/settings/users' },
-      { label: 'Roles & Permissions', href: '/pos/settings/roles' },
-      { label: 'Surcharging', href: '/pos/settings/surcharging' },
-      { label: 'Registers & Outlets', href: '/pos/settings/registers' },
-      { label: 'Barcodes', href: '/pos/barcodes' },
-      { label: 'Price Sets', href: '/pos/price-sets' },
-      { label: 'Supplier Integrations', href: '/pos/setup/suppliers' },
-      { label: 'Migrate Data', href: '/pos/setup/migrate' },
-      { label: 'Billing', href: '/pos/settings/billing' },
-    ],
-  },
-  {
-    id: 'utilities',
-    label: 'Utilities',
-    icon: '🔧',
-    items: [
-      { label: 'Future Prices', href: '/pos/future-prices' },
-      { label: 'Mobile Scanner', href: '/pos/mobile' },
-      { label: 'Timesheets', href: '/pos/timesheets' },
-      { label: 'Void & Refund', href: '/pos/void' },
-    ],
-  },
-]
-
-function getActiveSection(pathname: string): string {
-  if (pathname === '/pos/terminal') return 'sell'
-  if (pathname.startsWith('/pos/agents')) return 'agents'
-  if (pathname.startsWith('/pos/reports') || pathname.startsWith('/pos/competitors') || pathname.startsWith('/pos/ask')) return 'reporting'
-  if (pathname.startsWith('/pos/settings') || pathname.startsWith('/pos/sale-keys') ||
-      pathname.startsWith('/pos/receipt-templates') || pathname.startsWith('/pos/barcodes') ||
-      pathname.startsWith('/pos/setup')) return 'setup'
-  if (pathname.startsWith('/pos/customers') || pathname.startsWith('/pos/customer-groups') ||
-      pathname.startsWith('/pos/gift-cards') || pathname.startsWith('/pos/balances')) return 'customers'
-  if (pathname.startsWith('/pos/products') || pathname.startsWith('/pos/categories') ||
-      pathname.startsWith('/pos/suppliers') || pathname.startsWith('/pos/orders') ||
-      pathname.startsWith('/pos/stocktake') || pathname.startsWith('/pos/inventory') ||
-      pathname.startsWith('/pos/transfers') || pathname.startsWith('/pos/import')) return 'stock'
-  if (pathname.startsWith('/pos/promotions') || pathname.startsWith('/pos/shelf-tickets') ||
-      pathname.startsWith('/pos/laybys') || pathname.startsWith('/pos/loyalty')) return 'marketing'
-  if (pathname.startsWith('/pos/future-prices') || pathname.startsWith('/pos/mobile') ||
-      pathname.startsWith('/pos/timesheets') || pathname.startsWith('/pos/void')) return 'utilities'
-  return 'register'
-}
-
+// ── Props — backwards-compatible with existing POSShell wiring ───────
 interface Props {
-  businessName?:  string
-  posUser?:       { name: string; initials: string; role: string } | null
-  currentUser?:   { name: string; initials: string; role: string } | null
-  onAriaToggle?:  () => void
-  ariaOpen?:      boolean
-  onUserSwitch?:  () => void
-  onNavigate?:    () => void
+  businessName?: string
+  userEmail?: string
+  // Legacy props accepted but unused in new design
+  posUser?: { name: string; initials: string; role: string } | null
+  currentUser?: { name: string; initials: string; role: string } | null
+  onAriaToggle?: () => void
+  ariaOpen?: boolean
+  onUserSwitch?: () => void
+  onNavigate?: () => void
 }
 
+const COLLAPSED_WIDTH = 56
+const EXPANDED_WIDTH  = 220
+const STORAGE_KEY_RAIL     = 'aria-sidebar-collapsed'
+const STORAGE_KEY_SECTIONS = 'aria-sidebar-sections'
+
+// ── Small kbd helper ─────────────────────────────────────────────────
+const kbdStyle: React.CSSProperties = {
+  fontSize: 9, padding: '1px 4px', borderRadius: 3,
+  background: 'var(--bg-base)', color: 'var(--text-secondary)',
+  marginRight: 4,
+}
+
+// ── Main component ───────────────────────────────────────────────────
 export default function POSSidebar({
-  businessName = '',
+  businessName,
+  userEmail,
   posUser,
   currentUser,
   onAriaToggle,
-  ariaOpen = false,
-  onUserSwitch,
-  onNavigate,
 }: Props) {
-  const pathname    = usePathname()
-  const router      = useRouter()
-  const user        = currentUser ?? posUser ?? null
-  const isTerminal  = pathname === '/pos/terminal'
+  const pathname  = usePathname() ?? ''
+  const router    = useRouter()
+  const isTerminal = pathname === '/pos/terminal'
 
-  // Dark overrides for terminal — sidebar matches terminal's forced-dark theme
-  const SB = isTerminal ? {
-    bg:        '#0A0910',
-    elevated:  '#1A1728',
-    text:      '#EDE8FF',
-    secondary: 'rgba(237,232,255,0.65)',
-    tertiary:  'rgba(237,232,255,0.4)',
-    divider:   'rgba(255,255,255,0.05)',
-  } : {
-    bg:        'var(--bg-surface)',
-    elevated:  'var(--bg-elevated)',
-    text:      'var(--text-primary)',
-    secondary: 'var(--text-secondary)',
-    tertiary:  'var(--text-tertiary)',
-    divider:   'var(--divider)',
-  }
+  const [collapsed,    setCollapsed]    = useState(false)
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({})
+  const [hoveredItem,  setHoveredItem]  = useState<string | null>(null)
+  const [showCmdK,     setShowCmdK]     = useState(false)
+  const [userMenuOpen, setUserMenuOpen] = useState(false)
+  const [mounted,      setMounted]      = useState(false)
+  const userMenuRef = useRef<HTMLDivElement>(null)
 
-  const [collapsed, setCollapsed]       = useState(false)
-  const [openSections, setOpenSections] = useState<Set<string>>(
-    () => new Set([getActiveSection(pathname)])
-  )
-  const [time, setTime] = useState('')
+  // ── Hydration guard
+  useEffect(() => { setMounted(true) }, [])
 
+  // ── Load persisted state from localStorage ──────────────────────
   useEffect(() => {
-    const stored = localStorage.getItem('aria_pos_sidebar_collapsed')
-    if (stored === 'true') setCollapsed(true)
-    const tick = () => setTime(new Date().toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' }))
-    tick()
-    const id = setInterval(tick, 15000)
-    return () => clearInterval(id)
+    const railState = localStorage.getItem(STORAGE_KEY_RAIL)
+    if (railState === '1') setCollapsed(true)
+
+    const sectionsRaw = localStorage.getItem(STORAGE_KEY_SECTIONS)
+    const defaults: Record<string, boolean> = {}
+    NAV_STRUCTURE.forEach(s => { defaults[s.id] = s.defaultOpen ?? true })
+
+    if (sectionsRaw) {
+      try {
+        setOpenSections({ ...defaults, ...JSON.parse(sectionsRaw) })
+      } catch {
+        setOpenSections(defaults)
+      }
+    } else {
+      setOpenSections(defaults)
+    }
   }, [])
 
+  // ── Auto-open active section on navigation ───────────────────────
   useEffect(() => {
-    setOpenSections(prev => new Set([...prev, getActiveSection(pathname)]))
+    const activeSectionId = findActiveSection(pathname)
+    if (!activeSectionId) return
+    setOpenSections(prev => {
+      if (prev[activeSectionId]) return prev
+      const next = { ...prev, [activeSectionId]: true }
+      localStorage.setItem(STORAGE_KEY_SECTIONS, JSON.stringify(next))
+      return next
+    })
   }, [pathname])
 
-  const toggleCollapse = () => {
+  // ── Keyboard: ⌘K → command palette (skip on terminal to avoid conflict) ──
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const isMeta = e.metaKey || e.ctrlKey
+      if (isMeta && e.key === 'k' && !isTerminal) {
+        e.preventDefault()
+        setShowCmdK(s => !s)
+      }
+      if (e.key === 'Escape') {
+        setShowCmdK(false)
+        setUserMenuOpen(false)
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [isTerminal])
+
+  // ── Close user menu on outside click ────────────────────────────
+  useEffect(() => {
+    if (!userMenuOpen) return
+    const handler = (e: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
+        setUserMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [userMenuOpen])
+
+  // ── Helpers ──────────────────────────────────────────────────────
+  const toggleRail = () => {
     const next = !collapsed
     setCollapsed(next)
-    localStorage.setItem('aria_pos_sidebar_collapsed', String(next))
-    if (next) setOpenSections(new Set())
-    else setOpenSections(new Set([getActiveSection(pathname)]))
+    localStorage.setItem(STORAGE_KEY_RAIL, next ? '1' : '0')
   }
 
   const toggleSection = (id: string) => {
     setOpenSections(prev => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
+      const next = { ...prev, [id]: !prev[id] }
+      localStorage.setItem(STORAGE_KEY_SECTIONS, JSON.stringify(next))
       return next
     })
   }
 
-  const isActive = (href: string) => {
-    if (href === '/pos') return pathname === '/pos'
-    if (href === '/pos/display') return pathname === '/pos/display'
-    if (href === '/pos/terminal') return pathname === '/pos/terminal'
-    return pathname.startsWith(href)
-  }
-
-  const navigate = (href: string) => {
-    router.push(href)
-    onNavigate?.()
+  const handleSignOut = async () => {
+    if (supabase) await supabase.auth.signOut()
+    router.push('/login')
   }
 
   const openDisplay = () =>
     window.open('/pos/display', 'AriaDisplay', 'width=1920,height=1080,menubar=no,toolbar=no')
 
+  const activeItemHref = mounted ? (findActiveItem(pathname)?.href ?? '') : ''
+
+  // Derive display name for bottom user menu
+  const displayUser = currentUser ?? posUser
+  const displayName = displayUser?.name ?? businessName ?? 'Aria POS'
+
   return (
-    <nav style={{
-      width: collapsed ? COLLAPSED_W : EXPANDED_W,
-      minWidth: collapsed ? COLLAPSED_W : EXPANDED_W,
-      transition: 'width 280ms cubic-bezier(0.16,1,0.3,1), min-width 280ms cubic-bezier(0.16,1,0.3,1)',
-      background: SB.bg,
-      boxShadow: collapsed ? 'none' : 'var(--shadow-md)',
-      display: 'flex',
-      flexDirection: 'column',
-      height: '100vh',
-      position: 'relative',
-      overflow: 'hidden',
-      flexShrink: 0,
-      zIndex: 10,
-    }}>
-
-      {/* Collapse toggle tab */}
-      <div onClick={toggleCollapse} style={{
-        position: 'absolute', right: -12, top: '50%',
-        transform: 'translateY(-50%)',
-        width: 20, height: 44,
-        background: SB.elevated,
-        boxShadow: 'var(--shadow-sm)',
-        borderRadius: '0 8px 8px 0',
-        cursor: 'pointer',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        zIndex: 20,
-        fontSize: 10, color: 'var(--text-tertiary)', fontWeight: 800,
-        transition: 'color 150ms',
-      }}>
-        {collapsed ? '›' : '‹'}
-      </div>
-
-      {/* Logo */}
-      <div style={{
-        padding: collapsed ? '14px 0' : '14px 16px',
-        display: 'flex', alignItems: 'center', gap: 10,
-        flexShrink: 0,
-        justifyContent: collapsed ? 'center' : 'flex-start',
-        minHeight: 56,
-      }}>
-        <div style={{ flexShrink: 0 }}><LogoMark size={26} /></div>
-        {!collapsed && (
-          <div>
+    <>
+      <motion.aside
+        animate={{ width: collapsed ? COLLAPSED_WIDTH : EXPANDED_WIDTH }}
+        transition={springs.smooth}
+        style={{
+          height: '100dvh',
+          position: 'sticky',
+          top: 0,
+          background: 'var(--bg-glass)',
+          backdropFilter: 'var(--glass-blur)',
+          WebkitBackdropFilter: 'var(--glass-blur)',
+          boxShadow: 'inset -1px 0 0 var(--divider)',
+          display: 'flex',
+          flexDirection: 'column',
+          flexShrink: 0,
+          overflow: 'hidden',
+          zIndex: 50,
+        }}
+      >
+        {/* ── TOP: branding ──────────────────────────────────────── */}
+        <div style={{
+          padding: collapsed ? '14px 10px' : '14px 14px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 8,
+          minHeight: 56,
+          flexShrink: 0,
+        }}>
+          <Link href="/pos" style={{ display: 'flex', alignItems: 'center', gap: 8, textDecoration: 'none' }}>
             <div style={{
+              width: 28, height: 28, borderRadius: 8,
+              background: 'var(--gradient-aria)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: '#fff', fontSize: 14, fontWeight: 700,
               fontFamily: 'var(--font-display)', fontStyle: 'italic',
-              fontSize: 15, color: 'var(--text-primary)', fontWeight: 400, whiteSpace: 'nowrap',
-            }}>AriaPOS</div>
-            {businessName && (
-              <div style={{
-                fontSize: 10, color: 'var(--text-tertiary)', whiteSpace: 'nowrap',
-                overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 160,
-              }}>{businessName}</div>
+              flexShrink: 0,
+              boxShadow: '0 4px 12px var(--violet-glow)',
+            }}>A</div>
+            {!collapsed && (
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
+                <AriaMark size={15} />
+                <span style={{ fontSize: 11, color: 'var(--text-tertiary)', letterSpacing: '0.06em' }}>POS</span>
+              </div>
             )}
+          </Link>
+          {!collapsed && (
+            <button onClick={toggleRail} aria-label="Collapse sidebar" style={{
+              background: 'transparent', border: 'none',
+              color: 'var(--text-tertiary)', cursor: 'pointer',
+              padding: 4, borderRadius: 6,
+              display: 'flex', alignItems: 'center',
+            }}>
+              <ChevronLeft size={15} />
+            </button>
+          )}
+        </div>
+
+        {/* ── CMD+K TRIGGER ────────────────────────────────────── */}
+        {!isTerminal && (
+          <div style={{ padding: collapsed ? '0 8px 10px' : '0 10px 10px', flexShrink: 0 }}>
+            <button
+              onClick={() => setShowCmdK(true)}
+              title="Search (⌘K)"
+              style={{
+                width: '100%', display: 'flex', alignItems: 'center',
+                gap: 8, padding: collapsed ? 8 : '7px 10px',
+                background: 'var(--bg-input)', border: '1px solid var(--divider)',
+                borderRadius: 8, color: 'var(--text-tertiary)', fontSize: 12,
+                cursor: 'pointer', textAlign: 'left',
+                justifyContent: collapsed ? 'center' : 'flex-start',
+                transition: 'background 150ms',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-hover)' }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'var(--bg-input)' }}
+            >
+              <Search size={14} style={{ flexShrink: 0 }} />
+              {!collapsed && (
+                <>
+                  <span style={{ flex: 1 }}>Search...</span>
+                  <kbd style={{ fontSize: 10, padding: '1px 5px', borderRadius: 4, background: 'var(--bg-base)', color: 'var(--text-tertiary)', fontFamily: 'inherit' }}>⌘K</kbd>
+                </>
+              )}
+            </button>
           </div>
         )}
-      </div>
 
-      <div className="divider" />
+        {/* ── NAV SECTIONS ─────────────────────────────────────── */}
+        <nav style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: collapsed ? '0 4px' : '0 6px' }}>
+          {NAV_STRUCTURE.map(section => {
+            const isOpen = openSections[section.id] ?? (section.defaultOpen ?? true)
+            const SectionIcon = section.icon
 
-      {/* Nav sections */}
-      <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '6px 0' }}>
-        {SECTIONS.map(section => {
-          const isOpen = openSections.has(section.id)
-          const isSectionActive = getActiveSection(pathname) === section.id
-
-          if ('directHref' in section) {
             return (
-              <div key={section.id} onClick={() => navigate(section.directHref!)} style={{
-                display: 'flex', alignItems: 'center', gap: 10,
-                padding: collapsed ? '11px 0' : '10px 14px',
-                justifyContent: collapsed ? 'center' : 'flex-start',
-                cursor: 'pointer',
-                background: isSectionActive ? 'var(--violet-dim)' : 'transparent',
-                borderLeft: isSectionActive && !collapsed ? '3px solid var(--violet)' : '3px solid transparent',
-                transition: 'all 150ms',
-                position: 'relative',
-              }}>
-                {isSectionActive && collapsed && (
-                  <div style={{
-                    position: 'absolute', left: 0, top: '50%', transform: 'translateY(-50%)',
-                    width: 3, height: 18, background: 'var(--violet)', borderRadius: 999,
-                    boxShadow: '0 0 8px var(--violet-glow)',
-                  }} />
-                )}
-                <span style={{ fontSize: 17, flexShrink: 0 }}>{section.icon}</span>
+              <div key={section.id} style={{ marginBottom: 2 }}>
+                {/* Section header — only shown expanded */}
                 {!collapsed && (
-                  <span style={{
-                    fontSize: 13, fontWeight: 700,
-                    color: isSectionActive ? 'var(--text-violet)' : 'var(--text-primary)',
-                    whiteSpace: 'nowrap',
-                  }}>{section.label}</span>
+                  <button
+                    onClick={() => toggleSection(section.id)}
+                    style={{
+                      width: '100%', display: 'flex', alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '7px 8px', background: 'transparent', border: 'none',
+                      color: 'var(--text-tertiary)', fontSize: 10, fontWeight: 600,
+                      textTransform: 'uppercase', letterSpacing: '0.16em',
+                      cursor: 'pointer', borderRadius: 6, marginTop: 2,
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.color = 'var(--text-secondary)' }}
+                    onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-tertiary)' }}
+                  >
+                    <span>{section.label}</span>
+                    <motion.span
+                      animate={{ rotate: isOpen ? 0 : -90 }}
+                      transition={springs.snappy}
+                      style={{ display: 'flex', alignItems: 'center' }}
+                    >
+                      <ChevronDown size={11} />
+                    </motion.span>
+                  </button>
                 )}
+
+                {/* Collapsed: show section icon as separator pill */}
+                {collapsed && SectionIcon && (
+                  <div style={{
+                    display: 'flex', justifyContent: 'center',
+                    padding: '6px 0 2px',
+                    color: 'var(--text-tertiary)',
+                  }}>
+                    <SectionIcon size={13} />
+                  </div>
+                )}
+
+                {/* Items */}
+                <AnimatePresence initial={false}>
+                  {(collapsed || isOpen) && (
+                    <motion.div
+                      initial={collapsed ? false : { height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={springs.smooth}
+                      style={{ overflow: 'hidden' }}
+                    >
+                      {section.items.map(item => {
+                        const Icon = item.icon
+                        const isActive = mounted && (
+                          item.href === '/pos'
+                            ? pathname === '/pos'
+                            : item.href === '/pos/display'
+                              ? false
+                              : activeItemHref === item.href
+                        )
+                        const isHero = item.isHero
+
+                        return (
+                          <div
+                            key={item.href}
+                            style={{ position: 'relative' }}
+                            onMouseEnter={() => setHoveredItem(item.href)}
+                            onMouseLeave={() => setHoveredItem(null)}
+                          >
+                            {/* External display link */}
+                            {item.external ? (
+                              <button
+                                onClick={openDisplay}
+                                style={{
+                                  width: '100%', display: 'flex', alignItems: 'center',
+                                  gap: 9, padding: collapsed ? '9px' : '7px 8px',
+                                  marginLeft: collapsed ? 0 : 4,
+                                  borderRadius: 7, textDecoration: 'none',
+                                  background: 'transparent',
+                                  border: 'none', cursor: 'pointer',
+                                  color: 'var(--text-secondary)', fontSize: 13,
+                                  justifyContent: collapsed ? 'center' : 'flex-start',
+                                  transition: 'background 150ms',
+                                  fontFamily: 'inherit',
+                                }}
+                                onMouseEnter={e => {
+                                  e.currentTarget.style.background = 'var(--bg-hover)'
+                                  e.currentTarget.style.color = 'var(--text-primary)'
+                                }}
+                                onMouseLeave={e => {
+                                  e.currentTarget.style.background = 'transparent'
+                                  e.currentTarget.style.color = 'var(--text-secondary)'
+                                }}
+                              >
+                                <Icon size={15} style={{ flexShrink: 0 }} />
+                                {!collapsed && <span>{item.label}</span>}
+                              </button>
+                            ) : (
+                              <Link
+                                href={item.href}
+                                style={{
+                                  display: 'flex', alignItems: 'center', gap: 9,
+                                  padding: collapsed ? '9px' : '7px 8px',
+                                  marginLeft: collapsed ? 0 : 4,
+                                  borderRadius: 7, textDecoration: 'none',
+                                  color: isActive ? 'var(--text-primary)' : 'var(--text-secondary)',
+                                  background: isActive ? 'var(--violet-soft)' : 'transparent',
+                                  fontSize: 13, fontWeight: isActive ? 500 : 400,
+                                  position: 'relative',
+                                  transition: 'background 150ms, color 150ms',
+                                  justifyContent: collapsed ? 'center' : 'flex-start',
+                                }}
+                                onMouseEnter={e => {
+                                  if (!isActive) {
+                                    e.currentTarget.style.background = 'var(--bg-hover)'
+                                    e.currentTarget.style.color = 'var(--text-primary)'
+                                  }
+                                }}
+                                onMouseLeave={e => {
+                                  if (!isActive) {
+                                    e.currentTarget.style.background = 'transparent'
+                                    e.currentTarget.style.color = 'var(--text-secondary)'
+                                  }
+                                }}
+                              >
+                                {/* Active sage left-border */}
+                                {isActive && !collapsed && (
+                                  <motion.div
+                                    layoutId="active-border"
+                                    style={{
+                                      position: 'absolute', left: -4, top: 5, bottom: 5,
+                                      width: 3, background: 'var(--violet)', borderRadius: 2,
+                                      boxShadow: '0 0 8px var(--violet-glow)',
+                                    }}
+                                  />
+                                )}
+
+                                <Icon
+                                  size={15}
+                                  style={{
+                                    flexShrink: 0,
+                                    color: isHero ? 'var(--violet)' : isActive ? 'var(--violet)' : 'currentColor',
+                                  }}
+                                />
+
+                                {!collapsed && (
+                                  <span style={{
+                                    flex: 1, whiteSpace: 'nowrap',
+                                    overflow: 'hidden', textOverflow: 'ellipsis',
+                                    ...(isHero ? {
+                                      background: 'var(--gradient-aria)',
+                                      WebkitBackgroundClip: 'text',
+                                      WebkitTextFillColor: 'transparent',
+                                      fontWeight: 500,
+                                    } : {}),
+                                  }}>
+                                    {item.label}
+                                  </span>
+                                )}
+
+                                {!collapsed && item.badge !== undefined && (
+                                  <span style={{
+                                    fontSize: 10, padding: '2px 6px', borderRadius: 99,
+                                    background: 'var(--violet-dim)', color: 'var(--violet)', fontWeight: 500,
+                                  }}>{item.badge}</span>
+                                )}
+                              </Link>
+                            )}
+
+                            {/* Collapsed tooltip */}
+                            {collapsed && hoveredItem === item.href && (
+                              <motion.div
+                                initial={{ opacity: 0, x: -6 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                transition={{ duration: 0.1 }}
+                                style={{
+                                  position: 'absolute', left: 'calc(100% + 8px)', top: '50%',
+                                  transform: 'translateY(-50%)',
+                                  background: 'var(--bg-elevated)', color: 'var(--text-primary)',
+                                  padding: '5px 10px', borderRadius: 7, fontSize: 12,
+                                  whiteSpace: 'nowrap', boxShadow: 'var(--shadow-md)',
+                                  pointerEvents: 'none', zIndex: 100,
+                                }}
+                              >
+                                {item.label}
+                              </motion.div>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             )
-          }
+          })}
 
-          return (
-            <div key={section.id}>
-              <div onClick={() => {
-                if (collapsed) {
-                  setCollapsed(false)
-                  localStorage.setItem('aria_pos_sidebar_collapsed', 'false')
-                  setOpenSections(new Set([section.id]))
-                } else {
-                  toggleSection(section.id)
-                }
-              }} style={{
-                display: 'flex', alignItems: 'center', gap: 10,
-                padding: collapsed ? '11px 0' : '10px 14px',
+          {/* Aria toggle (legacy — for terminal's ⌘K / onAriaToggle) */}
+          {onAriaToggle && (
+            <button
+              onClick={onAriaToggle}
+              title="Ask Aria"
+              style={{
+                width: '100%', display: 'flex', alignItems: 'center',
+                gap: 9, padding: collapsed ? '9px' : '7px 8px',
+                marginTop: 4,
+                background: 'transparent', border: 'none', borderRadius: 7,
+                color: 'var(--text-tertiary)', cursor: 'pointer', fontSize: 13,
                 justifyContent: collapsed ? 'center' : 'flex-start',
-                cursor: 'pointer',
-                background: isSectionActive && !isOpen ? 'var(--violet-soft)' : 'transparent',
-                borderLeft: isSectionActive && !collapsed ? '3px solid rgba(139,92,246,0.3)' : '3px solid transparent',
-                transition: 'all 150ms',
-                userSelect: 'none',
-                position: 'relative',
-              }}>
-                {isSectionActive && collapsed && (
-                  <div style={{
-                    position: 'absolute', left: 0, top: '50%', transform: 'translateY(-50%)',
-                    width: 3, height: 18, background: 'var(--violet)', borderRadius: 999,
-                    boxShadow: '0 0 8px var(--violet-glow)',
-                  }} />
-                )}
-                <span style={{ fontSize: 17, flexShrink: 0 }}>{section.icon}</span>
-                {!collapsed && (
+                fontFamily: 'inherit',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-hover)' }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
+            >
+              <span style={{ fontSize: 15 }}>✦</span>
+              {!collapsed && <span>Ask Aria</span>}
+            </button>
+          )}
+        </nav>
+
+        {/* ── COLLAPSED expand button ──────────────────────────── */}
+        {collapsed && (
+          <button
+            onClick={toggleRail}
+            aria-label="Expand sidebar"
+            style={{
+              margin: '8px auto', padding: 8,
+              background: 'transparent', border: '1px solid var(--divider)',
+              color: 'var(--text-tertiary)', cursor: 'pointer',
+              borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              width: 36,
+            }}
+          >
+            <ChevronRight size={15} />
+          </button>
+        )}
+
+        {/* ── BOTTOM: business / user ──────────────────────────── */}
+        <div
+          ref={userMenuRef}
+          style={{ borderTop: '1px solid var(--divider)', padding: collapsed ? 8 : 10, position: 'relative', flexShrink: 0 }}
+        >
+          <button
+            onClick={() => setUserMenuOpen(!userMenuOpen)}
+            style={{
+              width: '100%', display: 'flex', alignItems: 'center',
+              gap: 9, padding: collapsed ? 8 : '7px 9px',
+              background: userMenuOpen ? 'var(--bg-hover)' : 'transparent',
+              border: 'none', borderRadius: 8,
+              color: 'var(--text-primary)', cursor: 'pointer', textAlign: 'left',
+              justifyContent: collapsed ? 'center' : 'flex-start',
+              transition: 'background 150ms',
+            }}
+            onMouseEnter={e => { if (!userMenuOpen) e.currentTarget.style.background = 'var(--bg-hover)' }}
+            onMouseLeave={e => { if (!userMenuOpen) e.currentTarget.style.background = 'transparent' }}
+          >
+            <div style={{
+              width: 28, height: 28, borderRadius: 8,
+              background: 'var(--gradient-aria-soft)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: 'var(--violet)', flexShrink: 0,
+            }}>
+              <Building2 size={14} />
+            </div>
+            {!collapsed && (
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 12, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {businessName ?? displayName}
+                </div>
+                <div style={{ fontSize: 10, color: 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: 4, marginTop: 1 }}>
+                  <PulseDot color="var(--success)" />
+                  <span>Online</span>
+                </div>
+              </div>
+            )}
+          </button>
+
+          {/* User menu popup */}
+          <AnimatePresence>
+            {userMenuOpen && !collapsed && (
+              <motion.div
+                initial={{ opacity: 0, y: 8, scale: 0.96 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 8, scale: 0.96 }}
+                transition={springs.snappy}
+                style={{
+                  position: 'absolute', bottom: 'calc(100% + 6px)', left: 10, right: 10,
+                  background: 'var(--bg-elevated)',
+                  borderRadius: 10, boxShadow: 'var(--shadow-lg)', overflow: 'hidden', zIndex: 100,
+                }}
+              >
+                {userEmail && (
                   <>
-                    <span style={{
-                      fontSize: 12, fontWeight: 600, flex: 1, whiteSpace: 'nowrap',
-                      color: isSectionActive ? 'var(--text-primary)' : 'var(--text-secondary)',
-                    }}>{section.label}</span>
-                    <span style={{
-                      fontSize: 12, color: 'var(--text-tertiary)', flexShrink: 0, lineHeight: 1,
-                      transform: isOpen ? 'rotate(90deg)' : 'rotate(0deg)',
-                      transition: 'transform 220ms cubic-bezier(0.16,1,0.3,1)',
-                    }}>›</span>
+                    <div style={{ padding: '9px 12px', fontSize: 11, color: 'var(--text-tertiary)' }}>
+                      {userEmail}
+                    </div>
+                    <div style={{ height: 1, background: 'var(--divider)' }} />
                   </>
                 )}
-              </div>
-
-              {!collapsed && isOpen && (
-                <div style={{ marginLeft: 30, borderLeft: '1px solid var(--divider)', paddingBottom: 4 }}>
-                  {'items' in section && section.items?.map(item => {
-                    const active = isActive(item.href)
-                    return (
-                      <div key={item.href} onClick={() => {
-                        if ('external' in item && item.external) openDisplay()
-                        else navigate(item.href)
-                      }} style={{
-                        padding: '7px 14px', cursor: 'pointer',
-                        fontSize: 12, fontWeight: active ? 600 : 400,
-                        color: active ? 'var(--text-violet)' : 'var(--text-tertiary)',
-                        background: active ? 'var(--violet-soft)' : 'transparent',
-                        borderLeft: active ? '2px solid var(--violet)' : '2px solid transparent',
-                        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                        transition: 'all 100ms', marginLeft: -1,
-                      }}
-                      onMouseEnter={e => {
-                        if (!active) {
-                          const el = e.currentTarget as HTMLElement
-                          el.style.color = 'var(--text-primary)'
-                          el.style.background = 'var(--bg-hover)'
-                        }
-                      }}
-                      onMouseLeave={e => {
-                        if (!active) {
-                          const el = e.currentTarget as HTMLElement
-                          el.style.color = 'var(--text-tertiary)'
-                          el.style.background = 'transparent'
-                        }
-                      }}>
-                        {item.label}
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
-          )
-        })}
-      </div>
-
-      <div className="divider" />
-
-      {/* Bottom */}
-      <div style={{ flexShrink: 0, padding: '8px 0' }}>
-        <div style={{ padding: collapsed ? '6px 12px' : '6px 10px', display: 'flex', justifyContent: collapsed ? 'center' : 'stretch' }}>
-          <ThemeToggle collapsed={collapsed} />
+                <Link
+                  href="/pos/settings"
+                  style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', color: 'var(--text-primary)', textDecoration: 'none', fontSize: 13 }}
+                  onClick={() => setUserMenuOpen(false)}
+                  onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-hover)' }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
+                >
+                  <User size={14} /> Settings
+                </Link>
+                <button
+                  onClick={handleSignOut}
+                  style={{
+                    width: '100%', display: 'flex', alignItems: 'center', gap: 8,
+                    padding: '8px 12px', background: 'transparent', border: 'none',
+                    color: 'var(--destructive)', cursor: 'pointer', fontSize: 13, textAlign: 'left',
+                    fontFamily: 'inherit',
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.background = 'var(--destructive-bg)' }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
+                >
+                  <LogOut size={14} /> Sign out
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
+      </motion.aside>
 
-        <div onClick={onAriaToggle} style={{
-          display: 'flex', alignItems: 'center', gap: 8,
-          padding: collapsed ? '10px 0' : '10px 14px',
-          justifyContent: collapsed ? 'center' : 'flex-start',
-          cursor: 'pointer',
-          background: ariaOpen ? 'var(--violet-dim)' : 'transparent',
-          transition: 'background 150ms',
-        }}>
-          <span style={{ fontSize: 16 }}>✨</span>
-          {!collapsed && (
-            <span style={{ fontSize: 12, fontWeight: 700, color: ariaOpen ? 'var(--text-violet)' : 'var(--text-secondary)' }}>
-              Ask Aria
-            </span>
-          )}
-        </div>
+      {/* ── Command palette ──────────────────────────────────────── */}
+      <AnimatePresence>
+        {showCmdK && (
+          <CommandPalette
+            onClose={() => setShowCmdK(false)}
+            onNavigate={(href) => { router.push(href); setShowCmdK(false) }}
+          />
+        )}
+      </AnimatePresence>
+    </>
+  )
+}
 
-        <div onClick={onUserSwitch} style={{
-          display: 'flex', alignItems: 'center', gap: 8,
-          padding: collapsed ? '8px 0' : '8px 12px',
-          justifyContent: collapsed ? 'center' : 'flex-start',
-          cursor: 'pointer',
-          margin: collapsed ? 0 : '0 8px',
-          borderRadius: 12,
-          background: SB.elevated,
-          boxShadow: 'var(--shadow-sm)',
-          transition: 'transform 200ms var(--ease)',
+// ── CommandPalette ───────────────────────────────────────────────────
+function CommandPalette({
+  onClose,
+  onNavigate,
+}: {
+  onClose: () => void
+  onNavigate: (href: string) => void
+}) {
+  const [query, setQuery]           = useState('')
+  const [highlightIdx, setHighlightIdx] = useState(0)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => { inputRef.current?.focus() }, [])
+
+  const allItems = NAV_STRUCTURE.flatMap(s =>
+    s.items.filter(i => !i.external).map(item => ({ ...item, sectionLabel: s.label }))
+  )
+
+  const filtered = query.trim() === ''
+    ? allItems.slice(0, 9)
+    : allItems.filter(item =>
+        item.label.toLowerCase().includes(query.toLowerCase()) ||
+        item.sectionLabel.toLowerCase().includes(query.toLowerCase()) ||
+        item.href.toLowerCase().includes(query.toLowerCase())
+      )
+
+  useEffect(() => { setHighlightIdx(0) }, [query])
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'ArrowDown') { e.preventDefault(); setHighlightIdx(i => Math.min(i + 1, filtered.length - 1)) }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setHighlightIdx(i => Math.max(i - 1, 0)) }
+    else if (e.key === 'Enter') { e.preventDefault(); if (filtered[highlightIdx]) onNavigate(filtered[highlightIdx].href) }
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.12 }}
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 1000,
+        background: 'rgba(0,0,0,0.48)', backdropFilter: 'blur(8px)',
+        display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
+        paddingTop: '15vh',
+      }}
+    >
+      <motion.div
+        onClick={e => e.stopPropagation()}
+        initial={{ y: -12, scale: 0.96 }}
+        animate={{ y: 0, scale: 1 }}
+        exit={{ y: -12, scale: 0.96 }}
+        transition={springs.snappy}
+        style={{
+          width: 'min(540px, 90vw)',
+          background: 'var(--bg-elevated)',
+          backdropFilter: 'var(--glass-blur-strong)',
+          borderRadius: 14, overflow: 'hidden',
+          boxShadow: 'var(--shadow-plane-4), 0 0 0 1px var(--divider) inset',
         }}
-        onMouseEnter={e => (e.currentTarget as HTMLElement).style.transform = 'translateY(-1px)'}
-        onMouseLeave={e => (e.currentTarget as HTMLElement).style.transform = 'translateY(0)'}>
-          <div style={{
-            width: 28, height: 28, borderRadius: 9, flexShrink: 0,
-            background: 'linear-gradient(135deg, #A78BFA, #7C3AED)',
-            boxShadow: '0 4px 12px rgba(139,92,246,0.30)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 9, fontWeight: 800, color: '#fff',
-          }}>
-            {user?.initials || '?'}
-          </div>
-          {!collapsed && user && (
-            <div style={{ overflow: 'hidden', flex: 1 }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {user.name}
-              </div>
-              <div style={{ fontSize: 9, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                {user.role}
-              </div>
-            </div>
-          )}
-          {!collapsed && time && (
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-tertiary)', flexShrink: 0 }}>
-              {time}
-            </div>
-          )}
+      >
+        {/* Input */}
+        <div style={{ padding: '13px 16px', display: 'flex', alignItems: 'center', gap: 10, borderBottom: '1px solid var(--divider)' }}>
+          <Search size={17} style={{ color: 'var(--text-tertiary)', flexShrink: 0 }} />
+          <input
+            ref={inputRef}
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Search pages, settings, agents..."
+            style={{
+              flex: 1, background: 'transparent', border: 'none', outline: 'none',
+              color: 'var(--text-primary)', fontSize: 15, fontFamily: 'inherit',
+            }}
+          />
+          <kbd style={{ ...kbdStyle, padding: '2px 6px', fontSize: 10 }}>ESC</kbd>
         </div>
-      </div>
-    </nav>
+
+        {/* Results */}
+        <div style={{ maxHeight: 360, overflowY: 'auto', padding: 6 }}>
+          {filtered.length === 0 ? (
+            <div style={{ padding: '24px 0', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: 13 }}>
+              No results for &ldquo;{query}&rdquo;
+            </div>
+          ) : filtered.map((item, i) => {
+            const Icon = item.icon
+            const highlighted = i === highlightIdx
+            return (
+              <button
+                key={item.href}
+                onClick={() => onNavigate(item.href)}
+                onMouseEnter={() => setHighlightIdx(i)}
+                style={{
+                  width: '100%', display: 'flex', alignItems: 'center', gap: 12,
+                  padding: '9px 12px',
+                  background: highlighted ? 'var(--violet-soft)' : 'transparent',
+                  border: 'none', borderRadius: 8,
+                  color: 'var(--text-primary)', cursor: 'pointer', textAlign: 'left', fontSize: 13,
+                  fontFamily: 'inherit',
+                }}
+              >
+                <Icon size={15} style={{ color: highlighted ? 'var(--violet)' : 'var(--text-secondary)', flexShrink: 0 }} />
+                <span style={{ flex: 1 }}>{item.label}</span>
+                <span style={{ fontSize: 10, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                  {item.sectionLabel}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+
+        {/* Footer hints */}
+        <div style={{ padding: '8px 14px', borderTop: '1px solid var(--divider)', display: 'flex', gap: 16, fontSize: 10, color: 'var(--text-tertiary)' }}>
+          <span><kbd style={kbdStyle}>↑↓</kbd>Navigate</span>
+          <span><kbd style={kbdStyle}>↵</kbd>Open</span>
+          <span><kbd style={kbdStyle}>ESC</kbd>Close</span>
+        </div>
+      </motion.div>
+    </motion.div>
   )
 }

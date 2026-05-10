@@ -334,6 +334,16 @@ export default function POSShell({ children, businessId, businessName }: {
   const [online, setOnline] = useState(true);
   const [justReconnected, setJustReconnected] = useState(false);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [sidebarHint, setSidebarHint] = useState(false);
+
+  // One-time sidebar hint on first load
+  useEffect(() => {
+    if (!localStorage.getItem('aria-sidebar-hint-shown')) {
+      setSidebarHint(true);
+      localStorage.setItem('aria-sidebar-hint-shown', '1');
+      setTimeout(() => setSidebarHint(false), 6000);
+    }
+  }, []);
 
   useEffect(() => {
     const key = `aria_trial_banner_dismissed_${new Date().toISOString().split('T')[0]}`
@@ -457,6 +467,11 @@ export default function POSShell({ children, businessId, businessName }: {
           </div>
         )}
         <POSErrorBoundary>{children}</POSErrorBoundary>
+        {sidebarHint && (
+          <div style={{ position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', zIndex: 200, background: 'var(--bg-elevated)', color: 'var(--text-secondary)', padding: '10px 18px', borderRadius: 10, fontSize: 12, boxShadow: 'var(--shadow-lg)', whiteSpace: 'nowrap', fontFamily: 'var(--font-ui)', animation: 'fade-up 400ms ease forwards' }}>
+            Press <kbd style={{ background: 'var(--bg-base)', padding: '1px 5px', borderRadius: 4, fontSize: 10, color: 'var(--text-primary)' }}>⌘K</kbd> to search · Click <strong>◀</strong> to collapse the sidebar
+          </div>
+        )}
       </main>
     </div>
   );
