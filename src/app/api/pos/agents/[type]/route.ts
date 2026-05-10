@@ -210,7 +210,12 @@ export async function POST(req: Request, { params }: Params) {
       } catch (runErr) {
         const e = runErr as Error;
         console.error(`[agents/${type}/run_now] ${reqId} agent failed:`, { message: e?.message, name: e?.name, stack: e?.stack });
-        return NextResponse.json({ error: e?.message ?? 'agent_failed', request_id: reqId }, { status: 500 });
+        return NextResponse.json({
+          error: e?.message ?? 'agent_failed',
+          error_name: e?.name,
+          error_stack: e?.stack?.split('\n').slice(0, 6).join(' | '),
+          request_id: reqId,
+        }, { status: 500 });
       }
     }
 

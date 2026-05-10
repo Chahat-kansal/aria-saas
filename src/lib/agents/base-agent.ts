@@ -12,17 +12,22 @@ export abstract class BaseAgent {
   });
 
   protected async getSettings(business_id: string): Promise<AgentSettings> {
-    const { data } = await this.supabase
-      .from('agent_settings')
-      .select('enabled,auto_approve_below_cents,config')
-      .eq('business_id', business_id)
-      .eq('agent_type', this.type)
-      .maybeSingle();
-    return {
-      enabled: data?.enabled ?? true,
-      auto_approve_below_cents: data?.auto_approve_below_cents ?? 0,
-      config: (data?.config as Record<string, unknown>) ?? {},
-    };
+    try {
+      const { data } = await this.supabase
+        .from('agent_settings')
+        .select('enabled,auto_approve_below_cents,config')
+        .eq('business_id', business_id)
+        .eq('agent_type', this.type)
+        .maybeSingle();
+      return {
+        enabled: data?.enabled ?? true,
+        auto_approve_below_cents: data?.auto_approve_below_cents ?? 0,
+        config: (data?.config as Record<string, unknown>) ?? {},
+      };
+    } catch {
+      // agent_settings table may not exist yet — default to enabled
+      return { enabled: true, auto_approve_below_cents: 0, config: {} };
+    }
   }
 
   protected async saveDecisions(decisions: AgentDecisionInput[]): Promise<AgentDecision[]> {
