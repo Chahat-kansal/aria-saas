@@ -242,6 +242,10 @@ export default function TerminalPage() {
   const [businessType, setBusinessType] = useState<string>('liquor');
   const [terminalLayoutOverride, setTerminalLayoutOverride] = useState<TerminalLayout | null>(null);
 
+  // Outlet awareness — additive
+  const [activeOutletId, setActiveOutletId] = useState<string | null>(null);
+  const [outlets, setOutlets] = useState<any[]>([]);
+
   // Training mode — additive
   const [trainingMode, setTrainingMode] = useState(false);
   const [trainingOffTimer, setTrainingOffTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
@@ -377,6 +381,34 @@ export default function TerminalPage() {
   useEffect(() => {
     setLayout(getCurrentLayout(businessType, terminalLayoutOverride));
   }, [businessType, terminalLayoutOverride]);
+
+  /* ── Load outlets from pos_outlets — additive ───────────────── */
+  useEffect(() => {
+    if (!businessId) return;
+    import('@/lib/supabase').then(({ supabase: sb }) => {
+      if (!sb) return;
+      sb.from('pos_outlets')
+        .select('id, name, is_global, is_default, code')
+        .eq('business_id', businessId)
+        .eq('active', true)
+        .order('is_global', { ascending: false })
+        .order('name')
+        .then(({ data }: { data: any[] | null }) => {
+          const list = data ?? [];
+          setOutlets(list);
+          if (list.length > 0) {
+            const stored = typeof window !== 'undefined' ? localStorage.getItem('aria-active-outlet') : null;
+            const found = stored ? list.find((o: any) => o.id === stored) : null;
+            const chosen = found ?? list[0];
+            setActiveOutletId(chosen.id);
+            // Keep legacy key in sync for sale API
+            if (typeof window !== 'undefined') localStorage.setItem('pos_outlet_id', chosen.id);
+          }
+        });
+    });
+  // Only re-run when businessId resolves — intentionally exclude activeOutletId
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [businessId]);
 
   /* ── Mobile detection ────────────────────────────────────────── */
   useEffect(() => {
@@ -918,6 +950,21 @@ export default function TerminalPage() {
         if (!item || !p.track_stock) return p;
         return { ...p, stock_quantity: Math.max(0, p.stock_quantity - item.qty) };
       }));
+      // Decrement outlet inventory via Supabase RPC — additive, non-blocking
+      if (activeOutletId && businessId) {
+        import('@/lib/supabase').then(({ supabase: sb }) => {
+          if (!sb) return;
+          cart.forEach(i => {
+            if (!i.product.track_stock) return;
+            sb.rpc('decrement_outlet_inventory', {
+              p_business_id: businessId,
+              p_product_id: i.product.id,
+              p_outlet_id: activeOutletId,
+              p_qty: i.qty,
+            }).catch(() => {}); // non-blocking — local state already updated above
+          });
+        });
+      }
       const cartSnapshot = [...cart];
       const customerSnapshot = customer;
       setRecentSales(prev => [{
@@ -1630,6 +1677,28 @@ export default function TerminalPage() {
             </button>
             {/* Layout switcher — additive */}
             <LayoutSwitcher current={currentLayout} onChange={setLayout} />
+            {/* Outlet switcher — only shown when 2+ outlets — additive */}
+            {outlets.length > 1 && (
+              <select
+                value={activeOutletId ?? ''}
+                onChange={e => {
+                  const id = e.target.value;
+                  setActiveOutletId(id);
+                  localStorage.setItem('aria-active-outlet', id);
+                  localStorage.setItem('pos_outlet_id', id);
+                }}
+                title="Active outlet"
+                style={{
+                  padding: '5px 8px', borderRadius: 8, fontSize: 11, fontWeight: 500,
+                  background: 'rgba(127,184,151,0.06)', border: '1px solid rgba(127,184,151,0.15)',
+                  color: 'var(--text-secondary)', cursor: 'pointer', fontFamily: 'inherit',
+                }}
+              >
+                {outlets.map((o: any) => (
+                  <option key={o.id} value={o.id}>{o.name}{o.is_global ? ' (All)' : ''}</option>
+                ))}
+              </select>
+            )}
           </div>
 
           {priceCheckMode && (
