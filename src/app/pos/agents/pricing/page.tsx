@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { track } from '@/lib/analytics';
 
-interface PricingData { product_id: string; product_name: string; current_price: number; suggested_price: number; direction: 'drop' | 'lift'; focus: string; market: { median: number; p25: number; p75: number; position_pct: number }; velocity: { recent_14d: number; trend_pct: number }; }
+interface PricingData { product_id: string; product_name: string; current_price: number; suggested_price: number; direction: 'drop' | 'lift'; focus: string; market: { median: number; p25: number; p75: number; position_pct: number; competitor_count?: number }; velocity: { recent_14d: number; trend_pct: number }; competitors?: { cheapest?: { name: string; price: number }; most_expensive?: { name: string; price: number } }; }
 interface Decision { id: string; reasoning: string; projected_impact_cents: number; confidence_score: number; created_at: string; status: string; decision_data: PricingData; }
 
 export default function PricingAgentPage() {
@@ -121,14 +121,28 @@ export default function PricingAgentPage() {
                   </div>
 
                   {/* Market chips */}
-                  <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+                  <div style={{ display: 'flex', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
                     {[['P25', data.market?.p25], ['Med', data.market?.median], ['P75', data.market?.p75]].map(([l, v]) => (
                       <div key={l as string} style={{ background: 'var(--bg-elevated)', borderRadius: 6, padding: '3px 8px', fontSize: 11, color: 'var(--text-secondary)' }}>
                         <span style={{ color: 'var(--text-tertiary)' }}>{l}: </span>
                         <span style={{ fontFamily: "'JetBrains Mono',monospace", fontWeight: 600 }}>A${((v as number) ?? 0).toFixed(2)}</span>
                       </div>
                     ))}
+                    {data.market?.competitor_count && (
+                      <div style={{ background: 'var(--bg-elevated)', borderRadius: 6, padding: '3px 8px', fontSize: 11, color: 'var(--text-tertiary)' }}>
+                        {data.market.competitor_count} competitors
+                      </div>
+                    )}
                   </div>
+                  {/* Competitor names */}
+                  {data.competitors?.cheapest && (
+                    <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginBottom: 6, lineHeight: 1.6 }}>
+                      <span style={{ color: '#34D399' }}>Cheapest:</span> {data.competitors.cheapest.name} at A${data.competitors.cheapest.price.toFixed(2)}
+                      {data.competitors.most_expensive && data.competitors.most_expensive.name !== data.competitors.cheapest.name && (
+                        <> · <span style={{ color: '#F87171' }}>Most expensive:</span> {data.competitors.most_expensive.name} at A${data.competitors.most_expensive.price.toFixed(2)}</>
+                      )}
+                    </div>
+                  )}
 
                   {/* Velocity */}
                   <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 10 }}>
@@ -145,9 +159,16 @@ export default function PricingAgentPage() {
                     </div>
                   )}
 
-                  <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
-                    Projected impact: <span style={{ color: accentColor, fontWeight: 700 }}>{isDrop ? '-' : '+'}A${(impact / 100).toFixed(0)}/week</span> · Confidence: {(d.confidence_score * 100).toFixed(0)}%
+                  <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginBottom: 8 }}>
+                    Projected impact: <span style={{ color: accentColor, fontWeight: 700 }}>{isDrop ? '-' : '+'}A${(impact / 100).toFixed(0)}/week</span>
                   </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                    <div style={{ flex: 1, height: 5, borderRadius: 99, background: 'var(--bg-overlay)', overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: `${(d.confidence_score ?? 0) * 100}%`, background: (d.confidence_score ?? 0) >= 0.8 ? '#34D399' : (d.confidence_score ?? 0) >= 0.5 ? '#FBBF24' : '#F87171', borderRadius: 99 }} />
+                    </div>
+                    <span style={{ fontSize: 11, color: 'var(--text-tertiary)', whiteSpace: 'nowrap' }}>Confidence: {((d.confidence_score ?? 0) * 100).toFixed(0)}%</span>
+                  </div>
+                  {(d.confidence_score ?? 0) < 0.5 && <div style={{ fontSize: 11, color: '#F87171' }}>⚠️ Low confidence — review carefully before approving</div>}
                 </div>
 
                 <div style={{ padding: '12px 18px', borderTop: '1px solid var(--divider)', display: 'flex', gap: 6 }}>

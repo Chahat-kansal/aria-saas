@@ -3,6 +3,21 @@ import type { AgentType, AgentDecisionInput, AgentRunResult } from './types';
 
 const REVENUE_PER_CASHIER_PER_HOUR = 200; // AUD
 
+// Australian public holidays 2026 (AEST) — excluded from baseline avg to avoid skew
+const AU_PUBLIC_HOLIDAYS_2026 = new Set([
+  '2026-01-01', '2026-01-26', '2026-04-03', '2026-04-06',
+  '2026-04-25', '2026-06-08', '2026-11-03', '2026-12-25',
+  '2026-12-26', '2026-12-28',
+]);
+
+const AU_HOLIDAY_NAMES: Record<string, string> = {
+  '2026-01-01': "New Year's Day", '2026-01-26': 'Australia Day',
+  '2026-04-03': 'Good Friday', '2026-04-06': 'Easter Monday',
+  '2026-04-25': 'ANZAC Day', '2026-06-08': "King's Birthday",
+  '2026-11-03': 'Melbourne Cup', '2026-12-25': 'Christmas Day',
+  '2026-12-26': 'Boxing Day', '2026-12-28': 'Boxing Day (observed)',
+};
+
 interface StaffRow { id: string; name: string; role: string; hourly_rate_cents: number; rsa_expiry: string | null; max_hours_week: number; availability: Record<string, number[][]>; }
 interface ShiftAssignment { staff_id: string; staff_name: string; hour: number; day: string; hourly_rate_cents: number; reasoning: string; }
 
@@ -46,9 +61,12 @@ export class ScheduleAgent extends BaseAgent {
         .limit(5000);
 
       // Build hourly revenue grid [outlet][dow][hour] = avg revenue
+      // Exclude public holidays from baseline to avoid skewing averages
       const grid: Record<string, Record<number, Record<number, number[]>>> = {};
       for (const sale of (salesHistory ?? [])) {
         const d = new Date(sale.created_at);
+        const dateStr = d.toISOString().split('T')[0];
+        if (AU_PUBLIC_HOLIDAYS_2026.has(dateStr)) continue; // exclude holidays from baseline
         const dow = d.getDay();
         const hour = d.getHours();
         const oid = sale.outlet_id ?? outlets[0].id;
@@ -99,10 +117,19 @@ export class ScheduleAgent extends BaseAgent {
         const totalHours = Object.values(staffHours).reduce((s, v) => s + v, 0);
         const totalCostCents = shifts.reduce((s, sh) => s + sh.hourly_rate_cents, 0);
 
+        // Check if any day in the roster week is a public holiday
+        const holidaysInWeek: string[] = [];
+        for (let d = 0; d < 7; d++) {
+          const date = new Date(weekStart);
+          date.setDate(date.getDate() + d);
+          const ds = date.toISOString().split('T')[0];
+          if (AU_PUBLIC_HOLIDAYS_2026.has(ds)) holidaysInWeek.push(`Note: ${ds} is ${AU_HOLIDAY_NAMES[ds] ?? 'public holiday'} — forecast adjusted.`);
+        }
+
         const reasoning = await this.claudeReason({
           system: 'You are Aria, summarising a generated staff roster for an Australian bottle shop manager. Be specific with hours and cost. Max 2 sentences. Australian English.',
-          user: `Outlet: ${outlet.name}. Roster: ${shifts.length} shifts, ${totalHours} staff-hours, A$${(totalCostCents / 100).toFixed(0)} cost. Strongest demand: ${shifts.filter(s => s.reasoning.includes('200')).length > 0 ? 'peak hours covered' : 'steady coverage'}. Summarise why this roster looks right.`,
-          maxTokens: 100,
+          user: `Outlet: ${outlet.name}. Roster: ${shifts.length} shifts, ${totalHours} staff-hours, A$${(totalCostCents / 100).toFixed(0)} cost. Strongest demand: ${shifts.filter(s => s.reasoning.includes('200')).length > 0 ? 'peak hours covered' : 'steady coverage'}. ${holidaysInWeek.join(' ')} Summarise why this roster looks right.`,
+          maxTokens: 120,
         });
 
         // Save roster row

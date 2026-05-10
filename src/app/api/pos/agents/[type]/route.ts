@@ -271,6 +271,16 @@ export async function POST(req: Request, { params }: Params) {
       return NextResponse.json({ ok: true });
     }
 
+    if (action === 'edit_decision') {
+      const decisionId = decision_id as string;
+      if (!decisionId || !body.decision_data) return NextResponse.json({ error: 'missing_params' }, { status: 400 });
+      await supabase.from('agent_decisions')
+        .update({ decision_data: body.decision_data })
+        .eq('id', decisionId)
+        .eq('business_id', bid);
+      return NextResponse.json({ ok: true });
+    }
+
     if (action === 'update_settings') {
       const { enabled, auto_approve_below_cents, config } = body;
       await supabase.from('agent_settings').upsert({

@@ -35,9 +35,19 @@ export async function POST(req: Request) {
       (items as any[]).map(i => ({ stock_take_id: stockTake.id, product_id: i.product_id, system_qty: i.system_qty, counted_qty: i.counted_qty, recount_count: i.recount_count ?? 0 }))
     );
 
-    // Apply inventory adjustments
+    // Apply inventory adjustments — upsert pos_inventory + update pos_products stock_quantity
     for (const item of variances as any[]) {
-      await supabase.from('pos_products').update({ stock_quantity: item.counted_qty }).eq('id', item.product_id).eq('business_id', bid);
+      await supabase.from('pos_products')
+        .update({ stock_quantity: item.counted_qty })
+        .eq('id', item.product_id)
+        .eq('business_id', bid);
+      await supabase.from('pos_inventory').upsert({
+        product_id: item.product_id,
+        outlet_id,
+        business_id: bid,
+        quantity: item.counted_qty,
+        last_counted_at: new Date().toISOString(),
+      }, { onConflict: 'product_id,outlet_id' }).then(() => null);
     }
   }
 

@@ -39,13 +39,16 @@ export class PricingAgent extends BaseAgent {
       }
 
       // Aggregate competitor prices per product
-      const productCompMap = new Map<string, { competitor_prices: number[]; own_price_cents: number; own_margin_pct: number }>();
+      interface CompEntry { competitor_prices: number[]; own_price_cents: number; own_margin_pct: number; comp_rows: Array<{ name: string; price: number }>; }
+      const productCompMap = new Map<string, CompEntry>();
       for (const row of (compRows as Array<{ product_name: string; competitor_name: string; competitor_price_cents: number; own_price_cents: number; own_margin_pct: number }>)) {
         if (!productCompMap.has(row.product_name)) {
-          productCompMap.set(row.product_name, { competitor_prices: [], own_price_cents: row.own_price_cents ?? 0, own_margin_pct: row.own_margin_pct ?? 0 });
+          productCompMap.set(row.product_name, { competitor_prices: [], own_price_cents: row.own_price_cents ?? 0, own_margin_pct: row.own_margin_pct ?? 0, comp_rows: [] });
         }
         if (row.competitor_price_cents) {
-          productCompMap.get(row.product_name)!.competitor_prices.push(row.competitor_price_cents / 100);
+          const entry = productCompMap.get(row.product_name)!;
+          entry.competitor_prices.push(row.competitor_price_cents / 100);
+          entry.comp_rows.push({ name: row.competitor_name ?? 'Unknown', price: row.competitor_price_cents / 100 });
         }
       }
 
@@ -69,15 +72,33 @@ export class PricingAgent extends BaseAgent {
       for (const si of (recent14 ?? [])) vel14.set(si.product_id, (vel14.get(si.product_id) ?? 0) + si.quantity);
       for (const si of (prev14 ?? [])) vel14Prev.set(si.product_id, (vel14Prev.get(si.product_id) ?? 0) + si.quantity);
 
+      // Fetch recently approved pricing decisions (7-day cooldown per product)
+      const cooldownCutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+      const { data: recentApproved } = await this.supabase
+        .from('agent_decisions')
+        .select('decision_data')
+        .eq('business_id', business_id)
+        .eq('agent_type', 'pricing')
+        .eq('status', 'approved')
+        .gte('created_at', cooldownCutoff);
+      const recentlyPricedProductIds = new Set<string>(
+        (recentApproved ?? []).map(r => (r.decision_data as Record<string, unknown>)?.product_id as string).filter(Boolean)
+      );
+
       const decisions: AgentDecisionInput[] = [];
 
       for (const [productName, aggData] of productCompMap) {
         const compPrices = aggData.competitor_prices;
         if (compPrices.length < MIN_COMPETITOR_POINTS) continue;
         const cc = { product_name: productName, own_price_cents: aggData.own_price_cents, own_margin_pct: aggData.own_margin_pct };
+        const cheapest = aggData.comp_rows.reduce((a, b) => a.price < b.price ? a : b, aggData.comp_rows[0]);
+        const mostExpensive = aggData.comp_rows.reduce((a, b) => a.price > b.price ? a : b, aggData.comp_rows[0]);
 
         const product = productByName.get(cc.product_name.toLowerCase());
         if (!product) continue;
+
+        // Skip if this product had an approved pricing decision in the last 7 days
+        if (recentlyPricedProductIds.has(product.id)) continue;
 
         const ourPrice = (product.price as number | null) ?? (cc.own_price_cents / 100);
         const median = quantile(compPrices, 0.5);
@@ -121,8 +142,9 @@ export class PricingAgent extends BaseAgent {
             suggested_price: suggested,
             direction,
             focus,
-            market: { median, p25, p75, position_pct: positionPct },
+            market: { median, p25, p75, position_pct: positionPct, competitor_count: compPrices.length },
             velocity: { recent_14d: recentSold, prev_14d: prevSold, trend_pct: velocityTrend },
+            competitors: { cheapest, most_expensive: mostExpensive },
           },
           reasoning,
           confidence_score: focus === 'price-drop-to-recover-volume' ? 0.78 : 0.65,

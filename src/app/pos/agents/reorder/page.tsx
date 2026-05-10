@@ -22,6 +22,9 @@ export default function ReorderAgentPage() {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editLines, setEditLines] = useState<POLine[]>([]);
+  const [editSaving, setEditSaving] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -58,6 +61,20 @@ export default function ReorderAgentPage() {
     track(`agent_decision_${action}`, { agent_type: 'reorder', projected_impact_cents: dec?.projected_impact_cents ?? 0 });
     setActionLoading(null);
     setConfirmId(null);
+    load();
+  }
+
+  async function saveEdits(id: string) {
+    setEditSaving(true);
+    const newTotal = editLines.reduce((s, l) => s + l.qty * l.unit_cost, 0);
+    const updatedLines = editLines.map(l => ({ ...l, total: l.qty * l.unit_cost }));
+    await fetch('/api/pos/agents/reorder', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'edit_decision', decision_id: id, decision_data: { ...decisions.find(d => d.id === id)!.decision_data, lines: updatedLines, total_cost: newTotal } }),
+    });
+    setEditSaving(false);
+    setEditId(null);
     load();
   }
 
@@ -127,6 +144,17 @@ export default function ReorderAgentPage() {
                 </div>
               )}
 
+              {/* Confidence bar */}
+              <div style={{ margin: '0 20px 10px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{ flex: 1, height: 5, borderRadius: 99, background: 'var(--bg-overlay)', overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: `${(d.confidence_score ?? 0) * 100}%`, background: (d.confidence_score ?? 0) >= 0.8 ? '#34D399' : (d.confidence_score ?? 0) >= 0.5 ? '#FBBF24' : '#F87171', borderRadius: 99 }} />
+                  </div>
+                  <span style={{ fontSize: 11, color: 'var(--text-tertiary)', whiteSpace: 'nowrap' }}>Confidence: {((d.confidence_score ?? 0) * 100).toFixed(0)}%</span>
+                </div>
+                {(d.confidence_score ?? 0) < 0.5 && <div style={{ fontSize: 11, color: '#F87171', marginTop: 4 }}>⚠️ Low confidence — review carefully before approving</div>}
+              </div>
+
               {/* Top lines preview */}
               <div style={{ margin: '0 20px' }}>
                 {(data.lines ?? []).slice(0, isOpen ? 100 : 3).map((l, i) => (
@@ -148,6 +176,9 @@ export default function ReorderAgentPage() {
               <div style={{ padding: '14px 20px', borderTop: '1px solid var(--divider)', display: 'flex', gap: 8 }}>
                 <button onClick={() => setConfirmId(d.id)} disabled={actionLoading === d.id} style={{ padding: '8px 18px', borderRadius: 8, border: 'none', background: '#34D399', color: '#000', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
                   ✓ Approve & Send
+                </button>
+                <button onClick={() => { setEditId(d.id); setEditLines((d.decision_data?.lines ?? []).map(l => ({ ...l }))); }} style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid rgba(96,165,250,0.4)', background: 'rgba(96,165,250,0.08)', color: '#60A5FA', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+                  ✏ Edit quantities
                 </button>
                 <button onClick={() => doAction(d.id, 'snooze')} disabled={actionLoading === d.id} style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border-default)', background: 'var(--bg-elevated)', color: 'var(--text-secondary)', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
                   Snooze 7d
@@ -171,21 +202,89 @@ export default function ReorderAgentPage() {
       {confirmId && (() => {
         const dec = decisions.find(d => d.id === confirmId);
         if (!dec) return null;
+        const hasEmail = !!dec.decision_data.supplier_email;
         return (
           <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <div style={{ background: 'var(--bg-elevated)', borderRadius: 16, padding: 28, maxWidth: 400, boxShadow: 'var(--shadow-lg)' }}>
+            <div style={{ background: 'var(--bg-elevated)', borderRadius: 16, padding: 28, maxWidth: 420, width: '90vw', boxShadow: 'var(--shadow-lg)' }}>
               <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 12 }}>Send PO to {dec.decision_data.supplier_name}?</h3>
               <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 8 }}>
                 A$${(dec.decision_data.total_cost ?? 0).toFixed(2)} · {dec.decision_data.lines?.length ?? 0} lines
               </p>
-              {dec.decision_data.supplier_email && (
+              {hasEmail ? (
                 <p style={{ fontSize: 12, color: 'var(--text-tertiary)', marginBottom: 20 }}>Will email to: {dec.decision_data.supplier_email}</p>
+              ) : (
+                <div style={{ background: 'rgba(251,191,36,0.1)', border: '1px solid rgba(251,191,36,0.3)', borderRadius: 8, padding: '10px 14px', marginBottom: 20 }}>
+                  <div style={{ fontSize: 12, color: '#FBBF24', fontWeight: 700, marginBottom: 4 }}>⚠️ No supplier email — download PDF instead</div>
+                  <button onClick={() => { window.print(); }} style={{ fontSize: 11, padding: '5px 12px', borderRadius: 6, border: '1px solid rgba(251,191,36,0.4)', background: 'rgba(251,191,36,0.1)', color: '#FBBF24', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600 }}>🖨 Download PO as PDF</button>
+                </div>
               )}
               <div style={{ display: 'flex', gap: 10 }}>
                 <button onClick={() => setConfirmId(null)} style={{ flex: 1, padding: '10px', borderRadius: 9, border: '1px solid var(--border-default)', background: 'transparent', color: 'var(--text-primary)', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>
-                <button onClick={() => doAction(confirmId, 'approve')} style={{ flex: 2, padding: '10px', borderRadius: 9, border: 'none', background: '#34D399', color: '#000', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
-                  ✓ Send PO
+                <button onClick={() => doAction(confirmId, 'approve')} style={{ flex: 2, padding: '10px', borderRadius: 9, border: hasEmail ? 'none' : '1px solid var(--border-default)', background: hasEmail ? '#34D399' : 'var(--bg-surface)', color: hasEmail ? '#000' : 'var(--text-primary)', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                  {hasEmail ? '✓ Send PO' : '✓ Approve (no email)'}
                 </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Edit quantities modal */}
+      {editId && (() => {
+        const dec = decisions.find(d => d.id === editId);
+        if (!dec) return null;
+        const editTotal = editLines.reduce((s, l) => s + l.qty * l.unit_cost, 0);
+        return (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 60, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+            <div style={{ background: 'var(--bg-elevated)', borderRadius: 16, padding: '0 0 20px', maxWidth: 560, width: '100%', boxShadow: 'var(--shadow-lg)', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}>
+              <div style={{ padding: '18px 24px 14px', borderBottom: '1px solid var(--divider)' }}>
+                <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>Edit PO — {dec.decision_data.supplier_name}</h3>
+              </div>
+              <div style={{ overflowY: 'auto', flex: 1, padding: '0 24px' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 12 }}>
+                  <thead>
+                    <tr>
+                      {['Product', 'Stock Qty', 'Suggested', 'Order Qty', 'Unit Cost', 'Line Total'].map(h => (
+                        <th key={h} style={{ padding: '8px 6px', fontSize: 10, fontWeight: 700, color: 'var(--text-tertiary)', textAlign: h === 'Line Total' ? 'right' : 'left', whiteSpace: 'nowrap', borderBottom: '1px solid var(--divider)' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {editLines.map((l, i) => (
+                      <tr key={l.product_id} style={{ borderBottom: '1px solid var(--divider)' }}>
+                        <td style={{ padding: '8px 6px', fontSize: 12, fontWeight: 600 }}>{l.product_name}</td>
+                        <td style={{ padding: '8px 6px', fontSize: 12, color: 'var(--text-secondary)', fontFamily: "'JetBrains Mono',monospace" }}>—</td>
+                        <td style={{ padding: '8px 6px', fontSize: 12, color: 'var(--text-tertiary)', fontFamily: "'JetBrains Mono',monospace" }}>{l.qty}</td>
+                        <td style={{ padding: '8px 6px' }}>
+                          <input
+                            type="number"
+                            min={1}
+                            value={l.qty}
+                            onChange={e => {
+                              const v = Math.max(1, parseInt(e.target.value) || 1);
+                              setEditLines(prev => prev.map((x, j) => j === i ? { ...x, qty: v, total: v * x.unit_cost } : x));
+                            }}
+                            style={{ width: 64, padding: '4px 8px', borderRadius: 6, border: '1px solid var(--border-default)', background: 'var(--bg-input)', color: 'var(--text-primary)', fontSize: 12, fontFamily: "'JetBrains Mono',monospace", textAlign: 'center', outline: 'none' }}
+                          />
+                        </td>
+                        <td style={{ padding: '8px 6px', fontSize: 12, color: 'var(--text-secondary)', fontFamily: "'JetBrains Mono',monospace" }}>A${l.unit_cost.toFixed(2)}</td>
+                        <td style={{ padding: '8px 6px', fontSize: 12, fontWeight: 700, fontFamily: "'JetBrains Mono',monospace", textAlign: 'right' }}>A${(l.qty * l.unit_cost).toFixed(2)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div style={{ padding: '14px 24px 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid var(--divider)', marginTop: 12 }}>
+                <div style={{ fontSize: 15, fontWeight: 800, fontFamily: "'JetBrains Mono',monospace" }}>Grand total: A${editTotal.toFixed(2)}</div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button onClick={() => setEditId(null)} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid var(--border-default)', background: 'transparent', color: 'var(--text-primary)', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>
+                  <button onClick={() => saveEdits(editId)} disabled={editSaving} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: 'var(--violet)', color: '#fff', fontSize: 13, fontWeight: 700, cursor: editSaving ? 'not-allowed' : 'pointer', fontFamily: 'inherit', opacity: editSaving ? 0.6 : 1 }}>
+                    {editSaving ? 'Saving…' : 'Save changes'}
+                  </button>
+                  <button onClick={async () => { await saveEdits(editId); setConfirmId(editId); }} disabled={editSaving} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: '#34D399', color: '#000', fontSize: 13, fontWeight: 700, cursor: editSaving ? 'not-allowed' : 'pointer', fontFamily: 'inherit', opacity: editSaving ? 0.6 : 1 }}>
+                    ✓ Approve edited PO
+                  </button>
+                </div>
               </div>
             </div>
           </div>

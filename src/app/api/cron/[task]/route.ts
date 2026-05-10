@@ -1,6 +1,10 @@
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
 
+// All crons run on AEST schedule (UTC+10).
+// Businesses are assumed to be in Australia.
+// Phase 2: add timezone per business from businesses table.
+
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { runAgent } from '@/lib/agents/orchestrator';
@@ -14,6 +18,7 @@ const TASK_TO_AGENT: Record<string, AgentType | null> = {
   'pricing-daily': 'pricing',
   'schedule-weekly': 'schedule',
   'briefing-daily': null,
+  'promo-cleanup': null,
 };
 
 export async function GET(req: Request, { params }: Params) {
@@ -31,6 +36,19 @@ export async function GET(req: Request, { params }: Params) {
 
   const agentType = TASK_TO_AGENT[task];
   const supabase = createServerSupabaseClient();
+
+  if (task === 'promo-cleanup') {
+    const now = new Date().toISOString();
+    const { data: expired, error } = await supabase
+      .from('pos_promotions')
+      .update({ active: false })
+      .eq('active', true)
+      .lt('ends_at', now)
+      .select('id');
+    const deactivated = expired?.length ?? 0;
+    if (error) console.error('[promo-cleanup] update error:', error.message);
+    return NextResponse.json({ task, deactivated });
+  }
 
   if (task === 'briefing-daily') {
     const { data: bizList } = await supabase.from('businesses').select('id').eq('is_active', true).limit(1000);
@@ -98,16 +116,33 @@ export async function GET(req: Request, { params }: Params) {
 
   let processed = 0;
   let errors = 0;
-  const results: Array<{ business_id: string; decisions: number; errors: number }> = [];
+  const results: Array<{ business_id: string; decisions: number; errors: number; timed_out?: boolean }> = [];
 
   for (const bid of businessIds) {
+    const runStart = new Date().toISOString();
     try {
-      const result = await runAgent(agentType, bid);
+      const result = await Promise.race([
+        runAgent(agentType, bid),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Agent timeout after 55s')), 55_000)
+        ),
+      ]);
       results.push({ business_id: bid, decisions: result.decisions.length, errors: result.errors.length });
       processed++;
     } catch (e) {
-      console.error(`[cron/${task}] failed for ${bid}:`, e);
-      results.push({ business_id: bid, decisions: 0, errors: 1 });
+      const msg = e instanceof Error ? e.message : String(e);
+      const isTimeout = msg.includes('timeout');
+      console.error(`[cron/${task}] ${isTimeout ? 'timed out' : 'failed'} for ${bid}:`, msg);
+      await supabase.from('agent_runs').insert({
+        business_id: bid,
+        agent_type: agentType,
+        started_at: runStart,
+        completed_at: new Date().toISOString(),
+        decisions_count: 0,
+        errors: [{ message: msg }],
+        triggered_by: 'cron',
+      }).then(() => null);
+      results.push({ business_id: bid, decisions: 0, errors: 1, timed_out: isTimeout });
       errors++;
     }
   }

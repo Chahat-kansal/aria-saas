@@ -81,17 +81,19 @@ interface Props {
   ariaMessage?: string;
   onClose?: () => void;
   template?: ReceiptTemplate | null;
+  watermark?: string;
 }
 
 /* ─── Template-based receipt ────────────────────────────────────
    Renders absolutely-positioned elements from the Canva editor
    with real sale data substituted in.                           */
-function TemplateReceipt({ template, sale, businessName, settings, onClose }: {
+function TemplateReceipt({ template, sale, businessName, settings, onClose, watermark }: {
   template: ReceiptTemplate;
   sale: ReceiptSale;
   businessName: string;
   settings: ReceiptSettings;
   onClose?: () => void;
+  watermark?: string;
 }) {
   const CW = template.canvas_width || 302;
 
@@ -311,6 +313,11 @@ function TemplateReceipt({ template, sale, businessName, settings, onClose }: {
             <div className="receipt-print-root" style={{ background: '#fff', overflow: 'hidden' }}>
               <div style={{ position: 'relative', width: CW, minHeight: template.canvas_height || 800, background: template.background_color || '#ffffff', margin: '0 auto' }}>
                 {sortedElements.map(el => renderEl(el))}
+                {watermark && (
+                  <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none', zIndex: 999 }}>
+                    <span style={{ fontSize: 64, fontWeight: 900, color: 'rgba(245,158,11,0.2)', transform: 'rotate(-30deg)', letterSpacing: 4, userSelect: 'none', fontFamily: 'sans-serif' }}>{watermark}</span>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -322,12 +329,13 @@ function TemplateReceipt({ template, sale, businessName, settings, onClose }: {
 
 /* ─── Settings-based receipt (original) ─────────────────────────
    Kept exactly as-is — used as fallback when no template exists.  */
-function SettingsReceipt({ sale, settings, businessName, ariaMessage, onClose }: {
+function SettingsReceipt({ sale, settings, businessName, ariaMessage, onClose, watermark }: {
   sale: ReceiptSale;
   settings: ReceiptSettings;
   businessName: string;
   ariaMessage?: string;
   onClose?: () => void;
+  watermark?: string;
 }) {
   const bName       = businessName ?? sale.businessName ?? 'AriaPOS';
   const total       = sale.total_amount ?? 0;
@@ -374,7 +382,12 @@ function SettingsReceipt({ sale, settings, businessName, ariaMessage, onClose }:
             </div>
           </div>
 
-          <div style={{ overflowY: 'auto', flex: 1 }}>
+          <div style={{ overflowY: 'auto', flex: 1, position: 'relative' }}>
+            {watermark && (
+              <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none', zIndex: 10 }}>
+                <span style={{ fontSize: 64, fontWeight: 900, color: 'rgba(245,158,11,0.2)', transform: 'rotate(-30deg)', letterSpacing: 4, userSelect: 'none', fontFamily: 'sans-serif' }}>{watermark}</span>
+              </div>
+            )}
             <div className="receipt-print-root" style={{ padding: '20px 24px', fontFamily: "'Courier New', monospace", fontSize: 12, color: '#111', background: '#fff', lineHeight: 1.5 }}>
 
               {settings.receipt_logo_url && (
@@ -499,7 +512,7 @@ function SettingsReceipt({ sale, settings, businessName, ariaMessage, onClose }:
 }
 
 /* ─── Main export — picks template or settings receipt ────────── */
-export default function Receipt({ sale, settings = {}, businessName, ariaMessage, onClose, template }: Props) {
+export default function Receipt({ sale, settings = {}, businessName, ariaMessage, onClose, template, watermark }: Props) {
   const bName = businessName ?? sale.businessName ?? 'AriaPOS';
 
   // Use the custom template if it exists and has elements
@@ -511,6 +524,7 @@ export default function Receipt({ sale, settings = {}, businessName, ariaMessage
         businessName={bName}
         settings={settings}
         onClose={onClose}
+        watermark={watermark}
       />
     );
   }
@@ -523,6 +537,7 @@ export default function Receipt({ sale, settings = {}, businessName, ariaMessage
       businessName={bName}
       ariaMessage={ariaMessage}
       onClose={onClose}
+      watermark={watermark}
     />
   );
 }

@@ -8,15 +8,24 @@ interface ScheduleData { outlet_id: string; outlet_name: string; week_start: str
 interface Decision { id: string; reasoning: string; projected_impact_cents: number; confidence_score: number; created_at: string; status: string; decision_data: ScheduleData; }
 
 const HOURS = Array.from({ length: 13 }, (_, i) => i + 9);
-const PALETTE = ['#7C3AED', '#2563EB', '#059669', '#D97706', '#DC2626', '#0891B2', '#9333EA', '#DB2777'];
+const STAFF_COLORS = ['#8B5CF6', '#EC4899', '#3B82F6', '#14B8A6', '#F59E0B', '#EF4444', '#10B981', '#6366F1'];
+
+function staffColor(staffId: string): string {
+  const hash = staffId.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
+  return STAFF_COLORS[hash % STAFF_COLORS.length];
+}
+
+const PALETTE = STAFF_COLORS;
 const fmtHour = (h: number) => h < 12 ? `${h}am` : h === 12 ? '12pm' : `${h - 12}pm`;
 
 function buildGrid(roster: RosterRow) {
   const dates = [...new Set(roster.shifts.map(s => s.day))].sort();
+  // Deterministic color by staff_id so it never changes between renders
   const nameColorMap = new Map<string, string>();
-  let ci = 0;
+  const staffIdMap = new Map<string, string>(); // name → id for color lookup
   for (const s of roster.shifts) {
-    if (!nameColorMap.has(s.staff_name)) nameColorMap.set(s.staff_name, PALETTE[ci++ % PALETTE.length]);
+    if (!staffIdMap.has(s.staff_name)) staffIdMap.set(s.staff_name, s.staff_id);
+    if (!nameColorMap.has(s.staff_name)) nameColorMap.set(s.staff_name, staffColor(s.staff_id));
   }
   const grid = new Map<string, Map<number, string[]>>();
   for (const s of roster.shifts) {

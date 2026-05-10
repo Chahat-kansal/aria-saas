@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { track } from '@/lib/analytics';
 
 interface Decision { id: string; agent_type: string; reasoning: string; projected_impact_cents: number; confidence_score: number; created_at: string; status: string; decision_data: Record<string, unknown>; }
-interface AgentSummary { type: string; label: string; icon: string; desc: string; href: string; pending: number; last_run: string | null; enabled: boolean; }
+interface AgentSummary { type: string; label: string; icon: string; desc: string; href: string; pending: number; last_run: string | null; last_run_decisions: number; last_run_timed_out: boolean; enabled: boolean; }
 
 function getTrustMessage(daysSince: number, decisionCount: number): string {
   if (daysSince < 7) return `Week 1: Every decision needs your approval. Aria is learning your business.`;
@@ -44,11 +44,18 @@ export default function AgentsDashboardPage() {
     if (bizRes?.business?.created_at) setBusinessCreatedAt(bizRes.business.created_at);
     const allCount = await fetch('/api/pos/agents/all?status=all').then(r => r.json()).then(d => (d.decisions ?? []).length).catch(() => 0);
     setTotalDecisionCount(allCount);
-    const sums: AgentSummary[] = AGENT_DEFS.map((a, i) => ({
-      ...a, pending: results[i].decisions?.length ?? 0,
-      last_run: results[i].last_run?.started_at ?? null,
-      enabled: results[i].settings?.enabled ?? true,
-    }));
+    const sums: AgentSummary[] = AGENT_DEFS.map((a, i) => {
+      const lr = results[i].last_run ?? null;
+      const lrErrors = lr?.errors as Array<{ message?: string }> | null;
+      const timedOut = Array.isArray(lrErrors) && lrErrors.some(e => (e?.message ?? '').includes('timeout'));
+      return {
+        ...a, pending: results[i].decisions?.length ?? 0,
+        last_run: lr?.started_at ?? null,
+        last_run_decisions: lr?.decisions_count ?? 0,
+        last_run_timed_out: timedOut,
+        enabled: results[i].settings?.enabled ?? true,
+      };
+    });
     setSummaries(sums);
     const flat: Decision[] = AGENT_DEFS.flatMap((_, i) => results[i].decisions ?? []);
     flat.sort((a, b) => Math.abs(b.projected_impact_cents) - Math.abs(a.projected_impact_cents));
@@ -97,6 +104,9 @@ export default function AgentsDashboardPage() {
           <h1 style={{ fontSize: 22, fontWeight: 700, margin: 0 }}>Aria Agents</h1>
           <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>Autonomous decisions, waiting for your one-tap approval.</p>
         </div>
+        <Link href="/pos/agents/activity" style={{ textDecoration: 'none' }}>
+          <span style={{ ...sBtn('#94A3B8', 'rgba(148,163,184,0.10)'), padding: '8px 16px' }}>📋 Activity log</span>
+        </Link>
       </div>
 
       {/* Agent cards */}
@@ -117,7 +127,14 @@ export default function AgentsDashboardPage() {
                 </div>
                 {pending > 0 && <span style={{ background: `${color}22`, color, fontSize: 11, padding: '2px 8px', borderRadius: 99, fontWeight: 700 }}>{pending} pending</span>}
               </div>
-              {(a as AgentSummary).last_run && <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginBottom: 12 }}>Last run: {relTime((a as AgentSummary).last_run!)}</div>}
+              {(a as AgentSummary).last_run && (
+                <div style={{ fontSize: 11, color: (a as AgentSummary).last_run_timed_out ? '#FBBF24' : 'var(--text-tertiary)', marginBottom: 12 }}>
+                  Last run: {relTime((a as AgentSummary).last_run!)} —{' '}
+                  {(a as AgentSummary).last_run_timed_out
+                    ? '⚠️ timed out'
+                    : `completed (${(a as AgentSummary).last_run_decisions} decisions)`}
+                </div>
+              )}
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                 <Link href={a.href} style={{ textDecoration: 'none' }}>
                   <span style={{ ...sBtn(color, dim) }}>View decisions</span>
@@ -155,8 +172,14 @@ export default function AgentsDashboardPage() {
                     <td style={{ padding: '10px 14px', fontSize: 12, fontWeight: 700, color: d.projected_impact_cents >= 0 ? '#34D399' : '#FBBF24', fontFamily: "'JetBrains Mono',monospace" }}>
                       {impactFmt(d.projected_impact_cents)}
                     </td>
-                    <td style={{ padding: '10px 14px', fontSize: 12, color: 'var(--text-secondary)' }}>
-                      {(d.confidence_score * 100).toFixed(0)}%
+                    <td style={{ padding: '10px 14px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <div style={{ width: 60, height: 5, borderRadius: 99, background: 'var(--bg-overlay)', overflow: 'hidden', flexShrink: 0 }}>
+                          <div style={{ height: '100%', width: `${(d.confidence_score ?? 0) * 100}%`, background: (d.confidence_score ?? 0) >= 0.8 ? '#34D399' : (d.confidence_score ?? 0) >= 0.5 ? '#FBBF24' : '#F87171', borderRadius: 99 }} />
+                        </div>
+                        <span style={{ fontSize: 11, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>{((d.confidence_score ?? 0) * 100).toFixed(0)}%</span>
+                      </div>
+                      {(d.confidence_score ?? 0) < 0.5 && <div style={{ fontSize: 10, color: '#F87171', marginTop: 2 }}>⚠️ Review carefully</div>}
                     </td>
                     <td style={{ padding: '10px 14px', fontSize: 11, color: 'var(--text-tertiary)' }}>{relTime(d.created_at)}</td>
                     <td style={{ padding: '10px 14px' }}>

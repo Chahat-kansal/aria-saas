@@ -948,10 +948,13 @@ export default function TerminalPage() {
     <div className="flex flex-col overflow-hidden" style={{ height: '100%', background: 'var(--bg-base)', position: 'relative' }}>
       {/* Training mode amber banner — additive */}
       {trainingMode && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 200, background: 'rgba(245,158,11,0.95)', color: '#000', fontSize: 13, fontWeight: 800, textAlign: 'center', padding: '6px 0', letterSpacing: '0.04em', backdropFilter: 'blur(4px)' }}>
-          🎓 TRAINING MODE — sales not recorded
-          <button onClick={toggleTrainingMode} style={{ marginLeft: 16, padding: '2px 10px', borderRadius: 6, border: 'none', background: 'rgba(0,0,0,0.2)', color: '#000', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>Turn off</button>
-        </div>
+        <>
+          <div style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 200, background: 'rgba(245,158,11,0.95)', color: '#000', fontSize: 13, fontWeight: 800, textAlign: 'center', padding: '6px 0', letterSpacing: '0.04em', backdropFilter: 'blur(4px)' }}>
+            🎓 TRAINING MODE — sales not recorded
+            <button onClick={toggleTrainingMode} style={{ marginLeft: 16, padding: '2px 10px', borderRadius: 6, border: 'none', background: 'rgba(0,0,0,0.2)', color: '#000', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>Turn off</button>
+          </div>
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(245,158,11,0.03)', pointerEvents: 'none', zIndex: 1 }} />
+        </>
       )}
       {/* Full-screen animated dot grid */}
       <AnimatedBg />
@@ -998,7 +1001,7 @@ export default function TerminalPage() {
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
                 <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>Total</span>
-                <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 24, fontWeight: 900, color: 'var(--text-primary)', letterSpacing: '-0.04em' }}>A${roundedTotal.toFixed(2)}</span>
+                <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 24, fontWeight: 900, color: trainingMode ? '#F59E0B' : 'var(--text-primary)', letterSpacing: '-0.04em' }}>A${roundedTotal.toFixed(2)}{trainingMode ? ' (TRAINING)' : ''}</span>
               </div>
             </div>
           </div>
@@ -1052,7 +1055,7 @@ export default function TerminalPage() {
                   {/* Confirm Payment */}
                   <button onClick={() => { processSale(); }} disabled={processing}
                     style={{ height: 52, padding: '0 36px', borderRadius: 14, border: 'none', background: 'linear-gradient(135deg,#00E5FF,#00BFCC,#7B2FFF)', color: '#000', fontFamily: 'inherit', fontSize: 14, fontWeight: 900, cursor: processing ? 'not-allowed' : 'pointer', boxShadow: '0 5px 0 rgba(0,150,200,0.5), 0 10px 30px rgba(0,229,255,0.3)', transition: 'all 200ms', opacity: processing ? 0.6 : 1, display: 'flex', alignItems: 'center', gap: 8 }}>
-                    {processing ? 'Processing…' : `Confirm Payment · A$${roundedTotal.toFixed(2)}`}
+                    {processing ? 'Processing…' : trainingMode ? `Complete (Training) · A$${roundedTotal.toFixed(2)}` : `Confirm Payment · A$${roundedTotal.toFixed(2)}`}
                   </button>
                 </div>
               )}
@@ -1233,6 +1236,7 @@ export default function TerminalPage() {
                 businessName={businessName}
                 template={receiptTemplate}
                 onClose={() => setShowReceiptModal(false)}
+                watermark={trainingMode ? 'TRAINING' : undefined}
               />
             )}
             <button
@@ -1650,6 +1654,7 @@ export default function TerminalPage() {
                 businessName={businessName}
                 template={receiptTemplate}
                 onClose={() => { setShowReceipt(null); if (window.innerWidth < 768) setMobileTab('products'); }}
+                watermark={trainingMode ? 'TRAINING' : undefined}
               />
             </div>
           ) : (
