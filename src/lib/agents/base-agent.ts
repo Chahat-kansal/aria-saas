@@ -7,7 +7,9 @@ export abstract class BaseAgent {
   abstract run(business_id: string): Promise<AgentRunResult>;
 
   protected supabase = createServerSupabaseClient();
-  protected anthropic = new Anthropic();
+  protected anthropic = new Anthropic({
+    apiKey: process.env.ANTHROPIC_API_KEY!,
+  });
 
   protected async getSettings(business_id: string): Promise<AgentSettings> {
     const { data } = await this.supabase
