@@ -51,7 +51,7 @@ export async function GET(req: Request) {
     });
   }
 
-  const { data: biz } = await supabase.from('businesses').select('name').eq('id', bid).maybeSingle();
+  const { data: biz } = await supabase.from('businesses').select('name,business_type,terminal_layout').eq('id', bid).maybeSingle();
   const [{ data: products }, { data: categories }, { data: saleKeys }] = await Promise.all([
     supabase
       .from('pos_products')
@@ -71,11 +71,13 @@ export async function GET(req: Request) {
   ]);
 
   return NextResponse.json({
-    business_id:   bid,
-    business_name: biz?.name ?? 'AriaPOS',
-    products:      products   || [],
-    categories:    categories || [],
-    sale_keys:     saleKeys   || [],
+    business_id:       bid,
+    business_name:     biz?.name ?? 'AriaPOS',
+    business_type:     (biz as any)?.business_type ?? null,
+    terminal_layout:   (biz as any)?.terminal_layout ?? null,
+    products:          products   || [],
+    categories:        categories || [],
+    sale_keys:         saleKeys   || [],
   });
 }
 

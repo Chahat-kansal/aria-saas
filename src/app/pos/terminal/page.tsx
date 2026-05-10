@@ -14,6 +14,16 @@ const CursorGlow = dynamic(() => import('@/components/pos/CursorGlow'), { ssr: f
 const AnimatedBg = dynamic(() => import('@/components/pos/AnimatedBg'), { ssr: false });
 const FlyToCart  = dynamic(() => import('@/components/pos/FlyToCart'),  { ssr: false });
 
+// Layout system — additive
+import { LayoutSwitcher } from '@/components/terminal/LayoutSwitcher';
+import { FastGridLayout } from '@/components/terminal/layouts/FastGridLayout';
+import { ShelfLayout } from '@/components/terminal/layouts/ShelfLayout';
+import { CarouselLayout } from '@/components/terminal/layouts/CarouselLayout';
+import { MasonryLayout } from '@/components/terminal/layouts/MasonryLayout';
+import { SearchFirstLayout } from '@/components/terminal/layouts/SearchFirstLayout';
+import type { ProductForTerminal } from '@/components/terminal/layouts/types';
+import { getCurrentLayout, TerminalLayout } from '@/lib/terminal/layouts';
+
 /* ─── Types ─────────────────────────────────────────────────────── */
 interface Product {
   id: string; name: string; sku: string | null; barcode: string | null;
@@ -223,6 +233,12 @@ export default function TerminalPage() {
   /* ── Context menu ─────────────────────────────────────────────── */
   const [contextMenu,      setContextMenu]      = useState<{ product: Product; x: number; y: number } | null>(null);
 
+  // Layout system — additive
+  const [currentLayout, setLayout] = useState<TerminalLayout>('grid');
+  const [recentProductIds, setRecentProductIds] = useState<string[]>([]);
+  const [businessType, setBusinessType] = useState<string>('liquor');
+  const [terminalLayoutOverride, setTerminalLayoutOverride] = useState<TerminalLayout | null>(null);
+
   // Training mode — additive
   const [trainingMode, setTrainingMode] = useState(false);
   const [trainingOffTimer, setTrainingOffTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
@@ -337,6 +353,9 @@ export default function TerminalPage() {
     ]).then(([prod, park, tmplData]) => {
       if (prod.business_id) setBusinessId(prod.business_id);
       if (prod.business_name) setBusinessName(prod.business_name);
+      // Layout init — additive
+      if (prod.business_type) setBusinessType(prod.business_type);
+      if (prod.terminal_layout) setTerminalLayoutOverride(prod.terminal_layout as TerminalLayout);
       const prods: Product[] = prod.products || [];
       setProducts(prods);
       setParkedSales(park.parked_sales || []);
@@ -350,6 +369,11 @@ export default function TerminalPage() {
       }
     }).catch(() => setLoading(false));
   }, [loadRegister]);
+
+  /* ── Layout init from business_type + localStorage — additive ── */
+  useEffect(() => {
+    setLayout(getCurrentLayout(businessType, terminalLayoutOverride));
+  }, [businessType, terminalLayoutOverride]);
 
   /* ── Mobile detection ────────────────────────────────────────── */
   useEffect(() => {
@@ -559,6 +583,8 @@ export default function TerminalPage() {
     SFX.add();
     setSelectedItem(p.id);
     setLastAddedId(p.id);
+    // Track recent for SearchFirstLayout — additive
+    setRecentProductIds(prev => [p.id, ...prev.filter(id => id !== p.id)].slice(0, 8));
     setSearch('');
     if (window.innerWidth < 768) setMobileTab('cart');
   }
@@ -1582,6 +1608,8 @@ export default function TerminalPage() {
               title="Price check mode">
               🔍
             </button>
+            {/* Layout switcher — additive */}
+            <LayoutSwitcher current={currentLayout} onChange={setLayout} />
           </div>
 
           {priceCheckMode && (
@@ -1628,6 +1656,73 @@ export default function TerminalPage() {
                 {!search && <a href="/pos/products" className="mt-3 text-xs font-medium hover:underline" style={{ color: '#8B5CF6' }}>Add products →</a>}
               </div>
             ) : (() => {
+              // Shared handler for layout components — additive
+              const handleLayoutClick = (lp: ProductForTerminal) => {
+                const p = products.find(prod => prod.id === lp.id);
+                if (!p) return;
+                if (priceCheckMode) { setPriceCheckProd(p); return; }
+                checkAndAddToCart(p);
+              };
+              // Map displayedProducts to ProductForTerminal shape — additive
+              const layoutProducts: ProductForTerminal[] = displayedProducts.map(p => ({
+                id: p.id,
+                name: p.name,
+                sku: p.sku ?? '',
+                barcode: p.barcode,
+                category: p.pos_categories?.name ?? null,
+                price: p.price,
+                cost_price: p.cost_price,
+                stock_quantity: p.stock_quantity,
+                image_url: (p as any).image_url ?? null,
+                container_type: null,
+                description: (p as any).description ?? null,
+              }));
+
+              if (currentLayout === 'shelf') {
+                return (
+                  <ShelfLayout
+                    products={layoutProducts}
+                    onProductClick={handleLayoutClick}
+                  />
+                );
+              }
+              if (currentLayout === 'carousel') {
+                return (
+                  <CarouselLayout
+                    products={layoutProducts}
+                    onProductClick={handleLayoutClick}
+                  />
+                );
+              }
+              if (currentLayout === 'masonry') {
+                return (
+                  <MasonryLayout
+                    products={layoutProducts}
+                    onProductClick={handleLayoutClick}
+                  />
+                );
+              }
+              if (currentLayout === 'search-first') {
+                return (
+                  <SearchFirstLayout
+                    products={layoutProducts}
+                    onProductClick={handleLayoutClick}
+                    recentProductIds={recentProductIds}
+                    suggestedProductIds={suggestions.map(s => s.id)}
+                  />
+                );
+              }
+              if (currentLayout === 'grid') {
+                return (
+                  <FastGridLayout
+                    products={layoutProducts}
+                    onProductClick={handleLayoutClick}
+                    showStock={true}
+                  />
+                );
+              }
+
+              // Fallback: original dense grid (preserved) — additive
               const CAT_META_LOCAL: Record<string, { a: string; b: string }> = {
                 'beer':         { a: '#F59E0B', b: '#92400E' },
                 'beer & cider': { a: '#F59E0B', b: '#92400E' },
