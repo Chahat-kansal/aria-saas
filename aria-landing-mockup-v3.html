@@ -1,0 +1,1158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Aria — The POS that thinks (Scroll-scrubbed hero + crossfade)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,300..600&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet" />
+<style>
+:root {
+  --bg-base: #0E1411;
+  --bg-canvas: #0A100C;
+  --bg-deeper: #060A08;
+  --bg-glass: rgba(19, 26, 22, 0.55);
+  --bg-elevated: rgba(20, 28, 23, 0.85);
+  --sage: #7FB897;
+  --sage-light: #9FC9B0;
+  --sage-dark: #2D5240;
+  --sage-soft: rgba(127, 184, 151, 0.12);
+  --sage-glow: rgba(127, 184, 151, 0.32);
+  --text-primary: #E8EDE7;
+  --text-secondary: #A8B5A8;
+  --text-tertiary: #6E7C6E;
+  --divider: rgba(127, 184, 151, 0.08);
+  --warning: #D4A95E;
+  --danger: #C97070;
+  --font-display: 'Fraunces', Georgia, serif;
+  --font-body: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: auto; }
+body {
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-weight: 300;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  letter-spacing: -0.005em;
+}
+
+/*
+ * SCROLL ARCHITECTURE:
+ *
+ * - HERO ACT (0vh → 200vh of scroll): scroll-scrubbed animation. iPad rotates,
+ *   products materialise onto screen, headline phases in. Viewport pinned.
+ *
+ * - CROSSFADE ACT (200vh → 1300vh): same mechanic as v2. 11 scenes fade in/out.
+ *
+ * Total scroll height: 1300vh. The viewport is fixed across both acts.
+ */
+
+.scroll-spacer {
+  position: relative;
+  height: 1300vh;
+  pointer-events: none;
+}
+
+.viewport {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  z-index: 1;
+  background: var(--bg-base);
+}
+
+/* ============ HERO ACT (scroll-scrubbed) ============ */
+
+/* Hero lives in its own layer that animates via CSS variables driven by JS.
+   The CSS variable --hero-progress goes from 0 to 1 as user scrolls
+   through the first 200vh. Each element reads it differently. */
+
+.hero-act {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+  /* Driven by JS: --hero-progress: 0 to 1 across 0-200vh of scroll */
+}
+
+/* Aurora layer that slowly intensifies */
+.hero-aurora {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 70% 50% at 12% 8%, rgba(127, 184, 151, 0.20), transparent 60%),
+    radial-gradient(ellipse 60% 45% at 92% 22%, rgba(58, 90, 64, 0.16), transparent 65%),
+    radial-gradient(ellipse 80% 60% at 78% 95%, rgba(101, 177, 121, 0.14), transparent 70%);
+  /* Aurora is dimmer at start (just enough to feel atmospheric), brightens with scroll */
+  opacity: calc(0.25 + var(--hero-progress, 0) * 0.75);
+  transition: opacity 80ms linear;
+}
+
+/* iPad scrubbed animation
+   At progress 0: tiny, edge-on, far back, screen empty
+   At progress 0.5: mid-size, mostly face-on
+   At progress 1: full-size, fully face-on, full UI loaded
+*/
+.hero-ipad-stage {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  perspective: 1800px;
+  perspective-origin: 50% 30%;
+}
+
+.hero-ipad {
+  width: clamp(320px, 60vw, 880px);
+  aspect-ratio: 1.4;
+  position: relative;
+  /* Combined transform from JS: scale + rotateY (rotateX done via CSS variable) */
+  transform:
+    scale(calc(0.55 + var(--hero-progress, 0) * 0.55))
+    rotateX(calc((1 - var(--hero-progress, 0)) * 18deg + 6deg))
+    rotateY(calc((1 - var(--hero-progress, 0)) * -65deg))
+    translateZ(calc((1 - var(--hero-progress, 0)) * -200px));
+  /* iPad is invisible at scroll 0, fades in across the first 30% of hero scroll.
+     This keeps the headline pure on first paint, then the iPad emerges. */
+  opacity: clamp(0, calc(var(--hero-progress, 0) * 4), 1);
+  transition: transform 80ms linear, opacity 80ms linear;
+  transform-style: preserve-3d;
+}
+
+.hero-ipad-frame {
+  position: absolute;
+  inset: 0;
+  border-radius: 28px;
+  background: var(--bg-canvas);
+  box-shadow:
+    0 60px 120px rgba(0, 0, 0, 0.7),
+    0 30px 60px rgba(0, 0, 0, 0.5),
+    inset 0 0 0 8px rgba(20, 28, 23, 0.95),
+    inset 0 0 0 9px rgba(127, 184, 151, calc(0.06 + var(--hero-progress, 0) * 0.16)),
+    0 0 0 1px rgba(127, 184, 151, calc(0.10 + var(--hero-progress, 0) * 0.16)),
+    0 0 calc(40px + var(--hero-progress, 0) * 80px) rgba(127, 184, 151, calc(var(--hero-progress, 0) * 0.3));
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: 56px 1fr 280px;
+  grid-template-rows: 44px 1fr;
+  padding: 8px;
+}
+
+/* The iPad screen content fades in as progress increases */
+.hero-ipad-content {
+  display: contents;
+  opacity: calc(var(--hero-progress, 0));
+  transition: opacity 80ms linear;
+}
+
+/* Top bar */
+.hero-ipad-topbar {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px;
+  font-size: 11px;
+  color: var(--text-tertiary);
+  border-bottom: 1px solid var(--divider);
+  opacity: calc((var(--hero-progress, 0) - 0.2) * 2);
+}
+.hero-live-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--sage);
+  box-shadow: 0 0 6px var(--sage);
+  animation: livePulse 2s ease-in-out infinite;
+}
+@keyframes livePulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+/* Sidebar */
+.hero-ipad-sidebar {
+  background: rgba(127, 184, 151, 0.04);
+  border-radius: 8px;
+  padding: 8px 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+  opacity: calc((var(--hero-progress, 0) - 0.3) * 2);
+}
+.hero-sidebar-icon {
+  width: 32px; height: 32px;
+  border-radius: 8px;
+  background: rgba(127, 184, 151, 0.08);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--sage);
+  font-size: 14px;
+}
+.hero-sidebar-icon.active { background: linear-gradient(135deg, var(--sage), var(--sage-dark)); color: white; }
+
+/* Product grid — tiles fade in one-by-one (staggered via custom property) */
+.hero-ipad-grid {
+  padding: 12px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  align-content: start;
+}
+.hero-product-tile {
+  background: rgba(20, 28, 23, 0.7);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-radius: 8px;
+  padding: 10px 8px;
+  font-size: 9px;
+  color: var(--text-secondary);
+  display: flex;
+  flex-direction: column;
+  aspect-ratio: 0.9;
+  box-shadow: inset 0 1px 0 rgba(127, 184, 151, 0.06);
+  /* Stagger: each tile appears at a slightly later progress */
+  opacity: calc((var(--hero-progress, 0) - var(--tile-stagger, 0.4)) * 4);
+  transform: translateY(calc((1 - clamp(0, (var(--hero-progress, 0) - var(--tile-stagger, 0.4)) * 4, 1)) * 8px));
+  transition: opacity 80ms linear, transform 80ms linear;
+}
+.hero-product-tile:nth-child(1) { --tile-stagger: 0.40; }
+.hero-product-tile:nth-child(2) { --tile-stagger: 0.45; }
+.hero-product-tile:nth-child(3) { --tile-stagger: 0.50; }
+.hero-product-tile:nth-child(4) { --tile-stagger: 0.55; }
+.hero-product-tile:nth-child(5) { --tile-stagger: 0.60; }
+.hero-product-tile:nth-child(6) { --tile-stagger: 0.65; }
+.hero-product-tile .swatch { width: 14px; height: 14px; border-radius: 4px; margin-bottom: auto; }
+.hero-product-tile .name { font-weight: 500; color: var(--text-primary); margin-top: 4px; line-height: 1.2; }
+.hero-product-tile .price { font-family: var(--font-display); font-style: italic; font-weight: 600; font-size: 11px; color: var(--sage-light); margin-top: 2px; }
+
+/* Cart panel — appears last */
+.hero-ipad-cart {
+  background: rgba(20, 28, 23, 0.85);
+  border-radius: 12px;
+  padding: 14px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 4px 4px 4px 0;
+  opacity: calc((var(--hero-progress, 0) - 0.7) * 3.3);
+  transform: translateX(calc((1 - clamp(0, (var(--hero-progress, 0) - 0.7) * 3.3, 1)) * 20px));
+}
+.hero-cart-header { font-family: var(--font-display); font-style: italic; font-size: 13px; color: var(--text-primary); margin-bottom: 4px; }
+.hero-cart-line { display: flex; justify-content: space-between; font-size: 10px; color: var(--text-secondary); padding: 4px 0; border-bottom: 1px solid var(--divider); }
+.hero-cart-total {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 600;
+  font-size: 22px;
+  background: linear-gradient(135deg, var(--sage-light), var(--sage));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin: 8px 0 0;
+  text-align: right;
+}
+.hero-charge-btn {
+  background: linear-gradient(135deg, var(--sage), var(--sage-dark));
+  color: white;
+  padding: 10px;
+  border-radius: 8px;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  box-shadow: 0 4px 12px rgba(127, 184, 151, 0.4);
+  margin-top: auto;
+}
+
+/* Hero text — phases over the iPad
+   Phase 1 (0-0.3): big headline visible, iPad starting from corner
+   Phase 2 (0.3-0.7): headline shrinks + moves up, subhead appears
+   Phase 3 (0.7-1.0): full hero composed, scroll prompt fades */
+.hero-text-layer {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  padding: 80px 32px 0;
+  text-align: center;
+  z-index: 10;
+  pointer-events: none;
+  /* Headline starts huge centered, then shifts up as iPad fills frame */
+  transform: translateY(calc(var(--hero-progress, 0) * -8vh));
+  transition: transform 80ms linear;
+}
+
+.hero-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: rgba(127, 184, 151, 0.07);
+  border: 1px solid rgba(127, 184, 151, 0.2);
+  color: var(--sage-light);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  margin-bottom: 24px;
+  opacity: calc(1 - var(--hero-progress, 0) * 1.3);
+}
+.hero-pill::before { content: '✦'; color: var(--sage); }
+
+.hero-h1 {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: clamp(48px, 9vw, 110px);
+  line-height: 1;
+  letter-spacing: -0.035em;
+  margin-bottom: 24px;
+  /* Headline scales DOWN slightly as iPad scales UP — creates depth */
+  transform: scale(calc(1 - var(--hero-progress, 0) * 0.18));
+  transform-origin: 50% 50%;
+}
+.hero-h1 em {
+  font-style: italic;
+  background: linear-gradient(135deg, #C7E0D0 0%, var(--sage) 50%, var(--sage-dark) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  display: block;
+}
+
+.hero-subhead {
+  font-size: 18px;
+  font-weight: 300;
+  color: var(--text-secondary);
+  max-width: 480px;
+  margin: 0 auto;
+  line-height: 1.55;
+  opacity: calc(1 - var(--hero-progress, 0) * 1.5);
+}
+
+/* Hero scroll cue at the very bottom */
+.hero-scroll-cue {
+  position: absolute;
+  bottom: 32px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 11px;
+  color: var(--text-tertiary);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  z-index: 11;
+  opacity: calc(1 - var(--hero-progress, 0) * 2);
+}
+.hero-scroll-cue::before {
+  content: '↓';
+  font-size: 14px;
+  animation: bobDown 1.8s ease-in-out infinite;
+}
+@keyframes bobDown {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(4px); }
+}
+
+/* Particle dust around iPad — pulses */
+.hero-particles {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: calc(var(--hero-progress, 0) * 0.7);
+}
+.particle {
+  position: absolute;
+  width: 3px;
+  height: 3px;
+  background: var(--sage-light);
+  border-radius: 50%;
+  box-shadow: 0 0 6px var(--sage);
+  animation: floatParticle 6s ease-in-out infinite;
+}
+.particle:nth-child(1) { left: 18%; top: 30%; animation-delay: 0s; }
+.particle:nth-child(2) { left: 78%; top: 22%; animation-delay: 1.2s; }
+.particle:nth-child(3) { left: 24%; top: 72%; animation-delay: 2.4s; }
+.particle:nth-child(4) { left: 84%; top: 68%; animation-delay: 3.6s; }
+.particle:nth-child(5) { left: 50%; top: 18%; animation-delay: 4.8s; }
+.particle:nth-child(6) { left: 50%; top: 80%; animation-delay: 0.6s; }
+@keyframes floatParticle {
+  0%, 100% { transform: translateY(0) scale(1); opacity: 0.6; }
+  50% { transform: translateY(-20px) scale(1.4); opacity: 1; }
+}
+
+/* ============ CROSSFADE ACT (scenes 02-12) ============ */
+
+.scene {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 32px;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 700ms cubic-bezier(0.4, 0, 0.2, 1), visibility 0ms linear 700ms;
+  overflow: hidden;
+  z-index: 2;
+}
+.scene.active {
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 700ms cubic-bezier(0.4, 0, 0.2, 1), visibility 0ms linear 0ms;
+  z-index: 3;
+}
+
+.scene-inner {
+  width: 100%;
+  max-width: 1200px;
+  position: relative;
+  z-index: 3;
+  transform: translateY(40px);
+  opacity: 0;
+  transition: transform 900ms cubic-bezier(0.16, 1, 0.3, 1) 150ms,
+              opacity 900ms cubic-bezier(0.16, 1, 0.3, 1) 150ms;
+}
+.scene.active .scene-inner { transform: translateY(0); opacity: 1; }
+
+.scene::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.85;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scene, .scene-inner, .hero-ipad, .hero-ipad-frame, .hero-h1, .hero-subhead, .hero-pill { transition: opacity 200ms linear !important; transform: none !important; }
+  .hero-act { --hero-progress: 1 !important; }
+}
+
+/* ============ STICKY OVERLAY ============ */
+.overlay-top {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  z-index: 100;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 24px 32px;
+  pointer-events: none;
+  background: linear-gradient(to bottom, rgba(14, 20, 17, 0.5), transparent);
+}
+.overlay-top > * { pointer-events: auto; }
+
+.brand-mark {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 22px;
+  background: linear-gradient(135deg, var(--sage-light), var(--sage));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  text-decoration: none;
+  letter-spacing: -0.02em;
+}
+
+.scene-counter {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 14px;
+  color: var(--sage);
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 80px;
+  justify-content: flex-end;
+}
+.scene-counter .num {
+  display: inline-block;
+  min-width: 22px;
+  text-align: right;
+  transition: opacity 250ms;
+}
+
+.overlay-bottom {
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  z-index: 100;
+  display: flex;
+  justify-content: flex-end;
+  padding: 24px 32px;
+  pointer-events: none;
+}
+.overlay-bottom > * { pointer-events: auto; }
+
+.cta-pill {
+  background: linear-gradient(135deg, var(--sage), var(--sage-dark));
+  color: #fff;
+  border: none;
+  border-radius: 999px;
+  padding: 12px 20px;
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 4px 16px var(--sage-glow), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  transition: all 260ms cubic-bezier(0.16, 1, 0.3, 1);
+  letter-spacing: -0.005em;
+  opacity: 0;
+  transform: translateY(8px);
+}
+.cta-pill.visible { opacity: 1; transform: translateY(0); }
+.cta-pill:hover { transform: translateY(-2px); box-shadow: 0 8px 24px var(--sage-glow); }
+.cta-pill:active { transform: translateY(0) scale(0.98); }
+.cta-pill .arrow { transition: transform 200ms; }
+.cta-pill:hover .arrow { transform: translateX(3px); }
+
+.progress-bar {
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  height: 2px;
+  background: rgba(127, 184, 151, 0.08);
+  z-index: 99;
+}
+.progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--sage), var(--sage-light));
+  width: 0%;
+  transition: width 100ms linear;
+  box-shadow: 0 0 8px var(--sage-glow);
+}
+
+/* ============ SHARED CONTENT (scenes 02-12) ============ */
+.scene-label { font-family: var(--font-display); font-style: italic; font-size: 13px; color: var(--sage); letter-spacing: 0.18em; text-transform: uppercase; margin-bottom: 20px; }
+.scene h2 { font-family: var(--font-display); font-weight: 400; font-size: clamp(40px, 6vw, 72px); line-height: 1.04; letter-spacing: -0.025em; margin-bottom: 24px; }
+.scene h2 em { font-style: italic; background: linear-gradient(135deg, var(--sage-light), var(--sage)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+.scene .body-copy { font-size: 17px; font-weight: 300; line-height: 1.6; color: var(--text-secondary); max-width: 540px; }
+
+/* SCENE 02 PROBLEM */
+.scene-problem { background: var(--bg-deeper); }
+.scene-problem::before { background: radial-gradient(ellipse 50% 70% at 90% 50%, rgba(58, 90, 64, 0.12), transparent 60%); }
+.scene-problem .scene-inner { display: grid; grid-template-columns: 1fr 1fr; gap: 80px; align-items: center; }
+.problem-stack { display: flex; flex-direction: column; gap: 16px; }
+.problem-card { background: var(--bg-glass); backdrop-filter: blur(28px) saturate(1.4); -webkit-backdrop-filter: blur(28px) saturate(1.4); border-radius: 12px; padding: 18px 20px; display: flex; align-items: center; gap: 14px; box-shadow: inset 0 1px 0 rgba(127, 184, 151, 0.06), 0 8px 24px rgba(0, 0, 0, 0.3); }
+.problem-icon { width: 36px; height: 36px; border-radius: 8px; background: rgba(201, 112, 112, 0.12); color: var(--danger); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.problem-card .text { font-size: 14px; color: var(--text-secondary); }
+
+/* SCENE 03 BRAIN */
+.scene-brain { background: var(--bg-canvas); }
+.scene-brain::before { background: radial-gradient(circle at 50% 50%, rgba(127, 184, 151, 0.18), transparent 60%); }
+.scene-brain .scene-inner { text-align: center; display: flex; flex-direction: column; align-items: center; }
+.brain-system { position: relative; width: 480px; height: 480px; margin: 32px auto 0; max-width: 90vw; }
+.brain-core { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 120px; height: 120px; border-radius: 50%; background: radial-gradient(circle, var(--sage) 0%, var(--sage-dark) 60%, transparent 100%); box-shadow: 0 0 60px rgba(127, 184, 151, 0.5), 0 0 120px rgba(127, 184, 151, 0.25); animation: pulseCore 3.6s ease-in-out infinite; }
+@keyframes pulseCore { 0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.95; } 50% { transform: translate(-50%, -50%) scale(1.06); opacity: 1; } }
+.orbit-ring { position: absolute; inset: 0; animation: spinOrbit 50s linear infinite; }
+@keyframes spinOrbit { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+.orbit-orb { position: absolute; top: 50%; left: 50%; width: 72px; height: 72px; border-radius: 50%; background: var(--bg-glass); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); box-shadow: inset 0 1px 0 rgba(127, 184, 151, 0.18), 0 4px 16px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(127, 184, 151, 0.16); display: flex; align-items: center; justify-content: center; font-family: var(--font-display); font-style: italic; font-size: 10px; color: var(--sage-light); letter-spacing: 0.08em; text-transform: uppercase; animation: counterSpin 50s linear infinite; }
+@keyframes counterSpin { from { transform: translate(-50%, -50%) rotate(0deg); } to { transform: translate(-50%, -50%) rotate(-360deg); } }
+.orbit-orb:nth-child(1) { left: calc(50% + 0px); top: calc(50% - 200px); }
+.orbit-orb:nth-child(2) { left: calc(50% + 190px); top: calc(50% - 62px); }
+.orbit-orb:nth-child(3) { left: calc(50% + 117px); top: calc(50% + 162px); }
+.orbit-orb:nth-child(4) { left: calc(50% - 117px); top: calc(50% + 162px); }
+.orbit-orb:nth-child(5) { left: calc(50% - 190px); top: calc(50% - 62px); }
+.brain-caption { font-size: 16px; color: var(--text-secondary); margin-top: 8px; max-width: 420px; font-style: italic; font-family: var(--font-display); font-weight: 300; }
+
+/* SPLIT SCENES */
+.scene-split { background: var(--bg-canvas); }
+.scene-split::before { background: radial-gradient(ellipse 50% 60% at 15% 30%, rgba(127, 184, 151, 0.10), transparent 60%); }
+.scene-split.reverse::before { background: radial-gradient(ellipse 50% 60% at 85% 30%, rgba(127, 184, 151, 0.10), transparent 60%); }
+.scene-split .scene-inner { display: grid; grid-template-columns: 1fr 1fr; gap: 80px; align-items: center; }
+.scene-split.reverse .text-side { order: 1; }
+.scene-split.reverse .mockup-side { order: 2; }
+
+.notification-card { background: var(--bg-elevated); backdrop-filter: blur(28px) saturate(1.4); -webkit-backdrop-filter: blur(28px) saturate(1.4); border-radius: 18px; padding: 22px; max-width: 360px; margin: 0 auto; box-shadow: inset 0 1px 0 rgba(127, 184, 151, 0.12), 0 24px 48px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(127, 184, 151, 0.14); transform: perspective(1400px) rotateY(-8deg) rotateX(4deg); transition: transform 600ms cubic-bezier(0.16, 1, 0.3, 1); }
+.notification-card:hover { transform: perspective(1400px) rotateY(-4deg) rotateX(2deg) translateY(-8px); }
+.notif-row { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+.notif-icon { width: 36px; height: 36px; border-radius: 10px; background: linear-gradient(135deg, var(--sage), var(--sage-dark)); display: flex; align-items: center; justify-content: center; color: white; box-shadow: 0 4px 12px rgba(127, 184, 151, 0.4); flex-shrink: 0; }
+.notif-meta { font-size: 11px; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.12em; font-weight: 500; }
+.notif-time { font-size: 11px; color: var(--text-tertiary); margin-left: auto; }
+.notif-title { font-family: var(--font-display); font-style: italic; font-size: 22px; color: var(--text-primary); margin-bottom: 6px; line-height: 1.2; }
+.notif-subtitle { font-size: 13px; color: var(--text-secondary); line-height: 1.5; margin-bottom: 18px; }
+.notif-actions { display: flex; gap: 8px; }
+.notif-btn { padding: 9px 16px; border-radius: 8px; border: none; cursor: pointer; font-size: 13px; font-weight: 500; font-family: inherit; transition: all 200ms; }
+.notif-btn.primary { background: linear-gradient(135deg, var(--sage), var(--sage-dark)); color: white; flex: 1; box-shadow: 0 4px 12px rgba(127, 184, 151, 0.35); }
+.notif-btn.secondary { background: transparent; color: var(--text-secondary); border: 1px solid rgba(127, 184, 151, 0.18); }
+.notif-confidence { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--divider); font-size: 11px; color: var(--text-tertiary); display: flex; align-items: center; gap: 6px; letter-spacing: 0.04em; }
+.confidence-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--sage); box-shadow: 0 0 6px var(--sage); }
+
+.pricing-mockup { background: var(--bg-elevated); backdrop-filter: blur(28px) saturate(1.4); -webkit-backdrop-filter: blur(28px) saturate(1.4); border-radius: 18px; padding: 22px; max-width: 360px; margin: 0 auto; box-shadow: inset 0 1px 0 rgba(127, 184, 151, 0.12), 0 24px 48px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(127, 184, 151, 0.14); transform: perspective(1400px) rotateY(8deg) rotateX(4deg); transition: transform 600ms cubic-bezier(0.16, 1, 0.3, 1); }
+.pricing-mockup:hover { transform: perspective(1400px) rotateY(4deg) rotateX(2deg) translateY(-8px); }
+.price-shift { font-family: var(--font-display); font-size: 18px; margin-bottom: 4px; color: var(--text-primary); }
+.price-shift .old { text-decoration: line-through; color: var(--text-tertiary); font-size: 14px; margin-right: 6px; font-style: italic; }
+.price-shift .new { color: var(--sage-light); font-style: italic; font-weight: 500; }
+
+.schedule-mockup { background: var(--bg-elevated); backdrop-filter: blur(28px) saturate(1.4); -webkit-backdrop-filter: blur(28px) saturate(1.4); border-radius: 18px; padding: 20px; max-width: 360px; margin: 0 auto; box-shadow: inset 0 1px 0 rgba(127, 184, 151, 0.12), 0 24px 48px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(127, 184, 151, 0.14); transform: perspective(1400px) rotateY(-8deg) rotateX(4deg); }
+.schedule-day-row { display: grid; grid-template-columns: 50px 1fr; gap: 8px; align-items: center; margin-bottom: 6px; font-size: 12px; }
+.schedule-day-label { color: var(--text-tertiary); font-size: 11px; letter-spacing: 0.04em; }
+.schedule-blocks { display: flex; gap: 3px; }
+.schedule-block { height: 22px; flex: 1; border-radius: 4px; }
+.schedule-block.sage { background: linear-gradient(135deg, var(--sage), var(--sage-dark)); }
+.schedule-block.amber { background: linear-gradient(135deg, var(--warning), #B0884A); }
+.schedule-block.dim { background: rgba(127, 184, 151, 0.12); }
+.schedule-holiday-tag { display: inline-block; background: rgba(212, 169, 94, 0.14); color: var(--warning); padding: 2px 8px; border-radius: 99px; font-size: 9px; margin-top: 12px; letter-spacing: 0.06em; text-transform: uppercase; }
+
+/* SCENE ASK */
+.scene-ask { background: var(--bg-canvas); }
+.scene-ask::before { background: radial-gradient(ellipse 50% 50% at 50% 30%, rgba(127, 184, 151, 0.12), transparent 60%); }
+.scene-ask .scene-inner { text-align: center; display: flex; flex-direction: column; align-items: center; }
+.conversation { display: flex; flex-direction: column; gap: 16px; max-width: 560px; width: 100%; margin: 32px auto 24px; }
+.bubble { padding: 14px 18px; border-radius: 16px; font-size: 15px; line-height: 1.5; max-width: 85%; text-align: left; }
+.bubble.user { background: linear-gradient(135deg, var(--sage-soft), rgba(127, 184, 151, 0.04)); color: var(--text-primary); align-self: flex-end; border-bottom-right-radius: 4px; border: 1px solid rgba(127, 184, 151, 0.15); }
+.bubble.aria { background: var(--bg-elevated); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); color: var(--text-primary); align-self: flex-start; border-bottom-left-radius: 4px; box-shadow: inset 0 1px 0 rgba(127, 184, 151, 0.08), 0 4px 16px rgba(0, 0, 0, 0.3); }
+.bubble.aria .stat { color: var(--sage-light); font-family: var(--font-display); font-style: italic; font-weight: 500; }
+.bubble-meta { font-size: 10px; color: var(--sage); text-transform: uppercase; letter-spacing: 0.16em; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
+.bubble-meta::before { content: '✦'; }
+.mini-chart { display: flex; align-items: flex-end; gap: 6px; height: 60px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--divider); }
+.bar { flex: 1; background: linear-gradient(to top, var(--sage-dark), var(--sage)); border-radius: 3px 3px 0 0; min-height: 6px; }
+
+/* SCENE AUSTRALIA */
+.scene-australia { background: var(--bg-deeper); }
+.scene-australia::before { background: radial-gradient(ellipse 50% 60% at 60% 50%, rgba(212, 169, 94, 0.06), transparent 60%); }
+.scene-australia .scene-inner { display: grid; grid-template-columns: 1fr 1.1fr; gap: 80px; align-items: center; }
+.au-list { list-style: none; display: flex; flex-direction: column; gap: 12px; margin-top: 20px; }
+.au-list li { display: flex; align-items: center; gap: 12px; font-size: 15px; color: var(--text-secondary); }
+.au-check { width: 20px; height: 20px; border-radius: 50%; background: rgba(127, 184, 151, 0.14); color: var(--sage); display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 11px; font-weight: 600; }
+.au-map { position: relative; width: 100%; aspect-ratio: 1.1; display: flex; align-items: center; justify-content: center; }
+.au-map svg { width: 100%; height: 100%; max-width: 480px; }
+
+/* SCENE TESTIMONIAL */
+.scene-testimonial { background: var(--bg-canvas); }
+.scene-testimonial::before { background: radial-gradient(circle at 50% 50%, rgba(127, 184, 151, 0.08), transparent 70%); }
+.scene-testimonial .scene-inner { text-align: center; max-width: 760px; margin: 0 auto; }
+.quote { font-family: var(--font-display); font-style: italic; font-weight: 300; font-size: clamp(24px, 3.5vw, 36px); line-height: 1.35; color: var(--text-primary); letter-spacing: -0.015em; margin-bottom: 28px; position: relative; }
+.quote::before { content: '"'; font-family: var(--font-display); color: var(--sage); opacity: 0.5; font-size: 1.5em; line-height: 0; vertical-align: -0.4em; margin-right: 4px; }
+.quote::after { content: '"'; font-family: var(--font-display); color: var(--sage); opacity: 0.5; font-size: 1.5em; line-height: 0; vertical-align: -0.4em; margin-left: 4px; }
+.attribution { font-size: 13px; color: var(--text-secondary); letter-spacing: 0.04em; }
+.attribution strong { color: var(--text-primary); font-weight: 500; }
+.attribution .em-meta { color: var(--text-tertiary); font-style: italic; }
+
+/* SCENE PRICING */
+.scene-pricing { background: var(--bg-canvas); }
+.scene-pricing::before { background: radial-gradient(ellipse 60% 50% at 50% 20%, rgba(127, 184, 151, 0.16), transparent 70%); }
+.scene-pricing .scene-inner { text-align: center; }
+.pricing-banner { display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; border-radius: 999px; background: rgba(212, 169, 94, 0.08); border: 1px solid rgba(212, 169, 94, 0.18); color: var(--warning); font-size: 12px; margin-bottom: 32px; letter-spacing: 0.02em; }
+.pricing-banner::before { content: '✦'; }
+.pricing-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; max-width: 960px; margin: 0 auto; align-items: center; }
+.price-card { background: var(--bg-glass); backdrop-filter: blur(28px) saturate(1.4); -webkit-backdrop-filter: blur(28px) saturate(1.4); border-radius: 14px; padding: 28px 24px; text-align: left; box-shadow: inset 0 1px 0 rgba(127, 184, 151, 0.06), 0 12px 32px rgba(0, 0, 0, 0.3); transition: transform 600ms cubic-bezier(0.16, 1, 0.3, 1); }
+.price-card.dim { opacity: 0.92; transform: scale(0.96); }
+.price-card.recommended { transform: scale(1.06) translateY(-8px); background: linear-gradient(180deg, rgba(127, 184, 151, 0.10), var(--bg-glass)); box-shadow: inset 0 1px 0 rgba(127, 184, 151, 0.18), 0 0 0 1px rgba(127, 184, 151, 0.3), 0 24px 64px rgba(127, 184, 151, 0.15); }
+.recommended-badge { display: inline-block; background: linear-gradient(135deg, var(--sage), var(--sage-dark)); color: white; font-size: 9px; letter-spacing: 0.16em; text-transform: uppercase; padding: 4px 10px; border-radius: 99px; font-weight: 600; margin-bottom: 16px; }
+.tier-name { font-family: var(--font-display); font-style: italic; font-size: 22px; color: var(--text-primary); margin-bottom: 4px; }
+.tier-tagline { font-size: 12px; color: var(--text-tertiary); margin-bottom: 20px; }
+.tier-price { font-family: var(--font-display); font-weight: 500; font-size: 48px; color: var(--text-primary); line-height: 1; letter-spacing: -0.03em; }
+.tier-price .currency { font-size: 20px; vertical-align: super; color: var(--text-secondary); margin-right: 2px; }
+.tier-period { font-size: 12px; color: var(--text-tertiary); margin: 8px 0 24px; }
+.tier-features { list-style: none; display: flex; flex-direction: column; gap: 10px; margin-bottom: 24px; font-size: 13px; color: var(--text-secondary); }
+.tier-features li { display: flex; align-items: flex-start; gap: 8px; line-height: 1.5; }
+.tier-features li::before { content: '✓'; color: var(--sage); font-weight: 600; flex-shrink: 0; }
+.tier-btn { width: 100%; padding: 12px; border-radius: 10px; font-family: inherit; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 200ms; }
+.tier-btn.outline { background: transparent; color: var(--sage); border: 1px solid rgba(127, 184, 151, 0.3); }
+.tier-btn.filled { background: linear-gradient(135deg, var(--sage), var(--sage-dark)); color: white; border: none; box-shadow: 0 4px 12px rgba(127, 184, 151, 0.4); }
+
+/* SCENE OUTRO */
+.scene-outro { background: var(--bg-base); }
+.scene-outro::before { background: radial-gradient(ellipse 80% 50% at 50% 30%, rgba(127, 184, 151, 0.20), transparent 60%); animation: auroraPulse 8s ease-in-out infinite; }
+@keyframes auroraPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
+.scene-outro .scene-inner { text-align: center; display: flex; flex-direction: column; align-items: center; }
+.outro-h1 { font-family: var(--font-display); font-weight: 400; font-size: clamp(56px, 9vw, 110px); line-height: 1; letter-spacing: -0.035em; color: var(--text-primary); margin-bottom: 28px; }
+.outro-h1 em { font-style: italic; background: linear-gradient(135deg, #C7E0D0, var(--sage), var(--sage-dark)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+.outro-cta-row { display: flex; align-items: center; gap: 24px; margin-top: 32px; flex-wrap: wrap; justify-content: center; }
+.btn-primary-large { background: linear-gradient(135deg, var(--sage), var(--sage-dark)); color: white; border: none; padding: 16px 32px; border-radius: 12px; font-family: inherit; font-size: 16px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 10px; box-shadow: 0 8px 24px var(--sage-glow), inset 0 1px 0 rgba(255, 255, 255, 0.2); transition: all 300ms cubic-bezier(0.16, 1, 0.3, 1); }
+.btn-primary-large:hover { transform: translateY(-2px); box-shadow: 0 12px 32px var(--sage-glow); }
+.btn-text { color: var(--text-secondary); font-size: 14px; text-decoration: none; display: inline-flex; align-items: center; gap: 8px; }
+.btn-text:hover { color: var(--sage); }
+.btn-text .play-circle { width: 28px; height: 28px; border-radius: 50%; background: var(--sage-soft); display: inline-flex; align-items: center; justify-content: center; color: var(--sage); font-size: 10px; }
+.outro-microtext { font-size: 12px; color: var(--text-tertiary); margin-top: 20px; letter-spacing: 0.04em; }
+
+/* MOBILE */
+@media (max-width: 900px) {
+  .scene { padding: 80px 20px; }
+  .scene-problem .scene-inner,
+  .scene-split .scene-inner,
+  .scene-australia .scene-inner { grid-template-columns: 1fr; gap: 32px; }
+  .scene-split.reverse .text-side { order: 2; }
+  .scene-split.reverse .mockup-side { order: 1; }
+  .pricing-grid { grid-template-columns: 1fr; gap: 12px; }
+  .price-card.dim, .price-card.recommended { transform: none; }
+  .hero-ipad-frame { grid-template-columns: 40px 1fr 180px; }
+  .hero-ipad-grid { grid-template-columns: repeat(2, 1fr); }
+  .brain-system { width: 320px; height: 320px; }
+  .brain-core { width: 80px; height: 80px; }
+  .orbit-orb { width: 56px; height: 56px; font-size: 9px; }
+  .orbit-orb:nth-child(1) { top: calc(50% - 130px); left: 50%; }
+  .orbit-orb:nth-child(2) { left: calc(50% + 124px); top: calc(50% - 40px); }
+  .orbit-orb:nth-child(3) { left: calc(50% + 76px); top: calc(50% + 105px); }
+  .orbit-orb:nth-child(4) { left: calc(50% - 76px); top: calc(50% + 105px); }
+  .orbit-orb:nth-child(5) { left: calc(50% - 124px); top: calc(50% - 40px); }
+  .overlay-top { padding: 16px 20px; }
+  .overlay-bottom { padding: 16px 20px; }
+}
+</style>
+</head>
+<body>
+
+<header class="overlay-top">
+  <a href="#" class="brand-mark">Aria</a>
+  <div class="scene-counter">
+    <span class="num" id="counter-current">01</span>
+    <span style="opacity: 0.4">/</span>
+    <span class="num" style="color: var(--text-tertiary)">12</span>
+  </div>
+</header>
+
+<aside class="overlay-bottom">
+  <button class="cta-pill" id="cta-pill">
+    <span>Start free trial</span>
+    <span class="arrow">→</span>
+  </button>
+</aside>
+
+<div class="progress-bar"><div class="progress-bar-fill" id="progress-fill"></div></div>
+
+<div class="viewport">
+
+  <!-- ============ HERO ACT — scroll-scrubbed ============ -->
+  <div class="hero-act" id="hero-act">
+    <div class="hero-aurora"></div>
+
+    <div class="hero-particles">
+      <span class="particle"></span>
+      <span class="particle"></span>
+      <span class="particle"></span>
+      <span class="particle"></span>
+      <span class="particle"></span>
+      <span class="particle"></span>
+    </div>
+
+    <div class="hero-text-layer">
+      <span class="hero-pill">Built for Australian retail</span>
+      <h1 class="hero-h1">
+        The POS that
+        <em>actually thinks.</em>
+      </h1>
+      <p class="hero-subhead">AI agents that run your shop while you serve customers.</p>
+    </div>
+
+    <div class="hero-ipad-stage">
+      <div class="hero-ipad">
+        <div class="hero-ipad-frame">
+          <div class="hero-ipad-content">
+            <div class="hero-ipad-topbar">
+              <span class="hero-live-dot"></span>
+              <span style="color: var(--text-secondary)">Bentleigh Cellars · Reg 1</span>
+              <span style="margin-left: auto;">$2,847.20 today</span>
+            </div>
+            <div class="hero-ipad-sidebar">
+              <div class="hero-sidebar-icon active">A</div>
+              <div class="hero-sidebar-icon">▦</div>
+              <div class="hero-sidebar-icon">◯</div>
+              <div class="hero-sidebar-icon">⊞</div>
+            </div>
+            <div class="hero-ipad-grid">
+              <div class="hero-product-tile"><div class="swatch" style="background: #B8854A;"></div><div class="name">Carlton Dry</div><div class="price">$58.99</div></div>
+              <div class="hero-product-tile"><div class="swatch" style="background: #94795E;"></div><div class="name">Wild Turkey</div><div class="price">$72.00</div></div>
+              <div class="hero-product-tile"><div class="swatch" style="background: #9C9560;"></div><div class="name">Wakefield SB</div><div class="price">$17.49</div></div>
+              <div class="hero-product-tile"><div class="swatch" style="background: #7B4754;"></div><div class="name">Penfolds 389</div><div class="price">$89.00</div></div>
+              <div class="hero-product-tile"><div class="swatch" style="background: #6B4423;"></div><div class="name">Coopers Pale</div><div class="price">$22.50</div></div>
+              <div class="hero-product-tile"><div class="swatch" style="background: #B8854A;"></div><div class="name">VB 6-pack</div><div class="price">$24.99</div></div>
+            </div>
+            <div class="hero-ipad-cart">
+              <div class="hero-cart-header">Cart · 3 items</div>
+              <div class="hero-cart-line"><span>Carlton Dry × 2</span><span>$117.98</span></div>
+              <div class="hero-cart-line"><span>Wakefield SB</span><span>$17.49</span></div>
+              <div class="hero-cart-line"><span>Coopers Pale</span><span>$22.50</span></div>
+              <div style="margin-top: auto;">
+                <div style="font-size: 10px; color: var(--text-tertiary); text-align: right;">Trade −10%</div>
+                <div class="hero-cart-total">$142.17</div>
+                <div class="hero-charge-btn">Charge</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="hero-scroll-cue">↓ Scroll to begin</div>
+  </div>
+
+  <!-- ============ CROSSFADE ACT ============ -->
+
+  <section class="scene scene-problem" data-scene="02">
+    <div class="scene-inner">
+      <div>
+        <div class="scene-label">01 · The shop today</div>
+        <h2>Most POS systems are <em>filing cabinets</em> with a screen.</h2>
+        <p class="body-copy">They don't see your stock running low. They don't read the room when sales drop on a Tuesday. They don't help you decide what to reorder.</p>
+      </div>
+      <div class="problem-stack">
+        <div class="problem-card">
+          <div class="problem-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/></svg></div>
+          <span class="text">Can't see your stock running low</span>
+        </div>
+        <div class="problem-card">
+          <div class="problem-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="m7 12 3-3 3 3 5-5"/></svg></div>
+          <span class="text">Can't read the room on a slow day</span>
+        </div>
+        <div class="problem-card">
+          <div class="problem-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg></div>
+          <span class="text">Can't help you decide</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene scene-brain" data-scene="03">
+    <div class="scene-inner">
+      <div class="scene-label" style="text-align: center">02 · Meet Aria</div>
+      <h2 style="text-align: center">Five agents. <em>One brain. Yours.</em></h2>
+      <div class="brain-system">
+        <div class="brain-core"></div>
+        <div class="orbit-ring">
+          <div class="orbit-orb">Reorder</div>
+          <div class="orbit-orb">Pricing</div>
+          <div class="orbit-orb">Schedule</div>
+          <div class="orbit-orb">Reports</div>
+          <div class="orbit-orb">Ask</div>
+        </div>
+      </div>
+      <p class="brain-caption">Aria runs in the background while you serve customers.</p>
+    </div>
+  </section>
+
+  <section class="scene scene-split" data-scene="04">
+    <div class="scene-inner">
+      <div class="text-side">
+        <div class="scene-label">03 · Reorder Agent</div>
+        <h2>Stop running to the supplier. <em>Aria just knows.</em></h2>
+        <p class="body-copy">Watches your sales velocity hour by hour, compares to last 90 days, and proposes orders before you run out. You approve in one tap.</p>
+      </div>
+      <div class="mockup-side">
+        <div class="notification-card">
+          <div class="notif-row">
+            <div class="notif-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg></div>
+            <div><div class="notif-meta">Reorder Agent</div></div>
+            <div class="notif-time">just now</div>
+          </div>
+          <div class="notif-title">Reorder Carlton Dry · 24 cases</div>
+          <p class="notif-subtitle">Stock will run out Sunday at 2pm based on this week's pace.</p>
+          <div class="notif-actions">
+            <button class="notif-btn primary">Approve</button>
+            <button class="notif-btn secondary">Edit</button>
+          </div>
+          <div class="notif-confidence"><span class="confidence-dot"></span>97% confidence · Reasoning →</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene scene-split reverse" data-scene="05">
+    <div class="scene-inner">
+      <div class="text-side">
+        <div class="scene-label">04 · Pricing Agent</div>
+        <h2>Match competitors <em>before</em> they take your customers.</h2>
+        <p class="body-copy">Aria watches your competitors and proposes price moves before your customers walk down the road. You stay in control.</p>
+      </div>
+      <div class="mockup-side">
+        <div class="pricing-mockup">
+          <div class="notif-row">
+            <div class="notif-icon" style="background: linear-gradient(135deg, var(--warning), #B0884A);"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M20.59 13.41 13.42 20.58a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg></div>
+            <div><div class="notif-meta">Pricing Agent</div></div>
+            <div class="notif-time">8m ago</div>
+          </div>
+          <div class="price-shift">Wakefield Sav Blanc <span class="old">$18.99</span> <span class="new">→ $17.49</span></div>
+          <p class="notif-subtitle" style="margin-top: 8px;">Cellars East dropped to $17.50 yesterday. Match for the weekend?</p>
+          <div class="notif-actions">
+            <button class="notif-btn primary">Match</button>
+            <button class="notif-btn secondary">Hold</button>
+          </div>
+          <div class="notif-confidence"><span class="confidence-dot"></span>91% confidence · 2 stores compared</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene scene-ask" data-scene="06">
+    <div class="scene-inner">
+      <div class="scene-label">05 · Ask Aria</div>
+      <h2>Ask in plain English. <em>Get answers in seconds.</em></h2>
+      <div class="conversation">
+        <div class="bubble user">How was last Friday?</div>
+        <div class="bubble aria">
+          <div class="bubble-meta">Aria</div>
+          Strongest Friday this month — <span class="stat">$4,287</span>. Carlton Dry sold <span class="stat">47 units</span>, beating last Friday by <span class="stat">22%</span>.
+          <div class="mini-chart">
+            <div class="bar" style="height: 35%"></div>
+            <div class="bar" style="height: 48%"></div>
+            <div class="bar" style="height: 42%"></div>
+            <div class="bar" style="height: 60%"></div>
+            <div class="bar" style="height: 70%"></div>
+            <div class="bar" style="height: 88%"></div>
+            <div class="bar" style="height: 100%; background: linear-gradient(to top, var(--sage), var(--sage-light));"></div>
+          </div>
+        </div>
+      </div>
+      <p class="body-copy" style="margin: 0 auto;">No SQL. No reports menu. Just ask.</p>
+    </div>
+  </section>
+
+  <section class="scene scene-split" data-scene="07">
+    <div class="scene-inner">
+      <div class="text-side">
+        <div class="scene-label">06 · Schedule Agent</div>
+        <h2>The roster <em>writes itself.</em></h2>
+        <p class="body-copy">AU public holidays and footy schedules baked in. Staff colour-coded by role. RSA hours respected. You approve. Aria sends.</p>
+      </div>
+      <div class="mockup-side">
+        <div class="schedule-mockup">
+          <div class="notif-row">
+            <div class="notif-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div>
+            <div><div class="notif-meta">Roster · Week 19</div></div>
+          </div>
+          <div style="margin-top: 12px;">
+            <div class="schedule-day-row"><span class="schedule-day-label">MON</span><div class="schedule-blocks"><div class="schedule-block sage"></div><div class="schedule-block sage"></div><div class="schedule-block dim"></div></div></div>
+            <div class="schedule-day-row"><span class="schedule-day-label">TUE</span><div class="schedule-blocks"><div class="schedule-block amber"></div><div class="schedule-block sage"></div><div class="schedule-block dim"></div></div></div>
+            <div class="schedule-day-row"><span class="schedule-day-label">WED</span><div class="schedule-blocks"><div class="schedule-block sage"></div><div class="schedule-block sage"></div><div class="schedule-block amber"></div></div></div>
+            <div class="schedule-day-row"><span class="schedule-day-label">THU</span><div class="schedule-blocks"><div class="schedule-block sage"></div><div class="schedule-block sage"></div><div class="schedule-block sage"></div></div></div>
+            <div class="schedule-day-row"><span class="schedule-day-label">FRI</span><div class="schedule-blocks"><div class="schedule-block sage"></div><div class="schedule-block sage"></div><div class="schedule-block sage"></div></div></div>
+            <div class="schedule-day-row"><span class="schedule-day-label">SAT</span><div class="schedule-blocks"><div class="schedule-block sage"></div><div class="schedule-block amber"></div><div class="schedule-block sage"></div></div></div>
+            <div class="schedule-day-row"><span class="schedule-day-label">SUN</span><div class="schedule-blocks"><div class="schedule-block dim"></div><div class="schedule-block dim"></div><div class="schedule-block dim"></div></div></div>
+          </div>
+          <span class="schedule-holiday-tag">Mon 12 May · Closed (Mother's Day adj.)</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene scene-australia" data-scene="08">
+    <div class="scene-inner">
+      <div>
+        <div class="scene-label">07 · Built for here</div>
+        <h2>Made in Melbourne. <em>For shops like yours.</em></h2>
+        <ul class="au-list">
+          <li><span class="au-check">✓</span> ALM and ILG supplier integrations</li>
+          <li><span class="au-check">✓</span> Tyro EFTPOS native</li>
+          <li><span class="au-check">✓</span> AU public holidays + footy schedule awareness</li>
+          <li><span class="au-check">✓</span> GST handling and BAS-ready exports</li>
+          <li><span class="au-check">✓</span> AEST timezones, AUD currency</li>
+          <li><span class="au-check">✓</span> RSA hour compliance per state</li>
+        </ul>
+      </div>
+      <div class="au-map">
+        <svg viewBox="0 0 500 500" xmlns="http://www.w3.org/2000/svg">
+          <path d="M 90 220 Q 80 180 100 160 Q 130 140 170 145 Q 200 150 230 140 Q 280 125 320 130 Q 360 135 400 155 Q 430 175 425 220 Q 420 260 410 295 Q 405 320 380 340 Q 350 360 310 365 Q 270 365 230 360 Q 200 365 175 360 Q 145 360 120 340 Q 95 320 90 290 Q 88 255 90 220 Z" fill="none" stroke="rgba(127, 184, 151, 0.32)" stroke-width="1.5" stroke-linejoin="round"/>
+          <ellipse cx="350" cy="395" rx="14" ry="10" fill="none" stroke="rgba(127, 184, 151, 0.32)" stroke-width="1.5"/>
+          <circle cx="372" cy="320" r="5" fill="#7FB897"><animate attributeName="opacity" values="1;0.3;1" dur="2.4s" repeatCount="indefinite" begin="0s"/></circle>
+          <circle cx="372" cy="320" r="5" fill="#7FB897" opacity="0.4"><animate attributeName="r" values="5;14;5" dur="2.4s" repeatCount="indefinite" begin="0s"/><animate attributeName="opacity" values="0.4;0;0.4" dur="2.4s" repeatCount="indefinite" begin="0s"/></circle>
+          <text x="372" y="338" font-family="Inter" font-size="9" fill="rgba(232, 237, 231, 0.75)" text-anchor="middle">Sydney</text>
+          <circle cx="335" cy="345" r="5" fill="#7FB897"><animate attributeName="opacity" values="1;0.3;1" dur="2.4s" repeatCount="indefinite" begin="0.4s"/></circle>
+          <circle cx="335" cy="345" r="5" fill="#7FB897" opacity="0.4"><animate attributeName="r" values="5;14;5" dur="2.4s" repeatCount="indefinite" begin="0.4s"/><animate attributeName="opacity" values="0.4;0;0.4" dur="2.4s" repeatCount="indefinite" begin="0.4s"/></circle>
+          <text x="335" y="365" font-family="Inter" font-size="9" fill="rgba(232, 237, 231, 0.75)" text-anchor="middle">Melbourne</text>
+          <circle cx="375" cy="200" r="5" fill="#7FB897"><animate attributeName="opacity" values="1;0.3;1" dur="2.4s" repeatCount="indefinite" begin="0.8s"/></circle>
+          <text x="375" y="218" font-family="Inter" font-size="9" fill="rgba(232, 237, 231, 0.75)" text-anchor="middle">Brisbane</text>
+          <circle cx="115" cy="240" r="5" fill="#7FB897"><animate attributeName="opacity" values="1;0.3;1" dur="2.4s" repeatCount="indefinite" begin="1.2s"/></circle>
+          <text x="115" y="258" font-family="Inter" font-size="9" fill="rgba(232, 237, 231, 0.75)" text-anchor="middle">Perth</text>
+          <circle cx="265" cy="320" r="4" fill="#7FB897"><animate attributeName="opacity" values="1;0.3;1" dur="2.4s" repeatCount="indefinite" begin="1.6s"/></circle>
+          <text x="265" y="338" font-family="Inter" font-size="9" fill="rgba(232, 237, 231, 0.75)" text-anchor="middle">Adelaide</text>
+        </svg>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene scene-testimonial" data-scene="10">
+    <div class="scene-inner">
+      <div class="scene-label">09 · From the field</div>
+      <p class="quote">Aria reorders my stock before I even notice. It's like hiring an extra manager for $59 a month.</p>
+      <p class="attribution"><strong>Sarah Lin</strong> · <span class="em-meta">Bentleigh Cellars · 14 outlets</span></p>
+    </div>
+  </section>
+
+  <section class="scene scene-pricing" data-scene="11">
+    <div class="scene-inner">
+      <div class="scene-label">10 · Plans</div>
+      <h2><em>Ready</em> when you are.</h2>
+      <div class="pricing-banner">First 100 customers · 60 days free + free import</div>
+      <div class="pricing-grid">
+        <div class="price-card dim">
+          <div class="tier-name">Starter</div>
+          <div class="tier-tagline">Single shop just getting started</div>
+          <div class="tier-price"><span class="currency">$</span>59</div>
+          <div class="tier-period">/month per outlet</div>
+          <ul class="tier-features"><li>Terminal + 5 layouts</li><li>Reports + dashboards</li><li>Customer database</li><li>1 outlet</li></ul>
+          <button class="tier-btn outline">Start trial</button>
+        </div>
+        <div class="price-card recommended">
+          <div class="recommended-badge">Recommended</div>
+          <div class="tier-name">Growth</div>
+          <div class="tier-tagline">Most shops scale to this within 60 days</div>
+          <div class="tier-price"><span class="currency">$</span>129</div>
+          <div class="tier-period">/month per outlet</div>
+          <ul class="tier-features"><li>Everything in Starter</li><li>3 AI agents (Reorder, Pricing, Schedule)</li><li>Conversation Reports</li><li>Multi-outlet support</li></ul>
+          <button class="tier-btn filled">Start trial</button>
+        </div>
+        <div class="price-card dim">
+          <div class="tier-name">Autonomous</div>
+          <div class="tier-tagline">Multi-store, full autonomy</div>
+          <div class="tier-price"><span class="currency">$</span>249</div>
+          <div class="tier-period">/month per outlet</div>
+          <ul class="tier-features"><li>Everything in Growth</li><li>All 5 AI agents</li><li>API access</li><li>Priority support + Tyro</li></ul>
+          <button class="tier-btn outline">Start trial</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene scene-outro" data-scene="12">
+    <div class="scene-inner">
+      <h1 class="outro-h1">Start your <em>trial.</em></h1>
+      <div class="outro-cta-row">
+        <button class="btn-primary-large">Start free trial <span>→</span></button>
+        <a href="#" class="btn-text"><span class="play-circle">▶</span> Watch 3-min demo</a>
+      </div>
+      <p class="outro-microtext">No credit card · Free data import · Cancel anytime</p>
+    </div>
+  </section>
+
+</div>
+
+<div class="scroll-spacer"></div>
+
+<script>
+  /*
+   * SCROLL ARCHITECTURE
+   *
+   * Total scroll: 1300vh
+   *   - 0vh   → 200vh: HERO ACT (scrubbed iPad rotation + UI assembly)
+   *   - 200vh → 1300vh: CROSSFADE ACT (11 scenes, 100vh each)
+   *
+   * The hero progresses via --hero-progress CSS variable (0 → 1).
+   * After hero completes, we hide it and start cycling crossfade scenes.
+   */
+
+  const HERO_END_PX = window.innerHeight * 2; // 200vh — 2 viewports of scroll for the hero act
+
+  const heroAct = document.getElementById('hero-act');
+  const scenes = document.querySelectorAll('.scene');
+  const counter = document.getElementById('counter-current');
+  const progressFill = document.getElementById('progress-fill');
+  const ctaPill = document.getElementById('cta-pill');
+  const totalScenes = scenes.length;
+
+  let currentSceneIndex = -1;
+  let hasScrolled = false;
+  let rafId = null;
+
+  function update() {
+    const scrollY = window.scrollY;
+    const docHeight = document.documentElement.scrollHeight - window.innerHeight;
+    const totalProgress = docHeight > 0 ? Math.max(0, Math.min(1, scrollY / docHeight)) : 0;
+
+    // ============ HERO ACT ============
+    if (scrollY < HERO_END_PX) {
+      // We're inside the hero act
+      const heroProgress = Math.max(0, Math.min(1, scrollY / HERO_END_PX));
+      heroAct.style.setProperty('--hero-progress', heroProgress);
+      heroAct.style.opacity = '1';
+      heroAct.style.visibility = 'visible';
+
+      // Counter shows "01" during hero
+      if (currentSceneIndex !== -1) {
+        currentSceneIndex = -1;
+        scenes.forEach(s => s.classList.remove('active'));
+        if (counter.textContent !== '01') {
+          counter.style.opacity = '0';
+          setTimeout(() => {
+            counter.textContent = '01';
+            counter.style.opacity = '1';
+          }, 120);
+        }
+      }
+    } else {
+      // We're past the hero — hide it, show crossfade scenes
+      heroAct.style.setProperty('--hero-progress', 1);
+      heroAct.style.opacity = '0';
+      heroAct.style.visibility = 'hidden';
+
+      // Map remaining scroll (HERO_END_PX → docHeight) to scene index 0 → totalScenes-1
+      const sceneScrollProgress = (scrollY - HERO_END_PX) / (docHeight - HERO_END_PX);
+      let sceneIndex = Math.floor(sceneScrollProgress * totalScenes);
+      if (sceneIndex >= totalScenes) sceneIndex = totalScenes - 1;
+      if (sceneIndex < 0) sceneIndex = 0;
+
+      if (sceneIndex !== currentSceneIndex) {
+        scenes.forEach((s, i) => {
+          if (i === sceneIndex) s.classList.add('active');
+          else s.classList.remove('active');
+        });
+        currentSceneIndex = sceneIndex;
+
+        const num = scenes[sceneIndex].dataset.scene;
+        counter.style.opacity = '0';
+        setTimeout(() => {
+          counter.textContent = num;
+          counter.style.opacity = '1';
+        }, 120);
+      }
+    }
+
+    progressFill.style.width = (totalProgress * 100) + '%';
+
+    if (!hasScrolled && scrollY > 80) {
+      hasScrolled = true;
+      ctaPill.classList.add('visible');
+    }
+
+    rafId = null;
+  }
+
+  function onScroll() {
+    if (rafId === null) {
+      rafId = requestAnimationFrame(update);
+    }
+  }
+
+  window.addEventListener('scroll', onScroll, { passive: true });
+  window.addEventListener('resize', onScroll, { passive: true });
+
+  ctaPill.addEventListener('click', () => {
+    window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' });
+  });
+
+  window.addEventListener('keydown', (e) => {
+    const stepDistance = window.innerHeight;
+    if (e.key === 'ArrowDown' || e.key === 'PageDown') {
+      e.preventDefault();
+      window.scrollBy({ top: stepDistance, behavior: 'smooth' });
+    } else if (e.key === 'ArrowUp' || e.key === 'PageUp') {
+      e.preventDefault();
+      window.scrollBy({ top: -stepDistance, behavior: 'smooth' });
+    } else if (e.key === 'Home') {
+      e.preventDefault();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } else if (e.key === 'End') {
+      e.preventDefault();
+      window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' });
+    }
+  });
+
+  update();
+</script>
+
+</body>
+</html>
