@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence, LayoutGroup } from 'framer-motion'
 import {
   ChevronDown, ChevronRight, ChevronLeft,
   Search, Building2, User, LogOut,
@@ -56,7 +56,9 @@ export default function POSSidebar({
   const [showCmdK,     setShowCmdK]     = useState(false)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const [mounted,      setMounted]      = useState(false)
-  const userMenuRef = useRef<HTMLDivElement>(null)
+  const [signingOut,   setSigningOut]   = useState(false)
+  const userMenuRef   = useRef<HTMLDivElement>(null)
+  const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // ── Hydration guard
   useEffect(() => { setMounted(true) }, [])
@@ -72,7 +74,12 @@ export default function POSSidebar({
 
     if (sectionsRaw) {
       try {
-        setOpenSections({ ...defaults, ...JSON.parse(sectionsRaw) })
+        const validIds = new Set(NAV_STRUCTURE.map(s => s.id))
+        const parsed = JSON.parse(sectionsRaw) as Record<string, boolean>
+        const filtered = Object.fromEntries(
+          Object.entries(parsed).filter(([k]) => validIds.has(k))
+        )
+        setOpenSections({ ...defaults, ...filtered })
       } catch {
         setOpenSections(defaults)
       }
@@ -105,10 +112,18 @@ export default function POSSidebar({
         setShowCmdK(false)
         setUserMenuOpen(false)
       }
+      // "/" outside any input → open command palette
+      if (e.key === '/' && !isTerminal && !showCmdK) {
+        const tag = (e.target as HTMLElement).tagName
+        if (tag !== 'INPUT' && tag !== 'TEXTAREA' && !(e.target as HTMLElement).isContentEditable) {
+          e.preventDefault()
+          setShowCmdK(true)
+        }
+      }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [isTerminal])
+  }, [isTerminal, showCmdK])
 
   // ── Close user menu on outside click ────────────────────────────
   useEffect(() => {
@@ -121,6 +136,17 @@ export default function POSSidebar({
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
   }, [userMenuOpen])
+
+  // ── Mobile auto-collapse (< 768px) ───────────────────────────────
+  useEffect(() => {
+    const check = () => {
+      if (window.innerWidth < 768) setCollapsed(true)
+    }
+    check()
+    window.addEventListener('resize', check)
+    return () => window.removeEventListener('resize', check)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // ── Helpers ──────────────────────────────────────────────────────
   const toggleRail = () => {
@@ -138,8 +164,12 @@ export default function POSSidebar({
   }
 
   const handleSignOut = async () => {
-    if (supabase) await supabase.auth.signOut()
-    router.push('/login')
+    setSigningOut(true)
+    try {
+      if (supabase) await supabase.auth.signOut()
+    } finally {
+      router.push('/login')
+    }
   }
 
   const openDisplay = () =>
@@ -152,7 +182,7 @@ export default function POSSidebar({
   const displayName = displayUser?.name ?? businessName ?? 'Aria POS'
 
   return (
-    <>
+    <LayoutGroup id="sidebar">
       <motion.aside
         animate={{ width: collapsed ? COLLAPSED_WIDTH : EXPANDED_WIDTH }}
         transition={springs.smooth}
@@ -309,8 +339,14 @@ export default function POSSidebar({
                           <div
                             key={item.href}
                             style={{ position: 'relative' }}
-                            onMouseEnter={() => setHoveredItem(item.href)}
-                            onMouseLeave={() => setHoveredItem(null)}
+                            onMouseEnter={() => {
+                              if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current)
+                              hoverTimerRef.current = setTimeout(() => setHoveredItem(item.href), 200)
+                            }}
+                            onMouseLeave={() => {
+                              if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current)
+                              setHoveredItem(null)
+                            }}
                           >
                             {/* External display link */}
                             {item.external ? (
@@ -412,24 +448,27 @@ export default function POSSidebar({
                               </Link>
                             )}
 
-                            {/* Collapsed tooltip */}
-                            {collapsed && hoveredItem === item.href && (
-                              <motion.div
-                                initial={{ opacity: 0, x: -6 }}
-                                animate={{ opacity: 1, x: 0 }}
-                                transition={{ duration: 0.1 }}
-                                style={{
-                                  position: 'absolute', left: 'calc(100% + 8px)', top: '50%',
-                                  transform: 'translateY(-50%)',
-                                  background: 'var(--bg-elevated)', color: 'var(--text-primary)',
-                                  padding: '5px 10px', borderRadius: 7, fontSize: 12,
-                                  whiteSpace: 'nowrap', boxShadow: 'var(--shadow-md)',
-                                  pointerEvents: 'none', zIndex: 100,
-                                }}
-                              >
-                                {item.label}
-                              </motion.div>
-                            )}
+                            {/* Collapsed tooltip — 200ms delay via hoverTimerRef */}
+                            <AnimatePresence>
+                              {collapsed && hoveredItem === item.href && (
+                                <motion.div
+                                  initial={{ opacity: 0, x: -8 }}
+                                  animate={{ opacity: 1, x: 0 }}
+                                  exit={{ opacity: 0, x: -4 }}
+                                  transition={{ duration: 0.12 }}
+                                  style={{
+                                    position: 'absolute', left: 'calc(100% + 8px)', top: '50%',
+                                    transform: 'translateY(-50%)',
+                                    background: 'var(--bg-elevated)', color: 'var(--text-primary)',
+                                    padding: '5px 10px', borderRadius: 7, fontSize: 12,
+                                    whiteSpace: 'nowrap', boxShadow: 'var(--shadow-md)',
+                                    pointerEvents: 'none', zIndex: 100,
+                                  }}
+                                >
+                                  {item.label}
+                                </motion.div>
+                              )}
+                            </AnimatePresence>
                           </div>
                         )
                       })}
@@ -553,16 +592,19 @@ export default function POSSidebar({
                 </Link>
                 <button
                   onClick={handleSignOut}
+                  disabled={signingOut}
                   style={{
                     width: '100%', display: 'flex', alignItems: 'center', gap: 8,
                     padding: '8px 12px', background: 'transparent', border: 'none',
-                    color: 'var(--destructive)', cursor: 'pointer', fontSize: 13, textAlign: 'left',
-                    fontFamily: 'inherit',
+                    color: 'var(--destructive)', cursor: signingOut ? 'not-allowed' : 'pointer',
+                    fontSize: 13, textAlign: 'left', fontFamily: 'inherit',
+                    opacity: signingOut ? 0.6 : 1,
                   }}
-                  onMouseEnter={e => { e.currentTarget.style.background = 'var(--destructive-bg)' }}
+                  onMouseEnter={e => { if (!signingOut) e.currentTarget.style.background = 'var(--destructive-bg)' }}
                   onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
                 >
-                  <LogOut size={14} /> Sign out
+                  <LogOut size={14} />
+                  {signingOut ? 'Signing out…' : 'Sign out'}
                 </button>
               </motion.div>
             )}
@@ -579,7 +621,7 @@ export default function POSSidebar({
           />
         )}
       </AnimatePresence>
-    </>
+    </LayoutGroup>
   )
 }
 
