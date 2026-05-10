@@ -15,6 +15,7 @@ interface Draft {
 interface Props {
   step: number
   id?: string
+  businessId?: string
   draft: Draft
   suppliers: Supplier[]
   categories: Category[]
@@ -68,7 +69,7 @@ function Row({ label, value }: { label: string; value?: string | number | boolea
   )
 }
 
-export default function ProductWizard({ step, id, draft, suppliers, categories }: Props) {
+export default function ProductWizard({ step, id, businessId, draft, suppliers, categories }: Props) {
   const router = useRouter()
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -101,28 +102,53 @@ export default function ProductWizard({ step, id, draft, suppliers, categories }
     return (((p - c) / p) * 100).toFixed(1)
   })()
 
-  const patch = useCallback(async (payload: Record<string, unknown>) => {
+  const patch = useCallback(async (payload: Record<string, unknown>, action?: string) => {
     if (!id) return false
-    const res = await fetch(`/api/pos/products/${id}`, {
+    const url = action ? `/api/pos/products/${id}?action=${action}` : `/api/pos/products/${id}`
+    const res = await fetch(url, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     })
     return res.ok
   }, [id])
 
-  // ── Step 1: create draft ────────────────────────────────────────
+  // ── Step 1: atomic draft creation via Supabase RPC ──────────────
   async function saveStep1() {
     if (!name.trim()) { setError('Product name is required'); return }
     setSaving(true); setError('')
-    const res = await fetch('/api/pos/products', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: name.trim(), sku, barcode, description, is_active: false }),
-    })
-    const d = await res.json()
-    if (d.product?.id) {
-      router.push(`/pos/products/new?id=${d.product.id}&step=2`)
-    } else {
-      setError(d.error ?? 'Failed to create draft'); setSaving(false)
+    try {
+      // Try the atomic RPC first — creates product + outlet_inventory rows + default price + loyalty
+      if (businessId) {
+        const { supabase: sb } = await import('@/lib/supabase')
+        if (sb) {
+          const { data: productId, error: rpcError } = await sb.rpc('create_product_draft', {
+            p_business_id: businessId,
+            p_name: name.trim(),
+            p_sku: sku || null,
+            p_barcode: barcode || null,
+            p_brand: null,
+            p_description: description || null,
+          })
+          if (!rpcError && productId) {
+            router.push(`/pos/products/new?id=${productId}&step=2`)
+            return
+          }
+          // RPC not yet migrated — fall through to REST POST
+        }
+      }
+      // Fallback: REST POST (works without the RPC migration)
+      const res = await fetch('/api/pos/products', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: name.trim(), sku, barcode, description, is_active: false }),
+      })
+      const d = await res.json()
+      if (d.product?.id) {
+        router.push(`/pos/products/new?id=${d.product.id}&step=2`)
+      } else {
+        setError(d.error ?? 'Failed to create draft'); setSaving(false)
+      }
+    } catch (e: any) {
+      setError(e?.message ?? 'Failed to create draft'); setSaving(false)
     }
   }
 
@@ -155,14 +181,16 @@ export default function ProductWizard({ step, id, draft, suppliers, categories }
 
   async function saveDraft() {
     setSaving(true); setError('')
-    const ok = await patch({ is_active: false })
-    if (ok) router.push('/pos/products')
+    // Use update_general action to keep active=false (draft saved, return to list)
+    const ok = await patch({ is_active: false }, 'update_general')
+    if (ok) router.push('/pos/products?tab=drafts')
     else { setError('Save failed'); setSaving(false) }
   }
 
   async function activate() {
     setSaving(true); setError('')
-    const ok = await patch({ is_active: true })
+    // Activate via update_general action — new schema action param
+    const ok = await patch({ is_active: true }, 'update_general')
     if (ok) router.push(`/pos/products/${id}`)
     else { setError('Save failed'); setSaving(false) }
   }

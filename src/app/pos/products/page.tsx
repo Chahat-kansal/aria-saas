@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 interface Category { id: string; name: string; color: string; }
 interface Product {
@@ -28,12 +28,16 @@ interface CSVRow { name: string; sku: string; barcode: string; price: string; co
 
 export default function ProductsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [products, setProducts]   = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading]     = useState(true);
   const [search, setSearch]       = useState('');
   const [filterCat, setFilterCat] = useState('');
-  const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive' | 'drafts'>('all');
+  const initialTab = (['all','active','inactive','drafts'] as const).includes(searchParams.get('tab') as any)
+    ? (searchParams.get('tab') as 'all' | 'active' | 'inactive' | 'drafts')
+    : 'all';
+  const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive' | 'drafts'>(initialTab);
   const [selected, setSelected]   = useState<Set<string>>(new Set());
   const [modal, setModal]         = useState<{ open: boolean; mode: 'add' | 'edit'; product?: Product }>({ open: false, mode: 'add' });
   const [form, setForm]           = useState({ ...EMPTY_FORM });

@@ -37,6 +37,7 @@ export default async function NewProductPage({
       <ProductWizard
         step={stepNum}
         id={id}
+        businessId={bid}
         draft={draftRes.data ?? {}}
         suppliers={(supRes.data ?? []) as { id: string; name: string }[]}
         categories={(catRes.data ?? []) as { id: string; name: string }[]}
