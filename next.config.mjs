@@ -32,7 +32,7 @@ const nextConfig = {
               // Media: allow blob for voice
               "media-src 'self' blob:",
               // API connections
-              "connect-src 'self' https://api.anthropic.com https://api.openai.com https://emkc.org https://api.openweathermap.org https://www.alphavantage.co https://www.googleapis.com https://gmail.googleapis.com https://calendar.googleapis.com https://ruijzxycpgtlqaacfyok.supabase.co https://*.supabase.co wss://ruijzxycpgtlqaacfyok.supabase.co https://api.stripe.com https://js.stripe.com",
+              "connect-src 'self' https://api.anthropic.com https://api.openai.com https://emkc.org https://api.openweathermap.org https://www.alphavantage.co https://www.googleapis.com https://gmail.googleapis.com https://calendar.googleapis.com https://*.supabase.co wss://*.supabase.co https://api.stripe.com https://js.stripe.com",
               // Frames: allow blob + data + any origin for srcdoc previews
               "frame-src 'self' blob: data: https: http:",
               // Workers
