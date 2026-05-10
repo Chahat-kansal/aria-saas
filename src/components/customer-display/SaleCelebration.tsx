@@ -35,25 +35,59 @@ function SageParticleBurst() {
 
 function BeerCanAnim() {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 20 }}>
-      {[0, 1, 2].map(i => (
-        <div key={i} style={{
-          opacity: 0,
-          animation: `fade-up 600ms cubic-bezier(0.16, 1, 0.3, 1) ${i * 80}ms forwards`,
-          transform: `rotate(${(i - 1) * 8}deg)`,
-        }}>
-          <svg width="60" height="110" viewBox="0 0 60 110">
-            <rect x="14" y="9" width="32" height="96" fill="var(--violet)" rx="4"/>
-            <ellipse cx="30" cy="9" rx="16" ry="3" fill="var(--violet-700)"/>
-            <ellipse cx="30" cy="105" rx="16" ry="3" fill="var(--violet-700)"/>
-            <rect x="16" y="35" width="28" height="44" fill="white" opacity="0.9" rx="2"/>
-            <text x="30" y="57" fontFamily="Georgia" fontSize="8" fill="var(--violet-700)"
-                  textAnchor="middle" fontStyle="italic" fontWeight="bold">Aria</text>
-            <text x="30" y="68" fontFamily="Georgia" fontSize="4" fill="var(--violet-700)"
-                  textAnchor="middle">AU BREW</text>
-          </svg>
-        </div>
-      ))}
+    <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', width: 220, height: 180 }}>
+      {/* Left hand grips */}
+      <div style={{
+        position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)',
+        fontSize: 52, lineHeight: 1, zIndex: 3,
+        opacity: 0,
+        animation: 'hand-grip-left 700ms cubic-bezier(0.16, 1, 0.3, 1) 200ms forwards',
+        transformOrigin: 'right center',
+      }}>🤚</div>
+
+      {/* Can in center */}
+      <div style={{ position: 'relative', zIndex: 2 }}>
+        <svg width="64" height="118" viewBox="0 0 60 110" style={{ display: 'block' }}>
+          <ellipse cx="30" cy="9" rx="16" ry="3" fill="var(--violet-700)"/>
+          {/* Tab */}
+          <g style={{
+            animation: 'can-tab-pull 400ms cubic-bezier(0.34, 1.56, 0.64, 1) 1050ms both',
+            transformOrigin: '30px 9px',
+          }}>
+            <rect x="26" y="3" width="8" height="8" rx="2" fill="var(--violet-600, #5A9577)"/>
+          </g>
+          <rect x="14" y="9" width="32" height="96" fill="var(--violet)" rx="3"/>
+          <ellipse cx="30" cy="105" rx="16" ry="3" fill="var(--violet-700)"/>
+          <rect x="16" y="36" width="28" height="42" fill="white" opacity="0.92" rx="2"/>
+          <text x="30" y="56" fontFamily="Georgia" fontSize="9" fill="var(--violet-700)"
+                textAnchor="middle" fontStyle="italic" fontWeight="bold">Aria</text>
+          <text x="30" y="67" fontFamily="Georgia" fontSize="3.5" fill="var(--violet-700)"
+                textAnchor="middle">AU BREW</text>
+          <ellipse cx="20" cy="62" rx="1.5" ry="14" fill="white" opacity="0.35"/>
+        </svg>
+        {/* Foam particles burst after tab pull */}
+        {[0, 1, 2, 3, 4].map(i => (
+          <div key={i} style={{
+            position: 'absolute',
+            top: -6,
+            left: `${14 + i * 9}px`,
+            width: i % 2 === 0 ? 7 : 5,
+            height: i % 2 === 0 ? 7 : 5,
+            borderRadius: '50%',
+            background: 'rgba(255,255,255,0.88)',
+            animation: `foam-rise 900ms ease-out ${1150 + i * 70}ms both`,
+          }} />
+        ))}
+      </div>
+
+      {/* Right hand pulls tab (mirrored) */}
+      <div style={{
+        position: 'absolute', right: 8, top: '42%', transform: 'translateY(-50%)',
+        fontSize: 52, lineHeight: 1, zIndex: 3,
+        opacity: 0,
+        animation: 'hand-grip-right-pull 1500ms cubic-bezier(0.16, 1, 0.3, 1) 200ms forwards',
+        transformOrigin: 'left center',
+      }}>🤚</div>
     </div>
   )
 }
@@ -91,18 +125,41 @@ function SnacksSpillAnim() {
 }
 
 function CoffeeSteamAnim() {
+  // 5 steam streams at staggered horizontal positions above the cup
+  const steamCols = [38, 46, 50, 54, 62] // % from left
   return (
-    <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-      <div style={{ display: 'flex', gap: 8, marginBottom: 4 }}>
-        {[0, 1, 2].map(i => (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ position: 'relative', width: 130, height: 170 }}>
+        {/* Steam streams — positioned above cup via bottom: 60% */}
+        {steamCols.map((left, i) => (
           <div key={i} style={{
-            width: 4, height: 24, background: 'var(--text-tertiary)',
-            borderRadius: 4, opacity: 0,
-            animation: `fade-up 1.2s ease-in-out ${i * 200}ms infinite`,
+            position: 'absolute',
+            left: `${left}%`,
+            bottom: '60%',
+            transform: 'translateX(-50%)',
+            width: 5,
+            height: 52,
+            background: 'linear-gradient(to top, rgba(200,210,220,0.65), transparent)',
+            borderRadius: 10,
+            zIndex: 3,
+            animation: `steam-rise 2.2s ease-in-out ${i * 0.4}s infinite`,
+            transformOrigin: 'bottom center',
           }} />
         ))}
+
+        {/* Cup — centered, rendered after steam in DOM so z-index is above */}
+        <div style={{
+          position: 'absolute',
+          bottom: 0,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          fontSize: 96,
+          lineHeight: 1,
+          zIndex: 2,
+          opacity: 0,
+          animation: 'fade-up 500ms cubic-bezier(0.16, 1, 0.3, 1) forwards',
+        }}>☕</div>
       </div>
-      <div style={{ fontSize: 72, opacity: 0, animation: 'fade-up 500ms cubic-bezier(0.16, 1, 0.3, 1) forwards' }}>☕</div>
     </div>
   )
 }

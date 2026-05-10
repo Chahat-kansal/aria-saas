@@ -224,3 +224,83 @@ body {
 
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes pos-processing { to { transform: rotate(360deg); } }
+
+/* ── Beer-can celebration ─────────────────────────────────── */
+@keyframes hand-grip-left {
+  0%   { transform: translateX(-90px) rotate(20deg); opacity: 0; }
+  50%  { opacity: 1; }
+  100% { transform: translateX(0px) rotate(-10deg); opacity: 1; }
+}
+
+@keyframes hand-grip-right-pull {
+  0%   { transform: translateX(90px) rotate(-20deg) scaleX(-1); opacity: 0; }
+  40%  { transform: translateX(0px) rotate(12deg) scaleX(-1); opacity: 1; }
+  70%  { transform: translateX(0px) rotate(12deg) scaleX(-1); opacity: 1; }
+  100% { transform: translateX(16px) rotate(-30deg) scaleX(-1); opacity: 1; }
+}
+
+@keyframes can-tab-pull {
+  0%   { transform: rotate(0deg); }
+  60%  { transform: rotate(-60deg) translateY(-6px); }
+  100% { transform: rotate(-80deg) translateY(-8px); }
+}
+
+@keyframes foam-rise {
+  0%   { transform: translateY(0) scale(1); opacity: 0.85; }
+  60%  { transform: translateY(-48px) scale(1.4); opacity: 0.5; }
+  100% { transform: translateY(-90px) scale(0.6); opacity: 0; }
+}
+
+/* ── Wine-bottle celebration ─────────────────────────────── */
+@keyframes cork-pop-anim {
+  0%   { transform: translateY(0) rotate(0deg); opacity: 1; }
+  30%  { transform: translateY(-24px) rotate(12deg); }
+  70%  { transform: translateY(-80px) rotate(45deg); opacity: 0.8; }
+  100% { transform: translateY(-160px) rotate(90deg); opacity: 0; }
+}
+
+@keyframes wine-pour {
+  0%   { transform: rotate(0deg); }
+  40%  { transform: rotate(-48deg) translateY(-12px); }
+  100% { transform: rotate(-72deg) translateY(-22px); }
+}
+
+/* ── Snacks celebration ──────────────────────────────────── */
+@keyframes packet-drop {
+  0%   { transform: translateY(-70px) rotate(-6deg); opacity: 0; }
+  55%  { transform: translateY(4px) rotate(2deg) scaleY(1.08); opacity: 1; }
+  75%  { transform: translateY(-10px) scaleY(0.94); }
+  100% { transform: translateY(0) scaleY(1); opacity: 1; }
+}
+
+@keyframes chips-fall {
+  0%   { transform: translateY(-16px) rotate(0deg); opacity: 0; }
+  20%  { opacity: 1; }
+  100% { transform: translateY(50px) rotate(200deg); opacity: 0; }
+}
+
+/* ── Coffee celebration ──────────────────────────────────── */
+@keyframes steam-rise {
+  0%   { transform: translateY(0) scaleX(1); opacity: 0.75; }
+  50%  { transform: translateY(-32px) scaleX(1.5); opacity: 0.45; }
+  100% { transform: translateY(-64px) scaleX(0.7); opacity: 0; }
+}
+
+/* ── Shared celebration effects ──────────────────────────── */
+@keyframes sage-particle {
+  0%   { transform: translate(0, 0) scale(1) rotate(0deg); opacity: 0.9; }
+  100% { transform: translate(var(--dx, 40px), var(--dy, -80px)) scale(0.2) rotate(120deg); opacity: 0; }
+}
+
+@keyframes checkmark-draw {
+  0%   { stroke-dashoffset: 100; opacity: 0; }
+  20%  { opacity: 1; }
+  100% { stroke-dashoffset: 0; opacity: 1; }
+}
+
+@keyframes fork-cut {
+  0%   { transform: rotate(0deg) translateY(0); }
+  30%  { transform: rotate(-18deg) translateY(-6px); }
+  65%  { transform: rotate(6deg) translateY(4px); }
+  100% { transform: rotate(0deg) translateY(0); }
+}
