@@ -1,4 +1,5 @@
-'use client';
+// No 'use client' — safe in both server (route handlers) and client contexts.
+// Browser APIs are guarded by typeof window === 'undefined'.
 
 const POSTHOG_KEY = process.env.NEXT_PUBLIC_POSTHOG_KEY;
 const POSTHOG_HOST = 'https://eu.posthog.com';

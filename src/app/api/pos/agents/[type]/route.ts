@@ -47,7 +47,7 @@ async function executeReorderApproval(supabase: Supa, bid: string, dec: Record<s
         headers: { Authorization: `Bearer ${resendKey}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ from: 'orders@ariaos.site', to: poData.supplier_email, subject: `Purchase Order from ${biz?.name ?? 'Aria POS'}`, html }),
       }).catch(e => console.warn('[reorder/approve] email fetch failed (non-fatal):', (e as Error).message));
-      track('po_email_sent', { supplier_name: poData.supplier_name, line_count: poLines.length, total_cents: Math.round(poTotal * 100) });
+      try { track('po_email_sent', { supplier_name: poData.supplier_name, line_count: poLines.length, total_cents: Math.round(poTotal * 100) }); } catch { /* analytics is optional */ }
     } catch (e) {
       console.warn('[reorder/approve] email exception (non-fatal):', (e as Error).message);
     }
@@ -73,7 +73,7 @@ async function executePricingApproval(supabase: Supa, bid: string, dec: Record<s
     console.error('[pricing/approve] pos_future_prices insert failed:', error.message);
     return { success: false, error: error.message };
   }
-  track('price_change_scheduled', { product_id: data.product_id, suggested_price: data.suggested_price, effective_date: tomorrow });
+  try { track('price_change_scheduled', { product_id: data.product_id, suggested_price: data.suggested_price, effective_date: tomorrow }); } catch { /* analytics is optional */ }
   return { success: true };
 }
 
@@ -99,7 +99,7 @@ async function executeScheduleApproval(supabase: Supa, bid: string, dec: Record<
           body: JSON.stringify({ from: 'roster@ariaos.site', to: staff.email, subject: `Your roster for week of ${data.week_start} — ${biz?.name ?? ''}`, html }),
         }).catch(e => console.warn('[schedule/approve] staff email failed (non-fatal):', (e as Error).message));
       }
-      track('roster_published', { week_start: data.week_start, total_hours: data.total_hours, total_cost_cents: data.total_cost_cents });
+      try { track('roster_published', { week_start: data.week_start, total_hours: data.total_hours, total_cost_cents: data.total_cost_cents }); } catch { /* analytics is optional */ }
     } catch (e) {
       console.warn('[schedule/approve] email block exception (non-fatal):', (e as Error).message);
     }
@@ -204,13 +204,13 @@ export async function POST(req: Request, { params }: Params) {
       }
       RUN_RATE_CACHE.set(rateKey, Date.now());
 
-      track('agent_run_started', { agent_type: type, manual: true });
+      try { track('agent_run_started', { agent_type: type, manual: true }); } catch { /* analytics is optional */ }
       try {
         const result = await Promise.race([
           runAgent(type as AgentType, bid),
           new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 55_000)),
         ]);
-        track('agent_run_completed', { agent_type: type, decisions: result.decisions.length, duration_ms: result.duration_ms, errors_count: result.errors.length });
+        try { track('agent_run_completed', { agent_type: type, decisions: result.decisions.length, duration_ms: result.duration_ms, errors_count: result.errors.length }); } catch { /* analytics is optional */ }
         return NextResponse.json({ decisions: result.decisions, errors: result.errors.map(e => e.message), duration_ms: result.duration_ms });
       } catch (runErr) {
         const e = runErr as Error;
@@ -261,14 +261,14 @@ export async function POST(req: Request, { params }: Params) {
         executed_at: executionResult.success ? new Date().toISOString() : null,
       }).eq('id', decisionId);
 
-      track('agent_decision_approved', { agent_type: dec.agent_type, projected_impact_cents: (dec as Record<string, unknown>).projected_impact_cents });
+      try { track('agent_decision_approved', { agent_type: dec.agent_type, projected_impact_cents: (dec as Record<string, unknown>).projected_impact_cents }); } catch { /* analytics is optional */ }
       return NextResponse.json({ success: executionResult.success, message: executionResult.success ? `${dec.agent_type} decision approved` : undefined, error: executionResult.error });
     }
 
     if (action === 'reject') {
       await supabase.from('agent_decisions').update({ status: 'rejected', reviewed_by: user.id, reviewed_at: new Date().toISOString() }).eq('id', decision_id as string).eq('business_id', bid);
       const { data: dec } = await supabase.from('agent_decisions').select('agent_type').eq('id', decision_id as string).single();
-      track('agent_decision_rejected', { agent_type: dec?.agent_type, reason: body.reason });
+      try { track('agent_decision_rejected', { agent_type: dec?.agent_type, reason: body.reason }); } catch { /* analytics is optional */ }
       return NextResponse.json({ ok: true });
     }
 
@@ -277,7 +277,7 @@ export async function POST(req: Request, { params }: Params) {
       const newExpiry = new Date(Date.now() + days * 86400000).toISOString();
       await supabase.from('agent_decisions').update({ status: 'snoozed', expires_at: newExpiry }).eq('id', decision_id as string).eq('business_id', bid);
       const { data: dec } = await supabase.from('agent_decisions').select('agent_type').eq('id', decision_id as string).single();
-      track('agent_decision_snoozed', { agent_type: dec?.agent_type, days });
+      try { track('agent_decision_snoozed', { agent_type: dec?.agent_type, days }); } catch { /* analytics is optional */ }
       return NextResponse.json({ ok: true });
     }
 
@@ -298,7 +298,7 @@ export async function POST(req: Request, { params }: Params) {
         enabled, auto_approve_below_cents, config,
         updated_at: new Date().toISOString(),
       }, { onConflict: 'business_id,agent_type' });
-      track('agent_settings_changed', { agent_type: type, setting: 'bulk', value: enabled });
+      try { track('agent_settings_changed', { agent_type: type, setting: 'bulk', value: enabled }); } catch { /* analytics is optional */ }
       return NextResponse.json({ ok: true });
     }
 
