@@ -349,7 +349,7 @@ export default function AskAriaPage() {
               return (
                 <div key={i} style={{ marginBottom: 20 }}>
                   <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-                    <div style={{ width: 24, height: 24, borderRadius: '50%', background: 'linear-gradient(135deg,#A78BFA,#7C3AED)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: '#fff', fontWeight: 800, flexShrink: 0, marginTop: 2 }}>✦</div>
+                    <div style={{ width: 24, height: 24, borderRadius: '50%', background: 'var(--gradient-aria)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: '#fff', fontWeight: 800, flexShrink: 0, marginTop: 2 }}>✦</div>
                     <div style={{ flex: 1, fontSize: 14, color: 'var(--text-primary)', lineHeight: 1.7 }}>
                       {msg.streaming ? msg.text : renderAriaContent(msg.text)}
                       {msg.streaming && <span style={{ display: 'inline-block', width: 2, height: 14, background: 'var(--violet)', marginLeft: 2, animation: 'blink 1s step-end infinite', verticalAlign: 'middle' }} />}
@@ -360,7 +360,7 @@ export default function AskAriaPage() {
             })}
             {streaming && messages.at(-1)?.type !== 'aria' && messages.at(-1)?.type !== 'tool' && (
               <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 12 }}>
-                <div style={{ width: 24, height: 24, borderRadius: '50%', background: 'linear-gradient(135deg,#A78BFA,#7C3AED)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: '#fff', fontWeight: 800, flexShrink: 0 }}>✦</div>
+                <div style={{ width: 24, height: 24, borderRadius: '50%', background: 'var(--gradient-aria)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: '#fff', fontWeight: 800, flexShrink: 0 }}>✦</div>
                 <div style={{ fontSize: 13, color: 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: 4 }}>
                   Aria is thinking
                   <span className="thinking-dot" style={{ animationDelay: '0ms' }} />

@@ -79,6 +79,12 @@ export async function GET(req: Request) {
   });
 }
 
+function generateSku(name: string): string {
+  const slug = (name ?? 'product').slice(0, 8).replace(/[^a-z0-9]/gi, '').toUpperCase();
+  const stamp = Date.now().toString(36).slice(-5).toUpperCase();
+  return `${slug}-${stamp}`;
+}
+
 export async function POST(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -87,14 +93,45 @@ export async function POST(req: Request) {
   const bid = await getBid(supabase, user.id);
   if (!bid) return NextResponse.json({ error: 'No business found' }, { status: 400 });
 
-  const body = await req.json();
+  const body = await req.json() as Record<string, unknown>;
+
+  if (!body.name || !(body.name as string).trim()) {
+    return NextResponse.json({ error: 'name_required' }, { status: 400 });
+  }
+
+  // Sanitised payload — only known pos_products columns
+  const insertPayload: Record<string, unknown> = {
+    business_id: bid,
+    name: (body.name as string).trim(),
+    sku: body.sku ? (body.sku as string).trim() : generateSku(body.name as string),
+    barcode: body.barcode ? (body.barcode as string).trim() : null,
+    description: body.description ? (body.description as string).trim() : null,
+    price: parseFloat(String(body.price)) || 0,
+    cost_price: parseFloat(String(body.cost_price ?? body.cost ?? 0)) || 0,
+    tax_rate: parseFloat(String(body.tax_rate ?? 10)) || 10,
+    stock_quantity: parseInt(String(body.stock_quantity ?? 0)) || 0,
+    low_stock_threshold: parseInt(String(body.low_stock_threshold ?? body.reorder_point ?? 5)) || 5,
+    track_stock: body.track_stock !== undefined ? !!body.track_stock : true,
+    is_active: body.is_active !== undefined ? !!body.is_active : (body.active !== undefined ? !!body.active : true),
+    case_quantity: parseInt(String(body.case_quantity ?? 1)) || 1,
+    is_age_restricted: !!body.is_age_restricted,
+    image_url: body.image_url || null,
+    image_source: body.image_url ? 'owner' : 'pending',
+    container_type: body.container_type ?? 'unknown',
+    category_id: body.category_id || null,
+    supplier_id: body.supplier_id || null,
+  };
+
   const { data: product, error } = await supabase
     .from('pos_products')
-    .insert({ ...body, business_id: bid })
+    .insert(insertPayload)
     .select()
     .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    console.error('[products POST]', error.message);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
   return NextResponse.json({ product });
 }
 

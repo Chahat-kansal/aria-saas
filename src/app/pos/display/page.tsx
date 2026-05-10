@@ -3,6 +3,8 @@ import { useRef, useEffect, useState } from 'react';
 import ConfettiCanvas from '@/components/pos/ConfettiCanvas';
 import LogoMark from '@/components/pos/LogoMark';
 import { CAT_META, fmt } from '@/lib/pos-utils';
+import { SaleCelebration } from '@/components/customer-display/SaleCelebration';
+import { pickCelebrationAnimation } from '@/lib/customer-display/pick-animation';
 
 interface CartItem {
   id?: string | number;
@@ -40,6 +42,10 @@ export default function CustomerDisplayPage() {
 
   const [phase, setPhase]   = useState<'idle' | 'order' | 'paid'>('idle');
   const [state, setState]   = useState<DisplayState>({ status: 'idle' });
+  const [celebration, setCelebration] = useState<{
+    visible: boolean; animationType: Parameters<typeof SaleCelebration>[0]['animationType'];
+    customerName?: string; total: number; pointsEarned: number;
+  } | null>(null);
   const [time, setTime]     = useState(
     new Date().toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })
   );
@@ -78,6 +84,22 @@ export default function CustomerDisplayPage() {
     const t = setTimeout(() => setPhase('idle'), 5000);
     return () => clearTimeout(t);
   }, [phase]);
+
+  // BroadcastChannel — receives sale_completed from terminal with cart items
+  useEffect(() => {
+    if (typeof BroadcastChannel === 'undefined') return;
+    const bc = new BroadcastChannel('aria-pos-display');
+    bc.onmessage = (ev: MessageEvent) => {
+      const d = ev.data as { type?: string; items?: { name: string; category: string; price: number; quantity: number }[]; customer_name?: string; total?: number; points_earned?: number };
+      if (d?.type !== 'sale_completed') return;
+      const items = d.items ?? [];
+      const animationType = pickCelebrationAnimation(
+        items.map(i => ({ product: { name: i.name, category: i.category }, qty: i.quantity, unitPrice: i.price }))
+      );
+      setCelebration({ visible: true, animationType, customerName: d.customer_name, total: d.total ?? 0, pointsEarned: d.points_earned ?? 0 });
+    };
+    return () => bc.close();
+  }, []);
 
   // ── CANVAS ANIMATION ENGINE ─────────────────────────────────────────
   useEffect(() => {
@@ -378,6 +400,18 @@ export default function CustomerDisplayPage() {
         </div>
         <span style={{ fontSize: 10, color: 'rgba(139,133,168,0.2)' }}>Prices incl. GST · AUD</span>
       </div>
+
+      {/* Sale celebration overlay — additive */}
+      {celebration?.visible && (
+        <SaleCelebration
+          visible={celebration.visible}
+          animationType={celebration.animationType}
+          customerName={celebration.customerName}
+          total={celebration.total}
+          pointsEarned={celebration.pointsEarned}
+          onComplete={() => setCelebration(null)}
+        />
+      )}
     </div>
   );
 }

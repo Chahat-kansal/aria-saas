@@ -17,7 +17,7 @@ interface ClassItem { id: string; name: string; }
 interface PricePoint { id: string; price_set_name: string; quantity: number; price: number; cost: number | null; margin_percent: number | null; }
 interface Outlet { id: string; name: string; }
 
-const C = { bg:'var(--bg-base)', card:'var(--bg-surface)', border:'transparent', text:'var(--text-primary)', muted:'var(--text-secondary)', dim:'var(--text-tertiary)', violet:'#8B5CF6', green:'#22C55E', red:'#EF4444' };
+const C = { bg:'var(--bg-base)', card:'var(--bg-surface)', border:'transparent', text:'var(--text-primary)', muted:'var(--text-secondary)', dim:'var(--text-tertiary)', violet:'var(--violet)', green:'var(--success)', red:'var(--destructive)' };
 const TABS = ['General','Classifications','Sell & Cost','Inventory','Barcodes','Images','Loyalty','Suppliers'] as const;
 
 export default function ProductEditPage() {

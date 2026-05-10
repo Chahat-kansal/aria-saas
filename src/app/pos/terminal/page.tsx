@@ -922,6 +922,18 @@ export default function TerminalPage() {
         });
         localStorage.setItem('aria_display_state', completePayload);
         localStorage.setItem('aria_pos_display_state', completePayload);
+        // Broadcast to customer display for SaleCelebration — additive
+        try {
+          const bc = new BroadcastChannel('aria-pos-display');
+          bc.postMessage({
+            type: 'sale_completed',
+            items: (cartSnapshot ?? []).map((i: any) => ({ name: i.product?.name ?? i.label ?? '', category: i.product?.category ?? '', price: i.unitPrice ?? i.unit_price ?? 0, quantity: i.qty ?? i.quantity ?? 1 })),
+            customer_name: customerSnapshot?.name ?? null,
+            total: roundedTotal,
+            points_earned: Math.floor(roundedTotal),
+          });
+          bc.close();
+        } catch { /* BroadcastChannel not available */ }
         SFX.ching();
         // Reset display to idle after 4.5 seconds
         setTimeout(() => {

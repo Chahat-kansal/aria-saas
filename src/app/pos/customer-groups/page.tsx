@@ -48,7 +48,7 @@ export default function CustomerGroupsPage() {
     <div className="p-6 max-w-4xl mx-auto">
       <div className="mb-6 flex items-start justify-between gap-4">
         <div><h1 className="text-xl font-semibold text-[#1a1a16]">Customer Groups</h1><p className="text-xs text-[rgba(26,26,22,.45)] mt-0.5">Segment customers and apply group discounts</p></div>
-        <button onClick={() => { setShowAdd(true); setEditId(null); setForm({ name: '', description: '', discount_percent: '' }); }} className="px-4 py-2 rounded-xl text-sm font-semibold text-white" style={{ background: '#8B5CF6' }}>+ New Group</button>
+        <button onClick={() => { setShowAdd(true); setEditId(null); setForm({ name: '', description: '', discount_percent: '' }); }} className="px-4 py-2 rounded-xl text-sm font-semibold text-white" style={{ background: 'var(--violet)' }}>+ New Group</button>
       </div>
 
       {loading ? (
@@ -57,7 +57,7 @@ export default function CustomerGroupsPage() {
         <div className="bg-white rounded-2xl border border-[rgba(0,0,0,.08)] p-12 text-center shadow-sm">
           <p className="text-sm font-medium text-[#1a1a16] mb-1">No customer groups</p>
           <p className="text-xs text-[rgba(26,26,22,.4)] mb-4">Create groups to segment customers and apply automatic discounts.</p>
-          <button onClick={() => setShowAdd(true)} className="px-4 py-2 rounded-xl text-sm font-semibold text-white" style={{ background: '#8B5CF6' }}>Create first group</button>
+          <button onClick={() => setShowAdd(true)} className="px-4 py-2 rounded-xl text-sm font-semibold text-white" style={{ background: 'var(--violet)' }}>Create first group</button>
         </div>
       ) : (
         <div className="space-y-3">
@@ -93,7 +93,7 @@ export default function CustomerGroupsPage() {
             </div>
             <div className="flex gap-2 mt-5">
               <button onClick={() => { setShowAdd(false); setEditId(null); }} className="flex-1 py-2.5 rounded-xl text-sm border border-[rgba(0,0,0,.12)] text-[rgba(26,26,22,.5)]">Cancel</button>
-              <button onClick={save} disabled={saving || !form.name} className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-40" style={{ background: '#8B5CF6' }}>{saving ? 'Saving…' : (editId ? 'Save' : 'Create')}</button>
+              <button onClick={save} disabled={saving || !form.name} className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-40" style={{ background: 'var(--violet)' }}>{saving ? 'Saving…' : (editId ? 'Save' : 'Create')}</button>
             </div>
           </div>
         </div>
