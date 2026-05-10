@@ -1310,7 +1310,7 @@ export default function TerminalPage() {
       {/* ══ CONFIRM OVERLAY ═════════════════════════════════════════ */}
       {showReceipt && terminalView === 'confirm' && (
         <div style={{ position: 'absolute', inset: 0, zIndex: 50, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 20, fontFamily: "'Manrope',sans-serif", overflow: 'hidden' }}>
-          <AnimatedBg />
+          {/* AnimatedBg rendered once at line ~1084 — not duplicated here */}
           <div style={{ position: 'relative', zIndex: 2, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 20 }}>
             {/* Green check with expanding rings */}
             <div style={{ position: 'relative', width: 120, height: 120, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>

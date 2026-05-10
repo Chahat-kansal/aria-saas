@@ -33,7 +33,7 @@ export default function ProductsPage() {
   const [loading, setLoading]     = useState(true);
   const [search, setSearch]       = useState('');
   const [filterCat, setFilterCat] = useState('');
-  const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive'>('all');
+  const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive' | 'drafts'>('all');
   const [selected, setSelected]   = useState<Set<string>>(new Set());
   const [modal, setModal]         = useState<{ open: boolean; mode: 'add' | 'edit'; product?: Product }>({ open: false, mode: 'add' });
   const [form, setForm]           = useState({ ...EMPTY_FORM });
@@ -59,6 +59,15 @@ export default function ProductsPage() {
   const filtered = products.filter(p => {
     if (filterStatus === 'active' && !p.is_active) return false;
     if (filterStatus === 'inactive' && p.is_active) return false;
+    // Drafts: inactive products created in last 7 days
+    if (filterStatus === 'drafts') {
+      if (p.is_active) return false;
+      const createdAt = (p as any).created_at;
+      if (createdAt) {
+        const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+        if (new Date(createdAt).getTime() < sevenDaysAgo) return false;
+      }
+    }
     if (filterCat && p.category_id !== filterCat) return false;
     if (search) {
       const q = search.toLowerCase();
@@ -220,10 +229,10 @@ export default function ProductsPage() {
             {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
           <div style={{ display: 'flex', gap: 4 }}>
-            {(['all', 'active', 'inactive'] as const).map(s => (
+            {(['all', 'active', 'inactive', 'drafts'] as const).map(s => (
               <button key={s} onClick={() => setFilterStatus(s)}
                 style={{ padding: '7px 14px', borderRadius: 8, border: `1px solid ${filterStatus === s ? C.violet : C.border}`, background: filterStatus === s ? 'rgba(139,92,246,0.15)' : 'transparent', color: filterStatus === s ? C.violet : C.muted, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', textTransform: 'capitalize' }}>
-                {s}
+                {s === 'drafts' ? '📝 Drafts' : s}
               </button>
             ))}
           </div>
@@ -334,6 +343,13 @@ export default function ProductsPage() {
                     {/* Actions */}
                     <td style={{ padding: '10px 12px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                        {filterStatus === 'drafts' ? (
+                          <Link href={`/pos/products/new?id=${p.id}&step=2`}
+                            style={{ padding: '5px 10px', borderRadius: 6, border: `1px solid rgba(139,92,246,0.3)`, background: 'rgba(139,92,246,0.08)', color: C.violet, fontSize: 11, fontWeight: 600, textDecoration: 'none', display: 'inline-block' }}>
+                            Resume →
+                          </Link>
+                        ) : (
+                          <>
                         <Link href={`/pos/products/${p.id}`}
                           style={{ padding: '5px 10px', borderRadius: 6, border: `1px solid ${C.border}`, background: 'transparent', color: C.muted, fontSize: 11, fontWeight: 600, textDecoration: 'none', display: 'inline-block' }}>
                           View
@@ -342,6 +358,8 @@ export default function ProductsPage() {
                           style={{ padding: '5px 10px', borderRadius: 6, border: `1px solid rgba(139,92,246,0.3)`, background: 'rgba(139,92,246,0.08)', color: C.violet, fontSize: 11, fontWeight: 600, textDecoration: 'none', display: 'inline-block' }}>
                           Edit
                         </Link>
+                          </>
+                        )}
                         <button onClick={() => { if (confirm(`Delete "${p.name}"?`)) deleteProduct(p.id); }}
                           disabled={deleting === p.id}
                           style={{ padding: '5px 10px', borderRadius: 6, border: '1px solid rgba(239,68,68,0.25)', background: 'rgba(239,68,68,0.06)', color: C.red, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', opacity: deleting === p.id ? 0.5 : 1 }}>
