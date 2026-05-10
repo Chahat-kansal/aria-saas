@@ -11,7 +11,7 @@ import {
   Settings, Key, Receipt, Shield, Building, Barcode, Database,
   Banknote, Wrench,
   Clock, Smartphone, Timer, Scissors,
-  ShoppingBag, CalendarClock,
+  ShoppingBag, CalendarClock, Plug,
 } from 'lucide-react'
 
 export interface NavItem {
@@ -145,6 +145,7 @@ export const NAV_STRUCTURE: NavSection[] = [
       { label: 'Registers & Outlets', href: '/pos/settings/registers', icon: Building },
       { label: 'Barcodes', href: '/pos/barcodes', icon: Barcode },
       { label: 'Price Sets', href: '/pos/price-sets', icon: Tag },
+      { label: 'Integrations', href: '/pos/setup/integrations', icon: Plug },
       { label: 'Supplier Integrations', href: '/pos/setup/suppliers', icon: Truck },
       { label: 'Migrate Data', href: '/pos/setup/migrate', icon: Database },
       { label: 'Billing', href: '/pos/settings/billing', icon: Banknote },
