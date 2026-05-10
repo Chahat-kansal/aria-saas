@@ -85,10 +85,14 @@ export async function middleware(request: NextRequest) {
     return response
   }
 
-  // ── ROOT — redirect based on auth state ─────────────────────────────────────
+  // ── ROOT — authenticated owners → POS; unauthenticated → landing page ───────
   if (pathname === '/') {
     const { data: { user } } = await makeSupabase().auth.getUser()
-    return NextResponse.redirect(new URL(user ? '/dashboard' : '/login', request.url))
+    if (user) {
+      return NextResponse.redirect(new URL('/pos/terminal', request.url))
+    }
+    // Unauthenticated: serve the marketing landing page — no redirect
+    return response
   }
 
   return response
