@@ -166,7 +166,12 @@ export async function POST(req: Request, { params }: Params) {
     const bid = await getBid(supabase, user.id);
     if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 });
 
-    const body = await req.json() as Record<string, unknown>;
+    let body: Record<string, unknown>;
+    try {
+      body = (await req.json()) as Record<string, unknown> ?? {};
+    } catch {
+      body = {};
+    }
     const { action, decision_id, snooze_days } = body;
 
     if (action === 'health') {
@@ -300,7 +305,13 @@ export async function POST(req: Request, { params }: Params) {
     return NextResponse.json({ error: 'Unknown action' }, { status: 400 });
   } catch (err) {
     const e = err as Error;
-    console.error(`[agents/POST] ${reqId} unhandled:`, { message: e?.message, name: e?.name, stack: e?.stack });
-    return NextResponse.json({ error: 'internal_error', message: e?.message ?? 'unknown', request_id: reqId }, { status: 500 });
+    console.error(`[agents/POST] ${reqId} unhandled:`, e);
+    return NextResponse.json({
+      error: 'internal_error',
+      message: e?.message ?? 'unknown',
+      error_name: e?.name,
+      error_stack: e?.stack?.split('\n').slice(0, 8).join(' | '),
+      request_id: reqId,
+    }, { status: 500 });
   }
 }
