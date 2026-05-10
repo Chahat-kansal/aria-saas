@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import AriaInsightCard from '@/components/reports/AriaInsightCard';
 import ExportButtons from '@/components/reports/ExportButtons';
 import { track } from '@/lib/analytics';
@@ -20,12 +21,16 @@ const iS: React.CSSProperties = { background: 'var(--bg-input)', border: '1px so
 const tBtn = (active: boolean): React.CSSProperties => ({ padding: '5px 12px', borderRadius: 6, border: '1px solid', borderColor: active ? 'var(--violet)' : 'var(--border-default)', background: active ? 'var(--violet-dim)' : 'var(--bg-elevated)', color: active ? 'var(--violet)' : 'var(--text-secondary)', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' });
 
 export default function DeadStockPage() {
+  const router = useRouter();
   const [rows, setRows] = useState<DeadRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [insight, setInsight] = useState<string[] | null>(null);
   const [daysSince, setDaysSince] = useState<number>(60);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [promoLoading, setPromoLoading] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
 
+  useEffect(() => { document.title = 'Dead Stock | Aria POS'; }, [])
   const load = useCallback(() => {
     setLoading(true);
     fetch(`/api/pos/dead-stock?days=${daysSince}`).then(r => r.json()).then(d => {
@@ -40,6 +45,40 @@ export default function DeadStockPage() {
 
   function toggleAll() {
     setSelected(s => s.size === rows.length ? new Set() : new Set(rows.map(r => r.id)));
+  }
+
+  async function generateClearancePromo() {
+    const selectedIds = [...selected];
+    if (!selectedIds.length) return;
+    setPromoLoading(true);
+    try {
+      const res = await fetch('/api/pos/promotions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: `Clearance ${new Date().toLocaleDateString('en-AU')}`,
+          type: 'percent_off',
+          percent: 30,
+          product_ids: selectedIds,
+          min_qty: 1,
+          active: true,
+          starts_at: new Date().toISOString(),
+        }),
+      });
+      if (res.ok) {
+        track('clearance_promo_created', { product_count: selectedIds.length });
+        setToast('Clearance promo created — active immediately');
+        setTimeout(() => { setToast(null); router.push('/pos/promotions'); }, 1800);
+      } else {
+        setToast('Failed to create promo — check settings');
+        setTimeout(() => setToast(null), 3000);
+      }
+    } catch {
+      setToast('Network error');
+      setTimeout(() => setToast(null), 3000);
+    } finally {
+      setPromoLoading(false);
+    }
   }
 
   const totalValue = rows.reduce((s, r) => s + r.value_cost, 0);
@@ -89,9 +128,10 @@ export default function DeadStockPage() {
       {selected.size > 0 && (
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', background: 'var(--bg-elevated)', borderRadius: 10, padding: '10px 16px', marginBottom: 14 }}>
           <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--violet)' }}>{selected.size} selected</span>
-          {['Generate clearance promo', 'Mark for stocktake'].map(action => (
-            <button key={action} onClick={() => { alert(`${action} — Phase 2 feature`); }} style={{ padding: '6px 14px', borderRadius: 7, border: '1px solid var(--border-default)', background: 'var(--bg-surface)', color: 'var(--text-primary)', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>{action}</button>
-          ))}
+          <button onClick={generateClearancePromo} disabled={promoLoading} style={{ padding: '6px 14px', borderRadius: 7, border: 'none', background: promoLoading ? 'var(--bg-elevated)' : '#F59E0B', color: promoLoading ? 'var(--text-tertiary)' : '#000', fontSize: 12, fontWeight: 700, cursor: promoLoading ? 'not-allowed' : 'pointer', fontFamily: 'inherit' }}>
+            {promoLoading ? 'Creating…' : '🎯 Generate 30% clearance promo'}
+          </button>
+          <button onClick={() => alert('Mark for stocktake — Phase 2')} style={{ padding: '6px 14px', borderRadius: 7, border: '1px solid var(--border-default)', background: 'var(--bg-surface)', color: 'var(--text-primary)', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Mark for stocktake</button>
         </div>
       )}
 
@@ -144,6 +184,12 @@ export default function DeadStockPage() {
           </tbody>
         </table>
       </div>
+
+      {toast && (
+        <div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 100, background: '#34D399', color: '#000', padding: '12px 20px', borderRadius: 12, fontSize: 13, fontWeight: 700, boxShadow: '0 4px 20px rgba(0,0,0,0.3)' }}>
+          {toast}
+        </div>
+      )}
     </div>
   );
 }

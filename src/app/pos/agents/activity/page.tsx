@@ -42,6 +42,7 @@ export default function AgentActivityPage() {
   const [page, setPage] = useState(0);
   const PAGE_SIZE = 25;
 
+  useEffect(() => { document.title = 'Agent Activity | Aria POS'; }, [])
   const load = useCallback(() => {
     setLoading(true);
     const params = new URLSearchParams({ status: 'reviewed', limit: '100' });

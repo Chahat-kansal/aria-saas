@@ -84,6 +84,18 @@ const SECTIONS = [
     ],
   },
   {
+    id: 'agents',
+    label: 'AI Agents',
+    icon: '✦',
+    items: [
+      { label: 'Overview', href: '/pos/agents' },
+      { label: 'Reorder', href: '/pos/agents/reorder' },
+      { label: 'Pricing', href: '/pos/agents/pricing' },
+      { label: 'Schedule', href: '/pos/agents/schedule' },
+      { label: 'Activity Log', href: '/pos/agents/activity' },
+    ],
+  },
+  {
     id: 'setup',
     label: 'Setup',
     icon: '⚙️',
@@ -98,17 +110,7 @@ const SECTIONS = [
       { label: 'Barcodes', href: '/pos/barcodes' },
       { label: 'Price Sets', href: '/pos/price-sets' },
       { label: 'Migrate Data', href: '/pos/setup/migrate' },
-    ],
-  },
-  {
-    id: 'agents',
-    label: 'AI Agents',
-    icon: '🤖',
-    items: [
-      { label: 'Agent Dashboard', href: '/pos/agents' },
-      { label: 'Reorder Agent', href: '/pos/agents/reorder' },
-      { label: 'Pricing Agent', href: '/pos/agents/pricing' },
-      { label: 'Smart Schedule', href: '/pos/agents/schedule' },
+      { label: 'Billing', href: '/pos/settings/billing' },
     ],
   },
   {
@@ -126,18 +128,19 @@ const SECTIONS = [
 
 function getActiveSection(pathname: string): string {
   if (pathname === '/pos/terminal') return 'sell'
+  if (pathname.startsWith('/pos/agents')) return 'agents'
   if (pathname.startsWith('/pos/reports') || pathname.startsWith('/pos/competitors') || pathname.startsWith('/pos/ask')) return 'reporting'
   if (pathname.startsWith('/pos/settings') || pathname.startsWith('/pos/sale-keys') ||
       pathname.startsWith('/pos/receipt-templates') || pathname.startsWith('/pos/barcodes') ||
-      pathname.startsWith('/pos/price-sets')) return 'setup'
+      pathname.startsWith('/pos/setup')) return 'setup'
   if (pathname.startsWith('/pos/customers') || pathname.startsWith('/pos/customer-groups') ||
       pathname.startsWith('/pos/gift-cards') || pathname.startsWith('/pos/balances')) return 'customers'
   if (pathname.startsWith('/pos/products') || pathname.startsWith('/pos/categories') ||
       pathname.startsWith('/pos/suppliers') || pathname.startsWith('/pos/orders') ||
-      pathname.startsWith('/pos/stocktake') || pathname.startsWith('/pos/transfers') ||
-      pathname.startsWith('/pos/import')) return 'stock'
+      pathname.startsWith('/pos/stocktake') || pathname.startsWith('/pos/inventory') ||
+      pathname.startsWith('/pos/transfers') || pathname.startsWith('/pos/import')) return 'stock'
   if (pathname.startsWith('/pos/promotions') || pathname.startsWith('/pos/shelf-tickets') ||
-      pathname.startsWith('/pos/loyalty')) return 'marketing'
+      pathname.startsWith('/pos/laybys') || pathname.startsWith('/pos/loyalty')) return 'marketing'
   if (pathname.startsWith('/pos/future-prices') || pathname.startsWith('/pos/mobile') ||
       pathname.startsWith('/pos/timesheets') || pathname.startsWith('/pos/void')) return 'utilities'
   return 'register'

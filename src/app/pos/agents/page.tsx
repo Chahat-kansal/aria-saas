@@ -64,6 +64,7 @@ export default function AgentsDashboardPage() {
     setLoading(false);
   }, []);
 
+  useEffect(() => { document.title = 'AI Agents | Aria POS'; }, [])
   useEffect(() => { loadAll(); }, [loadAll]);
 
   async function doDecision(id: string, action: 'approve' | 'reject' | 'snooze', type: string) {

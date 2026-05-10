@@ -1,7 +1,9 @@
 'use client';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { usePathname } from 'next/navigation';
 import POSSidebar from './POSSidebar';
+import POSErrorBoundary from './POSErrorBoundary';
+import { supabase } from '@/lib/supabase';
 
 const POS_USER_KEY  = 'aria_pos_user';
 const SESSION_TTL   = 12 * 3600 * 1000; // 12 hours
@@ -329,6 +331,9 @@ export default function POSShell({ children, businessId, businessName }: {
   const [ariaOpen, setAriaOpen] = useState(false);
   const [trialDaysLeft, setTrialDaysLeft] = useState<number | null>(null);
   const [trialDismissed, setTrialDismissed] = useState(false);
+  const [online, setOnline] = useState(true);
+  const [justReconnected, setJustReconnected] = useState(false);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const key = `aria_trial_banner_dismissed_${new Date().toISOString().split('T')[0]}`
@@ -340,6 +345,33 @@ export default function POSShell({ children, businessId, businessName }: {
         if (days <= 3) setTrialDaysLeft(days)
       }
     }).catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    const handleOnline = () => {
+      setOnline(true)
+      setJustReconnected(true)
+      reconnectTimerRef.current = setTimeout(() => setJustReconnected(false), 3000)
+    }
+    const handleOffline = () => { setOnline(false); setJustReconnected(false) }
+    window.addEventListener('online', handleOnline)
+    window.addEventListener('offline', handleOffline)
+    return () => {
+      window.removeEventListener('online', handleOnline)
+      window.removeEventListener('offline', handleOffline)
+      if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current)
+    }
+  }, [])
+
+  // Session expiry: refresh token automatically, redirect to login on sign-out
+  useEffect(() => {
+    if (!supabase) return
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event: string) => {
+      if (event === 'SIGNED_OUT') {
+        window.location.href = `/login?redirect=${encodeURIComponent(window.location.pathname)}`
+      }
+    })
+    return () => subscription.unsubscribe()
   }, [])
 
   useEffect(() => {
@@ -401,6 +433,17 @@ export default function POSShell({ children, businessId, businessName }: {
         }}
       />
       <main style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', minWidth: 0, height: '100dvh' }}>
+        {/* Offline indicator */}
+        {!online && (
+          <div style={{ background: 'rgba(248,113,113,0.15)', borderBottom: '1px solid rgba(248,113,113,0.3)', padding: '8px 18px', fontSize: 13, color: '#F87171', fontFamily: 'var(--font-ui)', fontWeight: 600, flexShrink: 0 }}>
+            ⚡ No internet connection — terminal still works, syncing when reconnected
+          </div>
+        )}
+        {online && justReconnected && (
+          <div style={{ background: 'rgba(52,211,153,0.12)', borderBottom: '1px solid rgba(52,211,153,0.3)', padding: '8px 18px', fontSize: 13, color: '#34D399', fontFamily: 'var(--font-ui)', fontWeight: 600, flexShrink: 0 }}>
+            ✓ Back online — syncing...
+          </div>
+        )}
         {trialDaysLeft !== null && !trialDismissed && (
           <div style={{ background: 'rgba(251,191,36,0.15)', borderBottom: '1px solid rgba(251,191,36,0.3)', padding: '8px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, fontSize: 13, color: '#FBBF24', fontFamily: 'var(--font-ui)', flexShrink: 0 }}>
             <span style={{ fontWeight: 600 }}>
@@ -413,7 +456,7 @@ export default function POSShell({ children, businessId, businessName }: {
             }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(251,191,36,0.6)', fontSize: 16, lineHeight: 1, padding: 0 }}>×</button>
           </div>
         )}
-        {children}
+        <POSErrorBoundary>{children}</POSErrorBoundary>
       </main>
     </div>
   );

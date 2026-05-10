@@ -175,6 +175,7 @@ export default function AskAriaPage() {
     fetch('/api/pos/ask').then(r => r.json()).then(d => setConversations(d.conversations ?? [])).catch(() => {})
   }, [])
 
+  useEffect(() => { document.title = 'Ask Aria | Aria POS'; }, [])
   useEffect(() => { fetchConvs() }, [fetchConvs])
 
   useEffect(() => {

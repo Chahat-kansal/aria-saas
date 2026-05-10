@@ -62,6 +62,7 @@ export default function ScheduleAgentPage() {
     }).catch(() => setLoading(false));
   }, []);
 
+  useEffect(() => { document.title = 'Smart Schedule | Aria POS'; }, [])
   useEffect(() => { load(); }, [load]);
 
   async function runNow() {

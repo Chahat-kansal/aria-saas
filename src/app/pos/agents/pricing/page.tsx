@@ -23,6 +23,7 @@ export default function PricingAgentPage() {
     }).catch(() => setLoading(false));
   }, []);
 
+  useEffect(() => { document.title = 'Pricing Agent | Aria POS'; }, [])
   useEffect(() => { load(); }, [load]);
 
   async function runNow() {

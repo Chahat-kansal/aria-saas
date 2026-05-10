@@ -1,8 +1,10 @@
 'use client';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import AriaInsightCard from '@/components/reports/AriaInsightCard';
 import { track } from '@/lib/analytics';
+
+const SESSION_KEY = 'aria_stocktake_session';
 
 interface Outlet { id: string; name: string; }
 interface Product { id: string; name: string; sku: string | null; stock_quantity: number | null; }
@@ -22,21 +24,56 @@ export default function NewStocktakePage() {
   const [anomaly, setAnomaly] = useState<{ product: Product; system: number; counted: number } | null>(null);
   const [saving, setSaving] = useState(false);
   const [insight, setInsight] = useState<string[] | null>(null);
+  const [resumeSession, setResumeSession] = useState<{ outlet: Outlet; startedAt: string; counts: Record<string, CountRow> } | null>(null);
   const barcodeRef = useRef<HTMLInputElement>(null);
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => { document.title = 'New Stocktake | Aria POS'; }, [])
 
   useEffect(() => {
     fetch('/api/pos/outlets').then(r => r.json()).then(d => setOutlets(d.outlets ?? [])).catch(() => {});
+    try {
+      const raw = localStorage.getItem(SESSION_KEY);
+      if (raw) {
+        const session = JSON.parse(raw) as { outlet: Outlet; startedAt: string; counts: Record<string, CountRow> };
+        if (session?.outlet && session?.counts) setResumeSession(session);
+      }
+    } catch {}
   }, []);
 
-  function loadProducts(outletId: string) {
+  function loadProducts(outletId: string, existingCounts?: Record<string, CountRow>) {
     fetch(`/api/pos/products?outlet_id=${outletId}&limit=500`).then(r => r.json()).then(d => {
       const prods: Product[] = d.products ?? [];
       setProducts(prods);
       const initCounts: Record<string, CountRow> = {};
-      for (const p of prods) initCounts[p.id] = { product: p, counted: '', recount: 0 };
+      for (const p of prods) initCounts[p.id] = existingCounts?.[p.id] ?? { product: p, counted: '', recount: 0 };
       setCounts(initCounts);
       track('stocktake_started', { outlet: outletId, product_count: prods.length });
     }).catch(() => {});
+  }
+
+  const saveSession = useCallback((outlet: Outlet, updatedCounts: Record<string, CountRow>) => {
+    try {
+      localStorage.setItem(SESSION_KEY, JSON.stringify({ outlet, startedAt: new Date().toISOString(), counts: updatedCounts }));
+    } catch {}
+  }, []);
+
+  function handleCountChange(productId: string, val: string, product: Product) {
+    const sys = product.stock_quantity ?? 0;
+    const cnt = parseInt(val);
+    if (val !== '' && sys > 5 && Math.abs(cnt - sys) / sys > 0.5) {
+      setAnomaly({ product, system: sys, counted: cnt });
+      return;
+    }
+    const newCounts = (prev: Record<string, CountRow>) => ({ ...prev, [productId]: { ...prev[productId], counted: val } });
+    setCounts(prev => {
+      const updated = newCounts(prev);
+      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = setTimeout(() => {
+        if (selectedOutlet) saveSession(selectedOutlet, updated);
+      }, 500);
+      return updated;
+    });
   }
 
   function handleBarcodeSubmit(e: React.FormEvent) {
@@ -70,6 +107,7 @@ export default function NewStocktakePage() {
     await fetch('/api/pos/stock-takes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ outlet_id: selectedOutlet.id, items }) }).catch(() => {});
     track('stocktake_committed', { variance_count: variances.length, total_variance_cents: variances.reduce((s, i) => s + Math.abs(i.counted_qty - i.system_qty), 0) });
     setSaving(false);
+    try { localStorage.removeItem(SESSION_KEY); } catch {}
     router.push('/pos/stocktake');
   }
 
@@ -171,16 +209,7 @@ export default function NewStocktakePage() {
                         <td style={{ padding: '8px 14px', fontSize: 11, color: 'var(--text-secondary)', fontFamily: "'JetBrains Mono',monospace" }}>{p.sku ?? '—'}</td>
                         <td style={{ padding: '8px 14px', fontSize: 13, fontFamily: "'JetBrains Mono',monospace" }}>{system}</td>
                         <td style={{ padding: '8px 10px' }}>
-                          <input type="number" min="0" value={row?.counted ?? ''} onChange={e => {
-                            const val = e.target.value;
-                            const sys = p.stock_quantity ?? 0;
-                            const cnt = parseInt(val);
-                            if (val !== '' && sys > 5 && Math.abs(cnt - sys) / sys > 0.5) {
-                              setAnomaly({ product: p, system: sys, counted: cnt });
-                            } else {
-                              setCounts(c => ({ ...c, [p.id]: { ...c[p.id], counted: val } }));
-                            }
-                          }} style={{ ...iS, width: 72, textAlign: 'center', padding: '4px 6px', borderColor: variance !== null && variance !== 0 ? '#FBBF24' : 'var(--border-default)' }} />
+                          <input type="number" min="0" value={row?.counted ?? ''} onChange={e => handleCountChange(p.id, e.target.value, p)} style={{ ...iS, width: 72, textAlign: 'center', padding: '4px 6px', borderColor: variance !== null && variance !== 0 ? '#FBBF24' : 'var(--border-default)' }} />
                         </td>
                         <td style={{ padding: '8px 14px', fontSize: 13, fontWeight: 700, color: variance === null ? 'var(--text-tertiary)' : variance > 0 ? '#34D399' : variance < 0 ? '#F87171' : 'var(--text-secondary)' }}>
                           {variance === null ? '—' : variance > 0 ? `+${variance}` : String(variance)}
@@ -244,6 +273,35 @@ export default function NewStocktakePage() {
           </>
         )}
       </div>
+
+      {/* Resume session modal */}
+      {resumeSession && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: 'var(--bg-elevated)', borderRadius: 16, padding: 28, maxWidth: 420, boxShadow: 'var(--shadow-lg)' }}>
+            <div style={{ fontSize: 28, marginBottom: 12 }}>🔄</div>
+            <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 8 }}>Resume your count?</h3>
+            <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 20 }}>
+              You have an unfinished stock count for <strong>{resumeSession.outlet.name}</strong> started {new Date(resumeSession.startedAt).toLocaleString('en-AU')}. Pick up where you left off?
+            </p>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => {
+                try { localStorage.removeItem(SESSION_KEY); } catch {}
+                setResumeSession(null);
+              }} style={{ flex: 1, padding: '10px', borderRadius: 9, border: '1px solid var(--border-default)', background: 'var(--bg-surface)', color: 'var(--text-primary)', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+                Start fresh
+              </button>
+              <button onClick={() => {
+                setSelectedOutlet(resumeSession.outlet);
+                loadProducts(resumeSession.outlet.id, resumeSession.counts);
+                setStep(3);
+                setResumeSession(null);
+              }} style={{ flex: 1, padding: '10px', borderRadius: 9, border: 'none', background: 'var(--violet)', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                ↩ Resume count
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Anomaly modal */}
       {anomaly && (

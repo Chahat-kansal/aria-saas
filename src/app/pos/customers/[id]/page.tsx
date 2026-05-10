@@ -43,6 +43,11 @@ export default function CustomerDetailPage() {
   const [notesSaving, setNotesSaving] = useState(false);
   const [insight, setInsight] = useState<string[] | null>(null);
   const [insightLoading, setInsightLoading] = useState(true);
+  const [showSmsModal, setShowSmsModal] = useState(false);
+  const [smsText, setSmsText] = useState('');
+  const [smsSending, setSmsSending] = useState(false);
+  const [smsResult, setSmsResult] = useState<'sent' | 'error' | null>(null);
+  const [ariaSmsLoading, setAriaSmsLoading] = useState(false);
 
   const load = useCallback(() => {
     if (!id) return;
@@ -95,6 +100,34 @@ export default function CustomerDetailPage() {
 
   useEffect(() => { load(); }, [load]);
 
+  async function getAriaSms() {
+    if (!customer) return;
+    setAriaSmsLoading(true);
+    try {
+      const res = await fetch('/api/pos/customers/sms-draft', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ customer_name: customer.name, segment: customer.customer_segment ?? 'New', days_since: daysSinceLast, ltv }),
+      });
+      const d = await res.json();
+      if (d.message) setSmsText(d.message.slice(0, 160));
+    } catch {}
+    setAriaSmsLoading(false);
+  }
+
+  async function sendSms() {
+    if (!customer?.phone || !smsText.trim()) return;
+    setSmsSending(true);
+    try {
+      const res = await fetch('/api/pos/customers/sms', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ customer_id: customer.id, message: smsText.trim() }),
+      });
+      setSmsResult(res.ok ? 'sent' : 'error');
+      if (res.ok) { setTimeout(() => { setShowSmsModal(false); setSmsResult(null); setSmsText(''); }, 1500); }
+    } catch { setSmsResult('error'); }
+    setSmsSending(false);
+  }
+
   async function saveNotes() {
     if (!customer) return;
     setNotesSaving(true);
@@ -146,6 +179,11 @@ export default function CustomerDetailPage() {
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <Link href={`/pos/customers/${id}/edit`} style={{ padding: '7px 14px', borderRadius: 8, border: '1px solid var(--border-default)', background: 'var(--bg-elevated)', color: C.muted, fontSize: 12, fontWeight: 600, textDecoration: 'none' }}>✏️ Edit</Link>
+          {customer.phone && (
+            <button onClick={() => { setSmsText(''); setSmsResult(null); setShowSmsModal(true); }} style={{ padding: '7px 14px', borderRadius: 8, border: '1px solid var(--border-default)', background: 'var(--bg-elevated)', color: C.muted, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+              💬 Send SMS
+            </button>
+          )}
           <Link href={`/pos/terminal?customer_id=${id}`} style={{ padding: '7px 14px', borderRadius: 8, border: `1px solid ${C.violet}`, background: 'rgba(139,92,246,0.12)', color: C.violet, fontSize: 12, fontWeight: 600, textDecoration: 'none' }}>🛒 New Sale</Link>
         </div>
       </div>
@@ -270,6 +308,39 @@ export default function CustomerDetailPage() {
           </div>
         )}
       </div>
+
+      {showSmsModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: 'var(--bg-elevated)', borderRadius: 16, padding: 28, maxWidth: 420, width: '92%', boxShadow: 'var(--shadow-lg)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>Send SMS to {customer.name}</h3>
+              <button onClick={() => setShowSmsModal(false)} style={{ background: 'none', border: 'none', color: C.muted, cursor: 'pointer', fontSize: 18 }}>×</button>
+            </div>
+            <div style={{ fontSize: 12, color: C.muted, marginBottom: 12 }}>To: {customer.phone}</div>
+            <textarea
+              value={smsText}
+              onChange={e => setSmsText(e.target.value.slice(0, 160))}
+              rows={4}
+              placeholder="Type your message…"
+              style={{ width: '100%', background: 'var(--bg-input)', border: '1px solid var(--border-default)', color: C.text, borderRadius: 8, padding: '10px 12px', fontSize: 13, outline: 'none', fontFamily: 'inherit', resize: 'none', boxSizing: 'border-box', marginBottom: 6 }}
+            />
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16, fontSize: 11, color: C.dim }}>
+              <button onClick={getAriaSms} disabled={ariaSmsLoading} style={{ background: 'none', border: 'none', color: C.violet, cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'inherit', padding: 0 }}>
+                {ariaSmsLoading ? 'Writing…' : '✨ Let Aria write it'}
+              </button>
+              <span style={{ color: smsText.length > 140 ? '#FBBF24' : C.dim }}>{smsText.length}/160</span>
+            </div>
+            {smsResult === 'sent' && <div style={{ marginBottom: 12, color: '#34D399', fontSize: 13, fontWeight: 600 }}>✓ SMS sent</div>}
+            {smsResult === 'error' && <div style={{ marginBottom: 12, color: '#F87171', fontSize: 13 }}>Send failed — check TWILIO_* env vars in Settings</div>}
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => setShowSmsModal(false)} style={{ flex: 1, padding: '10px', borderRadius: 9, border: '1px solid var(--border-default)', background: 'transparent', color: C.text, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>
+              <button onClick={sendSms} disabled={smsSending || !smsText.trim()} style={{ flex: 2, padding: '10px', borderRadius: 9, border: 'none', background: smsText.trim() ? C.violet : 'var(--bg-elevated)', color: smsText.trim() ? '#fff' : C.dim, fontSize: 13, fontWeight: 700, cursor: (!smsText.trim() || smsSending) ? 'not-allowed' : 'pointer', fontFamily: 'inherit' }}>
+                {smsSending ? 'Sending…' : 'Send SMS'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

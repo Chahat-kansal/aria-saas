@@ -47,6 +47,7 @@ export default function MigratePage() {
   const dropRef = useRef<HTMLDivElement>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
+  useEffect(() => { document.title = 'Migrate Data | Aria POS'; }, [])
   useEffect(() => {
     if (step !== 5 || !migrationId) return
     pollRef.current = setInterval(async () => {

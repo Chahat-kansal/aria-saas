@@ -227,6 +227,9 @@ export default function TerminalPage() {
   const [trainingMode, setTrainingMode] = useState(false);
   const [trainingOffTimer, setTrainingOffTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
 
+  // Keyboard shortcuts help modal — additive
+  const [showShortcutsModal, setShowShortcutsModal] = useState(false);
+
   function toggleTrainingMode() {
     const newVal = !trainingMode;
     setTrainingMode(newVal);
@@ -276,6 +279,45 @@ export default function TerminalPage() {
   useEffect(() => {
     try { sessionStorage.setItem(CART_SESSION_KEY, JSON.stringify(cart)); } catch { /* ignore */ }
   }, [cart]);
+
+  /* ── Keyboard shortcuts — additive ───────────────────────────── */
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const isMeta = e.metaKey || e.ctrlKey;
+      if (isMeta && e.key === '/') { e.preventDefault(); setShowShortcutsModal(s => !s); return; }
+      if (isMeta && e.key === 'f') { e.preventDefault(); document.getElementById('pos-product-search')?.focus(); return; }
+      if (e.key === 'Escape') { setShowShortcutsModal(false); }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
+
+  /* ── Realtime price sync (multi-tab) — additive ───────────────── */
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let channel: any = null;
+    import('@/lib/supabase').then(({ supabase: sb }) => {
+      if (!sb) return;
+      const today = new Date().toISOString().split('T')[0];
+      channel = sb.channel('pos_future_prices_terminal')
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .on('postgres_changes' as any, {
+          event: 'INSERT', schema: 'public', table: 'pos_future_prices',
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        }, (payload: any) => {
+          const effectiveFrom = payload.new?.effective_date as string | undefined;
+          if (effectiveFrom && effectiveFrom <= today) {
+            fetch('/api/pos/products').then(r => r.json()).then(d => {
+              if (d.products) setProducts(d.products);
+            }).catch(() => {});
+          }
+        })
+        .subscribe();
+    });
+    return () => { channel?.unsubscribe(); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   /* ── Register load ────────────────────────────────────────────── */
   const loadRegister = useCallback(async () => {
@@ -955,6 +997,30 @@ export default function TerminalPage() {
           </div>
           <div style={{ position: 'fixed', inset: 0, background: 'rgba(245,158,11,0.03)', pointerEvents: 'none', zIndex: 1 }} />
         </>
+      )}
+
+      {/* Keyboard shortcuts modal — additive */}
+      {showShortcutsModal && (
+        <div onClick={() => setShowShortcutsModal(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: 'var(--bg-elevated)', borderRadius: 16, padding: '24px 28px', maxWidth: 400, width: '90vw', boxShadow: 'var(--shadow-lg)', fontFamily: "'Manrope',sans-serif" }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
+              <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>Keyboard Shortcuts</h3>
+              <button onClick={() => setShowShortcutsModal(false)} style={{ background: 'none', border: 'none', color: 'var(--text-tertiary)', fontSize: 18, cursor: 'pointer', lineHeight: 1 }}>×</button>
+            </div>
+            {[
+              ['⌘/', 'Open this shortcut list'],
+              ['⌘F', 'Focus product search'],
+              ['⌘P', 'View parked sales'],
+              ['⌘K', 'Open Aria chat'],
+              ['Esc', 'Close modal / panel'],
+            ].map(([key, desc]) => (
+              <div key={key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 0', borderBottom: '1px solid var(--divider)' }}>
+                <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{desc}</span>
+                <kbd style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: 5, padding: '2px 8px', fontSize: 11, fontFamily: "'JetBrains Mono',monospace", color: 'var(--text-primary)', fontWeight: 600 }}>{key}</kbd>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
       {/* Full-screen animated dot grid */}
       <AnimatedBg />

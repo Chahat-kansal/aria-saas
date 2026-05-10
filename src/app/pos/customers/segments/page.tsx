@@ -32,6 +32,7 @@ export default function SegmentsPage() {
     }).catch(() => setLoading(false));
   }, []);
 
+  useEffect(() => { document.title = 'Customer Segments | Aria POS'; }, [])
   useEffect(() => { loadSegments(); }, [loadSegments]);
 
   async function calculateNow() {

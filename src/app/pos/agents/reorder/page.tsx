@@ -35,7 +35,23 @@ export default function ReorderAgentPage() {
     }).catch(() => setLoading(false));
   }, []);
 
+  useEffect(() => { document.title = 'Reorder Agent | Aria POS'; }, [])
   useEffect(() => { load(); }, [load]);
+
+  // Keyboard shortcuts: A=approve first, D=reject first, S=snooze first
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      const first = decisions[0];
+      if (!first) return;
+      if (e.key === 'a' || e.key === 'A') { e.preventDefault(); setConfirmId(first.id); }
+      if (e.key === 'd' || e.key === 'D') { e.preventDefault(); doAction(first.id, 'reject'); }
+      if (e.key === 's' || e.key === 'S') { e.preventDefault(); doAction(first.id, 'snooze'); }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [decisions]);
 
   async function runNow() {
     setRunning(true);
