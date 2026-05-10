@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -86,7 +88,7 @@ html, body { height: 100%; }
 .animate-float { animation: float 3s ease-in-out infinite; }
 
 /* ─── POS DESIGN SYSTEM ─────────────────────────────────────── */
-@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+/* Font import moved to top of file */
 
 :root {
   --pos-bg:          #0A0910;
