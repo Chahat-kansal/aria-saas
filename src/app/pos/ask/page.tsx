@@ -1,12 +1,21 @@
 'use client'
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import {
   ResponsiveContainer, BarChart, Bar, LineChart, Line, AreaChart, Area,
   PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip,
 } from 'recharts'
 
 const COLORS = ['#8B5CF6', '#60A5FA', '#34D399', '#F59E0B', '#F87171']
+const MAX_INPUT = 1000
+
+const TOOL_LABELS: Record<string, { running: string; done: string }> = {
+  query_sales:     { running: '🔍 Looking at your sales data...', done: 'Checked sales data' },
+  query_inventory: { running: '📦 Checking inventory...',          done: 'Checked inventory' },
+  query_customers: { running: '👥 Finding your customers...',       done: 'Found customers' },
+  query_pricing:   { running: '💰 Checking pricing data...',        done: 'Checked pricing' },
+  query_staff:     { running: '👤 Checking staff performance...',   done: 'Checked staff data' },
+}
 
 const SUGGESTED = [
   'How much did we sell last Friday vs the Friday before?',
@@ -149,21 +158,31 @@ function getResultCount(result: unknown): number | undefined {
 
 export default function AskAriaPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [conversations, setConversations] = useState<ConvMeta[]>([])
   const [messages, setMessages] = useState<DisplayMsg[]>([])
   const [history, setHistory] = useState<{ role: 'user' | 'assistant'; content: string }[]>([])
   const [convId, setConvId] = useState<string | null>(null)
   const [input, setInput] = useState('')
   const [streaming, setStreaming] = useState(false)
+  const [inputError, setInputError] = useState<string | null>(null)
   const threadRef = useRef<HTMLDivElement>(null)
   const ariaIdxRef = useRef(-1)
   const toolIdxRef = useRef<Record<string, number>>({})
+  const urlConvLoaded = useRef(false)
 
   const fetchConvs = useCallback(() => {
     fetch('/api/pos/ask').then(r => r.json()).then(d => setConversations(d.conversations ?? [])).catch(() => {})
   }, [])
 
   useEffect(() => { fetchConvs() }, [fetchConvs])
+
+  useEffect(() => {
+    if (urlConvLoaded.current) return
+    const urlId = searchParams.get('conversation_id')
+    if (urlId) { urlConvLoaded.current = true; loadConversation(urlId) }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams])
 
   useEffect(() => {
     if (threadRef.current) threadRef.current.scrollTop = threadRef.current.scrollHeight
@@ -192,6 +211,11 @@ export default function AskAriaPage() {
 
   const sendMessage = useCallback(async (content: string) => {
     if (!content.trim() || streaming) return
+    if (content.length > MAX_INPUT) {
+      setInputError(`Your message is too long. Aria works best with specific questions under ${MAX_INPUT} characters. Try asking one question at a time.`)
+      return
+    }
+    setInputError(null)
     setStreaming(true); setInput('')
     ariaIdxRef.current = -1; toolIdxRef.current = {}
 
@@ -241,7 +265,9 @@ export default function AskAriaPage() {
               const next = [...prev]; (next[idx] as { type: 'tool'; toolName: string; status: 'running' | 'done'; count?: number }).status = 'done'; if (count !== undefined) (next[idx] as { count?: number }).count = count; return next
             })
           } else if (ev.type === 'done') {
-            setConvId(ev.conversation_id as string)
+            const newId = ev.conversation_id as string
+            setConvId(newId)
+            if (newId) router.replace(`/pos/ask?conversation_id=${newId}`, { scroll: false })
             setHistory(h => [...h, { role: 'user', content }, { role: 'assistant', content: accumulated }])
             setMessages(prev => prev.map(m => m.type === 'aria' ? { ...m, streaming: false } : m))
             setStreaming(false)
@@ -309,9 +335,9 @@ export default function AskAriaPage() {
                 <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
                   <div style={{ fontSize: 12, padding: '4px 12px', borderRadius: 99, background: msg.status === 'running' ? 'rgba(139,92,246,0.1)' : 'rgba(52,211,153,0.1)', color: msg.status === 'running' ? 'var(--violet)' : '#34D399', border: `1px solid ${msg.status === 'running' ? 'rgba(139,92,246,0.2)' : 'rgba(52,211,153,0.2)'}`, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 5 }}>
                     {msg.status === 'running' ? (
-                      <><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', border: '1.5px solid var(--violet)', borderTopColor: 'transparent', animation: 'spin 0.7s linear infinite' }} />Looking at {msg.toolName.replace(/_/g, ' ')}…</>
+                      <><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', border: '1.5px solid var(--violet)', borderTopColor: 'transparent', animation: 'spin 0.7s linear infinite' }} />{TOOL_LABELS[msg.toolName]?.running ?? `Looking at ${msg.toolName.replace(/_/g, ' ')}…`}</>
                     ) : (
-                      <><span style={{ color: '#34D399' }}>✓</span> {msg.count !== undefined ? `Found ${msg.count} results` : msg.toolName.replace(/_/g, ' ')}</>
+                      <><span style={{ color: '#34D399' }}>✓</span> {TOOL_LABELS[msg.toolName]?.done ?? msg.toolName.replace(/_/g, ' ')}{msg.count !== undefined ? ` (${msg.count} rows)` : ''}</>
                     )}
                   </div>
                 </div>
@@ -331,27 +357,42 @@ export default function AskAriaPage() {
                 </div>
               )
             })}
-            {streaming && messages.at(-1)?.type !== 'aria' && (
+            {streaming && messages.at(-1)?.type !== 'aria' && messages.at(-1)?.type !== 'tool' && (
               <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 12 }}>
                 <div style={{ width: 24, height: 24, borderRadius: '50%', background: 'linear-gradient(135deg,#A78BFA,#7C3AED)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: '#fff', fontWeight: 800, flexShrink: 0 }}>✦</div>
-                <div style={{ fontSize: 13, color: 'var(--text-tertiary)' }}>Aria is thinking<span style={{ letterSpacing: 2 }}>...</span></div>
+                <div style={{ fontSize: 13, color: 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                  Aria is thinking
+                  <span className="thinking-dot" style={{ animationDelay: '0ms' }} />
+                  <span className="thinking-dot" style={{ animationDelay: '160ms' }} />
+                  <span className="thinking-dot" style={{ animationDelay: '320ms' }} />
+                </div>
               </div>
             )}
           </div>
         )}
 
         <div style={{ borderTop: '1px solid var(--divider)', padding: '14px 48px', background: 'var(--bg-surface)' }}>
-          <div style={{ maxWidth: 760, margin: '0 auto', display: 'flex', gap: 10 }}>
-            <textarea
-              value={input} onChange={e => setInput(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(input) } }}
-              placeholder="Ask about sales, inventory, customers, staff…"
-              disabled={streaming} rows={1}
-              style={{ flex: 1, resize: 'none', background: 'var(--bg-elevated)', border: '1px solid var(--divider)', borderRadius: 12, padding: '10px 14px', fontSize: 14, color: 'var(--text-primary)', fontFamily: 'inherit', outline: 'none', lineHeight: 1.5, minHeight: 44, maxHeight: 120 }}
-            />
-            <button onClick={() => sendMessage(input)} disabled={streaming || !input.trim()} style={{ padding: '10px 20px', borderRadius: 10, border: 'none', background: streaming || !input.trim() ? 'var(--bg-elevated)' : 'var(--violet)', color: streaming || !input.trim() ? 'var(--text-tertiary)' : '#fff', fontSize: 13, fontWeight: 600, cursor: streaming || !input.trim() ? 'not-allowed' : 'pointer', fontFamily: 'inherit', flexShrink: 0, height: 44 }}>
-              {streaming ? '…' : 'Send'}
-            </button>
+          <div style={{ maxWidth: 760, margin: '0 auto' }}>
+            {inputError && (
+              <div style={{ marginBottom: 8, padding: '8px 12px', borderRadius: 8, background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.2)', fontSize: 12, color: '#F87171', lineHeight: 1.4 }}>{inputError}</div>
+            )}
+            <div style={{ display: 'flex', gap: 10 }}>
+              <div style={{ flex: 1, position: 'relative' }}>
+                <textarea
+                  value={input} onChange={e => { setInput(e.target.value); if (inputError) setInputError(null) }}
+                  onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(input) } }}
+                  placeholder="Ask about sales, inventory, customers, staff…"
+                  disabled={streaming} rows={1}
+                  style={{ width: '100%', resize: 'none', background: 'var(--bg-elevated)', border: `1px solid ${input.length > MAX_INPUT ? 'rgba(248,113,113,0.5)' : 'var(--divider)'}`, borderRadius: 12, padding: '10px 14px', paddingBottom: '22px', fontSize: 14, color: 'var(--text-primary)', fontFamily: 'inherit', outline: 'none', lineHeight: 1.5, minHeight: 44, maxHeight: 120, boxSizing: 'border-box' }}
+                />
+                {input.length > 800 && (
+                  <div style={{ position: 'absolute', bottom: 6, right: 10, fontSize: 10, color: input.length > MAX_INPUT ? '#F87171' : 'var(--text-tertiary)', pointerEvents: 'none' }}>{input.length}/{MAX_INPUT}</div>
+                )}
+              </div>
+              <button onClick={() => sendMessage(input)} disabled={streaming || !input.trim()} style={{ padding: '10px 20px', borderRadius: 10, border: 'none', background: streaming || !input.trim() ? 'var(--bg-elevated)' : 'var(--violet)', color: streaming || !input.trim() ? 'var(--text-tertiary)' : '#fff', fontSize: 13, fontWeight: 600, cursor: streaming || !input.trim() ? 'not-allowed' : 'pointer', fontFamily: 'inherit', flexShrink: 0, height: 44 }}>
+                {streaming ? '…' : 'Send'}
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -359,6 +400,8 @@ export default function AskAriaPage() {
       <style>{`
         @keyframes spin { to { transform: rotate(360deg) } }
         @keyframes blink { 50% { opacity: 0 } }
+        @keyframes thinking-pulse { 0%,80%,100% { opacity: 0.2; transform: scale(0.8) } 40% { opacity: 1; transform: scale(1) } }
+        .thinking-dot { display: inline-block; width: 5px; height: 5px; border-radius: 50%; background: var(--violet); animation: thinking-pulse 1.2s ease-in-out infinite; }
       `}</style>
     </div>
   )

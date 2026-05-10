@@ -65,7 +65,7 @@ async function processMigration(
   const results = Papa.parse<Record<string, string>>(csvText, { header: true, skipEmptyLines: true })
   const rows = results.data
   const total = rows.length
-  const BATCH = 50
+  const BATCH = 100
 
   for (let i = 0; i < rows.length; i += BATCH) {
     const { data: cancelled } = await supabase.from('pos_migrations').select('status').eq('id', migration_id).single()
@@ -76,16 +76,38 @@ async function processMigration(
       const product = mapRow(row, mapping)
       if (!product) continue
 
-      const { error } = await supabase.from('pos_products').insert({ ...product, business_id })
-      if (error) {
-        if (error.code === '23505' && product.barcode) {
-          const { error: uErr } = await supabase.from('pos_products')
-            .update(product).eq('business_id', business_id).eq('barcode', product.barcode as string)
-          if (!uErr) { updated++; continue }
+      const productWithBiz = { ...product, business_id }
+      if (product.barcode) {
+        // Upsert on barcode (most reliable unique key)
+        const { error, data } = await supabase.from('pos_products')
+          .upsert(productWithBiz, { onConflict: 'business_id,barcode', ignoreDuplicates: false })
+          .select('id')
+        if (error) {
+          if (errors.length < 20) errors.push(`${product.name}: ${error.message}`)
+        } else {
+          // If data was returned, it was an update (record existed)
+          const existed = data && data.length > 0
+          if (existed) updated++; else imported++
         }
-        if (errors.length < 20) errors.push(`${product.name}: ${error.message}`)
+      } else if (product.sku) {
+        // Fallback: upsert on SKU
+        const { error, data } = await supabase.from('pos_products')
+          .upsert(productWithBiz, { onConflict: 'business_id,sku', ignoreDuplicates: false })
+          .select('id')
+        if (error) {
+          if (errors.length < 20) errors.push(`${product.name}: ${error.message}`)
+        } else {
+          const existed = data && data.length > 0
+          if (existed) updated++; else imported++
+        }
       } else {
-        imported++
+        // No unique key — insert only
+        const { error } = await supabase.from('pos_products').insert(productWithBiz)
+        if (error) {
+          if (errors.length < 20) errors.push(`${product.name}: ${error.message}`)
+        } else {
+          imported++
+        }
       }
     }
 
@@ -123,12 +145,8 @@ export async function POST(request: NextRequest) {
     const headers = JSON.parse(formData.get('headers') as string) as string[]
     const samples = JSON.parse(formData.get('samples') as string) as Record<string, string[]>
 
-    const prompt = `Map these CSV column headers to a POS product schema. Only map if confident.
-
-Source columns: ${JSON.stringify(headers)}
+    const prompt = `Source columns: ${JSON.stringify(headers)}
 Sample values (first 3 per column): ${JSON.stringify(samples)}
-
-Target fields: name, sku, barcode, brand, category, supplier_name, unit_price, cost_price, stock_quantity, description, tags
 
 Return JSON only — no markdown fences:
 {"mappings":[{"source":"col","target":"field_or_null","confidence":0.0,"reason":"brief reason"}]}`
@@ -136,6 +154,14 @@ Return JSON only — no markdown fences:
     const response = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 1024,
+      system: `You are mapping CSV column headers to a POS database schema.
+Given these source columns and sample values, map each to the closest target field.
+Be conservative — only map if confident (>80%). Return JSON only.
+
+Target fields: name, sku, barcode, brand, category, supplier_name, unit_price, cost_price, on_hand, description, tags (comma-separated).
+
+If a column doesn't match any target, set target: null.
+{ "mappings": [{ "source": "col", "target": "field", "confidence": 0.9 }] }`,
       messages: [{ role: 'user', content: prompt }],
     })
 

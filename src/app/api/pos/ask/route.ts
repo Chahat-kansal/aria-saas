@@ -277,7 +277,25 @@ export async function POST(request: NextRequest) {
             if (tu.type !== 'tool_use') continue
             const result = await executeTool(tu.name, tu.input as Record<string, unknown>, biz.id)
             send({ type: 'tool_result', name: tu.name, result })
-            toolResults.push({ type: 'tool_result' as const, tool_use_id: tu.id, content: JSON.stringify(result) })
+
+            // Truncate large results to avoid token overflow
+            let sendResult: Record<string, unknown> = result as Record<string, unknown>
+            if (Array.isArray(sendResult.rows) && sendResult.rows.length > 100) {
+              sendResult = { ...sendResult, rows: (sendResult.rows as unknown[]).slice(0, 100), truncated: true, note: 'Results truncated to 100 rows for context efficiency.' }
+            }
+            if (Array.isArray(sendResult.breakdown) && (sendResult.breakdown as unknown[]).length > 100) {
+              sendResult = { ...sendResult, breakdown: (sendResult.breakdown as unknown[]).slice(0, 100), truncated: true, note: 'Results truncated to 100 rows for context efficiency.' }
+            }
+
+            // Wrap empty results with explicit no-data instruction
+            const rowCount = typeof sendResult.rows === 'number' ? sendResult.rows : (Array.isArray(sendResult.rows) ? sendResult.rows.length : 0)
+            let content: string
+            if (rowCount === 0 && !Array.isArray(sendResult.customers) && !Array.isArray(sendResult.staff) && !Array.isArray(sendResult.items)) {
+              content = `No data available for this query. rows: 0. Do not estimate or assume — tell the user there is no data for this period. ${(sendResult as { message?: string }).message ?? 'No records found.'}`
+            } else {
+              content = JSON.stringify(sendResult)
+            }
+            toolResults.push({ type: 'tool_result' as const, tool_use_id: tu.id, content })
           }
           conversationMessages.push({
             role: 'user',

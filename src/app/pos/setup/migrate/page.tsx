@@ -62,16 +62,25 @@ export default function MigratePage() {
 
   function parseFile(f: File) {
     setFile(f)
+    let headersSet = false
+    let previewRows: Record<string, string>[] = []
+    let rowCount = 0
     Papa.parse<Record<string, string>>(f, {
       header: true,
       skipEmptyLines: true,
-      complete: (res) => {
-        const rows = res.data
-        setHeaders(res.meta.fields ?? [])
-        setPreview(rows.slice(0, 5))
-        setTotalRows(rows.length)
-        setErrMsg(null)
+      chunk: (results) => {
+        if (!headersSet) {
+          setHeaders(results.meta.fields ?? [])
+          headersSet = true
+        }
+        rowCount += results.data.length
+        if (previewRows.length < 5) {
+          previewRows = [...previewRows, ...results.data].slice(0, 5)
+          setPreview(previewRows)
+        }
+        setTotalRows(rowCount)
       },
+      complete: () => setErrMsg(null),
       error: (err) => setErrMsg(err.message),
     })
   }
@@ -90,7 +99,11 @@ export default function MigratePage() {
       const res = await fetch('/api/pos/migrate', { method: 'POST', body: fd })
       const data = await res.json() as { mappings?: MappingItem[] }
       if (data.mappings?.length) {
-        setMapping(data.mappings)
+        // Only auto-apply high-confidence mappings; clear low-confidence ones for manual review
+        setMapping(data.mappings.map((m: MappingItem) => ({
+          ...m,
+          target: m.confidence < 0.5 ? null : m.target,
+        })))
       } else {
         setMapping(headers.map(h => ({ source: h, target: null, confidence: 0 })))
       }
@@ -253,21 +266,30 @@ export default function MigratePage() {
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ background: 'var(--bg-elevated)' }}>
-                    {['Your column', 'Sample values', 'Map to', 'Confidence'].map(h => <th key={h} style={{ padding: '10px 14px', fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', textAlign: 'left', whiteSpace: 'nowrap' }}>{h}</th>)}
+                    {['Your column (sample)', 'Map to', 'Confidence'].map(h => <th key={h} style={{ padding: '10px 14px', fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', textAlign: 'left', whiteSpace: 'nowrap' }}>{h}</th>)}
                   </tr>
                 </thead>
                 <tbody>
                   {mapping.map((m, i) => {
-                    const samples = preview.map(r => r[m.source]).filter(Boolean).slice(0, 3).join(', ')
+                    const sampleVal = preview.map(r => r[m.source]).filter(Boolean).slice(0, 1)[0] ?? ''
+                    const isHigh = m.confidence >= 0.8
+                    const isMed = m.confidence >= 0.5 && m.confidence < 0.8
                     return (
-                      <tr key={m.source} style={{ borderTop: i > 0 ? '1px solid var(--divider)' : 'none' }}>
-                        <td style={{ padding: '10px 14px', fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap' }}>{m.source}</td>
-                        <td style={{ padding: '10px 14px', fontSize: 11, color: 'var(--text-tertiary)', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{samples || '—'}</td>
+                      <tr key={m.source} style={{ borderTop: i > 0 ? '1px solid var(--divider)' : 'none', background: isHigh && m.target ? 'rgba(52,211,153,0.04)' : 'transparent' }}>
                         <td style={{ padding: '10px 14px' }}>
-                          <select value={m.target ?? ''} onChange={e => updateMapping(m.source, e.target.value || null)}
-                            style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: 7, padding: '5px 10px', fontSize: 12, color: 'var(--text-primary)', fontFamily: 'inherit', cursor: 'pointer' }}>
-                            {TARGET_FIELDS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
-                          </select>
+                          <div style={{ fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap' }}>{m.source}</div>
+                          {sampleVal && <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: 2 }}>{sampleVal.slice(0, 30)}</div>}
+                        </td>
+                        <td style={{ padding: '10px 14px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <select value={m.target ?? ''} onChange={e => updateMapping(m.source, e.target.value || null)}
+                              style={{ background: 'var(--bg-elevated)', border: `1px solid ${isHigh && m.target ? 'rgba(52,211,153,0.4)' : isMed && m.target ? 'rgba(251,191,36,0.4)' : 'var(--border-default)'}`, borderRadius: 7, padding: '5px 10px', fontSize: 12, color: 'var(--text-primary)', fontFamily: 'inherit', cursor: 'pointer' }}>
+                              {TARGET_FIELDS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+                            </select>
+                            {isHigh && m.target && <span style={{ color: '#34D399', fontSize: 14 }}>✓</span>}
+                            {isMed && m.target && <span style={{ color: '#FBBF24', fontSize: 11, fontWeight: 600 }}>confirm?</span>}
+                            {!m.target && <span style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>select →</span>}
+                          </div>
                         </td>
                         <td style={{ padding: '10px 14px' }}>
                           <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 99, background: confColor(m.confidence) + '22', color: confColor(m.confidence), fontWeight: 700 }}>{confLabel(m.confidence)}</span>

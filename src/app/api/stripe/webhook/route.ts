@@ -15,6 +15,20 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Invalid signature' }, { status: 400 });
   }
 
+  // Idempotency check — Stripe retries on non-200, deduplicate by event.id
+  const { data: existing } = await supabaseAdmin
+    .from('stripe_events')
+    .select('id, processed')
+    .eq('id', event.id)
+    .maybeSingle();
+  if (existing?.processed) {
+    return NextResponse.json({ received: true }); // already processed
+  }
+  // Record event as seen (processed=false) before doing any work
+  await supabaseAdmin
+    .from('stripe_events')
+    .upsert({ id: event.id, type: event.type, processed: false, created_at: new Date().toISOString() }, { onConflict: 'id' });
+
   if (event.type === 'checkout.session.completed') {
     const session = event.data.object as Stripe.Checkout.Session;
     const userId = session.metadata?.userId;
@@ -60,6 +74,12 @@ export async function POST(req: Request) {
       .update({ plan: 'starter', stripe_subscription_id: null })
       .eq('stripe_subscription_id', sub.id);
   }
+
+  // Mark event as processed after all handlers complete
+  await supabaseAdmin
+    .from('stripe_events')
+    .update({ processed: true, processed_at: new Date().toISOString() })
+    .eq('id', event.id);
 
   return NextResponse.json({ received: true });
 }
