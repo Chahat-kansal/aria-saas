@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Sora, JetBrains_Mono, Fraunces, Inter } from 'next/font/google';
 import './globals.css';
 import '@/styles/aria-tokens.css';
+import '@/styles/aria-landing.css';
 import { Providers } from './providers';
 import { ThemeProvider } from '@/components/ThemeProvider';
 import PostHogProvider from '@/components/PostHogProvider';
