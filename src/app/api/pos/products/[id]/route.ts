@@ -183,10 +183,17 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   }
 
   // ── Legacy fallback (no action) ─────────────────────────────────
-  const allowed = ['name', 'sku', 'barcode', 'description', 'price', 'cost_price', 'tax_rate',
-    'stock_quantity', 'low_stock_threshold', 'track_stock', 'is_active', 'case_quantity',
-    'is_age_restricted', 'image_url', 'image_source', 'container_type', 'category_id', 'supplier_id',
-    'brand_id', 'family_id', 'loyalty_earn_rate', 'show_online']
+  const allowed = [
+    'name','sku','barcode','description','price','cost_price','cost','tax_rate',
+    'stock_quantity','low_stock_threshold','track_stock','track_inventory',
+    'is_active','status','show_online','case_quantity','age_restricted',
+    'is_age_restricted','gst_exempt','image_url','image_source','container_type',
+    'category_id','category','supplier_id','supplier_name','brand_id','brand',
+    'family_id','family','department','subdepartment','tags','notes',
+    'costing_method','purchase_uom','purchase_uom_qty','sell_uom','source',
+    'loyalty_earn_rate','loyalty_points_override','reorder_point','reorder_qty',
+    'featured','sort_order','serial_tracked','quality_hold','stocktake_frozen',
+  ]
   const updatePayload: Record<string, unknown> = { updated_at: new Date().toISOString() }
   for (const key of allowed) if (key in body) updatePayload[key] = body[key]
   if ('active' in body) updatePayload.is_active = !!body.active
