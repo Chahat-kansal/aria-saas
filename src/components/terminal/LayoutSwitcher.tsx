@@ -79,12 +79,14 @@ export function LayoutSwitcher({ current, onChange }: Props) {
                 <button
                   key={layout.id}
                   onClick={() => handleSelect(layout.id)}
+                  onTouchStart={e => { e.currentTarget.style.background = 'rgba(127,184,151,0.06)' }}
+                  onTouchEnd={e => { e.currentTarget.style.background = isActive ? 'rgba(127,184,151,0.08)' : 'transparent' }}
                   style={{
                     width: '100%', display: 'flex', alignItems: 'flex-start', gap: 12,
-                    padding: '12px', cursor: 'pointer', textAlign: 'left',
+                    padding: '14px 12px', cursor: 'pointer', textAlign: 'left',
                     color: 'var(--text-primary)', border: 'none',
                     background: isActive ? 'rgba(127,184,151,0.08)' : 'transparent',
-                    transition: 'background 150ms',
+                    transition: 'background 150ms', minHeight: 56,
                   }}
                   onMouseEnter={e => {
                     if (!isActive) e.currentTarget.style.background = 'rgba(255,255,255,0.03)'
@@ -94,7 +96,7 @@ export function LayoutSwitcher({ current, onChange }: Props) {
                   }}
                 >
                   <span style={{
-                    fontSize: 18, flexShrink: 0,
+                    fontSize: 22, flexShrink: 0, lineHeight: 1,
                     color: isActive ? 'var(--violet)' : 'var(--text-secondary)',
                   }}>{layout.icon}</span>
                   <div style={{ flex: 1, minWidth: 0 }}>

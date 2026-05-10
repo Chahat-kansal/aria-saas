@@ -16,13 +16,16 @@ const FlyToCart  = dynamic(() => import('@/components/pos/FlyToCart'),  { ssr: f
 
 // Layout system — additive
 import { LayoutSwitcher } from '@/components/terminal/LayoutSwitcher';
+import { LayoutWrapper } from '@/components/terminal/layouts/LayoutWrapper';
 import { FastGridLayout } from '@/components/terminal/layouts/FastGridLayout';
 import { ShelfLayout } from '@/components/terminal/layouts/ShelfLayout';
 import { CarouselLayout } from '@/components/terminal/layouts/CarouselLayout';
 import { MasonryLayout } from '@/components/terminal/layouts/MasonryLayout';
 import { SearchFirstLayout } from '@/components/terminal/layouts/SearchFirstLayout';
+import { EmptyLayoutState } from '@/components/terminal/layouts/EmptyLayoutState';
 import type { ProductForTerminal } from '@/components/terminal/layouts/types';
 import { getCurrentLayout, TerminalLayout } from '@/lib/terminal/layouts';
+import { getAriaSuggestions } from '@/lib/terminal/aria-suggestions';
 
 /* ─── Types ─────────────────────────────────────────────────────── */
 interface Product {
@@ -535,6 +538,23 @@ export default function TerminalPage() {
 
   const ageRestrictedInCart = useMemo(() =>
     cart.some(i => (i.product as any).is_age_restricted), [cart]);
+
+  // Local Aria suggestions for SearchFirstLayout — additive
+  const ariaSuggestedIds = useMemo(() => {
+    const lps: ProductForTerminal[] = displayedProducts.map(p => ({
+      id: p.id, name: p.name, sku: p.sku ?? '',
+      category: p.pos_categories?.name ?? null,
+      price: p.price, stock_quantity: p.stock_quantity,
+      track_inventory: p.track_stock, active: p.is_active,
+    }));
+    return getAriaSuggestions({
+      products: lps,
+      recentProductIds,
+      cartProductIds: cart.map(i => i.product.id),
+      nowAEST: new Date(),
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [displayedProducts, recentProductIds, cart.map(i => i.product.id).join(',')]);
 
   const loyaltyCustomer = customer && customer.loyalty_points > 0;
 
@@ -1650,11 +1670,15 @@ export default function TerminalPage() {
                 ))}
               </div>
             ) : displayedProducts.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full text-center py-12">
-                <p className="text-3xl mb-2">📦</p>
-                <p className="text-sm" style={{ color: 'var(--text-tertiary)' }}>{search ? `No products match "${search}"` : 'No products yet'}</p>
-                {!search && <a href="/pos/products" className="mt-3 text-xs font-medium hover:underline" style={{ color: '#8B5CF6' }}>Add products →</a>}
-              </div>
+              /* Empty state — additive */
+              <EmptyLayoutState
+                reason={search.trim().length >= 2
+                  ? 'no-search-match'
+                  : activeCategory
+                    ? 'category-empty'
+                    : 'no-products'}
+                searchQuery={search}
+              />
             ) : (() => {
               // Shared handler for layout components — additive
               const handleLayoutClick = (lp: ProductForTerminal) => {
@@ -1674,53 +1698,59 @@ export default function TerminalPage() {
                 cost_price: p.cost_price,
                 stock_quantity: p.stock_quantity,
                 image_url: (p as any).image_url ?? null,
+                image_source: (p as any).image_source ?? null,
                 container_type: null,
                 description: (p as any).description ?? null,
+                track_inventory: p.track_stock,
+                active: p.is_active,
               }));
 
-              if (currentLayout === 'shelf') {
-                return (
-                  <ShelfLayout
-                    products={layoutProducts}
-                    onProductClick={handleLayoutClick}
-                  />
-                );
-              }
-              if (currentLayout === 'carousel') {
-                return (
-                  <CarouselLayout
-                    products={layoutProducts}
-                    onProductClick={handleLayoutClick}
-                  />
-                );
-              }
-              if (currentLayout === 'masonry') {
-                return (
-                  <MasonryLayout
-                    products={layoutProducts}
-                    onProductClick={handleLayoutClick}
-                  />
-                );
-              }
-              if (currentLayout === 'search-first') {
-                return (
-                  <SearchFirstLayout
-                    products={layoutProducts}
-                    onProductClick={handleLayoutClick}
-                    recentProductIds={recentProductIds}
-                    suggestedProductIds={suggestions.map(s => s.id)}
-                  />
-                );
-              }
-              if (currentLayout === 'grid') {
-                return (
-                  <FastGridLayout
-                    products={layoutProducts}
-                    onProductClick={handleLayoutClick}
-                    showStock={true}
-                  />
-                );
-              }
+              // Search fallback: always render FastGrid when searching — additive
+              const effectiveLayout: TerminalLayout =
+                search.trim().length >= 2 ? 'grid' : currentLayout;
+
+              return (
+                <LayoutWrapper layout={effectiveLayout}>
+                  {effectiveLayout === 'shelf' && (
+                    <ShelfLayout
+                      products={layoutProducts}
+                      onProductClick={handleLayoutClick}
+                      selectedCategory={activeCategory}
+                    />
+                  )}
+                  {effectiveLayout === 'carousel' && (
+                    <CarouselLayout
+                      products={layoutProducts}
+                      onProductClick={handleLayoutClick}
+                      selectedCategory={activeCategory}
+                    />
+                  )}
+                  {effectiveLayout === 'masonry' && (
+                    <MasonryLayout
+                      products={layoutProducts}
+                      onProductClick={handleLayoutClick}
+                    />
+                  )}
+                  {effectiveLayout === 'search-first' && (
+                    <SearchFirstLayout
+                      products={layoutProducts}
+                      onProductClick={handleLayoutClick}
+                      recentProductIds={recentProductIds}
+                      suggestedProductIds={ariaSuggestedIds}
+                    />
+                  )}
+                  {effectiveLayout === 'grid' && (
+                    <FastGridLayout
+                      products={layoutProducts}
+                      onProductClick={handleLayoutClick}
+                      showStock={true}
+                    />
+                  )}
+                </LayoutWrapper>
+              );
+
+              // unreachable — kept for fallback reference
+              if (false) {
 
               // Fallback: original dense grid (preserved) — additive
               const CAT_META_LOCAL: Record<string, { a: string; b: string }> = {
@@ -1811,6 +1841,7 @@ export default function TerminalPage() {
                   })}
                 </div>
               );
+              } // close if (false)
             })()}
           </div>
         </div>

@@ -304,3 +304,13 @@ body {
   65%  { transform: rotate(6deg) translateY(4px); }
   100% { transform: rotate(0deg) translateY(0); }
 }
+
+/* Fallback when backdrop-filter unsupported (older Safari/Firefox) */
+@supports not (backdrop-filter: blur(1px)) {
+  html[data-theme="dark"], html:not([data-theme]) {
+    --bg-glass: rgba(19, 26, 22, 0.94);
+  }
+  html[data-theme="light"] {
+    --bg-glass: rgba(255, 255, 255, 0.96);
+  }
+}
