@@ -124,10 +124,11 @@ export function RetailDashboard({ business }: { business: Business }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ business_id: business.id }),
       });
-      if (res.ok) {
-        const d = await res.json();
-        setBriefingRecs((d.recommendations ?? []).slice(0, 4));
-      }
+      // 401 / 429: session expired or rate-limited — stop silently, no retry
+      if (res.status === 401 || res.status === 429) return;
+      if (!res.ok) return;
+      const d = await res.json();
+      setBriefingRecs((d.recommendations ?? []).slice(0, 4));
     } catch { /* silent */ }
   }, [business.id]);
 

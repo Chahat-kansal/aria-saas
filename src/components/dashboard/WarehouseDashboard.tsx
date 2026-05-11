@@ -40,7 +40,9 @@ export function WarehouseDashboard({ business }: { business: Business }) {
       fetch(`/api/warehouse/kpis?business_id=${bid}`).then(r => r.json()),
       fetch(`/api/warehouse/grn?business_id=${bid}&date=${today}`).then(r => r.json()),
       fetch(`/api/warehouse/lots?business_id=${bid}&expiring=60`).then(r => r.json()),
-      fetch('/api/aria/daily-briefing', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ business_id: bid }) }).then(r => r.json()),
+      fetch('/api/aria/daily-briefing', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ business_id: bid }) })
+        .then(r => (r.status === 401 || r.status === 429 || !r.ok) ? { recommendations: [] } : r.json())
+        .catch(() => ({ recommendations: [] })),
     ]).then(([k, g, e, b]) => {
       setKpis(k);
       setGrns((g.grns ?? []).slice(0, 5));

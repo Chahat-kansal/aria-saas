@@ -75,6 +75,7 @@ export function DailyBriefingModal() {
   const [hasUserDismissedBriefing, setHasUserDismissedBriefing] = useState(false);
   const [isBriefingLoading, setIsBriefingLoading] = useState(false);
   const [briefingError, setBriefingError] = useState(false);
+  const [authFailed, setAuthFailed] = useState(false);  // stop all retries after 401
   const [recs, setRecs] = useState<Recommendation[]>([]);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [hasLiveData, setHasLiveData] = useState(false);
@@ -83,6 +84,7 @@ export function DailyBriefingModal() {
 
   const load = useCallback(async () => {
     if (!business?.id) return;
+    if (authFailed) return;  // session expired — don't hammer API
 
     // Respect localStorage dismiss for today only — never auto-dismiss for other reasons
     const lsKey = `aria_briefing_dismissed_${today}`;
@@ -101,8 +103,15 @@ export function DailyBriefingModal() {
         body: JSON.stringify({ business_id: business.id }),
       });
 
+      if (res.status === 401 || res.status === 429) {
+        // Session expired or rate-limited — stop permanently, don't open modal
+        setAuthFailed(true);
+        setIsBriefingLoading(false);
+        return;
+      }
+
       if (!res.ok) {
-        // API error — still open modal, show error state
+        // Other API error — show error state in modal but don't retry
         setBriefingError(true);
         setTimeout(() => setIsBriefingOpen(true), 800);
         setIsBriefingLoading(false);
@@ -141,7 +150,7 @@ export function DailyBriefingModal() {
     }
 
     setIsBriefingLoading(false);
-  }, [business?.id, today]);
+  }, [business?.id, today, authFailed]);
 
   useEffect(() => { load(); }, [load]);
 

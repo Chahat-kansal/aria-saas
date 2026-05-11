@@ -2,7 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { trackUsage } from '@/lib/track-usage';
 import { getBusinessSales, getBusinessCustomers, getBusinessItems } from '@/lib/business-data';
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { ARIA_VOICE } from '@/lib/aria-voice-guide';
 import { getWeatherForecast, getUpcomingHolidays, getABSRetailBenchmarks, getRBAData } from '@/lib/external-apis';
 
@@ -12,7 +12,28 @@ export const maxDuration = 60;
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-export async function POST(req: Request) {
+// Simple in-memory rate limit — 6 req/min per IP. Resets per minute.
+// Module-level map survives across warm invocations in the same lambda instance.
+const _ipBuckets = new Map<string, { count: number; resetAt: number }>();
+function checkRateLimit(ip: string): boolean {
+  const now = Date.now();
+  const bucket = _ipBuckets.get(ip);
+  if (!bucket || now > bucket.resetAt) {
+    _ipBuckets.set(ip, { count: 1, resetAt: now + 60_000 });
+    return true;
+  }
+  if (bucket.count >= 6) return false;
+  bucket.count++;
+  return true;
+}
+
+export async function POST(req: NextRequest) {
+  // Rate limit BEFORE auth — cheap guard against retry storms
+  const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown';
+  if (!checkRateLimit(ip)) {
+    return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
+  }
+
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -345,7 +366,7 @@ Each item must match this exact type:
   });
 }
 
-export async function PATCH(req: Request) {
+export async function PATCH(req: NextRequest) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
