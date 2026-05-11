@@ -19,7 +19,13 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const results = await fetchMarketPrices(productId, businessId, barcode, productName)
+    const timeout = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('timeout')), 5000)
+    )
+    const results = await Promise.race([
+      fetchMarketPrices(productId, businessId, barcode, productName),
+      timeout,
+    ])
     return NextResponse.json({ results, cached: results.some(r => r.is_cached) })
   } catch {
     return NextResponse.json({ results: [], cached: false })

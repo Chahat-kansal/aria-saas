@@ -63,9 +63,12 @@ export default function OrderBuilderPage() {
   }, [])
 
   const fetchMarket = useCallback(async (line: DraftLine) => {
-    if (!businessId) return
+    const clearLoading = () => setDraft(prev => prev.map(l =>
+      l.product_id === line.product_id ? { ...l, market_loading: false } : l
+    ))
+    if (!businessId) { clearLoading(); return }
     const product = products.find(p => p.id === line.product_id)
-    if (!product) return
+    if (!product) { clearLoading(); return }
     const params = new URLSearchParams({
       productId: line.product_id,
       businessId,
@@ -73,17 +76,20 @@ export default function OrderBuilderPage() {
       ...(product.barcode ? { barcode: product.barcode } : {}),
     })
     try {
-      const { results } = await fetch(`/api/pos/orders/market-prices?${params}`).then(r => r.json())
-      if (!results?.length) return
-      const prices = results.map((r: any) => r.shelf_price).filter(Boolean)
+      const ctrl = new AbortController()
+      const timer = setTimeout(() => ctrl.abort(), 6000)
+      const res = await fetch(`/api/pos/orders/market-prices?${params}`, { signal: ctrl.signal })
+      clearTimeout(timer)
+      const { results } = await res.json()
+      const prices = ((results ?? []) as any[]).map((r: any) => r.shelf_price).filter(Boolean)
       setDraft(prev => prev.map(l => l.product_id === line.product_id ? {
         ...l,
         market_loading: false,
-        open_market_low: Math.min(...prices),
-        open_market_high: Math.max(...prices),
-        open_market_source: results.map((r: any) => r.source_name).join(', '),
+        open_market_low: prices.length ? Math.min(...prices) : null,
+        open_market_high: prices.length ? Math.max(...prices) : null,
+        open_market_source: prices.length ? (results as any[]).map((r: any) => r.source_name).join(', ') : null,
       } : l))
-    } catch { setDraft(prev => prev.map(l => l.product_id === line.product_id ? { ...l, market_loading: false } : l)) }
+    } catch { clearLoading() }
   }, [businessId, products])
 
   function addProduct(p: Product) {
@@ -283,19 +289,21 @@ export default function OrderBuilderPage() {
                           <div style={{ color: 'var(--text-tertiary)' }}>Last paid: <strong>${line.last_purchase_price.toFixed(2)}</strong>/case</div>
                         )}
                         {line.market_loading ? (
-                          <div style={{ color: 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: 5 }}>
-                            <Loader2 size={11} style={{ animation: 'spin 0.7s linear infinite' }} /> Fetching market prices…
+                          <div style={{ color: 'var(--text-tertiary)', fontStyle: 'italic', display: 'flex', alignItems: 'center', gap: 5 }}>
+                            <Loader2 size={11} style={{ animation: 'spin 0.7s linear infinite' }} /> Loading…
                           </div>
                         ) : line.open_market_low != null ? (
-                          <div style={{ color: 'var(--text-tertiary)' }}
+                          <div style={{ color: 'var(--text-tertiary)', fontStyle: 'italic' }}
                             title={line.open_market_source?.includes('estimate')
-                              ? 'Estimated retail price based on industry typical markup (last paid × 1.60). For exact pricing check Dan Murphy\'s or BWS directly.'
+                              ? 'Estimated retail price based on industry typical markup (last paid × 1.60).'
                               : 'Public retail shelf price. Wholesale is typically 55-65% of this figure.'}>
                             {line.open_market_source?.includes('estimate')
                               ? `≈ $${line.open_market_low.toFixed(2)} estimated retail ⓘ`
                               : `Market ref: $${line.open_market_low.toFixed(2)}–$${(line.open_market_high ?? line.open_market_low).toFixed(2)} · ${line.open_market_source} ⓘ`}
                           </div>
-                        ) : null}
+                        ) : (
+                          <div style={{ color: 'var(--text-tertiary)', opacity: 0.6, fontSize: 11 }}>No estimate available</div>
+                        )}
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                           <span style={{ color: 'var(--text-secondary)' }}>Your price:</span>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'var(--bg-input)', borderRadius: 6, padding: '4px 8px' }}>
