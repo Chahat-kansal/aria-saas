@@ -424,6 +424,24 @@ html:has(.landing-v3) { scroll-behavior: auto; }
   transition: opacity 250ms;
 }
 
+.landing-v3 .overlay-login {
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 500;
+  color: rgba(159, 201, 176, 0.75);
+  text-decoration: none;
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(127, 184, 151, 0.22);
+  transition: color 180ms, border-color 180ms, background 180ms;
+  white-space: nowrap;
+}
+.landing-v3 .overlay-login:hover {
+  color: var(--sage, #7FB897);
+  border-color: rgba(127, 184, 151, 0.45);
+  background: rgba(127, 184, 151, 0.08);
+}
+
 .landing-v3 .overlay-bottom {
   position: fixed;
   bottom: 0; left: 0; right: 0;

@@ -17,10 +17,13 @@ export default function StickyOverlay({ counterNum, hasScrolled }: Props) {
         >
           Aria
         </button>
-        <div className="scene-counter">
-          <span className="num">{counterNum}</span>
-          <span style={{ opacity: 0.4 }}>/</span>
-          <span className="num" style={{ color: 'var(--text-tertiary)' }}>12</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <Link href="/login" className="overlay-login">Log in</Link>
+          <div className="scene-counter">
+            <span className="num">{counterNum}</span>
+            <span style={{ opacity: 0.4 }}>/</span>
+            <span className="num" style={{ color: 'var(--text-tertiary)' }}>12</span>
+          </div>
         </div>
       </header>
 
