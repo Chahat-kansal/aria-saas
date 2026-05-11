@@ -74,9 +74,12 @@ export async function addOrderLine(
 ): Promise<PurchaseOrderLine | null> {
   const { data, error } = await supabase
     .from('pos_purchase_order_lines')
-    .insert({ ...line, order_id: orderId, business_id: businessId })
+    .insert({ unit: 'case', ...line, order_id: orderId, business_id: businessId })
     .select().single()
-  if (error) return null
+  if (error) {
+    console.error('[addOrderLine] insert failed:', error.message)
+    return null
+  }
   return data as PurchaseOrderLine
 }
 

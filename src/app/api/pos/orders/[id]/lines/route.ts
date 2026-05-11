@@ -45,6 +45,18 @@ export async function POST(req: NextRequest, { params }: Params) {
   return NextResponse.json({ line })
 }
 
+export async function DELETE(_req: NextRequest, { params }: Params) {
+  const { id } = await params
+  const supabase = createServerSupabaseClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  const bid = await getBid(supabase, user.id)
+  if (!bid) return NextResponse.json({ error: 'no_business' }, { status: 404 })
+
+  await supabase.from('pos_purchase_order_lines').delete().eq('order_id', id).eq('business_id', bid)
+  return NextResponse.json({ ok: true })
+}
+
 export async function PATCH(req: NextRequest, { params }: Params) {
   const { id } = await params
   const supabase = createServerSupabaseClient()

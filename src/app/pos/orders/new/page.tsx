@@ -129,16 +129,20 @@ export default function OrderBuilderPage() {
         orderId = res.order?.id ?? null
         if (!orderId) throw new Error(res.error ?? 'Failed to create order')
         setSavedOrderId(orderId)
+      } else {
+        // Re-save: wipe existing lines so we don't accumulate duplicates
+        await fetch(`/api/pos/orders/${orderId}/lines`, { method: 'DELETE' })
       }
-      // Save lines
-      await Promise.all(draft.map((l, i) =>
+      // Insert all draft lines, checking each response
+      const lineResults = await Promise.all(draft.map((l, i) =>
         fetch(`/api/pos/orders/${orderId}/lines`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ ...l, sort_order: i, market_loading: undefined }),
-        })
+        }).then(r => r.json())
       ))
-      const orderNumber = `PO-${new Date().getFullYear()}-####`
-      setToast(`Order saved`)
+      const failed = lineResults.filter(r => r.error)
+      if (failed.length) throw new Error(`${failed.length} line(s) failed to save: ${failed[0].error}`)
+      setToast('Order saved')
       setTimeout(() => setToast(''), 3000)
       if (andNavigate && orderId) router.push(`/pos/orders/${orderId}`)
     } catch (e: any) { setToast(e.message ?? 'Save failed') }
