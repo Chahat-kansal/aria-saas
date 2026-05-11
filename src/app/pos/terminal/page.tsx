@@ -1472,43 +1472,6 @@ export default function TerminalPage() {
         </div>
       )}
 
-      {/* Register status bar */}
-      {!registerLoading && (
-        <div className="flex-shrink-0 flex items-center justify-between px-4 py-1.5 text-xs" style={{ background: 'rgba(0,0,0,0.3)', borderBottom: '1px solid rgba(0,229,255,0.05)', position: 'relative', zIndex: 2 }}>
-          <div className="flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full" style={{ background: registerIsOpen ? '#22C55E' : '#EF4444' }} />
-            <span style={{ color: registerIsOpen ? '#22C55E' : '#EF4444' }}>
-              {registerIsOpen
-                ? `Open since ${new Date(registerSession!.opened_at).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}`
-                : 'Register closed'}
-            </span>
-          </div>
-          <div className="flex gap-1.5 flex-wrap">
-            {parkedSales.length > 0 && (
-              <button onClick={() => setShowParked(true)} className="px-2 py-0.5 rounded text-xs" style={{ color: 'var(--text-secondary)', border: '1px solid #2A2540', background: 'rgba(255,255,255,0.03)' }}>
-                Parked ({parkedSales.length})
-              </button>
-            )}
-            <button onClick={() => setShowRefundModal(true)} className="px-2 py-0.5 rounded text-xs" style={{ color: 'var(--text-secondary)', border: '1px solid #2A2540', background: 'rgba(255,255,255,0.03)' }}>
-              ⟳ Refund
-            </button>
-            {registerIsOpen && (
-              <button onClick={() => setShowCashierModal(true)} className="px-2 py-0.5 rounded text-xs" style={{ color: 'var(--text-secondary)', border: '1px solid #2A2540', background: 'rgba(255,255,255,0.03)' }}>
-                {registerSession?.opened_by ? `👤 ${registerSession.opened_by}` : 'Switch cashier'}
-              </button>
-            )}
-            {/* Training mode toggle — additive */}
-            <button onClick={toggleTrainingMode} className="px-2 py-0.5 rounded text-xs" style={{ color: trainingMode ? '#F59E0B' : 'var(--text-secondary)', border: `1px solid ${trainingMode ? 'rgba(245,158,11,0.4)' : '#2A2540'}`, background: trainingMode ? 'rgba(245,158,11,0.08)' : 'rgba(255,255,255,0.03)' }}>
-              {trainingMode ? '🎓 Training ON' : '🎓 Training'}
-            </button>
-            {registerIsOpen
-              ? <button onClick={() => setShowCloseModal(true)} className="px-2 py-0.5 rounded text-xs" style={{ color: '#EF4444', border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.06)' }}>Close register</button>
-              : <button onClick={() => setShowRegisterModal(true)} className="px-2 py-0.5 rounded text-xs" style={{ color: '#22C55E', border: '1px solid rgba(34,197,94,0.3)', background: 'rgba(34,197,94,0.06)' }}>Open register</button>
-            }
-          </div>
-        </div>
-      )}
-
       {/* ── TOP BAR ───────────────────────────────────────────────── */}
       <div className="flex-shrink-0 flex items-center px-4 gap-3" style={{ height: 46, background: 'rgba(11,20,16,0.85)', borderBottom: '1px solid var(--terminal-sage-rim,rgba(127,184,151,0.18))', backdropFilter: 'blur(20px) saturate(1.4)', WebkitBackdropFilter: 'blur(20px) saturate(1.4)', position: 'relative', zIndex: 2 }}>
         <svg width="20" height="20" viewBox="0 0 32 32" fill="none" style={{ flexShrink: 0 }}>
@@ -1522,17 +1485,33 @@ export default function TerminalPage() {
         <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>Point of Sale</span>
         <span style={{ fontSize: 11, color: 'var(--text-tertiary)', fontWeight: 400 }}>{businessName}</span>
         <div style={{ flex: 1 }} />
-        <div style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'rgba(34,197,94,0.07)', border: '1px solid rgba(34,197,94,0.15)', borderRadius: 20, padding: '3px 9px' }}>
-          <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#22C55E', display: 'inline-block', boxShadow: '0 0 5px #22C55E' }} />
-          <span style={{ fontSize: 9, fontWeight: 700, color: 'rgba(34,197,94,0.75)', letterSpacing: '0.04em' }}>LIVE</span>
+        {/* Register quick actions — right side of top bar */}
+        <div className="flex gap-1.5 items-center">
+          {!registerLoading && parkedSales.length > 0 && (
+            <button onClick={() => setShowParked(true)} className="px-2 py-0.5 rounded text-xs" style={{ color: 'var(--text-secondary)', border: '1px solid #2A2540', background: 'rgba(255,255,255,0.03)' }}>
+              Parked ({parkedSales.length})
+            </button>
+          )}
+          {!registerLoading && (
+            <button onClick={() => setShowRefundModal(true)} className="px-2 py-0.5 rounded text-xs" style={{ color: 'var(--text-secondary)', border: '1px solid #2A2540', background: 'rgba(255,255,255,0.03)' }}>
+              ⟳ Refund
+            </button>
+          )}
+          {!registerLoading && registerIsOpen && (
+            <button onClick={() => setShowCashierModal(true)} className="px-2 py-0.5 rounded text-xs" style={{ color: 'var(--text-secondary)', border: '1px solid #2A2540', background: 'rgba(255,255,255,0.03)' }}>
+              {registerSession?.opened_by ? `👤 ${registerSession.opened_by}` : 'Switch cashier'}
+            </button>
+          )}
+          {!registerLoading && (
+            <button onClick={toggleTrainingMode} className="px-2 py-0.5 rounded text-xs" style={{ color: trainingMode ? '#F59E0B' : 'var(--text-secondary)', border: `1px solid ${trainingMode ? 'rgba(245,158,11,0.4)' : '#2A2540'}`, background: trainingMode ? 'rgba(245,158,11,0.08)' : 'rgba(255,255,255,0.03)' }}>
+              {trainingMode ? '🎓 Training ON' : '🎓'}
+            </button>
+          )}
+          {!registerLoading && (registerIsOpen
+            ? <button onClick={() => setShowCloseModal(true)} className="px-2 py-0.5 rounded text-xs" style={{ color: '#EF4444', border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.06)' }}>Close reg.</button>
+            : <button onClick={() => setShowRegisterModal(true)} className="px-2 py-0.5 rounded text-xs" style={{ color: '#22C55E', border: '1px solid rgba(34,197,94,0.3)', background: 'rgba(34,197,94,0.06)' }}>Open reg.</button>
+          )}
         </div>
-        <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 8, padding: '3px 10px', display: 'flex', gap: 7, alignItems: 'center' }}>
-          <span style={{ fontSize: 9, color: 'var(--text-tertiary)', letterSpacing: '0.06em' }}>TODAY</span>
-          <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 12, fontWeight: 700, color: 'rgba(220,240,255,0.75)' }}>A${recentSales.reduce((s,r)=>s+r.total,0).toFixed(2)}</span>
-        </div>
-        <button style={{ width: 27, height: 27, borderRadius: 7, border: '1px solid rgba(255,255,255,0.05)', background: 'rgba(255,255,255,0.03)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--text-tertiary)' }}>
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-        </button>
       </div>
 
       {/* 2-column grid — Aria panel is now floating */}
@@ -2017,7 +1996,7 @@ export default function TerminalPage() {
               </div>
 
               {/* Cart items */}
-              <div className="flex-1 overflow-y-auto" style={{ background: 'transparent', minHeight: 0 }}>
+              <div className="cart-items" style={{ flex: '1 1 0', overflowY: 'auto', minHeight: 0 }}>
                 {cart.length === 0 ? (
                   <div className="flex flex-col items-center justify-center h-full text-center px-6 py-12">
                     <div style={{ width: 52, height: 52, borderRadius: 15, border: '1px dashed rgba(0,229,255,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 10 }}>
@@ -2139,7 +2118,7 @@ export default function TerminalPage() {
                         </div>
                       )}
                     </div>
-                    <div style={{ padding: '0 16px' }}>
+                    <div style={{ padding: '0 16px', flexShrink: 0 }}>
                       <div className="totals-grand">
                         <div className="totals-grand-label-block">
                           <span className="totals-grand-label">Total</span>
@@ -2404,19 +2383,6 @@ export default function TerminalPage() {
       </div>
 
       {/* ── FLOATING ASK ARIA BUTTON — removed in v4 (replaced by inline cart card) */}
-
-      {/* Keyboard shortcuts bar — desktop only */}
-      <div className="hidden md:flex flex-shrink-0 h-8 items-center px-4 gap-4 overflow-hidden" style={{ background: 'rgba(8,6,16,0.8)', borderTop: '1px solid #1C1928' }}>
-        {[
-          ['F1','Search'], ['F2','Custom item'], ['F3','Hold'], ['F8','Cash'],
-          ['F9','Card'], ['F10','Complete'], ['Esc','Clear'],
-        ].map(([key, label]) => (
-          <span key={key} className="flex items-center gap-1 text-[10px] whitespace-nowrap" style={{ color: 'var(--text-tertiary)' }}>
-            <kbd className="rounded px-1 py-0.5 text-[10px]" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid #2A2540', fontFamily: "'JetBrains Mono',monospace", color: 'var(--text-secondary)' }}>{key}</kbd>
-            {label}
-          </span>
-        ))}
-      </div>
 
       {/* Mobile bottom tab bar */}
       <div className="md:hidden flex-shrink-0 h-16 grid grid-cols-3" style={{ background: 'var(--bg-base)', borderTop: '1px solid #1C1928' }}>
