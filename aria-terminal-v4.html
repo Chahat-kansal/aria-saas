@@ -1,0 +1,2160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Aria POS — Terminal V4 (Live Pulse)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..700;1,9..144,300..700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+:root {
+  --bg-canvas: #0B1410;
+  --bg-aurora: #0F1B16;
+  --bg-surface: #131F19;
+  --bg-elevated: #18271F;
+  --bg-elevated-2: #1D2E25;
+  --glass-1: rgba(28, 44, 36, 0.55);
+  --glass-2: rgba(20, 33, 26, 0.72);
+  --glass-3: rgba(15, 25, 20, 0.85);
+  --sage-bright: #8FCAA5;
+  --sage: #7FB897;
+  --sage-mid: #5C9D7B;
+  --sage-deep: #2D5240;
+  --sage-glow: rgba(127, 184, 151, 0.35);
+  --sage-soft: rgba(127, 184, 151, 0.10);
+  --sage-rim: rgba(127, 184, 151, 0.18);
+  --amber: #E8B85C;
+  --amber-soft: rgba(232, 184, 92, 0.14);
+  --amber-glow: rgba(232, 184, 92, 0.32);
+  --text-primary: #ECF1EC;
+  --text-secondary: #B0BCB2;
+  --text-tertiary: #7A8B7E;
+  --text-quaternary: #4F5C53;
+  --live-green: #6BD894;
+  --warning: #D4A95E;
+  --danger: #C97070;
+  --divider: rgba(127, 184, 151, 0.08);
+  --divider-strong: rgba(127, 184, 151, 0.16);
+  --font-display: 'Fraunces', Georgia, serif;
+  --font-body: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%;
+  background: var(--bg-canvas);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-weight: 400;
+  -webkit-font-smoothing: antialiased;
+  letter-spacing: -0.005em;
+  overflow: hidden;
+}
+
+/* ============================================================
+   LIVING AURORA — reacts to register activity
+   Three independent layers, each with its own slow pulse.
+   In production: scale + brightness modulates with cart events.
+   ============================================================ */
+
+.aurora-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.aurora-1 {
+  background: radial-gradient(ellipse 1200px 800px at 12% 18%, rgba(127, 184, 151, 0.20), transparent 60%);
+  animation: drift1 28s ease-in-out infinite;
+}
+.aurora-2 {
+  background: radial-gradient(ellipse 1000px 700px at 88% 22%, rgba(58, 90, 64, 0.28), transparent 65%);
+  animation: drift2 34s ease-in-out infinite;
+}
+.aurora-3 {
+  background: radial-gradient(ellipse 1400px 900px at 50% 105%, rgba(101, 177, 121, 0.18), transparent 70%);
+  animation: drift3 42s ease-in-out infinite;
+}
+.aurora-base {
+  background: linear-gradient(160deg, var(--bg-aurora) 0%, var(--bg-canvas) 70%);
+}
+
+@keyframes drift1 {
+  0%, 100% { transform: translate(0, 0) scale(1); opacity: 1; }
+  33% { transform: translate(60px, -30px) scale(1.08); opacity: 0.85; }
+  66% { transform: translate(-40px, 40px) scale(0.95); opacity: 1.1; }
+}
+@keyframes drift2 {
+  0%, 100% { transform: translate(0, 0) scale(1); opacity: 1; }
+  50% { transform: translate(-50px, 60px) scale(1.12); opacity: 0.8; }
+}
+@keyframes drift3 {
+  0%, 100% { transform: translate(0, 0) scale(1); opacity: 1; }
+  40% { transform: translate(80px, -50px) scale(1.05); opacity: 1.15; }
+  80% { transform: translate(-60px, 30px) scale(0.92); opacity: 0.9; }
+}
+
+/* Noise texture — kills the flat sticker feel */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  opacity: 0.4;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.025 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  mix-blend-mode: overlay;
+}
+
+/* ============================================================
+   THE EXTRAORDINARY THING — LIVE PULSE RAIL
+   A thin horizontal strip at the very top showing live data
+   that no other POS shows in real time. Activity beats, live
+   sales counter, dollar/min, top product right now, weather/
+   forecast cue, and an ambient "Aria is watching" indicator.
+   ============================================================ */
+
+.pulse-rail {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: auto 1fr auto auto auto auto auto auto;
+  align-items: center;
+  gap: 24px;
+  height: 38px;
+  padding: 0 18px;
+  background: rgba(11, 20, 16, 0.6);
+  backdrop-filter: blur(20px) saturate(1.4);
+  -webkit-backdrop-filter: blur(20px) saturate(1.4);
+  border-bottom: 1px solid var(--sage-rim);
+  font-size: 11px;
+  color: var(--text-secondary);
+  letter-spacing: 0.02em;
+}
+
+.pulse-aria-mark {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+}
+.pulse-aria-mark .dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--sage);
+  box-shadow: 0 0 8px var(--sage-glow);
+  animation: ariaPulse 1.8s ease-in-out infinite;
+}
+.pulse-aria-mark .label {
+  font-family: var(--font-display);
+  font-style: italic;
+  color: var(--sage-bright);
+  font-size: 12px;
+}
+@keyframes ariaPulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.4); opacity: 0.6; }
+}
+
+/* Live heartbeat — actual sine wave */
+.heartbeat-wave {
+  flex: 1;
+  height: 22px;
+  max-width: 280px;
+  position: relative;
+  overflow: hidden;
+}
+.heartbeat-wave svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.heartbeat-wave .wave-path {
+  fill: none;
+  stroke: var(--sage);
+  stroke-width: 1.5;
+  filter: drop-shadow(0 0 4px var(--sage-glow));
+  stroke-dasharray: 800;
+  stroke-dashoffset: 800;
+  animation: drawWave 4s linear infinite;
+}
+@keyframes drawWave {
+  to { stroke-dashoffset: 0; }
+}
+
+.pulse-stat {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.pulse-stat-label {
+  color: var(--text-quaternary);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+.pulse-stat-value {
+  font-family: var(--font-display);
+  font-style: italic;
+  color: var(--sage-bright);
+  font-weight: 500;
+  font-size: 13px;
+}
+.pulse-stat-value.amber { color: var(--amber); }
+.pulse-stat-value.live { color: var(--live-green); }
+.pulse-stat-arrow {
+  font-size: 9px;
+  color: var(--live-green);
+  margin-left: 2px;
+}
+.pulse-stat-arrow.down { color: var(--warning); }
+
+.pulse-divider {
+  width: 1px;
+  height: 18px;
+  background: var(--divider-strong);
+}
+
+/* ============================================================
+   MAIN APP SHELL
+   ============================================================ */
+
+.shell {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: 230px 1fr 390px;
+  width: 100vw;
+  height: calc(100vh - 38px);
+  gap: 0;
+  padding: 14px;
+}
+
+/* ============ LEFT SIDEBAR ============ */
+
+.sidebar {
+  background: var(--glass-2);
+  backdrop-filter: blur(40px) saturate(1.4);
+  -webkit-backdrop-filter: blur(40px) saturate(1.4);
+  border-radius: 18px;
+  border: 1px solid var(--sage-rim);
+  box-shadow:
+    inset 0 1px 0 rgba(127, 184, 151, 0.08),
+    0 24px 48px rgba(0, 0, 0, 0.3);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  margin-right: 12px;
+}
+
+.brand-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 18px 18px 22px;
+  border-bottom: 1px solid var(--divider);
+}
+
+.brand-mark {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, var(--sage-bright), var(--sage-deep));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 18px;
+  font-weight: 600;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.25),
+    0 4px 12px rgba(127, 184, 151, 0.32);
+}
+
+.brand-text { display: flex; flex-direction: column; flex: 1; }
+.brand-name {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 500;
+  font-size: 18px;
+  background: linear-gradient(135deg, #C7E0D0, var(--sage));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  line-height: 1;
+}
+.brand-subtitle {
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  margin-top: 4px;
+  font-weight: 500;
+}
+
+.brand-collapse {
+  width: 24px; height: 24px;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-tertiary);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+}
+.brand-collapse:hover { background: var(--sage-soft); color: var(--sage); }
+
+.search-tiny {
+  margin: 14px 14px 8px;
+  position: relative;
+}
+.search-tiny input {
+  width: 100%;
+  background: rgba(11, 20, 16, 0.5);
+  border: 1px solid var(--divider-strong);
+  border-radius: 10px;
+  padding: 9px 12px 9px 32px;
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: 12px;
+  outline: none;
+}
+.search-tiny input:focus { border-color: var(--sage-rim); }
+.search-tiny .icon {
+  position: absolute;
+  left: 11px; top: 10px;
+  color: var(--text-quaternary);
+}
+.search-tiny .kbd {
+  position: absolute;
+  right: 8px; top: 8px;
+  font-size: 10px;
+  background: rgba(127, 184, 151, 0.06);
+  border: 1px solid var(--divider);
+  padding: 1px 6px;
+  border-radius: 4px;
+  color: var(--text-tertiary);
+}
+
+.nav-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 0 16px;
+}
+.nav-scroll::-webkit-scrollbar { width: 4px; }
+.nav-scroll::-webkit-scrollbar-thumb { background: var(--sage-soft); border-radius: 2px; }
+
+.nav-section { margin-top: 12px; padding: 0 14px; }
+
+.nav-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-quaternary);
+  font-weight: 600;
+  padding: 8px 4px;
+  cursor: pointer;
+  user-select: none;
+}
+.nav-section-header svg { transition: transform 200ms; }
+.nav-section.collapsed .nav-section-header svg { transform: rotate(-90deg); }
+.nav-section.collapsed .nav-items { display: none; }
+
+.nav-items { display: flex; flex-direction: column; gap: 1px; }
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 9px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  position: relative;
+  transition: all 180ms;
+}
+.nav-item:hover { background: var(--sage-soft); color: var(--text-primary); }
+.nav-item.active {
+  background: var(--sage-soft);
+  color: var(--text-primary);
+  font-weight: 500;
+}
+.nav-item.active::before {
+  content: '';
+  position: absolute;
+  left: -14px;
+  top: 6px; bottom: 6px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: linear-gradient(180deg, var(--sage-bright), var(--sage));
+  box-shadow: 0 0 8px var(--sage-glow);
+}
+.nav-item.hero {
+  background: linear-gradient(135deg, rgba(143, 202, 165, 0.12), rgba(58, 90, 64, 0.08));
+  color: var(--sage-bright);
+  font-weight: 500;
+}
+.nav-item .icon {
+  width: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.nav-item .badge {
+  margin-left: auto;
+  background: var(--amber-soft);
+  color: var(--amber);
+  font-size: 9px;
+  padding: 1px 6px;
+  border-radius: 99px;
+  font-weight: 600;
+}
+
+.user-row {
+  border-top: 1px solid var(--divider);
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.user-avatar {
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--sage), var(--sage-deep));
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 600;
+  font-size: 13px;
+  color: white;
+}
+.user-info { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.user-name { font-size: 13px; font-weight: 500; color: var(--text-primary); }
+.user-status {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 2px;
+}
+.live-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--live-green);
+  box-shadow: 0 0 6px var(--live-green);
+  animation: pulseLive 2s ease-in-out infinite;
+}
+@keyframes pulseLive {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(0.85); }
+}
+
+/* ============ CENTRE — PRODUCTS WORKSPACE ============ */
+
+.workspace {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  margin-right: 12px;
+}
+
+/* === Workspace top bar === */
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--glass-1);
+  backdrop-filter: blur(40px) saturate(1.4);
+  -webkit-backdrop-filter: blur(40px) saturate(1.4);
+  border-radius: 14px;
+  border: 1px solid var(--sage-rim);
+  box-shadow:
+    inset 0 1px 0 rgba(127, 184, 151, 0.06),
+    0 12px 32px rgba(0, 0, 0, 0.25);
+}
+
+.topbar-page { display: flex; flex-direction: column; flex: 1; }
+.topbar-page-title {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 18px;
+  font-weight: 500;
+  color: var(--text-primary);
+  line-height: 1;
+}
+.topbar-page-sub {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  margin-top: 4px;
+  letter-spacing: 0.04em;
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.icon-btn {
+  width: 36px; height: 36px;
+  border-radius: 10px;
+  background: rgba(127, 184, 151, 0.06);
+  border: 1px solid var(--divider-strong);
+  color: var(--text-secondary);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  position: relative;
+}
+.icon-btn:hover {
+  background: var(--sage-soft);
+  color: var(--sage);
+  border-color: var(--sage-rim);
+}
+
+.btn {
+  padding: 9px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--divider-strong);
+  background: rgba(127, 184, 151, 0.04);
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.btn:hover {
+  background: var(--sage-soft);
+  color: var(--text-primary);
+  border-color: var(--sage-rim);
+}
+.btn.danger {
+  border-color: rgba(201, 112, 112, 0.3);
+  color: var(--danger);
+}
+.btn.training {
+  background: linear-gradient(135deg, rgba(232, 184, 92, 0.10), rgba(232, 184, 92, 0.04));
+  border-color: rgba(232, 184, 92, 0.25);
+  color: var(--amber);
+}
+
+/* === Search + filters bar === */
+.search-bar {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.search-main {
+  flex: 1;
+  position: relative;
+}
+.search-main input {
+  width: 100%;
+  background: var(--glass-2);
+  backdrop-filter: blur(40px);
+  -webkit-backdrop-filter: blur(40px);
+  border: 1px solid var(--sage-rim);
+  border-radius: 14px;
+  padding: 14px 56px 14px 48px;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 15px;
+  outline: none;
+  transition: all 200ms;
+  box-shadow:
+    inset 0 1px 0 rgba(127, 184, 151, 0.06),
+    0 8px 24px rgba(0, 0, 0, 0.18);
+}
+.search-main input::placeholder { color: var(--text-tertiary); font-weight: 400; }
+.search-main input:focus {
+  border-color: var(--sage);
+  box-shadow:
+    inset 0 1px 0 rgba(127, 184, 151, 0.10),
+    0 0 0 3px var(--sage-soft),
+    0 8px 24px rgba(0, 0, 0, 0.18);
+}
+.search-main .icon-left {
+  position: absolute;
+  left: 18px; top: 50%;
+  transform: translateY(-50%);
+  color: var(--sage);
+}
+.search-main .icon-right {
+  position: absolute;
+  right: 18px; top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-tertiary);
+}
+
+.layout-switch {
+  display: flex;
+  background: var(--glass-2);
+  backdrop-filter: blur(40px);
+  -webkit-backdrop-filter: blur(40px);
+  border: 1px solid var(--sage-rim);
+  border-radius: 14px;
+  padding: 4px;
+  gap: 2px;
+}
+.layout-switch button {
+  background: transparent;
+  border: none;
+  width: 36px; height: 36px;
+  border-radius: 10px;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+.layout-switch button:hover { color: var(--text-secondary); background: var(--sage-soft); }
+.layout-switch button.active {
+  background: linear-gradient(135deg, var(--sage), var(--sage-deep));
+  color: white;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
+/* === Categories pill row === */
+.categories {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 4px 2px;
+  scrollbar-width: none;
+}
+.categories::-webkit-scrollbar { display: none; }
+
+.cat-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 14px;
+  border-radius: 99px;
+  background: var(--glass-1);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--divider-strong);
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.cat-pill:hover {
+  background: var(--sage-soft);
+  color: var(--text-primary);
+  border-color: var(--sage-rim);
+}
+.cat-pill.active {
+  background: linear-gradient(135deg, var(--sage), var(--sage-deep));
+  border-color: transparent;
+  color: white;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 4px 12px var(--sage-glow);
+}
+.cat-pill .count {
+  font-size: 11px;
+  background: rgba(255, 255, 255, 0.18);
+  padding: 1px 7px;
+  border-radius: 99px;
+  font-weight: 600;
+}
+.cat-pill:not(.active) .count {
+  background: rgba(127, 184, 151, 0.10);
+  color: var(--text-tertiary);
+}
+.cat-pill.add {
+  background: transparent;
+  border: 1px dashed var(--sage-rim);
+  color: var(--sage);
+}
+
+/* === Product grid === */
+.product-grid-wrap {
+  flex: 1;
+  background: var(--glass-1);
+  backdrop-filter: blur(40px) saturate(1.4);
+  -webkit-backdrop-filter: blur(40px) saturate(1.4);
+  border-radius: 18px;
+  border: 1px solid var(--sage-rim);
+  box-shadow:
+    inset 0 1px 0 rgba(127, 184, 151, 0.06),
+    0 24px 48px rgba(0, 0, 0, 0.3);
+  padding: 22px;
+  overflow-y: auto;
+  position: relative;
+}
+
+.section-label-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.section-label {
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  font-weight: 600;
+}
+.section-divider {
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, var(--divider-strong) 0%, transparent 100%);
+}
+.section-count {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  font-family: var(--font-display);
+  font-style: italic;
+}
+
+.product-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 14px;
+}
+
+.product-tile {
+  position: relative;
+  background: linear-gradient(180deg, var(--bg-elevated) 0%, var(--bg-elevated-2) 100%);
+  border-radius: 16px;
+  border: 1px solid var(--sage-rim);
+  padding: 16px 14px 14px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow: hidden;
+  transition: all 280ms cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow:
+    inset 0 1px 0 rgba(127, 184, 151, 0.10),
+    inset 0 0 40px rgba(127, 184, 151, 0.02),
+    0 4px 14px rgba(0, 0, 0, 0.25);
+}
+.product-tile:hover {
+  transform: translateY(-3px);
+  border-color: var(--sage);
+  box-shadow:
+    inset 0 1px 0 rgba(127, 184, 151, 0.16),
+    inset 0 0 40px rgba(127, 184, 151, 0.04),
+    0 16px 32px rgba(0, 0, 0, 0.4),
+    0 0 24px var(--sage-glow);
+}
+.product-tile:active { transform: translateY(-1px) scale(0.99); }
+
+.product-tile.trending {
+  border-color: rgba(232, 184, 92, 0.45);
+  box-shadow:
+    inset 0 1px 0 rgba(232, 184, 92, 0.12),
+    0 4px 14px rgba(0, 0, 0, 0.25),
+    0 0 18px rgba(232, 184, 92, 0.10);
+}
+
+.product-image {
+  height: 110px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  position: relative;
+  overflow: visible;
+}
+.product-image::after {
+  content: '';
+  position: absolute;
+  bottom: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 60%;
+  height: 8px;
+  border-radius: 50%;
+  background: radial-gradient(ellipse, rgba(0, 0, 0, 0.5) 0%, transparent 70%);
+  filter: blur(4px);
+}
+
+.bottle-svg {
+  height: 100%;
+  width: auto;
+  filter: drop-shadow(-1px 2px 1px rgba(0, 0, 0, 0.3));
+  transition: transform 300ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.product-tile:hover .bottle-svg { transform: scale(1.05) translateY(-2px); }
+
+.product-meta { display: flex; flex-direction: column; gap: 2px; }
+.product-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  line-height: 1.25;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.product-brand {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  letter-spacing: 0.02em;
+}
+
+.product-price-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-top: auto;
+  padding-top: 6px;
+  border-top: 1px solid var(--divider);
+}
+
+.product-price {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 600;
+  font-size: 19px;
+  letter-spacing: -0.02em;
+  color: var(--amber);
+  text-shadow: 0 0 12px var(--amber-glow);
+  line-height: 1;
+}
+
+.product-stock-pip {
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  color: var(--text-tertiary);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.product-stock-pip.low { color: var(--warning); }
+.product-stock-pip.out { color: var(--danger); }
+.product-stock-pip .dot {
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: var(--sage);
+  box-shadow: 0 0 6px var(--sage-glow);
+}
+.product-stock-pip.low .dot { background: var(--warning); box-shadow: 0 0 6px rgba(212, 169, 94, 0.45); }
+.product-stock-pip.out .dot { background: var(--danger); box-shadow: 0 0 6px rgba(201, 112, 112, 0.5); }
+
+.product-flag {
+  position: absolute;
+  top: 10px; left: 10px;
+  background: linear-gradient(135deg, rgba(232, 184, 92, 0.32), rgba(232, 184, 92, 0.16));
+  color: var(--amber);
+  font-size: 9px;
+  letter-spacing: 0.10em;
+  padding: 3px 8px;
+  border-radius: 99px;
+  font-weight: 700;
+  text-transform: uppercase;
+  border: 1px solid rgba(232, 184, 92, 0.45);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  z-index: 2;
+}
+.product-flag.new {
+  background: rgba(143, 202, 165, 0.12);
+  color: var(--sage-bright);
+  border-color: var(--sage-rim);
+}
+
+/* Trending live indicator on flag */
+.product-flag.trending::before {
+  content: '';
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: var(--amber);
+  box-shadow: 0 0 6px var(--amber);
+  animation: pulseLive 1.4s ease-in-out infinite;
+}
+
+.product-tile.in-cart {
+  border-color: var(--sage);
+  background: linear-gradient(180deg, rgba(127, 184, 151, 0.10) 0%, var(--bg-elevated-2) 100%);
+}
+.product-tile.in-cart::after {
+  content: '';
+  position: absolute;
+  top: 10px; right: 10px;
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  background-color: var(--sage);
+  background-image:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' width='12' height='12'><path d='M3 8l3 3 7-7' stroke='white' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round' fill='none'/></svg>");
+  background-position: center;
+  background-repeat: no-repeat;
+  box-shadow: 0 4px 10px var(--sage-glow);
+}
+
+/* ============================================================
+   RIGHT — CART PANEL (with the EXTRAORDINARY "Growing Mass")
+   ============================================================ */
+
+.cart {
+  display: flex;
+  flex-direction: column;
+  background: var(--glass-2);
+  backdrop-filter: blur(40px) saturate(1.4);
+  -webkit-backdrop-filter: blur(40px) saturate(1.4);
+  border-radius: 18px;
+  border: 1px solid var(--sage-rim);
+  box-shadow:
+    inset 0 1px 0 rgba(127, 184, 151, 0.10),
+    0 24px 48px rgba(0, 0, 0, 0.3);
+  overflow: hidden;
+  position: relative;
+}
+
+/* Ambient sage glow at bottom of cart that grows with total */
+.cart::before {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0; right: 0;
+  height: 240px;
+  background: radial-gradient(ellipse 380px 220px at 50% 100%, var(--sage-glow), transparent 70%);
+  pointer-events: none;
+  opacity: 0.85;
+  z-index: 0;
+}
+
+.cart > * {
+  position: relative;
+  z-index: 1;
+}
+
+.cart-header {
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid var(--divider);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.cart-title {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 18px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+.cart-count {
+  background: rgba(127, 184, 151, 0.10);
+  color: var(--sage);
+  font-size: 11px;
+  padding: 3px 10px;
+  border-radius: 99px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+.cart-clear {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  background: none;
+  border: none;
+  font-family: inherit;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-weight: 500;
+}
+.cart-clear:hover { color: var(--danger); }
+
+.cart-customer {
+  margin: 12px 16px;
+  padding: 12px 14px;
+  background: rgba(11, 20, 16, 0.4);
+  border-radius: 12px;
+  border: 1px dashed var(--sage-rim);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+}
+.cart-customer:hover { background: var(--sage-soft); }
+.cart-customer .icon {
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  background: var(--sage-soft);
+  color: var(--sage);
+  display: flex; align-items: center; justify-content: center;
+}
+.cart-customer-text { flex: 1; font-size: 12px; color: var(--text-secondary); }
+.cart-customer-text strong {
+  display: block;
+  color: var(--text-primary);
+  font-weight: 500;
+  font-size: 13px;
+}
+
+.cart-items {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 16px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.cart-items::-webkit-scrollbar { width: 4px; }
+.cart-items::-webkit-scrollbar-thumb { background: var(--sage-soft); border-radius: 2px; }
+
+.cart-line {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px;
+  background: rgba(15, 25, 20, 0.4);
+  border: 1px solid var(--divider);
+  border-radius: 12px;
+  transition: all 180ms;
+  position: relative;
+}
+.cart-line:hover { border-color: var(--sage-rim); }
+
+.cart-line.just-added {
+  animation: justAdded 600ms ease-out;
+}
+@keyframes justAdded {
+  0% {
+    transform: translateX(20px);
+    opacity: 0;
+    border-color: var(--sage);
+    background: var(--sage-soft);
+  }
+  100% {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.cart-thumb {
+  width: 44px;
+  height: 56px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.cart-thumb svg { height: 100%; width: auto; }
+
+.cart-line-info { flex: 1; min-width: 0; }
+.cart-line-name {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cart-line-meta {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  margin-top: 2px;
+}
+
+.qty-control {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(11, 20, 16, 0.5);
+  border: 1px solid var(--divider-strong);
+  border-radius: 8px;
+  padding: 2px;
+}
+.qty-btn {
+  width: 22px; height: 22px;
+  border-radius: 6px;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+}
+.qty-btn:hover { background: var(--sage-soft); color: var(--sage); }
+.qty-num {
+  min-width: 18px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: var(--font-display);
+  font-style: italic;
+  color: var(--text-primary);
+  line-height: 1;
+}
+
+.cart-line-price {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--amber);
+  min-width: 56px;
+  text-align: right;
+}
+
+/* ============================================================
+   THE EXTRAORDINARY THING #2 — ARIA INLINE INTELLIGENCE
+   No floating bubble. The intelligence lives inside the cart
+   as a context-aware suggestion that morphs based on what's
+   in the cart, time of day, customer history.
+   ============================================================ */
+
+.aria-insight {
+  margin: 8px 16px;
+  padding: 14px 14px 12px;
+  background: linear-gradient(135deg, rgba(143, 202, 165, 0.10), rgba(58, 90, 64, 0.04));
+  border: 1px solid rgba(143, 202, 165, 0.22);
+  border-radius: 14px;
+  position: relative;
+  overflow: hidden;
+}
+
+.aria-insight::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0;
+  width: 3px;
+  height: 100%;
+  background: linear-gradient(180deg, var(--sage-bright), var(--sage-deep));
+  box-shadow: 0 0 12px var(--sage-glow);
+}
+
+.aria-insight-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.aria-insight-mark {
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--sage-bright), var(--sage-deep));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 700;
+  font-size: 11px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3), 0 2px 6px var(--sage-glow);
+}
+
+.aria-insight-label {
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--sage);
+  font-weight: 600;
+}
+
+.aria-insight-text {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 13px;
+  color: var(--text-primary);
+  line-height: 1.4;
+  margin-bottom: 10px;
+}
+
+.aria-insight-action {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.aria-insight-suggest {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  background: rgba(11, 20, 16, 0.4);
+  border: 1px solid var(--divider-strong);
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 11px;
+  color: var(--text-secondary);
+  transition: all 180ms;
+}
+.aria-insight-suggest:hover {
+  background: var(--sage-soft);
+  border-color: var(--sage-rim);
+  color: var(--text-primary);
+}
+.aria-insight-suggest .product-mini-thumb {
+  width: 16px; height: 20px;
+  flex-shrink: 0;
+}
+.aria-insight-suggest .price {
+  margin-left: auto;
+  font-family: var(--font-display);
+  font-style: italic;
+  color: var(--amber);
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.aria-insight-quick {
+  padding: 7px 10px;
+  background: linear-gradient(135deg, var(--sage), var(--sage-deep));
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 2px 6px var(--sage-glow);
+  transition: transform 180ms;
+}
+.aria-insight-quick:hover { transform: translateY(-1px); }
+
+/* === Cart totals === */
+.cart-totals {
+  padding: 14px 20px 0;
+  border-top: 1px solid var(--divider);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.totals-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.totals-row .value { color: var(--text-primary); font-weight: 500; }
+.totals-row.discount .value { color: var(--sage); }
+
+/* ============================================================
+   THE EXTRAORDINARY THING #3 — TOTAL THAT PHYSICALLY GROWS
+   The grand total isn't just a number that updates.
+   It's a sculptural element with a gradient mass that grows
+   based on the sale size. Small sale = small subtle total.
+   Big sale = giant glowing centrepiece.
+   ============================================================ */
+
+.totals-grand {
+  margin-top: 10px;
+  padding: 18px 20px;
+  background: linear-gradient(135deg, rgba(127, 184, 151, 0.12), rgba(58, 90, 64, 0.06));
+  border-radius: 14px;
+  border: 1px solid rgba(127, 184, 151, 0.28);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: relative;
+  overflow: hidden;
+}
+
+/* The sage mass that grows — sized for $132 sale */
+.totals-grand::before {
+  content: '';
+  position: absolute;
+  bottom: -20px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 280px;
+  height: 80px;
+  border-radius: 50%;
+  background: radial-gradient(ellipse, var(--sage-glow), transparent 70%);
+  filter: blur(20px);
+  pointer-events: none;
+}
+
+.totals-grand-label-block {
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  z-index: 1;
+}
+.totals-grand-label {
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--sage);
+  font-weight: 700;
+}
+.totals-grand-sub {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  margin-top: 4px;
+  font-family: var(--font-display);
+  font-style: italic;
+}
+
+.totals-grand-value {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 600;
+  font-size: 38px;
+  background: linear-gradient(135deg, #E0F2E5, var(--sage-bright) 40%, var(--sage));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  letter-spacing: -0.025em;
+  line-height: 1;
+  position: relative;
+  z-index: 1;
+}
+.totals-grand-value .cents {
+  font-size: 18px;
+  opacity: 0.85;
+}
+
+/* === Charge action === */
+.cart-action { padding: 14px 16px 18px; }
+.charge-btn {
+  width: 100%;
+  padding: 18px 24px;
+  border-radius: 14px;
+  border: none;
+  background: linear-gradient(135deg, var(--sage-bright) 0%, var(--sage) 50%, var(--sage-deep) 100%);
+  color: white;
+  font-family: inherit;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.25),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.18),
+    0 8px 24px var(--sage-glow),
+    0 2px 6px rgba(0, 0, 0, 0.2);
+  position: relative;
+  overflow: hidden;
+}
+.charge-btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(120deg, transparent 30%, rgba(255, 255, 255, 0.20) 50%, transparent 70%);
+  transform: translateX(-100%);
+  transition: transform 700ms;
+}
+.charge-btn:hover::before { transform: translateX(100%); }
+.charge-btn:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.3),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.18),
+    0 12px 32px var(--sage-glow),
+    0 4px 8px rgba(0, 0, 0, 0.2);
+}
+.charge-btn .arrow {
+  transition: transform 240ms;
+}
+.charge-btn:hover .arrow { transform: translateX(4px); }
+
+.cart-quick-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+.quick-action {
+  flex: 1;
+  padding: 10px;
+  border-radius: 10px;
+  background: rgba(127, 184, 151, 0.04);
+  border: 1px solid var(--divider-strong);
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  letter-spacing: 0.02em;
+}
+.quick-action:hover {
+  background: var(--sage-soft);
+  color: var(--text-primary);
+  border-color: var(--sage-rim);
+}
+</style>
+</head>
+<body>
+
+<!-- ============================================================
+     LIVING AURORA (no floating bubble — just background)
+     ============================================================ -->
+<div class="aurora-layer aurora-base"></div>
+<div class="aurora-layer aurora-1"></div>
+<div class="aurora-layer aurora-2"></div>
+<div class="aurora-layer aurora-3"></div>
+
+<!-- ============================================================
+     EXTRAORDINARY #1 — LIVE PULSE RAIL
+     Thin strip showing real-time data no other POS shows.
+     This replaces the floating bubble and embeds Aria's
+     intelligence as ambient context across the whole top.
+     ============================================================ -->
+<div class="pulse-rail">
+  <div class="pulse-aria-mark">
+    <span class="dot"></span>
+    <span class="label">Aria</span>
+    <span style="color: var(--text-tertiary); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase;">watching</span>
+  </div>
+
+  <div class="heartbeat-wave">
+    <svg viewBox="0 0 800 22" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">
+      <path class="wave-path"
+            d="M 0,11 L 40,11 L 50,11 L 60,3 L 70,19 L 80,7 L 90,11 L 200,11 L 210,11 L 220,5 L 230,17 L 240,11 L 360,11 L 370,11 L 380,8 L 390,14 L 400,11 L 520,11 L 530,11 L 540,4 L 550,18 L 560,8 L 570,14 L 580,11 L 700,11 L 710,11 L 720,7 L 730,15 L 740,11 L 800,11" />
+    </svg>
+  </div>
+
+  <div class="pulse-stat">
+    <span class="pulse-stat-label">Today</span>
+    <span class="pulse-stat-value">$2,847</span>
+    <span class="pulse-stat-arrow">↑ 12%</span>
+  </div>
+
+  <span class="pulse-divider"></span>
+
+  <div class="pulse-stat">
+    <span class="pulse-stat-label">$/min</span>
+    <span class="pulse-stat-value amber">$4.20</span>
+  </div>
+
+  <span class="pulse-divider"></span>
+
+  <div class="pulse-stat">
+    <span class="pulse-stat-label">Hot</span>
+    <span class="pulse-stat-value">Carlton 6pk</span>
+  </div>
+
+  <span class="pulse-divider"></span>
+
+  <div class="pulse-stat">
+    <span class="pulse-stat-label">28°C</span>
+    <span class="pulse-stat-value live">Beer +30%</span>
+  </div>
+
+  <span class="pulse-divider"></span>
+
+  <div class="pulse-stat">
+    <span class="pulse-stat-label">Reg</span>
+    <span class="pulse-stat-value live">● Open · 5:02pm</span>
+  </div>
+</div>
+
+<!-- ============================================================
+     MAIN SHELL — 3 panels, same structure as v3
+     ============================================================ -->
+<div class="shell">
+
+<!-- ============ LEFT SIDEBAR ============ -->
+<aside class="sidebar">
+  <div class="brand-row">
+    <div class="brand-mark">A</div>
+    <div class="brand-text">
+      <span class="brand-name">Aria</span>
+      <span class="brand-subtitle">POS</span>
+    </div>
+    <div class="brand-collapse">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+    </div>
+  </div>
+
+  <div class="search-tiny">
+    <svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+    <input type="text" placeholder="Search...">
+    <span class="kbd">⌘K</span>
+  </div>
+
+  <nav class="nav-scroll">
+    <div class="nav-section">
+      <div class="nav-section-header">
+        <span>Sell</span>
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+      </div>
+      <div class="nav-items">
+        <div class="nav-item active">
+          <span class="icon">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="14" rx="2"/><path d="M6 10h12M6 14h6"/></svg>
+          </span>
+          <span>Terminal</span>
+        </div>
+        <div class="nav-item">
+          <span class="icon">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M8 21h8M12 18v3"/></svg>
+          </span>
+          <span>Customer Display</span>
+        </div>
+        <div class="nav-item">
+          <span class="icon">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M8 12h8M8 8h6"/></svg>
+          </span>
+          <span>Laybys</span>
+          <span class="badge">3</span>
+        </div>
+        <div class="nav-item">
+          <span class="icon">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 12V7l-3-3H7l-3 3v5"/><path d="M4 12v5l8 4 8-4v-5"/></svg>
+          </span>
+          <span>Promotions</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="nav-section collapsed">
+      <div class="nav-section-header">
+        <span>Register</span>
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+      </div>
+    </div>
+
+    <div class="nav-section collapsed">
+      <div class="nav-section-header">
+        <span>Inventory</span>
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+      </div>
+    </div>
+
+    <div class="nav-section collapsed">
+      <div class="nav-section-header">
+        <span>Customers</span>
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+      </div>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-section-header">
+        <span>Reporting</span>
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+      </div>
+      <div class="nav-items">
+        <div class="nav-item hero">
+          <span class="icon">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3z"/></svg>
+          </span>
+          <span>Ask Aria</span>
+        </div>
+        <div class="nav-item">
+          <span class="icon">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="m7 14 3-3 3 3 5-5"/></svg>
+          </span>
+          <span>Sales Reports</span>
+        </div>
+        <div class="nav-item">
+          <span class="icon">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/></svg>
+          </span>
+          <span>Inventory</span>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <div class="user-row">
+    <div class="user-avatar">O</div>
+    <div class="user-info">
+      <span class="user-name">ohu</span>
+      <span class="user-status"><span class="live-dot"></span> Online · Bentleigh</span>
+    </div>
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--text-tertiary)"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+  </div>
+</aside>
+
+<!-- ============ CENTRE WORKSPACE ============ -->
+<main class="workspace">
+
+  <div class="topbar">
+    <div class="topbar-page">
+      <span class="topbar-page-title">Point of Sale</span>
+      <span class="topbar-page-sub">Bentleigh Cellars · Reg 1</span>
+    </div>
+
+    <div class="topbar-actions">
+      <button class="btn">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1018 0 9 9 0 00-18 0z"/><path d="M9 12l2 2 4-4"/></svg>
+        Refund
+      </button>
+      <button class="btn training">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12c0 5.5-4.5 10-10 10S2 17.5 2 12 6.5 2 12 2"/><path d="M12 8v4l3 3"/></svg>
+        Training
+      </button>
+      <button class="btn danger">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        Close register
+      </button>
+    </div>
+  </div>
+
+  <div class="search-bar">
+    <div class="search-main">
+      <span class="icon-left">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+      </span>
+      <input type="text" placeholder="Search products or scan barcode...">
+      <span class="icon-right">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="6" width="2" height="12"/><rect x="7" y="6" width="1" height="12"/><rect x="10" y="6" width="3" height="12"/><rect x="15" y="6" width="2" height="12"/><rect x="19" y="6" width="2" height="12"/></svg>
+      </span>
+    </div>
+    <div class="layout-switch">
+      <button class="active" title="Grid">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+      </button>
+      <button title="Shelf">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      </button>
+      <button title="Carousel">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="4" width="12" height="16" rx="2"/><path d="M2 7v10M22 7v10"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <div class="categories">
+    <div class="cat-pill active">All Products<span class="count">147</span></div>
+    <div class="cat-pill">Beer<span class="count">42</span></div>
+    <div class="cat-pill">Wine — Red<span class="count">28</span></div>
+    <div class="cat-pill">Wine — White<span class="count">22</span></div>
+    <div class="cat-pill">Spirits<span class="count">31</span></div>
+    <div class="cat-pill">RTD<span class="count">12</span></div>
+    <div class="cat-pill">Snacks<span class="count">12</span></div>
+    <div class="cat-pill add">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+      Custom item
+    </div>
+  </div>
+
+  <div class="product-grid-wrap">
+    <div class="section-label-row">
+      <span class="section-label">Trending right now</span>
+      <span class="section-divider"></span>
+      <span class="section-count">9 of 147</span>
+    </div>
+
+    <div class="product-grid">
+
+      <!-- Carlton Dry — TRENDING (live indicator) -->
+      <div class="product-tile trending">
+        <div class="product-flag trending">Trending</div>
+        <div class="product-image">
+          <svg class="bottle-svg" viewBox="0 0 60 100" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <linearGradient id="beer-glass-1" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stop-color="#3a2615"/>
+                <stop offset="35%" stop-color="#7B4720"/>
+                <stop offset="55%" stop-color="#A8662F"/>
+                <stop offset="75%" stop-color="#7B4720"/>
+                <stop offset="100%" stop-color="#3a2615"/>
+              </linearGradient>
+            </defs>
+            <path d="M 25 6 L 25 18 Q 22 22 22 30 L 22 92 Q 22 96 26 96 L 34 96 Q 38 96 38 92 L 38 30 Q 38 22 35 18 L 35 6 Z"
+                  fill="url(#beer-glass-1)" stroke="#1F1108" stroke-width="0.5"/>
+            <ellipse cx="30" cy="6" rx="5.5" ry="2.2" fill="#3a2615"/>
+            <rect x="22.5" y="20" width="15" height="6" fill="#0F4D2C"/>
+            <rect x="22" y="46" width="16" height="32" fill="#0F4D2C"/>
+            <text x="30" y="60" font-family="serif" font-size="4.5" font-style="italic" font-weight="700" fill="#E8B85C" text-anchor="middle">Carlton</text>
+            <text x="30" y="68" font-family="sans-serif" font-size="3" font-weight="500" fill="#E8B85C" text-anchor="middle" letter-spacing="0.5">DRY</text>
+            <path d="M 24 25 Q 25 60 27 92" stroke="rgba(255,255,255,0.18)" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <div class="product-meta">
+          <div class="product-name">Carlton Dry 6-pack</div>
+          <div class="product-brand">Carlton · 330ml × 6</div>
+        </div>
+        <div class="product-price-row">
+          <div class="product-price">$24<span style="font-size: 13px;">.99</span></div>
+          <div class="product-stock-pip"><span class="dot"></span>48</div>
+        </div>
+      </div>
+
+      <!-- Wild Turkey IN CART -->
+      <div class="product-tile in-cart">
+        <div class="product-image">
+          <svg class="bottle-svg" viewBox="0 0 60 100" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <linearGradient id="whisky-glass" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stop-color="#5a2812"/>
+                <stop offset="35%" stop-color="#9B4A20"/>
+                <stop offset="55%" stop-color="#C8732A"/>
+                <stop offset="75%" stop-color="#9B4A20"/>
+                <stop offset="100%" stop-color="#5a2812"/>
+              </linearGradient>
+            </defs>
+            <path d="M 25 6 L 25 16 Q 22 20 22 26 L 18 32 Q 16 36 16 42 L 16 90 Q 16 96 22 96 L 38 96 Q 44 96 44 90 L 44 42 Q 44 36 42 32 L 38 26 Q 38 20 35 16 L 35 6 Z"
+                  fill="url(#whisky-glass)" stroke="#2a0f06" stroke-width="0.5"/>
+            <rect x="24" y="2" width="12" height="6" rx="1" fill="#1a0c05"/>
+            <rect x="17" y="50" width="26" height="34" fill="#F4E4C4"/>
+            <text x="30" y="62" font-family="serif" font-size="5" font-weight="700" fill="#5a2812" text-anchor="middle">WILD</text>
+            <text x="30" y="70" font-family="serif" font-size="5" font-weight="700" fill="#5a2812" text-anchor="middle">TURKEY</text>
+            <path d="M 19 32 Q 20 60 22 88" stroke="rgba(255,255,255,0.22)" stroke-width="2" fill="none" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <div class="product-meta">
+          <div class="product-name">Wild Turkey 101</div>
+          <div class="product-brand">Wild Turkey · 700ml</div>
+        </div>
+        <div class="product-price-row">
+          <div class="product-price">$72<span style="font-size: 13px;">.00</span></div>
+          <div class="product-stock-pip low"><span class="dot"></span>4 left</div>
+        </div>
+      </div>
+
+      <!-- Wakefield Sauv Blanc -->
+      <div class="product-tile">
+        <div class="product-image">
+          <svg class="bottle-svg" viewBox="0 0 60 100" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <linearGradient id="white-wine" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stop-color="#3D5840"/>
+                <stop offset="35%" stop-color="#7B9C7E"/>
+                <stop offset="55%" stop-color="#A0BAA0"/>
+                <stop offset="75%" stop-color="#7B9C7E"/>
+                <stop offset="100%" stop-color="#3D5840"/>
+              </linearGradient>
+            </defs>
+            <path d="M 28 6 L 28 22 Q 25 26 25 36 L 22 46 Q 20 52 20 58 L 20 92 Q 20 96 24 96 L 36 96 Q 40 96 40 92 L 40 58 Q 40 52 38 46 L 35 36 Q 35 26 32 22 L 32 6 Z"
+                  fill="url(#white-wine)" stroke="#1f2e22" stroke-width="0.5"/>
+            <rect x="26" y="2" width="8" height="14" fill="#222"/>
+            <rect x="20" y="60" width="20" height="28" fill="#F8F2DC"/>
+            <text x="30" y="70" font-family="serif" font-size="3.5" font-style="italic" font-weight="600" fill="#3D5840" text-anchor="middle">Wakefield</text>
+            <text x="30" y="76" font-family="serif" font-size="2.8" fill="#3D5840" text-anchor="middle">Sauvignon Blanc</text>
+            <path d="M 23 50 Q 24 70 26 90" stroke="rgba(255,255,255,0.28)" stroke-width="2" fill="none" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <div class="product-meta">
+          <div class="product-name">Wakefield Sauv Blanc</div>
+          <div class="product-brand">Wakefield · 750ml</div>
+        </div>
+        <div class="product-price-row">
+          <div class="product-price">$17<span style="font-size: 13px;">.49</span></div>
+          <div class="product-stock-pip"><span class="dot"></span>22</div>
+        </div>
+      </div>
+
+      <!-- Penfolds Bin 389 -->
+      <div class="product-tile">
+        <div class="product-image">
+          <svg class="bottle-svg" viewBox="0 0 60 100" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <linearGradient id="red-wine" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stop-color="#1A0A0A"/>
+                <stop offset="35%" stop-color="#3F1414"/>
+                <stop offset="55%" stop-color="#5F1F1F"/>
+                <stop offset="75%" stop-color="#3F1414"/>
+                <stop offset="100%" stop-color="#1A0A0A"/>
+              </linearGradient>
+            </defs>
+            <path d="M 28 6 L 28 22 Q 25 26 25 36 L 22 46 Q 20 52 20 58 L 20 92 Q 20 96 24 96 L 36 96 Q 40 96 40 92 L 40 58 Q 40 52 38 46 L 35 36 Q 35 26 32 22 L 32 6 Z"
+                  fill="url(#red-wine)" stroke="#0a0303" stroke-width="0.5"/>
+            <rect x="26" y="2" width="8" height="14" fill="#0a0a0a"/>
+            <rect x="20" y="60" width="20" height="28" fill="#0F0E0C"/>
+            <text x="30" y="69" font-family="serif" font-size="3.8" font-style="italic" font-weight="700" fill="#E8B85C" text-anchor="middle">Penfolds</text>
+            <text x="30" y="76" font-family="sans-serif" font-size="3" font-weight="600" fill="#E8B85C" text-anchor="middle" letter-spacing="1.2">389</text>
+            <path d="M 23 50 Q 24 70 26 90" stroke="rgba(232,184,92,0.18)" stroke-width="2" fill="none" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <div class="product-meta">
+          <div class="product-name">Penfolds Bin 389</div>
+          <div class="product-brand">Penfolds · 750ml</div>
+        </div>
+        <div class="product-price-row">
+          <div class="product-price">$89<span style="font-size: 13px;">.00</span></div>
+          <div class="product-stock-pip"><span class="dot"></span>11</div>
+        </div>
+      </div>
+
+      <!-- Coopers Pale Ale -->
+      <div class="product-tile">
+        <div class="product-image">
+          <svg class="bottle-svg" viewBox="0 0 60 100" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <linearGradient id="coopers-glass" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stop-color="#241509"/>
+                <stop offset="35%" stop-color="#5C2F18"/>
+                <stop offset="55%" stop-color="#834326"/>
+                <stop offset="75%" stop-color="#5C2F18"/>
+                <stop offset="100%" stop-color="#241509"/>
+              </linearGradient>
+            </defs>
+            <path d="M 25 6 L 25 18 Q 22 22 22 30 L 22 92 Q 22 96 26 96 L 34 96 Q 38 96 38 92 L 38 30 Q 38 22 35 18 L 35 6 Z"
+                  fill="url(#coopers-glass)" stroke="#150a04" stroke-width="0.5"/>
+            <ellipse cx="30" cy="6" rx="5.5" ry="2.2" fill="#241509"/>
+            <rect x="22.5" y="20" width="15" height="5" fill="#A03020"/>
+            <rect x="22" y="48" width="16" height="32" fill="#F0E2BC"/>
+            <text x="30" y="58" font-family="serif" font-size="3.8" font-style="italic" font-weight="700" fill="#A03020" text-anchor="middle">Coopers</text>
+            <text x="30" y="65" font-family="sans-serif" font-size="2.6" font-weight="600" fill="#5C2F18" text-anchor="middle" letter-spacing="0.6">PALE ALE</text>
+            <path d="M 24 25 Q 25 60 27 92" stroke="rgba(255,255,255,0.18)" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <div class="product-meta">
+          <div class="product-name">Coopers Pale Ale</div>
+          <div class="product-brand">Coopers · 375ml</div>
+        </div>
+        <div class="product-price-row">
+          <div class="product-price">$22<span style="font-size: 13px;">.50</span></div>
+          <div class="product-stock-pip"><span class="dot"></span>36</div>
+        </div>
+      </div>
+
+      <!-- Absolut Vodka -->
+      <div class="product-tile">
+        <div class="product-flag">Hot</div>
+        <div class="product-image">
+          <svg class="bottle-svg" viewBox="0 0 60 100" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <linearGradient id="absolut-glass" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stop-color="rgba(180,200,210,0.3)"/>
+                <stop offset="50%" stop-color="rgba(220,235,240,0.55)"/>
+                <stop offset="100%" stop-color="rgba(180,200,210,0.3)"/>
+              </linearGradient>
+            </defs>
+            <path d="M 25 6 L 25 16 Q 22 18 21 22 Q 19 26 18 32 L 18 90 Q 18 96 24 96 L 36 96 Q 42 96 42 90 L 42 32 Q 41 26 39 22 Q 38 18 35 16 L 35 6 Z"
+                  fill="url(#absolut-glass)" stroke="rgba(127, 184, 151, 0.3)" stroke-width="0.5"/>
+            <rect x="25" y="2" width="10" height="6" rx="1" fill="#0a0a0a"/>
+            <text x="30" y="46" font-family="sans-serif" font-size="6.5" font-weight="800" fill="#0F2D1F" text-anchor="middle" letter-spacing="0.5">ABSOLUT</text>
+            <text x="30" y="60" font-family="sans-serif" font-size="3.5" font-weight="700" fill="#0F2D1F" text-anchor="middle" letter-spacing="0.4">VODKA</text>
+            <path d="M 21 30 Q 22 60 24 90" stroke="rgba(255,255,255,0.6)" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <div class="product-meta">
+          <div class="product-name">Absolut Vodka</div>
+          <div class="product-brand">Absolut · 700ml</div>
+        </div>
+        <div class="product-price-row">
+          <div class="product-price">$48<span style="font-size: 13px;">.00</span></div>
+          <div class="product-stock-pip"><span class="dot"></span>18</div>
+        </div>
+      </div>
+
+      <!-- Heineken Can -->
+      <div class="product-tile">
+        <div class="product-image">
+          <svg class="bottle-svg" viewBox="0 0 60 100" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <linearGradient id="heineken-can" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stop-color="#0A3D1F"/>
+                <stop offset="40%" stop-color="#1F7A3E"/>
+                <stop offset="55%" stop-color="#2BA055"/>
+                <stop offset="70%" stop-color="#1F7A3E"/>
+                <stop offset="100%" stop-color="#0A3D1F"/>
+              </linearGradient>
+            </defs>
+            <ellipse cx="30" cy="14" rx="14" ry="2.5" fill="#7a8a90"/>
+            <rect x="16" y="14" width="28" height="78" fill="url(#heineken-can)"/>
+            <ellipse cx="30" cy="92" rx="14" ry="2.5" fill="#0A3D1F"/>
+            <ellipse cx="30" cy="13" rx="13" ry="1.6" fill="#9aa6ab"/>
+            <polygon points="30,32 31.2,35.6 35,35.6 31.9,37.8 33.1,41.4 30,39.2 26.9,41.4 28.1,37.8 25,35.6 28.8,35.6"
+                     fill="#E8B85C" stroke="#A88040" stroke-width="0.2"/>
+            <rect x="18" y="50" width="24" height="6" fill="white"/>
+            <text x="30" y="55" font-family="serif" font-size="4" font-weight="700" font-style="italic" fill="#C8102E" text-anchor="middle">Heineken</text>
+            <rect x="19" y="14" width="2.5" height="78" fill="rgba(255,255,255,0.2)"/>
+          </svg>
+        </div>
+        <div class="product-meta">
+          <div class="product-name">Heineken Lager</div>
+          <div class="product-brand">Heineken · 330ml</div>
+        </div>
+        <div class="product-price-row">
+          <div class="product-price">$5<span style="font-size: 13px;">.99</span></div>
+          <div class="product-stock-pip"><span class="dot"></span>72</div>
+        </div>
+      </div>
+
+      <!-- Monster -->
+      <div class="product-tile">
+        <div class="product-image">
+          <svg class="bottle-svg" viewBox="0 0 60 100" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <linearGradient id="monster-can" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stop-color="#000"/>
+                <stop offset="40%" stop-color="#1a1a1a"/>
+                <stop offset="55%" stop-color="#2a2a2a"/>
+                <stop offset="70%" stop-color="#1a1a1a"/>
+                <stop offset="100%" stop-color="#000"/>
+              </linearGradient>
+            </defs>
+            <ellipse cx="30" cy="14" rx="14" ry="2.5" fill="#4a4a4a"/>
+            <rect x="16" y="14" width="28" height="78" fill="url(#monster-can)"/>
+            <ellipse cx="30" cy="92" rx="14" ry="2.5" fill="#000"/>
+            <ellipse cx="30" cy="13" rx="13" ry="1.6" fill="#7a7a7a"/>
+            <path d="M 22 35 L 26 50 L 24 35 L 28 52 L 28 35 L 32 52 L 32 35 L 36 50 L 34 35 L 38 50"
+                  stroke="#9DD432" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+            <text x="30" y="68" font-family="sans-serif" font-size="3.3" font-weight="800" fill="#9DD432" text-anchor="middle" letter-spacing="0.4">MONSTER</text>
+            <rect x="19" y="14" width="2.5" height="78" fill="rgba(157,212,50,0.08)"/>
+          </svg>
+        </div>
+        <div class="product-meta">
+          <div class="product-name">Monster Energy</div>
+          <div class="product-brand">Monster · 500ml</div>
+        </div>
+        <div class="product-price-row">
+          <div class="product-price">$5<span style="font-size: 13px;">.99</span></div>
+          <div class="product-stock-pip"><span class="dot"></span>54</div>
+        </div>
+      </div>
+
+      <!-- VB Slab -->
+      <div class="product-tile">
+        <div class="product-image">
+          <svg class="bottle-svg" viewBox="0 0 60 100" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <linearGradient id="vb-glass" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stop-color="#3D2614"/>
+                <stop offset="35%" stop-color="#7B4720"/>
+                <stop offset="55%" stop-color="#A8662F"/>
+                <stop offset="75%" stop-color="#7B4720"/>
+                <stop offset="100%" stop-color="#3D2614"/>
+              </linearGradient>
+            </defs>
+            <path d="M 25 6 L 25 18 Q 22 22 22 30 L 22 92 Q 22 96 26 96 L 34 96 Q 38 96 38 92 L 38 30 Q 38 22 35 18 L 35 6 Z"
+                  fill="url(#vb-glass)" stroke="#1F1108" stroke-width="0.5"/>
+            <ellipse cx="30" cy="6" rx="5.5" ry="2.2" fill="#3D2614"/>
+            <rect x="22.5" y="20" width="15" height="6" fill="#054A2C"/>
+            <rect x="22" y="46" width="16" height="32" fill="#054A2C"/>
+            <text x="30" y="58" font-family="serif" font-size="3.8" font-style="italic" font-weight="700" fill="#E8B85C" text-anchor="middle">Victoria</text>
+            <text x="30" y="65" font-family="serif" font-size="3.8" font-style="italic" font-weight="700" fill="#E8B85C" text-anchor="middle">Bitter</text>
+            <path d="M 24 25 Q 25 60 27 92" stroke="rgba(255,255,255,0.18)" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <div class="product-meta">
+          <div class="product-name">Victoria Bitter Slab</div>
+          <div class="product-brand">VB · 375ml × 24</div>
+        </div>
+        <div class="product-price-row">
+          <div class="product-price">$58<span style="font-size: 13px;">.99</span></div>
+          <div class="product-stock-pip out"><span class="dot"></span>Out</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</main>
+
+<!-- ============ RIGHT — CART (with inline Aria + Growing Total) ============ -->
+<aside class="cart">
+
+  <div class="cart-header">
+    <div style="display: flex; align-items: center; gap: 10px;">
+      <span class="cart-title">Sale</span>
+      <span class="cart-count">3 items</span>
+    </div>
+    <button class="cart-clear">Clear</button>
+  </div>
+
+  <div class="cart-customer">
+    <div class="icon">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+    </div>
+    <div class="cart-customer-text">
+      <strong>Sarah Lin</strong>
+      Gold · 2 visits this month
+    </div>
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--text-tertiary)"><path d="M9 18l6-6-6-6"/></svg>
+  </div>
+
+  <div class="cart-items">
+
+    <div class="cart-line">
+      <div class="cart-thumb">
+        <svg viewBox="0 0 60 100" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="cart-wt" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="#5a2812"/>
+              <stop offset="50%" stop-color="#C8732A"/>
+              <stop offset="100%" stop-color="#5a2812"/>
+            </linearGradient>
+          </defs>
+          <path d="M 25 6 L 25 16 Q 22 20 22 26 L 18 32 Q 16 36 16 42 L 16 90 Q 16 96 22 96 L 38 96 Q 44 96 44 90 L 44 42 Q 44 36 42 32 L 38 26 Q 38 20 35 16 L 35 6 Z" fill="url(#cart-wt)"/>
+          <rect x="24" y="2" width="12" height="6" rx="1" fill="#1a0c05"/>
+          <rect x="17" y="50" width="26" height="34" fill="#F4E4C4"/>
+          <text x="30" y="62" font-family="serif" font-size="5" font-weight="700" fill="#5a2812" text-anchor="middle">WILD</text>
+          <text x="30" y="70" font-family="serif" font-size="5" font-weight="700" fill="#5a2812" text-anchor="middle">TURKEY</text>
+        </svg>
+      </div>
+      <div class="cart-line-info">
+        <div class="cart-line-name">Wild Turkey 101</div>
+        <div class="cart-line-meta">700ml · spirits</div>
+      </div>
+      <div class="qty-control">
+        <button class="qty-btn">−</button>
+        <span class="qty-num">1</span>
+        <button class="qty-btn">+</button>
+      </div>
+      <div class="cart-line-price">$72<span style="font-size: 11px;">.00</span></div>
+    </div>
+
+    <div class="cart-line">
+      <div class="cart-thumb">
+        <svg viewBox="0 0 60 100" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="cart-cd" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="#3a2615"/>
+              <stop offset="50%" stop-color="#A8662F"/>
+              <stop offset="100%" stop-color="#3a2615"/>
+            </linearGradient>
+          </defs>
+          <path d="M 25 6 L 25 18 Q 22 22 22 30 L 22 92 Q 22 96 26 96 L 34 96 Q 38 96 38 92 L 38 30 Q 38 22 35 18 L 35 6 Z" fill="url(#cart-cd)"/>
+          <rect x="22" y="46" width="16" height="32" fill="#0F4D2C"/>
+          <text x="30" y="62" font-family="serif" font-size="4.5" font-style="italic" font-weight="700" fill="#E8B85C" text-anchor="middle">Carlton</text>
+        </svg>
+      </div>
+      <div class="cart-line-info">
+        <div class="cart-line-name">Carlton Dry 6-pack</div>
+        <div class="cart-line-meta">330ml × 6 · beer</div>
+      </div>
+      <div class="qty-control">
+        <button class="qty-btn">−</button>
+        <span class="qty-num">2</span>
+        <button class="qty-btn">+</button>
+      </div>
+      <div class="cart-line-price">$49<span style="font-size: 11px;">.98</span></div>
+    </div>
+
+    <div class="cart-line just-added">
+      <div class="cart-thumb">
+        <svg viewBox="0 0 60 100" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="cart-wk" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="#3D5840"/>
+              <stop offset="50%" stop-color="#A0BAA0"/>
+              <stop offset="100%" stop-color="#3D5840"/>
+            </linearGradient>
+          </defs>
+          <path d="M 28 6 L 28 22 Q 25 26 25 36 L 22 46 Q 20 52 20 58 L 20 92 Q 20 96 24 96 L 36 96 Q 40 96 40 92 L 40 58 Q 40 52 38 46 L 35 36 Q 35 26 32 22 L 32 6 Z" fill="url(#cart-wk)"/>
+          <rect x="26" y="2" width="8" height="14" fill="#222"/>
+          <rect x="20" y="60" width="20" height="28" fill="#F8F2DC"/>
+          <text x="30" y="72" font-family="serif" font-size="3.5" font-style="italic" font-weight="600" fill="#3D5840" text-anchor="middle">Wakefield</text>
+        </svg>
+      </div>
+      <div class="cart-line-info">
+        <div class="cart-line-name">Wakefield Sauv Blanc</div>
+        <div class="cart-line-meta">750ml · wine-white</div>
+      </div>
+      <div class="qty-control">
+        <button class="qty-btn">−</button>
+        <span class="qty-num">1</span>
+        <button class="qty-btn">+</button>
+      </div>
+      <div class="cart-line-price">$17<span style="font-size: 11px;">.49</span></div>
+    </div>
+
+  </div>
+
+  <!-- ============================================================
+       EXTRAORDINARY #2 — ARIA INLINE INTELLIGENCE
+       Lives inside the cart. Context-aware. No floating bubble.
+       ============================================================ -->
+  <div class="aria-insight">
+    <div class="aria-insight-header">
+      <div class="aria-insight-mark">A</div>
+      <span class="aria-insight-label">Aria · suggestion</span>
+    </div>
+    <div class="aria-insight-text">
+      "Sarah usually grabs Schweppes Soda with whisky — last 2 visits."
+    </div>
+    <div class="aria-insight-action">
+      <div class="aria-insight-suggest">
+        <svg class="product-mini-thumb" viewBox="0 0 60 100" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="schw" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="#1a3a6a"/>
+              <stop offset="50%" stop-color="#3a6abc"/>
+              <stop offset="100%" stop-color="#1a3a6a"/>
+            </linearGradient>
+          </defs>
+          <rect x="16" y="14" width="28" height="78" fill="url(#schw)" rx="2"/>
+          <text x="30" y="55" font-family="serif" font-size="6" font-style="italic" fill="white" text-anchor="middle">S</text>
+        </svg>
+        <span>Schweppes Soda 1L</span>
+        <span class="price">$4.99</span>
+      </div>
+      <button class="aria-insight-quick">
+        + Add
+      </button>
+    </div>
+  </div>
+
+  <div class="cart-totals">
+    <div class="totals-row">
+      <span>Subtotal</span>
+      <span class="value">$139.47</span>
+    </div>
+    <div class="totals-row">
+      <span>GST (10% inc.)</span>
+      <span class="value">$12.68</span>
+    </div>
+    <div class="totals-row discount">
+      <span>Gold member · 5%</span>
+      <span class="value">−$6.97</span>
+    </div>
+  </div>
+
+  <div style="padding: 0 16px;">
+    <!-- ============================================================
+         EXTRAORDINARY #3 — TOTAL THAT PHYSICALLY GROWS
+         Not just a number. A sculptural element with a sage mass
+         that scales with the sale size. The bigger the sale, the
+         brighter and more prominent it becomes.
+         ============================================================ -->
+    <div class="totals-grand">
+      <div class="totals-grand-label-block">
+        <span class="totals-grand-label">Total</span>
+        <span class="totals-grand-sub">3 items · Sarah</span>
+      </div>
+      <span class="totals-grand-value">$132<span class="cents">.50</span></span>
+    </div>
+  </div>
+
+  <div class="cart-action">
+    <button class="charge-btn">
+      <span>Charge $132.50</span>
+      <span class="arrow">→</span>
+    </button>
+    <div class="cart-quick-actions">
+      <button class="quick-action">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>
+        EFTPOS
+      </button>
+      <button class="quick-action">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v12M9 9h6M9 15h6"/></svg>
+        Cash
+      </button>
+      <button class="quick-action">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="3" width="12" height="18" rx="2"/><path d="M11 17h2"/></svg>
+        Layby
+      </button>
+    </div>
+  </div>
+
+</aside>
+
+</div>
+
+</body>
+</html>
