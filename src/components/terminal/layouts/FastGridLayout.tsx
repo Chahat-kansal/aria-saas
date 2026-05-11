@@ -77,7 +77,7 @@ export function FastGridLayout({ products, onProductClick, showStock = true }: L
               onMouseDown={e => { e.currentTarget.style.transform = 'translateY(0) scale(0.96)' }}
               onMouseUp={e => { e.currentTarget.style.transform = 'translateY(-3px)' }}
               style={{
-                background: 'linear-gradient(180deg, var(--terminal-bg-elevated,#18271F) 0%, rgba(29,46,37,0.9) 100%)',
+                background: 'linear-gradient(180deg, var(--terminal-bg-elevated,#18271F) 0%, var(--terminal-bg-elevated-2,#1D2E25) 100%)',
                 border: '1px solid var(--terminal-sage-rim, rgba(127,184,151,0.18))',
                 borderRadius: 14,
                 padding: '14px 12px 12px',
@@ -108,7 +108,7 @@ export function FastGridLayout({ products, onProductClick, showStock = true }: L
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 'auto' }}>
                 <div style={{ lineHeight: 1 }}>
                   <span style={{
-                    fontFamily: "'Instrument Serif',Georgia,serif",
+                    fontFamily: "var(--font-display,'Fraunces',Georgia,serif)",
                     fontStyle: 'italic', fontWeight: 600,
                     fontSize: 17, letterSpacing: '-0.02em',
                     color: 'var(--terminal-amber, #E8B85C)',

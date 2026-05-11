@@ -20,9 +20,11 @@
   --terminal-bg-canvas:   #0B1410;
   --terminal-bg-aurora:   #0F1B16;
   --terminal-bg-surface:  #131F19;
-  --terminal-bg-elevated: #18271F;
-  --terminal-glass-1:     rgba(28, 44, 36, 0.55);
-  --terminal-glass-2:     rgba(20, 33, 26, 0.72);
+  --terminal-bg-elevated:   #18271F;
+  --terminal-bg-elevated-2: #1D2E25;
+  --terminal-glass-1:       rgba(28, 44, 36, 0.55);
+  --terminal-glass-2:       rgba(20, 33, 26, 0.72);
+  --terminal-glass-3:       rgba(15, 25, 20, 0.85);
   --terminal-sage-bright: #8FCAA5;
   --terminal-sage-rim:    rgba(127, 184, 151, 0.18);
   --terminal-sage-glow:   rgba(127, 184, 151, 0.35);
