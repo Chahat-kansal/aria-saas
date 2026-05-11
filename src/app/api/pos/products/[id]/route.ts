@@ -169,14 +169,39 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     for (const [k, v] of Object.entries(body)) {
       safeBody[k] = k.endsWith('_id') ? toNullableUuid(v) : v
     }
-    const row = {
-      ...safeBody,
-      product_id: id,
-      business_id: bid,
-      updated_at: new Date().toISOString(),
+
+    // Check if a loyalty row already exists for this product
+    const { data: existing, error: selErr } = await supabase
+      .from('pos_product_loyalty')
+      .select('id')
+      .eq('product_id', id)
+      .eq('business_id', bid)
+      .maybeSingle()
+
+    // Table missing entirely — not fatal
+    if (selErr?.code === '42P01') return NextResponse.json({ ok: true })
+
+    let dbError: { message: string; code?: string } | null = null
+    if (existing?.id) {
+      // Update existing row (avoids onConflict index requirement)
+      const { error } = await supabase
+        .from('pos_product_loyalty')
+        .update(safeBody)
+        .eq('id', existing.id)
+        .eq('business_id', bid)
+      dbError = error
+    } else {
+      // Insert first-time row
+      const { error } = await supabase
+        .from('pos_product_loyalty')
+        .insert({ ...safeBody, product_id: id, business_id: bid })
+      dbError = error
     }
-    const { error } = await supabase.from('pos_product_loyalty').upsert(row, { onConflict: 'product_id,business_id' })
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+    if (dbError) {
+      console.error('[update_loyalty]', dbError.code, dbError.message)
+      return NextResponse.json({ error: dbError.message, code: dbError.code }, { status: 500 })
+    }
     return NextResponse.json({ ok: true })
   }
 
