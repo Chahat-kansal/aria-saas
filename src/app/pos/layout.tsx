@@ -16,6 +16,10 @@ export default async function PosLayout({ children }: { children: React.ReactNod
   if (pathname === '/pos/login') {
     return <POSThemeProvider>{children}</POSThemeProvider>;
   }
+  // Routes in (fullscreen) group get their own minimal layout — no POSShell chrome.
+  if (pathname === '/pos/terminal') {
+    return <POSThemeProvider>{children}</POSThemeProvider>;
+  }
 
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
