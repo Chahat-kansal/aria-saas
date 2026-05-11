@@ -26,6 +26,7 @@ import { EmptyLayoutState } from '@/components/terminal/layouts/EmptyLayoutState
 import type { ProductForTerminal } from '@/components/terminal/layouts/types';
 import { getCurrentLayout, TerminalLayout } from '@/lib/terminal/layouts';
 import { getAriaSuggestions } from '@/lib/terminal/aria-suggestions';
+import { AuroraCanvas } from '@/components/terminal/AuroraCanvas';
 
 /* ─── Types ─────────────────────────────────────────────────────── */
 interface Product {
@@ -1092,7 +1093,7 @@ export default function TerminalPage() {
   const loyaltyPoints = Math.floor(total);
 
   return (
-    <div className="flex flex-col overflow-hidden" style={{ height: '100%', background: 'var(--bg-base)', position: 'relative' }}>
+    <div className="flex flex-col overflow-hidden" style={{ height: '100%', background: 'var(--terminal-bg-canvas)', position: 'relative' }}>
       {/* Training mode amber banner — additive */}
       {trainingMode && (
         <>
@@ -1127,6 +1128,8 @@ export default function TerminalPage() {
           </div>
         </div>
       )}
+      {/* Aurora canvas background — v3 redesign */}
+      <AuroraCanvas />
       {/* Full-screen animated dot grid */}
       <AnimatedBg />
       <CursorGlow />
@@ -1503,7 +1506,7 @@ export default function TerminalPage() {
       )}
 
       {/* ── TOP BAR ───────────────────────────────────────────────── */}
-      <div className="flex-shrink-0 flex items-center px-4 gap-3" style={{ height: 46, background: 'var(--bg-base)', borderBottom: '1px solid rgba(0,229,255,0.06)', backdropFilter: 'blur(16px)', position: 'relative', zIndex: 2 }}>
+      <div className="flex-shrink-0 flex items-center px-4 gap-3" style={{ height: 46, background: 'rgba(11,20,16,0.85)', borderBottom: '1px solid var(--terminal-sage-rim,rgba(127,184,151,0.18))', backdropFilter: 'blur(20px) saturate(1.4)', WebkitBackdropFilter: 'blur(20px) saturate(1.4)', position: 'relative', zIndex: 2 }}>
         <svg width="20" height="20" viewBox="0 0 32 32" fill="none" style={{ flexShrink: 0 }}>
           <rect x="16" y="2" width="19" height="19" rx="3" transform="rotate(45 16 2)" stroke="#00E5FF" strokeWidth="1.8" fill="none"/>
           <circle cx="16" cy="16" r="3" fill="#00E5FF"/>
@@ -1533,7 +1536,7 @@ export default function TerminalPage() {
 
         {/* ── LEFT: Product browser ──────────────────────────────── */}
         <div className={`relative flex flex-col overflow-hidden ${mobileTab !== 'products' ? 'hidden md:flex' : 'flex'}`}
-          style={{ borderRight: '1px solid rgba(0,229,255,0.06)', background: 'var(--bg-surface)' }}>
+          style={{ borderRight: '1px solid var(--terminal-sage-rim,rgba(127,184,151,0.18))', background: 'var(--terminal-glass-2,rgba(20,33,26,0.72))', backdropFilter: 'blur(40px) saturate(1.4)', WebkitBackdropFilter: 'blur(40px) saturate(1.4)' }}>
 
           {/* Quick panel slide-out */}
           {showQuickPanel && (
@@ -1917,7 +1920,7 @@ export default function TerminalPage() {
 
         {/* ── CENTRE: Cart ──────────────────────────────────────── */}
         <div className={`flex flex-col overflow-hidden ${mobileTab !== 'cart' ? 'hidden md:flex' : 'flex'}`}
-          style={{ background: 'var(--bg-surface)', borderRight: '1px solid rgba(0,229,255,0.06)' }}>
+          style={{ background: 'var(--terminal-glass-1,rgba(28,44,36,0.55))', backdropFilter: 'blur(40px) saturate(1.4)', WebkitBackdropFilter: 'blur(40px) saturate(1.4)', borderLeft: '1px solid var(--terminal-sage-rim,rgba(127,184,151,0.18))' }}>
 
           {showReceipt && terminalView !== 'confirm' ? (
             /* ── RECEIPT VIEW (non-confirm, e.g. reprint) ─────── */
@@ -2124,7 +2127,7 @@ export default function TerminalPage() {
               <div style={{ flexShrink: 0, padding: '12px 14px 14px', borderTop: '1px solid rgba(0,229,255,0.06)' }}>
                 {!registerIsOpen && !registerLoading ? (
                   <button onClick={() => setShowRegisterModal(true)}
-                    style={{ width: '100%', height: 56, borderRadius: 14, border: 'none', background: 'linear-gradient(135deg,#00E5FF,#7B2FFF)', color: '#000', fontFamily: 'inherit', fontSize: 14, fontWeight: 900, cursor: 'pointer', boxShadow: '0 5px 0 rgba(0,150,200,0.4), 0 10px 30px rgba(0,229,255,0.25)' }}>
+                    style={{ width: '100%', height: 56, borderRadius: 14, border: 'none', background: 'linear-gradient(135deg,var(--terminal-sage-bright,#8FCAA5),var(--violet,#7FB897),var(--violet-700,#2D5240))', color: '#0B1410', fontFamily: 'inherit', fontSize: 14, fontWeight: 900, cursor: 'pointer', boxShadow: '0 4px 0 rgba(45,82,64,0.5), 0 10px 30px rgba(127,184,151,0.3)' }}>
                     Open Register to Sell
                   </button>
                 ) : (
@@ -2141,16 +2144,16 @@ export default function TerminalPage() {
                       disabled={!cart.length || !registerIsOpen || processing}
                       style={{
                         flex: 1, height: 56, borderRadius: 14, border: 'none',
-                        background: cart.length > 0 ? 'linear-gradient(135deg,#00E5FF,#00BFCC,#7B2FFF)' : 'rgba(0,229,255,0.05)',
-                        color: cart.length > 0 ? '#000' : 'rgba(130,160,200,0.3)',
+                        background: cart.length > 0 ? 'linear-gradient(135deg,var(--terminal-sage-bright,#8FCAA5),var(--violet,#7FB897),var(--violet-700,#2D5240))' : 'rgba(127,184,151,0.05)',
+                        color: cart.length > 0 ? '#0B1410' : 'rgba(127,184,151,0.3)',
                         fontFamily: 'inherit', fontSize: 14, fontWeight: 900, cursor: !cart.length || !registerIsOpen ? 'not-allowed' : 'pointer',
                         opacity: (!cart.length || !registerIsOpen) ? 0.4 : 1,
-                        boxShadow: cart.length > 0 ? '0 5px 0 rgba(0,150,200,0.5), 0 10px 30px rgba(0,229,255,0.3)' : 'none',
+                        boxShadow: cart.length > 0 ? '0 4px 0 rgba(45,82,64,0.6), 0 10px 30px var(--terminal-sage-glow,rgba(127,184,151,0.35))' : 'none',
                         transition: 'all 200ms', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
                         position: 'relative', overflow: 'hidden',
                       }}
-                      onMouseEnter={e => { const el = e.currentTarget; if (!el.disabled) { el.style.transform = 'translateY(-2px)'; el.style.boxShadow = '0 8px 0 rgba(0,150,200,0.5), 0 16px 40px rgba(0,229,255,0.4)'; } }}
-                      onMouseLeave={e => { const el = e.currentTarget; el.style.transform = ''; el.style.boxShadow = cart.length > 0 ? '0 5px 0 rgba(0,150,200,0.5), 0 10px 30px rgba(0,229,255,0.3)' : 'none'; }}
+                      onMouseEnter={e => { const el = e.currentTarget; if (!el.disabled) { el.style.transform = 'translateY(-2px)'; el.style.boxShadow = '0 7px 0 rgba(45,82,64,0.6), 0 16px 40px rgba(127,184,151,0.45)'; } }}
+                      onMouseLeave={e => { const el = e.currentTarget; el.style.transform = ''; el.style.boxShadow = cart.length > 0 ? '0 4px 0 rgba(45,82,64,0.6), 0 10px 30px var(--terminal-sage-glow,rgba(127,184,151,0.35))' : 'none'; }}
                       onMouseDown={e => { const el = e.currentTarget; el.style.transform = 'translateY(2px) scale(0.97)'; el.style.boxShadow = '0 2px 0 rgba(0,150,200,0.5)'; }}
                       onMouseUp={e => { const el = e.currentTarget; el.style.transform = 'translateY(-2px)'; }}>
                       <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>

@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { LayoutProps, ProductForTerminal } from './types'
+import { ProductImage } from '@/components/terminal/ProductImage'
 
 const MAX_ITEMS = 200
 
@@ -13,32 +14,15 @@ function getStockStatus(p: ProductForTerminal) {
   return 'normal'
 }
 
-function getCategoryColor(category: string | null | undefined): string {
-  const map: Record<string, string> = {
-    'beer': '#B8854A', 'beer & cider': '#B8854A',
-    'whisky': '#8B5A2B', 'spirits': '#94795E',
-    'wine': '#7B4754', 'wine-red': '#7B4754', 'wine-white': '#9C9560',
-    'liqueur': '#A85F3F', 'coffee': '#6B4423',
-    'snacks': '#D4A95E', 'mixer': '#6B96B0', 'soft drinks': '#6B96B0',
-  }
-  return map[category?.toLowerCase() ?? ''] ?? '#7FB897'
-}
-
-function ProductImage({ product, size = 36 }: { product: ProductForTerminal; size?: number }) {
-  if (product.image_url && product.image_source !== 'pending') {
-    return (
-      <img
-        src={product.image_url}
-        alt={product.name}
-        loading="lazy"
-        width={size}
-        height={size}
-        style={{ width: size, height: size, objectFit: 'cover', borderRadius: 6 }}
-      />
-    )
-  }
+function StockPip({ status, qty }: { status: string; qty: number }) {
+  if (status === 'unlimited' || status === 'normal') return null
+  const color = status === 'out' ? '#C97070' : status === 'low' ? '#D4A95E' : '#8FCAA5'
+  const label = status === 'out' ? 'Out' : `${qty}`
   return (
-    <div style={{ width: size, height: size, borderRadius: 6, background: getCategoryColor(product.category) }} />
+    <span style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 9, color, fontWeight: 600 }}>
+      <span style={{ width: 5, height: 5, borderRadius: '50%', background: color, boxShadow: `0 0 5px ${color}88`, flexShrink: 0 }}/>
+      {label}
+    </span>
   )
 }
 
@@ -51,14 +35,27 @@ export function FastGridLayout({ products, onProductClick, showStock = true }: L
   const capped = products.slice(0, MAX_ITEMS)
   const hasMore = products.length > MAX_ITEMS
 
+  const shadowBase = 'inset 0 1px 0 rgba(127,184,151,0.08), 0 6px 18px rgba(0,0,0,0.25)'
+  const shadowHover = 'inset 0 1px 0 rgba(127,184,151,0.16), 0 16px 32px rgba(0,0,0,0.4), 0 0 24px rgba(127,184,151,0.20)'
+
   return (
     <>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, padding: 8 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, padding: 10 }}>
         {capped.map(p => {
           const status = getStockStatus(p)
           const isOut = status === 'out'
-          const shadowBase = 'inset 0 1px 0 rgba(127,184,151,0.06), 0 6px 18px rgba(0,0,0,0.18)'
-          const shadowLimited = `${shadowBase}, 0 0 0 1px rgba(212,169,94,0.3) inset`
+
+          const dollars = Math.floor(p.price)
+          const cents = Math.round((p.price - dollars) * 100).toString().padStart(2, '0')
+
+          const productForImage = {
+            id: p.id,
+            name: p.name,
+            category: p.category,
+            container_type: p.container_type,
+            image_url: p.image_url,
+            image_source: p.image_source,
+          }
 
           return (
             <button
@@ -68,74 +65,68 @@ export function FastGridLayout({ products, onProductClick, showStock = true }: L
               onTouchEnd={e => { e.currentTarget.style.transform = 'scale(1)' }}
               onMouseEnter={supportsHover ? e => {
                 if (isOut) return
-                e.currentTarget.style.transform = 'translateY(-2px)'
-                e.currentTarget.style.boxShadow =
-                  'inset 0 1px 0 rgba(127,184,151,0.10), 0 12px 28px rgba(0,0,0,0.3), 0 0 0 1px rgba(127,184,151,0.18)'
+                e.currentTarget.style.transform = 'translateY(-3px)'
+                e.currentTarget.style.boxShadow = shadowHover
+                e.currentTarget.style.borderColor = 'var(--terminal-sage-bright, #8FCAA5)'
               } : undefined}
               onMouseLeave={supportsHover ? e => {
-                e.currentTarget.style.transform = 'translateY(0) scale(1)'
-                e.currentTarget.style.boxShadow = status === 'limited' ? shadowLimited : shadowBase
+                e.currentTarget.style.transform = ''
+                e.currentTarget.style.boxShadow = shadowBase
+                e.currentTarget.style.borderColor = 'var(--terminal-sage-rim, rgba(127,184,151,0.18))'
               } : undefined}
+              onMouseDown={e => { e.currentTarget.style.transform = 'translateY(0) scale(0.96)' }}
+              onMouseUp={e => { e.currentTarget.style.transform = 'translateY(-3px)' }}
               style={{
-                background: 'var(--bg-glass)',
-                backdropFilter: 'blur(12px)',
-                border: '1px solid rgba(127,184,151,0.08)',
-                borderRadius: 11, padding: 10,
-                aspectRatio: '0.92',
-                display: 'flex', flexDirection: 'column',
-                justifyContent: 'space-between',
+                background: 'linear-gradient(180deg, var(--terminal-bg-elevated,#18271F) 0%, rgba(29,46,37,0.9) 100%)',
+                border: '1px solid var(--terminal-sage-rim, rgba(127,184,151,0.18))',
+                borderRadius: 14,
+                padding: '14px 12px 12px',
+                display: 'flex', flexDirection: 'column', gap: 8,
                 cursor: isOut ? 'not-allowed' : 'pointer',
-                pointerEvents: isOut ? 'none' : 'auto',
-                opacity: isOut ? 0.5 : 1,
-                boxShadow: status === 'limited' ? shadowLimited : shadowBase,
-                transition: 'all 200ms cubic-bezier(0.22,1,0.36,1)',
+                opacity: isOut ? 0.45 : 1,
+                boxShadow: shadowBase,
+                transition: 'all 250ms cubic-bezier(0.16,1,0.3,1)',
                 color: 'var(--text-primary)',
                 textAlign: 'left',
                 position: 'relative',
+                overflow: 'hidden',
               }}
             >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <ProductImage product={p} size={36} />
-                {showStock && isOut && (
-                  <span style={{
-                    fontSize: 9, padding: '2px 6px', borderRadius: 99,
-                    background: 'rgba(201,112,112,0.16)', color: 'var(--destructive)', fontWeight: 600,
-                    letterSpacing: '0.08em',
-                  }}>OUT</span>
-                )}
-                {showStock && status === 'low' && (
-                  <span style={{
-                    fontSize: 9, padding: '2px 6px', borderRadius: 99,
-                    background: 'rgba(212,169,94,0.14)', color: 'var(--warning)', fontWeight: 500,
-                  }}>{p.stock_quantity} left</span>
-                )}
+              {/* Product image area */}
+              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'flex-end', height: 88, position: 'relative' }}>
+                <ProductImage product={productForImage} size={88} showShadow={!isOut} />
               </div>
-              <div>
-                <p style={{
-                  fontSize: 11, fontWeight: 500, margin: 0, color: 'var(--text-primary)',
-                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                }}>{p.name}</p>
-                {p.description && (
-                  <p style={{
-                    fontSize: 9, margin: '1px 0 0', color: 'var(--text-tertiary)',
-                    whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                  }}>{p.description}</p>
-                )}
-                <p style={{
-                  fontSize: 14, fontWeight: 600, margin: '4px 0 0',
-                  fontFamily: "'JetBrains Mono',monospace", color: 'var(--violet)',
-                }}>${p.price.toFixed(2)}</p>
+
+              {/* Name */}
+              <p style={{
+                fontSize: 11, fontWeight: 600, margin: 0, color: 'var(--text-primary)',
+                display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const,
+                overflow: 'hidden', lineHeight: 1.35,
+              }}>{p.name}</p>
+
+              {/* Price + stock */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 'auto' }}>
+                <div style={{ lineHeight: 1 }}>
+                  <span style={{
+                    fontFamily: "'Instrument Serif',Georgia,serif",
+                    fontStyle: 'italic', fontWeight: 600,
+                    fontSize: 17, letterSpacing: '-0.02em',
+                    color: 'var(--terminal-amber, #E8B85C)',
+                    textShadow: '0 0 12px var(--terminal-amber-glow, rgba(232,184,92,0.32))',
+                  }}>
+                    ${dollars}
+                    <span style={{ fontSize: 11, fontStyle: 'normal', fontWeight: 500 }}>.{cents}</span>
+                  </span>
+                </div>
+                {showStock && <StockPip status={status} qty={p.stock_quantity ?? 0} />}
               </div>
             </button>
           )
         })}
       </div>
       {hasMore && (
-        <p style={{
-          textAlign: 'center', fontSize: 11, color: 'var(--text-tertiary)',
-          padding: '8px 0 16px',
-        }}>
-          Showing first {MAX_ITEMS} of {products.length} products — search to find more
+        <p style={{ textAlign: 'center', fontSize: 11, color: 'var(--text-tertiary)', padding: '8px 0 16px' }}>
+          Showing first {MAX_ITEMS} of {products.length} — search to find more
         </p>
       )}
     </>
