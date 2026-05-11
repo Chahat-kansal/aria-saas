@@ -87,11 +87,24 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       await supabase.from('pos_product_prices').delete().in('id', deleted).eq('business_id', bid)
     }
     if (prices.length) {
-      const rows = prices.map((p: any) => ({
-        ...p, product_id: id, business_id: bid,
-        updated_at: new Date().toISOString(),
-      }))
-      const { error } = await supabase.from('pos_product_prices').upsert(rows, { onConflict: 'id' })
+      const rows = prices.map((p: any) => {
+        const row: Record<string, unknown> = {
+          product_id: id,
+          business_id: bid,
+          price_set_id: p.price_set_id,
+          outlet_id: p.outlet_id ?? null,
+          quantity: p.quantity ?? 1,
+          price: p.price,
+          updated_at: new Date().toISOString(),
+        }
+        if (p.cost != null) row.cost = p.cost
+        if (p.margin_pct != null) row.margin_pct = p.margin_pct
+        // Only include id if it's a real UUID (not a client-side 'new-xxx' placeholder)
+        if (p.id && !String(p.id).startsWith('new-')) row.id = p.id
+        return row
+      })
+      const { error } = await supabase.from('pos_product_prices')
+        .upsert(rows, { onConflict: 'business_id,product_id,price_set_id,outlet_id,quantity' })
       if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     }
     // Also update pos_products.price for the default price set qty=1
