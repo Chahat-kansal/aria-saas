@@ -21,29 +21,23 @@ export function LivePulseRail({ businessId }: { businessId: string | null }) {
       const today = new Date().toISOString().split('T')[0]
       const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0]
 
-      const [todayRes, yRes, recentRes, hotRes] = await Promise.allSettled([
+      const [todayRes, yRes, recentRes] = await Promise.allSettled([
         supabase!.from('pos_sales').select('total_amount').eq('business_id', businessId!).gte('created_at', `${today}T00:00:00`).neq('status', 'voided'),
         supabase!.from('pos_sales').select('total_amount').eq('business_id', businessId!).gte('created_at', `${yesterday}T00:00:00`).lt('created_at', `${yesterday}T${String(new Date().getHours()).padStart(2,'0')}:00:00`).neq('status', 'voided'),
         supabase!.from('pos_sales').select('total_amount').eq('business_id', businessId!).gte('created_at', new Date(Date.now() - 15 * 60_000).toISOString()).neq('status', 'voided'),
-        supabase!.from('pos_sale_items').select('product_name, quantity').eq('business_id', businessId!).gte('created_at', new Date(Date.now() - 60 * 60_000).toISOString()).limit(500),
       ])
 
       const todaySales = todayRes.status === 'fulfilled' ? (todayRes.value.data ?? []) : []
       const ySales     = yRes.status === 'fulfilled'     ? (yRes.value.data ?? [])     : []
       const recent     = recentRes.status === 'fulfilled' ? (recentRes.value.data ?? []) : []
-      const hotItems   = hotRes.status === 'fulfilled'   ? (hotRes.value.data ?? [])   : []
 
       const todayTotal = (todaySales as any[]).reduce((s: number, x: any) => s + (x.total_amount ?? 0), 0)
       const yTotal     = (ySales as any[]).reduce((s: number, x: any) => s + (x.total_amount ?? 0), 0)
       const delta      = yTotal > 0 ? ((todayTotal - yTotal) / yTotal) * 100 : 0
       const perMin     = (recent as any[]).reduce((s: number, x: any) => s + (x.total_amount ?? 0), 0) / 15
 
-      // Hot product by quantity in last hour
-      const tally = new Map<string, number>()
-      for (const item of hotItems as Array<{ product_name: string; quantity: number }>) {
-        tally.set(item.product_name, (tally.get(item.product_name) ?? 0) + (item.quantity ?? 1))
-      }
-      const hot = [...tally.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? '—'
+      // TODO: hot product needs pos_sales join (pos_sale_items has no business_id column) — fix in follow-up
+      const hot = '—'
 
       if (alive) setStats({ today: todayTotal, todayDelta: delta, perMin, hot: hot.slice(0, 14), registerOpen: true })
     }

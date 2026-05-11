@@ -145,7 +145,7 @@ export async function collectBusinessData(
     safeSelect(supabase, 'pos_sales', q => q.eq('business_id', businessId).gte('created_at', since90).order('created_at', { ascending: false }).limit(RECENT_LIMIT)),
     safeSelect(supabase, 'square_items', q => q.eq('business_id', businessId).order('name').limit(RECENT_LIMIT)),
     safeSelect(supabase, 'pos_products', q => q.eq('business_id', businessId).order('name').limit(RECENT_LIMIT)),
-    safeSelect(supabase, 'pos_sale_items', q => q.eq('business_id', businessId).gte('created_at', since90).limit(DETAIL_LIMIT)),
+    safeSelect(supabase, 'pos_sale_items', q => q.eq('business_id', businessId).gte('created_at', since90).limit(DETAIL_LIMIT)), // TODO: needs pos_sales join, see issue
     safeSelect(supabase, 'stock_movements', q => q.eq('business_id', businessId).gte('created_at', since90).limit(DETAIL_LIMIT)),
     safeSelect(supabase, 'warehouse_lots', q => q.eq('business_id', businessId).limit(RECENT_LIMIT)),
     safeSelect(supabase, 'warehouse_item_locations', q => q.eq('business_id', businessId).limit(RECENT_LIMIT)),

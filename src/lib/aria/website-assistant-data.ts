@@ -30,7 +30,7 @@ export async function buildWebsiteAssistantContext(
     supabaseAdmin.from('businesses').select('name, industry, city, phone, email').eq('id', businessId).maybeSingle(),
     supabaseAdmin.from('pos_products').select('name, category, price_cents, current_stock, is_active').eq('business_id', businessId).eq('is_active', true).limit(200),
     supabaseAdmin.from('recipes').select('name, description, category, sell_price_cents, recipe_ingredients(ingredient_name, quantity, unit)').eq('business_id', businessId).eq('is_active', true).limit(50),
-    supabaseAdmin.from('pos_sale_items').select('product_name, quantity').eq('business_id', businessId).gte('created_at', since30).limit(1000),
+    supabaseAdmin.from('pos_sale_items').select('product_name, quantity').eq('business_id', businessId).gte('created_at', since30).limit(1000), // TODO: needs pos_sales join, see issue
   ]);
 
   const productRows = (productsRes.data ?? []) as Array<{ name: string; category: string | null; price_cents: number | null; current_stock: number | null; is_active: boolean }>;

@@ -119,7 +119,7 @@ export async function runLiveMonitor(businessId: string): Promise<LiveMonitorRes
     safeQuery(supabase, 'pos_sales', q =>
       q.eq('business_id', businessId).gte('created_at', lastWeek.start).lte('created_at', lastWeek.end).limit(500)
     ),
-    safeQuery(supabase, 'pos_sale_items', q =>
+    safeQuery(supabase, 'pos_sale_items', q => // TODO: needs pos_sales join, see issue
       q.eq('business_id', businessId).gte('created_at', today).limit(2000)
     ),
     safeQuery(supabase, 'pos_products', q =>

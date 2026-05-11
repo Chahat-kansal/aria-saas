@@ -34,11 +34,11 @@ export async function POST(req: Request) {
         .eq('id', product_id).maybeSingle(),
       supabase.from('pos_sale_items')
         .select('quantity,line_total,created_at')
-        .eq('product_id', product_id).eq('business_id', business_id)
+        .eq('product_id', product_id)
         .gte('created_at', from30d).limit(500),
       supabase.from('pos_sale_items')
         .select('quantity,line_total,created_at')
-        .eq('product_id', product_id).eq('business_id', business_id)
+        .eq('product_id', product_id)
         .gte('created_at', `${from12m}T00:00:00`)
         .limit(2000),
     ])
