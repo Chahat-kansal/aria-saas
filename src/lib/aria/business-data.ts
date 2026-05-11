@@ -145,14 +145,26 @@ export async function collectBusinessData(
     safeSelect(supabase, 'pos_sales', q => q.eq('business_id', businessId).gte('created_at', since90).order('created_at', { ascending: false }).limit(RECENT_LIMIT)),
     safeSelect(supabase, 'square_items', q => q.eq('business_id', businessId).order('name').limit(RECENT_LIMIT)),
     safeSelect(supabase, 'pos_products', q => q.eq('business_id', businessId).order('name').limit(RECENT_LIMIT)),
-    safeSelect(supabase, 'pos_sale_items', q => q.eq('business_id', businessId).gte('created_at', since90).limit(DETAIL_LIMIT)), // TODO: needs pos_sales join, see issue
-    safeSelect(supabase, 'stock_movements', q => q.eq('business_id', businessId).gte('created_at', since90).limit(DETAIL_LIMIT)),
+    // pos_sale_items has no business_id column — join via pos_sales
+    (async (): Promise<Row[]> => {
+      try {
+        const { data: salesData } = await supabase.from('pos_sales').select('id')
+          .eq('business_id', businessId).gte('created_at', since90).limit(DETAIL_LIMIT);
+        const ids = (salesData ?? []).map((s: Row) => s.id as string);
+        if (!ids.length) return [];
+        const { data, error } = await supabase.from('pos_sale_items').select('*')
+          .in('sale_id', ids).limit(DETAIL_LIMIT);
+        if (error) { console.warn('[aria/business-data] pos_sale_items skipped:', error.message); return []; }
+        return asArray(data);
+      } catch (e) { console.warn('[aria/business-data] pos_sale_items unavailable', e); return []; }
+    })(),
+    safeSelect(supabase, 'stock_movements', q => q.eq('business_id', businessId).gte('scanned_at', since90).limit(DETAIL_LIMIT)),
     safeSelect(supabase, 'warehouse_lots', q => q.eq('business_id', businessId).limit(RECENT_LIMIT)),
     safeSelect(supabase, 'warehouse_item_locations', q => q.eq('business_id', businessId).limit(RECENT_LIMIT)),
     safeSelect(supabase, 'pos_suppliers', q => q.eq('business_id', businessId).limit(RECENT_LIMIT)),
     safeSelect(supabase, 'warehouse_supplier_performance', q => q.eq('business_id', businessId).gte('created_at', since90).limit(RECENT_LIMIT)),
     safeSelect(supabase, 'warehouse_purchase_orders', q => q.eq('business_id', businessId).gte('created_at', since90).limit(RECENT_LIMIT)),
-    safeSelect(supabase, 'pos_customers', q => q.eq('business_id', businessId).order('updated_at', { ascending: false }).limit(RECENT_LIMIT)),
+    safeSelect(supabase, 'pos_customers', q => q.eq('business_id', businessId).order('last_visit', { ascending: false }).limit(RECENT_LIMIT)),
     safeSelect(supabase, 'square_customers', q => q.eq('business_id', businessId).limit(RECENT_LIMIT)),
     safeSelect(supabase, 'customers', q => q.eq('business_id', businessId).limit(RECENT_LIMIT)),
     safeSelect(supabase, 'staff_members', q => q.eq('business_id', businessId).limit(RECENT_LIMIT)),
