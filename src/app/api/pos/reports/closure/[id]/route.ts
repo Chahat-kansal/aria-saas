@@ -9,19 +9,33 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const { data: biz } = await supabase.from('businesses').select('id').eq('user_id', user.id).maybeSingle();
-  if (!biz) return NextResponse.json({ error: 'No business' }, { status: 404 });
-
-  const { data: session } = await supabase.from('pos_cash_sessions').select('*').eq('id', params.id).maybeSingle();
+  const { data: session } = await supabase
+    .from('pos_cash_sessions')
+    .select('*')
+    .eq('id', params.id)
+    .maybeSingle();
   if (!session) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
+  // Verify this session belongs to a business owned by the authenticated user
+  const sessionBid = (session as any).business_id as string;
+  const { data: ownerCheck } = await supabase
+    .from('businesses')
+    .select('id')
+    .eq('id', sessionBid)
+    .eq('user_id', user.id)
+    .maybeSingle();
+  if (!ownerCheck) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+
   const endTime = (session.closed_at as string | null) || new Date().toISOString();
+
+  // Use session.business_id (not the user's first business) — this was the root cause
   const { data: sales } = await supabase
     .from('pos_sales')
     .select('id,total_amount,payment_method,served_by,customer_id,created_at,discount_amount,tax_total')
-    .eq('business_id', biz.id)
+    .eq('business_id', sessionBid)
     .gte('created_at', session.opened_at as string)
-    .lte('created_at', endTime);
+    .lte('created_at', endTime)
+    .neq('status', 'voided');
 
   const saleIds = (sales || []).map((s: any) => s.id);
   const { data: items } = saleIds.length > 0
