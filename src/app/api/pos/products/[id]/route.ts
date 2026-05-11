@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { toNullableUuid } from '@/lib/utils/uuid-helpers'
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -65,9 +66,12 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
   // ── update_classifications ──────────────────────────────────────
   if (action === 'update_classifications') {
+    const UUID_COLS = new Set(['category_id', 'brand_id', 'family_id'])
     const allowed = ['category_id', 'brand_id', 'family_id', 'container_type']
     const payload: Record<string, unknown> = { updated_at: new Date().toISOString() }
-    for (const k of allowed) if (k in body) payload[k] = body[k]
+    for (const k of allowed) {
+      if (k in body) payload[k] = UUID_COLS.has(k) ? toNullableUuid(body[k]) : body[k]
+    }
     const { error } = await supabase.from('pos_products').update(payload).eq('id', id).eq('business_id', bid)
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     return NextResponse.json({ ok: true })
@@ -146,7 +150,12 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     try {
       if (deleted.length) await supabase.from('pos_product_suppliers').delete().in('id', deleted).eq('business_id', bid)
       if (suppliers.length) {
-        const rows = suppliers.map((s: any) => ({ ...s, product_id: id, business_id: bid }))
+        const rows = suppliers.map((s: any) => ({
+          ...s,
+          supplier_id: toNullableUuid(s.supplier_id),
+          product_id: id,
+          business_id: bid,
+        }))
         await supabase.from('pos_product_suppliers').upsert(rows, { onConflict: 'id' })
       }
     } catch { /* table may not exist yet */ }
@@ -155,8 +164,13 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
   // ── update_loyalty ──────────────────────────────────────────────
   if (action === 'update_loyalty') {
+    // Coerce any _id field (UUID column) that arrived as "" to null
+    const safeBody: Record<string, unknown> = {}
+    for (const [k, v] of Object.entries(body)) {
+      safeBody[k] = k.endsWith('_id') ? toNullableUuid(v) : v
+    }
     const row = {
-      ...(body as any),
+      ...safeBody,
       product_id: id,
       business_id: bid,
       updated_at: new Date().toISOString(),
@@ -194,8 +208,11 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     'loyalty_earn_rate','loyalty_points_override','reorder_point','reorder_qty',
     'featured','sort_order','serial_tracked','quality_hold','stocktake_frozen',
   ]
+  const LEGACY_UUID_COLS = new Set(['category_id', 'supplier_id', 'brand_id', 'family_id'])
   const updatePayload: Record<string, unknown> = { updated_at: new Date().toISOString() }
-  for (const key of allowed) if (key in body) updatePayload[key] = body[key]
+  for (const key of allowed) {
+    if (key in body) updatePayload[key] = LEGACY_UUID_COLS.has(key) ? toNullableUuid(body[key]) : body[key]
+  }
   if ('active' in body) updatePayload.is_active = !!body.active
   if ('track_inventory' in body) updatePayload.track_stock = !!body.track_inventory
 

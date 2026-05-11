@@ -54,9 +54,9 @@ export default function ProductEditShell(props: Props) {
     is_age_restricted: product.is_age_restricted ?? false,
   })
   const [classifications, setClassifications] = useState({
-    category_id: product.category_id ?? '',
-    brand_id: product.brand_id ?? '',
-    family_id: product.family_id ?? '',
+    category_id: product.category_id ?? null,
+    brand_id: product.brand_id ?? null,
+    family_id: product.family_id ?? null,
     container_type: product.container_type ?? 'unknown',
     track_stock: product.track_stock ?? true,
     tax_rate: product.tax_rate ?? 10,
