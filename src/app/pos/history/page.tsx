@@ -8,36 +8,57 @@ interface Sale {
   id: string; sale_number?: string; total_amount: number; tax_amount?: number;
   payment_method?: string; status?: string; created_at: string;
   served_by?: string | null; customer_id?: string | null;
+  internal_comment?: string | null; external_notes?: string | null; notes?: string | null;
   pos_customers?: { name: string; email?: string } | null;
   pos_sale_items?: SaleItem[];
+}
+interface AuditEntry {
+  id: string; action: string; field_changed?: string | null;
+  old_value?: unknown; new_value?: unknown; reason?: string | null;
+  edited_by?: string | null; created_at: string;
 }
 
 const C = { bg:'var(--bg-base)', card:'var(--bg-surface)', border:'transparent', text:'var(--text-primary)', muted:'var(--text-secondary)', dim:'var(--text-tertiary)', violet:'#8B5CF6' };
 const PAY: Record<string, string> = { card:'#3B82F6', cash:'#22C55E', eftpos:'#38BDF8', split:'#F59E0B' };
 
 function fmtDate(d: Date) { return d.toISOString().split('T')[0]; }
+function relTime(iso: string) {
+  const diff = Date.now() - new Date(iso).getTime();
+  if (diff < 60000) return 'just now';
+  if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
+  if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
+  return new Date(iso).toLocaleDateString('en-AU');
+}
 
 export default function HistoryPage() {
-  const [sales,    setSales]    = useState<Sale[]>([]);
-  const [loading,  setLoading]  = useState(true);
+  const [sales, setSales] = useState<Sale[]>([]);
+  const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Sale | null>(null);
-  const [detail,   setDetail]   = useState<Sale | null>(null);
+  const [detail, setDetail] = useState<Sale | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
-  const [from, setFrom]   = useState(() => fmtDate(new Date()));
-  const [to,   setTo]     = useState(() => fmtDate(new Date()));
+  const [from, setFrom] = useState(() => fmtDate(new Date()));
+  const [to, setTo] = useState(() => fmtDate(new Date()));
   const [search, setSearch] = useState('');
   const [payFilter, setPayFilter] = useState('');
   const [showReceipt, setShowReceipt] = useState(false);
   const [receiptTemplate, setReceiptTemplate] = useState<ReceiptTemplate | null>(null);
-  // Modify details state
+  // Edit state
   const [editMode, setEditMode] = useState(false);
-  const [editServedBy, setEditServedBy] = useState('');
-  const [editNotes, setEditNotes] = useState('');
+  const [editFields, setEditFields] = useState({ served_by: '', notes: '', internal_comment: '', external_notes: '' });
   const [saving, setSaving] = useState(false);
-  // Return items state
+  const [saveMsg, setSaveMsg] = useState('');
+  // Return state
   const [returnMode, setReturnMode] = useState(false);
   const [returnItems, setReturnItems] = useState<Record<string, boolean>>({});
   const [processing, setProcessing] = useState(false);
+  // Audit trail
+  const [auditTrail, setAuditTrail] = useState<AuditEntry[]>([]);
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [showAudit, setShowAudit] = useState(false);
+  // Email receipt
+  const [emailAddr, setEmailAddr] = useState('');
+  const [emailSending, setEmailSending] = useState(false);
+  const [emailMsg, setEmailMsg] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -51,49 +72,71 @@ export default function HistoryPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  // Fetch the default receipt template once on mount
   useEffect(() => {
-    fetch('/api/pos/receipt-templates')
-      .then(r => r.json())
-      .then(d => {
-        const templates: ReceiptTemplate[] = d.templates || [];
-        if (templates.length > 0) {
-          const def = templates.find(t => t.is_default) ?? templates[0];
-          if (def?.elements?.length) setReceiptTemplate(def);
-        }
-      })
-      .catch(() => null);
+    fetch('/api/pos/receipt-templates').then(r => r.json()).then(d => {
+      const templates: ReceiptTemplate[] = d.templates || [];
+      if (templates.length > 0) {
+        const def = templates.find(t => t.is_default) ?? templates[0];
+        if (def?.elements?.length) setReceiptTemplate(def);
+      }
+    }).catch(() => null);
   }, []);
 
   async function loadDetail(sale: Sale) {
     setSelected(sale);
-    setDetail(null);
-    setDetailLoading(true);
+    setDetail(null); setDetailLoading(true);
     setEditMode(false); setReturnMode(false); setReturnItems({});
+    setShowAudit(false); setAuditTrail([]);
+    setEmailAddr((sale.pos_customers as any)?.email ?? '');
+    setEmailMsg('');
     try {
       const r = await fetch(`/api/pos/sales/${sale.id}`);
       const d = await r.json();
-      if (d.sale) { setDetail(d.sale); setEditServedBy(d.sale.served_by ?? ''); setEditNotes(d.sale.notes ?? ''); }
+      if (d.sale) {
+        setDetail(d.sale);
+        setEditFields({
+          served_by: d.sale.served_by ?? '',
+          notes: d.sale.notes ?? '',
+          internal_comment: d.sale.internal_comment ?? '',
+          external_notes: d.sale.external_notes ?? '',
+        });
+        setEmailAddr((d.sale.pos_customers as any)?.email ?? '');
+      }
     } catch { setDetail(sale); }
     setDetailLoading(false);
   }
 
+  async function loadAudit(saleId: string) {
+    setAuditLoading(true);
+    try {
+      const r = await fetch(`/api/pos/sales/${saleId}?action=audit`);
+      const d = await r.json();
+      setAuditTrail(d.edits ?? []);
+    } catch { setAuditTrail([]); }
+    setAuditLoading(false);
+  }
+
   async function saveEdit() {
     if (!selected) return;
-    setSaving(true);
-    await fetch(`/api/pos/sales/${selected.id}`, {
+    setSaving(true); setSaveMsg('');
+    const res = await fetch(`/api/pos/sales/${selected.id}?action=modify_metadata`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ served_by: editServedBy, notes: editNotes }),
+      body: JSON.stringify(editFields),
     });
-    setSaving(false); setEditMode(false);
-    if (detail) setDetail({ ...detail, served_by: editServedBy });
+    const d = await res.json();
+    setSaving(false);
+    if (res.ok) {
+      setSaveMsg(d.message === 'no_changes' ? 'No changes' : `Saved ${d.changes} field(s)`);
+      setEditMode(false);
+      if (detail) setDetail({ ...detail, ...editFields });
+    } else {
+      setSaveMsg(d.message ?? d.error ?? 'Save failed');
+    }
   }
 
   async function processReturn() {
     if (!selected || !detail) return;
-    const items = (detail.pos_sale_items ?? [])
-      .filter(i => returnItems[i.id])
-      .map(i => ({ sale_item_id: i.id, qty: i.quantity }));
+    const items = (detail.pos_sale_items ?? []).filter(i => returnItems[i.id]).map(i => ({ sale_item_id: i.id, qty: i.quantity }));
     if (!items.length) return;
     setProcessing(true);
     const r = await fetch('/api/pos/sales/return', {
@@ -102,8 +145,29 @@ export default function HistoryPage() {
     });
     const d = await r.json();
     setProcessing(false);
-    if (d.refund_sale) { alert(`Refund of A$${Math.abs(d.total).toFixed(2)} processed successfully.`); setReturnMode(false); load(); }
+    if (d.refund_sale) { setReturnMode(false); load(); alert(`Refund of A$${Math.abs(d.total).toFixed(2)} processed.`); }
     else alert('Return failed: ' + (d.error ?? 'Unknown error'));
+  }
+
+  async function sendEmailReceipt() {
+    if (!selected || !emailAddr) return;
+    setEmailSending(true); setEmailMsg('');
+    try {
+      const res = await fetch('/api/pos/email-receipt', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sale_id: selected.id, email: emailAddr, business_id: (detail as any)?.business_id ?? selected.id }),
+      });
+      if (res.status === 503) {
+        const b = await res.json().catch(() => ({}));
+        setEmailMsg(b.error ?? 'Email service not configured. Set RESEND_API_KEY in Vercel.');
+      } else if (res.ok) {
+        setEmailMsg('Receipt sent ✓');
+      } else {
+        const b = await res.json().catch(() => ({}));
+        setEmailMsg(b.error ?? 'Failed to send email receipt');
+      }
+    } catch { setEmailMsg('Failed to send email receipt'); }
+    setEmailSending(false);
   }
 
   const filtered = sales.filter(s => {
@@ -111,15 +175,14 @@ export default function HistoryPage() {
     const matchPay = !payFilter || s.payment_method === payFilter;
     return matchSearch && matchPay;
   });
-
   const totalRev = filtered.reduce((sum, s) => sum + (s.total_amount ?? 0), 0);
+
+  const inp: React.CSSProperties = { width: '100%', background: C.card, border: `1px solid ${C.border}`, color: C.text, borderRadius: 8, padding: '7px 10px', fontSize: 12, outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' };
 
   return (
     <div style={{ display: 'flex', height: '100%', overflow: 'hidden', background: C.bg, color: C.text, fontFamily: "'Manrope',sans-serif" }}>
       {/* Left: list */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', borderRight: `1px solid ${C.border}` }}>
-
-        {/* Filters */}
         <div style={{ padding: '16px 20px', borderBottom: `1px solid ${C.border}`, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div>
@@ -139,7 +202,6 @@ export default function HistoryPage() {
           </div>
         </div>
 
-        {/* Table */}
         <div style={{ flex: 1, overflowY: 'auto' }}>
           {loading ? (
             <div style={{ display: 'flex', justifyContent: 'center', padding: 48 }}>
@@ -149,7 +211,6 @@ export default function HistoryPage() {
             <div style={{ textAlign: 'center', padding: '64px 24px', color: C.dim }}>
               <div style={{ fontSize: 32, marginBottom: 12 }}>🧾</div>
               <p style={{ fontSize: 14 }}>No sales found for this period</p>
-              <p style={{ fontSize: 12, marginTop: 4 }}>Try changing the date range or search term</p>
             </div>
           ) : (
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -166,23 +227,12 @@ export default function HistoryPage() {
                   return (
                     <tr key={s.id} onClick={() => loadDetail(s)}
                       style={{ borderBottom: `1px solid ${C.border}`, cursor: 'pointer', background: isActive ? 'rgba(139,92,246,0.1)' : i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.01)', transition: 'background 100ms' }}>
-                      <td style={{ padding: '10px 16px', fontSize: 12, color: C.muted }}>
-                        {new Date(s.created_at).toLocaleDateString('en-AU')}<br/>
-                        <span style={{ fontSize: 10, color: C.dim }}>{new Date(s.created_at).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}</span>
-                      </td>
-                      <td style={{ padding: '10px 16px', fontFamily: "'JetBrains Mono',monospace", fontSize: 12, fontWeight: 600, color: isActive ? C.violet : '#7C3AED' }}>
-                        {s.sale_number ?? s.id.slice(-8).toUpperCase()}
-                      </td>
+                      <td style={{ padding: '10px 16px', fontSize: 12, color: C.muted }}>{new Date(s.created_at).toLocaleDateString('en-AU')}<br/><span style={{ fontSize: 10, color: C.dim }}>{new Date(s.created_at).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}</span></td>
+                      <td style={{ padding: '10px 16px', fontFamily: "'JetBrains Mono',monospace", fontSize: 12, fontWeight: 600, color: isActive ? C.violet : '#7C3AED' }}>{s.sale_number ?? s.id.slice(-8).toUpperCase()}</td>
                       <td style={{ padding: '10px 16px', fontSize: 12, color: C.muted }}>{(s.pos_customers as any)?.name ?? '—'}</td>
                       <td style={{ padding: '10px 16px', fontSize: 12, color: C.muted }}>{s.served_by ?? '—'}</td>
-                      <td style={{ padding: '10px 16px' }}>
-                        <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 99, fontWeight: 600, textTransform: 'capitalize', background: `${PAY[s.payment_method ?? 'card'] ?? C.violet}22`, color: PAY[s.payment_method ?? 'card'] ?? C.violet }}>
-                          {s.payment_method ?? '—'}
-                        </span>
-                      </td>
-                      <td style={{ padding: '10px 16px', fontFamily: "'JetBrains Mono',monospace", fontWeight: 700, fontSize: 14, color: C.text }}>
-                        A${s.total_amount.toFixed(2)}
-                      </td>
+                      <td style={{ padding: '10px 16px' }}><span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 99, fontWeight: 600, textTransform: 'capitalize', background: `${PAY[s.payment_method ?? 'card'] ?? C.violet}22`, color: PAY[s.payment_method ?? 'card'] ?? C.violet }}>{s.payment_method ?? '—'}</span></td>
+                      <td style={{ padding: '10px 16px', fontFamily: "'JetBrains Mono',monospace", fontWeight: 700, fontSize: 14, color: C.text }}>A${s.total_amount.toFixed(2)}</td>
                     </tr>
                   );
                 })}
@@ -194,133 +244,156 @@ export default function HistoryPage() {
 
       {/* Right: detail panel */}
       {selected && (
-        <div style={{ width: 380, display: 'flex', flexDirection: 'column', overflow: 'hidden', flexShrink: 0, background: C.card }}>
-          {/* Panel header */}
+        <div style={{ width: 400, display: 'flex', flexDirection: 'column', overflow: 'hidden', flexShrink: 0, background: C.card }}>
           <div style={{ padding: '14px 18px', borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
             <div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: C.text, fontFamily: "'JetBrains Mono',monospace" }}>
-                {selected.sale_number ?? selected.id.slice(-8).toUpperCase()}
-              </div>
-              <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>
-                {new Date(selected.created_at).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })} · {new Date(selected.created_at).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}
-              </div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: C.text, fontFamily: "'JetBrains Mono',monospace" }}>{selected.sale_number ?? selected.id.slice(-8).toUpperCase()}</div>
+              <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>{new Date(selected.created_at).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })} · {new Date(selected.created_at).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}</div>
             </div>
             <button onClick={() => { setSelected(null); setDetail(null); }} style={{ background: 'none', border: 'none', color: C.dim, cursor: 'pointer', fontSize: 20, lineHeight: 1, padding: 4 }}>×</button>
           </div>
 
           <div style={{ flex: 1, overflowY: 'auto', padding: '14px 18px' }}>
             {detailLoading ? (
-              <div style={{ display: 'flex', justifyContent: 'center', padding: 32 }}>
-                <div style={{ width: 20, height: 20, borderRadius: '50%', border: `2px solid rgba(139,92,246,0.3)`, borderTopColor: C.violet, animation: 'spin 0.7s linear infinite' }} />
+              <div style={{ display: 'flex', justifyContent: 'center', padding: 32 }}><div style={{ width: 20, height: 20, borderRadius: '50%', border: `2px solid rgba(139,92,246,0.3)`, borderTopColor: C.violet, animation: 'spin 0.7s linear infinite' }} /></div>
+            ) : (<>
+              {/* Summary */}
+              <div style={{ background: 'rgba(255,255,255,0.03)', border: `1px solid ${C.border}`, borderRadius: 12, padding: '12px 14px', marginBottom: 12 }}>
+                {[
+                  ['Status', <span key="s" style={{ fontSize: 10, padding: '2px 8px', borderRadius: 99, fontWeight: 600, background: 'rgba(34,197,94,0.15)', color: '#22C55E' }}>{detail?.status ?? 'completed'}</span>],
+                  ['Cashier', detail?.served_by ?? selected.served_by ?? '—'],
+                  ['Customer', (detail?.pos_customers as any)?.name ?? '—'],
+                  ['Tender', <span key="t" style={{ display: 'flex', alignItems: 'center', gap: 6 }}><strong>{selected.payment_method?.toUpperCase() ?? '—'}</strong><span style={{ fontSize: 10, color: C.dim }}>read-only</span></span>],
+                ].map(([l, v]) => (
+                  <div key={String(l)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 7 }}>
+                    <span style={{ fontSize: 12, color: C.muted }}>{String(l)}</span>
+                    <span style={{ fontSize: 12, color: C.text, fontWeight: 500 }}>{v}</span>
+                  </div>
+                ))}
               </div>
-            ) : (
-              <>
-                {/* Summary */}
-                <div style={{ background: 'rgba(255,255,255,0.03)', border: `1px solid ${C.border}`, borderRadius: 12, padding: '12px 14px', marginBottom: 14 }}>
-                  {[
-                    ['Status', <span key="s" style={{ fontSize: 10, padding: '2px 8px', borderRadius: 99, fontWeight: 600, background: 'rgba(34,197,94,0.15)', color: '#22C55E' }}>Completed</span>],
-                    ['Cashier', detail?.served_by ?? selected.served_by ?? '—'],
-                    ['Customer', (detail?.pos_customers as any)?.name ?? '—'],
-                    ['Payment', selected.payment_method?.toUpperCase() ?? '—'],
-                  ].map(([l, v]) => (
-                    <div key={String(l)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                      <span style={{ fontSize: 12, color: C.muted }}>{String(l)}</span>
-                      <span style={{ fontSize: 12, color: C.text, fontWeight: 500 }}>{v}</span>
+
+              {/* Financials */}
+              <div style={{ background: 'rgba(255,255,255,0.03)', border: `1px solid ${C.border}`, borderRadius: 12, padding: '12px 14px', marginBottom: 12 }}>
+                <p style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: C.dim, marginBottom: 8 }}>Financials</p>
+                {[['Subtotal (excl. GST)', `A$${((selected.total_amount ?? 0) / 1.1).toFixed(2)}`], ['GST (10%)', `A$${((selected.total_amount ?? 0) - (selected.total_amount ?? 0) / 1.1).toFixed(2)}`]].map(([l, v]) => (
+                  <div key={l} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}><span style={{ fontSize: 12, color: C.muted }}>{l}</span><span style={{ fontSize: 12, color: C.text, fontFamily: "'JetBrains Mono',monospace" }}>{v}</span></div>
+                ))}
+                <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 7, marginTop: 3, display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: C.text }}>TOTAL</span>
+                  <span style={{ fontSize: 16, fontWeight: 800, color: C.text, fontFamily: "'JetBrains Mono',monospace" }}>A${(selected.total_amount ?? 0).toFixed(2)}</span>
+                </div>
+              </div>
+
+              {/* Items */}
+              {(detail?.pos_sale_items ?? []).length > 0 && (
+                <div style={{ background: 'rgba(255,255,255,0.03)', border: `1px solid ${C.border}`, borderRadius: 12, padding: '12px 14px', marginBottom: 12 }}>
+                  <p style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: C.dim, marginBottom: 8 }}>Items</p>
+                  {(detail?.pos_sale_items ?? []).map(item => (
+                    <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 7 }}>
+                      {returnMode && <input type="checkbox" checked={!!returnItems[item.id]} onChange={e => setReturnItems(r => ({ ...r, [item.id]: e.target.checked }))} style={{ flexShrink: 0, width: 14, height: 14, accentColor: C.violet }} />}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.product_name}</div>
+                        <div style={{ fontSize: 10, color: C.dim }}>{item.quantity} × A${item.unit_price?.toFixed(2)}</div>
+                      </div>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: C.text, fontFamily: "'JetBrains Mono',monospace", flexShrink: 0 }}>A${item.line_total?.toFixed(2)}</span>
                     </div>
                   ))}
                 </div>
+              )}
 
-                {/* Financials */}
-                <div style={{ background: 'rgba(255,255,255,0.03)', border: `1px solid ${C.border}`, borderRadius: 12, padding: '12px 14px', marginBottom: 14 }}>
-                  <p style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: C.dim, marginBottom: 10 }}>Financials</p>
+              {/* Edit form */}
+              {editMode && (
+                <div style={{ background: 'rgba(139,92,246,0.06)', border: `1px solid rgba(139,92,246,0.2)`, borderRadius: 12, padding: '12px 14px', marginBottom: 12 }}>
+                  <p style={{ fontSize: 11, fontWeight: 700, color: C.violet, marginBottom: 10 }}>Modify Details</p>
                   {[
-                    ['Subtotal (excl. GST)', `A$${((selected.total_amount ?? 0) / 1.1).toFixed(2)}`],
-                    ['GST (10%)', `A$${((selected.total_amount ?? 0) - (selected.total_amount ?? 0) / 1.1).toFixed(2)}`],
-                  ].map(([l, v]) => (
-                    <div key={l} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                      <span style={{ fontSize: 12, color: C.muted }}>{l}</span>
-                      <span style={{ fontSize: 12, color: C.text, fontFamily: "'JetBrains Mono',monospace" }}>{v}</span>
+                    { label: 'Cashier name', key: 'served_by' as const, type: 'input' },
+                    { label: 'Notes (receipt)', key: 'notes' as const, type: 'textarea' },
+                    { label: 'External notes', key: 'external_notes' as const, type: 'textarea' },
+                    { label: 'Internal comment (not on receipt)', key: 'internal_comment' as const, type: 'textarea' },
+                  ].map(({ label, key, type }) => (
+                    <div key={key} style={{ marginBottom: 8 }}>
+                      <label style={{ display: 'block', fontSize: 11, color: C.muted, marginBottom: 3 }}>{label}</label>
+                      {type === 'input'
+                        ? <input value={editFields[key]} onChange={e => setEditFields(f => ({ ...f, [key]: e.target.value }))} style={inp} />
+                        : <textarea value={editFields[key]} onChange={e => setEditFields(f => ({ ...f, [key]: e.target.value }))} rows={2} style={{ ...inp, resize: 'none' }} />
+                      }
                     </div>
                   ))}
-                  <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 8, marginTop: 4, display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: C.text }}>TOTAL</span>
-                    <span style={{ fontSize: 16, fontWeight: 800, color: C.text, fontFamily: "'JetBrains Mono',monospace" }}>A${(selected.total_amount ?? 0).toFixed(2)}</span>
+                  <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 8, padding: '8px 10px', marginBottom: 8 }}>
+                    <span style={{ fontSize: 11, color: C.dim }}>Tender: <strong style={{ color: C.muted }}>{selected.payment_method?.toUpperCase()}</strong> — cannot change. Void and re-ring if needed.</span>
+                  </div>
+                  {saveMsg && <p style={{ fontSize: 11, color: saveMsg.includes('fail') || saveMsg.includes('Error') ? '#EF4444' : '#22C55E', marginBottom: 6 }}>{saveMsg}</p>}
+                  <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+                    <button onClick={() => { setEditMode(false); setSaveMsg(''); }} style={{ flex: 1, padding: '7px', borderRadius: 8, border: `1px solid ${C.border}`, background: 'transparent', color: C.muted, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>
+                    <button onClick={saveEdit} disabled={saving} style={{ flex: 1, padding: '7px', borderRadius: 8, border: 'none', background: C.violet, color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', opacity: saving ? 0.5 : 1 }}>{saving ? 'Saving…' : 'Save'}</button>
                   </div>
                 </div>
+              )}
 
-                {/* Items */}
-                {(detail?.pos_sale_items ?? []).length > 0 && (
-                  <div style={{ background: 'rgba(255,255,255,0.03)', border: `1px solid ${C.border}`, borderRadius: 12, padding: '12px 14px', marginBottom: 14 }}>
-                    <p style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: C.dim, marginBottom: 10 }}>Items</p>
-                    {(detail?.pos_sale_items ?? []).map(item => (
-                      <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                        {returnMode && (
-                          <input type="checkbox" checked={!!returnItems[item.id]} onChange={e => setReturnItems(r => ({ ...r, [item.id]: e.target.checked }))}
-                            style={{ flexShrink: 0, width: 14, height: 14, accentColor: C.violet }} />
-                        )}
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 12, fontWeight: 600, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.product_name}</div>
-                          <div style={{ fontSize: 10, color: C.dim }}>{item.quantity} × A${item.unit_price?.toFixed(2)}</div>
+              {/* Return confirm */}
+              {returnMode && Object.values(returnItems).some(Boolean) && (
+                <div style={{ marginBottom: 12 }}>
+                  <button onClick={processReturn} disabled={processing} style={{ width: '100%', padding: '10px', borderRadius: 10, border: 'none', background: '#EF4444', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', opacity: processing ? 0.5 : 1 }}>
+                    {processing ? 'Processing…' : `Return ${Object.values(returnItems).filter(Boolean).length} item(s)`}
+                  </button>
+                </div>
+              )}
+
+              {/* Email receipt */}
+              <div style={{ background: 'rgba(255,255,255,0.03)', border: `1px solid ${C.border}`, borderRadius: 12, padding: '12px 14px', marginBottom: 12 }}>
+                <p style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: C.dim, marginBottom: 8 }}>Email Receipt</p>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <input value={emailAddr} onChange={e => setEmailAddr(e.target.value)} placeholder="customer@email.com" type="email"
+                    style={{ ...inp, flex: 1 }} />
+                  <button onClick={sendEmailReceipt} disabled={emailSending || !emailAddr}
+                    style={{ padding: '7px 12px', borderRadius: 8, border: 'none', background: C.violet, color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', opacity: (emailSending || !emailAddr) ? 0.5 : 1 }}>
+                    {emailSending ? '…' : 'Send'}
+                  </button>
+                </div>
+                {emailMsg && <p style={{ fontSize: 11, color: emailMsg.includes('✓') ? '#22C55E' : '#EF4444', marginTop: 5 }}>{emailMsg}</p>}
+              </div>
+
+              {/* Audit trail */}
+              <div style={{ background: 'rgba(255,255,255,0.03)', border: `1px solid ${C.border}`, borderRadius: 12, padding: '12px 14px', marginBottom: 12 }}>
+                <button onClick={() => { setShowAudit(v => !v); if (!showAudit && auditTrail.length === 0) loadAudit(selected.id); }}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', justifyContent: 'space-between', width: '100%', padding: 0 }}>
+                  <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: C.dim }}>Modification History</span>
+                  <span style={{ fontSize: 11, color: C.dim }}>{showAudit ? '▲' : '▼'}</span>
+                </button>
+                {showAudit && (
+                  <div style={{ marginTop: 10 }}>
+                    {auditLoading ? <p style={{ fontSize: 12, color: C.dim }}>Loading…</p>
+                    : auditTrail.length === 0 ? <p style={{ fontSize: 12, color: C.dim }}>No modifications recorded.</p>
+                    : auditTrail.map(e => (
+                      <div key={e.id} style={{ borderTop: `1px solid ${C.border}`, paddingTop: 7, marginTop: 7 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
+                          <span style={{ fontSize: 11, fontWeight: 600, color: C.muted, textTransform: 'capitalize' }}>{e.action.replace(/_/g, ' ')}</span>
+                          <span style={{ fontSize: 10, color: C.dim }} title={new Date(e.created_at).toLocaleString('en-AU')}>{relTime(e.created_at)}</span>
                         </div>
-                        <span style={{ fontSize: 12, fontWeight: 700, color: C.text, fontFamily: "'JetBrains Mono',monospace", flexShrink: 0 }}>A${item.line_total?.toFixed(2)}</span>
+                        {e.field_changed && <p style={{ fontSize: 11, color: C.dim }}>{e.field_changed}: <em>{String(e.old_value ?? '—')}</em> → <em>{String(e.new_value ?? '—')}</em></p>}
+                        {e.reason && <p style={{ fontSize: 11, color: C.dim }}>Reason: {e.reason}</p>}
+                        {e.edited_by && <p style={{ fontSize: 10, color: C.dim, opacity: 0.6 }}>{e.edited_by}</p>}
                       </div>
                     ))}
                   </div>
                 )}
-
-                {/* Edit mode */}
-                {editMode && (
-                  <div style={{ background: 'rgba(139,92,246,0.06)', border: `1px solid rgba(139,92,246,0.2)`, borderRadius: 12, padding: '12px 14px', marginBottom: 14 }}>
-                    <p style={{ fontSize: 11, fontWeight: 700, color: C.violet, marginBottom: 10 }}>Modify Details</p>
-                    <label style={{ display: 'block', fontSize: 11, color: C.muted, marginBottom: 4 }}>Cashier name</label>
-                    <input value={editServedBy} onChange={e => setEditServedBy(e.target.value)} placeholder="Cashier name"
-                      style={{ width: '100%', background: C.card, border: `1px solid ${C.border}`, color: C.text, borderRadius: 8, padding: '8px 10px', fontSize: 12, outline: 'none', fontFamily: 'inherit', marginBottom: 10, boxSizing: 'border-box' }} />
-                    <label style={{ display: 'block', fontSize: 11, color: C.muted, marginBottom: 4 }}>Notes</label>
-                    <textarea value={editNotes} onChange={e => setEditNotes(e.target.value)} rows={2} placeholder="Notes…"
-                      style={{ width: '100%', background: C.card, border: `1px solid ${C.border}`, color: C.text, borderRadius: 8, padding: '8px 10px', fontSize: 12, outline: 'none', fontFamily: 'inherit', resize: 'none', boxSizing: 'border-box' }} />
-                    <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-                      <button onClick={() => setEditMode(false)} style={{ flex: 1, padding: '8px', borderRadius: 8, border: `1px solid ${C.border}`, background: 'transparent', color: C.muted, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>
-                      <button onClick={saveEdit} disabled={saving} style={{ flex: 1, padding: '8px', borderRadius: 8, border: 'none', background: C.violet, color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', opacity: saving ? 0.5 : 1 }}>
-                        {saving ? 'Saving…' : 'Save'}
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {/* Return confirm */}
-                {returnMode && Object.values(returnItems).some(Boolean) && (
-                  <div style={{ marginBottom: 14 }}>
-                    <button onClick={processReturn} disabled={processing}
-                      style={{ width: '100%', padding: '10px', borderRadius: 10, border: 'none', background: '#EF4444', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', opacity: processing ? 0.5 : 1 }}>
-                      {processing ? 'Processing…' : `Return ${Object.values(returnItems).filter(Boolean).length} item(s)`}
-                    </button>
-                  </div>
-                )}
-              </>
-            )}
+              </div>
+            </>)}
           </div>
 
           {/* Action buttons */}
           <div style={{ padding: '12px 18px', borderTop: `1px solid ${C.border}`, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-              <button onClick={() => setShowReceipt(true)}
-                style={{ padding: '8px 12px', borderRadius: 8, border: `1px solid ${C.border}`, background: 'rgba(255,255,255,0.04)', color: C.text, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
-                🖨️ Reprint
-              </button>
-              <button onClick={() => { setEditMode(e => !e); setReturnMode(false); }}
-                style={{ padding: '8px 12px', borderRadius: 8, border: `1px solid ${C.border}`, background: 'rgba(255,255,255,0.04)', color: C.text, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
-                ✏️ Modify
-              </button>
+              <button onClick={() => setShowReceipt(true)} style={{ padding: '8px 12px', borderRadius: 8, border: `1px solid ${C.border}`, background: 'rgba(255,255,255,0.04)', color: C.text, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>🖨️ Reprint</button>
+              <button onClick={() => { setEditMode(e => !e); setReturnMode(false); }} style={{ padding: '8px 12px', borderRadius: 8, border: `1px solid ${C.border}`, background: 'rgba(255,255,255,0.04)', color: C.text, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>✏️ Modify</button>
             </div>
-            <button onClick={() => { setReturnMode(r => !r); setEditMode(false); setReturnItems({}); }}
-              style={{ padding: '8px 12px', borderRadius: 8, border: `1px solid rgba(239,68,68,0.3)`, background: 'rgba(239,68,68,0.07)', color: '#EF4444', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+            <button onClick={() => { setReturnMode(r => !r); setEditMode(false); setReturnItems({}); }} style={{ padding: '8px 12px', borderRadius: 8, border: `1px solid rgba(239,68,68,0.3)`, background: 'rgba(239,68,68,0.07)', color: '#EF4444', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
               ↩️ Return Items
             </button>
           </div>
         </div>
       )}
 
-      {/* Receipt modal */}
       {showReceipt && selected && (
         <Receipt
           sale={{ ...selected, served_by: selected.served_by ?? undefined, cartSnapshot: (detail?.pos_sale_items ?? []).map(i => ({ product: { name: i.product_name }, qty: i.quantity, unitPrice: i.unit_price, label: i.product_name, discount_percent: i.discount_percent })) }}
