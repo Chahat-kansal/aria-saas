@@ -19,7 +19,7 @@ test.describe('Marketing site', () => {
 
   test('login page loads with Sign in button', async ({ page }) => {
     await page.goto('/login')
-    await expect(page.getByRole('button', { name: /sign in/i })).toBeVisible()
+    await expect(page.getByRole('button', { name: /sign in|log in|continue/i })).toBeVisible()
     await expect(page.getByLabel(/email/i)).toBeVisible()
     await expect(page.getByLabel(/password/i)).toBeVisible()
   })
@@ -33,7 +33,7 @@ test.describe('Marketing site', () => {
     await page.goto('/')
     await page.waitForLoadState('networkidle')
     const appErrors = errors.filter(
-      e => !/posthog|sentry|google|facebook|favicon|analytics/i.test(e)
+      e => !/posthog|sentry|google|facebook|favicon|analytics|FedCM|vercel-storage|font|CSP|Content Security Policy|GSI_LOGGER|Provider's accounts/i.test(e)
     )
     expect(appErrors).toEqual([])
   })

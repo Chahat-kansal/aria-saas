@@ -24,7 +24,7 @@ jobs:
 
       - name: Run E2E smoke tests
         env:
-          BASE_URL: ${{ github.event.client_payload.url }}
+          BASE_URL: https://www.ariaos.site
           TEST_USER_EMAIL: ${{ secrets.TEST_USER_EMAIL }}
           TEST_USER_PASSWORD: ${{ secrets.TEST_USER_PASSWORD }}
         run: npx playwright test
