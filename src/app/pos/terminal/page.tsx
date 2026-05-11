@@ -1096,7 +1096,7 @@ export default function TerminalPage() {
   const loyaltyPoints = Math.floor(total);
 
   return (
-    <div className="flex flex-col overflow-hidden" style={{ height: '100%', background: 'var(--terminal-bg-canvas)', position: 'relative' }}>
+    <div className="flex flex-col overflow-hidden" style={{ height: '100dvh', background: 'var(--terminal-bg-canvas)', position: 'relative' }}>
       {/* Training mode amber banner — additive */}
       {trainingMode && (
         <>
@@ -1903,7 +1903,7 @@ export default function TerminalPage() {
 
         {/* ── CENTRE: Cart ──────────────────────────────────────── */}
         <div className={`flex flex-col overflow-hidden ${mobileTab !== 'cart' ? 'hidden md:flex' : 'flex'}`}
-          style={{ background: 'var(--terminal-glass-1,rgba(28,44,36,0.55))', backdropFilter: 'blur(40px) saturate(1.4)', WebkitBackdropFilter: 'blur(40px) saturate(1.4)', borderLeft: '1px solid var(--terminal-sage-rim,rgba(127,184,151,0.18))' }}>
+          style={{ background: 'var(--terminal-glass-1,rgba(28,44,36,0.55))', backdropFilter: 'blur(40px) saturate(1.4)', WebkitBackdropFilter: 'blur(40px) saturate(1.4)', borderLeft: '1px solid var(--terminal-sage-rim,rgba(127,184,151,0.18))', minHeight: 0 }}>
 
           {showReceipt && terminalView !== 'confirm' ? (
             /* ── RECEIPT VIEW (non-confirm, e.g. reprint) ─────── */
@@ -1995,181 +1995,158 @@ export default function TerminalPage() {
                   style={{ color: 'var(--text-secondary)' }} />
               </div>
 
-              {/* Cart items */}
-              <div className="cart-items" style={{ flex: '1 1 0', overflowY: 'auto', minHeight: 0 }}>
+              {/* Cart items — scrollable region, flex-1 fills remaining height */}
+              <div className="cart-items">
                 {cart.length === 0 ? (
                   <div className="flex flex-col items-center justify-center h-full text-center px-6 py-12">
-                    <div style={{ width: 52, height: 52, borderRadius: 15, border: '1px dashed rgba(0,229,255,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 10 }}>
-                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="rgba(0,229,255,0.15)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+                    <div style={{ width: 52, height: 52, borderRadius: 15, border: '1px dashed rgba(127,184,151,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 10 }}>
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="rgba(127,184,151,0.2)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
                     </div>
-                    <p style={{ fontSize: 12, color: 'rgba(130,160,200,0.3)', lineHeight: 1.6 }}>Tap a product<br/>to begin</p>
+                    <p style={{ fontSize: 12, color: 'rgba(127,184,151,0.25)', lineHeight: 1.6 }}>Tap a product<br/>to begin</p>
                   </div>
-                ) : (
-                  <div>
-                    {cart.map(item => {
-                      const key = cartKey(item);
-                      const lineTotal = item.unitPrice * item.qty * (1 - (item.discount_percent ?? 0) / 100);
-                      return (
-                        <div key={key}
-                          onClick={() => setSelectedItem(item.product.id)}
-                          className="group cursor-pointer transition-colors"
-                          style={{ borderBottom: '1px solid rgba(127,184,151,0.06)', background: selectedItem === item.product.id ? 'rgba(127,184,151,0.06)' : undefined, display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px' }}>
-                          {/* v4: cart line thumbnail */}
-                          <div className="cart-thumb">
-                            <ProductImage product={{ id: item.product.id, name: item.label ?? item.product.name, category: item.product.pos_categories?.name ?? null, image_url: (item.product as any).image_url ?? null, image_source: (item.product as any).image_source ?? null }} size={56} showShadow={false} />
-                          </div>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                          {/* Row 1: name + total */}
-                          <div className="flex items-start justify-between gap-2 mb-1.5">
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-semibold leading-snug" style={{ color: 'var(--text-primary)' }}>
-                                {item.label ?? item.product.name}
-                              </p>
-                              {item.modifierDetails && item.modifierDetails.length > 0 && (
-                                <p className="text-xs italic mt-0.5" style={{ color: 'var(--text-secondary)' }}>· {item.modifierDetails.map(m => m.name).join(', ')}</p>
-                              )}
-                            </div>
-                            <div className="text-right flex-shrink-0">
-                              {(item.discount_percent ?? 0) > 0 && (
-                                <p className="text-[10px] line-through" style={{ fontFamily: "'JetBrains Mono',monospace", color: 'var(--text-tertiary)' }}>A${(item.unitPrice * item.qty).toFixed(2)}</p>
-                              )}
-                              <p className="text-sm font-bold" style={{ fontFamily: "'JetBrains Mono',monospace", color: 'var(--text-primary)' }}>A${lineTotal.toFixed(2)}</p>
-                            </div>
-                          </div>
-                          {/* Row 2: qty pill + remove */}
-                          <div className="flex items-center justify-between">
-                            <div className="flex rounded-full overflow-hidden" style={{ border: '1px solid #2A2540', background: 'rgba(255,255,255,0.05)' }}>
-                              <button
-                                onClick={e => { e.stopPropagation(); updateQty(key, item.qty - 1); }}
-                                className="px-2.5 py-1 text-sm font-bold leading-none transition-colors"
-                                style={{ color: 'var(--text-secondary)' }}>
-                                −
-                              </button>
-                              <span className="px-3 py-1 text-sm font-bold min-w-[28px] text-center" style={{ fontFamily: "'JetBrains Mono',monospace", color: 'var(--text-primary)', borderLeft: '1px solid #2A2540', borderRight: '1px solid #2A2540' }}>
-                                {item.qty}
-                              </span>
-                              <button
-                                onClick={e => { e.stopPropagation(); updateQty(key, item.qty + 1); }}
-                                className="px-2.5 py-1 text-sm font-bold leading-none transition-colors"
-                                style={{ color: '#8B5CF6' }}>
-                                +
-                              </button>
-                            </div>
-                            <button onClick={e => { e.stopPropagation(); updateQty(key, 0); }}
-                              className="opacity-0 group-hover:opacity-100 transition-opacity text-base leading-none px-1"
-                              style={{ color: 'rgba(139,133,168,0.3)' }}>×</button>
-                          </div>
-                          </div>{/* end flex-1 name/qty wrapper */}
+                ) : cart.map(item => {
+                  const key = cartKey(item);
+                  const lineTotal = item.unitPrice * item.qty * (1 - (item.discount_percent ?? 0) / 100);
+                  return (
+                    <div key={key}
+                      className="cart-line"
+                      onClick={() => setSelectedItem(item.product.id)}
+                      style={{ background: selectedItem === item.product.id ? 'rgba(127,184,151,0.08)' : undefined, borderColor: selectedItem === item.product.id ? 'var(--terminal-sage-rim,rgba(127,184,151,0.18))' : undefined }}>
+                      <div className="cart-thumb">
+                        <ProductImage product={{ id: item.product.id, name: item.label ?? item.product.name, category: item.product.pos_categories?.name ?? null, image_url: (item.product as any).image_url ?? null, image_source: (item.product as any).image_source ?? null }} size={56} showShadow={false} />
+                      </div>
+                      <div className="cart-line-info">
+                        <div className="cart-line-name">{item.label ?? item.product.name}</div>
+                        <div className="cart-line-meta">
+                          {item.modifierDetails && item.modifierDetails.length > 0
+                            ? item.modifierDetails.map(m => m.name).join(', ')
+                            : (item.product.pos_categories?.name ?? '')}
                         </div>
+                      </div>
+                      <div className="qty-control">
+                        <button className="qty-btn" onClick={e => { e.stopPropagation(); updateQty(key, item.qty - 1); }}>−</button>
+                        <span className="qty-num">{item.qty}</span>
+                        <button className="qty-btn" onClick={e => { e.stopPropagation(); updateQty(key, item.qty + 1); }}>+</button>
+                      </div>
+                      <div className="cart-line-price">
+                        {(item.discount_percent ?? 0) > 0 && (
+                          <span style={{ fontSize: 10, textDecoration: 'line-through', color: 'var(--text-tertiary)', display: 'block', textAlign: 'right' }}>
+                            ${(item.unitPrice * item.qty).toFixed(2)}
+                          </span>
+                        )}
+                        ${lineTotal.toFixed(2)}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Fixed bottom: discount pills + aria card + totals + charge */}
+              <div style={{ flexShrink: 0 }}>
+                {/* Discount quick-select pills */}
+                {cart.length > 0 && (
+                  <div style={{ padding: '8px 12px', display: 'flex', gap: 5, borderTop: '1px solid rgba(127,184,151,0.06)' }}>
+                    {[0, 5, 10, 15, 20].map(d => {
+                      const curDisc = cart.length > 0 ? Math.round(cart[0].discount_percent ?? 0) : 0;
+                      const active = d === 0 ? curDisc === 0 : curDisc === d;
+                      return (
+                        <button key={d} onClick={() => setCart(c => c.map(i => ({ ...i, discount_percent: d })))}
+                          style={{ flex: 1, height: 26, borderRadius: 7, border: `1px solid ${active ? 'rgba(127,184,151,0.35)' : 'rgba(127,184,151,0.1)'}`, background: active ? 'rgba(127,184,151,0.12)' : 'rgba(127,184,151,0.03)', color: active ? 'var(--terminal-sage-bright,#8FCAA5)' : 'var(--text-tertiary)', fontSize: 10, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', transition: 'all 150ms' }}>
+                          {d === 0 ? '—' : `${d}%`}
+                        </button>
                       );
                     })}
                   </div>
                 )}
-              </div>
 
-              {/* Discount quick-select pills */}
-              {cart.length > 0 && (
-                <div style={{ flexShrink: 0, padding: '8px 12px', display: 'flex', gap: 5, borderTop: '1px solid rgba(0,229,255,0.06)' }}>
-                  {[0, 5, 10, 15, 20].map(d => {
-                    const curDisc = cart.length > 0 ? Math.round(cart[0].discount_percent ?? 0) : 0;
-                    const active = d === 0 ? curDisc === 0 : curDisc === d;
-                    return (
-                      <button key={d} onClick={() => setCart(c => c.map(i => ({ ...i, discount_percent: d })))}
-                        style={{ flex: 1, height: 26, borderRadius: 7, border: `1px solid ${active ? 'rgba(0,229,255,0.35)' : 'rgba(0,229,255,0.1)'}`, background: active ? 'rgba(0,229,255,0.12)' : 'rgba(0,229,255,0.03)', color: active ? '#00E5FF' : 'var(--text-tertiary)', fontSize: 10, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', transition: 'all 150ms' }}>
-                        {d === 0 ? '—' : `${d}%`}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
+                {/* Aria inline suggestion card */}
+                {cart.length > 0 && (
+                  <AriaInlineCard
+                    cartItems={cart.map(c => ({
+                      name: c.label ?? c.product.name,
+                      category: c.product.pos_categories?.name ?? null,
+                    }))}
+                    customer={customer ? { name: customer.name } : null}
+                    onAddSuggestion={(name) => console.log('[Aria] suggestion accepted:', name)}
+                  />
+                )}
 
-              {/* v4: Aria inline suggestion card */}
-              {cart.length > 0 && (
-                <AriaInlineCard
-                  cartItems={cart.map(c => ({
-                    name: c.label ?? c.product.name,
-                    category: c.product.pos_categories?.name ?? null,
-                  }))}
-                  customer={customer ? { name: customer.name } : null}
-                  onAddSuggestion={(name) => console.log('[Aria] suggestion accepted:', name)}
-                />
-              )}
-
-              {/* v4 pay panel — totals + grand total halo + charge + quick actions */}
-              {cart.length > 0 && (() => {
-                const discountAmt = cart.reduce((s, i) => s + i.unitPrice * i.qty * ((i.discount_percent ?? 0) / 100), 0);
-                const tFloor = Math.floor(total);
-                const tCents = String(Math.round((total - tFloor) * 100)).padStart(2, '0');
-                return (
-                  <>
-                    <div className="cart-totals">
-                      <div className="totals-row">
-                        <span>Subtotal</span>
-                        <span className="value">A${subtotal.toFixed(2)}</span>
-                      </div>
-                      <div className="totals-row">
-                        <span>GST (10% inc.)</span>
-                        <span className="value">A${taxAmount.toFixed(2)}</span>
-                      </div>
-                      {discountAmt > 0 && (
-                        <div className="totals-row discount">
-                          <span>Discount</span>
-                          <span className="value">−A${discountAmt.toFixed(2)}</span>
+                {/* Pay panel — totals + grand total halo + charge + quick actions */}
+                {cart.length > 0 && (() => {
+                  const discountAmt = cart.reduce((s, i) => s + i.unitPrice * i.qty * ((i.discount_percent ?? 0) / 100), 0);
+                  const tFloor = Math.floor(total);
+                  const tCents = String(Math.round((total - tFloor) * 100)).padStart(2, '0');
+                  return (
+                    <>
+                      <div className="cart-totals">
+                        <div className="totals-row">
+                          <span>Subtotal</span>
+                          <span className="value">A${subtotal.toFixed(2)}</span>
                         </div>
-                      )}
-                    </div>
-                    <div style={{ padding: '0 16px', flexShrink: 0 }}>
-                      <div className="totals-grand">
-                        <div className="totals-grand-label-block">
-                          <span className="totals-grand-label">Total</span>
-                          <span className="totals-grand-sub">
-                            {cart.length} item{cart.length === 1 ? '' : 's'}
-                            {customer ? ` · ${customer.name?.split(' ')[0]}` : ''}
+                        <div className="totals-row">
+                          <span>GST (10% inc.)</span>
+                          <span className="value">A${taxAmount.toFixed(2)}</span>
+                        </div>
+                        {discountAmt > 0 && (
+                          <div className="totals-row discount">
+                            <span>Discount</span>
+                            <span className="value">−A${discountAmt.toFixed(2)}</span>
+                          </div>
+                        )}
+                      </div>
+                      <div style={{ padding: '0 16px' }}>
+                        <div className="totals-grand">
+                          <div className="totals-grand-label-block">
+                            <span className="totals-grand-label">Total</span>
+                            <span className="totals-grand-sub">
+                              {cart.length} item{cart.length === 1 ? '' : 's'}
+                              {customer ? ` · ${customer.name?.split(' ')[0]}` : ''}
+                            </span>
+                          </div>
+                          <span className="totals-grand-value">
+                            A${tFloor}<span className="cents">.{tCents}</span>
                           </span>
                         </div>
-                        <span className="totals-grand-value">
-                          A${tFloor}<span className="cents">.{tCents}</span>
-                        </span>
                       </div>
-                    </div>
-                    <div className="cart-action">
-                      {!registerIsOpen && !registerLoading ? (
-                        <button className="charge-btn" onClick={() => setShowRegisterModal(true)}>
-                          <span>Open Register to Sell</span>
-                          <span className="arrow">→</span>
-                        </button>
-                      ) : (
-                        <>
-                          <button className="charge-btn"
-                            onClick={() => registerIsOpen && setTerminalView('checkout')}
-                            disabled={!registerIsOpen || processing}
-                            style={{ opacity: !registerIsOpen ? 0.4 : 1 }}>
-                            <span>Charge A${roundedTotal.toFixed(2)}</span>
+                      <div className="cart-action">
+                        {!registerIsOpen && !registerLoading ? (
+                          <button className="charge-btn" onClick={() => setShowRegisterModal(true)}>
+                            <span>Open Register to Sell</span>
                             <span className="arrow">→</span>
                           </button>
-                          <div className="cart-quick-actions">
-                            <button className="quick-action"
-                              onClick={() => { setPayMethod('card'); setTerminalView('checkout'); }}>
-                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="6" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>
-                              EFTPOS
+                        ) : (
+                          <>
+                            <button className="charge-btn"
+                              onClick={() => registerIsOpen && setTerminalView('checkout')}
+                              disabled={!registerIsOpen || processing}
+                              style={{ opacity: !registerIsOpen ? 0.4 : 1 }}>
+                              <span>Charge A${roundedTotal.toFixed(2)}</span>
+                              <span className="arrow">→</span>
                             </button>
-                            <button className="quick-action"
-                              onClick={() => { setPayMethod('cash'); setTerminalView('checkout'); }}>
-                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v12M9 9h6M9 15h6"/></svg>
-                              Cash
-                            </button>
-                            <button className="quick-action"
-                              onClick={() => setShowLaybyModal(true)}>
-                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="6" y="3" width="12" height="18" rx="2"/><path d="M11 17h2"/></svg>
-                              Layby
-                            </button>
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  </>
-                );
-              })()}
+                            <div className="cart-quick-actions">
+                              <button className="quick-action"
+                                onClick={() => { setPayMethod('card'); setTerminalView('checkout'); }}>
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="6" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>
+                                EFTPOS
+                              </button>
+                              <button className="quick-action"
+                                onClick={() => { setPayMethod('cash'); setTerminalView('checkout'); }}>
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v12M9 9h6M9 15h6"/></svg>
+                                Cash
+                              </button>
+                              <button className="quick-action"
+                                onClick={() => setShowLaybyModal(true)}>
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="6" y="3" width="12" height="18" rx="2"/><path d="M11 17h2"/></svg>
+                                Layby
+                              </button>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </>
+                  );
+                })()}
+              </div>{/* end fixed bottom */}
             </>
           )}
         </div>
