@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import Link from 'next/link';
 import { isMobileDevice, hasCameraSupport } from '@/lib/mobile-detect';
 import { SFX } from '@/lib/pos-utils';
 import dynamic from 'next/dynamic';
@@ -2928,6 +2929,13 @@ export default function TerminalPage() {
           </div>
         </div>
       )}
+
+      {/* Ask Aria FAB — bottom-right corner */}
+      <Link href="/pos/ask" className="ask-aria-fab" aria-label="Ask Aria">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3z"/>
+        </svg>
+      </Link>
     </div>
   );
 }

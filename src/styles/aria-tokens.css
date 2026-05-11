@@ -386,7 +386,7 @@ body {
 
 /* ── Terminal v4: Aria Inline Intelligence Card ───────────── */
 .aria-insight {
-  margin: 8px 16px; padding: 14px 14px 12px;
+  margin: 6px 16px; padding: 10px 12px 8px;
   background: linear-gradient(135deg, rgba(143,202,165,0.10), rgba(58,90,64,0.04));
   border: 1px solid rgba(143,202,165,0.22); border-radius: 14px;
   position: relative; overflow: hidden; flex-shrink: 0;
@@ -409,8 +409,8 @@ body {
   color: var(--terminal-sage, #7FB897); font-weight: 600;
 }
 .aria-insight-text {
-  font-family: var(--font-display); font-style: italic; font-size: 13px;
-  color: var(--text-primary); line-height: 1.4; margin-bottom: 10px;
+  font-family: var(--font-display); font-style: italic; font-size: 12px;
+  color: var(--text-primary); line-height: 1.35; margin-bottom: 6px;
 }
 .aria-insight-action { display: flex; align-items: center; gap: 8px; }
 .aria-insight-suggest {
@@ -434,7 +434,7 @@ body {
 /* ── Terminal v4: Cart panel layout ──────────────────────── */
 .cart-items {
   flex: 1 1 0;
-  min-height: 0;
+  min-height: 180px;
   overflow-y: auto;
   padding: 0 16px 8px;
   display: flex; flex-direction: column; gap: 8px;
@@ -502,19 +502,19 @@ body {
 
 /* ── Terminal v4: Cart pay panel ─────────────────────────── */
 .cart-totals {
-  padding: 14px 20px 0;
+  padding: 10px 20px 0;
   border-top: 1px solid var(--terminal-sage-rim, rgba(127,184,151,0.08));
-  display: flex; flex-direction: column; gap: 6px; flex-shrink: 0;
+  display: flex; flex-direction: column; gap: 4px; flex-shrink: 0;
 }
 .totals-row {
   display: flex; justify-content: space-between;
-  font-size: 12px; color: var(--text-secondary);
+  font-size: 11px; color: var(--text-secondary);
 }
 .totals-row .value { color: var(--text-primary); font-weight: 500; }
 .totals-row.discount .value { color: var(--terminal-sage, #7FB897); }
 
 .totals-grand {
-  margin-top: 10px; padding: 18px 20px;
+  margin-top: 6px; padding: 12px 16px;
   background: linear-gradient(135deg, rgba(127,184,151,0.12), rgba(58,90,64,0.06));
   border-radius: 14px; border: 1px solid rgba(127,184,151,0.28);
   display: flex; align-items: center; justify-content: space-between;
@@ -540,19 +540,25 @@ body {
 }
 .totals-grand-value {
   font-family: var(--font-display, 'Fraunces', Georgia, serif);
-  font-style: italic; font-weight: 600; font-size: 38px;
+  font-style: italic; font-weight: 600; font-size: 30px;
   background: linear-gradient(135deg, #E0F2E5, var(--terminal-sage-bright, #8FCAA5) 40%, var(--terminal-sage, #7FB897));
   -webkit-background-clip: text; -webkit-text-fill-color: transparent;
   background-clip: text; letter-spacing: -0.025em; line-height: 1;
   position: relative; z-index: 1;
 }
-.totals-grand-value .cents { font-size: 18px; opacity: 0.85; }
+.totals-grand-value .cents {
+  font-size: 16px; font-weight: 500; letter-spacing: -0.01em;
+  -webkit-text-fill-color: var(--terminal-amber, #E8B85C);
+  color: var(--terminal-amber, #E8B85C);
+  background: none; -webkit-background-clip: initial; background-clip: initial;
+  opacity: 0.95; margin-left: 2px;
+}
 
-.cart-action { padding: 14px 16px 18px; flex-shrink: 0; }
+.cart-action { padding: 10px 16px 12px; flex-shrink: 0; }
 .charge-btn {
-  width: 100%; padding: 18px 24px; border-radius: 14px; border: none;
+  width: 100%; padding: 14px 20px; border-radius: 14px; border: none;
   background: linear-gradient(135deg, var(--terminal-sage-bright,#8FCAA5) 0%, var(--terminal-sage,#7FB897) 50%, var(--violet-700,#2D5240) 100%);
-  color: white; font-family: inherit; font-size: 16px; font-weight: 700;
+  color: white; font-family: inherit; font-size: 14px; font-weight: 700;
   letter-spacing: 0.04em; cursor: pointer;
   display: flex; align-items: center; justify-content: center; gap: 12px;
   box-shadow:
@@ -581,9 +587,9 @@ body {
 .charge-btn .arrow { transition: transform 240ms; }
 .charge-btn:hover .arrow { transform: translateX(4px); }
 
-.cart-quick-actions { display: flex; gap: 8px; margin-top: 10px; }
+.cart-quick-actions { display: flex; gap: 8px; margin-top: 6px; }
 .quick-action {
-  flex: 1; padding: 10px; border-radius: 10px;
+  flex: 1; padding: 7px; border-radius: 10px;
   background: rgba(127,184,151,0.04);
   border: 1px solid var(--terminal-sage-rim, rgba(127,184,151,0.16));
   color: var(--text-secondary); font-family: inherit; font-size: 11px; font-weight: 500;
@@ -595,3 +601,38 @@ body {
   border-color: var(--terminal-sage-rim, rgba(127,184,151,0.18));
 }
 .quick-action:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ── Ask Aria FAB — bottom-right floating action button ──────── */
+.ask-aria-fab {
+  position: fixed; bottom: 24px; right: 24px;
+  width: 52px; height: 52px; border-radius: 50%;
+  background: linear-gradient(135deg, #8FCAA5, #2D5240);
+  color: white;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; z-index: 100;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.3),
+    0 8px 24px rgba(127,184,151,0.45),
+    0 2px 8px rgba(0,0,0,0.25);
+  transition: transform 220ms cubic-bezier(0.16,1,0.3,1), box-shadow 220ms;
+  text-decoration: none;
+}
+.ask-aria-fab:hover {
+  transform: translateY(-3px) scale(1.05);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.35),
+    0 14px 32px rgba(127,184,151,0.55),
+    0 4px 12px rgba(0,0,0,0.3);
+}
+.ask-aria-fab:active { transform: translateY(-1px) scale(0.98); }
+.ask-aria-fab svg { filter: drop-shadow(0 1px 2px rgba(0,0,0,0.15)); }
+.ask-aria-fab::before {
+  content: ''; position: absolute; inset: -4px; border-radius: 50%;
+  border: 2px solid rgba(127,184,151,0.4);
+  animation: askAriaPulse 2.4s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes askAriaPulse {
+  0%, 100% { transform: scale(1); opacity: 0.8; }
+  50%       { transform: scale(1.15); opacity: 0; }
+}
