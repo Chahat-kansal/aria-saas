@@ -11,7 +11,7 @@ import { AriaChatMessage } from '@/components/pos/AriaChatMessage';
 import type { AriaResponse } from '@/components/pos/AriaChatMessage';
 
 const CursorGlow = dynamic(() => import('@/components/pos/CursorGlow'), { ssr: false });
-const AnimatedBg = dynamic(() => import('@/components/pos/AnimatedBg'), { ssr: false });
+// AnimatedBg removed from terminal v4 — static aurora only (AuroraCanvas handles background)
 const FlyToCart  = dynamic(() => import('@/components/pos/FlyToCart'),  { ssr: false });
 
 // Layout system — additive
@@ -29,6 +29,7 @@ import { getAriaSuggestions } from '@/lib/terminal/aria-suggestions';
 import { AuroraCanvas } from '@/components/terminal/AuroraCanvas';
 import { LivePulseRail } from '@/components/terminal/LivePulseRail';
 import { AriaInlineCard } from '@/components/terminal/AriaInlineCard';
+import { ProductImage } from '@/components/terminal/ProductImage';
 
 /* ─── Types ─────────────────────────────────────────────────────── */
 interface Product {
@@ -1134,8 +1135,7 @@ export default function TerminalPage() {
       <AuroraCanvas />
       {/* v4: Live pulse rail — 38px strip above main shell */}
       <LivePulseRail businessId={businessId} />
-      {/* Full-screen animated dot grid */}
-      <AnimatedBg />
+      {/* Animated dot grid removed from terminal v4 — only static aurora */}
       <CursorGlow />
       <FlyToCart ref={flyRef} />
 
@@ -2033,8 +2033,13 @@ export default function TerminalPage() {
                       return (
                         <div key={key}
                           onClick={() => setSelectedItem(item.product.id)}
-                          className="group px-4 py-2.5 cursor-pointer transition-colors"
-                          style={{ borderBottom: '1px solid #1C1928', background: selectedItem === item.product.id ? 'rgba(139,92,246,0.05)' : undefined }}>
+                          className="group cursor-pointer transition-colors"
+                          style={{ borderBottom: '1px solid rgba(127,184,151,0.06)', background: selectedItem === item.product.id ? 'rgba(127,184,151,0.06)' : undefined, display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px' }}>
+                          {/* v4: cart line thumbnail */}
+                          <div className="cart-thumb">
+                            <ProductImage product={{ id: item.product.id, name: item.label ?? item.product.name, category: item.product.pos_categories?.name ?? null, image_url: (item.product as any).image_url ?? null, image_source: (item.product as any).image_source ?? null }} size={56} showShadow={false} />
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
                           {/* Row 1: name + total */}
                           <div className="flex items-start justify-between gap-2 mb-1.5">
                             <div className="flex-1 min-w-0">
@@ -2075,6 +2080,7 @@ export default function TerminalPage() {
                               className="opacity-0 group-hover:opacity-100 transition-opacity text-base leading-none px-1"
                               style={{ color: 'rgba(139,133,168,0.3)' }}>×</button>
                           </div>
+                          </div>{/* end flex-1 name/qty wrapper */}
                         </div>
                       );
                     })}
@@ -2110,74 +2116,81 @@ export default function TerminalPage() {
                 />
               )}
 
-              {/* Summary */}
-              {cart.length > 0 && (
-                <div style={{ flexShrink: 0, padding: '8px 14px 0', borderTop: '1px solid rgba(0,229,255,0.06)' }}>
-                  <div style={{ borderRadius: 12, padding: '10px 14px', background: 'rgba(0,229,255,0.03)', border: '1px solid rgba(0,229,255,0.06)' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                      <span style={{ fontSize: 11, color: 'rgba(130,160,200,0.55)' }}>Subtotal</span>
-                      <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, color: 'rgba(220,240,255,0.7)' }}>A${subtotal.toFixed(2)}</span>
+              {/* v4 pay panel — totals + grand total halo + charge + quick actions */}
+              {cart.length > 0 && (() => {
+                const discountAmt = cart.reduce((s, i) => s + i.unitPrice * i.qty * ((i.discount_percent ?? 0) / 100), 0);
+                const tFloor = Math.floor(total);
+                const tCents = String(Math.round((total - tFloor) * 100)).padStart(2, '0');
+                return (
+                  <>
+                    <div className="cart-totals">
+                      <div className="totals-row">
+                        <span>Subtotal</span>
+                        <span className="value">A${subtotal.toFixed(2)}</span>
+                      </div>
+                      <div className="totals-row">
+                        <span>GST (10% inc.)</span>
+                        <span className="value">A${taxAmount.toFixed(2)}</span>
+                      </div>
+                      {discountAmt > 0 && (
+                        <div className="totals-row discount">
+                          <span>Discount</span>
+                          <span className="value">−A${discountAmt.toFixed(2)}</span>
+                        </div>
+                      )}
                     </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                      <span style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>GST incl.</span>
-                      <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 10, color: 'var(--text-tertiary)' }}>A${taxAmount.toFixed(2)}</span>
-                    </div>
-                    {/* Loyalty points earned */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                      <span style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>Loyalty earned</span>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(0,229,255,0.07)', border: '1px solid rgba(0,229,255,0.18)', borderRadius: 20, padding: '2px 8px' }}>
-                        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#00E5FF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-                        <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 9, fontWeight: 800, color: '#00E5FF' }}>{loyaltyPoints} PTS</span>
+                    <div style={{ padding: '0 16px' }}>
+                      <div className="totals-grand">
+                        <div className="totals-grand-label-block">
+                          <span className="totals-grand-label">Total</span>
+                          <span className="totals-grand-sub">
+                            {cart.length} item{cart.length === 1 ? '' : 's'}
+                            {customer ? ` · ${customer.name?.split(' ')[0]}` : ''}
+                          </span>
+                        </div>
+                        <span className="totals-grand-value">
+                          A${tFloor}<span className="cents">.{tCents}</span>
+                        </span>
                       </div>
                     </div>
-                    <div style={{ height: 1, background: 'rgba(0,229,255,0.06)', marginBottom: 8 }} />
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                      <span style={{ fontSize: 11, fontWeight: 700, color: 'rgba(220,240,255,0.7)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Total</span>
-                      <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 26, fontWeight: 900, color: 'var(--text-primary)', letterSpacing: '-0.04em' }}>A${roundedTotal.toFixed(2)}</span>
+                    <div className="cart-action">
+                      {!registerIsOpen && !registerLoading ? (
+                        <button className="charge-btn" onClick={() => setShowRegisterModal(true)}>
+                          <span>Open Register to Sell</span>
+                          <span className="arrow">→</span>
+                        </button>
+                      ) : (
+                        <>
+                          <button className="charge-btn"
+                            onClick={() => registerIsOpen && setTerminalView('checkout')}
+                            disabled={!registerIsOpen || processing}
+                            style={{ opacity: !registerIsOpen ? 0.4 : 1 }}>
+                            <span>Charge A${roundedTotal.toFixed(2)}</span>
+                            <span className="arrow">→</span>
+                          </button>
+                          <div className="cart-quick-actions">
+                            <button className="quick-action"
+                              onClick={() => { setPayMethod('card'); setTerminalView('checkout'); }}>
+                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="6" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>
+                              EFTPOS
+                            </button>
+                            <button className="quick-action"
+                              onClick={() => { setPayMethod('cash'); setTerminalView('checkout'); }}>
+                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v12M9 9h6M9 15h6"/></svg>
+                              Cash
+                            </button>
+                            <button className="quick-action"
+                              onClick={() => setShowLaybyModal(true)}>
+                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="6" y="3" width="12" height="18" rx="2"/><path d="M11 17h2"/></svg>
+                              Layby
+                            </button>
+                          </div>
+                        </>
+                      )}
                     </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Charge button */}
-              <div style={{ flexShrink: 0, padding: '12px 14px 14px', borderTop: '1px solid rgba(0,229,255,0.06)' }}>
-                {!registerIsOpen && !registerLoading ? (
-                  <button onClick={() => setShowRegisterModal(true)}
-                    style={{ width: '100%', height: 56, borderRadius: 14, border: 'none', background: 'linear-gradient(135deg,var(--terminal-sage-bright,#8FCAA5),var(--violet,#7FB897),var(--violet-700,#2D5240))', color: '#0B1410', fontFamily: 'inherit', fontSize: 14, fontWeight: 900, cursor: 'pointer', boxShadow: '0 4px 0 rgba(45,82,64,0.5), 0 10px 30px rgba(127,184,151,0.3)' }}>
-                    Open Register to Sell
-                  </button>
-                ) : (
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    {cart.length > 0 && (
-                      <button onClick={parkSale}
-                        style={{ height: 56, width: 52, borderRadius: 12, border: '1px solid rgba(0,229,255,0.1)', background: 'rgba(0,229,255,0.04)', color: 'var(--text-tertiary)', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3, flexShrink: 0, fontFamily: 'inherit' }}>
-                        <span>⏸</span>
-                        <span style={{ fontSize: 9, fontWeight: 600 }}>Hold</span>
-                      </button>
-                    )}
-                    <button
-                      onClick={() => cart.length > 0 && registerIsOpen && setTerminalView('checkout')}
-                      disabled={!cart.length || !registerIsOpen || processing}
-                      style={{
-                        flex: 1, height: 56, borderRadius: 14, border: 'none',
-                        background: cart.length > 0 ? 'linear-gradient(135deg,var(--terminal-sage-bright,#8FCAA5),var(--violet,#7FB897),var(--violet-700,#2D5240))' : 'rgba(127,184,151,0.05)',
-                        color: cart.length > 0 ? '#0B1410' : 'rgba(127,184,151,0.3)',
-                        fontFamily: 'inherit', fontSize: 14, fontWeight: 900, cursor: !cart.length || !registerIsOpen ? 'not-allowed' : 'pointer',
-                        opacity: (!cart.length || !registerIsOpen) ? 0.4 : 1,
-                        boxShadow: cart.length > 0 ? '0 4px 0 rgba(45,82,64,0.6), 0 10px 30px var(--terminal-sage-glow,rgba(127,184,151,0.35))' : 'none',
-                        transition: 'all 200ms', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                        position: 'relative', overflow: 'hidden',
-                      }}
-                      onMouseEnter={e => { const el = e.currentTarget; if (!el.disabled) { el.style.transform = 'translateY(-2px)'; el.style.boxShadow = '0 7px 0 rgba(45,82,64,0.6), 0 16px 40px rgba(127,184,151,0.45)'; } }}
-                      onMouseLeave={e => { const el = e.currentTarget; el.style.transform = ''; el.style.boxShadow = cart.length > 0 ? '0 4px 0 rgba(45,82,64,0.6), 0 10px 30px var(--terminal-sage-glow,rgba(127,184,151,0.35))' : 'none'; }}
-                      onMouseDown={e => { const el = e.currentTarget; el.style.transform = 'translateY(2px) scale(0.97)'; el.style.boxShadow = '0 2px 0 rgba(0,150,200,0.5)'; }}
-                      onMouseUp={e => { const el = e.currentTarget; el.style.transform = 'translateY(-2px)'; }}>
-                      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
-                      {cart.length > 0 ? `Charge A$${roundedTotal.toFixed(2)}` : 'Select items to charge'}
-                    </button>
-                  </div>
-                )}
-              </div>
+                  </>
+                );
+              })()}
             </>
           )}
         </div>
