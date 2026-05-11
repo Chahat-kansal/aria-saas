@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
+import { logSaleEdit } from '@/lib/pos/sale-audit';
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
   const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle();
@@ -11,6 +12,18 @@ async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, u
   return data?.id ?? null;
 }
 
+const EDITABLE_METADATA = [
+  'served_by', 'register_id', 'outlet_id', 'customer_id',
+  'internal_comment', 'external_notes', 'notes',
+] as const;
+
+const BLOCKED_FIELDS = [
+  'payment_method', 'total_amount', 'subtotal', 'tax_amount',
+  'created_at', 'sale_number', 'business_id', 'session_id', 'status',
+] as const;
+
+const UUID_FIELDS = new Set(['register_id', 'outlet_id', 'customer_id']);
+
 export async function GET(req: Request, { params }: { params: { id: string } }) {
   const supabase = createServerSupabaseClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -18,6 +31,19 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
 
   const bid = await getBid(supabase, user.id);
   if (!bid) return NextResponse.json({ error: 'No business' }, { status: 404 });
+
+  const action = new URL(req.url).searchParams.get('action');
+
+  if (action === 'audit') {
+    const { data: edits } = await supabase
+      .from('pos_sale_edits')
+      .select('*')
+      .eq('sale_id', params.id)
+      .eq('business_id', bid)
+      .order('created_at', { ascending: false })
+      .limit(100);
+    return NextResponse.json({ edits: edits ?? [] });
+  }
 
   const { data: sale } = await supabase
     .from('pos_sales')
@@ -38,17 +64,123 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   const bid = await getBid(supabase, user.id);
   if (!bid) return NextResponse.json({ error: 'No business' }, { status: 404 });
 
+  const action = new URL(req.url).searchParams.get('action') ?? 'modify_metadata';
   const body = await req.json();
-  // Only allow safe fields to be updated
-  const allowed = ['served_by', 'notes', 'customer_id'];
-  const update: Record<string, unknown> = {};
-  for (const k of allowed) {
-    if (k in body) update[k] = body[k];
+  const saleId = params.id;
+
+  // Fetch existing sale for comparison + auth
+  const { data: existing } = await supabase
+    .from('pos_sales')
+    .select('*')
+    .eq('id', saleId)
+    .eq('business_id', bid)
+    .maybeSingle();
+  if (!existing) return NextResponse.json({ error: 'sale_not_found' }, { status: 404 });
+
+  // ── void ─────────────────────────────────────────────────────────
+  if (action === 'void') {
+    if (existing.status === 'voided') {
+      return NextResponse.json({ error: 'already_voided' }, { status: 400 });
+    }
+
+    const { data: items } = await supabase
+      .from('pos_sale_items')
+      .select('product_id, quantity')
+      .eq('sale_id', saleId);
+
+    for (const item of (items ?? [])) {
+      if (!item.product_id) continue;
+      const { data: prod } = await supabase
+        .from('pos_products').select('track_stock').eq('id', item.product_id).maybeSingle();
+      if (!prod?.track_stock) continue;
+      try {
+        await supabase.rpc('reverse_outlet_inventory', {
+          p_product_id: item.product_id,
+          p_outlet_id: existing.outlet_id ?? null,
+          p_quantity: item.quantity,
+          p_business_id: bid,
+          p_reason: `void:${saleId}`,
+        });
+      } catch (err) {
+        console.warn('[void] inventory reverse failed:', err);
+      }
+    }
+
+    await supabase.from('pos_sales').update({
+      status: 'voided',
+      last_edited_at: new Date().toISOString(),
+      last_edited_by: user.id,
+    }).eq('id', saleId);
+
+    await logSaleEdit(supabase, {
+      sale_id: saleId, business_id: bid, edited_by: user.id,
+      action: 'void',
+      old_value: { status: existing.status },
+      new_value: { status: 'voided' },
+      reason: body.reason,
+    });
+
+    return NextResponse.json({ ok: true });
   }
 
-  if (!Object.keys(update).length) return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 });
+  // ── add_comment ───────────────────────────────────────────────────
+  if (action === 'add_comment') {
+    await logSaleEdit(supabase, {
+      sale_id: saleId, business_id: bid, edited_by: user.id,
+      action: 'comment',
+      new_value: body.comment,
+      reason: body.reason,
+    });
+    return NextResponse.json({ ok: true });
+  }
 
-  const { error } = await supabase.from('pos_sales').update(update).eq('id', params.id).eq('business_id', bid);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ ok: true });
+  // ── modify_metadata ───────────────────────────────────────────────
+  const blocked = Object.keys(body).filter(k => BLOCKED_FIELDS.includes(k as never));
+  if (blocked.includes('payment_method')) {
+    return NextResponse.json({
+      error: 'tender_change_blocked',
+      message: 'Tender type cannot be changed. Void the sale and re-ring with the correct tender.',
+    }, { status: 400 });
+  }
+  if (blocked.length > 0) {
+    return NextResponse.json({
+      error: 'fields_not_editable',
+      message: `These fields cannot be edited: ${blocked.join(', ')}`,
+    }, { status: 400 });
+  }
+
+  const updatePayload: Record<string, unknown> = {
+    last_edited_at: new Date().toISOString(),
+    last_edited_by: user.id,
+  };
+  const changes: { field: string; old: unknown; new: unknown }[] = [];
+
+  for (const field of EDITABLE_METADATA) {
+    if (!(field in body)) continue;
+    const rawVal = body[field];
+    const newVal = UUID_FIELDS.has(field) ? (rawVal === '' ? null : rawVal) : rawVal;
+    const oldVal = (existing as Record<string, unknown>)[field];
+    if (newVal !== oldVal) {
+      updatePayload[field] = newVal;
+      changes.push({ field, old: oldVal, new: newVal });
+    }
+  }
+
+  if (changes.length === 0) return NextResponse.json({ ok: true, message: 'no_changes' });
+
+  const { error: updErr } = await supabase
+    .from('pos_sales').update(updatePayload).eq('id', saleId).eq('business_id', bid);
+  if (updErr) return NextResponse.json({ error: updErr.message }, { status: 500 });
+
+  for (const change of changes) {
+    await logSaleEdit(supabase, {
+      sale_id: saleId, business_id: bid, edited_by: user.id,
+      action: 'modify_metadata',
+      field_changed: change.field,
+      old_value: change.old,
+      new_value: change.new,
+    });
+  }
+
+  return NextResponse.json({ ok: true, changes: changes.length });
 }
