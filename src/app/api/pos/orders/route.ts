@@ -56,9 +56,10 @@ export async function POST(req: Request) {
   }
 
   const body = await req.json();
+  const createdBy = body.created_by ?? user.email ?? 'Unknown';
   const { data: order, error } = await supabase
     .from('pos_purchase_orders')
-    .insert({ status: 'draft', source: 'manual', ...body, business_id: bid, order_number: orderNumber })
+    .insert({ status: 'draft', source: 'manual', ...body, business_id: bid, order_number: orderNumber, created_by: createdBy })
     .select('*, pos_suppliers(name)')
     .single();
 

@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const results = await fetchMarketPrices(supabase, productId, businessId, barcode, productName)
+    const results = await fetchMarketPrices(productId, businessId, barcode, productName)
     return NextResponse.json({ results, cached: results.some(r => r.is_cached) })
   } catch {
     return NextResponse.json({ results: [], cached: false })

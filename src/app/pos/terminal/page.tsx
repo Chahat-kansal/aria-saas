@@ -27,6 +27,8 @@ import type { ProductForTerminal } from '@/components/terminal/layouts/types';
 import { getCurrentLayout, TerminalLayout } from '@/lib/terminal/layouts';
 import { getAriaSuggestions } from '@/lib/terminal/aria-suggestions';
 import { AuroraCanvas } from '@/components/terminal/AuroraCanvas';
+import { LivePulseRail } from '@/components/terminal/LivePulseRail';
+import { AriaInlineCard } from '@/components/terminal/AriaInlineCard';
 
 /* ─── Types ─────────────────────────────────────────────────────── */
 interface Product {
@@ -1130,6 +1132,8 @@ export default function TerminalPage() {
       )}
       {/* Aurora canvas background — v3 redesign */}
       <AuroraCanvas />
+      {/* v4: Live pulse rail — 38px strip above main shell */}
+      <LivePulseRail businessId={businessId} />
       {/* Full-screen animated dot grid */}
       <AnimatedBg />
       <CursorGlow />
@@ -2094,6 +2098,18 @@ export default function TerminalPage() {
                 </div>
               )}
 
+              {/* v4: Aria inline suggestion card */}
+              {cart.length > 0 && (
+                <AriaInlineCard
+                  cartItems={cart.map(c => ({
+                    name: c.label ?? c.product.name,
+                    category: c.product.pos_categories?.name ?? null,
+                  }))}
+                  customer={customer ? { name: customer.name } : null}
+                  onAddSuggestion={(name) => console.log('[Aria] suggestion accepted:', name)}
+                />
+              )}
+
               {/* Summary */}
               {cart.length > 0 && (
                 <div style={{ flexShrink: 0, padding: '8px 14px 0', borderTop: '1px solid rgba(0,229,255,0.06)' }}>
@@ -2374,37 +2390,7 @@ export default function TerminalPage() {
         </div>
       </div>
 
-      {/* ── FLOATING ASK ARIA BUTTON — desktop only ────────────────── */}
-      <div
-        className="hidden md:flex"
-        onClick={() => setAriaOpen(prev => !prev)}
-        style={{
-          position: 'fixed',
-          bottom: 24, right: 24,
-          zIndex: 100,
-          alignItems: 'center',
-          gap: 8,
-          padding: '10px 20px',
-          borderRadius: 99,
-          background: ariaOpen
-            ? 'linear-gradient(135deg, #8B5CF6, #7C3AED)'
-            : 'var(--bg-elevated)',
-          boxShadow: ariaOpen
-            ? '0 4px 14px rgba(139,92,246,0.4), 0 12px 32px rgba(139,92,246,0.28)'
-            : 'var(--shadow-md)',
-          cursor: 'pointer',
-          transition: 'all 250ms cubic-bezier(0.16,1,0.3,1)',
-          userSelect: 'none',
-        }}
-      >
-        <span style={{ fontSize: 16 }}>✨</span>
-        <span style={{ fontSize: 13, fontWeight: 700, color: ariaOpen ? '#fff' : 'var(--text-primary)' }}>
-          {ariaOpen ? 'Close Aria' : 'Ask Aria'}
-        </span>
-        {!ariaOpen && lowStockItems.length > 0 && (
-          <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#F59E0B', boxShadow: '0 0 6px #F59E0B' }} />
-        )}
-      </div>
+      {/* ── FLOATING ASK ARIA BUTTON — removed in v4 (replaced by inline cart card) */}
 
       {/* Keyboard shortcuts bar — desktop only */}
       <div className="hidden md:flex flex-shrink-0 h-8 items-center px-4 gap-4 overflow-hidden" style={{ background: 'rgba(8,6,16,0.8)', borderTop: '1px solid #1C1928' }}>

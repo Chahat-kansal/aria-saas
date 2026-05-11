@@ -61,4 +61,5 @@ export interface MarketPriceResult {
   shelf_price: number
   fetched_at: string
   is_cached: boolean
+  is_estimate?: boolean
 }

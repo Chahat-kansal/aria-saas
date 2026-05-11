@@ -287,8 +287,13 @@ export default function OrderBuilderPage() {
                             <Loader2 size={11} style={{ animation: 'spin 0.7s linear infinite' }} /> Fetching market prices…
                           </div>
                         ) : line.open_market_low != null ? (
-                          <div style={{ color: 'var(--text-tertiary)' }} title="Public retail shelf price. Wholesale is typically 55-65% of this figure.">
-                            Market retail ref: ${line.open_market_low.toFixed(2)}–${(line.open_market_high ?? line.open_market_low).toFixed(2)} · {line.open_market_source} ⓘ
+                          <div style={{ color: 'var(--text-tertiary)' }}
+                            title={line.open_market_source?.includes('estimate')
+                              ? 'Estimated retail price based on industry typical markup (last paid × 1.60). For exact pricing check Dan Murphy\'s or BWS directly.'
+                              : 'Public retail shelf price. Wholesale is typically 55-65% of this figure.'}>
+                            {line.open_market_source?.includes('estimate')
+                              ? `≈ $${line.open_market_low.toFixed(2)} estimated retail ⓘ`
+                              : `Market ref: $${line.open_market_low.toFixed(2)}–$${(line.open_market_high ?? line.open_market_low).toFixed(2)} · ${line.open_market_source} ⓘ`}
                           </div>
                         ) : null}
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

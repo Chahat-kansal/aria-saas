@@ -1,131 +1,93 @@
-import type { MarketPriceResult } from './types'
+import { createServerSupabaseClient } from '@/lib/supabase-server'
 
-interface SourceConfig {
-  name: string
-  buildUrl: (term: string) => string
-  parse: (data: any) => { price: number; url: string | null } | null
+export interface MarketPriceResult {
+  source_name: string
+  source_url: string | null
+  shelf_price: number
+  fetched_at: string
+  is_cached: boolean
+  is_estimate: boolean
 }
 
-const SOURCES: SourceConfig[] = [
-  {
-    name: "Dan Murphy's",
-    buildUrl: (term) =>
-      `https://api.danmurphys.com.au/apis/ui/v3/search?q=${encodeURIComponent(term)}&inStockOnly=false&limit=3`,
-    parse: (data) => {
-      const product = data?.products?.[0] ?? data?.items?.[0]
-      if (!product) return null
-      const price = product.price ?? product.nowPrice ?? product.priceValue
-      if (!price) return null
-      return { price: Number(price), url: product.url ? `https://www.danmurphys.com.au${product.url}` : null }
-    },
-  },
-  {
-    name: 'BWS',
-    buildUrl: (term) =>
-      `https://api.bws.com.au/apis/ui/v3/search?q=${encodeURIComponent(term)}&inStockOnly=false&limit=3`,
-    parse: (data) => {
-      const product = data?.products?.[0] ?? data?.items?.[0]
-      if (!product) return null
-      const price = product.price ?? product.nowPrice ?? product.priceValue
-      if (!price) return null
-      return { price: Number(price), url: product.url ? `https://www.bws.com.au${product.url}` : null }
-    },
-  },
-  {
-    name: 'Liquorland',
-    buildUrl: (term) =>
-      `https://www.liquorland.com.au/api/2.0/page/search?SearchTerm=${encodeURIComponent(term)}&PageSize=3`,
-    parse: (data) => {
-      const products = data?.Products ?? data?.products ?? []
-      const product = products[0]
-      if (!product) return null
-      const price = product.Price ?? product.price ?? product.NowPrice
-      if (!price) return null
-      return { price: Number(price), url: product.Url ? `https://www.liquorland.com.au${product.Url}` : null }
-    },
-  },
-  {
-    name: 'First Choice',
-    buildUrl: (term) =>
-      `https://www.firstchoiceliquor.com.au/api/2.0/page/search?SearchTerm=${encodeURIComponent(term)}&PageSize=3`,
-    parse: (data) => {
-      const products = data?.Products ?? data?.products ?? []
-      const product = products[0]
-      if (!product) return null
-      const price = product.Price ?? product.price ?? product.NowPrice
-      if (!price) return null
-      return { price: Number(price), url: product.Url ? `https://www.firstchoiceliquor.com.au${product.Url}` : null }
-    },
-  },
-]
-
-async function fetchSource(
-  source: SourceConfig,
-  searchTerm: string,
-  signal?: AbortSignal
-): Promise<{ name: string; shelf_price: number; source_url: string | null } | null> {
-  try {
-    const res = await fetch(source.buildUrl(searchTerm), {
-      headers: {
-        'Accept': 'application/json',
-        'User-Agent': 'Mozilla/5.0 (compatible; AriaOS retail price check)',
-      },
-      signal,
-      next: { revalidate: 0 },
-    })
-    if (!res.ok) return null
-    const data = await res.json()
-    const result = source.parse(data)
-    if (!result) return null
-    return { name: source.name, shelf_price: result.price, source_url: result.url }
-  } catch (e) {
-    console.error(`[market-prices] ${source.name} fetch failed:`, e)
-    return null
-  }
-}
-
+/**
+ * Returns retail-price estimates from the business's own purchase history.
+ * Liquor/FMCG retail marks up ~60% above wholesale; we use ×1.60 as midpoint.
+ *
+ * Previous implementation called Dan Murphy's / BWS APIs — blocked by anti-bot
+ * measures. Local estimates are more reliable and honest.
+ */
 export async function fetchMarketPrices(
-  supabase: any,
   productId: string,
   businessId: string,
-  barcode: string | null,
-  productName: string
+  _barcode: string | null,
+  _productName: string,
 ): Promise<MarketPriceResult[]> {
-  // 1. Check cache
-  const { data: cached } = await supabase
-    .from('pos_market_price_cache')
-    .select('source_name,source_url,shelf_price,fetched_at')
+  const supabase = createServerSupabaseClient()
+
+  const { data: history } = await supabase
+    .from('pos_purchase_order_lines')
+    .select('confirmed_price, created_at')
     .eq('product_id', productId)
-    .gt('expires_at', new Date().toISOString())
-  if (cached?.length) {
-    return cached.map((r: any) => ({ ...r, is_cached: true }))
+    .eq('business_id', businessId)
+    .not('confirmed_price', 'is', null)
+    .order('created_at', { ascending: false })
+    .limit(1)
+
+  if (history && history.length > 0) {
+    const lastPaid = history[0].confirmed_price as number
+    return [{
+      source_name: 'Industry estimate',
+      source_url: null,
+      shelf_price: lastPaid * 1.60,
+      fetched_at: new Date().toISOString(),
+      is_cached: false,
+      is_estimate: true,
+    }]
   }
 
-  // 2. Fetch from all sources (prefer barcode for accuracy)
-  const searchTerm = barcode ?? productName
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), 8000)
+  const { data: inv } = await supabase
+    .from('pos_outlet_inventory')
+    .select('last_case_cost, items_per_case')
+    .eq('product_id', productId)
+    .eq('business_id', businessId)
+    .not('last_case_cost', 'is', null)
+    .limit(1)
+    .maybeSingle()
 
-  const settled = await Promise.allSettled(
-    SOURCES.map(s => fetchSource(s, searchTerm, controller.signal))
-  )
-  clearTimeout(timeout)
+  if (!inv?.last_case_cost) return []
 
-  const results: MarketPriceResult[] = []
-  const now = new Date().toISOString()
-  const expires = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+  const perItem = inv.items_per_case
+    ? (inv.last_case_cost as number) / (inv.items_per_case as number)
+    : (inv.last_case_cost as number)
 
-  for (const outcome of settled) {
-    if (outcome.status !== 'fulfilled' || !outcome.value) continue
-    const { name, shelf_price, source_url } = outcome.value
-    results.push({ source_name: name, source_url, shelf_price, fetched_at: now, is_cached: false })
+  return [{
+    source_name: 'Industry estimate',
+    source_url: null,
+    shelf_price: perItem * 1.60,
+    fetched_at: new Date().toISOString(),
+    is_cached: false,
+    is_estimate: true,
+  }]
+}
 
-    // 3. Cache the result — best effort
-    supabase.from('pos_market_price_cache').upsert(
-      { product_id: productId, business_id: businessId, barcode, source_name: name, source_url, shelf_price, fetched_at: now, expires_at: expires },
-      { onConflict: 'product_id,source_name' }
-    ).then(() => {}).catch(() => {})
-  }
+export async function getPurchaseHistory(
+  productId: string,
+  businessId: string,
+  limit = 5,
+) {
+  const supabase = createServerSupabaseClient()
+  const { data } = await supabase
+    .from('pos_purchase_order_lines')
+    .select('confirmed_price, created_at, supplier_name')
+    .eq('product_id', productId)
+    .eq('business_id', businessId)
+    .not('confirmed_price', 'is', null)
+    .order('created_at', { ascending: false })
+    .limit(limit)
 
-  return results
+  return (data ?? []).map(d => ({
+    price: d.confirmed_price as number,
+    date: d.created_at as string,
+    supplier: d.supplier_name as string | null,
+  }))
 }
