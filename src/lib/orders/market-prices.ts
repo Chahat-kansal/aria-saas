@@ -22,52 +22,57 @@ export async function fetchMarketPrices(
   _barcode: string | null,
   _productName: string,
 ): Promise<MarketPriceResult[]> {
-  const supabase = createServerSupabaseClient()
+  try {
+    const supabase = createServerSupabaseClient()
 
-  const { data: history } = await supabase
-    .from('pos_purchase_order_lines')
-    .select('confirmed_price, created_at')
-    .eq('product_id', productId)
-    .eq('business_id', businessId)
-    .not('confirmed_price', 'is', null)
-    .order('created_at', { ascending: false })
-    .limit(1)
+    const { data: history } = await supabase
+      .from('pos_purchase_order_lines')
+      .select('confirmed_price, created_at')
+      .eq('product_id', productId)
+      .eq('business_id', businessId)
+      .not('confirmed_price', 'is', null)
+      .order('created_at', { ascending: false })
+      .limit(1)
 
-  if (history && history.length > 0) {
-    const lastPaid = history[0].confirmed_price as number
+    if (history && history.length > 0) {
+      const lastPaid = history[0].confirmed_price as number
+      return [{
+        source_name: 'Industry estimate',
+        source_url: null,
+        shelf_price: lastPaid * 1.60,
+        fetched_at: new Date().toISOString(),
+        is_cached: false,
+        is_estimate: true,
+      }]
+    }
+
+    const { data: inv } = await supabase
+      .from('pos_outlet_inventory')
+      .select('last_case_cost, items_per_case')
+      .eq('product_id', productId)
+      .eq('business_id', businessId)
+      .not('last_case_cost', 'is', null)
+      .limit(1)
+      .maybeSingle()
+
+    if (!inv?.last_case_cost) return []
+
+    const perItem = inv.items_per_case
+      ? (inv.last_case_cost as number) / (inv.items_per_case as number)
+      : (inv.last_case_cost as number)
+
     return [{
       source_name: 'Industry estimate',
       source_url: null,
-      shelf_price: lastPaid * 1.60,
+      shelf_price: perItem * 1.60,
       fetched_at: new Date().toISOString(),
       is_cached: false,
       is_estimate: true,
     }]
+  } catch (err) {
+    console.warn('[market-prices] failed:', err)
+    return []
   }
-
-  const { data: inv } = await supabase
-    .from('pos_outlet_inventory')
-    .select('last_case_cost, items_per_case')
-    .eq('product_id', productId)
-    .eq('business_id', businessId)
-    .not('last_case_cost', 'is', null)
-    .limit(1)
-    .maybeSingle()
-
-  if (!inv?.last_case_cost) return []
-
-  const perItem = inv.items_per_case
-    ? (inv.last_case_cost as number) / (inv.items_per_case as number)
-    : (inv.last_case_cost as number)
-
-  return [{
-    source_name: 'Industry estimate',
-    source_url: null,
-    shelf_price: perItem * 1.60,
-    fetched_at: new Date().toISOString(),
-    is_cached: false,
-    is_estimate: true,
-  }]
 }
 
 export async function getPurchaseHistory(
