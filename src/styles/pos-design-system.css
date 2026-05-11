@@ -107,6 +107,14 @@
 .pos-shell p, .pos-shell span, .pos-shell label { color: var(--text-secondary); }
 .pos-shell strong, .pos-shell b { color: var(--text-primary); }
 
+/* Low-stock banner must stay readable on the terminal's dark #0B1410 surface.
+   The .pos-shell span rule above is overriding inline styles via cascade.
+   Scope an explicit override so amber text wins regardless of surface. */
+.low-stock-banner span,
+.low-stock-banner a,
+.low-stock-banner button { color: #FBBF24 !important; }
+.low-stock-banner button { color: rgba(251, 191, 36, 0.7) !important; }
+
 /* ── Scrollbar ────────────────────────────────────────────────────── */
 .pos-shell ::-webkit-scrollbar { width: 3px; height: 3px; }
 .pos-shell ::-webkit-scrollbar-track { background: transparent; }

@@ -1463,13 +1463,13 @@ export default function TerminalPage() {
 
       {/* Low stock alert bar */}
       {lowStockItems.length > 0 && !lowStockDismissed && (
-        <div className="flex-shrink-0 px-4 py-2 flex items-center gap-3" style={{ background: 'rgba(245,158,11,0.08)', borderBottom: '1px solid rgba(245,158,11,0.15)' }}>
-          <span className="text-xs font-medium flex-1" style={{ color: '#F59E0B' }}>
+        <div className="low-stock-banner flex-shrink-0 px-4 py-2 flex items-center gap-3" style={{ background: 'rgba(245,158,11,0.18)', borderBottom: '1px solid rgba(245,158,11,0.3)', minHeight: '36px' }}>
+          <span className="text-xs font-medium flex-1" style={{ color: '#FBBF24', fontWeight: 600 }}>
             ⚠ {lowStockItems.length} product{lowStockItems.length > 1 ? 's' : ''} running low:{' '}
             {lowStockItems.slice(0, 3).map(p => p.name).join(', ')}{lowStockItems.length > 3 ? ' …' : ''}
           </span>
-          <a href="/dashboard/reorder" className="text-xs font-semibold hover:underline" style={{ color: '#F59E0B' }}>Reorder →</a>
-          <button onClick={() => setLowStockDismissed(true)} className="text-lg leading-none" style={{ color: 'rgba(245,158,11,0.5)' }}>×</button>
+          <a href="/dashboard/reorder" className="text-xs font-semibold hover:underline" style={{ color: '#FBBF24', fontWeight: 700 }}>Reorder →</a>
+          <button onClick={() => setLowStockDismissed(true)} className="text-lg leading-none" style={{ color: 'rgba(251,191,36,0.7)' }}>×</button>
         </div>
       )}
 
