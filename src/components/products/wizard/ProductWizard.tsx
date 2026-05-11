@@ -50,7 +50,7 @@ const btn = (primary = false): React.CSSProperties => ({
   background: primary ? V : 'var(--bg-elevated)', color: primary ? '#fff' : C.muted,
 })
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({ label, children }: { label: React.ReactNode; children: React.ReactNode }) {
   return (
     <div style={{ marginBottom: 18 }}>
       <label style={lbl}>{label}</label>
@@ -130,6 +130,7 @@ export default function ProductWizard({ step, id, businessId, draft, suppliers, 
             p_description: description || null,
           })
           if (!rpcError && productId) {
+            setSaving(false)
             router.push(`/pos/products/new?id=${productId}&step=2`)
             return
           }
@@ -143,6 +144,7 @@ export default function ProductWizard({ step, id, businessId, draft, suppliers, 
       })
       const d = await res.json()
       if (d.product?.id) {
+        setSaving(false)
         router.push(`/pos/products/new?id=${d.product.id}&step=2`)
       } else {
         setError(d.error ?? 'Failed to create draft'); setSaving(false)
@@ -156,7 +158,7 @@ export default function ProductWizard({ step, id, businessId, draft, suppliers, 
   async function saveStep2() {
     setSaving(true); setError('')
     const ok = await patch({ category_id: categoryId || null, supplier_id: supplierId || null, container_type: containerType, image_url: imageUrl || null })
-    if (ok) router.push(`/pos/products/new?id=${id}&step=3`)
+    if (ok) { setSaving(false); router.push(`/pos/products/new?id=${id}&step=3`) }
     else { setError('Save failed'); setSaving(false) }
   }
 
@@ -164,7 +166,7 @@ export default function ProductWizard({ step, id, businessId, draft, suppliers, 
     if (!price) { setError('Sale price is required'); return }
     setSaving(true); setError('')
     const ok = await patch({ price: parseFloat(price), cost_price: costPrice ? parseFloat(costPrice) : null, tax_rate: parseFloat(taxRate) || 10 })
-    if (ok) router.push(`/pos/products/new?id=${id}&step=4`)
+    if (ok) { setSaving(false); router.push(`/pos/products/new?id=${id}&step=4`) }
     else { setError('Save failed'); setSaving(false) }
   }
 
@@ -175,7 +177,7 @@ export default function ProductWizard({ step, id, businessId, draft, suppliers, 
       stock_quantity: trackStock ? (parseInt(stockQty) || 0) : null,
       low_stock_threshold: parseInt(lowStockThreshold) || 5,
     })
-    if (ok) router.push(`/pos/products/new?id=${id}&step=5`)
+    if (ok) { setSaving(false); router.push(`/pos/products/new?id=${id}&step=5`) }
     else { setError('Save failed'); setSaving(false) }
   }
 
@@ -196,8 +198,12 @@ export default function ProductWizard({ step, id, businessId, draft, suppliers, 
   }
 
   function goBack() {
-    if (step > 1 && id) router.push(`/pos/products/new?id=${id}&step=${step - 1}`)
-    else router.push('/pos/products')
+    if (step > 1) {
+      const base = id ? `/pos/products/new?id=${id}&step=${step - 1}` : `/pos/products/new?step=${step - 1}`
+      router.push(base)
+    } else {
+      router.push('/pos/products')
+    }
   }
 
   return (
@@ -262,13 +268,13 @@ export default function ProductWizard({ step, id, businessId, draft, suppliers, 
           {step === 2 && (
             <>
               <h2 style={{ fontSize: 15, fontWeight: 700, margin: '0 0 24px' }}>Category & Details</h2>
-              <Field label="Category">
+              <Field label={<>Category <span style={{ color: C.dim, fontSize: 11, fontWeight: 400, letterSpacing: '0.04em' }}>(optional)</span></>}>
                 <select style={inp} value={categoryId} onChange={e => setCategoryId(e.target.value)}>
                   <option value="">No category</option>
                   {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
               </Field>
-              <Field label="Supplier">
+              <Field label={<>Supplier <span style={{ color: C.dim, fontSize: 11, fontWeight: 400, letterSpacing: '0.04em' }}>(optional)</span></>}>
                 <select style={inp} value={supplierId} onChange={e => setSupplierId(e.target.value)}>
                   <option value="">No supplier</option>
                   {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
