@@ -7,7 +7,7 @@ import { supabase } from '@/lib/supabase';
 
 const POS_USER_KEY  = 'aria_pos_user';
 const SESSION_TTL   = 12 * 3600 * 1000; // 12 hours
-const BYPASS_PATHS  = ['/pos/display', '/pos/mobile'];
+const BYPASS_PATHS  = ['/pos/display', '/pos/mobile', '/pos/terminal'];
 
 interface PosUser {
   id: string; name: string; role: string;

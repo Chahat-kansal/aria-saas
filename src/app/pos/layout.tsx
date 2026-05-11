@@ -16,10 +16,10 @@ export default async function PosLayout({ children }: { children: React.ReactNod
   if (pathname === '/pos/login') {
     return <POSThemeProvider>{children}</POSThemeProvider>;
   }
-  // Routes in (fullscreen) group get their own minimal layout — no POSShell chrome.
-  if (pathname === '/pos/terminal') {
-    return <POSThemeProvider>{children}</POSThemeProvider>;
-  }
+  // NOTE: /pos/terminal bypass cannot be done here — the middleware matcher
+  // deliberately excludes /pos/* routes (see middleware.ts line 117), so the
+  // x-next-pathname header is never set and pathname is always ''.
+  // POSShell handles the terminal bypass client-side via BYPASS_PATHS.
 
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
