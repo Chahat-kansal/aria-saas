@@ -47,7 +47,7 @@ export async function GET(req: Request) {
       };
     });
 
-    return NextResponse.json({ sessions: rows });
+    return NextResponse.json({ closures: rows, sessions: rows });
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 });
   }

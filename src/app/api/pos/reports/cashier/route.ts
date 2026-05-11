@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
+import { generateInsight } from '@/lib/aria-insights';
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
   const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle();
@@ -17,63 +18,88 @@ export async function GET(req: Request) {
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const bid = await getBid(supabase, user.id);
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 });
+  if (!bid) return NextResponse.json({ rows: [], insight: null });
 
   const { searchParams } = new URL(req.url);
   const from = searchParams.get('from') ?? new Date(Date.now() - 29 * 86400000).toISOString().split('T')[0];
   const to   = searchParams.get('to')   ?? new Date().toISOString().split('T')[0];
 
-  // Try with served_by first, fall back without it
-  let sales: Array<{ total_amount: number; payment_method: string; status: string; served_by?: string | null }> = [];
-  const { data, error } = await supabase
+  const { data: sales, error } = await supabase
     .from('pos_sales')
-    .select('total_amount, payment_method, status, served_by')
+    .select('total_amount, payment_method, status, served_by, discount_amount')
     .eq('business_id', bid)
     .gte('created_at', `${from}T00:00:00`)
     .lte('created_at', `${to}T23:59:59`)
     .limit(2000);
 
+  let saleRows: Array<{ total_amount: number; payment_method: string; status: string; served_by?: string | null; discount_amount?: number | null }> = [];
   if (error) {
-    // served_by column may not exist — retry without it
     const { data: fallback } = await supabase
       .from('pos_sales')
-      .select('total_amount, payment_method, status')
+      .select('total_amount, payment_method, status, discount_amount')
       .eq('business_id', bid)
       .gte('created_at', `${from}T00:00:00`)
       .lte('created_at', `${to}T23:59:59`)
       .limit(2000);
-    sales = fallback ?? [];
+    saleRows = fallback ?? [];
   } else {
-    sales = data ?? [];
+    saleRows = sales ?? [];
   }
 
-  // Group by cashier name
-  const cashierMap = new Map<string, { name: string; sales_count: number; revenue: number; cash_sales: number; card_sales: number; refunds: number }>();
+  // Also load action log for voids / no-sale-opens
+  const { data: actionLogRaw } = await supabase
+    .from('pos_action_log')
+    .select('action_type, user_id')
+    .eq('business_id', bid)
+    .gte('created_at', `${from}T00:00:00`)
+    .lte('created_at', `${to}T23:59:59`)
+    .in('action_type', ['void', 'refund', 'no_sale_open', 'discount_apply'])
+    .limit(2000);
+  const actionLog = actionLogRaw ?? [];
 
-  for (const s of sales) {
-    const name = (s as any).served_by || 'Unassigned';
-    const existing = cashierMap.get(name) ?? { name, sales_count: 0, revenue: 0, cash_sales: 0, card_sales: 0, refunds: 0 };
+  const cashierMap = new Map<string, {
+    name: string; sales: number; transactions: number;
+    voids: number; refunds: number; noSaleOpens: number; discountTotal: number;
+  }>();
+
+  for (const s of saleRows) {
+    const key = (s as any).served_by ?? 'Unknown';
+    const e = cashierMap.get(key) ?? { name: key, sales: 0, transactions: 0, voids: 0, refunds: 0, noSaleOpens: 0, discountTotal: 0 };
     const amt = s.total_amount ?? 0;
-    if (amt < 0 || s.status === 'refunded') {
-      existing.refunds += Math.abs(amt);
-    } else {
-      existing.sales_count++;
-      existing.revenue += amt;
-      if (s.payment_method === 'cash') existing.cash_sales += amt;
-      else existing.card_sales += amt;
+    if (amt >= 0 && s.status !== 'voided' && s.status !== 'refunded') {
+      e.sales += amt;
+      e.transactions += 1;
+    } else if (s.status === 'refunded') {
+      e.refunds += 1;
     }
-    cashierMap.set(name, existing);
+    e.discountTotal += (s as any).discount_amount ?? 0;
+    cashierMap.set(key, e);
   }
 
-  const by_cashier = Array.from(cashierMap.values())
-    .map(r => ({ ...r, avg_basket: r.sales_count > 0 ? r.revenue / r.sales_count : 0 }))
-    .sort((a, b) => b.revenue - a.revenue);
+  for (const a of (actionLog as Array<{ action_type: string; user_id: string }>)) {
+    const key = a.user_id ?? 'Unknown';
+    const e = cashierMap.get(key) ?? { name: key, sales: 0, transactions: 0, voids: 0, refunds: 0, noSaleOpens: 0, discountTotal: 0 };
+    if (a.action_type === 'void') e.voids += 1;
+    else if (a.action_type === 'refund') e.refunds += 1;
+    else if (a.action_type === 'no_sale_open') e.noSaleOpens += 1;
+    cashierMap.set(key, e);
+  }
 
-  const totals = {
-    total_revenue:  by_cashier.reduce((s, r) => s + r.revenue, 0),
-    total_sales:    by_cashier.reduce((s, r) => s + r.sales_count, 0),
-    cashier_count:  by_cashier.length,
-  };
+  const rows = Array.from(cashierMap.values())
+    .map(r => ({ ...r, avg_sale: r.transactions > 0 ? r.sales / r.transactions : 0 }))
+    .sort((a, b) => b.sales - a.sales);
 
-  return NextResponse.json({ by_cashier, totals });
+  let insight: { bullets: string[] } | null = null;
+  try {
+    const top = rows[0];
+    const res = await generateInsight({
+      business_id: bid,
+      context: `cashier_report top_cashier="${top?.name ?? ''}" revenue=${top?.sales ?? 0} transactions=${top?.transactions ?? 0}`,
+      data: { rows: rows.slice(0, 3) },
+      maxBullets: 2,
+    });
+    insight = { bullets: res.bullets };
+  } catch { /* insight is optional */ }
+
+  return NextResponse.json({ rows, insight });
 }

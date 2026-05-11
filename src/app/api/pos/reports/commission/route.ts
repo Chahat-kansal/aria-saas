@@ -3,58 +3,78 @@ export const dynamic = 'force-dynamic';
 
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
+import { generateInsight } from '@/lib/aria-insights';
+
+async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
+  const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle();
+  if (active?.business_id) return active.business_id as string;
+  const { data } = await supabase.from('businesses').select('id').eq('user_id', userId).eq('is_active', true).order('created_at', { ascending: true }).limit(1).maybeSingle();
+  return data?.id ?? null;
+}
 
 export async function GET(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+  const bid = await getBid(supabase, user.id);
+  if (!bid) return NextResponse.json({ rows: [], rules: [], totalRevenue: 0, totalCommission: 0, commissionPct: 0, insight: null });
+
   const { searchParams } = new URL(req.url);
-  const business_id = searchParams.get('business_id');
-  const from = searchParams.get('from') ?? new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0];
-  const to = searchParams.get('to') ?? new Date().toISOString().split('T')[0];
+  const from = searchParams.get('from') ?? new Date(Date.now() - 29 * 86400000).toISOString().split('T')[0];
+  const to   = searchParams.get('to')   ?? new Date().toISOString().split('T')[0];
 
-  if (!business_id) return NextResponse.json({ error: 'business_id required' }, { status: 400 });
+  const [{ data: sales }, { data: rules }] = await Promise.all([
+    supabase
+      .from('pos_sales')
+      .select('total_amount, served_by')
+      .eq('business_id', bid)
+      .neq('status', 'voided')
+      .gte('created_at', `${from}T00:00:00`)
+      .lte('created_at', `${to}T23:59:59`)
+      .limit(5000),
+    supabase
+      .from('pos_commission_rules')
+      .select('*')
+      .eq('business_id', bid)
+      .is('effective_until', null)
+      .limit(50),
+  ]);
 
-  const { data: biz } = await supabase.from('businesses').select('id').eq('id', business_id).eq('user_id', user.id).single();
-  if (!biz) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  const ruleList = (rules ?? []) as Array<{ id: string; staff_id: string | null; rule_type: string; rate_pct: number; flat_cents: number; applies_to: string; effective_from: string }>;
+  const defaultRule = ruleList.find(r => r.staff_id == null);
 
-  const { data: commissions } = await supabase
-    .from('pos_commissions')
-    .select('*, pos_sales(total_amount, created_at, payment_method)')
-    .eq('business_id', business_id)
-    .gte('created_at', `${from}T00:00:00`)
-    .lte('created_at', `${to}T23:59:59`)
-    .order('created_at', { ascending: false });
-
-  // Aggregate by cashier
-  const staffMap: Record<string, {
-    name: string; sales_count: number; total_sales_cents: number;
-    commission_cents: number; pending: number; paid: number;
-    commissions: typeof commissions;
-  }> = {};
-
-  for (const c of commissions ?? []) {
-    const name = c.pos_user_name;
-    if (!staffMap[name]) {
-      staffMap[name] = { name, sales_count: 0, total_sales_cents: 0, commission_cents: 0, pending: 0, paid: 0, commissions: [] };
-    }
-    staffMap[name].sales_count++;
-    staffMap[name].total_sales_cents += c.sale_total_cents ?? 0;
-    staffMap[name].commission_cents += c.commission_cents ?? 0;
-    if (c.status === 'pending') staffMap[name].pending += c.commission_cents ?? 0;
-    if (c.status === 'paid') staffMap[name].paid += c.commission_cents ?? 0;
-    (staffMap[name].commissions as typeof commissions)?.push(c);
+  const staffMap = new Map<string, { name: string; total: number }>();
+  for (const s of (sales ?? []) as Array<{ total_amount: number; served_by?: string | null }>) {
+    const key = (s as any).served_by ?? 'Unknown';
+    const e = staffMap.get(key) ?? { name: key, total: 0 };
+    e.total += s.total_amount ?? 0;
+    staffMap.set(key, e);
   }
 
-  const leaderboard = Object.values(staffMap).sort((a, b) => b.commission_cents - a.commission_cents);
-  const totals = {
-    total_commission_cents: leaderboard.reduce((s, r) => s + r.commission_cents, 0),
-    total_sales_cents: leaderboard.reduce((s, r) => s + r.total_sales_cents, 0),
-    pending_cents: leaderboard.reduce((s, r) => s + r.pending, 0),
-  };
+  const rows = Array.from(staffMap.values()).map(s => {
+    const rule = ruleList.find(r => r.staff_id === s.name) ?? defaultRule;
+    const commission = rule ? (s.total * ((rule.rate_pct ?? 0) / 100)) : 0;
+    return { name: s.name, total: s.total, rule: rule ? `${rule.rate_pct}% of sale` : 'No rule', commission };
+  }).sort((a, b) => b.commission - a.commission);
 
-  return NextResponse.json({ leaderboard, totals, from, to });
+  const totalRevenue    = rows.reduce((s, r) => s + r.total, 0);
+  const totalCommission = rows.reduce((s, r) => s + r.commission, 0);
+  const commissionPct   = totalRevenue > 0 ? (totalCommission / totalRevenue) * 100 : 0;
+
+  let insight: { bullets: string[] } | null = null;
+  try {
+    const top = rows[0];
+    const res = await generateInsight({
+      business_id: bid,
+      context: `commission_report top="${top?.name ?? ''}" commission=${totalCommission.toFixed(0)} pct=${commissionPct.toFixed(1)}`,
+      data: { totalRevenue, totalCommission, rows: rows.slice(0, 3) },
+      maxBullets: 2,
+    });
+    insight = { bullets: res.bullets };
+  } catch { /* insight is optional */ }
+
+  return NextResponse.json({ rows, rules: ruleList, totalRevenue, totalCommission, commissionPct, insight });
 }
 
 export async function PATCH(req: Request) {
@@ -62,16 +82,16 @@ export async function PATCH(req: Request) {
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+  const bid = await getBid(supabase, user.id);
+  if (!bid) return NextResponse.json({ error: 'No business found' }, { status: 400 });
+
   const body = await req.json().catch(() => ({}));
-  const { business_id, pos_user_name, status = 'paid' } = body;
-  if (!business_id || !pos_user_name) return NextResponse.json({ error: 'business_id and pos_user_name required' }, { status: 400 });
+  const { pos_user_name, status = 'paid' } = body;
+  if (!pos_user_name) return NextResponse.json({ error: 'pos_user_name required' }, { status: 400 });
 
-  const { data: biz } = await supabase.from('businesses').select('id').eq('id', business_id).eq('user_id', user.id).single();
-  if (!biz) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-
-  await supabase.from('pos_commissions')
+  await supabase.from('pos_commission_rules')
     .update({ status, paid_at: status === 'paid' ? new Date().toISOString() : null })
-    .eq('business_id', business_id)
+    .eq('business_id', bid)
     .eq('pos_user_name', pos_user_name)
     .eq('status', 'pending');
 
