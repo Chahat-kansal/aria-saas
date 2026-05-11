@@ -20,8 +20,8 @@ test.describe('Marketing site', () => {
   test('login page loads with Sign in button', async ({ page }) => {
     await page.goto('/login')
     await expect(page.getByRole('button', { name: /sign in|log in|continue/i })).toBeVisible()
-    await expect(page.getByLabel(/email/i)).toBeVisible()
-    await expect(page.getByLabel(/password/i)).toBeVisible()
+    await expect(page.locator('input[type="email"]').first()).toBeVisible()
+    await expect(page.locator('input[type="password"]').first()).toBeVisible()
   })
 
   test('no app errors on homepage', async ({ page }) => {

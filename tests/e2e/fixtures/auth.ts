@@ -13,11 +13,25 @@ export const test = base.extend<AuthFixtures>({
     }
 
     await page.goto('/login')
-    // Login form uses <label>Email</label> and <label>Password</label>
-    // with a submit button text "Sign in"
-    await page.getByLabel(/email/i).fill(email)
-    await page.getByLabel(/password/i).fill(password)
-    await page.getByRole('button', { name: /sign in/i }).click()
+    // Login form has <label>Email</label> / <label>Password</label> as visual
+    // siblings with NO for/id association — getByLabel() can't match them.
+    // Use type-based selectors which always work.
+    const emailInput = page.locator(
+      'input[type="email"], input[name="email"], input[autocomplete="email"], input[autocomplete="username"]'
+    ).first()
+    await emailInput.waitFor({ state: 'visible', timeout: 15_000 })
+    await emailInput.fill(email)
+
+    const passwordInput = page.locator(
+      'input[type="password"], input[name="password"], input[autocomplete="current-password"]'
+    ).first()
+    await passwordInput.fill(password)
+
+    const submitButton = page
+      .getByRole('button', { name: /sign in|log in|continue/i })
+      .or(page.locator('button[type="submit"]'))
+      .first()
+    await submitButton.click()
     await page.waitForURL(/\/(pos|dashboard)/, { timeout: 20_000 })
 
     await use(page)
