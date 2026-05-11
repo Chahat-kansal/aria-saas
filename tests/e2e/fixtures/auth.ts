@@ -34,6 +34,21 @@ export const test = base.extend<AuthFixtures>({
     await submitButton.click()
     await page.waitForURL(/\/(pos|dashboard)/, { timeout: 20_000 })
 
+    // POSShell requires a POS staff user in localStorage ('aria_pos_user') to
+    // render any page content. Without it, every /pos/* page shows only the
+    // POSUserSelect PIN-entry screen and the actual page component is never
+    // mounted — causing all content-specific selectors to fail.
+    // Inject a valid manager user so POSShell renders page content normally.
+    await page.evaluate(() => {
+      localStorage.setItem('aria_pos_user', JSON.stringify({
+        id: 'e2e-test-bypass',
+        name: 'E2E Test',
+        role: 'manager',
+        permissions: {},
+        loginAt: Date.now(),
+      }))
+    })
+
     await use(page)
   },
 })

@@ -35,6 +35,8 @@ test.describe('Terminal', () => {
 
   test('Ask Aria FAB is visible', async ({ authedPage: page }) => {
     await page.goto('/pos/terminal')
-    await expect(page.locator('.ask-aria-fab')).toBeVisible()
+    // FAB is <Link aria-label="Ask Aria" className="ask-aria-fab">
+    // Use aria-label role query — more robust than CSS class
+    await expect(page.getByRole('link', { name: 'Ask Aria' })).toBeVisible({ timeout: 15_000 })
   })
 })
