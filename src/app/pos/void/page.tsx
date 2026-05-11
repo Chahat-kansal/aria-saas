@@ -1,17 +1,25 @@
 'use client';
 import { useState } from 'react';
 
-interface SaleItem { id: string; product_name: string; quantity: number; unit_price: number; line_total: number; }
-interface Sale { id: string; sale_number: string | null; created_at: string; total_amount: number; payment_method: string; customer_name: string | null; items: SaleItem[]; }
+interface Sale {
+  id: string;
+  sale_number: string | null;
+  created_at: string;
+  total_amount: number;
+  payment_method: string;
+  customer_name: string | null;
+  status: string;
+}
 
 export default function VoidPage() {
-  const [query, setQuery]           = useState('');
-  const [results, setResults]       = useState<Sale[]>([]);
-  const [selected, setSelected]     = useState<Sale | null>(null);
-  const [refundItems, setRefundItems] = useState<Record<string, boolean>>({});
+  const [query, setQuery]       = useState('');
+  const [results, setResults]   = useState<Sale[]>([]);
+  const [selected, setSelected] = useState<Sale | null>(null);
+  const [reason, setReason]     = useState('');
   const [processing, setProcessing] = useState(false);
-  const [done, setDone]             = useState(false);
-  const [searching, setSearching]   = useState(false);
+  const [done, setDone]         = useState(false);
+  const [searching, setSearching] = useState(false);
+  const [error, setError]       = useState('');
 
   async function search(q: string) {
     setQuery(q);
@@ -20,46 +28,38 @@ export default function VoidPage() {
     try {
       const r = await fetch(`/api/pos/sales?q=${encodeURIComponent(q)}&limit=15`);
       const d = await r.json();
-      setResults(d.sales ?? []);
+      setResults((d.sales ?? []).filter((s: Sale) => s.status !== 'voided'));
     } catch { setResults([]); }
     setSearching(false);
   }
 
-  async function processRefund() {
+  async function processVoid() {
     if (!selected) return;
-    const items = selected.items.filter(i => refundItems[i.id]);
-    if (!items.length) return;
-    setProcessing(true);
+    setProcessing(true); setError('');
     try {
-      const refundTotal = items.reduce((s, i) => s + (i.line_total ?? 0), 0);
-      const res = await fetch('/api/pos/sale', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          items: items.map(i => ({ product_id: undefined, product_name: i.product_name, quantity: -Math.abs(i.quantity), unit_price: i.unit_price, tax_rate: 10, discount_percent: 0, line_total: -Math.abs(i.line_total) })),
-          payment_method: selected.payment_method ?? 'card',
-          subtotal: -refundTotal, tax_amount: -(refundTotal - refundTotal / 1.1),
-          discount_amount: 0, total_amount: -refundTotal,
-          original_sale_id: selected.id,
-          notes: `Refund for sale ${selected.sale_number ?? selected.id.slice(-8)}`,
-        }),
+      const res = await fetch(`/api/pos/sales/${selected.id}?action=void`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: reason || 'Operator void' }),
       });
+      const d = await res.json();
       if (res.ok) { setDone(true); }
-      else { alert('Refund failed — please try again.'); }
-    } catch { alert('Connection error.'); }
+      else { setError(d.error ?? d.message ?? 'Void failed — please try again.'); }
+    } catch { setError('Connection error.'); }
     setProcessing(false);
   }
-
-  const refundTotal = (selected?.items ?? []).filter(i => refundItems[i.id]).reduce((s, i) => s + (i.line_total ?? 0), 0);
 
   if (done) return (
     <div style={{ height: '100%', background: 'var(--bg-base)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--font-ui)' }}>
       <div style={{ textAlign: 'center' }}>
-        <div style={{ fontSize: 64, color: 'var(--pos-success,#10B981)', marginBottom: 16 }}>✓</div>
-        <h2 style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 8 }}>Refund processed</h2>
-        <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 24 }}>A${refundTotal.toFixed(2)} refunded via {selected?.payment_method ?? 'original method'}</p>
-        <button onClick={() => { setDone(false); setSelected(null); setRefundItems({}); setQuery(''); setResults([]); }}
+        <div style={{ fontSize: 64, marginBottom: 16 }}>✓</div>
+        <h2 style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 8 }}>Sale voided</h2>
+        <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 24 }}>
+          #{selected?.sale_number ?? selected?.id.slice(-8).toUpperCase()} · A${selected?.total_amount.toFixed(2)} reversed
+        </p>
+        <button onClick={() => { setDone(false); setSelected(null); setReason(''); setQuery(''); setResults([]); }}
           style={{ padding: '10px 24px', borderRadius: 12, background: 'var(--violet)', border: 'none', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font-ui)' }}>
-          Process another refund
+          Void another sale
         </button>
       </div>
     </div>
@@ -67,14 +67,12 @@ export default function VoidPage() {
 
   return (
     <div style={{ height: '100%', overflowY: 'auto', background: 'var(--bg-base)', fontFamily: 'var(--font-ui)', display: 'flex', flexDirection: 'column' }}>
-      {/* Header */}
       <div style={{ flexShrink: 0, padding: '20px 28px', borderBottom: '1px solid var(--border-subtle)', background: 'rgba(8,12,16,0.9)' }}>
-        <h1 style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 2 }}>Void & Refund</h1>
-        <p style={{ fontSize: 13, color: 'var(--text-tertiary)' }}>Search a sale by receipt number or customer name</p>
+        <h1 style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 2 }}>Void Sale</h1>
+        <p style={{ fontSize: 13, color: 'var(--text-tertiary)' }}>Search a completed sale to void. Stock is automatically restored for tracked items.</p>
       </div>
 
       <div style={{ flex: 1, overflowY: 'auto', padding: 28, maxWidth: 720, width: '100%' }}>
-        {/* Search */}
         <div style={{ position: 'relative', marginBottom: 20 }}>
           <input value={query} onChange={e => search(e.target.value)}
             placeholder="Search receipt #, customer name…"
@@ -83,21 +81,14 @@ export default function VoidPage() {
           {searching && <span style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', fontSize: 12, color: 'var(--text-tertiary)' }}>Searching…</span>}
         </div>
 
-        {/* Results list */}
         {!selected && results.length > 0 && (
           <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: 16, overflow: 'hidden', marginBottom: 20 }}>
             {results.map((s, i) => (
-              <button key={s.id} onClick={() => { setSelected(s); setRefundItems({}); }}
-                style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 16, padding: '14px 16px', background: 'none', border: 'none', borderBottom: i < results.length - 1 ? '1px solid var(--border-subtle)' : 'none', cursor: 'pointer', textAlign: 'left', transition: 'background 150ms' }}
-                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg-hover)'; }}
-                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'none'; }}>
+              <button key={s.id} onClick={() => { setSelected(s); setError(''); }}
+                style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 16, padding: '14px 16px', background: 'none', border: 'none', borderBottom: i < results.length - 1 ? '1px solid var(--border-subtle)' : 'none', cursor: 'pointer', textAlign: 'left' }}>
                 <div style={{ flex: 1 }}>
-                  <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 2 }}>
-                    #{s.sale_number ?? s.id.slice(-8).toUpperCase()}
-                  </p>
-                  <p style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
-                    {new Date(s.created_at).toLocaleDateString('en-AU')} · {s.customer_name ?? 'Walk-in'}
-                  </p>
+                  <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 2 }}>#{s.sale_number ?? s.id.slice(-8).toUpperCase()}</p>
+                  <p style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>{new Date(s.created_at).toLocaleDateString('en-AU')} · {s.customer_name ?? 'Walk-in'}</p>
                 </div>
                 <p style={{ fontFamily: 'var(--font-mono)', fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>A${s.total_amount.toFixed(2)}</p>
               </button>
@@ -106,10 +97,9 @@ export default function VoidPage() {
         )}
 
         {!selected && query.length >= 2 && results.length === 0 && !searching && (
-          <p style={{ fontSize: 14, color: 'var(--text-tertiary)', textAlign: 'center', paddingTop: 40 }}>No sales found for &quot;{query}&quot;</p>
+          <p style={{ fontSize: 14, color: 'var(--text-tertiary)', textAlign: 'center', paddingTop: 40 }}>No active sales found for &quot;{query}&quot;</p>
         )}
 
-        {/* Selected sale */}
         {selected && (
           <div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
@@ -120,31 +110,20 @@ export default function VoidPage() {
               <button onClick={() => setSelected(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: 'var(--text-tertiary)', fontFamily: 'var(--font-ui)' }}>← Back</button>
             </div>
 
-            <p style={{ fontSize: 12, color: 'var(--text-tertiary)', marginBottom: 10, fontFamily: 'var(--font-ui)' }}>Select items to refund:</p>
-            <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: 16, overflow: 'hidden', marginBottom: 16 }}>
-              {(selected.items ?? []).map((item, i) => (
-                <label key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 16px', borderBottom: i < selected.items.length - 1 ? '1px solid var(--border-subtle)' : 'none', cursor: 'pointer' }}>
-                  <input type="checkbox" checked={!!refundItems[item.id]} onChange={e => setRefundItems(r => ({ ...r, [item.id]: e.target.checked }))}
-                    style={{ width: 16, height: 16, accentColor: 'var(--violet)' }} />
-                  <div style={{ flex: 1 }}>
-                    <p style={{ fontSize: 14, color: 'var(--text-primary)', fontWeight: 500 }}>{item.product_name}</p>
-                    <p style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>qty {item.quantity} × A${(item.unit_price ?? 0).toFixed(2)}</p>
-                  </div>
-                  <p style={{ fontFamily: 'var(--font-mono)', fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>A${(item.line_total ?? 0).toFixed(2)}</p>
-                </label>
-              ))}
+            <div style={{ background: 'rgba(239,68,68,0.07)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 12, padding: '12px 16px', marginBottom: 16 }}>
+              <p style={{ fontSize: 13, color: '#EF4444', fontWeight: 600, marginBottom: 6 }}>This will void the entire sale</p>
+              <p style={{ fontSize: 12, color: 'var(--text-secondary)' }}>All tracked inventory will be automatically restored. This action is logged and cannot be undone from the UI.</p>
             </div>
 
-            {refundTotal > 0 && (
-              <div style={{ background: 'rgba(239,68,68,0.07)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 12, padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                <p style={{ fontSize: 14, color: 'var(--text-secondary)', fontFamily: 'var(--font-ui)' }}>Refund total</p>
-                <p style={{ fontFamily: 'var(--font-mono)', fontSize: 20, fontWeight: 800, color: '#EF4444' }}>A${refundTotal.toFixed(2)}</p>
-              </div>
-            )}
+            <label style={{ display: 'block', fontSize: 12, color: 'var(--text-secondary)', marginBottom: 6 }}>Reason (optional)</label>
+            <input value={reason} onChange={e => setReason(e.target.value)} placeholder="e.g. Customer changed mind, entry error…"
+              style={{ width: '100%', background: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: 10, padding: '10px 14px', fontSize: 13, color: 'var(--text-primary)', outline: 'none', fontFamily: 'var(--font-ui)', boxSizing: 'border-box', marginBottom: 16 }} />
 
-            <button onClick={processRefund} disabled={processing || refundTotal === 0}
-              style={{ width: '100%', padding: '14px', borderRadius: 14, border: 'none', background: '#EF4444', color: '#fff', fontSize: 15, fontWeight: 700, cursor: (processing || refundTotal === 0) ? 'not-allowed' : 'pointer', opacity: (processing || refundTotal === 0) ? 0.5 : 1, fontFamily: 'var(--font-ui)' }}>
-              {processing ? 'Processing…' : `Process Refund · A$${refundTotal.toFixed(2)}`}
+            {error && <p style={{ fontSize: 13, color: '#EF4444', marginBottom: 12 }}>{error}</p>}
+
+            <button onClick={processVoid} disabled={processing}
+              style={{ width: '100%', padding: '14px', borderRadius: 14, border: 'none', background: '#EF4444', color: '#fff', fontSize: 15, fontWeight: 700, cursor: processing ? 'not-allowed' : 'pointer', opacity: processing ? 0.5 : 1, fontFamily: 'var(--font-ui)' }}>
+              {processing ? 'Voiding…' : `Void Sale · A$${selected.total_amount.toFixed(2)}`}
             </button>
           </div>
         )}
