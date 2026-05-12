@@ -4,7 +4,7 @@ import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, Send, CheckCircle, XCircle, Loader2 } from 'lucide-react'
 
-interface Line { id: string; product_name: string; product_sku: string | null; quantity_cases: number; quantity_items: number; last_purchase_price: number | null; open_market_low: number | null; open_market_high: number | null; open_market_source: string | null; confirmed_price: number | null; line_total: number | null; supplier_name: string | null }
+interface Line { id: string; product_name: string; product_sku: string | null; quantity_cases: number; quantity_items: number; last_purchase_price: number | null; open_market_low: number | null; open_market_high: number | null; open_market_source: string | null; confirmed_price: number | null; line_total: number | null; supplier_name: string | null; is_estimated_cost?: boolean }
 interface Order { id: string; order_number: string; status: string; source: string; supplier_name: string | null; notes: string | null; total_estimated: number | null; created_by: string | null; created_at: string; sent_at: string | null; received_at: string | null; lines?: Line[] }
 
 const STATUS_COL: Record<string, string> = { draft: 'var(--warning)', sent: '#6B96B0', received: 'var(--success)', cancelled: 'var(--destructive)' }
@@ -41,7 +41,8 @@ export default function OrderDetailPage() {
   if (loading) return <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-tertiary)', fontFamily: "'Manrope',sans-serif" }}>Loading…</div>
   if (!order) return <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-tertiary)', fontFamily: "'Manrope',sans-serif" }}>Order not found. <Link href="/pos/orders" style={{ color: 'var(--violet)' }}>Back</Link></div>
 
-  const grandTotal = (order.lines ?? []).reduce((s, l) => s + (l.quantity_cases * (l.confirmed_price ?? 0)), 0)
+  const grandTotal = (order.lines ?? []).reduce((s, l) => s + (l.quantity_cases * (l.confirmed_price ?? l.last_purchase_price ?? 0)), 0)
+  const grandTotalIsEstimated = (order.lines ?? []).some(l => !l.confirmed_price && l.last_purchase_price)
 
   return (
     <div style={{ minHeight: '100%', background: 'var(--bg-base)', color: 'var(--text-primary)', fontFamily: "'Manrope',sans-serif" }}>
@@ -111,16 +112,28 @@ export default function OrderDetailPage() {
                     <td style={{ padding: '10px 12px', fontSize: 12, color: 'var(--text-tertiary)', fontStyle: 'italic' }} title="Public retail shelf price — not your wholesale cost. Wholesale is typically 55-65% of this figure.">
                       {l.open_market_low != null ? `$${Number(l.open_market_low).toFixed(2)}–$${Number(l.open_market_high ?? l.open_market_low).toFixed(2)} · ${l.open_market_source}` : '—'}
                     </td>
-                    <td style={{ padding: '10px 12px', fontWeight: 600 }}>{l.confirmed_price != null ? `$${Number(l.confirmed_price).toFixed(2)}` : '—'}</td>
+                    <td style={{ padding: '10px 12px', fontWeight: 600 }}>
+                      {l.confirmed_price != null
+                        ? `$${Number(l.confirmed_price).toFixed(2)}`
+                        : l.last_purchase_price != null
+                          ? <>{`$${Number(l.last_purchase_price).toFixed(2)}`}<span style={{ fontSize: 10, color: '#F59E0B', background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.2)', borderRadius: 4, padding: '1px 5px', marginLeft: 4 }}>Est.</span></>
+                          : '—'}
+                    </td>
                     <td style={{ padding: '10px 12px', fontFamily: "'Instrument Serif',Georgia,serif", fontStyle: 'italic', fontSize: 15, color: 'var(--violet)' }}>
-                      {l.confirmed_price != null ? `$${(l.quantity_cases * l.confirmed_price).toFixed(2)}` : '—'}
+                      {(() => {
+                        const price = l.confirmed_price ?? l.last_purchase_price
+                        return price != null ? `$${(l.quantity_cases * price).toFixed(2)}` : '—'
+                      })()}
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
             <div style={{ textAlign: 'right', padding: '16px 12px' }}>
-              <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginBottom: 4 }}>Estimated total</div>
+              <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginBottom: 4 }}>
+                Estimated total
+                {grandTotalIsEstimated && <span style={{ fontSize: 10, color: '#F59E0B', marginLeft: 5 }}>(estimated)</span>}
+              </div>
               <div style={{ fontFamily: "'Instrument Serif',Georgia,serif", fontStyle: 'italic', fontWeight: 500, fontSize: 28, background: 'linear-gradient(135deg,#9FC9B0,#7FB897)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>
                 ${grandTotal.toFixed(2)}
               </div>

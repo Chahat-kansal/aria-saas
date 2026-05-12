@@ -19,6 +19,7 @@ interface DraftLine {
   last_purchase_price: number | null; confirmed_price: number | null
   open_market_low: number | null; open_market_high: number | null; open_market_source: string | null
   market_loading: boolean; sort_order: number
+  is_estimated_cost?: boolean
 }
 
 const V = 'var(--violet)'
@@ -88,6 +89,7 @@ export default function OrderBuilderPage() {
         open_market_low: prices.length ? Math.min(...prices) : null,
         open_market_high: prices.length ? Math.max(...prices) : null,
         open_market_source: prices.length ? (results as any[]).map((r: any) => r.source_name).join(', ') : null,
+        is_estimated_cost: prices.length === 0,
       } : l))
     } catch { clearLoading() }
   }, [businessId, products])
@@ -107,6 +109,7 @@ export default function OrderBuilderPage() {
       last_purchase_price: lastPrice, confirmed_price: lastPrice,
       open_market_low: null, open_market_high: null, open_market_source: null,
       market_loading: true, sort_order: draft.length,
+      is_estimated_cost: !lastPrice,
     }
     setDraft(prev => [...prev, newLine])
     setTimeout(() => fetchMarket(newLine), 100)
@@ -115,7 +118,8 @@ export default function OrderBuilderPage() {
   function removeLine(productId: string) { setDraft(prev => prev.filter(l => l.product_id !== productId)) }
   function updateLine(productId: string, k: keyof DraftLine, v: any) { setDraft(prev => prev.map(l => l.product_id === productId ? { ...l, [k]: v } : l)) }
 
-  const grandTotal = draft.reduce((s, l) => s + (l.quantity_cases * (l.confirmed_price ?? 0)), 0)
+  const grandTotal = draft.reduce((s, l) => s + (l.quantity_cases * (l.confirmed_price ?? l.last_purchase_price ?? 0)), 0)
+  const grandTotalIsEstimated = draft.some(l => !l.confirmed_price && !l.open_market_low)
 
   async function saveDraft(andNavigate = false) {
     setSaving(true)
@@ -265,7 +269,8 @@ export default function OrderBuilderPage() {
               <div key={supplier} style={{ marginBottom: 16 }}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 8 }}>{supplier}</div>
                 {lines.map(line => {
-                  const lineTotal = line.quantity_cases * (line.confirmed_price ?? 0)
+                  const lineTotal = line.quantity_cases * (line.confirmed_price ?? line.last_purchase_price ?? 0)
+                  const lineIsEstimated = !line.confirmed_price && !line.open_market_low
                   return (
                     <div key={line.product_id} style={{ background: 'var(--bg-surface)', borderRadius: 10, padding: 12, marginBottom: 8, position: 'relative' }}>
                       <button onClick={() => removeLine(line.product_id)} style={{ position: 'absolute', top: 8, right: 8, background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-tertiary)', padding: 2 }}>
@@ -320,10 +325,15 @@ export default function OrderBuilderPage() {
                         </div>
                       </div>
                       {/* Line total */}
-                      <div style={{ marginTop: 8, textAlign: 'right', fontFamily: "'Instrument Serif',Georgia,serif", fontStyle: 'italic', fontWeight: 500, fontSize: 16,
-                        background: 'linear-gradient(135deg,var(--sage-light,#9FC9B0),var(--sage,#7FB897))',
-                        WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>
-                        ${lineTotal.toFixed(2)}
+                      <div style={{ marginTop: 8, display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 6 }}>
+                        {lineIsEstimated && (
+                          <span style={{ fontSize: 10, color: '#F59E0B', background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.2)', borderRadius: 4, padding: '1px 5px' }}>Est.</span>
+                        )}
+                        <span style={{ fontFamily: "'Instrument Serif',Georgia,serif", fontStyle: 'italic', fontWeight: 500, fontSize: 16,
+                          background: 'linear-gradient(135deg,var(--sage-light,#9FC9B0),var(--sage,#7FB897))',
+                          WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>
+                          ${lineTotal.toFixed(2)}
+                        </span>
                       </div>
                     </div>
                   )
@@ -336,7 +346,10 @@ export default function OrderBuilderPage() {
             <div style={{ padding: '12px 16px', borderTop: '1px solid var(--divider)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>{draft.length} products · {draft.reduce((s, l) => s + l.quantity_cases, 0)} cases</span>
               <div style={{ textAlign: 'right' }}>
-                <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginBottom: 2 }}>Estimated total</div>
+                <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginBottom: 2 }}>
+                  Estimated total
+                  {grandTotalIsEstimated && <span style={{ fontSize: 10, color: '#F59E0B', marginLeft: 5 }}>(est.)</span>}
+                </div>
                 <div style={{ fontFamily: "'Instrument Serif',Georgia,serif", fontStyle: 'italic', fontWeight: 500, fontSize: 22,
                   background: 'linear-gradient(135deg,var(--sage-light,#9FC9B0),var(--sage,#7FB897))',
                   WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>

@@ -6,6 +6,7 @@ import { getWeatherForecast, getUpcomingHolidays, getWeatherUplift } from '@/lib
 import { trackUsage } from '@/lib/track-usage';
 import { NextResponse } from 'next/server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { resolveUnitCost } from '@/lib/orders/resolve-unit-cost'
 
 async function _POST(req: Request) {
   const supabase = createServerSupabaseClient();
@@ -76,7 +77,11 @@ async function _POST(req: Request) {
       reason = `${holidays[0].name} in ${holidays[0].days_away} days — holiday uplift`;
     else reason = `Regular replenishment — ${Math.ceil(daysOfStock)} days stock`;
 
-    const unitCostCents = Math.round((product.cost_price || 0) * 100);
+    const unitCost = await resolveUnitCost(supabase, product.id, business_id, {
+      productCostPrice: product.cost_price,
+    })
+    const unitCostCents = Math.round(unitCost * 100)
+    const isEstimatedCost = !product.cost_price || product.cost_price === 0
 
     orderItems.push({
       product_id: product.id,
@@ -91,6 +96,7 @@ async function _POST(req: Request) {
       manual_qty: null,
       unit_cost_cents: unitCostCents,
       total_cost_cents: suggestedQty * unitCostCents,
+      is_estimated_cost: isEstimatedCost,
       reason,
       weather_uplift: combinedUplift > 1.1 ? Math.round(combinedUplift * 100) / 100 : null,
       supplier_id: product.supplier_id,

@@ -1,5 +1,6 @@
 import { BaseAgent } from './base-agent';
 import type { AgentType, AgentDecisionInput, AgentRunResult } from './types';
+import { resolveUnitCost } from '@/lib/orders/resolve-unit-cost'
 
 // Lead times by known AU supplier shorthand (days)
 const KNOWN_LEAD_TIMES: Record<string, number> = {
@@ -84,7 +85,7 @@ export class ReorderAgent extends BaseAgent {
 
         const caseQty = p.case_quantity ?? 1;
         const orderQty = rawQty < caseQty ? caseQty : Math.ceil(rawQty / caseQty) * caseQty;
-        const unitCost = p.cost_price ?? 0;
+        const unitCost = await resolveUnitCost(this.supabase, p.id, business_id, { productCostPrice: p.cost_price })
         const urgency = reorderPoint > 0 ? Math.max(0, Math.min(1, 1 - current / reorderPoint)) : 1;
 
         const line: POLine = { product: p, qty: orderQty, unit_cost: unitCost, total: orderQty * unitCost, urgency, avg_daily: avgDaily };
