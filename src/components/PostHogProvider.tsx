@@ -1,17 +1,33 @@
-'use client';
-import { useEffect } from 'react';
+'use client'
+import { useEffect, Suspense } from 'react'
+import { usePathname, useSearchParams } from 'next/navigation'
+import { initPostHog, posthog } from '@/lib/posthog'
 
-const POSTHOG_KEY = process.env.NEXT_PUBLIC_POSTHOG_KEY;
+function PostHogPageView() {
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+
+  useEffect(() => {
+    if (pathname && posthog.__loaded) {
+      const url =
+        window.location.origin +
+        pathname +
+        (searchParams?.toString() ? '?' + searchParams.toString() : '')
+      posthog.capture('$pageview', { '$current_url': url })
+    }
+  }, [pathname, searchParams])
+
+  return null
+}
 
 export default function PostHogProvider({ children }: { children: React.ReactNode }) {
-  useEffect(() => {
-    if (!POSTHOG_KEY || typeof window === 'undefined') return;
-    import('posthog-js').then(({ default: posthog }) => {
-      if (!posthog.__loaded) {
-        posthog.init(POSTHOG_KEY, { api_host: 'https://eu.posthog.com', capture_pageview: true });
-      }
-    }).catch(() => {});
-  }, []);
-
-  return <>{children}</>;
+  useEffect(() => { initPostHog() }, [])
+  return (
+    <>
+      <Suspense fallback={null}>
+        <PostHogPageView />
+      </Suspense>
+      {children}
+    </>
+  )
 }

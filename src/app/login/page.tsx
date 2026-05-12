@@ -3,6 +3,7 @@ import { Suspense, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import LogoMark from '@/components/pos/LogoMark'
+import { posthog } from '@/lib/posthog'
 
 const iS: React.CSSProperties = {
   width: '100%',
@@ -40,7 +41,7 @@ function LoginForm() {
     setLoading(true)
     setError('')
 
-    const { error: authError } = await supabase.auth.signInWithPassword({
+    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
       email: email.trim(),
       password,
     })
@@ -49,6 +50,10 @@ function LoginForm() {
       setError(authError.message)
       setLoading(false)
       return
+    }
+
+    if (posthog.__loaded && authData.user?.id) {
+      posthog.identify(authData.user.id, { email: authData.user.email })
     }
 
     const redirectTo = searchParams.get('redirectTo') || '/dashboard'
