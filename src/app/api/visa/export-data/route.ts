@@ -2,10 +2,11 @@ import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
 import { logAuditEvent } from '@/lib/audit';
 import { decryptVisaClient, decryptVisaApplication } from '@/lib/visa-encryption';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 export const runtime = 'nodejs';
 
-export async function POST(req: Request) {
+async function _POST(req: Request) {
   try {
     const supabase = createServerSupabaseClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -93,3 +94,5 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Export failed' }, { status: 500 });
   }
 }
+
+export const POST = withErrorCapture('visa/export-data', _POST)

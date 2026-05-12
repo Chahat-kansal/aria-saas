@@ -1,7 +1,8 @@
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
-export async function GET(_: Request, { params }: { params: { token: string } }) {
+async function _GET(_: Request, { params }: { params: { token: string } }) {
   const supabase = createServerSupabaseClient();
 
   const { data, error } = await supabase
@@ -13,3 +14,5 @@ export async function GET(_: Request, { params }: { params: { token: string } })
   if (error || !data) return NextResponse.json({ error: 'Not found' }, { status: 404 });
   return NextResponse.json(data);
 }
+
+export const GET = withErrorCapture('share/[token]', _GET)

@@ -3,8 +3,9 @@ import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { getPriceId } from '@/lib/stripe';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
-export async function POST(req: Request) {
+async function _POST(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -122,3 +123,5 @@ export async function POST(req: Request) {
 
   return NextResponse.json({ url: checkoutSession.url });
 }
+
+export const POST = withErrorCapture('stripe/create-checkout', _POST)

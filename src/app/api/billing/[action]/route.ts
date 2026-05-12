@@ -4,6 +4,7 @@ export const maxDuration = 30;
 import { NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 
@@ -16,7 +17,7 @@ async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, u
   return data?.id ?? null;
 }
 
-export async function GET(_req: Request, { params }: Params) {
+async function _GET(_req: Request, { params }: Params) {
   const { action } = await params;
   if (action !== 'status') return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
@@ -31,7 +32,7 @@ export async function GET(_req: Request, { params }: Params) {
   return NextResponse.json({ subscription: sub ?? null });
 }
 
-export async function POST(req: Request, { params }: Params) {
+async function _POST(req: Request, { params }: Params) {
   const { action } = await params;
 
   if (action === 'webhook') {
@@ -139,3 +140,6 @@ export async function POST(req: Request, { params }: Params) {
 
   return NextResponse.json({ error: 'Unknown action' }, { status: 400 });
 }
+
+export const GET = withErrorCapture('billing/[action]', _GET)
+export const POST = withErrorCapture('billing/[action]', _POST)

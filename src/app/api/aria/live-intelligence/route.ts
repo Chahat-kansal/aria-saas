@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { runLiveMonitor } from '@/lib/aria/live-monitor';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 45;
 
-export async function POST(req: NextRequest) {
+async function _POST(req: NextRequest) {
   try {
     const { business_id } = await req.json();
     if (!business_id) {
@@ -38,7 +39,7 @@ export async function POST(req: NextRequest) {
   }
 }
 
-export async function GET(req: NextRequest) {
+async function _GET(req: NextRequest) {
   const business_id = req.nextUrl.searchParams.get('business_id');
   if (!business_id) {
     return NextResponse.json({ error: 'business_id required' }, { status: 400 });
@@ -69,3 +70,6 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Internal error' }, { status: 500 });
   }
 }
+
+export const GET = withErrorCapture('aria/live-intelligence', _GET)
+export const POST = withErrorCapture('aria/live-intelligence', _POST)

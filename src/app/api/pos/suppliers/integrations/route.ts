@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string) {
   const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
@@ -10,7 +11,7 @@ async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, u
   return data?.id ?? null
 }
 
-export async function GET() {
+async function _GET() {
   const supabase = createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
@@ -27,7 +28,7 @@ export async function GET() {
   return NextResponse.json({ integrations: data ?? [] })
 }
 
-export async function POST(request: NextRequest) {
+async function _POST(request: NextRequest) {
   const body = await request.json() as {
     supplier_key?: string
     account_number?: string
@@ -74,3 +75,6 @@ export async function POST(request: NextRequest) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ integration: data })
 }
+
+export const GET = withErrorCapture('pos/suppliers/integrations', _GET)
+export const POST = withErrorCapture('pos/suppliers/integrations', _POST)

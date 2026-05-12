@@ -4,6 +4,7 @@ export const maxDuration = 30;
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { generateInsight } from '@/lib/aria-insights';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string) {
   const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle();
@@ -12,7 +13,7 @@ async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, u
   return data?.id ?? null;
 }
 
-export async function GET() {
+async function _GET() {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error } = await supabase.auth.getUser();
   if (error || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -47,3 +48,5 @@ export async function GET() {
 
   return NextResponse.json({ segments, insight });
 }
+
+export const GET = withErrorCapture('pos/customers/segments', _GET)

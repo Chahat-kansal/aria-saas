@@ -1,10 +1,11 @@
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
 import Stripe from 'stripe';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2024-06-20' });
 
-export async function POST(request: Request) {
+async function _POST(request: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -31,3 +32,5 @@ export async function POST(request: Request) {
 
   return NextResponse.json({ url: session.url });
 }
+
+export const POST = withErrorCapture('stripe/portal', _POST)

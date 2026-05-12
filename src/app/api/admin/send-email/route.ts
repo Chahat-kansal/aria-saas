@@ -5,8 +5,9 @@ import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { getAdminClient, logAdminAction, isAdminEmail } from '@/lib/admin';
 import { sendEmail } from '@/lib/external-apis';
 import { NextResponse } from 'next/server';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
-export async function POST(req: Request) {
+async function _POST(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user || !isAdminEmail(user.email)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -47,3 +48,5 @@ export async function POST(req: Request) {
 
   return NextResponse.json({ ok: true, sent_count: sent, total_recipients: emails.length });
 }
+
+export const POST = withErrorCapture('admin/send-email', _POST)

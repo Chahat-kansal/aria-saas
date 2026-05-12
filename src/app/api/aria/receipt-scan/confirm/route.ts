@@ -3,8 +3,9 @@ export const dynamic = 'force-dynamic';
 
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
-export async function POST(req: Request) {
+async function _POST(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -54,3 +55,5 @@ export async function POST(req: Request) {
 
   return NextResponse.json({ ok: true, updated });
 }
+
+export const POST = withErrorCapture('aria/receipt-scan/confirm', _POST)

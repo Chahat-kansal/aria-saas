@@ -5,6 +5,7 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { createClient } from '@supabase/supabase-js'
 import Anthropic from '@anthropic-ai/sdk'
 import Papa from 'papaparse'
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 
@@ -130,7 +131,7 @@ async function processMigration(
   }).eq('id', migration_id)
 }
 
-export async function POST(request: NextRequest) {
+async function _POST(request: NextRequest) {
   const formData = await request.formData()
   const action = formData.get('action') as string
 
@@ -209,7 +210,7 @@ If a column doesn't match any target, set target: null.
   return NextResponse.json({ error: 'unknown_action' }, { status: 400 })
 }
 
-export async function GET(request: NextRequest) {
+async function _GET(request: NextRequest) {
   const id = new URL(request.url).searchParams.get('id')
   if (!id) return NextResponse.json({ error: 'missing_id' }, { status: 400 })
 
@@ -221,3 +222,6 @@ export async function GET(request: NextRequest) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ migration: data })
 }
+
+export const GET = withErrorCapture('pos/migrate', _GET)
+export const POST = withErrorCapture('pos/migrate', _POST)

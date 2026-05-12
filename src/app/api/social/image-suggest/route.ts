@@ -2,6 +2,7 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 const INDUSTRY_CONTEXT: Record<string, string> = {
   cafe: 'coffee cafe latte flat white barista',
@@ -10,7 +11,7 @@ const INDUSTRY_CONTEXT: Record<string, string> = {
   warehouse: 'warehouse logistics business professional',
 };
 
-export async function GET(req: Request) {
+async function _GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const query    = searchParams.get('query') ?? '';
   const industry = searchParams.get('industry') ?? 'retail';
@@ -42,3 +43,5 @@ export async function GET(req: Request) {
 
   return NextResponse.json({ photos });
 }
+
+export const GET = withErrorCapture('social/image-suggest', _GET)

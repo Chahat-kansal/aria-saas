@@ -4,10 +4,12 @@ export const dynamic = 'force-dynamic';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import Anthropic from '@anthropic-ai/sdk';
 import { NextResponse } from 'next/server';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { trackAICall } from '@/lib/aria/ai-telemetry'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-export async function POST(req: Request) {
+async function _POST(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -63,11 +65,11 @@ Return a JSON object with this exact structure:
 Use realistic Australian pricing for the industry. Return ONLY the JSON.`;
 
   try {
-    const response = await anthropic.messages.create({
+    const response = await trackAICall({ route: 'aria/generate-quote', model: 'claude-sonnet-4-6', businessId: businessId, purpose: 'quote-generate' }, () => anthropic.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 1500,
       messages: [{ role: 'user', content: prompt }],
-    });
+    }));
 
     const text = response.content.filter(b => b.type === 'text').map(b => b.text).join('');
     const jsonMatch = text.match(/\{[\s\S]*\}/);
@@ -106,7 +108,7 @@ Use realistic Australian pricing for the industry. Return ONLY the JSON.`;
   }
 }
 
-export async function GET(req: Request) {
+async function _GET(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -129,7 +131,7 @@ export async function GET(req: Request) {
   return NextResponse.json({ quotes: quotes ?? [] });
 }
 
-export async function PATCH(req: Request) {
+async function _PATCH(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -147,3 +149,7 @@ export async function PATCH(req: Request) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });
 }
+
+export const GET = withErrorCapture('aria/generate-quote', _GET)
+export const POST = withErrorCapture('aria/generate-quote', _POST)
+export const PATCH = withErrorCapture('aria/generate-quote', _PATCH)

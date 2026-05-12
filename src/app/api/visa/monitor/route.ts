@@ -2,6 +2,7 @@ import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { supabaseAdmin } from '@/lib/supabase';
 import Anthropic from '@anthropic-ai/sdk';
 import { NextResponse } from 'next/server';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
 
@@ -60,7 +61,7 @@ ${content.slice(0, 8000)}`,
   }
 }
 
-export async function POST(req: Request) {
+async function _POST(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -123,6 +124,9 @@ export async function POST(req: Request) {
   return NextResponse.json({ saved, alertsCreated, message: `Scanned ${SOURCES.length} sources` });
 }
 
-export async function GET() {
+async function _GET() {
   return NextResponse.json({ sources: SOURCES.map(s => s.name), status: 'ready' });
 }
+
+export const GET = withErrorCapture('visa/monitor', _GET)
+export const POST = withErrorCapture('visa/monitor', _POST)

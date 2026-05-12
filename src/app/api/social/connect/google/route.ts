@@ -1,7 +1,8 @@
 export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
-export async function GET() {
+async function _GET() {
   const clientId = process.env.GOOGLE_BUSINESS_CLIENT_ID;
   const appUrl   = process.env.NEXT_PUBLIC_APP_URL ?? '';
 
@@ -19,3 +20,5 @@ export async function GET() {
 
   return NextResponse.redirect(url.toString());
 }
+
+export const GET = withErrorCapture('social/connect/google', _GET)

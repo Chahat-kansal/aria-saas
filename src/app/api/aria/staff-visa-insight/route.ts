@@ -1,6 +1,8 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { trackAICall } from '@/lib/aria/ai-telemetry'
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -8,7 +10,7 @@ export const maxDuration = 30;
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-export async function POST(req: Request) {
+async function _POST(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -40,7 +42,7 @@ export async function POST(req: Request) {
     : null;
 
   try {
-    const msg = await anthropic.messages.create({
+    const msg = await trackAICall({ route: 'aria/staff-visa-insight', model: 'claude-haiku-4-5-20251001', businessId: business_id, purpose: 'staff-visa-insight' }, () => anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 400,
       system: `You are Aria, an AI advisor for Australian businesses. Provide factual, helpful guidance about a staff member's visa situation in 2-4 plain English sentences. Note: you cannot give immigration legal advice — recommend consulting a registered migration agent for complex matters. Be specific and actionable.`,
@@ -55,7 +57,7 @@ Today: ${new Date().toISOString().split('T')[0]}
 
 Provide a concise, actionable Aria insight about this staff member's visa situation.`,
       }],
-    });
+    }));
 
     const insight = msg.content[0].type === 'text' ? msg.content[0].text.trim() : '';
     return NextResponse.json({ insight });
@@ -63,3 +65,5 @@ Provide a concise, actionable Aria insight about this staff member's visa situat
     return NextResponse.json({ insight: 'Unable to generate visa insight at this time.' });
   }
 }
+
+export const POST = withErrorCapture('aria/staff-visa-insight', _POST)

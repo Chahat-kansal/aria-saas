@@ -5,6 +5,7 @@ import type { NextRequest } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import type { MessageParam } from '@anthropic-ai/sdk/resources/messages'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 
@@ -215,7 +216,7 @@ async function executeTool(name: string, input: Record<string, unknown>, busines
   return { error: 'unknown_tool' }
 }
 
-export async function POST(request: NextRequest) {
+async function _POST(request: NextRequest) {
   const { messages: incomingMessages, conversation_id } = await request.json() as {
     messages: { role: 'user' | 'assistant'; content: string }[]
     conversation_id?: string
@@ -337,7 +338,7 @@ export async function POST(request: NextRequest) {
   })
 }
 
-export async function GET(request: NextRequest) {
+async function _GET(request: NextRequest) {
   const supabase = createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return Response.json({ error: 'unauthorized' }, { status: 401 })
@@ -359,3 +360,6 @@ export async function GET(request: NextRequest) {
     .order('last_message_at', { ascending: false }).limit(50)
   return Response.json({ conversations: data ?? [] })
 }
+
+export const GET = withErrorCapture('pos/ask', _GET)
+export const POST = withErrorCapture('pos/ask', _POST)

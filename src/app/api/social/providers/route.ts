@@ -3,8 +3,9 @@ export const dynamic = 'force-dynamic'
 
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { NextResponse } from 'next/server'
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
-export async function GET() {
+async function _GET() {
   try {
     const supabase = createServerSupabaseClient()
     const { data: { user }, error: authError } = await supabase.auth.getUser()
@@ -28,3 +29,5 @@ export async function GET() {
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Server error' }, { status: 500 })
   }
 }
+
+export const GET = withErrorCapture('social/providers', _GET)

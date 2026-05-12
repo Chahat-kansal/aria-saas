@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { addOrderLine } from '@/lib/orders/queries'
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -12,7 +13,7 @@ async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, u
   return data?.id ?? null
 }
 
-export async function GET(_req: NextRequest, { params }: Params) {
+async function _GET(_req: NextRequest, { params }: Params) {
   const { id } = await params
   const supabase = createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -31,7 +32,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
   return NextResponse.json({ lines: lines ?? [] })
 }
 
-export async function POST(req: NextRequest, { params }: Params) {
+async function _POST(req: NextRequest, { params }: Params) {
   const { id } = await params
   const supabase = createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -45,7 +46,7 @@ export async function POST(req: NextRequest, { params }: Params) {
   return NextResponse.json({ line })
 }
 
-export async function DELETE(_req: NextRequest, { params }: Params) {
+async function _DELETE(_req: NextRequest, { params }: Params) {
   const { id } = await params
   const supabase = createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -57,7 +58,7 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
   return NextResponse.json({ ok: true })
 }
 
-export async function PATCH(req: NextRequest, { params }: Params) {
+async function _PATCH(req: NextRequest, { params }: Params) {
   const { id } = await params
   const supabase = createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -76,3 +77,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   )
   return NextResponse.json({ lines: results.map(r => r.data).filter(Boolean) })
 }
+
+export const GET = withErrorCapture('pos/orders/[id]/lines', _GET)
+export const POST = withErrorCapture('pos/orders/[id]/lines', _POST)
+export const PATCH = withErrorCapture('pos/orders/[id]/lines', _PATCH)
+export const DELETE = withErrorCapture('pos/orders/[id]/lines', _DELETE)

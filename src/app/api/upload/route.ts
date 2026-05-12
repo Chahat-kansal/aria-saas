@@ -1,8 +1,9 @@
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { put } from '@vercel/blob';
 import { NextResponse } from 'next/server';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
-export async function POST(req: Request) {
+async function _POST(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -28,3 +29,5 @@ export async function POST(req: Request) {
   const blob = await put(`uploads/${user.id}/${Date.now()}-${file.name}`, file, { access: 'public' });
   return NextResponse.json({ url: blob.url, name: file.name, type: file.type, size: file.size });
 }
+
+export const POST = withErrorCapture('upload', _POST)

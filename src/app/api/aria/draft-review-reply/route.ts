@@ -5,10 +5,12 @@ export const maxDuration = 20;
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import Anthropic from '@anthropic-ai/sdk';
 import { NextResponse } from 'next/server';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { trackAICall } from '@/lib/aria/ai-telemetry'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-export async function POST(req: Request) {
+async function _POST(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error } = await supabase.auth.getUser();
   if (error || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -23,7 +25,7 @@ export async function POST(req: Request) {
   if (!review) return NextResponse.json({ error: 'Review not found' }, { status: 404 });
 
   try {
-    const msg = await anthropic.messages.create({
+    const msg = await trackAICall({ route: 'aria/draft-review-reply', model: 'claude-haiku-4-5-20251001', businessId: business_id, purpose: 'review-reply-draft' }, () => anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 300,
       system: `You are writing a professional reply to a Google review for an Australian business. Be warm, genuine, specific. Under 100 words. Thank them for the feedback. If negative, acknowledge and offer to resolve.`,
@@ -31,7 +33,7 @@ export async function POST(req: Request) {
         role: 'user',
         content: `Write a reply to this ${review.rating ?? '?'}-star review for ${biz.name} (${biz.industry}): "${review.text ?? review.review_text ?? review.content ?? 'No text provided'}"`,
       }],
-    });
+    }));
     const draft = msg.content[0].type === 'text' ? msg.content[0].text.trim() : '';
     return NextResponse.json({ draft });
   } catch {
@@ -39,7 +41,7 @@ export async function POST(req: Request) {
   }
 }
 
-export async function PATCH(req: Request) {
+async function _PATCH(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error } = await supabase.auth.getUser();
   if (error || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -57,3 +59,6 @@ export async function PATCH(req: Request) {
   if (e) return NextResponse.json({ error: e.message }, { status: 500 });
   return NextResponse.json({ ok: true });
 }
+
+export const POST = withErrorCapture('aria/draft-review-reply', _POST)
+export const PATCH = withErrorCapture('aria/draft-review-reply', _PATCH)

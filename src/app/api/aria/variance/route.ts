@@ -3,6 +3,8 @@ import Anthropic from '@anthropic-ai/sdk';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { calculateVariance } from '@/lib/business-data';
 import { NextResponse } from 'next/server';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { trackAICall } from '@/lib/aria/ai-telemetry'
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -10,7 +12,7 @@ export const maxDuration = 30;
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-export async function POST(req: Request) {
+async function _POST(req: Request) {
   try {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -38,7 +40,7 @@ export async function POST(req: Request) {
 
   if (significant.length > 0) {
     try {
-      const msg = await anthropic.messages.create({
+      const msg = await trackAICall({ route: 'aria/variance', model: 'claude-haiku-4-5-20251001', businessId: business_id, purpose: 'variance-insights' }, () => anthropic.messages.create({
         model: 'claude-haiku-4-5-20251001',
         max_tokens: 800,
         system: 'You are Aria. Return ONLY valid JSON array, no markdown.',
@@ -52,7 +54,7 @@ Items: ${JSON.stringify(significant.map(v => ({
   variance: v.variance, value: (v.variance_value_cents / 100).toFixed(2),
 })))}`,
         }],
-      });
+      }));
       const raw = msg.content[0].type === 'text' ? msg.content[0].text : '';
       const m = raw.match(/\[[\s\S]*\]/);
       if (m) aiInsights = JSON.parse(m[0]);
@@ -65,3 +67,5 @@ Items: ${JSON.stringify(significant.map(v => ({
     return NextResponse.json({ data: [], status: 'error', message: 'temporarily_unavailable' }, { status: 200 });
   }
 }
+
+export const POST = withErrorCapture('aria/variance', _POST)

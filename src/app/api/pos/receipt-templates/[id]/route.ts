@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { NextResponse } from 'next/server'
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 // Identical pattern to all working POS routes (promotions, products, customers, etc.)
 async function getBid(
@@ -26,7 +27,7 @@ async function getBid(
   return data?.id ?? null
 }
 
-export async function GET(_req: Request, { params }: { params: { id: string } }) {
+async function _GET(_req: Request, { params }: { params: { id: string } }) {
   try {
     const supabase = createServerSupabaseClient()
     const { data: { user } } = await supabase.auth.getUser()
@@ -44,7 +45,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   }
 }
 
-export async function PATCH(req: Request, { params }: { params: { id: string } }) {
+async function _PATCH(req: Request, { params }: { params: { id: string } }) {
   try {
     // Exact same client + auth + bid pattern as promotions/route.ts, products/route.ts, etc.
     const supabase = createServerSupabaseClient()
@@ -118,3 +119,6 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     return NextResponse.json({ error: e?.message || 'Internal server error' }, { status: 500 })
   }
 }
+
+export const GET = withErrorCapture('pos/receipt-templates/[id]', _GET)
+export const PATCH = withErrorCapture('pos/receipt-templates/[id]', _PATCH)

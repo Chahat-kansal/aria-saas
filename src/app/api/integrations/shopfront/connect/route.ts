@@ -2,8 +2,9 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
-export async function GET(req: Request) {
+async function _GET(req: Request) {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://aria-saas.vercel.app";
   const clientId = process.env.SHOPFRONT_CLIENT_ID;
 
@@ -18,3 +19,5 @@ export async function GET(req: Request) {
   url.searchParams.set("scope", "products customers sales read");
   return NextResponse.redirect(url.toString());
 }
+
+export const GET = withErrorCapture('integrations/shopfront/connect', _GET)

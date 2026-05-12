@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { toNullableUuid } from '@/lib/utils/uuid-helpers'
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -13,7 +14,7 @@ async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, u
   return data?.id ?? null
 }
 
-export async function GET(_req: NextRequest, { params }: Params) {
+async function _GET(_req: NextRequest, { params }: Params) {
   const { id } = await params
   const supabase = createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -30,7 +31,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
   return NextResponse.json({ product })
 }
 
-export async function DELETE(_req: NextRequest, { params }: Params) {
+async function _DELETE(_req: NextRequest, { params }: Params) {
   const { id } = await params
   const supabase = createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -43,7 +44,7 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
   return NextResponse.json({ ok: true })
 }
 
-export async function PATCH(req: NextRequest, { params }: Params) {
+async function _PATCH(req: NextRequest, { params }: Params) {
   const { id } = await params
   const supabase = createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -258,3 +259,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ product })
 }
+
+export const GET = withErrorCapture('pos/products/[id]', _GET)
+export const PATCH = withErrorCapture('pos/products/[id]', _PATCH)
+export const DELETE = withErrorCapture('pos/products/[id]', _DELETE)

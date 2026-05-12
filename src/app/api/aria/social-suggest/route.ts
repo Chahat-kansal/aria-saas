@@ -9,6 +9,8 @@ import { getWeatherForecast, getUpcomingHolidays } from '@/lib/external-apis';
 import { trackUsage } from '@/lib/track-usage';
 import Anthropic from '@anthropic-ai/sdk';
 import { NextResponse } from 'next/server';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { trackAICall } from '@/lib/aria/ai-telemetry'
 
 function getNextPostTime(timeStr: string, _platform: string, _prefs: any): string {
   const days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
@@ -62,7 +64,7 @@ const INDUSTRY_STRATEGIES: Record<string, string> = {
 - Reliability messaging: delivery times, quality, consistency`,
 };
 
-export async function POST(req: Request) {
+async function _POST(req: Request) {
   try {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -111,7 +113,7 @@ export async function POST(req: Request) {
   const count = Math.min(req_count || 3, 5);
 
   const client = new Anthropic();
-  const msg = await client.messages.create({
+  const msg = await trackAICall({ route: 'aria/social-suggest', model: 'claude-sonnet-4-6', businessId: business_id, purpose: 'social-post-generate' }, () => client.messages.create({
     model: 'claude-sonnet-4-6',
     max_tokens: 2000,
     system: ARIA_VOICE + '\n\n' + strategyContext,
@@ -156,7 +158,7 @@ Return ONLY a valid JSON array, no other text:
   }
 ]`,
     }],
-  });
+  }));
 
   const text = msg.content[0].type === 'text' ? msg.content[0].text : '[]';
   let suggestions: any[] = [];
@@ -280,3 +282,5 @@ Return ONLY a valid JSON array, no other text:
     return NextResponse.json({ posts: [], count: 0, status: 'error', message: 'temporarily_unavailable' }, { status: 200 });
   }
 }
+
+export const POST = withErrorCapture('aria/social-suggest', _POST)

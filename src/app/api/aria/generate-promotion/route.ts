@@ -6,10 +6,12 @@ import { createServerSupabaseClient } from '@/lib/supabase-server';
 import Anthropic from '@anthropic-ai/sdk';
 import { ARIA_VOICE } from '@/lib/aria-voice-guide';
 import { NextResponse } from 'next/server';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { trackAICall } from '@/lib/aria/ai-telemetry'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-export async function POST(req: Request) {
+async function _POST(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error } = await supabase.auth.getUser();
   if (error || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -21,7 +23,7 @@ export async function POST(req: Request) {
   if (!biz) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
   try {
-    const msg = await anthropic.messages.create({
+    const msg = await trackAICall({ route: 'aria/generate-promotion', model: 'claude-haiku-4-5-20251001', businessId: business_id, purpose: 'slow-day-promotion' }, () => anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 500,
       system: `${ARIA_VOICE}
@@ -42,7 +44,7 @@ Return JSON:
   "rationale": "one sentence why this will work"
 }`,
       }],
-    });
+    }));
 
     const raw = msg.content[0].type === 'text' ? msg.content[0].text : '';
     const match = raw.match(/\{[\s\S]*\}/);
@@ -59,3 +61,5 @@ Return JSON:
     });
   }
 }
+
+export const POST = withErrorCapture('aria/generate-promotion', _POST)

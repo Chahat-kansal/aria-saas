@@ -4,6 +4,7 @@ export const runtime = 'nodejs'
 import * as Sentry from '@sentry/nextjs'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { NextResponse } from 'next/server'
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 const INDUSTRY_SEARCH: Record<string, { type: string; keyword: string }> = {
   retail:      { type: 'store',         keyword: 'retail store shop' },
@@ -37,7 +38,7 @@ const AU_CHAINS: Record<string, string[]> = {
   default:     ['Woolworths', 'Coles', 'IGA'],
 }
 
-export async function GET(req: Request) {
+async function _GET(req: Request) {
   try {
     const supabase = createServerSupabaseClient()
     const { data: { user }, error: authError } = await supabase.auth.getUser()
@@ -149,3 +150,5 @@ export async function GET(req: Request) {
     return NextResponse.json({ competitors: [], status: 'error', message: 'temporarily_unavailable' }, { status: 200 })
   }
 }
+
+export const GET = withErrorCapture('aria/competitors', _GET)

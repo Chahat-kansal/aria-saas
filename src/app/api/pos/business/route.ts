@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 async function getActiveBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
   const { data: active } = await supabase
@@ -22,7 +23,7 @@ async function getActiveBid(supabase: ReturnType<typeof createServerSupabaseClie
   return data?.id ?? null
 }
 
-export async function GET() {
+async function _GET() {
   const supabase = createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
@@ -42,7 +43,7 @@ export async function GET() {
   return NextResponse.json({ business: biz ?? null })
 }
 
-export async function PATCH(request: NextRequest) {
+async function _PATCH(request: NextRequest) {
   const supabase = createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
@@ -80,3 +81,6 @@ export async function PATCH(request: NextRequest) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ business: data })
 }
+
+export const GET = withErrorCapture('pos/business', _GET)
+export const PATCH = withErrorCapture('pos/business', _PATCH)

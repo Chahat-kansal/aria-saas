@@ -2,6 +2,8 @@ import Anthropic from '@anthropic-ai/sdk';
 import { ARIA_VOICE } from '@/lib/aria-voice-guide';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { trackAICall } from '@/lib/aria/ai-telemetry'
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -9,7 +11,7 @@ export const maxDuration = 20;
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-export async function POST(req: Request) {
+async function _POST(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -21,7 +23,7 @@ export async function POST(req: Request) {
   if (!biz) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
   try {
-    const msg = await anthropic.messages.create({
+    const msg = await trackAICall({ route: 'aria/supplier-insights', model: 'claude-haiku-4-5-20251001', businessId: business_id, purpose: 'supplier-insights' }, () => anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 800,
       system: `${ARIA_VOICE}
@@ -34,7 +36,7 @@ Return JSON: [{"supplier":"name","insight":"one actionable sentence","rating":"g
 
 Suppliers: ${JSON.stringify(suppliers.slice(0, 10))}`,
       }],
-    });
+    }));
 
     const raw = msg.content[0].type === 'text' ? msg.content[0].text : '';
     const arrMatch = raw.match(/\[[\s\S]*\]/);
@@ -42,3 +44,5 @@ Suppliers: ${JSON.stringify(suppliers.slice(0, 10))}`,
     return NextResponse.json({ insights });
   } catch { return NextResponse.json({ insights: [] }); }
 }
+
+export const POST = withErrorCapture('aria/supplier-insights', _POST)

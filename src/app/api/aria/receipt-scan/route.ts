@@ -2,6 +2,8 @@ import Anthropic from '@anthropic-ai/sdk';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { getBusinessItems } from '@/lib/business-data';
 import { NextResponse } from 'next/server';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { trackAICall } from '@/lib/aria/ai-telemetry'
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -68,7 +70,7 @@ function fuzzyScore(a: string, b: string): number {
   return matches / Math.max(wordsA.size, wordsB.length);
 }
 
-export async function POST(req: Request) {
+async function _POST(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -101,7 +103,7 @@ export async function POST(req: Request) {
   let invoiceTotal: number | null = null;
 
   try {
-    const response = await anthropic.messages.create({
+    const response = await trackAICall({ route: 'aria/receipt-scan', model: 'claude-sonnet-4-6', businessId: business_id, purpose: 'receipt-scan-vision' }, () => anthropic.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 4096,
       messages: [{
@@ -133,7 +135,7 @@ Be precise — these numbers update real inventory.`,
           },
         ],
       }],
-    });
+    }));
 
     const text = response.content[0].type === 'text' ? response.content[0].text : '';
     console.log('[receipt-scan] Claude response (first 400 chars):', text.slice(0, 400));
@@ -226,3 +228,5 @@ Be precise — these numbers update real inventory.`,
     line_count: result.length,
   });
 }
+
+export const POST = withErrorCapture('aria/receipt-scan', _POST)

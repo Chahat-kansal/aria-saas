@@ -1,5 +1,6 @@
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 // Judge0 CE — free code execution API
 // Free tier: 100 requests/day on rapidapi, or use the public instance
@@ -34,7 +35,7 @@ const LANGUAGE_MAP: Record<string, { id: number; name: string }> = {
   lua:        { id: 64,  name: 'Lua' },
 };
 
-export async function POST(req: Request) {
+async function _POST(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -99,6 +100,9 @@ export async function POST(req: Request) {
   }
 }
 
-export async function GET() {
+async function _GET() {
   return NextResponse.json({ supported: Object.keys(LANGUAGE_MAP) });
 }
+
+export const GET = withErrorCapture('execute', _GET)
+export const POST = withErrorCapture('execute', _POST)

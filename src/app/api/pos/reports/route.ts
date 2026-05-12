@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
   const { data: active } = await supabase
@@ -20,7 +21,7 @@ async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, u
   return data?.id ?? null;
 }
 
-export async function GET(req: Request) {
+async function _GET(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -66,3 +67,5 @@ export async function GET(req: Request) {
     daily: Object.values(byDay).sort((a, b) => a.date.localeCompare(b.date)),
   });
 }
+
+export const GET = withErrorCapture('pos/reports', _GET)

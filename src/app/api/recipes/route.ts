@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 export const dynamic = 'force-dynamic';
 
-export async function GET(req: NextRequest) {
+async function _GET(req: NextRequest) {
   const business_id = req.nextUrl.searchParams.get('business_id');
   if (!business_id) return NextResponse.json({ error: 'business_id required' }, { status: 400 });
 
@@ -21,7 +22,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ recipes: recipes ?? [] });
 }
 
-export async function POST(req: NextRequest) {
+async function _POST(req: NextRequest) {
   const supabase = createServerSupabaseClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
@@ -54,3 +55,6 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({ recipe });
 }
+
+export const GET = withErrorCapture('recipes', _GET)
+export const POST = withErrorCapture('recipes', _POST)

@@ -6,10 +6,12 @@ import { createServerSupabaseClient } from '@/lib/supabase-server';
 import Anthropic from '@anthropic-ai/sdk';
 import { NextResponse } from 'next/server';
 import { ARIA_VOICE } from '@/lib/aria-voice-guide';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { trackAICall } from '@/lib/aria/ai-telemetry'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-export async function POST(req: Request) {
+async function _POST(req: Request) {
   try {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -65,7 +67,7 @@ export async function POST(req: Request) {
     });
   }
 
-  const msg = await anthropic.messages.create({
+  const msg = await trackAICall({ route: 'aria/missed-demand-analysis', model: 'claude-haiku-4-5-20251001', businessId: business_id, purpose: 'missed-demand-analysis' }, () => anthropic.messages.create({
     model: 'claude-haiku-4-5-20251001',
     max_tokens: 300,
     system: `${ARIA_VOICE}\n\nReturn ONLY valid JSON.`,
@@ -83,7 +85,7 @@ Return JSON:
   "reasoning": "one sentence"
 }`,
     }],
-  });
+  }));
 
   const raw = msg.content[0].type === 'text' ? msg.content[0].text : '';
   const match = raw.match(/\{[\s\S]*\}/);
@@ -115,3 +117,5 @@ Return JSON:
     return NextResponse.json({ data: [], status: 'error', message: 'temporarily_unavailable' }, { status: 200 });
   }
 }
+
+export const POST = withErrorCapture('aria/missed-demand-analysis', _POST)

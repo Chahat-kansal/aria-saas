@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { headers } from 'next/headers'
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!)
 
@@ -22,7 +23,7 @@ function priceToTier(priceId: string | undefined): string {
   return 'starter'
 }
 
-export async function GET() {
+async function _GET() {
   const supabase = createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
@@ -39,7 +40,7 @@ export async function GET() {
   return NextResponse.json({ subscription: sub ?? null })
 }
 
-export async function POST(request: NextRequest) {
+async function _POST(request: NextRequest) {
   const action = new URL(request.url).searchParams.get('action')
 
   if (action === 'webhook') {
@@ -186,3 +187,6 @@ export async function POST(request: NextRequest) {
 
   return NextResponse.json({ error: 'unknown_action' }, { status: 400 })
 }
+
+export const GET = withErrorCapture('stripe', _GET)
+export const POST = withErrorCapture('stripe', _POST)

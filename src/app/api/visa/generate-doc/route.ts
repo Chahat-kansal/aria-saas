@@ -1,6 +1,7 @@
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import Anthropic from '@anthropic-ai/sdk';
 import { NextResponse } from 'next/server';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
 
@@ -16,7 +17,7 @@ const DOC_PROMPTS: Record<string, (client: any) => string> = {
   character_reference: (c) => `Draft a character reference template for ${c.full_name} for use in an Australian visa application. The reference should be written from the perspective of a professional contact, address the person's character, integrity, and community standing, and be suitable for submission to the Department of Home Affairs.`,
 };
 
-export async function POST(req: Request) {
+async function _POST(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -42,3 +43,5 @@ export async function POST(req: Request) {
   const content = (msg.content[0] as any).text;
   return NextResponse.json({ content, document_type, client_name: client.full_name });
 }
+
+export const POST = withErrorCapture('visa/generate-doc', _POST)

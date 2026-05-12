@@ -1,7 +1,8 @@
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
-export async function GET(req: Request) {
+async function _GET(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -29,7 +30,7 @@ export async function GET(req: Request) {
   return NextResponse.json(data || []);
 }
 
-export async function POST(req: Request) {
+async function _POST(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -47,7 +48,7 @@ export async function POST(req: Request) {
   return NextResponse.json(data, { status: 201 });
 }
 
-export async function PUT(req: Request) {
+async function _PUT(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -67,7 +68,7 @@ export async function PUT(req: Request) {
   return NextResponse.json(data);
 }
 
-export async function DELETE(req: Request) {
+async function _DELETE(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -76,3 +77,8 @@ export async function DELETE(req: Request) {
   await supabase.from('projects').delete().eq('id', id).eq('user_id', user.id);
   return NextResponse.json({ success: true });
 }
+
+export const GET = withErrorCapture('project', _GET)
+export const POST = withErrorCapture('project', _POST)
+export const PUT = withErrorCapture('project', _PUT)
+export const DELETE = withErrorCapture('project', _DELETE)

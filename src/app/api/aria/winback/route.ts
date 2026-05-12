@@ -7,6 +7,8 @@ import { createServerSupabaseClient } from '@/lib/supabase-server';
 import Anthropic from '@anthropic-ai/sdk';
 import { ARIA_VOICE } from '@/lib/aria-voice-guide';
 import { NextResponse } from 'next/server';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { trackAICall } from '@/lib/aria/ai-telemetry'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -24,7 +26,7 @@ async function sendTwilio(from: string, to: string, body: string, sid: string, t
   return { ok: res.ok, sid: data.sid, error: data.message };
 }
 
-export async function POST(req: Request) {
+async function _POST(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -120,11 +122,11 @@ export async function POST(req: Request) {
   const daysSince = customer.last_visit ? Math.floor((Date.now() - new Date(customer.last_visit).getTime()) / 86400000) : null;
   let messageText = body.message ?? '';
   if (!messageText) {
-    const response = await anthropic.messages.create({
+    const response = await trackAICall({ route: 'aria/winback', model: 'claude-haiku-4-5-20251001', businessId: business_id, purpose: 'winback-sms-draft' }, () => anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001', max_tokens: 200,
       system: `${ARIA_VOICE}\n\nWrite concise, personalised SMS messages. Return ONLY the SMS text, no explanation.`,
       messages: [{ role: 'user', content: `Write a short, friendly winback SMS (max 160 chars) for customer: ${customer.name}, business: ${business.name} (${business.industry}), days since last visit: ${daysSince ?? 'unknown'}. Include a personalised offer.` }],
-    });
+    }));
     messageText = response.content.filter(b => b.type === 'text').map(b => b.text).join('').trim();
   }
 
@@ -152,3 +154,5 @@ export async function POST(req: Request) {
   }
   return NextResponse.json({ success: true, message: messageText, sms_sent: true, sid: result.sid });
 }
+
+export const POST = withErrorCapture('aria/winback', _POST)

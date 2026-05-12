@@ -3,6 +3,7 @@ export const maxDuration = 60;
 
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 function rfmScore(r: number, f: number, m: number): string {
   if (r >= 4 && f >= 4 && m >= 4) return 'Champions';
@@ -14,7 +15,7 @@ function rfmScore(r: number, f: number, m: number): string {
   return 'Promising';
 }
 
-export async function GET(req: Request) {
+async function _GET(req: Request) {
   // Only allow Vercel cron or internal calls
   const auth = req.headers.get('authorization');
   if (auth !== `Bearer ${process.env.CRON_SECRET}` && process.env.NODE_ENV !== 'development') {
@@ -108,3 +109,5 @@ export async function GET(req: Request) {
 
   return NextResponse.json({ processed, total: customers.length, segments: updates.reduce((acc: Record<string, number>, u) => { acc[u.customer_segment] = (acc[u.customer_segment] ?? 0) + 1; return acc; }, {}) });
 }
+
+export const GET = withErrorCapture('cron/rfm-daily', _GET)

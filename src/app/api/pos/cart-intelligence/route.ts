@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -11,7 +12,7 @@ interface CartWarning {
   staff_prompt: string | null;
 }
 
-export async function POST(req: NextRequest) {
+async function _POST(req: NextRequest) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
@@ -149,3 +150,5 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({ warnings: warnings.slice(0, 5) });
 }
+
+export const POST = withErrorCapture('pos/cart-intelligence', _POST)

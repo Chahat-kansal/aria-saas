@@ -3,13 +3,14 @@ export const dynamic = 'force-dynamic';
 
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 async function verifyBiz(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string, bid: string) {
   const { data } = await supabase.from('businesses').select('id').eq('id', bid).eq('user_id', userId).single();
   return data?.id ?? null;
 }
 
-export async function GET(req: Request) {
+async function _GET(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error } = await supabase.auth.getUser();
   if (error || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -30,7 +31,7 @@ export async function GET(req: Request) {
   return NextResponse.json({ bookings: data ?? [] });
 }
 
-export async function POST(req: Request) {
+async function _POST(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error } = await supabase.auth.getUser();
   if (error || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -69,7 +70,7 @@ export async function POST(req: Request) {
   return NextResponse.json({ booking: data });
 }
 
-export async function PATCH(req: Request) {
+async function _PATCH(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error } = await supabase.auth.getUser();
   if (error || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -87,7 +88,7 @@ export async function PATCH(req: Request) {
   return NextResponse.json({ ok: true });
 }
 
-export async function DELETE(req: Request) {
+async function _DELETE(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error } = await supabase.auth.getUser();
   if (error || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -101,3 +102,8 @@ export async function DELETE(req: Request) {
   await supabase.from('bookings').delete().eq('id', id).eq('business_id', business_id);
   return NextResponse.json({ ok: true });
 }
+
+export const GET = withErrorCapture('bookings', _GET)
+export const POST = withErrorCapture('bookings', _POST)
+export const PATCH = withErrorCapture('bookings', _PATCH)
+export const DELETE = withErrorCapture('bookings', _DELETE)

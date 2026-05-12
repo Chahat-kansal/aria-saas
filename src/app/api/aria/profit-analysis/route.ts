@@ -8,10 +8,12 @@ import Anthropic from '@anthropic-ai/sdk';
 import { NextResponse } from 'next/server';
 import { ARIA_VOICE } from '@/lib/aria-voice-guide';
 import { getRBAData, getABSRetailBenchmarks } from '@/lib/external-apis';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { trackAICall } from '@/lib/aria/ai-telemetry'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-export async function POST(req: Request) {
+async function _POST(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -206,7 +208,7 @@ Economic context:
 - CPI: ${absData?.cpi_annual_pct ?? 'N/A'}% annual
 Dead stock opportunity cost: capital locked at ${rbaData?.cash_rate_pct ?? 4.1}% cost of money.` : '';
 
-      const msg = await anthropic.messages.create({
+      const msg = await trackAICall({ route: 'aria/profit-analysis', model: 'claude-sonnet-4-6', businessId: business_id, purpose: 'profit-leak-analysis' }, () => anthropic.messages.create({
         model: 'claude-sonnet-4-6',
         max_tokens: 2000,
         system: `${ARIA_VOICE}
@@ -240,7 +242,7 @@ Return JSON:
 }
 Only include leaks where there is actual data (non-zero amounts). Skip analyses with zero impact.`,
         }],
-      });
+      }));
 
       const raw = msg.content[0].type === 'text' ? msg.content[0].text : '';
       const match = raw.match(/\{[\s\S]*\}/);
@@ -295,14 +297,14 @@ Only include leaks where there is actual data (non-zero amounts). Skip analyses 
   if (leaks.length > 0 && process.env.ANTHROPIC_API_KEY) {
     try {
       const topLeak = leaks.sort((a: any, b: any) => b.estimated_monthly_impact_cents - a.estimated_monthly_impact_cents)[0] as any;
-      const discoveryMsg = await anthropic.messages.create({
+      const discoveryMsg = await trackAICall({ route: 'aria/profit-analysis', model: 'claude-sonnet-4-6', businessId: business_id, purpose: 'profit-leak-discovery' }, () => anthropic.messages.create({
         model: 'claude-sonnet-4-6',
         max_tokens: 100,
         messages: [{
           role: 'user',
           content: `You are Aria, a sharp business analyst. Write 2 sentences that sound like you JUST discovered something surprising while analysing this business's data. Reference the specific finding: "${topLeak.title}" — ${topLeak.description}. Total monthly impact: A$${(totalMonthlyCents / 100).toFixed(0)}. Sound like a CFO who just spotted something the owner didn't know. Be specific with numbers. Australian context.`,
         }],
-      });
+      }));
       discovery = discoveryMsg.content[0].type === 'text' ? discoveryMsg.content[0].text.trim() : '';
     } catch { /* non-fatal — return without discovery */ }
   } else if (leaks.length > 0) {
@@ -312,3 +314,5 @@ Only include leaks where there is actual data (non-zero amounts). Skip analyses 
 
   return NextResponse.json({ leaks, total_monthly_impact_cents: totalMonthlyCents, ai_summary: aiSummary, discovery, analyses });
 }
+
+export const POST = withErrorCapture('aria/profit-analysis', _POST)

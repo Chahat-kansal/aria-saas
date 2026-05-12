@@ -1,5 +1,6 @@
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -19,7 +20,7 @@ async function verifyStaff(
   return data;
 }
 
-export async function GET(req: Request, { params }: { params: { id: string } }) {
+async function _GET(req: Request, { params }: { params: { id: string } }) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error } = await supabase.auth.getUser();
   if (error || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -41,7 +42,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
   });
 }
 
-export async function PATCH(req: Request, { params }: { params: { id: string } }) {
+async function _PATCH(req: Request, { params }: { params: { id: string } }) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error } = await supabase.auth.getUser();
   if (error || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -63,7 +64,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   return NextResponse.json({ staff: data });
 }
 
-export async function DELETE(req: Request, { params }: { params: { id: string } }) {
+async function _DELETE(req: Request, { params }: { params: { id: string } }) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error } = await supabase.auth.getUser();
   if (error || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -80,3 +81,7 @@ export async function DELETE(req: Request, { params }: { params: { id: string } 
 
   return NextResponse.json({ ok: true });
 }
+
+export const GET = withErrorCapture('staff/[id]', _GET)
+export const PATCH = withErrorCapture('staff/[id]', _PATCH)
+export const DELETE = withErrorCapture('staff/[id]', _DELETE)

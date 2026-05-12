@@ -5,6 +5,7 @@ import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { generateInsight } from '@/lib/aria-insights';
 import { thirtyDaysAgoAEST } from '@/lib/date-au';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string) {
   const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle();
@@ -15,7 +16,7 @@ async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, u
 
 const ACTIONS = ['Clearance 50% off', 'Return to supplier', 'Bundle promo', 'Dispose', 'Investigate'];
 
-export async function GET(req: Request) {
+async function _GET(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error } = await supabase.auth.getUser();
   if (error || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -90,3 +91,5 @@ export async function GET(req: Request) {
 
   return NextResponse.json({ items, insight });
 }
+
+export const GET = withErrorCapture('pos/dead-stock', _GET)

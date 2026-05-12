@@ -6,6 +6,8 @@ import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { getBusinessSales, getBusinessItems } from '@/lib/business-data';
 import Anthropic from '@anthropic-ai/sdk';
 import { NextResponse } from 'next/server';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { trackAICall } from '@/lib/aria/ai-telemetry'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -20,7 +22,7 @@ const AU_HOLIDAYS_2026 = [
   { name: "New Year's Eve", date: '2026-12-31', uplift: 1.6 },
 ];
 
-export async function POST(req: Request) {
+async function _POST(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -148,7 +150,7 @@ export async function POST(req: Request) {
 
   let result: any = null;
   try {
-    const msg = await anthropic.messages.create({
+    const msg = await trackAICall({ route: 'aria/generate-purchase-orders', model: 'claude-haiku-4-5-20251001', businessId: business_id, purpose: 'purchase-order-generate' }, () => anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 1500,
       system: 'You are Aria. Return ONLY valid JSON.',
@@ -165,7 +167,7 @@ export async function POST(req: Request) {
 
 Data: ${JSON.stringify(groupedSuggestions)}`,
       }],
-    });
+    }));
     const raw = msg.content[0].type === 'text' ? msg.content[0].text : '';
     const match = raw.match(/\{[\s\S]*\}/);
     if (match) result = JSON.parse(match[0]);
@@ -193,3 +195,5 @@ Data: ${JSON.stringify(groupedSuggestions)}`,
 
   return NextResponse.json({ ...result, orders: legacyOrders });
 }
+
+export const POST = withErrorCapture('aria/generate-purchase-orders', _POST)

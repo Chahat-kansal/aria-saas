@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { generateInsight } from '@/lib/aria-insights'
 import { checkBriefingTrigger, localDateString, BriefingBusiness } from '@/lib/aria/timezone'
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 function authOk(req: NextRequest): boolean {
   const cronSecret = process.env.CRON_SECRET
@@ -100,7 +101,7 @@ async function generateEvening(
   }, { onConflict: 'business_id,briefing_date,briefing_type' })
 }
 
-export async function GET(req: NextRequest) {
+async function _GET(req: NextRequest) {
   if (!authOk(req)) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
@@ -143,3 +144,5 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({ morning, evening, errors, total: businesses.length })
 }
+
+export const GET = withErrorCapture('cron/generate-briefings', _GET)

@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { updateOrderLine, removeOrderLine } from '@/lib/orders/queries'
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 type Params = { params: Promise<{ id: string; lineId: string }> }
 
@@ -12,7 +13,7 @@ async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, u
   return data?.id ?? null
 }
 
-export async function PATCH(req: NextRequest, { params }: Params) {
+async function _PATCH(req: NextRequest, { params }: Params) {
   const { lineId } = await params
   const supabase = createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -26,7 +27,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   return NextResponse.json({ line })
 }
 
-export async function DELETE(_req: NextRequest, { params }: Params) {
+async function _DELETE(_req: NextRequest, { params }: Params) {
   const { lineId } = await params
   const supabase = createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -38,3 +39,6 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
   if (!ok) return NextResponse.json({ error: 'delete_failed' }, { status: 500 })
   return NextResponse.json({ ok: true })
 }
+
+export const PATCH = withErrorCapture('pos/orders/[id]/lines/[lineId]', _PATCH)
+export const DELETE = withErrorCapture('pos/orders/[id]/lines/[lineId]', _DELETE)

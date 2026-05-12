@@ -3,6 +3,7 @@ export const maxDuration = 300;
 
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 type Params = { params: Promise<{ source: string }> };
 
@@ -15,7 +16,7 @@ async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, u
   return data?.id ?? null;
 }
 
-export async function GET(req: Request, { params }: Params) {
+async function _GET(req: Request, { params }: Params) {
   const { source } = await params;
   const { searchParams } = new URL(req.url);
   const migrationId = searchParams.get('migration_id');
@@ -37,7 +38,7 @@ export async function GET(req: Request, { params }: Params) {
   return NextResponse.json({ migrations: migrations ?? [] });
 }
 
-export async function POST(req: Request, { params }: Params) {
+async function _POST(req: Request, { params }: Params) {
   const { source } = await params;
 
   if (!VALID_SOURCES.includes(source as typeof VALID_SOURCES[number])) {
@@ -97,3 +98,6 @@ export async function POST(req: Request, { params }: Params) {
 
   return NextResponse.json({ error: 'Unknown action' }, { status: 400 });
 }
+
+export const GET = withErrorCapture('pos/migrate/[source]', _GET)
+export const POST = withErrorCapture('pos/migrate/[source]', _POST)

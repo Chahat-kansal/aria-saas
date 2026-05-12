@@ -3,8 +3,9 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import crypto from 'crypto';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
-export async function POST(req: Request) {
+async function _POST(req: Request) {
   try {
     const body = await req.text();
     const params = new URLSearchParams(body);
@@ -69,7 +70,7 @@ export async function POST(req: Request) {
   }
 }
 
-export async function GET(req: Request) {
+async function _GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const code = searchParams.get('confirmation_code');
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://aria-saas-fot6.vercel.app';
@@ -84,3 +85,6 @@ export async function GET(req: Request) {
 
   return NextResponse.redirect(`${appUrl}/data-deletion`);
 }
+
+export const GET = withErrorCapture('social/data-deletion', _GET)
+export const POST = withErrorCapture('social/data-deletion', _POST)

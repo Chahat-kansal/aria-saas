@@ -5,8 +5,9 @@ import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { getWeatherForecast, getUpcomingHolidays, getWeatherUplift } from '@/lib/external-apis';
 import { trackUsage } from '@/lib/track-usage';
 import { NextResponse } from 'next/server';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
-export async function POST(req: Request) {
+async function _POST(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -141,7 +142,7 @@ export async function POST(req: Request) {
   });
 }
 
-export async function GET(req: Request) {
+async function _GET(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -164,3 +165,6 @@ export async function GET(req: Request) {
   }
   return NextResponse.json({ drafts: drafts ?? [] });
 }
+
+export const GET = withErrorCapture('aria/weekly-order', _GET)
+export const POST = withErrorCapture('aria/weekly-order', _POST)

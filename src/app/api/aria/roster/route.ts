@@ -4,6 +4,8 @@ export const dynamic = "force-dynamic";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
+import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { trackAICall } from '@/lib/aria/ai-telemetry'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -14,7 +16,7 @@ async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, u
   return data?.id ?? null;
 }
 
-export async function GET(req: Request) {
+async function _GET(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -27,7 +29,7 @@ export async function GET(req: Request) {
   return NextResponse.json({ rosters: data ?? [] });
 }
 
-export async function POST(req: Request) {
+async function _POST(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -103,12 +105,12 @@ Return ONLY a valid JSON object with this exact structure:
   let totalCostCents = 0;
 
   try {
-    const resp = await anthropic.messages.create({
+    const resp = await trackAICall({ route: 'aria/roster', model: 'claude-sonnet-4-6', businessId: undefined, purpose: 'roster-optimization' }, () => anthropic.messages.create({
       model: "claude-sonnet-4-6",
       max_tokens: 4000,
       messages: [{ role: "user", content: `Generate the roster for this business:\n${context}` }],
       system: systemPrompt,
-    });
+    }));
     const text = ((resp.content[0] as { type: string; text: string }).text ?? "").trim();
     const match = text.match(/\{[\s\S]*\}/);
     if (match) {
@@ -154,7 +156,7 @@ Return ONLY a valid JSON object with this exact structure:
   return NextResponse.json({ roster, shifts, reasoning, total_hours: totalHours, total_cost_cents: totalCostCents });
 }
 
-export async function PATCH(req: Request) {
+async function _PATCH(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -180,7 +182,7 @@ export async function PATCH(req: Request) {
   return NextResponse.json({ roster: data });
 }
 
-export async function DELETE(req: Request) {
+async function _DELETE(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -193,3 +195,8 @@ export async function DELETE(req: Request) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });
 }
+
+export const GET = withErrorCapture('aria/roster', _GET)
+export const POST = withErrorCapture('aria/roster', _POST)
+export const PATCH = withErrorCapture('aria/roster', _PATCH)
+export const DELETE = withErrorCapture('aria/roster', _DELETE)

@@ -2,12 +2,13 @@ import { createServerSupabaseClient } from '@/lib/supabase-server';
 import Anthropic from '@anthropic-ai/sdk';
 import { ARIA_SYSTEM, ARIA_TOOLS, runAriaTool } from '@/lib/claudeTools';
 import { browserClose } from '@/lib/browser';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 export const maxDuration = 120;
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-export async function POST(req: Request) {
+async function _POST(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) {
@@ -149,3 +150,5 @@ export async function POST(req: Request) {
     },
   });
 }
+
+export const POST = withErrorCapture('research', _POST)

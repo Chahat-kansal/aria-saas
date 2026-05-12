@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 function serviceClient() {
   return createClient(
@@ -77,7 +78,7 @@ async function tryUnsplash(query: string): Promise<{ url: string; credit: string
   } catch { return null }
 }
 
-export async function POST(req: Request) {
+async function _POST(req: Request) {
   try {
     const supabase = createServerSupabaseClient()
     const { data: { user }, error: authError } = await supabase.auth.getUser()
@@ -126,3 +127,5 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Server error' }, { status: 500 })
   }
 }
+
+export const POST = withErrorCapture('social/generate-image', _POST)

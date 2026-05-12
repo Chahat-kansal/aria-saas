@@ -1,7 +1,8 @@
 export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
-export async function GET() {
+async function _GET() {
   const appId  = process.env.FACEBOOK_APP_ID;
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? '';
 
@@ -18,3 +19,5 @@ export async function GET() {
 
   return NextResponse.redirect(url.toString());
 }
+
+export const GET = withErrorCapture('social/connect/facebook', _GET)

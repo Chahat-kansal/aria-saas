@@ -7,6 +7,7 @@ import { runAgent } from '@/lib/agents/orchestrator';
 import Anthropic from '@anthropic-ai/sdk';
 import type { AgentType } from '@/lib/agents/types';
 import { track } from '@/lib/analytics';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 type Params = { params: Promise<{ type: string }> };
 type Supa = ReturnType<typeof createServerSupabaseClient>;
@@ -107,7 +108,7 @@ async function executeScheduleApproval(supabase: Supa, bid: string, dec: Record<
   return { success: true };
 }
 
-export async function GET(req: Request, { params }: Params) {
+async function _GET(req: Request, { params }: Params) {
   const reqId = Math.random().toString(36).slice(2, 10);
   try {
     const { type } = await params;
@@ -155,7 +156,7 @@ export async function GET(req: Request, { params }: Params) {
   }
 }
 
-export async function POST(req: Request, { params }: Params) {
+async function _POST(req: Request, { params }: Params) {
   const reqId = Math.random().toString(36).slice(2, 10);
   try {
     const { type } = await params;
@@ -315,3 +316,6 @@ export async function POST(req: Request, { params }: Params) {
     }, { status: 500 });
   }
 }
+
+export const GET = withErrorCapture('pos/agents/[type]', _GET)
+export const POST = withErrorCapture('pos/agents/[type]', _POST)

@@ -1,8 +1,9 @@
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
 import crypto from 'node:crypto';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
-export async function POST(req: Request) {
+async function _POST(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -28,7 +29,7 @@ export async function POST(req: Request) {
   return NextResponse.json({ shareUrl, token });
 }
 
-export async function DELETE(req: Request) {
+async function _DELETE(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -37,3 +38,6 @@ export async function DELETE(req: Request) {
   await supabase.from('conversations').update({ share_token: null }).eq('id', conversationId).eq('user_id', user.id);
   return NextResponse.json({ success: true });
 }
+
+export const POST = withErrorCapture('share', _POST)
+export const DELETE = withErrorCapture('share', _DELETE)

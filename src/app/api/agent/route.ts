@@ -1,5 +1,6 @@
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import Anthropic from '@anthropic-ai/sdk';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 export const maxDuration = 120;
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -34,7 +35,7 @@ Format your response as:
 
 Be thorough. Actually do the work at each step, don't just describe it.`;
 
-export async function POST(req: Request) {
+async function _POST(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
@@ -79,3 +80,5 @@ export async function POST(req: Request) {
 
   return new Response(stream, { headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' } });
 }
+
+export const POST = withErrorCapture('agent', _POST)

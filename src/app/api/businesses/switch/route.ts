@@ -1,10 +1,11 @@
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
 import { logAuditEvent } from '@/lib/audit';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 export const runtime = 'nodejs';
 
-export async function PATCH(req: Request) {
+async function _PATCH(req: Request) {
   try {
     const supabase = createServerSupabaseClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -53,3 +54,5 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ error: 'Switch failed' }, { status: 500 });
   }
 }
+
+export const PATCH = withErrorCapture('businesses/switch', _PATCH)

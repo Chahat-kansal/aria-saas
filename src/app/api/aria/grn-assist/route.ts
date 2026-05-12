@@ -4,6 +4,8 @@ export const dynamic = 'force-dynamic';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import Anthropic from '@anthropic-ai/sdk';
 import { NextResponse } from 'next/server';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { trackAICall } from '@/lib/aria/ai-telemetry'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -39,7 +41,7 @@ interface GrnAssistResponse {
   suggestions: string[];
 }
 
-export async function POST(req: Request): Promise<Response> {
+async function _POST(req: Request): Promise<Response> {
   const supabase = createServerSupabaseClient();
   const {
     data: { user },
@@ -180,7 +182,7 @@ export async function POST(req: Request): Promise<Response> {
       .map((i) => `${i.item_name} x${i.quantity}`)
       .join(', ');
 
-    const msg = await anthropic.messages.create({
+    const msg = await trackAICall({ route: 'aria/grn-assist', model: 'claude-haiku-4-5-20251001', businessId: business_id, purpose: 'grn-assist' }, () => anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 200,
       system:
@@ -191,7 +193,7 @@ export async function POST(req: Request): Promise<Response> {
           content: `Supplier: ${supplierName}. Items being received: ${itemsContext}. Current stock levels: ${productContext || 'no matching products found'}. Recent delivery history: ${grnContext}. Expiring lots: ${expiringContext}.`,
         },
       ],
-    });
+    }));
 
     const rawText =
       msg.content[0].type === 'text' ? msg.content[0].text.trim() : '';
@@ -235,3 +237,5 @@ export async function POST(req: Request): Promise<Response> {
     } satisfies GrnAssistResponse);
   }
 }
+
+export const POST = withErrorCapture('aria/grn-assist', _POST)

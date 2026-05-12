@@ -3,8 +3,9 @@ export const dynamic = 'force-dynamic';
 
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
-export async function GET(req: Request) {
+async function _GET(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -43,7 +44,7 @@ export async function GET(req: Request) {
   return NextResponse.json({ events: events ?? [] });
 }
 
-export async function PATCH(req: Request) {
+async function _PATCH(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -75,3 +76,6 @@ export async function PATCH(req: Request) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ event: updated });
 }
+
+export const GET = withErrorCapture('intelligence-events', _GET)
+export const PATCH = withErrorCapture('intelligence-events', _PATCH)

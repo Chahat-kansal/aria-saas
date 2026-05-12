@@ -2,6 +2,7 @@ import * as Sentry from '@sentry/nextjs';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { collectBusinessData } from '@/lib/aria/business-data';
 import { chatWithBusinessBrain } from '@/lib/aria/business-brain';
+import { withErrorCapture } from '@/lib/api/with-error-capture';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -33,7 +34,7 @@ function formatAnswer(output: Awaited<ReturnType<typeof chatWithBusinessBrain>>)
   return parts.filter(Boolean).join('\n\n');
 }
 
-export async function POST(req: Request) {
+export const POST = withErrorCapture('aria/business-chat', async (req: Request) => {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) {
@@ -82,6 +83,9 @@ export async function POST(req: Request) {
     return new Response(stream, { headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache, no-transform', Connection: 'keep-alive' } });
   }
 
+  const _aiStart = Date.now()
+  console.log(JSON.stringify({ type: 'aria_ai_call', status: 'started', route: 'aria/business-chat', model: 'claude-sonnet-4-6', purpose: 'chat-stream', ts: new Date().toISOString() }))
+
   const stream = new ReadableStream({
     async start(controller) {
       const send = (obj: object) => controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`));
@@ -101,6 +105,7 @@ export async function POST(req: Request) {
 
         send({ text: formatAnswer(output) });
         send({ done: true });
+        console.log(JSON.stringify({ type: 'aria_ai_call', status: 'success', route: 'aria/business-chat', model: 'claude-sonnet-4-6', purpose: 'chat-stream', durationMs: Date.now() - _aiStart, ts: new Date().toISOString() }))
       } catch (error) {
         Sentry.captureException(error, { tags: { route: 'aria/business-chat' } });
         console.error('[aria/business-chat] failed', error);
@@ -118,4 +123,4 @@ export async function POST(req: Request) {
       Connection: 'keep-alive',
     },
   });
-}
+})

@@ -5,6 +5,8 @@ import { createServerSupabaseClient } from '@/lib/supabase-server';
 import Anthropic from '@anthropic-ai/sdk';
 import { NextResponse } from 'next/server';
 import { ARIA_VOICE } from '@/lib/aria-voice-guide';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { trackAICall } from '@/lib/aria/ai-telemetry'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -38,16 +40,16 @@ interface PageInsightResult {
 }
 
 async function callClaude(prompt: string): Promise<string> {
-  const msg = await anthropic.messages.create({
+  const msg = await trackAICall({ route: 'aria/page-insight', model: 'claude-haiku-4-5-20251001', businessId: undefined, purpose: 'page-insight' }, () => anthropic.messages.create({
     model: 'claude-haiku-4-5-20251001',
     max_tokens: 80,
     system: `${ARIA_VOICE}\n\nRespond in ONE sentence only. Be specific with numbers. Australian business context.`,
     messages: [{ role: 'user', content: prompt }],
-  });
+  }));
   return msg.content[0].type === 'text' ? msg.content[0].text.trim() : '';
 }
 
-export async function POST(req: Request): Promise<Response> {
+async function _POST(req: Request): Promise<Response> {
   const supabase = createServerSupabaseClient();
   const {
     data: { user },
@@ -391,3 +393,5 @@ export async function POST(req: Request): Promise<Response> {
     return NextResponse.json({ insight: null } satisfies PageInsightResult);
   }
 }
+
+export const POST = withErrorCapture('aria/page-insight', _POST)

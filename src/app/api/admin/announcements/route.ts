@@ -4,8 +4,9 @@ export const dynamic = 'force-dynamic';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { getAdminClient, logAdminAction, isAdminEmail } from '@/lib/admin';
 import { NextResponse } from 'next/server';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
-export async function GET() {
+async function _GET() {
   const supabase = createServerSupabaseClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user || !isAdminEmail(user.email)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -19,7 +20,7 @@ export async function GET() {
   return NextResponse.json({ announcements: data ?? [] });
 }
 
-export async function POST(req: Request) {
+async function _POST(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user || !isAdminEmail(user.email)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -32,7 +33,7 @@ export async function POST(req: Request) {
   return NextResponse.json({ announcement: data });
 }
 
-export async function PATCH(req: Request) {
+async function _PATCH(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user || !isAdminEmail(user.email)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -48,7 +49,7 @@ export async function PATCH(req: Request) {
   return NextResponse.json({ announcement: data });
 }
 
-export async function DELETE(req: Request) {
+async function _DELETE(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user || !isAdminEmail(user.email)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -61,3 +62,8 @@ export async function DELETE(req: Request) {
   await db.from('announcements').delete().eq('id', id);
   return NextResponse.json({ ok: true });
 }
+
+export const GET = withErrorCapture('admin/announcements', _GET)
+export const POST = withErrorCapture('admin/announcements', _POST)
+export const PATCH = withErrorCapture('admin/announcements', _PATCH)
+export const DELETE = withErrorCapture('admin/announcements', _DELETE)

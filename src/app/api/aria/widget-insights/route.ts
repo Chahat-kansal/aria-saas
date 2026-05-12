@@ -1,6 +1,8 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { trackAICall } from '@/lib/aria/ai-telemetry'
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -11,7 +13,7 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 // Simple 1-hour in-memory cache
 const cache = new Map<string, { data: any; expires: number }>();
 
-export async function POST(req: Request) {
+async function _POST(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -48,7 +50,7 @@ export async function POST(req: Request) {
 
   let themes: { theme: string; count: number; example: string }[] = [];
   try {
-    const msg = await anthropic.messages.create({
+    const msg = await trackAICall({ route: 'aria/widget-insights', model: 'claude-haiku-4-5-20251001', businessId: business_id, purpose: 'widget-insights' }, () => anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 600,
       system: 'You are Aria. Return ONLY valid JSON, no markdown.',
@@ -59,7 +61,7 @@ export async function POST(req: Request) {
 
 Questions: ${JSON.stringify(userMessages.slice(0, 50))}`,
       }],
-    });
+    }));
     const raw = msg.content[0].type === 'text' ? msg.content[0].text : '';
     const m = raw.match(/\[[\s\S]*\]/);
     if (m) themes = JSON.parse(m[0]);
@@ -69,3 +71,5 @@ Questions: ${JSON.stringify(userMessages.slice(0, 50))}`,
   cache.set(cacheKey, { data: result, expires: Date.now() + 3600_000 });
   return NextResponse.json(result);
 }
+
+export const POST = withErrorCapture('aria/widget-insights', _POST)

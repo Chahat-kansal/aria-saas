@@ -4,10 +4,12 @@ export const dynamic = 'force-dynamic';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import Anthropic from '@anthropic-ai/sdk';
 import { NextResponse } from 'next/server';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { trackAICall } from '@/lib/aria/ai-telemetry'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-export async function POST(req: Request) {
+async function _POST(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -16,7 +18,7 @@ export async function POST(req: Request) {
   if (!name) return NextResponse.json({ error: 'name required' }, { status: 400 });
 
   try {
-    const msg = await anthropic.messages.create({
+    const msg = await trackAICall({ route: 'aria/classify-product', model: 'claude-haiku-4-5-20251001', businessId: undefined, purpose: 'product-classification' }, () => anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 300,
       messages: [{
@@ -40,7 +42,7 @@ Return ONLY valid JSON (no markdown, no explanation):
   ]
 }`,
       }],
-    });
+    }));
 
     const raw = msg.content[0].type === 'text' ? msg.content[0].text : '';
     const match = raw.match(/\{[\s\S]*\}/);
@@ -53,3 +55,5 @@ Return ONLY valid JSON (no markdown, no explanation):
     return NextResponse.json({ error: 'Classification failed' }, { status: 500 });
   }
 }
+
+export const POST = withErrorCapture('aria/classify-product', _POST)

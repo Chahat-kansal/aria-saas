@@ -4,6 +4,8 @@ export const dynamic = "force-dynamic";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
+import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { trackAICall } from '@/lib/aria/ai-telemetry'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -14,7 +16,7 @@ async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, u
   return data?.id ?? null;
 }
 
-export async function GET(req: Request) {
+async function _GET(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -30,7 +32,7 @@ export async function GET(req: Request) {
   return NextResponse.json({ actions: data ?? [] });
 }
 
-export async function POST(req: Request) {
+async function _POST(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -79,12 +81,12 @@ Generate 5-10 realistic, specific actions based on the data provided. Return ONL
 
   let actions: unknown[] = [];
   try {
-    const resp = await anthropic.messages.create({
+    const resp = await trackAICall({ route: 'aria/autopilot', model: 'claude-sonnet-4-6', businessId: undefined, purpose: 'autopilot-analysis' }, () => anthropic.messages.create({
       model: "claude-sonnet-4-6",
       max_tokens: 3000,
       messages: [{ role: "user", content: `Analyse this business and generate action recommendations:\n${context}` }],
       system: systemPrompt,
-    });
+    }));
     const text = ((resp.content[0] as { type: string; text: string }).text ?? "").trim();
     const match = text.match(/\[[\s\S]*\]/);
     if (match) actions = JSON.parse(match[0]);
@@ -112,7 +114,7 @@ Generate 5-10 realistic, specific actions based on the data provided. Return ONL
   return NextResponse.json({ actions, count: actions.length });
 }
 
-export async function PATCH(req: Request) {
+async function _PATCH(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -132,3 +134,7 @@ export async function PATCH(req: Request) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ action: data });
 }
+
+export const GET = withErrorCapture('aria/autopilot', _GET)
+export const POST = withErrorCapture('aria/autopilot', _POST)
+export const PATCH = withErrorCapture('aria/autopilot', _PATCH)

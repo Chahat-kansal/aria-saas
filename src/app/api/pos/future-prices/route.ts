@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
   const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle();
@@ -9,7 +10,7 @@ async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, u
   return data?.id ?? null;
 }
 
-export async function GET() {
+async function _GET() {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -32,7 +33,7 @@ export async function GET() {
   return NextResponse.json({ future_prices: data ?? [] });
 }
 
-export async function POST(req: Request) {
+async function _POST(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -49,7 +50,7 @@ export async function POST(req: Request) {
   return NextResponse.json({ future_price: data });
 }
 
-export async function DELETE(req: Request) {
+async function _DELETE(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -59,3 +60,7 @@ export async function DELETE(req: Request) {
   await supabase.from('pos_future_prices').delete().eq('id', id);
   return NextResponse.json({ ok: true });
 }
+
+export const GET = withErrorCapture('pos/future-prices', _GET)
+export const POST = withErrorCapture('pos/future-prices', _POST)
+export const DELETE = withErrorCapture('pos/future-prices', _DELETE)

@@ -1,11 +1,12 @@
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 const UPLOAD_TYPES = new Set(['products', 'sales', 'inventory', 'supplier_costs']);
 
 type ImportRow = Record<string, string | number | boolean | null>;
 
-export async function GET(req: Request) {
+async function _GET(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -38,7 +39,7 @@ export async function GET(req: Request) {
   });
 }
 
-export async function POST(req: Request) {
+async function _POST(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -90,3 +91,6 @@ export async function POST(req: Request) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ imported_file: data });
 }
+
+export const GET = withErrorCapture('import/csv', _GET)
+export const POST = withErrorCapture('import/csv', _POST)

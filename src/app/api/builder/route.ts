@@ -1,5 +1,6 @@
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import Anthropic from '@anthropic-ai/sdk';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 export const maxDuration = 120;
 
@@ -60,7 +61,7 @@ For every build request, output ONE complete code block then a brief explanation
 ## WHEN MODIFYING CODE:
 Always output the complete updated file — never partial updates or diffs.`;
 
-export async function POST(req: Request) {
+async function _POST(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
@@ -132,3 +133,5 @@ export async function POST(req: Request) {
     headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' },
   });
 }
+
+export const POST = withErrorCapture('builder', _POST)

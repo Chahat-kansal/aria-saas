@@ -4,6 +4,8 @@ export const dynamic = 'force-dynamic';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import Anthropic from '@anthropic-ai/sdk';
 import { NextResponse } from 'next/server';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { trackAICall } from '@/lib/aria/ai-telemetry'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -14,7 +16,7 @@ async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, u
   return data?.id ?? null;
 }
 
-export async function POST(req: Request) {
+async function _POST(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -127,11 +129,11 @@ export async function POST(req: Request) {
   try {
     const prompt = `Analyse today's trading for ${business?.name ?? 'the business'} and give a 3-sentence debrief for the owner closing up. Include: how today compared to 7-day average (today: A$${stats.today_revenue}, avg: A$${Math.round(sevenDayAvg * 100) / 100}, ${vsAvgPct !== null ? `${vsAvgPct > 0 ? '+' : ''}${vsAvgPct}%` : 'no comparison data'}), best-selling product (${topProduct ?? 'unknown'}), one actionable recommendation for tomorrow. Be warm and conversational.`;
 
-    const response = await anthropic.messages.create({
+    const response = await trackAICall({ route: 'aria/pos-end-of-day', model: 'claude-haiku-4-5-20251001', businessId: business_id, purpose: 'pos-eod-summary' }, () => anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 200,
       messages: [{ role: 'user', content: prompt }],
-    });
+    }));
 
     debrief = response.content
       .filter((b) => b.type === 'text')
@@ -144,3 +146,5 @@ export async function POST(req: Request) {
 
   return NextResponse.json({ debrief, stats });
 }
+
+export const POST = withErrorCapture('aria/pos-end-of-day', _POST)

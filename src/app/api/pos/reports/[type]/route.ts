@@ -5,6 +5,7 @@ import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { generateInsight } from '@/lib/aria-insights';
 import { toAESTStart, toAESTEnd, todayAEST, thirtyDaysAgoAEST, buildDateRange } from '@/lib/date-au';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 type Params = { params: Promise<{ type: string }> };
 
@@ -15,7 +16,7 @@ async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, u
   return data?.id ?? null;
 }
 
-export async function GET(req: Request, { params }: Params) {
+async function _GET(req: Request, { params }: Params) {
   const { type } = await params;
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -52,7 +53,7 @@ export async function GET(req: Request, { params }: Params) {
   }
 }
 
-export async function POST(req: Request, { params }: Params) {
+async function _POST(req: Request, { params }: Params) {
   const { type } = await params;
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -512,3 +513,6 @@ async function getBriefing(supabase: ReturnType<typeof createServerSupabaseClien
 
   return NextResponse.json({ bullets: res.bullets, generated_at: new Date().toISOString() });
 }
+
+export const GET = withErrorCapture('pos/reports/[type]', _GET)
+export const POST = withErrorCapture('pos/reports/[type]', _POST)

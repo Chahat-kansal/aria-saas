@@ -4,8 +4,9 @@ export const dynamic = 'force-dynamic';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { getBusinessItems, getBusinessSales } from '@/lib/business-data';
 import { NextResponse } from 'next/server';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
-export async function GET(req: Request) {
+async function _GET(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error } = await supabase.auth.getUser();
   if (error || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -76,3 +77,5 @@ export async function GET(req: Request) {
 
   return NextResponse.json({ items: enriched });
 }
+
+export const GET = withErrorCapture('warehouse/stock', _GET)

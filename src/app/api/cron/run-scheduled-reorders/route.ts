@@ -1,8 +1,9 @@
 export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
-export async function GET(req: NextRequest) {
+async function _GET(req: NextRequest) {
   // Verify cron secret
   const auth = req.headers.get('authorization')
   const cronSecret = process.env.CRON_SECRET
@@ -114,3 +115,5 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({ processed, errors, day: currentDay, hour: currentHour })
 }
+
+export const GET = withErrorCapture('cron/run-scheduled-reorders', _GET)

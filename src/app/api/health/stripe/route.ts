@@ -1,8 +1,9 @@
 export const dynamic = 'force-dynamic'
 
 import { NextResponse } from 'next/server'
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
-export async function GET() {
+async function _GET() {
   const check = {
     starter: !!process.env.STRIPE_PRICE_ID_STARTER,
     growth:  !!process.env.STRIPE_PRICE_ID_GROWTH,
@@ -16,3 +17,5 @@ export async function GET() {
     { status: allGood ? 200 : 503 }
   )
 }
+
+export const GET = withErrorCapture('health/stripe', _GET)

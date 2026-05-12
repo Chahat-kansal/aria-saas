@@ -3,6 +3,7 @@ export const runtime = 'nodejs'
 
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { NextResponse } from 'next/server'
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 function generateCode(): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
@@ -22,7 +23,7 @@ async function getBiz(supabase: any, userId: string) {
   return data
 }
 
-export async function GET(req: Request) {
+async function _GET(req: Request) {
   const supabase = createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -58,7 +59,7 @@ export async function GET(req: Request) {
   return NextResponse.json({ gift_cards: data || [] })
 }
 
-export async function POST(req: Request) {
+async function _POST(req: Request) {
   const supabase = createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -83,7 +84,7 @@ export async function POST(req: Request) {
   return NextResponse.json({ gift_card: data })
 }
 
-export async function PATCH(req: Request) {
+async function _PATCH(req: Request) {
   const supabase = createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -112,7 +113,7 @@ export async function PATCH(req: Request) {
   return NextResponse.json({ gift_card: data })
 }
 
-export async function DELETE(req: Request) {
+async function _DELETE(req: Request) {
   const supabase = createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -128,3 +129,8 @@ export async function DELETE(req: Request) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ ok: true })
 }
+
+export const GET = withErrorCapture('pos/gift-cards', _GET)
+export const POST = withErrorCapture('pos/gift-cards', _POST)
+export const PATCH = withErrorCapture('pos/gift-cards', _PATCH)
+export const DELETE = withErrorCapture('pos/gift-cards', _DELETE)

@@ -3,8 +3,9 @@ export const runtime = 'nodejs'
 
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { NextResponse } from 'next/server'
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
-export async function GET(req: Request) {
+async function _GET(req: Request) {
   try {
     const supabase = createServerSupabaseClient()
     const { data: { user }, error: authError } = await supabase.auth.getUser()
@@ -33,3 +34,5 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Server error' }, { status: 500 })
   }
 }
+
+export const GET = withErrorCapture('aria/competitor-prices/history', _GET)

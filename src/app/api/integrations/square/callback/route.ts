@@ -4,13 +4,14 @@ export const dynamic = 'force-dynamic';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { encryptField } from '@/lib/encryption';
 import { NextResponse } from 'next/server';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 // Token exchange uses the environment-specific API base
 const SQUARE_BASE = process.env.SQUARE_ENVIRONMENT === 'production'
   ? 'https://connect.squareup.com'
   : 'https://connect.squareupsandbox.com';
 
-export async function GET(req: Request) {
+async function _GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const code = searchParams.get('code');
   const state = searchParams.get('state');
@@ -97,3 +98,5 @@ export async function GET(req: Request) {
 
   return NextResponse.redirect(`${appUrl}/dashboard/integrations?connected=square`);
 }
+
+export const GET = withErrorCapture('integrations/square/callback', _GET)

@@ -5,6 +5,8 @@ import { createServerSupabaseClient } from '@/lib/supabase-server';
 import Anthropic from '@anthropic-ai/sdk';
 import { NextResponse } from 'next/server';
 import { ARIA_VOICE } from '@/lib/aria-voice-guide';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { trackAICall } from '@/lib/aria/ai-telemetry'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -76,7 +78,7 @@ Return a specific quality management recommendation.`,
   general: `Provide a general warehouse intelligence observation based on the data provided. Be specific, quantified, and actionable.`,
 };
 
-export async function POST(req: Request) {
+async function _POST(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -96,7 +98,7 @@ export async function POST(req: Request) {
   const businessCtx = `Business: ${(biz as any).name} (${(biz as any).industry ?? 'warehouse'}, ${(biz as any).city ?? 'Australia'})`;
 
   try {
-    const msg = await anthropic.messages.create({
+    const msg = await trackAICall({ route: 'aria/warehouse-intelligence', model: 'claude-sonnet-4-6', businessId: business_id, purpose: 'warehouse-intelligence' }, () => anthropic.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 400,
       system: WAREHOUSE_SYSTEM,
@@ -104,7 +106,7 @@ export async function POST(req: Request) {
         role: 'user',
         content: `${businessCtx}\n\n${contextPrompt}\n\nData: ${JSON.stringify(data ?? {})}`,
       }],
-    });
+    }));
 
     const insight = msg.content[0].type === 'text' ? msg.content[0].text.trim() : '';
     return NextResponse.json({ insight, context });
@@ -112,3 +114,5 @@ export async function POST(req: Request) {
     return NextResponse.json({ insight: 'Analysis temporarily unavailable.', context });
   }
 }
+
+export const POST = withErrorCapture('aria/warehouse-intelligence', _POST)

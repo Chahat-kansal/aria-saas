@@ -1,7 +1,8 @@
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
-export async function POST(req: Request) {
+async function _POST(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -34,3 +35,5 @@ export async function POST(req: Request) {
 
   return NextResponse.json({ conversationId: branch?.id, title: branch?.title });
 }
+
+export const POST = withErrorCapture('conversations/branch', _POST)

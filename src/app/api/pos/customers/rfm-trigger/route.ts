@@ -3,6 +3,7 @@ export const maxDuration = 60;
 
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 function rfmSegment(r: number, f: number, m: number): string {
   if (r >= 4 && f >= 4 && m >= 4) return 'Champions';
@@ -23,7 +24,7 @@ async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, u
 
 // Authenticated RFM trigger — runs RFM for the current user's business only.
 // No CRON_SECRET needed; uses session auth instead.
-export async function POST() {
+async function _POST() {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error } = await supabase.auth.getUser();
   if (error || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -104,3 +105,5 @@ export async function POST() {
 
   return NextResponse.json({ processed: updates.length, segments: segCounts });
 }
+
+export const POST = withErrorCapture('pos/customers/rfm-trigger', _POST)

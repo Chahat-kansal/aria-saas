@@ -6,8 +6,10 @@ import * as Sentry from '@sentry/nextjs'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import Anthropic from '@anthropic-ai/sdk'
 import { NextResponse } from 'next/server'
+import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { trackAICall } from '@/lib/aria/ai-telemetry'
 
-export async function POST(req: Request) {
+async function _POST(req: Request) {
   try {
     const supabase = createServerSupabaseClient()
     const { data: { user }, error: authError } = await supabase.auth.getUser()
@@ -101,9 +103,9 @@ Return [] if no prices found.`
         tools: [{ type: 'web_search_20250305', name: 'web_search' }],
         messages: [{ role: 'user', content: searchPrompt }],
       }
-      const response = await client.messages.create(createParams, {
+      const response = await trackAICall({ route: 'aria/competitor-prices', model: 'claude-haiku-4-5-20251001', businessId: business_id, purpose: 'competitor-price-search' }, () => client.messages.create(createParams, {
         headers: { 'anthropic-beta': 'web-search-2025-03-05' },
-      } as any)
+      } as any))
 
       const textBlocks = response.content.filter((b: any) => b.type === 'text')
       const jsonText = textBlocks.map((b: any) => b.text).join('')
@@ -175,3 +177,5 @@ function buildResponse(
     from_cache,
   })
 }
+
+export const POST = withErrorCapture('aria/competitor-prices', _POST)

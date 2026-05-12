@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { getAdminClient, isAdminEmail } from '@/lib/admin';
 import { NextResponse } from 'next/server';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 const EVENT_COSTS: Record<string, number> = {
   daily_briefing: 0.018,
@@ -15,7 +16,7 @@ const EVENT_COSTS: Record<string, number> = {
   page_insight: 0.005,
 };
 
-export async function GET(req: Request) {
+async function _GET(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user || !isAdminEmail(user.email)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -58,3 +59,5 @@ export async function GET(req: Request) {
     logs: (logs || []).slice(0, 200),
   });
 }
+
+export const GET = withErrorCapture('admin/usage', _GET)

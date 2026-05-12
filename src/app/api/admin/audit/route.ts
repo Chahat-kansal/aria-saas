@@ -4,8 +4,9 @@ export const dynamic = 'force-dynamic';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { getAdminClient, isAdminEmail } from '@/lib/admin';
 import { NextResponse } from 'next/server';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
-export async function GET(req: Request) {
+async function _GET(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user || !isAdminEmail(user.email)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -32,3 +33,5 @@ export async function GET(req: Request) {
   }
   return NextResponse.json({ entries: data ?? [], total: count ?? 0, page, limit });
 }
+
+export const GET = withErrorCapture('admin/audit', _GET)

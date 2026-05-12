@@ -1,10 +1,11 @@
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
 import { logAuditEvent } from '@/lib/audit';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 export const runtime = 'nodejs';
 
-export async function DELETE(req: Request) {
+async function _DELETE(req: Request) {
   try {
     const supabase = createServerSupabaseClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -82,3 +83,5 @@ export async function DELETE(req: Request) {
     return NextResponse.json({ error: 'Deletion failed' }, { status: 500 });
   }
 }
+
+export const DELETE = withErrorCapture('visa/delete-all-data', _DELETE)

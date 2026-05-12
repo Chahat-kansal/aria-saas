@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
+import { withErrorCapture } from '@/lib/api/with-error-capture';
 
 async function getBid(
   supabase: ReturnType<typeof createServerSupabaseClient>,
@@ -38,7 +39,7 @@ async function safeCount(
   }
 }
 
-export async function GET(req: Request) {
+export const GET = withErrorCapture('aria/badge-counts', async (req: Request) => {
   const supabase = createServerSupabaseClient();
   const {
     data: { user },
@@ -89,4 +90,4 @@ export async function GET(req: Request) {
     missed_demand,
     intelligence,
   });
-}
+})

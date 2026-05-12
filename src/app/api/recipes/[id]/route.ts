@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 export const dynamic = 'force-dynamic';
 
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+async function _PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const supabase = createServerSupabaseClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
@@ -40,7 +41,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   return NextResponse.json({ recipe });
 }
 
-export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+async function _DELETE(req: NextRequest, { params }: { params: { id: string } }) {
   const supabase = createServerSupabaseClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
@@ -49,3 +50,6 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });
 }
+
+export const PATCH = withErrorCapture('recipes/[id]', _PATCH)
+export const DELETE = withErrorCapture('recipes/[id]', _DELETE)

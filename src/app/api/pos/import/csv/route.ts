@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -59,7 +60,7 @@ function parseCSV(text: string): { headers: string[]; rows: Record<string, strin
  *   Body: { csv_text: string, confirmed: true, mapping: {...} }
  *   Returns: { imported, updated, skipped, errors }
  */
-export async function POST(req: Request) {
+async function _POST(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -216,3 +217,5 @@ Map every column. Use null for unrecognised columns. Do not add markdown or expl
 
   return NextResponse.json({ mapping, preview, total_rows: rows.length, unmapped_columns: unmapped, headers });
 }
+
+export const POST = withErrorCapture('pos/import/csv', _POST)

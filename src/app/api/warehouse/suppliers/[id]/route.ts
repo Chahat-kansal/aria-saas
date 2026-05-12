@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 async function verifySupplier(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string, supplierId: string) {
   const { data } = await supabase
@@ -14,7 +15,7 @@ async function verifySupplier(supabase: ReturnType<typeof createServerSupabaseCl
   return data;
 }
 
-export async function PATCH(req: Request, { params }: { params: { id: string } }) {
+async function _PATCH(req: Request, { params }: { params: { id: string } }) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error } = await supabase.auth.getUser();
   if (error || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -36,7 +37,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   return NextResponse.json({ supplier: data });
 }
 
-export async function DELETE(_req: Request, { params }: { params: { id: string } }) {
+async function _DELETE(_req: Request, { params }: { params: { id: string } }) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error } = await supabase.auth.getUser();
   if (error || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -52,3 +53,6 @@ export async function DELETE(_req: Request, { params }: { params: { id: string }
   if (e) return NextResponse.json({ error: e.message }, { status: 500 });
   return NextResponse.json({ ok: true });
 }
+
+export const PATCH = withErrorCapture('warehouse/suppliers/[id]', _PATCH)
+export const DELETE = withErrorCapture('warehouse/suppliers/[id]', _DELETE)

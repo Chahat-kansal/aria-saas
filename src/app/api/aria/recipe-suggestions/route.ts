@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { runAriaModel } from '@/lib/aria/model-router';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
 
-export async function POST(req: NextRequest) {
+async function _POST(req: NextRequest) {
   try {
     const { business_id } = await req.json();
     if (!business_id) return NextResponse.json({ error: 'business_id required' }, { status: 400 });
@@ -78,3 +79,5 @@ Return JSON: {
     return NextResponse.json({ error: 'Internal error' }, { status: 500 });
   }
 }
+
+export const POST = withErrorCapture('aria/recipe-suggestions', _POST)

@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabase';
 import { NextResponse } from 'next/server';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -16,7 +17,7 @@ export async function OPTIONS() {
 }
 
 // Public endpoint — returns only safe display config, never full widget data
-export async function GET(req: Request) {
+async function _GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const key = searchParams.get('key');
 
@@ -45,3 +46,5 @@ export async function GET(req: Request) {
     greeting: data.greeting,
   }, { headers: CORS });
 }
+
+export const GET = withErrorCapture('widget/config', _GET)

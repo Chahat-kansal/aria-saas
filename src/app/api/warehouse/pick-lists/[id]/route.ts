@@ -3,8 +3,9 @@ export const dynamic = 'force-dynamic';
 
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
-export async function GET(_req: Request, { params }: { params: { id: string } }) {
+async function _GET(_req: Request, { params }: { params: { id: string } }) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -14,7 +15,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   return NextResponse.json({ pick_list: data });
 }
 
-export async function PATCH(req: Request, { params }: { params: { id: string } }) {
+async function _PATCH(req: Request, { params }: { params: { id: string } }) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -38,3 +39,6 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ pick_list: data });
 }
+
+export const GET = withErrorCapture('warehouse/pick-lists/[id]', _GET)
+export const PATCH = withErrorCapture('warehouse/pick-lists/[id]', _PATCH)

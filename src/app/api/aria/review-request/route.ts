@@ -5,10 +5,12 @@ import { createServerSupabaseClient } from '@/lib/supabase-server';
 import Anthropic from '@anthropic-ai/sdk';
 import { ARIA_VOICE } from '@/lib/aria-voice-guide';
 import { NextResponse } from 'next/server';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { trackAICall } from '@/lib/aria/ai-telemetry'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-export async function POST(req: Request) {
+async function _POST(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -51,12 +53,12 @@ Business: ${business.name} (${business.industry})
 ${business.google_business_url ? `Google Business URL: ${business.google_business_url}` : ''}
 Keep it warm and personal. Ask them to share their experience. Return ONLY the SMS text.`;
 
-  const response = await anthropic.messages.create({
+  const response = await trackAICall({ route: 'aria/review-request', model: 'claude-haiku-4-5-20251001', businessId: businessId, purpose: 'review-request-sms' }, () => anthropic.messages.create({
     model: 'claude-haiku-4-5-20251001',
     max_tokens: 200,
     system: `${ARIA_VOICE}\n\nWrite concise, warm review request SMS messages. Return ONLY the SMS text, no explanation.`,
     messages: [{ role: 'user', content: prompt }],
-  });
+  }));
 
   const messageText = response.content.filter(b => b.type === 'text').map(b => b.text).join('').trim();
 
@@ -144,3 +146,5 @@ Keep it warm and personal. Ask them to share their experience. Return ONLY the S
     }, { status: 500 });
   }
 }
+
+export const POST = withErrorCapture('aria/review-request', _POST)

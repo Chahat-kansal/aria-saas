@@ -17,6 +17,7 @@ import {
   generateDailyDecisions,
   generateReorderPlan,
 } from '@/lib/aria/business-brain';
+import { withErrorCapture } from '@/lib/api/with-error-capture';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -115,7 +116,7 @@ async function runMode(
   return chatWithBusinessBrain(data, context);
 }
 
-export async function POST(req: Request) {
+export const POST = withErrorCapture('aria/business-brain', async (req: Request) => {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -212,4 +213,4 @@ export async function POST(req: Request) {
       error: 'Unable to generate business intelligence.',
     }, { status: 500 });
   }
-}
+})

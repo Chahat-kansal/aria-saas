@@ -1,5 +1,6 @@
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -18,7 +19,7 @@ async function verifyStaffOwnership(
   return data;
 }
 
-export async function GET(req: Request) {
+async function _GET(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error } = await supabase.auth.getUser();
   if (error || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -38,7 +39,7 @@ export async function GET(req: Request) {
   return NextResponse.json({ leave: data ?? [] });
 }
 
-export async function POST(req: Request) {
+async function _POST(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error } = await supabase.auth.getUser();
   if (error || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -75,7 +76,7 @@ export async function POST(req: Request) {
   return NextResponse.json({ leave: data });
 }
 
-export async function PATCH(req: Request) {
+async function _PATCH(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error } = await supabase.auth.getUser();
   if (error || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -96,3 +97,7 @@ export async function PATCH(req: Request) {
   if (e) return NextResponse.json({ error: e.message }, { status: 500 });
   return NextResponse.json({ leave: data });
 }
+
+export const GET = withErrorCapture('staff/leave', _GET)
+export const POST = withErrorCapture('staff/leave', _POST)
+export const PATCH = withErrorCapture('staff/leave', _PATCH)

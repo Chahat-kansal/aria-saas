@@ -1,5 +1,6 @@
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import Anthropic from '@anthropic-ai/sdk';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -41,7 +42,7 @@ Common project structures:
 - Node API: package.json, server.js, routes/api.js, .env.example, README.md
 - Dashboard: index.html, css/style.css, js/main.js, js/charts.js`;
 
-export async function POST(req: Request) {
+async function _POST(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
@@ -104,3 +105,5 @@ export async function POST(req: Request) {
     headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' },
   });
 }
+
+export const POST = withErrorCapture('project/generate', _POST)

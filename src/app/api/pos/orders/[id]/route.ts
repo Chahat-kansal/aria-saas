@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { getPurchaseOrder, updatePurchaseOrder, deletePurchaseOrder } from '@/lib/orders/queries'
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -12,7 +13,7 @@ async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, u
   return data?.id ?? null
 }
 
-export async function GET(_req: NextRequest, { params }: Params) {
+async function _GET(_req: NextRequest, { params }: Params) {
   const { id } = await params
   const supabase = createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -25,7 +26,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
   return NextResponse.json({ order })
 }
 
-export async function PATCH(req: NextRequest, { params }: Params) {
+async function _PATCH(req: NextRequest, { params }: Params) {
   const { id } = await params
   const supabase = createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -39,7 +40,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   return NextResponse.json({ order })
 }
 
-export async function DELETE(_req: NextRequest, { params }: Params) {
+async function _DELETE(_req: NextRequest, { params }: Params) {
   const { id } = await params
   const supabase = createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -51,3 +52,7 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
   if (!ok) return NextResponse.json({ error: 'cannot_delete' }, { status: 403 })
   return NextResponse.json({ ok: true })
 }
+
+export const GET = withErrorCapture('pos/orders/[id]', _GET)
+export const PATCH = withErrorCapture('pos/orders/[id]', _PATCH)
+export const DELETE = withErrorCapture('pos/orders/[id]', _DELETE)

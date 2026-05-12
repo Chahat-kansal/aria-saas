@@ -2,6 +2,7 @@
 
 import { NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -162,7 +163,7 @@ Return ONLY a JSON object with this exact format, no other text:
   }
 }
 
-export async function POST(req: Request) {
+async function _POST(req: Request) {
   const { createServerSupabaseClient } = await import('@/lib/supabase-server');
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -230,3 +231,5 @@ export async function POST(req: Request) {
     totalAttempts: attempts.length,
   });
 }
+
+export const POST = withErrorCapture('execute-autofix', _POST)

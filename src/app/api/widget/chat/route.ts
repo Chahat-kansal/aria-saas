@@ -3,6 +3,7 @@ import { supabaseAdmin } from '@/lib/supabase';
 import { getBusinessItems, getBusinessSales, type Item } from '@/lib/business-data';
 import { buildWebsiteAssistantContext, buildProductContext } from '@/lib/aria/website-assistant-data';
 import { NextResponse } from 'next/server';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -111,7 +112,7 @@ function buildIntentContext(intent: string, message: string, items: Item[], hour
   }
 }
 
-export async function POST(req: Request) {
+async function _POST(req: Request) {
   if (!supabaseAdmin) {
     console.error('[widget/chat] supabaseAdmin null — SUPABASE_SERVICE_ROLE_KEY not set');
     return err('Service not configured.', 503);
@@ -273,3 +274,5 @@ FOLLOWUP: "question 1"|"question 2"|"question 3"`;
     return err('Chat failed: ' + (e?.message ?? 'Unknown error'), 500);
   }
 }
+
+export const POST = withErrorCapture('widget/chat', _POST)

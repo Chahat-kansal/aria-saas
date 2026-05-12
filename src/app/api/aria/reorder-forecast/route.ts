@@ -5,6 +5,8 @@ import { getBusinessItems, getBusinessSales } from '@/lib/business-data';
 import { NextResponse } from 'next/server';
 import { ARIA_VOICE } from '@/lib/aria-voice-guide';
 import { getWeatherForecast, getUpcomingHolidays, getHolidayUplift, getWeatherUplift } from '@/lib/external-apis';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { trackAICall } from '@/lib/aria/ai-telemetry'
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -12,7 +14,7 @@ export const maxDuration = 60;
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-export async function POST(req: Request) {
+async function _POST(req: Request) {
   try {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -148,7 +150,7 @@ export async function POST(req: Request) {
         upcoming_holidays: upcomingHolidays.map(h => `${h.name} in ${h.days_away} days`),
       };
 
-      const msg = await anthropic.messages.create({
+      const msg = await trackAICall({ route: 'aria/reorder-forecast', model: 'claude-haiku-4-5-20251001', businessId: business_id, purpose: 'reorder-summary' }, () => anthropic.messages.create({
         model: 'claude-haiku-4-5-20251001',
         max_tokens: 600,
         system: `${ARIA_VOICE}\n\nReturn ONLY valid JSON, no markdown, no preamble.`,
@@ -157,7 +159,7 @@ export async function POST(req: Request) {
           content: `Reorder data: ${JSON.stringify(context)}
 Return: {"summary":"2-3 sentences with specific items/quantities","urgent_items":["item names that are critical/high"],"holiday_note":"string or null","recommended_actions":[{"action":"string","by_when":"string"}]}`,
         }],
-      });
+      }));
       const raw = msg.content[0].type === 'text' ? msg.content[0].text : '';
       const match = raw.match(/\{[\s\S]*\}/);
       if (match) aiSummary = JSON.parse(match[0]);
@@ -181,3 +183,5 @@ Return: {"summary":"2-3 sentences with specific items/quantities","urgent_items"
     return NextResponse.json({ data: [], status: 'error', message: 'temporarily_unavailable' }, { status: 200 });
   }
 }
+
+export const POST = withErrorCapture('aria/reorder-forecast', _POST)

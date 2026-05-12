@@ -3,8 +3,9 @@ export const dynamic = 'force-dynamic';
 
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
-export async function POST(req: Request, { params }: { params: { id: string } }) {
+async function _POST(req: Request, { params }: { params: { id: string } }) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -58,3 +59,5 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ pick_list: updated, accuracy_pct, shortfall: totalRequired - totalPicked });
 }
+
+export const POST = withErrorCapture('warehouse/pick-lists/[id]/complete', _POST)

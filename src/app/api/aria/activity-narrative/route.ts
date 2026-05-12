@@ -5,6 +5,8 @@ export const maxDuration = 20;
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import Anthropic from '@anthropic-ai/sdk';
 import { NextResponse } from 'next/server';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { trackAICall } from '@/lib/aria/ai-telemetry'
 
 async function getBid(
   supabase: ReturnType<typeof createServerSupabaseClient>,
@@ -87,7 +89,7 @@ function toHHMM(dateStr: string): string {
   });
 }
 
-export async function GET(req: Request) {
+async function _GET(req: Request) {
   const supabase = createServerSupabaseClient();
   const {
     data: { user },
@@ -248,7 +250,7 @@ export async function GET(req: Request) {
         2,
       );
 
-      const response = await anthropic.messages.create({
+      const response = await trackAICall({ route: 'aria/activity-narrative', model: 'claude-haiku-4-5-20251001', businessId: businessId, purpose: 'activity-narrative' }, () => anthropic.messages.create({
         model: 'claude-haiku-4-5-20251001',
         max_tokens: 400,
         system:
@@ -259,7 +261,7 @@ export async function GET(req: Request) {
             content: `Business events (last 24h):\n${eventsJson}\n\nReturn JSON array of up to 8 entries: [{"time": "HH:MM", "icon": "emoji", "narrative": "one friendly sentence", "link": "/path or null"}]`,
           },
         ],
-      });
+      }));
 
       const textBlock = response.content.find((b) => b.type === 'text');
       if (textBlock && textBlock.type === 'text') {
@@ -291,3 +293,5 @@ export async function GET(req: Request) {
 
   return NextResponse.json({ events: fallbackEntries, generated_at: generatedAt });
 }
+
+export const GET = withErrorCapture('aria/activity-narrative', _GET)

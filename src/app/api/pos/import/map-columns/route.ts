@@ -4,6 +4,7 @@ export const dynamic = "force-dynamic";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -18,7 +19,7 @@ const PRODUCT_FIELDS = [
   { key: "description", label: "Description"                    },
 ];
 
-export async function POST(req: Request) {
+async function _POST(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -75,3 +76,5 @@ Map all ${headers.length} headers. Do not include markdown or explanation.`;
   const unmapped = headers.filter((h: string) => !mapping[h]);
   return NextResponse.json({ mapping, unmapped_columns: unmapped, fields: PRODUCT_FIELDS });
 }
+
+export const POST = withErrorCapture('pos/import/map-columns', _POST)

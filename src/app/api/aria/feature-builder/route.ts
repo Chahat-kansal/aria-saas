@@ -5,6 +5,8 @@ import { createServerSupabaseClient } from '@/lib/supabase-server';
 import Anthropic from '@anthropic-ai/sdk';
 import { NextResponse } from 'next/server';
 import { ARIA_VOICE } from '@/lib/aria-voice-guide';
+import { withErrorCapture } from '@/lib/api/with-error-capture';
+import { trackAICall } from '@/lib/aria/ai-telemetry';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -76,7 +78,7 @@ data_table:
   columns: [{ field, label, format }]
   empty_message: "No records yet"`;
 
-export async function POST(req: Request) {
+export const POST = withErrorCapture('aria/feature-builder', async (req: Request) => {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -100,12 +102,21 @@ export async function POST(req: Request) {
     const bizCtx = `Business: ${(biz as Record<string,unknown>).name} (${(biz as Record<string,unknown>).industry ?? 'retail'}, Australia, currency: A$)`;
 
     try {
-      const msg = await anthropic.messages.create({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 1200,
-        system: GENERATE_SYSTEM,
-        messages: [{ role: 'user', content: `${bizCtx}\n\nFeature request: "${feature_request}"` }],
-      });
+      const msg = await trackAICall(
+        {
+          route: 'aria/feature-builder',
+          model: 'claude-sonnet-4-6',
+          businessId: business_id,
+          industry: (biz as any).industry ?? undefined,
+          purpose: 'feature-generate',
+        },
+        () => anthropic.messages.create({
+          model: 'claude-sonnet-4-6',
+          max_tokens: 1200,
+          system: GENERATE_SYSTEM,
+          messages: [{ role: 'user', content: `${bizCtx}\n\nFeature request: "${feature_request}"` }],
+        })
+      );
 
       const raw = msg.content[0].type === 'text' ? msg.content[0].text : '';
       const match = raw.match(/\{[\s\S]*\}/);
@@ -154,4 +165,4 @@ export async function POST(req: Request) {
   }
 
   return NextResponse.json({ error: 'Unknown phase' }, { status: 400 });
-}
+})

@@ -4,10 +4,12 @@ export const dynamic = 'force-dynamic';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import Anthropic from '@anthropic-ai/sdk';
 import { NextResponse } from 'next/server';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { trackAICall } from '@/lib/aria/ai-telemetry'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-export async function GET(req: Request) {
+async function _GET(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -54,14 +56,14 @@ Recent reviews: ${(recentReviews || []).map(r => `${r.rating}★`).join(', ') ||
   `.trim();
 
   try {
-    const response = await anthropic.messages.create({
+    const response = await trackAICall({ route: 'aria/briefing', model: 'claude-haiku-4-5-20251001', businessId: businessId, purpose: 'daily-briefing' }, () => anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 300,
       messages: [{
         role: 'user',
         content: `Write a short, friendly morning briefing for the business owner. 2-3 sentences max. Be specific and actionable. Context:\n${context}`,
       }],
-    });
+    }));
 
     const text = response.content.filter(b => b.type === 'text').map(b => b.text).join('');
     return NextResponse.json({ briefing: text });
@@ -69,3 +71,5 @@ Recent reviews: ${(recentReviews || []).map(r => `${r.rating}★`).join(', ') ||
     return NextResponse.json({ briefing: `Good morning! Aria is running ${activityCount || 0} automations for ${business.name}. Check your dashboard for the latest updates.` });
   }
 }
+
+export const GET = withErrorCapture('aria/briefing', _GET)

@@ -3,13 +3,14 @@ export const dynamic = 'force-dynamic';
 
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string, bid: string) {
   const { data } = await supabase.from('businesses').select('id').eq('id', bid).eq('user_id', userId).single();
   return data?.id ?? null;
 }
 
-export async function GET(req: Request) {
+async function _GET(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error } = await supabase.auth.getUser();
   if (error || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -35,7 +36,7 @@ export async function GET(req: Request) {
   return NextResponse.json({ lots: data ?? [] });
 }
 
-export async function POST(req: Request) {
+async function _POST(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error } = await supabase.auth.getUser();
   if (error || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -47,7 +48,7 @@ export async function POST(req: Request) {
   return NextResponse.json({ lot: data });
 }
 
-export async function PATCH(req: Request) {
+async function _PATCH(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error } = await supabase.auth.getUser();
   if (error || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -80,3 +81,7 @@ export async function PATCH(req: Request) {
   }
   return NextResponse.json({ ok: true });
 }
+
+export const GET = withErrorCapture('warehouse/lots', _GET)
+export const POST = withErrorCapture('warehouse/lots', _POST)
+export const PATCH = withErrorCapture('warehouse/lots', _PATCH)

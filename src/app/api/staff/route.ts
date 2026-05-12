@@ -1,5 +1,6 @@
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -14,7 +15,7 @@ const LIST_SELECT = `id, business_id, first_name, last_name, preferred_name, pro
   position, department, employment_type, status, start_date, end_date,
   right_to_work_verified, visa_type, visa_expiry_date, mobile, work_email, created_at`;
 
-export async function GET(req: Request) {
+async function _GET(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error } = await supabase.auth.getUser();
   if (error || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -36,7 +37,7 @@ export async function GET(req: Request) {
   return NextResponse.json({ staff: data ?? [] });
 }
 
-export async function POST(req: Request) {
+async function _POST(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error } = await supabase.auth.getUser();
   if (error || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -57,3 +58,6 @@ export async function POST(req: Request) {
   if (e) return NextResponse.json({ error: e.message }, { status: 500 });
   return NextResponse.json({ staff: data });
 }
+
+export const GET = withErrorCapture('staff', _GET)
+export const POST = withErrorCapture('staff', _POST)

@@ -4,8 +4,9 @@ export const dynamic = 'force-dynamic';
 import * as Sentry from '@sentry/nextjs';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
-export async function GET(req: Request) {
+async function _GET(req: Request) {
   try {
     const supabase = createServerSupabaseClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -31,3 +32,5 @@ export async function GET(req: Request) {
     return NextResponse.json({ features: [], error: 'internal' }, { status: 200 });
   }
 }
+
+export const GET = withErrorCapture('aria/custom-features', _GET)

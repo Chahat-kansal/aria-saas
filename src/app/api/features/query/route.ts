@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 const ALLOWED_TABLES = new Set([
   'pos_sales', 'pos_sale_items', 'pos_commissions', 'pos_customers',
@@ -43,7 +44,7 @@ interface QueryConfig {
   limit?:       number;
 }
 
-export async function POST(req: Request) {
+async function _POST(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -144,3 +145,5 @@ function aggregate(q: QueryConfig, rows: Record<string, unknown>[]): unknown {
   // rows — return as-is
   return rows;
 }
+
+export const POST = withErrorCapture('features/query', _POST)

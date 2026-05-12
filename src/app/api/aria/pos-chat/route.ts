@@ -8,8 +8,10 @@ import Anthropic from '@anthropic-ai/sdk'
 import { NextResponse } from 'next/server'
 import { getWeatherForecast, getUpcomingHolidays } from '@/lib/external-apis'
 import { trackUsage } from '@/lib/track-usage'
+import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { trackAICall } from '@/lib/aria/ai-telemetry'
 
-export async function POST(req: Request) {
+async function _POST(req: Request) {
   const supabase = createServerSupabaseClient()
   const { data: { user }, error: authError } = await supabase.auth.getUser()
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -401,12 +403,12 @@ TONE: Direct, specific, Australian English, A$ always.`
   }
 
   const client = new Anthropic()
-  const response = await client.messages.create({
+  const response = await trackAICall({ route: 'aria/pos-chat', model: 'claude-haiku-4-5-20251001', businessId: business_id, purpose: 'pos-chat' }, () => client.messages.create({
     model: 'claude-haiku-4-5-20251001',
     max_tokens: 1000,
     system: systemPrompt,
     messages: [{ role: 'user', content: message }],
-  })
+  }))
 
   const raw = response.content[0].type === 'text' ? response.content[0].text : '{}'
 
@@ -452,3 +454,5 @@ TONE: Direct, specific, Australian English, A$ always.`
 
   return NextResponse.json({ ...structured, action_results: actionResults })
 }
+
+export const POST = withErrorCapture('aria/pos-chat', _POST)

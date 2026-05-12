@@ -2,6 +2,7 @@ import { createServerSupabaseClient } from '@/lib/supabase-server';
 import Anthropic from '@anthropic-ai/sdk';
 import { ARIA_SYSTEM, ARIA_TOOLS, runAriaTool } from '@/lib/claudeTools';
 import { browserClose } from '@/lib/browser';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 export const maxDuration = 120;
 
@@ -13,7 +14,7 @@ const ALLOWED_MODELS = new Set([
   'claude-opus-4-5-20251101',
 ]);
 
-export async function POST(req: Request) {
+async function _POST(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
@@ -118,3 +119,5 @@ export async function POST(req: Request) {
     headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' },
   });
 }
+
+export const POST = withErrorCapture('chat', _POST)

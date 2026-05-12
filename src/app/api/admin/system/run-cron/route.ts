@@ -4,8 +4,9 @@ export const dynamic = 'force-dynamic';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { logAdminAction, isAdminEmail } from '@/lib/admin';
 import { NextResponse } from 'next/server';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
-export async function POST() {
+async function _POST() {
   const supabase = createServerSupabaseClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user || !isAdminEmail(user.email)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -25,3 +26,5 @@ export async function POST() {
 
   return NextResponse.json({ ok: true, result });
 }
+
+export const POST = withErrorCapture('admin/system/run-cron', _POST)

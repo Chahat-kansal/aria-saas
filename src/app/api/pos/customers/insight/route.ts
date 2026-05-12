@@ -4,12 +4,13 @@ export const maxDuration = 20;
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import Anthropic from '@anthropic-ai/sdk';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 const client = new Anthropic();
 
 const SYSTEM = `You are Aria, an AI advisor for an Australian retail business. Generate 2 concise insight bullets about a specific customer. Each bullet must: (1) contain a specific number or date, (2) end with a concrete action. Max 22 words per bullet. Australian English. No z's. Return ONLY valid JSON: {"bullets":["...","..."]}. No markdown.`;
 
-export async function POST(req: Request) {
+async function _POST(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error } = await supabase.auth.getUser();
   if (error || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -43,3 +44,5 @@ Predicted next visit: ${predicted_next_visit_days != null ? `in ${predicted_next
     return NextResponse.json({ bullets: [] });
   }
 }
+
+export const POST = withErrorCapture('pos/customers/insight', _POST)

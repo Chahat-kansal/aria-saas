@@ -3,6 +3,7 @@ export const maxDuration = 30;
 
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string) {
   const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle();
@@ -11,7 +12,7 @@ async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, u
   return data?.id ?? null;
 }
 
-export async function POST(req: Request) {
+async function _POST(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error } = await supabase.auth.getUser();
   if (error || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -54,7 +55,7 @@ export async function POST(req: Request) {
   return NextResponse.json({ success: true, stock_take_id: stockTake?.id });
 }
 
-export async function GET() {
+async function _GET() {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error } = await supabase.auth.getUser();
   if (error || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -63,3 +64,6 @@ export async function GET() {
   const { data } = await supabase.from('pos_stock_takes').select('*').eq('business_id', bid).order('started_at', { ascending: false }).limit(50);
   return NextResponse.json({ stock_takes: data ?? [] });
 }
+
+export const GET = withErrorCapture('pos/stock-takes', _GET)
+export const POST = withErrorCapture('pos/stock-takes', _POST)

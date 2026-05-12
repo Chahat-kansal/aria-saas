@@ -4,8 +4,9 @@ export const dynamic = 'force-dynamic';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { getAdminClient, logAdminAction, isAdminEmail } from '@/lib/admin';
 import { NextResponse } from 'next/server';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
-export async function GET(_req: Request, { params }: { params: { id: string } }) {
+async function _GET(_req: Request, { params }: { params: { id: string } }) {
   const supabase = createServerSupabaseClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user || !isAdminEmail(user.email)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -51,3 +52,5 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     },
   });
 }
+
+export const GET = withErrorCapture('admin/businesses/[id]', _GET)

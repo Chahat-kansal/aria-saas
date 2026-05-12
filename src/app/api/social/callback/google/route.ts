@@ -3,8 +3,9 @@ export const dynamic = 'force-dynamic';
 
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
-export async function GET(req: Request) {
+async function _GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const code  = searchParams.get('code');
   const error = searchParams.get('error');
@@ -68,3 +69,5 @@ export async function GET(req: Request) {
     return NextResponse.redirect(`${appUrl}/dashboard/social?error=${encodeURIComponent(err.message)}`);
   }
 }
+
+export const GET = withErrorCapture('social/callback/google', _GET)

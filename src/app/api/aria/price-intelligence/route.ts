@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import Anthropic from '@anthropic-ai/sdk';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { trackAICall } from '@/lib/aria/ai-telemetry'
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -12,7 +14,7 @@ async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, u
   return data?.id ?? null;
 }
 
-export async function POST(req: NextRequest) {
+async function _POST(req: NextRequest) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -107,11 +109,11 @@ export async function POST(req: NextRequest) {
     try {
       const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
       const itemNames = cart_items.map((i: any) => i.product?.name ?? i.product_name ?? 'item').join(', ');
-      const resp = await anthropic.messages.create({
+      const resp = await trackAICall({ route: 'aria/price-intelligence', model: 'claude-haiku-4-5-20251001', businessId: business_id, purpose: 'price-intelligence' }, () => anthropic.messages.create({
         model: 'claude-haiku-4-5-20251001',
         max_tokens: 60,
         messages: [{ role: 'user', content: `Cart: ${itemNames}. Total: A$${cartTotal.toFixed(2)}. One 1-sentence upsell tip for staff. Be specific, short, Australian.` }],
-      });
+      }));
       const txt = resp.content[0].type === 'text' ? resp.content[0].text.trim() : null;
       if (txt) aiSuggestion = txt;
     } catch { /* silent */ }
@@ -120,3 +122,5 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({ alerts, suggestions, promotions_applied, loyalty_points_earned });
 }
+
+export const POST = withErrorCapture('aria/price-intelligence', _POST)

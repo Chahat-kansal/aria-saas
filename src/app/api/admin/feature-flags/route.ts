@@ -4,8 +4,9 @@ export const dynamic = 'force-dynamic';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { getAdminClient, logAdminAction, isAdminEmail } from '@/lib/admin';
 import { NextResponse } from 'next/server';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
-export async function GET() {
+async function _GET() {
   const supabase = createServerSupabaseClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user || !isAdminEmail(user.email)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -19,7 +20,7 @@ export async function GET() {
   return NextResponse.json({ flags: flags ?? [] });
 }
 
-export async function PATCH(req: Request) {
+async function _PATCH(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user || !isAdminEmail(user.email)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -39,3 +40,6 @@ export async function PATCH(req: Request) {
   await logAdminAction({ admin_email: user.email!, action: 'change_feature_flag', target_type: 'feature_flag', target_id: flag_key, details: body });
   return NextResponse.json({ flag: data });
 }
+
+export const GET = withErrorCapture('admin/feature-flags', _GET)
+export const PATCH = withErrorCapture('admin/feature-flags', _PATCH)

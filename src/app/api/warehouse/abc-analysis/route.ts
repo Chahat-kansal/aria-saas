@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 interface ABCItem {
   id: string;
@@ -15,7 +16,7 @@ interface ABCItem {
   abc_class: 'A' | 'B' | 'C';
 }
 
-export async function POST(req: Request) {
+async function _POST(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -124,3 +125,5 @@ export async function POST(req: Request) {
     generated_at: new Date().toISOString(),
   });
 }
+
+export const POST = withErrorCapture('warehouse/abc-analysis', _POST)

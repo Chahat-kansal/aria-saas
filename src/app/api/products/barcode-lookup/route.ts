@@ -5,10 +5,11 @@ import { createServerSupabaseClient } from '@/lib/supabase-server';
 import Anthropic from '@anthropic-ai/sdk';
 import { NextResponse } from 'next/server';
 import { lookupBarcode } from '@/lib/external-apis';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-export async function GET(req: Request) {
+async function _GET(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -90,3 +91,5 @@ Return JSON only: {"name":"cleaned full product name","category":"single categor
     product: upserted ?? productData,
   });
 }
+
+export const GET = withErrorCapture('products/barcode-lookup', _GET)

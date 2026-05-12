@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -100,7 +101,7 @@ async function detectIntelligenceEvents(businessId: string): Promise<Intelligenc
   return events;
 }
 
-export async function GET(req: Request) {
+async function _GET(req: Request) {
   // Vercel Cron authenticates via Authorization header
   const authHeader = req.headers.get('authorization');
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
@@ -233,3 +234,5 @@ export async function GET(req: Request) {
     errors,
   });
 }
+
+export const GET = withErrorCapture('cron/nightly-sync', _GET)

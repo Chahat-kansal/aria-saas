@@ -6,6 +6,7 @@ import { INTEGRATIONS } from '@/lib/integrations/directory'
 import { getXeroAuthorizeUrl, exchangeXeroCode } from '@/lib/integrations/oauth-clients/xero'
 import { getMyobAuthorizeUrl, exchangeMyobCode } from '@/lib/integrations/oauth-clients/myob'
 import crypto from 'crypto'
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string) {
   const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
@@ -14,7 +15,7 @@ async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, u
   return data?.id ?? null
 }
 
-export async function GET(req: NextRequest) {
+async function _GET(req: NextRequest) {
   const supabase = createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -90,7 +91,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ integrations: connected ?? [] })
 }
 
-export async function POST(req: NextRequest) {
+async function _POST(req: NextRequest) {
   const supabase = createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -158,3 +159,6 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({ error: 'Unknown action' }, { status: 400 })
 }
+
+export const GET = withErrorCapture('pos/integrations', _GET)
+export const POST = withErrorCapture('pos/integrations', _POST)

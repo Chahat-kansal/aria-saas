@@ -10,6 +10,7 @@ import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { runAgent } from '@/lib/agents/orchestrator';
 import { generateInsight } from '@/lib/aria-insights';
 import type { AgentType } from '@/lib/agents/types';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 type Params = { params: Promise<{ task: string }> };
 
@@ -21,7 +22,7 @@ const TASK_TO_AGENT: Record<string, AgentType | null> = {
   'promo-cleanup': null,
 };
 
-export async function GET(req: Request, { params }: Params) {
+async function _GET(req: Request, { params }: Params) {
   const { task } = await params;
 
   const cronSecret = req.headers.get('x-cron-secret')
@@ -149,3 +150,5 @@ export async function GET(req: Request, { params }: Params) {
 
   return NextResponse.json({ task, agent_type: agentType, processed, errors, results });
 }
+
+export const GET = withErrorCapture('cron/[task]', _GET)

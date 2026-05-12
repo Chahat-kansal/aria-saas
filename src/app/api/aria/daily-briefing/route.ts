@@ -5,6 +5,8 @@ import { getBusinessSales, getBusinessCustomers, getBusinessItems } from '@/lib/
 import { NextRequest, NextResponse } from 'next/server';
 import { ARIA_VOICE } from '@/lib/aria-voice-guide';
 import { getWeatherForecast, getUpcomingHolidays, getABSRetailBenchmarks, getRBAData } from '@/lib/external-apis';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { trackAICall } from '@/lib/aria/ai-telemetry'
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -27,7 +29,7 @@ function checkRateLimit(ip: string): boolean {
   return true;
 }
 
-export async function POST(req: NextRequest) {
+async function _POST(req: NextRequest) {
   // Rate limit BEFORE auth — cheap guard against retry storms
   const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown';
   if (!checkRateLimit(ip)) {
@@ -321,26 +323,26 @@ Each item must match this exact type:
 
   let recommendations: unknown[] = [];
   try {
-    const msg = await anthropic.messages.create({
+    const msg = await trackAICall({ route: 'aria/daily-briefing', model: 'claude-haiku-4-5-20251001', businessId: business_id, purpose: 'daily-briefing' }, () => anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 1500,
       system: systemPrompt,
       messages: [{ role: 'user', content: JSON.stringify(context) }],
-    });
+    }));
     const raw = msg.content[0].type === 'text' ? msg.content[0].text : '';
     const match = raw.match(/\[[\s\S]*\]/);
     if (match) recommendations = JSON.parse(match[0]);
   } catch {
     // Retry with simpler prompt
     try {
-      const retry = await anthropic.messages.create({
+      const retry = await trackAICall({ route: 'aria/daily-briefing', model: 'claude-haiku-4-5-20251001', businessId: business_id, purpose: 'daily-briefing' }, () => anthropic.messages.create({
         model: 'claude-haiku-4-5-20251001',
         max_tokens: 1000,
         messages: [{
           role: 'user',
           content: `Return a JSON array of 3 business recommendations for: ${JSON.stringify(context)}. Format: [{id,priority,category,title,description,action_label,action_type,action_payload,metric,metric_label,trend}]`,
         }],
-      });
+      }));
       const raw = retry.content[0].type === 'text' ? retry.content[0].text : '';
       const match = raw.match(/\[[\s\S]*\]/);
       if (match) recommendations = JSON.parse(match[0]);
@@ -366,7 +368,7 @@ Each item must match this exact type:
   });
 }
 
-export async function PATCH(req: NextRequest) {
+async function _PATCH(req: NextRequest) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -385,3 +387,6 @@ export async function PATCH(req: NextRequest) {
   await supabase.from('daily_briefings').update(update).eq('business_id', business_id).eq('date', today);
   return NextResponse.json({ ok: true });
 }
+
+export const POST = withErrorCapture('aria/daily-briefing', _POST)
+export const PATCH = withErrorCapture('aria/daily-briefing', _PATCH)

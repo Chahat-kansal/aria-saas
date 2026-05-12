@@ -3,8 +3,9 @@ export const dynamic = 'force-dynamic';
 
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
-export async function PATCH(req: Request, { params }: { params: { id: string } }) {
+async function _PATCH(req: Request, { params }: { params: { id: string } }) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -39,7 +40,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   return NextResponse.json({ user: data });
 }
 
-export async function DELETE(req: Request, { params }: { params: { id: string } }) {
+async function _DELETE(req: Request, { params }: { params: { id: string } }) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -55,3 +56,6 @@ export async function DELETE(req: Request, { params }: { params: { id: string } 
   await supabase.from('pos_users').update({ is_active: false }).eq('id', params.id).eq('business_id', business_id);
   return NextResponse.json({ ok: true });
 }
+
+export const PATCH = withErrorCapture('pos/users/[id]', _PATCH)
+export const DELETE = withErrorCapture('pos/users/[id]', _DELETE)

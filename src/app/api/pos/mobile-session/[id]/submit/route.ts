@@ -3,8 +3,9 @@ export const dynamic = 'force-dynamic';
 
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
-export async function POST(req: Request, { params }: { params: { id: string } }) {
+async function _POST(req: Request, { params }: { params: { id: string } }) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -80,3 +81,5 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 
   return NextResponse.json({ ok: true, type: session.session_type, items_processed: items.length });
 }
+
+export const POST = withErrorCapture('pos/mobile-session/[id]/submit', _POST)

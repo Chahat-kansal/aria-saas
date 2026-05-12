@@ -4,6 +4,8 @@ export const dynamic = 'force-dynamic';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import Anthropic from '@anthropic-ai/sdk';
 import { NextResponse } from 'next/server';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { trackAICall } from '@/lib/aria/ai-telemetry'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -14,7 +16,7 @@ async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, u
   return data?.id ?? null;
 }
 
-export async function POST(req: Request) {
+async function _POST(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -78,11 +80,11 @@ export async function POST(req: Request) {
     const marginStr = currentMarginPct !== null ? `${currentMarginPct}%` : 'unknown';
     const prompt = `For ${productName} in ${category} category: current price A$${price}, cost A$${costPrice}, margin ${marginStr}, sold ${totalSold} units in 90 days (avg price A$${Math.round(avgPrice * 100) / 100}, ${txCount} transactions). Give a 2-sentence pricing recommendation. Be specific and direct.`;
 
-    const response = await anthropic.messages.create({
+    const response = await trackAICall({ route: 'aria/price-check', model: 'claude-haiku-4-5-20251001', businessId: business_id, purpose: 'price-check' }, () => anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 150,
       messages: [{ role: 'user', content: prompt }],
-    });
+    }));
 
     reasoning = response.content
       .filter((b) => b.type === 'text')
@@ -101,3 +103,5 @@ export async function POST(req: Request) {
     price_vs_market: 'unknown',
   });
 }
+
+export const POST = withErrorCapture('aria/price-check', _POST)

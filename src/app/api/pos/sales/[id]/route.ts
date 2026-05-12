@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
 import { logSaleEdit } from '@/lib/pos/sale-audit';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
   const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle();
@@ -24,7 +25,7 @@ const BLOCKED_FIELDS = [
 
 const UUID_FIELDS = new Set(['register_id', 'outlet_id', 'customer_id']);
 
-export async function GET(req: Request, { params }: { params: { id: string } }) {
+async function _GET(req: Request, { params }: { params: { id: string } }) {
   const supabase = createServerSupabaseClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -56,7 +57,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
   return NextResponse.json({ sale });
 }
 
-export async function PATCH(req: Request, { params }: { params: { id: string } }) {
+async function _PATCH(req: Request, { params }: { params: { id: string } }) {
   const supabase = createServerSupabaseClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -184,3 +185,6 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 
   return NextResponse.json({ ok: true, changes: changes.length });
 }
+
+export const GET = withErrorCapture('pos/sales/[id]', _GET)
+export const PATCH = withErrorCapture('pos/sales/[id]', _PATCH)

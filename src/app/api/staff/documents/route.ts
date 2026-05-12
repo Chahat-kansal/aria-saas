@@ -1,5 +1,6 @@
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -18,7 +19,7 @@ async function verifyStaffOwnership(
   return data;
 }
 
-export async function POST(req: Request) {
+async function _POST(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error } = await supabase.auth.getUser();
   if (error || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -46,7 +47,7 @@ export async function POST(req: Request) {
   return NextResponse.json({ document: data });
 }
 
-export async function DELETE(req: Request) {
+async function _DELETE(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error } = await supabase.auth.getUser();
   if (error || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -68,3 +69,6 @@ export async function DELETE(req: Request) {
   await supabase.from('staff_documents').delete().eq('id', id);
   return NextResponse.json({ ok: true });
 }
+
+export const POST = withErrorCapture('staff/documents', _POST)
+export const DELETE = withErrorCapture('staff/documents', _DELETE)

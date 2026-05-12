@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { getAdminClient, logAdminAction, isAdminEmail } from '@/lib/admin';
 import { NextResponse } from 'next/server';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 async function verifyAdmin() {
   const supabase = createServerSupabaseClient();
@@ -12,7 +13,7 @@ async function verifyAdmin() {
   return user;
 }
 
-export async function GET() {
+async function _GET() {
   const user = await verifyAdmin();
   if (!user) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
@@ -47,7 +48,7 @@ export async function GET() {
   return NextResponse.json({ businesses: enriched });
 }
 
-export async function PATCH(req: Request) {
+async function _PATCH(req: Request) {
   const user = await verifyAdmin();
   if (!user) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
@@ -69,3 +70,6 @@ export async function PATCH(req: Request) {
 
   return NextResponse.json({ business: data });
 }
+
+export const GET = withErrorCapture('admin/businesses', _GET)
+export const PATCH = withErrorCapture('admin/businesses', _PATCH)

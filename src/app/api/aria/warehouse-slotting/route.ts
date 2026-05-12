@@ -3,6 +3,8 @@ import { ARIA_VOICE } from '@/lib/aria-voice-guide';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { getBusinessSales, getBusinessItems } from '@/lib/business-data';
 import { NextResponse } from 'next/server';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { trackAICall } from '@/lib/aria/ai-telemetry'
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -10,7 +12,7 @@ export const maxDuration = 30;
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-export async function POST(req: Request) {
+async function _POST(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -54,7 +56,7 @@ export async function POST(req: Request) {
   }
 
   try {
-    const msg = await anthropic.messages.create({
+    const msg = await trackAICall({ route: 'aria/warehouse-slotting', model: 'claude-haiku-4-5-20251001', businessId: business_id, purpose: 'warehouse-slotting' }, () => anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 1000,
       system: `${ARIA_VOICE}
@@ -68,7 +70,7 @@ Return JSON: [{"item_id":"id","item_name":"name","current_location":"label or nu
 Items (sorted high→low velocity): ${JSON.stringify(rankedItems.slice(0, 15).map((i, idx) => ({ item_id: i.id, name: i.name, velocity: i.velocity, current_location: currentLocs[i.id]?.label ?? null, velocity_rank: idx < 5 ? 'high' : idx < 10 ? 'medium' : 'low' })))}
 Zones available: ${JSON.stringify([...new Set((locations.data ?? []).map((l: any) => l.zone))])}`,
       }],
-    });
+    }));
 
     const raw = msg.content[0].type === 'text' ? msg.content[0].text : '';
     const arrMatch = raw.match(/\[[\s\S]*\]/);
@@ -86,3 +88,5 @@ Zones available: ${JSON.stringify([...new Set((locations.data ?? []).map((l: any
     return NextResponse.json({ suggestions });
   } catch { return NextResponse.json({ suggestions: [] }); }
 }
+
+export const POST = withErrorCapture('aria/warehouse-slotting', _POST)

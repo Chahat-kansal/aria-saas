@@ -1,12 +1,13 @@
 export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 const ALLOWED_STATUSES = new Set(['pending', 'approved', 'ignored', 'completed', 'edited']);
 const ALLOWED_PRIORITIES = new Set(['high', 'medium', 'low']);
 const EDITABLE_FIELDS = ['title', 'category', 'recommendation', 'reason', 'expected_impact', 'confidence', 'source', 'outcome_status', 'outcome_notes'] as const;
 
-export async function PATCH(req: Request, { params }: { params: { id: string } }) {
+async function _PATCH(req: Request, { params }: { params: { id: string } }) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -48,3 +49,5 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ action: data });
 }
+
+export const PATCH = withErrorCapture('aria/actions/[id]', _PATCH)

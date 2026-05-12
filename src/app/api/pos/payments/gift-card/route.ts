@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
   const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle();
@@ -15,7 +16,7 @@ async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, u
  * GET /api/pos/payments/gift-card?code=XXXX-XXXX
  * Validate a gift card and return its balance before charging.
  */
-export async function GET(req: Request) {
+async function _GET(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -62,7 +63,7 @@ export async function GET(req: Request) {
  * Body: { gift_card_code, amount_to_charge, sale_id }
  * Returns: { ok, charged, remaining_balance, new_status }
  */
-export async function POST(req: Request) {
+async function _POST(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -122,3 +123,6 @@ export async function POST(req: Request) {
     short_paid: charge > actualCharge ? charge - actualCharge : 0,
   });
 }
+
+export const GET = withErrorCapture('pos/payments/gift-card', _GET)
+export const POST = withErrorCapture('pos/payments/gift-card', _POST)

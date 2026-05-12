@@ -5,12 +5,13 @@ export const maxDuration = 60;
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { decryptFieldSafe } from '@/lib/encryption';
 import { NextResponse } from 'next/server';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 const SQUARE_BASE = process.env.SQUARE_ENVIRONMENT === 'production'
   ? 'https://connect.squareup.com'
   : 'https://connect.squareupsandbox.com';
 
-export async function POST(req: Request) {
+async function _POST(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -137,3 +138,5 @@ export async function POST(req: Request) {
 
   return NextResponse.json({ ok: true, total: allItems.length, imported, updated, skipped });
 }
+
+export const POST = withErrorCapture('integrations/square/import-products', _POST)

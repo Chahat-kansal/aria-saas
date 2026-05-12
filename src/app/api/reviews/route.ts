@@ -3,8 +3,9 @@ export const dynamic = 'force-dynamic';
 
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
-export async function GET(req: Request) {
+async function _GET(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error } = await supabase.auth.getUser();
   if (error || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -27,7 +28,7 @@ export async function GET(req: Request) {
   return NextResponse.json({ reviews: data ?? [] });
 }
 
-export async function PATCH(req: Request) {
+async function _PATCH(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error } = await supabase.auth.getUser();
   if (error || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -47,3 +48,6 @@ export async function PATCH(req: Request) {
   if (e) return NextResponse.json({ error: e.message }, { status: 500 });
   return NextResponse.json({ ok: true });
 }
+
+export const GET = withErrorCapture('reviews', _GET)
+export const PATCH = withErrorCapture('reviews', _PATCH)

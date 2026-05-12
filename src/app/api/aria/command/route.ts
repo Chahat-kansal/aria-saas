@@ -4,6 +4,8 @@ export const dynamic = 'force-dynamic';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import Anthropic from '@anthropic-ai/sdk';
 import { NextResponse } from 'next/server';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { trackAICall } from '@/lib/aria/ai-telemetry'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -132,7 +134,7 @@ function mapQueryToAction(query: string): ActionResult {
   };
 }
 
-export async function POST(req: Request): Promise<Response> {
+async function _POST(req: Request): Promise<Response> {
   const supabase = createServerSupabaseClient();
   const {
     data: { user },
@@ -235,7 +237,7 @@ export async function POST(req: Request): Promise<Response> {
       const bizName = (biz as { id: string; name: string }).name ?? 'your business';
       const businessContext = `Today's sales: A$${todayRevenue.toFixed(2)} from ${todayTx} transactions. Total customers: ${customerCount}. Top products this week: ${topProducts || 'no data'}.`;
 
-      const msg = await anthropic.messages.create({
+      const msg = await trackAICall({ route: 'aria/command', model: 'claude-haiku-4-5-20251001', businessId: business_id, purpose: 'command-execution' }, () => anthropic.messages.create({
         model: 'claude-haiku-4-5-20251001',
         max_tokens: 150,
         system:
@@ -246,7 +248,7 @@ export async function POST(req: Request): Promise<Response> {
             content: `Business: ${bizName}. ${businessContext}\n\nQuestion: ${query}`,
           },
         ],
-      });
+      }));
 
       const text =
         msg.content[0].type === 'text' ? msg.content[0].text.trim() : '';
@@ -272,3 +274,5 @@ export async function POST(req: Request): Promise<Response> {
     } satisfies CommandResponse);
   }
 }
+
+export const POST = withErrorCapture('aria/command', _POST)

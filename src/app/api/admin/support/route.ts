@@ -4,8 +4,9 @@ export const dynamic = 'force-dynamic';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { getAdminClient, logAdminAction, isAdminEmail } from '@/lib/admin';
 import { NextResponse } from 'next/server';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
-export async function GET(req: Request) {
+async function _GET(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user || !isAdminEmail(user.email)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -25,7 +26,7 @@ export async function GET(req: Request) {
   return NextResponse.json({ tickets: data ?? [] });
 }
 
-export async function POST(req: Request) {
+async function _POST(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user || !isAdminEmail(user.email)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -37,7 +38,7 @@ export async function POST(req: Request) {
   return NextResponse.json({ ticket: data });
 }
 
-export async function PATCH(req: Request) {
+async function _PATCH(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user || !isAdminEmail(user.email)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -55,3 +56,7 @@ export async function PATCH(req: Request) {
   await logAdminAction({ admin_email: user.email!, action: 'update_ticket', target_type: 'support_ticket', target_id: id, details: { status: body.status } });
   return NextResponse.json({ ticket: data });
 }
+
+export const GET = withErrorCapture('admin/support', _GET)
+export const POST = withErrorCapture('admin/support', _POST)
+export const PATCH = withErrorCapture('admin/support', _PATCH)

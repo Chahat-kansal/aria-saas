@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { decryptField } from '@/lib/encryption';
 import { NextResponse } from 'next/server';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 const SQUARE_BASE = process.env.SQUARE_ENVIRONMENT === 'production'
   ? 'https://connect.squareup.com'
@@ -33,7 +34,7 @@ function calcChurnRisk(lastVisitAt: string | null, visitFreqDays: number | null)
   return 'low';
 }
 
-export async function POST(req: Request) {
+async function _POST(req: Request) {
   const supabase = createServerSupabaseClient();
 
   // Allow both authenticated user calls and internal cron calls
@@ -184,3 +185,5 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
+
+export const POST = withErrorCapture('integrations/square/sync', _POST)

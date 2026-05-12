@@ -1,6 +1,7 @@
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 export const runtime = 'edge';
 
-export async function GET() {
+async function _GET() {
   const svg = `<svg width="1200" height="630" viewBox="0 0 1200 630" fill="none" xmlns="http://www.w3.org/2000/svg">
   <rect width="1200" height="630" fill="#08070D"/>
   <defs>
@@ -31,3 +32,5 @@ export async function GET() {
     },
   });
 }
+
+export const GET = withErrorCapture('og/default', _GET)

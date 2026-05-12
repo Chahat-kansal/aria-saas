@@ -5,6 +5,8 @@ export const maxDuration = 30;
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import Anthropic from '@anthropic-ai/sdk';
 import { NextResponse } from 'next/server';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { trackAICall } from '@/lib/aria/ai-telemetry'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -15,7 +17,7 @@ async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, u
   return data?.id ?? null;
 }
 
-export async function POST(req: Request) {
+async function _POST(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error } = await supabase.auth.getUser();
   if (error || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -53,7 +55,7 @@ export async function POST(req: Request) {
   if (todayTx === 0) return NextResponse.json({ insight: `No sales yet today at ${biz?.name ?? 'your store'}. Open the register and start selling!`, cached: false });
 
   try {
-    const msg = await anthropic.messages.create({
+    const msg = await trackAICall({ route: 'aria/pos-insight', model: 'claude-haiku-4-5-20251001', businessId: business_id, purpose: 'pos-insight' }, () => anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 200,
       messages: [{
@@ -66,7 +68,7 @@ ${topProduct ? `Top product today: ${topProduct[0]} (${topProduct[1]} sold)` : '
 
 Write exactly 2 sentences: one about performance vs recent days, one specific recommendation. Be direct, Australian context, use A$.`,
       }],
-    });
+    }));
     const insight = msg.content[0].type === 'text' ? msg.content[0].text.trim() : '';
     return NextResponse.json({ insight, today_revenue: todayRev, today_transactions: todayTx, avg_basket: avgBasket });
   } catch {
@@ -79,3 +81,5 @@ Write exactly 2 sentences: one about performance vs recent days, one specific re
     });
   }
 }
+
+export const POST = withErrorCapture('aria/pos-insight', _POST)

@@ -1,12 +1,13 @@
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { collectBusinessData } from '@/lib/aria/business-data';
 import { chatWithBusinessBrain } from '@/lib/aria/business-brain';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
-export async function POST(req: Request) {
+async function _POST(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) {
@@ -37,3 +38,5 @@ export async function POST(req: Request) {
     return new Response(JSON.stringify({ error: 'Aria could not answer from business data right now.' }), { status: 500 });
   }
 }
+
+export const POST = withErrorCapture('aria/chat', _POST)

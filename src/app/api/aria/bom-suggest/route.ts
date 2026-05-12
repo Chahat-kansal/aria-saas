@@ -5,10 +5,12 @@ import { createServerSupabaseClient } from '@/lib/supabase-server';
 import Anthropic from '@anthropic-ai/sdk';
 import { NextResponse } from 'next/server';
 import { ARIA_VOICE } from '@/lib/aria-voice-guide';
+import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { trackAICall } from '@/lib/aria/ai-telemetry'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-export async function POST(req: Request) {
+async function _POST(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -27,7 +29,7 @@ export async function POST(req: Request) {
   }
 
   try {
-    const msg = await anthropic.messages.create({
+    const msg = await trackAICall({ route: 'aria/bom-suggest', model: 'claude-haiku-4-5-20251001', businessId: business_id, purpose: 'bom-suggest' }, () => anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 300,
       system: `${ARIA_VOICE}\n\nReturn ONLY valid JSON, no markdown.`,
@@ -37,7 +39,7 @@ export async function POST(req: Request) {
 Return JSON: { "components": [{ "name": "string", "typical_quantity": number, "unit": "string" }] }
 Maximum 8 components. Be specific to Australian products and industry context.`,
       }],
-    });
+    }));
 
     const raw = msg.content[0].type === 'text' ? msg.content[0].text : '';
     const match = raw.match(/\{[\s\S]*\}/);
@@ -49,3 +51,5 @@ Maximum 8 components. Be specific to Australian products and industry context.`,
 
   return NextResponse.json({ components: [] });
 }
+
+export const POST = withErrorCapture('aria/bom-suggest', _POST)
