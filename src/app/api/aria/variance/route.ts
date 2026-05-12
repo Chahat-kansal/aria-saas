@@ -1,3 +1,4 @@
+import * as Sentry from '@sentry/nextjs';
 import Anthropic from '@anthropic-ai/sdk';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { calculateVariance } from '@/lib/business-data';
@@ -10,6 +11,7 @@ export const maxDuration = 30;
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 export async function POST(req: Request) {
+  try {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -58,4 +60,8 @@ Items: ${JSON.stringify(significant.map(v => ({
   }
 
   return NextResponse.json({ items: variances, total_loss_cents: totalLoss, ai_insights: aiInsights });
+  } catch (err: unknown) {
+    Sentry.captureException(err, { tags: { route: 'aria/variance' } });
+    return NextResponse.json({ data: [], status: 'error', message: 'temporarily_unavailable' }, { status: 200 });
+  }
 }

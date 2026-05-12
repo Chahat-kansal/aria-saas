@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
+import * as Sentry from '@sentry/nextjs'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { NextResponse } from 'next/server'
 
@@ -144,6 +145,7 @@ export async function GET(req: Request) {
 
     return NextResponse.json({ competitors, from_cache: false })
   } catch (err: unknown) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : 'Server error' }, { status: 500 })
+    Sentry.captureException(err, { tags: { route: 'aria/competitors' } })
+    return NextResponse.json({ competitors: [], status: 'error', message: 'temporarily_unavailable' }, { status: 200 })
   }
 }

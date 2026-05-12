@@ -1,6 +1,7 @@
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
+import * as Sentry from '@sentry/nextjs';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import Anthropic from '@anthropic-ai/sdk';
 import { NextResponse } from 'next/server';
@@ -9,6 +10,7 @@ import { ARIA_VOICE } from '@/lib/aria-voice-guide';
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 export async function POST(req: Request) {
+  try {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -108,4 +110,8 @@ Return JSON:
     .eq('id', missed_demand_id);
 
   return NextResponse.json(parsed);
+  } catch (err: unknown) {
+    Sentry.captureException(err, { tags: { route: 'aria/missed-demand-analysis' } });
+    return NextResponse.json({ data: [], status: 'error', message: 'temporarily_unavailable' }, { status: 200 });
+  }
 }

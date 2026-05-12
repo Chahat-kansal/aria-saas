@@ -1,6 +1,7 @@
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
+import * as Sentry from '@sentry/nextjs';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { createClient } from '@supabase/supabase-js';
 import { ARIA_VOICE } from '@/lib/aria-voice-guide';
@@ -62,6 +63,7 @@ const INDUSTRY_STRATEGIES: Record<string, string> = {
 };
 
 export async function POST(req: Request) {
+  try {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -161,7 +163,7 @@ Return ONLY a valid JSON array, no other text:
   try {
     suggestions = JSON.parse(text.replace(/```json|```/g, '').trim());
   } catch {
-    return NextResponse.json({ error: 'Failed to parse AI response' }, { status: 500 });
+    return NextResponse.json({ posts: [], count: 0, status: 'error' }, { status: 200 });
   }
 
   const sbService = createClient(
@@ -273,4 +275,8 @@ Return ONLY a valid JSON array, no other text:
   }
 
   return NextResponse.json({ posts: saved, count: saved.length });
+  } catch (err: unknown) {
+    Sentry.captureException(err, { tags: { route: 'aria/social-suggest' } });
+    return NextResponse.json({ posts: [], count: 0, status: 'error', message: 'temporarily_unavailable' }, { status: 200 });
+  }
 }

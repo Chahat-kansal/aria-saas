@@ -1,3 +1,4 @@
+import * as Sentry from '@sentry/nextjs';
 import Anthropic from '@anthropic-ai/sdk';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { getBusinessItems, getBusinessSales } from '@/lib/business-data';
@@ -12,6 +13,7 @@ export const maxDuration = 60;
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 export async function POST(req: Request) {
+  try {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -174,4 +176,8 @@ Return: {"summary":"2-3 sentences with specific items/quantities","urgent_items"
   }, { onConflict: 'business_id,date' });
 
   return NextResponse.json({ ...forecast, cached: false });
+  } catch (err: unknown) {
+    Sentry.captureException(err, { tags: { route: 'aria/reorder-forecast' } });
+    return NextResponse.json({ data: [], status: 'error', message: 'temporarily_unavailable' }, { status: 200 });
+  }
 }
