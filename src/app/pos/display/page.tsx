@@ -1,5 +1,5 @@
 'use client';
-import { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect, useState, useCallback } from 'react';
 import ConfettiCanvas from '@/components/pos/ConfettiCanvas';
 import LogoMark from '@/components/pos/LogoMark';
 import { CAT_META, fmt } from '@/lib/pos-utils';
@@ -50,6 +50,34 @@ export default function CustomerDisplayPage() {
     new Date().toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })
   );
 
+  // Aria customer greeting
+  const [greeting, setGreeting]               = useState<string | null>(null);
+  const [greetingLoading, setGreetingLoading] = useState(false);
+  const [greetingCustomer, setGreetingCustomer] = useState<{
+    name: string; visit_count?: number; total_spent?: number;
+    is_known: boolean; is_lapsed?: boolean;
+  } | null>(null);
+  const lastGreetedName = useRef<string | null>(null);
+  const greetTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
+
+  const fetchGreeting = useCallback(async (name: string, businessId: string) => {
+    setGreetingLoading(true);
+    try {
+      const res = await fetch('/api/pos/customer-greet', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ customerName: name, businessId }),
+      });
+      const data = await res.json();
+      setGreeting(data.greeting ?? null);
+      setGreetingCustomer(data.customer ?? null);
+    } catch {
+      setGreeting(null);
+    } finally {
+      setGreetingLoading(false);
+    }
+  }, []);
+
   // Keep phaseRef in sync (canvas draw loop reads it without re-creating the loop)
   useEffect(() => { phaseRef.current = phase; }, [phase]);
 
@@ -84,6 +112,26 @@ export default function CustomerDisplayPage() {
     const t = setTimeout(() => setPhase('idle'), 5000);
     return () => clearTimeout(t);
   }, [phase]);
+
+  // Trigger Aria greeting when a customer name appears in display state
+  useEffect(() => {
+    const name = state.customer_name ?? null;
+    if (!name) {
+      setGreeting(null);
+      setGreetingCustomer(null);
+      lastGreetedName.current = null;
+      clearTimeout(greetTimeoutRef.current);
+      return;
+    }
+    if (name === lastGreetedName.current) return;
+    lastGreetedName.current = name;
+    clearTimeout(greetTimeoutRef.current);
+    const businessId = typeof window !== 'undefined'
+      ? (localStorage.getItem('aria_active_business_id') ?? '')
+      : '';
+    if (!businessId) return;
+    greetTimeoutRef.current = setTimeout(() => fetchGreeting(name, businessId), 400);
+  }, [state.customer_name, fetchGreeting]);
 
   // BroadcastChannel — receives sale_completed from terminal with cart items
   useEffect(() => {
@@ -311,9 +359,35 @@ export default function CustomerDisplayPage() {
       {/* ── ORDER ────────────────────────────────────────────────── */}
       {phase === 'order' && rawItems.length > 0 && (
         <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 20, zIndex: 2, padding: 32 }}>
-          {customerName && (
-            <div style={{ fontFamily: "'Instrument Serif', serif", fontSize: 18, fontStyle: 'italic', color: '#8B5CF6', animation: 'fade-up 0.3s ease' }}>
-              Welcome back, {customerName}! ✨
+          {/* Aria customer greeting */}
+          {greetingLoading && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'rgba(29,158,117,0.2)', border: '1px solid rgba(29,158,117,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: '#1D9E75' }}>A</div>
+              <span style={{ fontSize: 12, color: 'rgba(29,158,117,0.6)', letterSpacing: '0.05em', animation: 'aria-pulse 1.4s ease-in-out infinite' }}>Aria is saying hi…</span>
+            </div>
+          )}
+          {greeting && !greetingLoading && (
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, maxWidth: 420, animation: 'aria-greet-in 0.4s cubic-bezier(0.16,1,0.3,1)' }}>
+              <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'rgba(29,158,117,0.2)', border: '1px solid rgba(29,158,117,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: '#1D9E75', flexShrink: 0, marginTop: 2 }}>A</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                <span style={{ fontSize: 9, color: 'rgba(29,158,117,0.6)', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase' }}>Aria</span>
+                <p style={{ fontFamily: "'Instrument Serif', serif", fontSize: 16, fontStyle: 'italic', color: 'rgba(237,232,255,0.9)', lineHeight: 1.4, margin: 0 }}>
+                  {greeting}
+                </p>
+                {greetingCustomer?.is_known && (greetingCustomer.visit_count ?? 0) > 1 && (
+                  <span style={{ fontSize: 10, color: 'rgba(139,133,168,0.45)', marginTop: 2 }}>
+                    Visit #{greetingCustomer.visit_count}
+                    {greetingCustomer.total_spent
+                      ? ` · $${(greetingCustomer.total_spent as number).toLocaleString('en-AU')} lifetime`
+                      : ''}
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
+          {!greeting && !greetingLoading && customerName && (
+            <div style={{ fontFamily: "'Instrument Serif', serif", fontSize: 16, fontStyle: 'italic', color: '#8B5CF6' }}>
+              Hey {customerName.split(' ')[0]}
             </div>
           )}
           <div style={{ fontFamily: "'Instrument Serif', serif", fontSize: 16, fontStyle: 'italic', color: 'rgba(139,133,168,0.5)', letterSpacing: '-0.01em' }}>
