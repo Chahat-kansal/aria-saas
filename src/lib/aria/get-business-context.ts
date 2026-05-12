@@ -1,4 +1,5 @@
 import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { getWeatherContext } from './get-weather-context'
 
 export async function getBusinessContext(businessId: string): Promise<string> {
   const supabase = createServerSupabaseClient()
@@ -97,6 +98,10 @@ export async function getBusinessContext(businessId: string): Promise<string> {
 
   const hasSalesData = (rev7 ?? 0) > 0 || skus.length > 0
 
+  const city     = biz?.city ?? biz?.suburb ?? 'Melbourne'
+  const industry = biz?.industry ?? 'retail'
+  const weather  = await getWeatherContext(industry, city)
+
   return JSON.stringify({
     _meta: {
       snapshot_date: now.toISOString().split('T')[0],
@@ -140,6 +145,7 @@ export async function getBusinessContext(businessId: string): Promise<string> {
     },
     low_stock_alerts: alts,
     recent_aria_outcomes: outs,
+    weather: weather ?? { _note: 'Weather data unavailable — proceeding without weather context.' },
   }, null, 2)
 }
 

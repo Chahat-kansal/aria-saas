@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { trackUsage } from '@/lib/track-usage';
 import { collectBusinessData } from '@/lib/aria/business-data';
+import { getWeatherContext } from '@/lib/aria/get-weather-context';
 import {
   AriaBrainMode,
   analyseBusinessHealth,
@@ -153,6 +154,14 @@ export const POST = withErrorCapture('aria/business-brain', async (req: Request)
     const businessData = await collectBusinessData(businessId, { userId: user.id, supabase });
     if (!businessData.business) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
+    // Fetch live weather for daily briefing mode
+    const weatherCtx = mode === 'daily'
+      ? await getWeatherContext(
+          businessData.business.industry ?? 'retail',
+          businessData.business.city ?? businessData.business.suburb ?? 'Melbourne'
+        ).catch(() => null)
+      : null
+
     // ── 45-second hard timeout for Claude call ────────────────────────
     let output: Awaited<ReturnType<typeof runMode>>;
     try {
@@ -187,7 +196,20 @@ export const POST = withErrorCapture('aria/business-brain', async (req: Request)
       ? await saveRecommendations(supabase, businessId, mode, output)
       : [];
 
-    const result = { ...output, saved_actions, raw_counts: businessData.raw_counts };
+    // Prepend live weather opener to daily briefing summary
+    let weatherPrefix = ''
+    if (mode === 'daily' && weatherCtx) {
+      const w = weatherCtx
+      weatherPrefix = `It's ${w.today.temp_c}°C and ${w.today.condition} in ${w.location.split(',')[0]} today — ${w.business_impact} `
+    }
+
+    const result = {
+      ...output,
+      summary: weatherPrefix ? weatherPrefix + (output.summary ?? '') : output.summary,
+      weather: weatherCtx ?? undefined,
+      saved_actions,
+      raw_counts: businessData.raw_counts,
+    };
 
     // ── Write to cache ────────────────────────────────────────────────
     if (CACHE_MODES.has(mode)) {
