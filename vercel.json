@@ -27,7 +27,8 @@
     "src/app/api/pos/products/scan/route.ts":                  { "maxDuration": 10 },
     "src/app/api/pos/sync-offline/route.ts":                   { "maxDuration": 30 },
     "src/app/api/pos/customer-greet/route.ts":                 { "maxDuration": 15 },
-    "src/app/api/pos/seed-cafe-products/route.ts":             { "maxDuration": 30 }
+    "src/app/api/pos/seed-cafe-products/route.ts":             { "maxDuration": 30 },
+    "src/app/api/pos/refresh-product-images/route.ts":        { "maxDuration": 60 }
   },
   "crons": [
     { "path": "/api/cron/nightly-sync",                "schedule": "0 2 * * *"   },

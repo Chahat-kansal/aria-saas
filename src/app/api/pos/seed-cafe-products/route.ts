@@ -153,6 +153,33 @@ async function _POST() {
     }
   }
 
+  // Kick off image refresh in background (non-blocking — best effort)
+  const accessKey = process.env.UNSPLASH_ACCESS_KEY
+  if (accessKey) {
+    const { data: allProds } = await supabase
+      .from('pos_products').select('id, name').eq('business_id', biz.id).eq('is_active', true)
+    if (allProds?.length) {
+      void Promise.all(
+        allProds.map(async p => {
+          try {
+            const res = await fetch(
+              `https://api.unsplash.com/search/photos?query=${encodeURIComponent(p.name + ' cafe food')}&per_page=1&orientation=squarish&content_filter=high`,
+              { headers: { Authorization: `Client-ID ${accessKey}` } }
+            )
+            if (!res.ok) return
+            const d = await res.json()
+            const url = d.results?.[0]?.urls?.small ?? d.results?.[0]?.urls?.regular
+            if (url) {
+              await supabase.from('pos_products')
+                .update({ image_url: url, image_source: 'owner' })
+                .eq('id', p.id).eq('business_id', biz.id)
+            }
+          } catch { /* non-fatal */ }
+        })
+      )
+    }
+  }
+
   return NextResponse.json({ ok: true, seeded: inserted })
 }
 
