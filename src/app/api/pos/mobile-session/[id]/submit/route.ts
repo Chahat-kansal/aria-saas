@@ -22,6 +22,9 @@ async function _POST(req: Request, { params }: { params: { id: string } }) {
   if (!biz) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
   const items = session.scanned_items as any[];
+  console.log('[submit] session_type:', session.session_type)
+  console.log('[submit] items count:', items.length)
+  console.log('[submit] items:', JSON.stringify(items))
 
   if (session.session_type === 'count') {
     // Batch update stock quantities

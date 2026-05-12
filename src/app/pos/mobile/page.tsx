@@ -270,7 +270,7 @@ export default function MobileTerminal() {
     setInvSession(null)
     setInvDone(false)
 
-    if (mode !== 'sell' && businessId) {
+    if (mode !== 'sell') {
       try {
         const sessionType = mode === 'stocktake' ? 'count'
           : mode === 'order' ? 'order' : 'receive'
@@ -279,11 +279,14 @@ export default function MobileTerminal() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ business_id: businessId, session_type: sessionType }),
         })
+        const d = await r.json()
+        console.log('[switchMode] session response:', d)
         if (r.ok) {
-          const d = await r.json()
           setInvSession({ id: d.session?.id ?? d.id })
+        } else {
+          console.error('[switchMode] failed:', d)
         }
-      } catch { /* offline — session will be null */ }
+      } catch (err) { console.error('[switchMode] network error:', err) }
     }
   }, [appMode, businessId])
 
@@ -338,12 +341,21 @@ export default function MobileTerminal() {
     setInvSubmitting(true)
 
     try {
-      await fetch(`/api/pos/mobile-session?id=${invSession.id}`, {
+      const patchRes = await fetch(`/api/pos/mobile-session?id=${invSession.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ scanned_items: invItems }),
       })
-    } catch {}
+      if (!patchRes.ok) {
+        console.error('[submit] PATCH failed:', await patchRes.text())
+        setInvSubmitting(false)
+        return
+      }
+    } catch (err) {
+      console.error('[submit] PATCH network error:', err)
+      setInvSubmitting(false)
+      return
+    }
 
     try {
       const r = await fetch(`/api/pos/mobile-session/${invSession.id}/submit`, {
@@ -352,7 +364,8 @@ export default function MobileTerminal() {
         body: JSON.stringify({ business_id: businessId }),
       })
       if (r.ok) setInvDone(true)
-    } catch {}
+      else console.error('[submit] submit failed:', await r.text())
+    } catch (err) { console.error('[submit] submit network error:', err) }
 
     setInvSubmitting(false)
   }, [invSession, invItems, businessId])

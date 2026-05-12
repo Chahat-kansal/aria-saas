@@ -107,6 +107,17 @@ async function _POST(req: Request) {
   const totalCost = orderItems.reduce((s, i) => s + i.total_cost_cents, 0);
   const urgentItems = orderItems.filter(i => i.days_of_stock < 3);
 
+  if (!orderItems.length) {
+    return NextResponse.json({
+      draft: null,
+      items: [],
+      total_cost_cents: 0,
+      reasoning: 'All tracked products have sufficient stock — no reorder needed this week.',
+      urgent_count: 0,
+      suppliers: suppliers || [],
+    })
+  }
+
   const weekStarting = week_starting || (() => {
     const d = new Date(); d.setDate(d.getDate() + 1); return d.toISOString().split('T')[0];
   })();
