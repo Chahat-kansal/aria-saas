@@ -4,11 +4,11 @@ import { ChevronDown, ChevronRight, Copy } from 'lucide-react'
 import { inp, Toggle } from '../shared'
 
 interface Inv { id: string; outlet_id: string; items_on_hand: number; items_reorder_level: number; items_reorder_amount: number; items_reorder_limit: number | null; items_max_on_hand: number | null; cases_on_hand: number; cases_reorder_level: number; cases_reorder_amount: number; cases_reorder_limit: number | null; cases_max_on_hand: number | null; items_per_case: number; reorder_rounding: string }
-interface Props { inventory: Inv[]; outlets: { id: string; name: string }[]; onChange: (inventory: Inv[]) => void }
+interface Props { inventory: Inv[]; outlets: { id: string; name: string }[]; onChange: (inventory: Inv[]) => void; productId: string }
 
 const ROUNDING = ['no_rounding','round_up','round_down','case_only']
 
-export default function InventoryTab({ inventory: initInv, outlets, onChange }: Props) {
+export default function InventoryTab({ inventory: initInv, outlets, onChange, productId }: Props) {
   const [inventory, setInventory] = useState<Inv[]>(initInv)
   const [open, setOpen] = useState<Record<string, boolean>>(Object.fromEntries((initInv).map(i => [i.id, true])))
 
@@ -105,7 +105,32 @@ export default function InventoryTab({ inventory: initInv, outlets, onChange }: 
           </div>
         )
       })}
-      {inventory.length === 0 && <p style={{ color: 'var(--text-tertiary)', fontSize: 13 }}>No outlet inventory records. Run Phase A migrations in Supabase.</p>}
+      {inventory.length === 0 && (
+        <div style={{ padding: '16px', textAlign: 'center' }}>
+          <p style={{ color: 'var(--text-tertiary)', fontSize: 13, marginBottom: 8 }}>
+            No inventory records found for this product.
+          </p>
+          <button
+            onClick={async () => {
+              const res = await fetch(
+                `/api/pos/products/${productId}/init-inventory`,
+                { method: 'POST' }
+              )
+              if (res.ok) window.location.reload()
+            }}
+            style={{
+              padding: '6px 14px',
+              borderRadius: 6,
+              background: 'var(--accent)',
+              color: 'white',
+              border: 'none',
+              cursor: 'pointer',
+              fontSize: 13,
+            }}>
+            Create inventory records
+          </button>
+        </div>
+      )}
     </div>
   )
 }

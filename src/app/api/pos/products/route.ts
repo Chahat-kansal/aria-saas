@@ -167,6 +167,22 @@ async function _POST(req: Request) {
     console.error('[products POST]', error.message);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+
+  // Auto-create outlet inventory rows for all existing outlets
+  const { data: outlets } = await supabase
+    .from('pos_outlets')
+    .select('id')
+    .eq('business_id', bid)
+  if (outlets?.length) {
+    await supabase.from('pos_outlet_inventory').insert(
+      outlets.map(o => ({
+        business_id: bid,
+        product_id: product.id,
+        outlet_id: o.id,
+      }))
+    )
+  }
+
   return NextResponse.json({ product });
 }
 

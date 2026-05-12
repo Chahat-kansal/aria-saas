@@ -28,7 +28,7 @@ export default async function ProductEditPage({ params }: { params: Promise<{ id
     supabase.from('pos_product_barcodes').select('*').eq('product_id', id).eq('business_id', bid).order('is_primary', { ascending: false }),
     supabase.from('pos_product_loyalty').select('*').eq('product_id', id).eq('business_id', bid).maybeSingle(),
     supabase.from('pos_product_images').select('*').eq('product_id', id).eq('business_id', bid).order('sort_order'),
-    supabase.from('pos_outlets').select('id,name,is_global,is_default,code').eq('business_id', bid).eq('active', true).order('is_global', { ascending: false }).order('name'),
+    supabase.from('pos_outlets').select('id,name,is_global,is_default,code').eq('business_id', bid).order('is_global', { ascending: false }).order('name'),
     supabase.from('pos_price_sets').select('*').eq('business_id', bid).order('sort_order'),
     supabase.from('pos_categories').select('id,name,color').eq('business_id', bid).order('name'),
     supabase.from('pos_brands').select('id,name').eq('business_id', bid).order('name'),

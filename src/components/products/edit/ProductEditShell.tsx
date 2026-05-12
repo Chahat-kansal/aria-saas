@@ -160,7 +160,7 @@ export default function ProductEditShell(props: Props) {
             onChange={(p, d, inv) => { setPrices(p); setPriceDeletedIds(d); setCosts(inv) }}
           />
         )}
-        {activeTab === 'inventory' && <InventoryTab inventory={inventory} outlets={outlets} onChange={setInventory} />}
+        {activeTab === 'inventory' && <InventoryTab inventory={inventory} outlets={outlets} onChange={setInventory} productId={productId} />}
         {activeTab === 'barcodes' && (
           <BarcodesTab barcodes={barcodes}
             onChange={(b, d) => { setBarcodes(b); setBarcodeDeletedIds(d) }} />
