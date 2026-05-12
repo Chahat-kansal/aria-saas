@@ -24,6 +24,7 @@ type RunInput = {
   schema?: object;
   temperature?: number;
   maxTokens?: number;
+  tools?: any[];
 };
 
 export type AriaModelResult<T = any> = {
@@ -99,13 +100,18 @@ export function parseModelJson(text: string) {
 
 async function callAnthropic(input: RunInput) {
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-  const response = await client.messages.create({
+  const createParams: any = {
     model: SMART_TASKS.has(input.task) ? 'claude-sonnet-4-6' : 'claude-haiku-4-5-20251001',
     max_tokens: input.maxTokens ?? 2500,
     temperature: input.temperature ?? 0.2,
     system: input.systemPrompt,
     messages: [{ role: 'user', content: input.userPrompt }],
-  });
+  };
+  if (input.tools?.length) createParams.tools = input.tools;
+  const requestOpts: any = input.tools?.length
+    ? { headers: { 'anthropic-beta': 'web-search-2025-03-05' } }
+    : {};
+  const response = await client.messages.create(createParams, requestOpts);
   return response.content
     .map(block => (block.type === 'text' ? block.text : ''))
     .join('')

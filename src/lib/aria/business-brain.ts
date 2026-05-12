@@ -238,7 +238,7 @@ function normaliseOutput(value: any, data: AriaBusinessData): AriaBrainOutput {
   };
 }
 
-async function analyse(mode: AriaBrainMode, data: AriaBusinessData, context?: object, systemPromptOverride?: string): Promise<AriaBrainOutput> {
+async function analyse(mode: AriaBrainMode, data: AriaBusinessData, context?: object, systemPromptOverride?: string, tools?: any[]): Promise<AriaBrainOutput> {
   const missing = enoughForMode(data, mode);
   if (missing.length > 0 && mode !== 'explain' && mode !== 'chat') {
     return emptyOutput(data, 'Aria is ready, but live business data is not connected yet.', missing);
@@ -261,6 +261,7 @@ async function analyse(mode: AriaBrainMode, data: AriaBusinessData, context?: ob
       schema: OUTPUT_SCHEMA,
       temperature: 0.15,
       maxTokens: 800,
+      tools,
       userPrompt: JSON.stringify({
         mode,
         context: context ?? null,
@@ -320,6 +321,8 @@ export function explainRecommendation(input: AriaBusinessData, context?: object)
   return analyse('explain', input, context);
 }
 
+const WEB_SEARCH_TOOLS = [{ type: 'web_search_20250305' as any, name: 'web_search' }];
+
 export async function chatWithBusinessBrain(input: AriaBusinessData, context?: object): Promise<AriaBrainOutput> {
   let systemPromptOverride: string | undefined
   const businessId = (input.business as any)?.id as string | undefined
@@ -330,7 +333,7 @@ export async function chatWithBusinessBrain(input: AriaBusinessData, context?: o
       systemPromptOverride = getSystemPrompt(industry, businessContext)
     } catch { /* fall back to generic SYSTEM_PROMPT */ }
   }
-  return analyse('chat', input, context, systemPromptOverride)
+  return analyse('chat', input, context, systemPromptOverride, WEB_SEARCH_TOOLS)
 }
 
 export function convertInsightToAction(input: { recommendation: AriaRecommendation }) {
