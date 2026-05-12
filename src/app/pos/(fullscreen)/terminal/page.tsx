@@ -31,6 +31,7 @@ import { AuroraCanvas } from '@/components/terminal/AuroraCanvas';
 import { LivePulseRail } from '@/components/terminal/LivePulseRail';
 import { AriaInlineCard } from '@/components/terminal/AriaInlineCard';
 import { ProductImage } from '@/components/terminal/ProductImage';
+import CafeSetupModal from '@/components/pos/CafeSetupModal';
 
 /* ─── Types ─────────────────────────────────────────────────────── */
 interface Product {
@@ -246,6 +247,7 @@ export default function TerminalPage() {
   const [recentProductIds, setRecentProductIds] = useState<string[]>([]);
   const [businessType, setBusinessType] = useState<string>('liquor');
   const [terminalLayoutOverride, setTerminalLayoutOverride] = useState<TerminalLayout | null>(null);
+  const [showCafeSetup, setShowCafeSetup] = useState(false);
 
   // Outlet awareness — additive
   const [activeOutletId, setActiveOutletId] = useState<string | null>(null);
@@ -372,6 +374,10 @@ export default function TerminalPage() {
       setProducts(prods);
       setParkedSales(park.parked_sales || []);
       setLowStockItems(prods.filter(p => p.track_stock && p.stock_quantity <= (p.low_stock_threshold ?? 5) && p.is_active));
+      // First-run cafe setup
+      if (prod.business_type === 'cafe' && prods.length === 0) {
+        setShowCafeSetup(true);
+      }
       setLoading(false);
       // Load the default receipt template (is_default first, else first template)
       const templates: ReceiptTemplate[] = tmplData.templates || [];
@@ -1098,6 +1104,13 @@ export default function TerminalPage() {
 
   return (
     <div className="flex flex-col overflow-hidden" style={{ height: '100dvh', background: 'var(--terminal-bg-canvas)', position: 'relative' }}>
+      {showCafeSetup && (
+        <CafeSetupModal
+          businessName={businessName}
+          onComplete={() => { setShowCafeSetup(false); window.location.reload(); }}
+          onSkip={() => setShowCafeSetup(false)}
+        />
+      )}
       {/* Training mode amber banner — additive */}
       {trainingMode && (
         <>
