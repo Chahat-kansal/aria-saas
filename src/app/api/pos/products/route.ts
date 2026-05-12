@@ -52,7 +52,7 @@ async function _GET(req: Request) {
     });
   }
 
-  const { data: biz } = await supabase.from('businesses').select('name,business_type,terminal_layout').eq('id', bid).maybeSingle();
+  const { data: biz } = await supabase.from('businesses').select('name,industry,terminal_layout').eq('id', bid).maybeSingle();
   const [{ data: products }, { data: categories }, { data: saleKeys }] = await Promise.all([
     supabase
       .from('pos_products')
@@ -74,7 +74,7 @@ async function _GET(req: Request) {
   return NextResponse.json({
     business_id:       bid,
     business_name:     biz?.name ?? 'AriaPOS',
-    business_type:     (biz as any)?.business_type ?? null,
+    business_type:     (biz as any)?.industry ?? null,
     terminal_layout:   (biz as any)?.terminal_layout ?? null,
     products:          products   || [],
     categories:        categories || [],

@@ -34,14 +34,14 @@ async function _POST() {
 
   const { data: biz } = await supabase
     .from('businesses')
-    .select('id, business_type, name')
+    .select('id, industry, name')
     .eq('id', active.business_id)
     .eq('user_id', user.id)
     .maybeSingle()
 
   if (!biz) return NextResponse.json({ error: 'Business not found' }, { status: 404 })
 
-  if (biz.business_type !== 'cafe') {
+  if ((biz as any).industry !== 'cafe') {
     return NextResponse.json(
       { error: 'Only available for cafe businesses' },
       { status: 400 }

@@ -36,7 +36,7 @@ async function _GET() {
 
   const { data: biz } = await supabase
     .from('businesses')
-    .select('id,name,created_at,business_type,plan,terminal_layout')
+    .select('id,name,created_at,industry,plan,terminal_layout')
     .eq('id', bid)
     .maybeSingle()
 
@@ -64,7 +64,7 @@ async function _PATCH(request: NextRequest) {
     updatePayload.terminal_layout = body.terminal_layout
   }
   if ('business_type' in body && typeof body.business_type === 'string') {
-    updatePayload.business_type = body.business_type
+    updatePayload.industry = body.business_type
   }
 
   if (Object.keys(updatePayload).length === 0) {
@@ -75,7 +75,7 @@ async function _PATCH(request: NextRequest) {
     .from('businesses')
     .update(updatePayload)
     .eq('id', bid)
-    .select('id,name,business_type,plan,terminal_layout')
+    .select('id,name,industry,plan,terminal_layout')
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
