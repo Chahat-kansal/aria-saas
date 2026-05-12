@@ -46,6 +46,7 @@ export async function POST(req: Request) {
     salesLast90Res,
     expiryRes,
     belowCostRes,
+    outOfStockRes,
   ] = await Promise.all([
     // Products with stock
     supabase.from('pos_products')
@@ -85,6 +86,12 @@ export async function POST(req: Request) {
       .eq('business_id', business_id)
       .eq('is_active', true)
       .gt('cost_price', 0),
+    // Out-of-stock active products — separate query, not derived from belowCostRes
+    supabase.from('pos_products')
+      .select('id, name, price, stock_quantity')
+      .eq('business_id', business_id)
+      .eq('is_active', true)
+      .lte('stock_quantity', 0),
   ]);
 
   const products = productsRes.data ?? [];
@@ -93,6 +100,10 @@ export async function POST(req: Request) {
   const sales90 = salesLast90Res.data ?? [];
   const expiringLots = expiryRes.data ?? [];
   const allProducts = belowCostRes.data ?? [];
+  const outOfStockProducts = outOfStockRes.data ?? [];
+
+  if (belowCostRes.error) Sentry.captureException(belowCostRes.error, { tags: { route: 'aria/profit-analysis', query: 'belowCost' } });
+  if (outOfStockRes.error) Sentry.captureException(outOfStockRes.error, { tags: { route: 'aria/profit-analysis', query: 'outOfStock' } });
 
   // ANALYSIS 1 — Dead stock
   const soldProductIds = new Set(saleItems.map((si: any) => si.product_id));
@@ -108,17 +119,30 @@ export async function POST(req: Request) {
   const totalDiscountCents = discountSales.reduce((s: number, sale: any) => s + Math.round((sale.discount_amount ?? 0) * 100), 0);
 
   // ANALYSIS 3 — Stockout revenue loss
-  const outOfStockProducts = (belowCostRes.data ?? []).filter((p: any) => p.stock_quantity === 0 && p.is_active);
+  // velocityMap: units sold per product_id over last 60 days
   const velocityMap: Record<string, number> = {};
   for (const si of saleItems) {
     const id = (si as any).product_id;
     velocityMap[id] = (velocityMap[id] ?? 0) + ((si as any).quantity ?? 1);
   }
-  const stockoutItems = outOfStockProducts.map((p: any) => ({
-    name: p.name,
-    units_sold_60d: velocityMap[p.id] ?? 0,
-  })).filter((i: any) => i.units_sold_60d > 0);
-  const stockoutTotal = 0;
+  // Only count out-of-stock products that have a real sales velocity (i.e. were selling)
+  const stockoutItems = outOfStockProducts
+    .map((p: any) => {
+      const units60d = velocityMap[p.id] ?? 0;
+      const dailyVelocity = units60d / 60;
+      const priceCents = Math.round((p.price ?? 0) * 100);
+      return {
+        name: p.name,
+        units_sold_60d: units60d,
+        estimated_daily_loss_cents: Math.round(dailyVelocity * priceCents),
+      };
+    })
+    .filter((i: any) => i.units_sold_60d > 0);
+  // Revenue lost = daily velocity × price × 3 days (conservative avg stockout duration)
+  const stockoutTotal = stockoutItems.reduce(
+    (total: number, item: any) => total + item.estimated_daily_loss_cents * 3,
+    0,
+  );
 
   // ANALYSIS 4 — Expiry risk (warehouse)
   const expiryItems = expiringLots.map((l: any) => ({
