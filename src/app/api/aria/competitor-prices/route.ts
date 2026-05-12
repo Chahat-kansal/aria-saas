@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 export const maxDuration = 30
 
+import * as Sentry from '@sentry/nextjs'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import Anthropic from '@anthropic-ai/sdk'
 import { NextResponse } from 'next/server'
@@ -38,8 +39,10 @@ export async function POST(req: Request) {
       .gte('expires_at', new Date().toISOString())
       .order('searched_at', { ascending: false }).limit(10)
 
-    if (cached && cached.length >= 2) {
-      return buildResponse(product_name, ownPriceCents, ownMarginPct, cached.map(r => ({
+    // Exclude any previously cached entries that were AI-estimated (confidence: 'low')
+    const validCached = (cached || []).filter(r => r.confidence !== 'low')
+    if (validCached.length >= 2) {
+      return buildResponse(product_name, ownPriceCents, ownMarginPct, validCached.map(r => ({
         competitor_name: r.competitor_name,
         price_cents: r.competitor_price_cents,
         confidence: r.confidence,
@@ -49,7 +52,7 @@ export async function POST(req: Request) {
     }
 
     // Get nearby competitors for context
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://aria-saas-fot6.vercel.app'
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.ariaos.site'
     let nearbyNames: string[] = competitorNames || []
     if (nearbyNames.length === 0) {
       try {
@@ -107,20 +110,13 @@ Return [] if no prices found.`
       const match = jsonText.match(/\[[\s\S]*\]/)
       if (match) prices = JSON.parse(match[0])
     } catch {
-      // Web search unavailable — fall back to Claude text generation
-      try {
-        const fallbackRes = await client.messages.create({
-          model: 'claude-haiku-4-5-20251001',
-          max_tokens: 600,
-          messages: [{
-            role: 'user',
-            content: `Based on typical Australian retail pricing, estimate the price of "${product_name}" at these stores in ${businessCity}: ${nearbyNames.slice(0, 4).join(', ')}. Return ONLY a JSON array: [{"competitor_name":"Name","price_cents":1999,"in_stock":true,"confidence":"low"}]. Use realistic Australian prices.`,
-          }],
-        })
-        const text = fallbackRes.content[0].type === 'text' ? fallbackRes.content[0].text : ''
-        const m = text.match(/\[[\s\S]*\]/)
-        if (m) prices = JSON.parse(m[0])
-      } catch { /* return empty */ }
+      // Web search unavailable — never estimate; return honest "no data" response
+      return NextResponse.json({
+        competitors: [],
+        error: 'price_search_unavailable',
+        message: 'Live competitor price data is not available right now. We never show estimated or AI-generated prices — only verified data from web search.',
+        retryable: true,
+      }, { status: 200 })
     }
 
     // Save to cache
@@ -139,7 +135,13 @@ Return [] if no prices found.`
 
     return buildResponse(product_name, ownPriceCents, ownMarginPct, prices, false)
   } catch (err: unknown) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : 'Server error' }, { status: 500 })
+    Sentry.captureException(err, { tags: { route: 'aria/competitor-prices' } })
+    return NextResponse.json({
+      competitors: [],
+      error: 'price_search_unavailable',
+      message: 'Live competitor price data is not available right now. We never show estimated or AI-generated prices — only verified data from web search.',
+      retryable: true,
+    }, { status: 200 })
   }
 }
 
