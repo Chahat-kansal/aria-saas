@@ -1,5 +1,6 @@
 import { AriaBusinessData, AriaDataStatus } from '@/lib/aria/business-data';
 import { AriaTask, runAriaModel } from '@/lib/aria/model-router';
+import { trackAICall } from '@/lib/aria/ai-telemetry';
 
 export type AriaBrainMode =
   | 'daily'
@@ -241,19 +242,31 @@ async function analyse(mode: AriaBrainMode, data: AriaBusinessData, context?: ob
     return emptyOutput(data, 'Aria is ready, but live business data is not connected yet.', missing);
   }
 
-  const result = await runAriaModel({
-    task: taskForMode(mode),
-    systemPrompt: SYSTEM_PROMPT,
-    schema: OUTPUT_SCHEMA,
-    temperature: 0.15,
-    maxTokens: 800,
-    userPrompt: JSON.stringify({
-      mode,
-      context: context ?? null,
-      business_data: compactData(data),
-      instruction: 'Analyse only the provided real records. If evidence is thin or missing, say that clearly and return no unsupported recommendations.',
-    }),
-  });
+  const smartModes = new Set<AriaBrainMode>(['reorder', 'profit', 'supplier', 'explain'])
+  const model = smartModes.has(mode) ? 'claude-sonnet-4-6' : 'claude-haiku-4-5-20251001'
+
+  const result = await trackAICall(
+    {
+      route: 'aria/business-brain',
+      model,
+      businessId: data.business?.id ?? undefined,
+      industry: data.business?.industry ?? undefined,
+      purpose: `business-brain-${mode}`,
+    },
+    () => runAriaModel({
+      task: taskForMode(mode),
+      systemPrompt: SYSTEM_PROMPT,
+      schema: OUTPUT_SCHEMA,
+      temperature: 0.15,
+      maxTokens: 800,
+      userPrompt: JSON.stringify({
+        mode,
+        context: context ?? null,
+        business_data: compactData(data),
+        instruction: 'Analyse only the provided real records. If evidence is thin or missing, say that clearly and return no unsupported recommendations.',
+      }),
+    })
+  );
 
   if (!result.ok || !result.data) {
     return {

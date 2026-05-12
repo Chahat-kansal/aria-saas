@@ -1,8 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { createHash } from 'crypto';
 
-const client = new Anthropic();
-
 export interface InsightResult {
   bullets: string[];
   generated_at: string;
@@ -92,6 +90,8 @@ export async function generateInsight(opts: InsightOpts): Promise<InsightResult>
   }
 
   try {
+    if (!process.env.ANTHROPIC_API_KEY) return FALLBACK;
+    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
     const dataStr = JSON.stringify(data);
     const truncated = dataStr.length > 2048 ? dataStr.slice(0, 2048) + '…' : dataStr;
 
