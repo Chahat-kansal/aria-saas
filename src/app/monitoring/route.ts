@@ -35,11 +35,16 @@ export async function POST(request: Request) {
     }
 
     const projectId = dsnUrl.pathname.substring(1);
+    const publicKey = dsnUrl.username;
     const ingestUrl = `https://${dsnUrl.hostname}/api/${projectId}/envelope/`;
 
     const res = await fetch(ingestUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/x-sentry-envelope' },
+      headers: {
+        'Content-Type': 'application/x-sentry-envelope',
+        // Sentry's ingest authenticates via the DSN public key — required to avoid 403
+        'X-Sentry-Auth': `Sentry sentry_key=${publicKey}, sentry_version=7`,
+      },
       body: envelope,
     });
 
