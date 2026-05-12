@@ -89,7 +89,13 @@ async function _POST(req: Request) {
     if (query.limit) q = q.limit(query.limit);
 
     const { data, error } = await q;
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (error) {
+      // Table or column doesn't exist — return empty result rather than 500
+      if (error.code === '42P01' || error.code === '42703') {
+        return NextResponse.json({ result: [] });
+      }
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
 
     const result = aggregate(query, (data ?? []) as unknown as Record<string, unknown>[]);
     return NextResponse.json({ result });

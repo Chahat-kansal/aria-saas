@@ -28,11 +28,8 @@ export default function CompetitorsPage() {
     if (!business?.id) return;
     setScanning(true); setError('');
     try {
-      const res = await fetch('/api/aria/competitors', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ businessId: business.id, competitorUrl: competitorUrl || undefined }),
-      }).then(r => r.json());
+      const params = new URLSearchParams({ business_id: business.id, radius_m: '5000' });
+      const res = await fetch(`/api/aria/competitors?${params}`).then(r => r.json());
       if (res.error) throw new Error(res.error);
       setLastScanned(new Date().toISOString());
       load();

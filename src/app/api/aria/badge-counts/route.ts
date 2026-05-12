@@ -77,6 +77,7 @@ export const GET = withErrorCapture('aria/badge-counts', async (req: Request) =>
   if (!lowStockRaw.error && lowStockRaw.data) {
     low_stock = lowStockRaw.data.filter(
       (p: { stock_quantity: number | null; low_stock_threshold: number | null }) =>
+        (p.low_stock_threshold ?? 0) > 0 &&
         (p.stock_quantity ?? 0) <= (p.low_stock_threshold ?? 0),
     ).length;
   }
