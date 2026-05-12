@@ -1,12 +1,7 @@
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
 import Stripe from 'stripe';
-
-const PRICE_IDS: Record<string, string | undefined> = {
-  starter: process.env.STRIPE_STARTER_PRICE_ID,
-  growth:  process.env.STRIPE_GROWTH_PRICE_ID,
-  pro:     process.env.STRIPE_PRO_PRICE_ID,
-};
+import { getPriceId } from '@/lib/stripe';
 
 export async function POST(req: Request) {
   const supabase = createServerSupabaseClient();
@@ -80,8 +75,9 @@ export async function POST(req: Request) {
   }
 
   // First business — standard plan checkout
-  const priceId = PRICE_IDS[plan];
-  if (!priceId) return NextResponse.json({ url: null });
+  let priceId: string;
+  try { priceId = getPriceId(plan as 'starter' | 'growth' | 'pro'); }
+  catch { return NextResponse.json({ url: null }); }
 
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2024-06-20' });
 

@@ -11,19 +11,6 @@ function daysAgo(date: string | null) {
   return Math.floor((Date.now() - new Date(date).getTime()) / 86400000);
 }
 
-async function sendSMS(twilioSid: string, twilioToken: string, twilioFrom: string, to: string, body: string) {
-  const url = `https://api.twilio.com/2010-04-01/Accounts/${twilioSid}/Messages.json`;
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      Authorization: `Basic ${Buffer.from(`${twilioSid}:${twilioToken}`).toString('base64')}`,
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: new URLSearchParams({ From: twilioFrom, To: to, Body: body }),
-  });
-  return res.ok;
-}
-
 export default function WinbackPage() {
   const { business } = useBusinessContext();
   const [customers, setCustomers] = useState<LapsedCustomer[]>([]);

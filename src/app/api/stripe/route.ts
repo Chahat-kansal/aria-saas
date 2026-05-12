@@ -16,9 +16,9 @@ async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, u
 }
 
 function priceToTier(priceId: string | undefined): string {
-  if (priceId === process.env.STRIPE_PRICE_STARTER) return 'starter'
-  if (priceId === process.env.STRIPE_PRICE_GROWTH) return 'growth'
-  if (priceId === process.env.STRIPE_PRICE_AUTONOMOUS) return 'autonomous'
+  if (priceId === process.env.STRIPE_PRICE_ID_STARTER) return 'starter'
+  if (priceId === process.env.STRIPE_PRICE_ID_GROWTH) return 'growth'
+  if (priceId === process.env.STRIPE_PRICE_ID_PRO) return 'pro'
   return 'starter'
 }
 
@@ -126,13 +126,11 @@ export async function POST(request: NextRequest) {
   if (action === 'create_checkout') {
     const { tier } = await request.json() as { tier: string }
 
-    const priceMap: Record<string, string | undefined> = {
-      starter: process.env.STRIPE_PRICE_STARTER,
-      growth: process.env.STRIPE_PRICE_GROWTH,
-      autonomous: process.env.STRIPE_PRICE_AUTONOMOUS,
-    }
-    const priceId = priceMap[tier]
-    if (!priceId) return NextResponse.json({ error: 'invalid_tier' }, { status: 400 })
+    const { getPriceId } = await import('@/lib/stripe')
+    const normTier = tier === 'autonomous' ? 'pro' : tier
+    let priceId: string
+    try { priceId = getPriceId(normTier as 'starter' | 'growth' | 'pro') }
+    catch { return NextResponse.json({ error: 'invalid_tier' }, { status: 400 }) }
 
     const { data: existingSub } = await supabase
       .from('business_subscriptions')

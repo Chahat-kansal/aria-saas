@@ -103,13 +103,11 @@ export async function POST(req: Request, { params }: Params) {
 
   if (action === 'checkout') {
     const { tier } = await req.json() as { tier: string };
-    const priceIds: Record<string, string | undefined> = {
-      starter: process.env.STRIPE_PRICE_ID_STARTER,
-      growth: process.env.STRIPE_PRICE_ID_GROWTH,
-      autonomous: process.env.STRIPE_PRICE_ID_AUTONOMOUS,
-    };
-    const priceId = priceIds[tier];
-    if (!priceId) return NextResponse.json({ error: 'Invalid tier' }, { status: 400 });
+    // Normalise 'autonomous' legacy alias → 'pro'
+    const normTier = tier === 'autonomous' ? 'pro' : tier;
+    let priceId: string;
+    try { const { getPriceId } = await import('@/lib/stripe'); priceId = getPriceId(normTier as 'starter' | 'growth' | 'pro'); }
+    catch { return NextResponse.json({ error: 'Invalid tier' }, { status: 400 }); }
 
     const { data: existingSub } = await supabase.from('business_subscriptions').select('stripe_customer_id').eq('business_id', bid).maybeSingle();
 
