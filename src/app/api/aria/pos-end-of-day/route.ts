@@ -6,6 +6,9 @@ import Anthropic from '@anthropic-ai/sdk';
 import { NextResponse } from 'next/server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { trackAICall } from '@/lib/aria/ai-telemetry'
+import { getBusinessContext, hasEnoughData } from '@/lib/aria/get-business-context'
+import { getSystemPrompt } from '@/lib/aria/get-system-prompt'
+import { writeAriaOutcome } from '@/lib/aria/write-outcome'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -129,8 +132,12 @@ async function _POST(req: Request) {
   try {
     const prompt = `Analyse today's trading for ${business?.name ?? 'the business'} and give a 3-sentence debrief for the owner closing up. Include: how today compared to 7-day average (today: A$${stats.today_revenue}, avg: A$${Math.round(sevenDayAvg * 100) / 100}, ${vsAvgPct !== null ? `${vsAvgPct > 0 ? '+' : ''}${vsAvgPct}%` : 'no comparison data'}), best-selling product (${topProduct ?? 'unknown'}), one actionable recommendation for tomorrow. Be warm and conversational.`;
 
-    const response = await trackAICall({ route: 'aria/pos-end-of-day', model: 'claude-haiku-4-5-20251001', businessId: business_id, purpose: 'pos-eod-summary' }, () => anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
+    const _bizCtx = await getBusinessContext(business_id)
+  const _industry = (JSON.parse(_bizCtx))?.business?.industry ?? 'retail'
+  const systemPrompt = getSystemPrompt(_industry as string, _bizCtx)
+  const response = 
+await trackAICall({ route: 'aria/pos-end-of-day', model: 'claude-sonnet-4-6', businessId: business_id, purpose: 'pos-eod-summary' }, () => anthropic.messages.create({
+      model: 'claude-sonnet-4-6',
       max_tokens: 200,
       messages: [{ role: 'user', content: prompt }],
     }));

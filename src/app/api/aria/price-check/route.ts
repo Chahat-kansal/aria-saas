@@ -6,6 +6,9 @@ import Anthropic from '@anthropic-ai/sdk';
 import { NextResponse } from 'next/server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { trackAICall } from '@/lib/aria/ai-telemetry'
+import { getBusinessContext, hasEnoughData } from '@/lib/aria/get-business-context'
+import { getSystemPrompt } from '@/lib/aria/get-system-prompt'
+import { writeAriaOutcome } from '@/lib/aria/write-outcome'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -80,8 +83,12 @@ async function _POST(req: Request) {
     const marginStr = currentMarginPct !== null ? `${currentMarginPct}%` : 'unknown';
     const prompt = `For ${productName} in ${category} category: current price A$${price}, cost A$${costPrice}, margin ${marginStr}, sold ${totalSold} units in 90 days (avg price A$${Math.round(avgPrice * 100) / 100}, ${txCount} transactions). Give a 2-sentence pricing recommendation. Be specific and direct.`;
 
-    const response = await trackAICall({ route: 'aria/price-check', model: 'claude-haiku-4-5-20251001', businessId: business_id, purpose: 'price-check' }, () => anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
+    const _bizCtx = await getBusinessContext(business_id)
+  const _industry = (JSON.parse(_bizCtx))?.business?.industry ?? 'retail'
+  const systemPrompt = getSystemPrompt(_industry as string, _bizCtx)
+  const response = 
+await trackAICall({ route: 'aria/price-check', model: 'claude-sonnet-4-6', businessId: business_id, purpose: 'price-check' }, () => anthropic.messages.create({
+      model: 'claude-sonnet-4-6',
       max_tokens: 150,
       messages: [{ role: 'user', content: prompt }],
     }));

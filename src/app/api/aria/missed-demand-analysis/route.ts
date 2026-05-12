@@ -8,6 +8,9 @@ import { NextResponse } from 'next/server';
 import { ARIA_VOICE } from '@/lib/aria-voice-guide';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { trackAICall } from '@/lib/aria/ai-telemetry'
+import { getBusinessContext, hasEnoughData } from '@/lib/aria/get-business-context'
+import { getSystemPrompt } from '@/lib/aria/get-system-prompt'
+import { writeAriaOutcome } from '@/lib/aria/write-outcome'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -67,10 +70,15 @@ async function _POST(req: Request) {
     });
   }
 
-  const msg = await trackAICall({ route: 'aria/missed-demand-analysis', model: 'claude-haiku-4-5-20251001', businessId: business_id, purpose: 'missed-demand-analysis' }, () => anthropic.messages.create({
-    model: 'claude-haiku-4-5-20251001',
+  const _bizCtx = await getBusinessContext(business_id)
+  const _industry = (JSON.parse(_bizCtx))?.business?.industry ?? 'retail'
+  const systemPrompt = getSystemPrompt(_industry as string, _bizCtx)
+  const msg = 
+await trackAICall({ route: 'aria/missed-demand-analysis', model: 'claude-sonnet-4-6', businessId: business_id, purpose: 'missed-demand-analysis' }, () => anthropic.messages.create({
+    model: 'claude-sonnet-4-6',
     max_tokens: 300,
-    system: `${ARIA_VOICE}\n\nReturn ONLY valid JSON.`,
+      temperature: 0.4,
+    system: [{ type: 'text' as const, text: systemPrompt, cache_control: { type: 'ephemeral' as const } }],
     messages: [{
       role: 'user',
       content: `Analyse this missed demand item for an Australian ${bizData.industry ?? 'retail'} business:

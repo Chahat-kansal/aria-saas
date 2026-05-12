@@ -9,6 +9,9 @@ import { ARIA_VOICE } from '@/lib/aria-voice-guide';
 import { NextResponse } from 'next/server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { trackAICall } from '@/lib/aria/ai-telemetry'
+import { getBusinessContext, hasEnoughData } from '@/lib/aria/get-business-context'
+import { getSystemPrompt } from '@/lib/aria/get-system-prompt'
+import { writeAriaOutcome } from '@/lib/aria/write-outcome'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -122,9 +125,14 @@ async function _POST(req: Request) {
   const daysSince = customer.last_visit ? Math.floor((Date.now() - new Date(customer.last_visit).getTime()) / 86400000) : null;
   let messageText = body.message ?? '';
   if (!messageText) {
-    const response = await trackAICall({ route: 'aria/winback', model: 'claude-haiku-4-5-20251001', businessId: business_id, purpose: 'winback-sms-draft' }, () => anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001', max_tokens: 200,
-      system: `${ARIA_VOICE}\n\nWrite concise, personalised SMS messages. Return ONLY the SMS text, no explanation.`,
+    const _bizCtx = await getBusinessContext(business_id)
+  const _industry = (JSON.parse(_bizCtx))?.business?.industry ?? 'retail'
+  const systemPrompt = getSystemPrompt(_industry as string, _bizCtx)
+  const response = 
+await trackAICall({ route: 'aria/winback', model: 'claude-sonnet-4-6', businessId: business_id, purpose: 'winback-sms-draft' }, () => anthropic.messages.create({
+      model: 'claude-sonnet-4-6', max_tokens: 200,
+      temperature: 0.75,
+      system: [{ type: 'text' as const, text: systemPrompt, cache_control: { type: 'ephemeral' as const } }],
       messages: [{ role: 'user', content: `Write a short, friendly winback SMS (max 160 chars) for customer: ${customer.name}, business: ${business.name} (${business.industry}), days since last visit: ${daysSince ?? 'unknown'}. Include a personalised offer.` }],
     }));
     messageText = response.content.filter(b => b.type === 'text').map(b => b.text).join('').trim();

@@ -3,6 +3,9 @@ import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { trackAICall } from '@/lib/aria/ai-telemetry'
+import { getBusinessContext, hasEnoughData } from '@/lib/aria/get-business-context'
+import { getSystemPrompt } from '@/lib/aria/get-system-prompt'
+import { writeAriaOutcome } from '@/lib/aria/write-outcome'
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -42,8 +45,8 @@ async function _POST(req: Request) {
     : null;
 
   try {
-    const msg = await trackAICall({ route: 'aria/staff-visa-insight', model: 'claude-haiku-4-5-20251001', businessId: business_id, purpose: 'staff-visa-insight' }, () => anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
+    const msg = await trackAICall({ route: 'aria/staff-visa-insight', model: 'claude-sonnet-4-6', businessId: business_id, purpose: 'staff-visa-insight' }, () => anthropic.messages.create({
+      model: 'claude-sonnet-4-6',
       max_tokens: 400,
       system: `You are Aria, an AI advisor for Australian businesses. Provide factual, helpful guidance about a staff member's visa situation in 2-4 plain English sentences. Note: you cannot give immigration legal advice — recommend consulting a registered migration agent for complex matters. Be specific and actionable.`,
       messages: [{

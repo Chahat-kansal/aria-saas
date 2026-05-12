@@ -7,6 +7,9 @@ import { ARIA_VOICE } from '@/lib/aria-voice-guide';
 import { getWeatherForecast, getUpcomingHolidays, getHolidayUplift, getWeatherUplift } from '@/lib/external-apis';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { trackAICall } from '@/lib/aria/ai-telemetry'
+import { getBusinessContext, hasEnoughData } from '@/lib/aria/get-business-context'
+import { getSystemPrompt } from '@/lib/aria/get-system-prompt'
+import { writeAriaOutcome } from '@/lib/aria/write-outcome'
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -150,10 +153,15 @@ async function _POST(req: Request) {
         upcoming_holidays: upcomingHolidays.map(h => `${h.name} in ${h.days_away} days`),
       };
 
-      const msg = await trackAICall({ route: 'aria/reorder-forecast', model: 'claude-haiku-4-5-20251001', businessId: business_id, purpose: 'reorder-summary' }, () => anthropic.messages.create({
-        model: 'claude-haiku-4-5-20251001',
+      const _bizCtx = await getBusinessContext(business_id)
+  const _industry = (JSON.parse(_bizCtx))?.business?.industry ?? 'retail'
+  const systemPrompt = getSystemPrompt(_industry as string, _bizCtx)
+  const msg = 
+await trackAICall({ route: 'aria/reorder-forecast', model: 'claude-sonnet-4-6', businessId: business_id, purpose: 'reorder-summary' }, () => anthropic.messages.create({
+        model: 'claude-sonnet-4-6',
         max_tokens: 600,
-        system: `${ARIA_VOICE}\n\nReturn ONLY valid JSON, no markdown, no preamble.`,
+      temperature: 0.4,
+        system: [{ type: 'text' as const, text: systemPrompt, cache_control: { type: 'ephemeral' as const } }],
         messages: [{
           role: 'user',
           content: `Reorder data: ${JSON.stringify(context)}

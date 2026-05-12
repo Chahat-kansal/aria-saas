@@ -7,6 +7,9 @@ import { NextResponse } from 'next/server';
 import { ARIA_VOICE } from '@/lib/aria-voice-guide';
 import { withErrorCapture } from '@/lib/api/with-error-capture';
 import { trackAICall } from '@/lib/aria/ai-telemetry';
+import { getBusinessContext, hasEnoughData } from '@/lib/aria/get-business-context'
+import { getSystemPrompt } from '@/lib/aria/get-system-prompt'
+import { writeAriaOutcome } from '@/lib/aria/write-outcome'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -102,7 +105,11 @@ export const POST = withErrorCapture('aria/feature-builder', async (req: Request
     const bizCtx = `Business: ${(biz as Record<string,unknown>).name} (${(biz as Record<string,unknown>).industry ?? 'retail'}, Australia, currency: A$)`;
 
     try {
-      const msg = await trackAICall(
+      const _bizCtx = await getBusinessContext(business_id)
+  const _industry = (JSON.parse(_bizCtx))?.business?.industry ?? 'retail'
+  const systemPrompt = getSystemPrompt(_industry as string, _bizCtx)
+  const msg = 
+await trackAICall(
         {
           route: 'aria/feature-builder',
           model: 'claude-sonnet-4-6',
@@ -113,6 +120,7 @@ export const POST = withErrorCapture('aria/feature-builder', async (req: Request
         () => anthropic.messages.create({
           model: 'claude-sonnet-4-6',
           max_tokens: 1200,
+      temperature: 0.2,
           system: GENERATE_SYSTEM,
           messages: [{ role: 'user', content: `${bizCtx}\n\nFeature request: "${feature_request}"` }],
         })

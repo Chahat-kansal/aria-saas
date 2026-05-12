@@ -5,6 +5,9 @@ import { calculateVariance } from '@/lib/business-data';
 import { NextResponse } from 'next/server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { trackAICall } from '@/lib/aria/ai-telemetry'
+import { getBusinessContext, hasEnoughData } from '@/lib/aria/get-business-context'
+import { getSystemPrompt } from '@/lib/aria/get-system-prompt'
+import { writeAriaOutcome } from '@/lib/aria/write-outcome'
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -40,10 +43,15 @@ async function _POST(req: Request) {
 
   if (significant.length > 0) {
     try {
-      const msg = await trackAICall({ route: 'aria/variance', model: 'claude-haiku-4-5-20251001', businessId: business_id, purpose: 'variance-insights' }, () => anthropic.messages.create({
-        model: 'claude-haiku-4-5-20251001',
+      const _bizCtx = await getBusinessContext(business_id)
+  const _industry = (JSON.parse(_bizCtx))?.business?.industry ?? 'retail'
+  const systemPrompt = getSystemPrompt(_industry as string, _bizCtx)
+  const msg = 
+await trackAICall({ route: 'aria/variance', model: 'claude-sonnet-4-6', businessId: business_id, purpose: 'variance-insights' }, () => anthropic.messages.create({
+        model: 'claude-sonnet-4-6',
         max_tokens: 800,
-        system: 'You are Aria. Return ONLY valid JSON array, no markdown.',
+      temperature: 0.4,
+        system: [{ type: 'text' as const, text: systemPrompt, cache_control: { type: 'ephemeral' as const } }],
         messages: [{
           role: 'user',
           content: `Generate brief AI insights for these stock variance items for ${business.name}. Return JSON array:

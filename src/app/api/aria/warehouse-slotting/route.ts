@@ -5,6 +5,9 @@ import { getBusinessSales, getBusinessItems } from '@/lib/business-data';
 import { NextResponse } from 'next/server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { trackAICall } from '@/lib/aria/ai-telemetry'
+import { getBusinessContext, hasEnoughData } from '@/lib/aria/get-business-context'
+import { getSystemPrompt } from '@/lib/aria/get-system-prompt'
+import { writeAriaOutcome } from '@/lib/aria/write-outcome'
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -56,12 +59,14 @@ async function _POST(req: Request) {
   }
 
   try {
-    const msg = await trackAICall({ route: 'aria/warehouse-slotting', model: 'claude-haiku-4-5-20251001', businessId: business_id, purpose: 'warehouse-slotting' }, () => anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
+    const _bizCtx = await getBusinessContext(business_id)
+  const _industry = (JSON.parse(_bizCtx))?.business?.industry ?? 'retail'
+  const systemPrompt = getSystemPrompt(_industry as string, _bizCtx)
+  const msg = 
+await trackAICall({ route: 'aria/warehouse-slotting', model: 'claude-sonnet-4-6', businessId: business_id, purpose: 'warehouse-slotting' }, () => anthropic.messages.create({
+      model: 'claude-sonnet-4-6',
       max_tokens: 1000,
-      system: `${ARIA_VOICE}
-
-You are a warehouse optimization expert. Return ONLY valid JSON array, no markdown.`,
+      system: [{ type: 'text' as const, text: systemPrompt, cache_control: { type: 'ephemeral' as const } }],
       messages: [{
         role: 'user',
         content: `Suggest optimal bin locations. High-velocity items should be in Zone A, low bay numbers (near dispatch). Low-velocity items can be in back zones.

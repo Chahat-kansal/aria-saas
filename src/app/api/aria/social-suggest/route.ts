@@ -11,6 +11,9 @@ import Anthropic from '@anthropic-ai/sdk';
 import { NextResponse } from 'next/server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { trackAICall } from '@/lib/aria/ai-telemetry'
+import { getBusinessContext, hasEnoughData } from '@/lib/aria/get-business-context'
+import { getSystemPrompt } from '@/lib/aria/get-system-prompt'
+import { writeAriaOutcome } from '@/lib/aria/write-outcome'
 
 function getNextPostTime(timeStr: string, _platform: string, _prefs: any): string {
   const days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
@@ -113,10 +116,15 @@ async function _POST(req: Request) {
   const count = Math.min(req_count || 3, 5);
 
   const client = new Anthropic();
-  const msg = await trackAICall({ route: 'aria/social-suggest', model: 'claude-sonnet-4-6', businessId: business_id, purpose: 'social-post-generate' }, () => client.messages.create({
+  const _bizCtx = await getBusinessContext(business_id)
+  const _industry = (JSON.parse(_bizCtx))?.business?.industry ?? 'retail'
+  const systemPrompt = getSystemPrompt(_industry as string, _bizCtx, 'social-suggest')
+  const msg = 
+await trackAICall({ route: 'aria/social-suggest', model: 'claude-sonnet-4-6', businessId: business_id, purpose: 'social-post-generate' }, () => client.messages.create({
     model: 'claude-sonnet-4-6',
     max_tokens: 2000,
-    system: ARIA_VOICE + '\n\n' + strategyContext,
+      temperature: 0.75,
+    system: [{ type: 'text' as const, text: systemPrompt, cache_control: { type: 'ephemeral' as const } }],
     messages: [{
       role: 'user',
       content: `Generate ${count} social media post suggestions for this business.

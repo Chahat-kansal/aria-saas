@@ -6,6 +6,9 @@ import Anthropic from '@anthropic-ai/sdk';
 import { NextResponse } from 'next/server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { trackAICall } from '@/lib/aria/ai-telemetry'
+import { getBusinessContext, hasEnoughData } from '@/lib/aria/get-business-context'
+import { getSystemPrompt } from '@/lib/aria/get-system-prompt'
+import { writeAriaOutcome } from '@/lib/aria/write-outcome'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -45,9 +48,10 @@ async function _POST(req: Request) {
   const avgBasket = salesSummary.length > 0 ? totalSpend / salesSummary.length : 0;
 
   try {
-    const msg = await trackAICall({ route: 'aria/customer-intel', model: 'claude-haiku-4-5-20251001', businessId: undefined, purpose: 'customer-intel' }, () => anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
+    const msg = await trackAICall({ route: 'aria/customer-intel', model: 'claude-sonnet-4-6', businessId: undefined, purpose: 'customer-intel' }, () => anthropic.messages.create({
+      model: 'claude-sonnet-4-6',
       max_tokens: 400,
+      temperature: 0.6,
       messages: [{
         role: 'user',
         content: `Analyse this Australian retail customer for a POS intelligence panel.

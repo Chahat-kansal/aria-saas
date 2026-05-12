@@ -6,6 +6,9 @@ import Anthropic from '@anthropic-ai/sdk';
 import { NextResponse } from 'next/server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { trackAICall } from '@/lib/aria/ai-telemetry'
+import { getBusinessContext, hasEnoughData } from '@/lib/aria/get-business-context'
+import { getSystemPrompt } from '@/lib/aria/get-system-prompt'
+import { writeAriaOutcome } from '@/lib/aria/write-outcome'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -56,8 +59,12 @@ Recent reviews: ${(recentReviews || []).map(r => `${r.rating}★`).join(', ') ||
   `.trim();
 
   try {
-    const response = await trackAICall({ route: 'aria/briefing', model: 'claude-haiku-4-5-20251001', businessId: businessId, purpose: 'daily-briefing' }, () => anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
+    const _bizCtx = await getBusinessContext(businessId)
+  const _industry = (JSON.parse(_bizCtx))?.business?.industry ?? 'retail'
+  const systemPrompt = getSystemPrompt(_industry as string, _bizCtx)
+  const response = 
+await trackAICall({ route: 'aria/briefing', model: 'claude-sonnet-4-6', businessId: businessId, purpose: 'daily-briefing' }, () => anthropic.messages.create({
+      model: 'claude-sonnet-4-6',
       max_tokens: 300,
       messages: [{
         role: 'user',

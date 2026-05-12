@@ -6,6 +6,9 @@ import Anthropic from '@anthropic-ai/sdk';
 import { NextResponse } from 'next/server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { trackAICall } from '@/lib/aria/ai-telemetry'
+import { getBusinessContext, hasEnoughData } from '@/lib/aria/get-business-context'
+import { getSystemPrompt } from '@/lib/aria/get-system-prompt'
+import { writeAriaOutcome } from '@/lib/aria/write-outcome'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -65,9 +68,14 @@ Return a JSON object with this exact structure:
 Use realistic Australian pricing for the industry. Return ONLY the JSON.`;
 
   try {
-    const response = await trackAICall({ route: 'aria/generate-quote', model: 'claude-sonnet-4-6', businessId: businessId, purpose: 'quote-generate' }, () => anthropic.messages.create({
+    const _bizCtx = await getBusinessContext(businessId)
+  const _industry = (JSON.parse(_bizCtx))?.business?.industry ?? 'retail'
+  const systemPrompt = getSystemPrompt(_industry as string, _bizCtx)
+  const response = 
+await trackAICall({ route: 'aria/generate-quote', model: 'claude-sonnet-4-6', businessId: businessId, purpose: 'quote-generate' }, () => anthropic.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 1500,
+      temperature: 0.2,
       messages: [{ role: 'user', content: prompt }],
     }));
 

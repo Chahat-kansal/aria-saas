@@ -3,6 +3,9 @@ import { createServerSupabaseClient } from '@/lib/supabase-server';
 import Anthropic from '@anthropic-ai/sdk';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { trackAICall } from '@/lib/aria/ai-telemetry'
+import { getBusinessContext, hasEnoughData } from '@/lib/aria/get-business-context'
+import { getSystemPrompt } from '@/lib/aria/get-system-prompt'
+import { writeAriaOutcome } from '@/lib/aria/write-outcome'
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -109,8 +112,12 @@ async function _POST(req: NextRequest) {
     try {
       const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
       const itemNames = cart_items.map((i: any) => i.product?.name ?? i.product_name ?? 'item').join(', ');
-      const resp = await trackAICall({ route: 'aria/price-intelligence', model: 'claude-haiku-4-5-20251001', businessId: business_id, purpose: 'price-intelligence' }, () => anthropic.messages.create({
-        model: 'claude-haiku-4-5-20251001',
+      const _bizCtx = await getBusinessContext(business_id)
+  const _industry = (JSON.parse(_bizCtx))?.business?.industry ?? 'retail'
+  const systemPrompt = getSystemPrompt(_industry as string, _bizCtx)
+  const resp = 
+await trackAICall({ route: 'aria/price-intelligence', model: 'claude-sonnet-4-6', businessId: business_id, purpose: 'price-intelligence' }, () => anthropic.messages.create({
+        model: 'claude-sonnet-4-6',
         max_tokens: 60,
         messages: [{ role: 'user', content: `Cart: ${itemNames}. Total: A$${cartTotal.toFixed(2)}. One 1-sentence upsell tip for staff. Be specific, short, Australian.` }],
       }));

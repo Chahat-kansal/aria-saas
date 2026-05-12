@@ -7,6 +7,9 @@ import { NextResponse } from 'next/server';
 import { ARIA_VOICE } from '@/lib/aria-voice-guide';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { trackAICall } from '@/lib/aria/ai-telemetry'
+import { getBusinessContext, hasEnoughData } from '@/lib/aria/get-business-context'
+import { getSystemPrompt } from '@/lib/aria/get-system-prompt'
+import { writeAriaOutcome } from '@/lib/aria/write-outcome'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -39,13 +42,18 @@ interface PageInsightResult {
   link?: string;
 }
 
-async function callClaude(prompt: string): Promise<string> {
-  const msg = await trackAICall({ route: 'aria/page-insight', model: 'claude-haiku-4-5-20251001', businessId: undefined, purpose: 'page-insight' }, () => anthropic.messages.create({
-    model: 'claude-haiku-4-5-20251001',
-    max_tokens: 80,
-    system: `${ARIA_VOICE}\n\nRespond in ONE sentence only. Be specific with numbers. Australian business context.`,
-    messages: [{ role: 'user', content: prompt }],
-  }));
+async function callClaude(prompt: string, systemPrompt?: string): Promise<string> {
+  const sys = systemPrompt ?? 'You are Aria, an AI business co-owner. Be specific and concise.'
+  const msg = await trackAICall(
+    { route: 'aria/page-insight', model: 'claude-sonnet-4-6', businessId: undefined, purpose: 'page-insight' },
+    () => anthropic.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 80,
+      temperature: 0.4,
+      system: [{ type: 'text' as const, text: sys, cache_control: { type: 'ephemeral' as const } }],
+      messages: [{ role: 'user', content: prompt }],
+    })
+  )
   return msg.content[0].type === 'text' ? msg.content[0].text.trim() : '';
 }
 
@@ -77,6 +85,10 @@ async function _POST(req: Request): Promise<Response> {
     .eq('user_id', user.id)
     .maybeSingle();
   if (!biz) return NextResponse.json({ insight: null });
+
+  const _bizCtx = await getBusinessContext(business_id)
+  const _industry = (JSON.parse(_bizCtx))?.business?.industry ?? 'retail'
+  const systemPrompt = getSystemPrompt(_industry as string, _bizCtx)
 
   const page = (body.page ?? '').toLowerCase().trim();
   const bizName = (biz as { id: string; name: string }).name ?? 'your business';
@@ -118,7 +130,7 @@ async function _POST(req: Request): Promise<Response> {
 
       const insight = await callClaude(
         `In ONE sentence, give the most important insight about stock for ${bizName} based on this data: ${context}. Be specific with numbers. Australian business context.`
-      );
+      , systemPrompt);
 
       const priority: Priority =
         outOfStock.length > 0 ? 'critical' : below.length > 0 ? 'warning' : 'info';
@@ -137,7 +149,7 @@ async function _POST(req: Request): Promise<Response> {
 
       const insight = await callClaude(
         `In ONE sentence, give the most important insight about winback for ${bizName} based on this data: ${context}. Be specific with numbers. Australian business context.`
-      );
+      , systemPrompt);
 
       const priority: Priority = count > 20 ? 'warning' : 'info';
       return NextResponse.json({ insight, priority, link: '/dashboard/winback' } satisfies PageInsightResult);
@@ -163,7 +175,7 @@ async function _POST(req: Request): Promise<Response> {
 
       const insight = await callClaude(
         `In ONE sentence, give the most important insight about reviews for ${bizName} based on this data: ${context}. Be specific with numbers. Australian business context.`
-      );
+      , systemPrompt);
 
       const priority: Priority = count > 5 ? 'warning' : 'info';
       return NextResponse.json({ insight, priority, link: '/dashboard/reviews' } satisfies PageInsightResult);
@@ -188,7 +200,7 @@ async function _POST(req: Request): Promise<Response> {
 
       const insight = await callClaude(
         `In ONE sentence, give the most important insight about staff compliance for ${bizName} based on this data: ${context}. Be specific with numbers. Australian business context.`
-      );
+      , systemPrompt);
 
       const priority: Priority = count > 0 ? 'critical' : 'info';
       return NextResponse.json({ insight, priority, link: '/dashboard/staff' } satisfies PageInsightResult);
@@ -228,7 +240,7 @@ async function _POST(req: Request): Promise<Response> {
 
       const insight = await callClaude(
         `In ONE sentence, give the most important insight about variance for ${bizName} based on this data: ${context}. Be specific with numbers. Australian business context.`
-      );
+      , systemPrompt);
 
       const priority: Priority = varianceValue > 500 ? 'critical' : varianceValue > 100 ? 'warning' : 'info';
       return NextResponse.json({ insight, priority, link: '/dashboard/variance' } satisfies PageInsightResult);
@@ -274,7 +286,7 @@ async function _POST(req: Request): Promise<Response> {
 
       const insight = await callClaude(
         `In ONE sentence, give the most important insight about profit leaks for ${bizName} based on this data: ${context}. Be specific with numbers. Australian business context.`
-      );
+      , systemPrompt);
 
       const priority: Priority = totalDiscountValue > 500 ? 'critical' : totalDiscountValue > 100 ? 'warning' : 'info';
       return NextResponse.json({ insight, priority, link: '/dashboard/profit-leaks' } satisfies PageInsightResult);
@@ -305,7 +317,7 @@ async function _POST(req: Request): Promise<Response> {
 
       const insight = await callClaude(
         `In ONE sentence, give the most important insight about reorder for ${bizName} based on this data: ${context}. Be specific with numbers. Australian business context.`
-      );
+      , systemPrompt);
 
       const outOfStock = belowReorder.filter(
         (p: { stock_quantity: number | null }) => (p.stock_quantity ?? 0) <= 0
@@ -341,7 +353,7 @@ async function _POST(req: Request): Promise<Response> {
 
       const insight = await callClaude(
         `In ONE sentence, give the most important insight about pos/terminal for ${bizName} based on this data: ${context}. Be specific with numbers. Australian business context.`
-      );
+      , systemPrompt);
 
       return NextResponse.json({
         insight,
@@ -377,7 +389,7 @@ async function _POST(req: Request): Promise<Response> {
 
       const insight = await callClaude(
         `In ONE sentence, give the most important insight about dashboard for ${bizName} based on this data: ${context}. Be specific with numbers. Australian business context.`
-      );
+      , systemPrompt);
 
       const priority: Priority = outOfStockCount > 0 ? 'warning' : 'info';
       return NextResponse.json({ insight, priority } satisfies PageInsightResult);

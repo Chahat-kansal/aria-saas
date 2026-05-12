@@ -7,6 +7,9 @@ import { ARIA_VOICE } from '@/lib/aria-voice-guide';
 import { NextResponse } from 'next/server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { trackAICall } from '@/lib/aria/ai-telemetry'
+import { getBusinessContext, hasEnoughData } from '@/lib/aria/get-business-context'
+import { getSystemPrompt } from '@/lib/aria/get-system-prompt'
+import { writeAriaOutcome } from '@/lib/aria/write-outcome'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -56,6 +59,7 @@ Keep it warm and personal. Ask them to share their experience. Return ONLY the S
   const response = await trackAICall({ route: 'aria/review-request', model: 'claude-haiku-4-5-20251001', businessId: businessId, purpose: 'review-request-sms' }, () => anthropic.messages.create({
     model: 'claude-haiku-4-5-20251001',
     max_tokens: 200,
+      temperature: 0.75,
     system: `${ARIA_VOICE}\n\nWrite concise, warm review request SMS messages. Return ONLY the SMS text, no explanation.`,
     messages: [{ role: 'user', content: prompt }],
   }));

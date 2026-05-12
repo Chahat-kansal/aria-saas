@@ -10,6 +10,9 @@ import { ARIA_VOICE } from '@/lib/aria-voice-guide';
 import { getRBAData, getABSRetailBenchmarks } from '@/lib/external-apis';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { trackAICall } from '@/lib/aria/ai-telemetry'
+import { getBusinessContext, hasEnoughData } from '@/lib/aria/get-business-context'
+import { getSystemPrompt } from '@/lib/aria/get-system-prompt'
+import { writeAriaOutcome } from '@/lib/aria/write-outcome'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -208,16 +211,15 @@ Economic context:
 - CPI: ${absData?.cpi_annual_pct ?? 'N/A'}% annual
 Dead stock opportunity cost: capital locked at ${rbaData?.cash_rate_pct ?? 4.1}% cost of money.` : '';
 
-      const msg = await trackAICall({ route: 'aria/profit-analysis', model: 'claude-sonnet-4-6', businessId: business_id, purpose: 'profit-leak-analysis' }, () => anthropic.messages.create({
+      const _bizCtx = await getBusinessContext(business_id)
+  const _industry = (JSON.parse(_bizCtx))?.business?.industry ?? 'retail'
+  const systemPrompt = getSystemPrompt(_industry as string, _bizCtx)
+  const msg = 
+await trackAICall({ route: 'aria/profit-analysis', model: 'claude-sonnet-4-6', businessId: business_id, purpose: 'profit-leak-analysis' }, () => anthropic.messages.create({
         model: 'claude-sonnet-4-6',
         max_tokens: 2000,
-        system: `${ARIA_VOICE}
-
-Identify and explain profit leaks based on real business data.
-Be specific — name actual products, cite actual A$ amounts.
-Be direct — business owners need to know exactly where they're losing money.
-${economicContext}
-Return ONLY valid JSON.`,
+      temperature: 0.4,
+        system: [{ type: 'text' as const, text: systemPrompt, cache_control: { type: 'ephemeral' as const } }],
         messages: [{
           role: 'user',
           content: `Analyse these profit leaks for ${business.name} (${business.industry} in ${business.city ?? 'Australia'}) and return actionable insights:

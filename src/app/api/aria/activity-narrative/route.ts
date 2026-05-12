@@ -7,6 +7,9 @@ import Anthropic from '@anthropic-ai/sdk';
 import { NextResponse } from 'next/server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { trackAICall } from '@/lib/aria/ai-telemetry'
+import { getBusinessContext, hasEnoughData } from '@/lib/aria/get-business-context'
+import { getSystemPrompt } from '@/lib/aria/get-system-prompt'
+import { writeAriaOutcome } from '@/lib/aria/write-outcome'
 
 async function getBid(
   supabase: ReturnType<typeof createServerSupabaseClient>,
@@ -250,11 +253,14 @@ async function _GET(req: Request) {
         2,
       );
 
-      const response = await trackAICall({ route: 'aria/activity-narrative', model: 'claude-haiku-4-5-20251001', businessId: businessId, purpose: 'activity-narrative' }, () => anthropic.messages.create({
-        model: 'claude-haiku-4-5-20251001',
+      const _bizCtx = await getBusinessContext(businessId)
+  const _industry = (JSON.parse(_bizCtx))?.business?.industry ?? 'retail'
+  const systemPrompt = getSystemPrompt(_industry as string, _bizCtx)
+  const response = 
+await trackAICall({ route: 'aria/activity-narrative', model: 'claude-sonnet-4-6', businessId: businessId, purpose: 'activity-narrative' }, () => anthropic.messages.create({
+        model: 'claude-sonnet-4-6',
         max_tokens: 400,
-        system:
-          'Transform these business events into friendly narrative entries for the business owner. Each entry should feel like a colleague updating them. Use specific numbers. Australian context. A$ currency.',
+        system: [{ type: 'text' as const, text: systemPrompt, cache_control: { type: 'ephemeral' as const } }],
         messages: [
           {
             role: 'user',

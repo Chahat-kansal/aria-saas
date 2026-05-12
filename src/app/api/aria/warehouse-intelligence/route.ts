@@ -7,6 +7,9 @@ import { NextResponse } from 'next/server';
 import { ARIA_VOICE } from '@/lib/aria-voice-guide';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { trackAICall } from '@/lib/aria/ai-telemetry'
+import { getBusinessContext, hasEnoughData } from '@/lib/aria/get-business-context'
+import { getSystemPrompt } from '@/lib/aria/get-system-prompt'
+import { writeAriaOutcome } from '@/lib/aria/write-outcome'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -98,7 +101,11 @@ async function _POST(req: Request) {
   const businessCtx = `Business: ${(biz as any).name} (${(biz as any).industry ?? 'warehouse'}, ${(biz as any).city ?? 'Australia'})`;
 
   try {
-    const msg = await trackAICall({ route: 'aria/warehouse-intelligence', model: 'claude-sonnet-4-6', businessId: business_id, purpose: 'warehouse-intelligence' }, () => anthropic.messages.create({
+    const _bizCtx = await getBusinessContext(business_id)
+  const _industry = (JSON.parse(_bizCtx))?.business?.industry ?? 'retail'
+  const systemPrompt = getSystemPrompt(_industry as string, _bizCtx)
+  const msg = 
+await trackAICall({ route: 'aria/warehouse-intelligence', model: 'claude-sonnet-4-6', businessId: business_id, purpose: 'warehouse-intelligence' }, () => anthropic.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 400,
       system: WAREHOUSE_SYSTEM,

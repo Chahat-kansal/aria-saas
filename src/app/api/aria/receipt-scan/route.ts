@@ -4,6 +4,9 @@ import { getBusinessItems } from '@/lib/business-data';
 import { NextResponse } from 'next/server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { trackAICall } from '@/lib/aria/ai-telemetry'
+import { getBusinessContext, hasEnoughData } from '@/lib/aria/get-business-context'
+import { getSystemPrompt } from '@/lib/aria/get-system-prompt'
+import { writeAriaOutcome } from '@/lib/aria/write-outcome'
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -106,6 +109,7 @@ async function _POST(req: Request) {
     const response = await trackAICall({ route: 'aria/receipt-scan', model: 'claude-sonnet-4-6', businessId: business_id, purpose: 'receipt-scan-vision' }, () => anthropic.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 4096,
+      temperature: 0.2,
       messages: [{
         role: 'user',
         content: [

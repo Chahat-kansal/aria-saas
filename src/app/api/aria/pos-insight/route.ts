@@ -7,6 +7,9 @@ import Anthropic from '@anthropic-ai/sdk';
 import { NextResponse } from 'next/server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { trackAICall } from '@/lib/aria/ai-telemetry'
+import { getBusinessContext, hasEnoughData } from '@/lib/aria/get-business-context'
+import { getSystemPrompt } from '@/lib/aria/get-system-prompt'
+import { writeAriaOutcome } from '@/lib/aria/write-outcome'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -55,8 +58,12 @@ async function _POST(req: Request) {
   if (todayTx === 0) return NextResponse.json({ insight: `No sales yet today at ${biz?.name ?? 'your store'}. Open the register and start selling!`, cached: false });
 
   try {
-    const msg = await trackAICall({ route: 'aria/pos-insight', model: 'claude-haiku-4-5-20251001', businessId: business_id, purpose: 'pos-insight' }, () => anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
+    const _bizCtx = await getBusinessContext(business_id)
+  const _industry = (JSON.parse(_bizCtx))?.business?.industry ?? 'retail'
+  const systemPrompt = getSystemPrompt(_industry as string, _bizCtx)
+  const msg = 
+await trackAICall({ route: 'aria/pos-insight', model: 'claude-sonnet-4-6', businessId: business_id, purpose: 'pos-insight' }, () => anthropic.messages.create({
+      model: 'claude-sonnet-4-6',
       max_tokens: 200,
       messages: [{
         role: 'user',

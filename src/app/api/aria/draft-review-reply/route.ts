@@ -7,6 +7,9 @@ import Anthropic from '@anthropic-ai/sdk';
 import { NextResponse } from 'next/server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { trackAICall } from '@/lib/aria/ai-telemetry'
+import { getBusinessContext, hasEnoughData } from '@/lib/aria/get-business-context'
+import { getSystemPrompt } from '@/lib/aria/get-system-prompt'
+import { writeAriaOutcome } from '@/lib/aria/write-outcome'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -25,9 +28,10 @@ async function _POST(req: Request) {
   if (!review) return NextResponse.json({ error: 'Review not found' }, { status: 404 });
 
   try {
-    const msg = await trackAICall({ route: 'aria/draft-review-reply', model: 'claude-haiku-4-5-20251001', businessId: business_id, purpose: 'review-reply-draft' }, () => anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
+    const msg = await trackAICall({ route: 'aria/draft-review-reply', model: 'claude-sonnet-4-6', businessId: business_id, purpose: 'review-reply-draft' }, () => anthropic.messages.create({
+      model: 'claude-sonnet-4-6',
       max_tokens: 300,
+      temperature: 0.75,
       system: `You are writing a professional reply to a Google review for an Australian business. Be warm, genuine, specific. Under 100 words. Thank them for the feedback. If negative, acknowledge and offer to resolve.`,
       messages: [{
         role: 'user',

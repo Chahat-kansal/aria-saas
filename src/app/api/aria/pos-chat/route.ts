@@ -10,6 +10,9 @@ import { getWeatherForecast, getUpcomingHolidays } from '@/lib/external-apis'
 import { trackUsage } from '@/lib/track-usage'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { trackAICall } from '@/lib/aria/ai-telemetry'
+import { getBusinessContext, hasEnoughData } from '@/lib/aria/get-business-context'
+import { getSystemPrompt } from '@/lib/aria/get-system-prompt'
+import { writeAriaOutcome } from '@/lib/aria/write-outcome'
 
 async function _POST(req: Request) {
   const supabase = createServerSupabaseClient()
@@ -403,9 +406,10 @@ TONE: Direct, specific, Australian English, A$ always.`
   }
 
   const client = new Anthropic()
-  const response = await trackAICall({ route: 'aria/pos-chat', model: 'claude-haiku-4-5-20251001', businessId: business_id, purpose: 'pos-chat' }, () => client.messages.create({
-    model: 'claude-haiku-4-5-20251001',
+  const response = await trackAICall({ route: 'aria/pos-chat', model: 'claude-sonnet-4-6', businessId: business_id, purpose: 'pos-chat' }, () => client.messages.create({
+    model: 'claude-sonnet-4-6',
     max_tokens: 1000,
+      temperature: 0.75,
     system: systemPrompt,
     messages: [{ role: 'user', content: message }],
   }))
