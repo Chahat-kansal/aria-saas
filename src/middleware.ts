@@ -4,6 +4,9 @@ import { NextResponse, type NextRequest } from 'next/server'
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
+  // Public tunnel routes — must never be intercepted by auth checks
+  if (pathname.startsWith('/monitoring')) return NextResponse.next()
+
   // Forward pathname for server components that need it (e.g. pos/layout.tsx)
   const requestHeaders = new Headers(request.headers)
   requestHeaders.set('x-next-pathname', pathname)
