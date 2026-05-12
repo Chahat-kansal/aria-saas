@@ -68,14 +68,15 @@ Return a JSON object with this exact structure:
 Use realistic Australian pricing for the industry. Return ONLY the JSON.`;
 
   try {
-    const _bizCtx = await getBusinessContext(businessId)
+    const _bizCtx = await getBusinessContext(bid)
   const _industry = (JSON.parse(_bizCtx))?.business?.industry ?? 'retail'
   const systemPrompt = getSystemPrompt(_industry as string, _bizCtx)
-  const response = 
-await trackAICall({ route: 'aria/generate-quote', model: 'claude-sonnet-4-6', businessId: businessId, purpose: 'quote-generate' }, () => anthropic.messages.create({
+  const response =
+await trackAICall({ route: 'aria/generate-quote', model: 'claude-sonnet-4-6', businessId: bid, purpose: 'quote-generate' }, () => anthropic.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 1500,
       temperature: 0.2,
+      system: [{ type: 'text' as const, text: systemPrompt, cache_control: { type: 'ephemeral' as const } }],
       messages: [{ role: 'user', content: prompt }],
     }));
 
@@ -110,6 +111,7 @@ await trackAICall({ route: 'aria/generate-quote', model: 'claude-sonnet-4-6', bu
       return NextResponse.json({ quote: quoteData, saved: false });
     }
 
+    await writeAriaOutcome(bid, 'quote-generated', `Quote ${quoteData.quoteNumber ?? ''} — ${jobDescription.slice(0, 80)}`).catch(() => null);
     return NextResponse.json({ quote: quoteData, id: saved.id, saved: true });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
@@ -148,11 +150,20 @@ async function _PATCH(req: Request) {
   const id = searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
 
+  // Resolve bid for ownership check
+  const { data: active } = await supabase
+    .from('user_active_business').select('business_id').eq('user_id', user.id).maybeSingle();
+  const bid = active?.business_id
+    ?? (await supabase.from('businesses').select('id').eq('user_id', user.id)
+        .eq('is_active', true).order('created_at', { ascending: true }).limit(1).maybeSingle()).data?.id;
+  if (!bid) return NextResponse.json({ error: 'No business found' }, { status: 404 });
+
   const body = await req.json();
   const { error } = await supabase
     .from('quotes')
     .update({ ...body, updated_at: new Date().toISOString() })
-    .eq('id', id);
+    .eq('id', id)
+    .eq('business_id', bid);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });

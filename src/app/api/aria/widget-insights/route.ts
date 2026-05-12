@@ -13,9 +13,6 @@ export const maxDuration = 30;
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-// Simple 1-hour in-memory cache
-const cache = new Map<string, { data: any; expires: number }>();
-
 async function _POST(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -27,10 +24,6 @@ async function _POST(req: Request) {
   const { data: biz } = await supabase.from('businesses').select('id').eq('id', business_id).eq('user_id', user.id).single();
   if (!biz) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-  const cacheKey = `insights_${business_id}`;
-  const cached = cache.get(cacheKey);
-  if (cached && cached.expires > Date.now()) return NextResponse.json(cached.data);
-
   // Fetch last 50 conversations
   const { data: convos } = await supabase
     .from('widget_conversations')
@@ -41,6 +34,10 @@ async function _POST(req: Request) {
 
   if (!convos || convos.length === 0) {
     return NextResponse.json({ themes: [], total_conversations: 0 });
+  }
+
+  if (!process.env.ANTHROPIC_API_KEY) {
+    return NextResponse.json({ themes: [], total_conversations: convos.length });
   }
 
   // Extract first user message from each conversation
@@ -56,7 +53,7 @@ async function _POST(req: Request) {
     const _bizCtx = await getBusinessContext(business_id)
   const _industry = (JSON.parse(_bizCtx))?.business?.industry ?? 'retail'
   const systemPrompt = getSystemPrompt(_industry as string, _bizCtx)
-  const msg = 
+  const msg =
 await trackAICall({ route: 'aria/widget-insights', model: 'claude-sonnet-4-6', businessId: business_id, purpose: 'widget-insights' }, () => anthropic.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 600,
@@ -75,9 +72,7 @@ Questions: ${JSON.stringify(userMessages.slice(0, 50))}`,
     if (m) themes = JSON.parse(m[0]);
   } catch { /* return empty themes */ }
 
-  const result = { themes, total_conversations: convos.length };
-  cache.set(cacheKey, { data: result, expires: Date.now() + 3600_000 });
-  return NextResponse.json(result);
+  return NextResponse.json({ themes, total_conversations: convos.length });
 }
 
 export const POST = withErrorCapture('aria/widget-insights', _POST)

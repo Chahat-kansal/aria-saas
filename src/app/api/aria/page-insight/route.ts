@@ -140,9 +140,9 @@ async function _POST(req: Request): Promise<Response> {
     if (page === 'winback') {
       const { data: lapsed } = await supabase
         .from('pos_customers')
-        .select('id, name, last_visit_date')
+        .select('id, name, last_visit')
         .eq('business_id', business_id)
-        .lt('last_visit_date', sixtyDaysAgo);
+        .lt('last_visit', sixtyDaysAgo);
 
       const count = (lapsed ?? []).length;
       const context = `${count} customers have not visited in over 60 days.`;
@@ -395,11 +395,8 @@ async function _POST(req: Request): Promise<Response> {
       return NextResponse.json({ insight, priority } satisfies PageInsightResult);
     }
 
-    // Default
-    return NextResponse.json({
-      insight: 'Your data looks healthy today.',
-      priority: 'info' as Priority,
-    } satisfies PageInsightResult);
+    // Default — no insight for unhandled pages
+    return NextResponse.json({ insight: null } satisfies PageInsightResult);
   } catch (err) {
     console.error('[aria/page-insight] error', err);
     return NextResponse.json({ insight: null } satisfies PageInsightResult);

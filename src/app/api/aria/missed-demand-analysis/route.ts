@@ -15,7 +15,6 @@ import { writeAriaOutcome } from '@/lib/aria/write-outcome'
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 async function _POST(req: Request) {
-  try {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -25,6 +24,7 @@ async function _POST(req: Request) {
     return NextResponse.json({ error: 'business_id and missed_demand_id required' }, { status: 400 });
   }
 
+  try {
   const { data: biz } = await supabase
     .from('businesses')
     .select('id, name, industry, city')
@@ -119,10 +119,11 @@ Return JSON:
     })
     .eq('id', missed_demand_id);
 
+  await writeAriaOutcome(business_id, 'missed-demand', `${parsed.recommendation}: ${(parsed.reasoning ?? '').slice(0, 100)}`).catch(() => null);
   return NextResponse.json(parsed);
   } catch (err: unknown) {
     Sentry.captureException(err, { tags: { route: 'aria/missed-demand-analysis' } });
-    return NextResponse.json({ data: [], status: 'error', message: 'temporarily_unavailable' }, { status: 200 });
+    return NextResponse.json({ data: null, status: 'error', message: 'Something went wrong.' }, { status: 500 });
   }
 }
 

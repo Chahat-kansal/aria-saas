@@ -16,7 +16,6 @@ export const maxDuration = 30;
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 async function _POST(req: Request) {
-  try {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -24,6 +23,7 @@ async function _POST(req: Request) {
   const { business_id } = await req.json();
   if (!business_id) return NextResponse.json({ error: 'business_id required' }, { status: 400 });
 
+  try {
   const { data: business } = await supabase.from('businesses')
     .select('id, name, data_source').eq('id', business_id).eq('user_id', user.id).single();
   if (!business) return NextResponse.json({ error: 'Business not found' }, { status: 404 });
@@ -46,7 +46,7 @@ async function _POST(req: Request) {
       const _bizCtx = await getBusinessContext(business_id)
   const _industry = (JSON.parse(_bizCtx))?.business?.industry ?? 'retail'
   const systemPrompt = getSystemPrompt(_industry as string, _bizCtx)
-  const msg = 
+  const msg =
 await trackAICall({ route: 'aria/variance', model: 'claude-sonnet-4-6', businessId: business_id, purpose: 'variance-insights' }, () => anthropic.messages.create({
         model: 'claude-sonnet-4-6',
         max_tokens: 800,
@@ -69,10 +69,11 @@ Items: ${JSON.stringify(significant.map(v => ({
     } catch { /* non-critical */ }
   }
 
+  await writeAriaOutcome(business_id, 'variance-analysis', `${variances.length} variance items analysed`).catch(() => null);
   return NextResponse.json({ items: variances, total_loss_cents: totalLoss, ai_insights: aiInsights });
   } catch (err: unknown) {
     Sentry.captureException(err, { tags: { route: 'aria/variance' } });
-    return NextResponse.json({ data: [], status: 'error', message: 'temporarily_unavailable' }, { status: 200 });
+    return NextResponse.json({ data: null, status: 'error', message: 'Something went wrong.' }, { status: 500 });
   }
 }
 

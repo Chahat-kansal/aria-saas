@@ -70,14 +70,11 @@ export default function SocialPage() {
 
   async function loadAll(businessId: string) {
     setLoadingPosts(true);
-    const [connRes, postsRes, prefsRes, bizRes] = await Promise.all([
-      fetch(`/api/social/posts?business_id=${businessId}`).then(r => r.json()).catch(() => ({ posts: [] })),
+    const [postsRes, prefsRes, bizRes] = await Promise.all([
       fetch(`/api/social/posts?business_id=${businessId}&status=draft`).then(r => r.json()).catch(() => ({ posts: [] })),
       fetch(`/api/social/preferences?business_id=${businessId}`).then(r => r.json()).catch(() => ({ preferences: null })),
       fetch('/api/businesses/current').then(r => r.json()).catch(() => null),
     ]);
-    // connections come from a different endpoint
-    const allConns = await fetch(`/api/social/posts?business_id=${businessId}`).then(r => r.json()).catch(() => ({ posts: [] }));
     setPosts(postsRes.posts ?? []);
     if (prefsRes.preferences) setPrefs(p => ({ ...p, ...prefsRes.preferences }));
     if (bizRes?.industry) setIndustry(bizRes.industry);

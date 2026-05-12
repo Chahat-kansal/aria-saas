@@ -63,16 +63,12 @@ async function _GET(req: Request) {
 
     const key = process.env.GOOGLE_PLACES_API_KEY
     if (!key) {
-      const industry = biz.industry || 'default'
-      const chains = AU_CHAINS[industry] ?? AU_CHAINS.default
-      const fallback = chains.map((name, i) => ({
-        business_id, competitor_name: name,
-        competitor_address: `${biz.city}, Australia`,
-        distance_m: (i + 1) * 800,
-        category: industry, google_rating: null,
-        phone: null, website: null, last_checked: new Date().toISOString(),
-      }))
-      return NextResponse.json({ competitors: fallback, from_cache: false, no_api_key: true })
+      return NextResponse.json({
+        competitors: [],
+        from_cache: false,
+        no_api_key: true,
+        message: 'Competitor scanning requires Google Places API key. Contact support to enable.',
+      })
     }
 
     // Geocode business address
@@ -94,45 +90,42 @@ async function _GET(req: Request) {
     const nearbyData = await nearbyRes.json()
     const places: any[] = nearbyData.results ?? []
 
-    // Filter own business, get details, calculate distances
+    // Filter own business and out-of-radius places first
     const bizFirstWord = biz.name.toLowerCase().split(' ')[0]
-    const competitors: any[] = []
-
-    for (const place of places.slice(0, 12)) {
-      if (place.name.toLowerCase().includes(bizFirstWord)) continue
-
+    const filteredPlaces = places.slice(0, 12).filter(place => {
+      if (place.name.toLowerCase().includes(bizFirstWord)) return false
       const pLat = place.geometry?.location?.lat ?? lat
       const pLng = place.geometry?.location?.lng ?? lng
-      const distance = Math.round(haversineMetres(lat, lng, pLat, pLng))
-      if (distance > radius_m) continue
+      return Math.round(haversineMetres(lat, lng, pLat, pLng)) <= radius_m
+    }).slice(0, 10)
 
-      // Get place details
-      let website: string | null = null
-      let phone: string | null = null
-      try {
-        const detailRes = await fetch(
-          `https://maps.googleapis.com/maps/api/place/details/json?place_id=${place.place_id}&fields=name,formatted_address,formatted_phone_number,website,rating&key=${key}`
-        )
-        const detail = await detailRes.json()
-        website = detail.result?.website ?? null
-        phone = detail.result?.formatted_phone_number ?? null
-      } catch { /* non-critical */ }
-
-      competitors.push({
-        business_id,
-        competitor_name: place.name,
-        competitor_address: place.vicinity || place.formatted_address || null,
-        competitor_place_id: place.place_id,
-        distance_m: distance,
-        category: biz.industry,
-        phone,
-        website,
-        google_rating: place.rating ?? null,
-        last_checked: new Date().toISOString(),
+    // Fetch all place details in parallel
+    const placeDetails = await Promise.all(
+      filteredPlaces.map(async (place) => {
+        try {
+          const detailRes = await fetch(
+            `https://maps.googleapis.com/maps/api/place/details/json?place_id=${place.place_id}&fields=name,formatted_address,formatted_phone_number,website,rating&key=${key}`
+          )
+          const detail = await detailRes.json()
+          return { website: detail.result?.website ?? null, phone: detail.result?.formatted_phone_number ?? null }
+        } catch {
+          return { website: null, phone: null }
+        }
       })
+    )
 
-      if (competitors.length >= 10) break
-    }
+    const competitors: any[] = filteredPlaces.map((place, i) => ({
+      business_id,
+      competitor_name: place.name,
+      competitor_address: place.vicinity || place.formatted_address || null,
+      competitor_place_id: place.place_id,
+      distance_m: Math.round(haversineMetres(lat, lng, place.geometry?.location?.lat ?? lat, place.geometry?.location?.lng ?? lng)),
+      category: biz.industry,
+      phone: placeDetails[i].phone,
+      website: placeDetails[i].website,
+      google_rating: place.rating ?? null,
+      last_checked: new Date().toISOString(),
+    }))
 
     // Sort by distance
     competitors.sort((a, b) => a.distance_m - b.distance_m)
