@@ -1,6 +1,8 @@
 import { AriaBusinessData, AriaDataStatus } from '@/lib/aria/business-data';
 import { AriaTask, runAriaModel } from '@/lib/aria/model-router';
 import { trackAICall } from '@/lib/aria/ai-telemetry';
+import { getBusinessContext } from '@/lib/aria/get-business-context';
+import { getSystemPrompt } from '@/lib/aria/get-system-prompt';
 
 export type AriaBrainMode =
   | 'daily'
@@ -236,7 +238,7 @@ function normaliseOutput(value: any, data: AriaBusinessData): AriaBrainOutput {
   };
 }
 
-async function analyse(mode: AriaBrainMode, data: AriaBusinessData, context?: object): Promise<AriaBrainOutput> {
+async function analyse(mode: AriaBrainMode, data: AriaBusinessData, context?: object, systemPromptOverride?: string): Promise<AriaBrainOutput> {
   const missing = enoughForMode(data, mode);
   if (missing.length > 0 && mode !== 'explain' && mode !== 'chat') {
     return emptyOutput(data, 'Aria is ready, but live business data is not connected yet.', missing);
@@ -255,7 +257,7 @@ async function analyse(mode: AriaBrainMode, data: AriaBusinessData, context?: ob
     },
     () => runAriaModel({
       task: taskForMode(mode),
-      systemPrompt: SYSTEM_PROMPT,
+      systemPrompt: systemPromptOverride ?? SYSTEM_PROMPT,
       schema: OUTPUT_SCHEMA,
       temperature: 0.15,
       maxTokens: 800,
@@ -318,8 +320,17 @@ export function explainRecommendation(input: AriaBusinessData, context?: object)
   return analyse('explain', input, context);
 }
 
-export function chatWithBusinessBrain(input: AriaBusinessData, context?: object) {
-  return analyse('chat', input, context);
+export async function chatWithBusinessBrain(input: AriaBusinessData, context?: object): Promise<AriaBrainOutput> {
+  let systemPromptOverride: string | undefined
+  const businessId = (input.business as any)?.id as string | undefined
+  const industry = ((input.business as any)?.industry as string | undefined) ?? 'retail'
+  if (businessId) {
+    try {
+      const businessContext = await getBusinessContext(businessId)
+      systemPromptOverride = getSystemPrompt(industry, businessContext)
+    } catch { /* fall back to generic SYSTEM_PROMPT */ }
+  }
+  return analyse('chat', input, context, systemPromptOverride)
 }
 
 export function convertInsightToAction(input: { recommendation: AriaRecommendation }) {

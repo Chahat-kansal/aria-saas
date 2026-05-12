@@ -222,27 +222,29 @@ await trackAICall({ route: 'aria/profit-analysis', model: 'claude-sonnet-4-6', b
         system: [{ type: 'text' as const, text: systemPrompt, cache_control: { type: 'ephemeral' as const } }],
         messages: [{
           role: 'user',
-          content: `Analyse these profit leaks for ${business.name} (${business.industry} in ${business.city ?? 'Australia'}) and return actionable insights:
+          content: `You are analysing profit leaks for ${business.name}, a ${business.industry} in ${business.city ?? 'Australia'}.
 
-${JSON.stringify(analyses, null, 2)}
+First, think through what the data is actually telling you. Which numbers are genuinely alarming vs just low? What would a sharp operator notice first? What's the single most urgent thing to fix this week?
 
-Return JSON:
+Then return your analysis as JSON:
 {
   "leaks": [{
     "id": "leak-001",
     "type": "dead_stock|discounting|stockout|expiry_risk|slow_days|below_cost",
-    "title": "max 8 words, specific",
-    "description": "max 40 words, cite real amounts and product names from the data",
+    "title": "max 8 words, specific — name the product or category",
+    "description": "max 40 words — cite real dollar amounts and product names",
     "estimated_monthly_impact_cents": number,
     "priority": "critical|high|medium",
-    "action": "one specific actionable sentence",
+    "action": "one specific sentence the owner can act on today",
     "action_type": "navigate|promote|reorder|reprice|review",
     "action_href": "/dashboard/... or null"
   }],
   "total_monthly_impact_cents": number,
-  "ai_summary": "2-3 sentences, total impact and top recommendation"
+  "ai_summary": "2-3 sentences. Lead with the biggest number. Name specific SKUs. End with the one thing to do today."
 }
-Only include leaks where there is actual data (non-zero amounts). Skip analyses with zero impact.`,
+Only include leaks with actual non-zero data.
+Data to analyse:
+${JSON.stringify(analyses, null, 2)}`,
         }],
       }));
 

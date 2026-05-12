@@ -3,7 +3,6 @@ import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { collectBusinessData } from '@/lib/aria/business-data';
 import { chatWithBusinessBrain } from '@/lib/aria/business-brain';
 import { withErrorCapture } from '@/lib/api/with-error-capture';
-import { getBusinessContext } from '@/lib/aria/get-business-context';
 import { writeAriaOutcome } from '@/lib/aria/write-outcome';
 
 export const runtime = 'nodejs';
@@ -84,9 +83,6 @@ export const POST = withErrorCapture('aria/business-chat', async (req: Request) 
     });
     return new Response(stream, { headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache, no-transform', Connection: 'keep-alive' } });
   }
-
-  // Pre-fetch business context for telemetry and future use
-  const _bizCtx = await getBusinessContext(business_id).catch(() => '{}')
 
   const _aiStart = Date.now()
   console.log(JSON.stringify({ type: 'aria_ai_call', status: 'started', route: 'aria/business-chat', model: 'claude-sonnet-4-6', purpose: 'chat-stream', ts: new Date().toISOString() }))
