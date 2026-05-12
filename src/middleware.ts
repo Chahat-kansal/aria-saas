@@ -115,5 +115,6 @@ export const config = {
     '/chat/:path*',
     '/settings/:path*',
     // NOTE: /pos is deliberately NOT here — POSAuthGate handles staff auth client-side
+    // NOTE: /monitoring is deliberately NOT here — public Sentry tunnel proxy, no auth needed
   ],
 }
