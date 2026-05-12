@@ -1843,7 +1843,7 @@ export default function TerminalPage() {
                           background: 'var(--bg-elevated)',
                           boxShadow: 'var(--shadow-card)',
                           borderRadius: 18,
-                          padding: 14,
+                          padding: 0,
                           cursor: 'pointer',
                           transition: 'all 150ms cubic-bezier(0.16,1,0.3,1)',
                           animation: `card-enter 0.35s cubic-bezier(0.16,1,0.3,1) ${idx * 30}ms both`,
@@ -1865,35 +1865,34 @@ export default function TerminalPage() {
                         onMouseDown={e => { const el = e.currentTarget as HTMLElement; el.style.transform = 'translateY(0) scale(0.96)'; }}
                         onMouseUp={e => { const el = e.currentTarget as HTMLElement; el.style.transform = 'translateY(-2px) scale(1.02)'; }}>
 
-                        {/* Category icon square */}
-                        <div style={{ width: 68, height: 68, borderRadius: 14, background: `linear-gradient(135deg,${m.a}44,${m.b}88)`, border: `1px solid ${m.a}44`, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 10, position: 'relative', overflow: 'hidden' }}>
-                          <div style={{ position: 'absolute', inset: 0, opacity: 0.2, background: `radial-gradient(circle at 30% 30%, ${m.a}, transparent 60%)` }} />
+                        {/* Product image — full-width top */}
+                        <div style={{ width: '100%', paddingTop: '70%', position: 'relative', background: `linear-gradient(135deg,${m.a}22,${m.b}44)`, overflow: 'hidden', borderRadius: '18px 18px 0 0' }}>
+                          <div style={{ position: 'absolute', inset: 0, opacity: 0.15, background: `radial-gradient(circle at 30% 30%, ${m.a}, transparent 60%)` }} />
                           {(p as any).image_url
-                            ? <img src={(p as any).image_url} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 14 }} />
-                            : <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 22, fontWeight: 800, color: m.a, letterSpacing: '-0.02em', position: 'relative' }}>{initials}</span>
+                            ? <img src={(p as any).image_url} alt={p.name} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+                            : <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'JetBrains Mono',monospace", fontSize: 28, fontWeight: 800, color: m.a, letterSpacing: '-0.02em' }}>{initials}</span>
                           }
                           {isOut && (
-                            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--destructive-bg)' }}>
+                            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.55)' }}>
                               <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 99, background: 'var(--destructive-bg)', color: 'var(--destructive)' }}>Out of Stock</span>
+                            </div>
+                          )}
+                          {isLow && !isOut && (
+                            <div style={{ position: 'absolute', top: 6, right: 6, background: 'rgba(245,158,11,0.9)', borderRadius: 99, padding: '1px 6px', fontSize: 9, fontWeight: 700, color: '#000' }}>
+                              {p.stock_quantity} left
                             </div>
                           )}
                         </div>
 
-                        {/* Name */}
-                        <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.3, marginBottom: 6, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const, overflow: 'hidden' }}>
-                          {p.name}
-                        </div>
-
-                        {/* Price */}
-                        <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>
-                          A${p.price.toFixed(2)}
-                        </div>
-
-                        {isLow && !isOut && (
-                          <div style={{ position: 'absolute', top: 8, right: 8, background: 'rgba(245,158,11,0.15)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: 99, padding: '1px 6px', fontSize: 9, fontWeight: 700, color: '#F59E0B' }}>
-                            {p.stock_quantity} left
+                        {/* Name + price */}
+                        <div style={{ padding: '10px 12px 12px' }}>
+                          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.3, marginBottom: 5, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const, overflow: 'hidden' }}>
+                            {p.name}
                           </div>
-                        )}
+                          <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 14, fontWeight: 700, color: m.a }}>
+                            A${p.price.toFixed(2)}
+                          </div>
+                        </div>
                       </div>
                     );
                   })}

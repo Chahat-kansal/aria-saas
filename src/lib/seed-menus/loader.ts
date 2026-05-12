@@ -24,7 +24,8 @@ export async function seedBusinessMenu(business_id: string, business_type: strin
       cost_price: p.cost ?? p.price * 0.4,
       description: p.description ?? null,
       container_type: p.container_type ?? 'unknown',
-      image_source: 'pending',
+      image_url: p.image_url ?? null,
+      image_source: p.image_url ? 'owner' : 'pending',
       is_active: true,
     }))
 
