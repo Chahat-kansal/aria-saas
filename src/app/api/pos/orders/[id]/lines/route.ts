@@ -1,8 +1,8 @@
 export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
-import { addOrderLine } from '@/lib/orders/queries'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { addOrderLine } from '@/lib/orders/queries'
 
 type Params = { params: Promise<{ id: string }> }
 
