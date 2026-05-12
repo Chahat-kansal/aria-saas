@@ -1,3 +1,4 @@
+import * as Sentry from '@sentry/nextjs';
 import { NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { supabaseAdmin } from '@/lib/supabase';
@@ -76,10 +77,14 @@ export async function POST(req: Request) {
   }
 
   // Mark event as processed after all handlers complete
-  await supabaseAdmin
-    .from('stripe_events')
-    .update({ processed: true, processed_at: new Date().toISOString() })
-    .eq('id', event.id);
+  try {
+    await supabaseAdmin
+      .from('stripe_events')
+      .update({ processed: true, processed_at: new Date().toISOString() })
+      .eq('id', event.id);
+  } catch (err) {
+    Sentry.captureException(err, { tags: { route: 'stripe/webhook' }, extra: { event_id: event.id, event_type: event.type } });
+  }
 
   return NextResponse.json({ received: true });
 }

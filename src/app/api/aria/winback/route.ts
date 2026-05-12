@@ -2,6 +2,7 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
+import * as Sentry from '@sentry/nextjs';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import Anthropic from '@anthropic-ai/sdk';
 import { ARIA_VOICE } from '@/lib/aria-voice-guide';
@@ -142,6 +143,12 @@ export async function POST(req: Request) {
     description: result.ok ? `Winback SMS sent to ${customer.name}` : `Winback SMS to ${customer.name} FAILED`,
   }).then(() => null, () => null);
 
-  if (!result.ok) return NextResponse.json({ error: 'SMS delivery failed', message: result.error, sms_sent: false }, { status: 500 });
+  if (!result.ok) {
+    Sentry.captureException(new Error(`Twilio delivery failed: ${result.error}`), {
+      tags: { route: 'aria/winback' },
+      extra: { business_id, customer_id: customerId },
+    });
+    return NextResponse.json({ error: 'SMS delivery failed', message: result.error, sms_sent: false }, { status: 500 });
+  }
   return NextResponse.json({ success: true, message: messageText, sms_sent: true, sid: result.sid });
 }

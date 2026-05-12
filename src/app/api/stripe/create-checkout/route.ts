@@ -1,3 +1,4 @@
+import * as Sentry from '@sentry/nextjs';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
 import Stripe from 'stripe';
@@ -77,7 +78,10 @@ export async function POST(req: Request) {
   // First business — standard plan checkout
   let priceId: string;
   try { priceId = getPriceId(plan as 'starter' | 'growth' | 'pro'); }
-  catch { return NextResponse.json({ url: null }); }
+  catch (err) {
+    Sentry.captureException(err, { tags: { route: 'stripe/create-checkout' }, extra: { plan } });
+    return NextResponse.json({ url: null });
+  }
 
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2024-06-20' });
 

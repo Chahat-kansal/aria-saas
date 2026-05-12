@@ -1,3 +1,4 @@
+import * as Sentry from '@sentry/nextjs';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { collectBusinessData } from '@/lib/aria/business-data';
 import { chatWithBusinessBrain } from '@/lib/aria/business-brain';
@@ -101,6 +102,7 @@ export async function POST(req: Request) {
         send({ text: formatAnswer(output) });
         send({ done: true });
       } catch (error) {
+        Sentry.captureException(error, { tags: { route: 'aria/business-chat' } });
         console.error('[aria/business-chat] failed', error);
         send({ error: 'Aria could not answer from business data right now.' });
       } finally {

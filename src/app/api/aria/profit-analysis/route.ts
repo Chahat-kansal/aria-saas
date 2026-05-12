@@ -2,6 +2,7 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
+import * as Sentry from '@sentry/nextjs';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import Anthropic from '@anthropic-ai/sdk';
 import { NextResponse } from 'next/server';
@@ -225,7 +226,8 @@ Only include leaks where there is actual data (non-zero amounts). Skip analyses 
         aiSummary = parsed.ai_summary ?? '';
         totalMonthlyCents = parsed.total_monthly_impact_cents ?? 0;
       }
-    } catch {
+    } catch (err) {
+      Sentry.captureException(err, { tags: { route: 'aria/profit-analysis' } });
       // Build basic leaks from raw data without AI
       if (deadStockTotal > 0) leaks.push({ id: 'dead-stock-1', type: 'dead_stock', title: `${deadStockItems.length} products with no sales (60d)`, description: `A$${(deadStockTotal / 100).toFixed(0)} tied up in unsold inventory.`, estimated_monthly_impact_cents: 0, priority: 'high', action: 'Review these real dead-stock products and decide whether to clear them.', action_type: 'promote', action_href: '/pos/products', stock_value_cents: deadStockTotal });
       if (belowCostItems.length > 0) leaks.push({ id: 'below-cost-1', type: 'below_cost', title: `${belowCostItems.length} products priced below cost`, description: 'Items selling below recorded cost price.', estimated_monthly_impact_cents: 0, priority: 'critical', action: 'Review and correct pricing immediately.', action_type: 'reprice', action_href: '/pos/products' });
