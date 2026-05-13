@@ -60,8 +60,8 @@ export default function ProductDetailPage() {
       }).catch(() => {});
 
       // Aria product insight
-      if (p) {
-        fetch('/api/aria/product-insights', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ product_id: id, business_id: '' }) })
+      if (p && pd.business_id) {
+        fetch('/api/aria/product-insights', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ product_id: id, business_id: pd.business_id }) })
           .then(r => r.json()).then(d => { setInsight(d.bullets ?? d.insights ?? null); setInsightLoading(false); })
           .catch(() => setInsightLoading(false));
       } else { setInsightLoading(false); }
