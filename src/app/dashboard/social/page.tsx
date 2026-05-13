@@ -231,8 +231,14 @@ export default function SocialPage() {
       {/* Connected Accounts — uses new SocialConnections component */}
       {bid && <SocialConnections businessId={bid} />}
 
-      {/* Content Calendar + Custom Request */}
-      {bid && <ContentCalendar businessId={bid} onPostsChanged={() => loadAll(bid)} />}
+      {/* Content Calendar */}
+      {bid && (
+        <ContentCalendar
+          businessId={bid}
+          industry={industry}
+          activePlatforms={connections.filter(c => c.is_active).map(c => c.platform)}
+        />
+      )}
 
       {/* Generate button */}
       <section style={{ marginBottom: 28 }}>

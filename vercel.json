@@ -36,6 +36,7 @@
     "src/app/api/integrations/facebook/callback/route.ts":    { "maxDuration": 30 },
     "src/app/api/integrations/google/callback/route.ts":      { "maxDuration": 30 },
     "src/app/api/integrations/connect/[platform]/route.ts":   { "maxDuration": 10 },
+    "src/app/api/social/posts/route.ts":                      { "maxDuration": 30 },
     "src/app/api/social/connections/route.ts":                { "maxDuration": 10 },
     "src/app/api/social/connections/[id]/route.ts":           { "maxDuration": 10 },
     "src/app/api/social/owner-request/route.ts":              { "maxDuration": 60 },
