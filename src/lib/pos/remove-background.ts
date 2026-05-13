@@ -1,33 +1,46 @@
 /**
- * Removes the background from an image URL using PhotoRoom API.
- * Returns a transparent PNG as a Buffer.
+ * Removes background from an image URL using AI Engine via RapidAPI.
+ * Returns the URL of the transparent PNG (hosted on AI Engine's CDN).
  *
- * PhotoRoom API: https://www.photoroom.com/api/background-removal
- * Our cost: $0.02/image. Owner pays: $0.29/image.
+ * Free tier: 100 images/month (no credit card)
+ * Pro: $12.99/month for 10,000 images (~$0.0013/image)
+ * Sign up: rapidapi.com → search "AI Engine Background Removal"
+ * Env var: RAPIDAPI_KEY
  */
-export async function removeBackgroundPhotoRoom(imageUrl: string): Promise<Buffer> {
-  const apiKey = process.env.PHOTOROOM_API_KEY
-  if (!apiKey) throw new Error('PHOTOROOM_API_KEY not set')
+export async function removeBackgroundAIEngine(
+  imageUrl: string
+): Promise<Buffer> {
+  const apiKey = process.env.RAPIDAPI_KEY
+  if (!apiKey) throw new Error('RAPIDAPI_KEY not set')
 
-  const imageRes = await fetch(imageUrl)
-  if (!imageRes.ok) throw new Error(`Failed to download image: ${imageRes.status}`)
-  const imageBuffer = Buffer.from(await imageRes.arrayBuffer())
-
-  const formData = new FormData()
-  formData.append('image_file', new Blob([imageBuffer], { type: 'image/jpeg' }), 'product.jpg')
-  formData.append('format', 'png')
-  formData.append('channels', 'rgba')
-
-  const response = await fetch('https://sdk.photoroom.com/v1/segment', {
-    method: 'POST',
-    headers: { 'x-api-key': apiKey },
-    body: formData,
-  })
+  const response = await fetch(
+    'https://background-removal-ai.p.rapidapi.com/remove-background',
+    {
+      method: 'POST',
+      headers: {
+        'x-rapidapi-host': 'background-removal-ai.p.rapidapi.com',
+        'x-rapidapi-key': apiKey,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({ image_url: imageUrl }).toString(),
+    }
+  )
 
   if (!response.ok) {
     const err = await response.text()
-    throw new Error(`PhotoRoom API error ${response.status}: ${err}`)
+    throw new Error(`AI Engine API error ${response.status}: ${err}`)
   }
 
-  return Buffer.from(await response.arrayBuffer())
+  const data = await response.json()
+
+  // AI Engine returns a CDN URL to the transparent PNG
+  if (!data.image_url) {
+    throw new Error(`AI Engine returned no image_url: ${JSON.stringify(data)}`)
+  }
+
+  // Download the transparent PNG to buffer for upload to Supabase
+  const pngRes = await fetch(data.image_url)
+  if (!pngRes.ok) throw new Error(`Failed to download transparent PNG: ${pngRes.status}`)
+
+  return Buffer.from(await pngRes.arrayBuffer())
 }

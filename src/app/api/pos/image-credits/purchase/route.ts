@@ -39,7 +39,7 @@ async function _POST(req: Request) {
       pack,
       credits: String(packConfig.credits),
     },
-    description: `Aria OS — ${packConfig.label} for ${biz.name}`,
+    description: `Aria OS AI Engine — ${packConfig.label} for ${biz.name}`,
   })
 
   return NextResponse.json({

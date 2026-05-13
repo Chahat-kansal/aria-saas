@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { getRelevantImage } from '@/lib/images/pixabay'
-import { removeBackgroundPhotoRoom } from './remove-background'
+import { removeBackgroundAIEngine } from './remove-background'
 
 const BUCKET = 'pos-images'
 
@@ -82,7 +82,7 @@ export function autoFetchProductImage(opts: {
       let bgRemoved = false
 
       if (usePaidCredit) {
-        finalBuffer = await removeBackgroundPhotoRoom(sourceUrl)
+        finalBuffer = await removeBackgroundAIEngine(sourceUrl)
         storagePath = `owner-products/${productId}-${safeName}-transparent.png`
         bgRemoved = true
         await supabase.rpc('decrement_paid_credit', { bid: businessId })
