@@ -83,7 +83,7 @@ async function _POST(req: Request) {
     { data: prefs },
     { data: promotions },
   ] = await Promise.all([
-    supabase.from('businesses').select('id,name,industry,city,description').eq('id', business_id).eq('user_id', user.id).maybeSingle(),
+    supabase.from('businesses').select('id,name,industry,city').eq('id', business_id).eq('user_id', user.id).maybeSingle(),
     supabase.from('pos_sale_items').select('product_name,quantity').eq('business_id', business_id).gte('created_at', new Date(Date.now() - 7 * 86400000).toISOString()),
     supabase.from('social_preferences').select('*').eq('business_id', business_id).maybeSingle(),
     supabase.from('pos_promotions').select('name,discount_type,discount_value').eq('business_id', business_id).eq('is_active', true),
