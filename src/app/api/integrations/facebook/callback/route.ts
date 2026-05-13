@@ -25,9 +25,10 @@ async function _GET(req: Request) {
   }
 
   try {
-    const appId     = process.env.META_APP_ID ?? process.env.FACEBOOK_APP_ID ?? ''
-    const appSecret = process.env.META_APP_SECRET ?? process.env.FACEBOOK_APP_SECRET ?? ''
-    const redirectUri = `${appUrl}/api/integrations/facebook/callback`
+    const appId      = process.env.META_APP_ID ?? process.env.FACEBOOK_APP_ID ?? ''
+    const appSecret  = process.env.META_APP_SECRET ?? process.env.FACEBOOK_APP_SECRET ?? ''
+    // Must be byte-identical to the redirect_uri sent by the connect route
+    const redirectUri = process.env.FACEBOOK_REDIRECT_URI ?? `${appUrl}/api/integrations/facebook/callback`
 
     // Exchange code for short-lived token
     const tokenRes = await fetch(
@@ -35,8 +36,23 @@ async function _GET(req: Request) {
     )
     const tokenData = await tokenRes.json()
     if (!tokenData.access_token) {
-      console.error('[facebook/callback] token failed', tokenData)
-      return NextResponse.redirect(`${appUrl}/dashboard/social?error=token_failed`)
+      console.error('[facebook/callback] token exchange failed', JSON.stringify({
+        http_status: tokenRes.status,
+        fb_response: tokenData,
+        env_check: {
+          META_APP_ID_set: !!process.env.META_APP_ID,
+          META_APP_SECRET_set: !!process.env.META_APP_SECRET,
+          FACEBOOK_REDIRECT_URI: process.env.FACEBOOK_REDIRECT_URI,
+          META_REDIRECT_URI: process.env.META_REDIRECT_URI,
+          META_FBLB_CONFIG_ID_set: !!process.env.META_FBLB_CONFIG_ID,
+        },
+        code_received_length: code?.length ?? 0,
+      }, null, 2))
+
+      const errorDetail = tokenData?.error?.message ?? tokenData?.error_description ?? 'unknown'
+      return NextResponse.redirect(
+        `${appUrl}/dashboard/integrations?error=token_failed&fb_error=${encodeURIComponent(errorDetail)}`
+      )
     }
 
     // Exchange for long-lived token (~60 days)
