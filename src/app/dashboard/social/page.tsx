@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
+import SocialConnections from '@/components/dashboard/social/SocialConnections';
 
 const C = { bg: 'var(--bg-base)', card: 'var(--bg-surface)', border: 'transparent', text: '#F0F4FF', muted: 'var(--text-secondary)', dim: 'var(--text-tertiary)', violet: '#8B5CF6', green: '#22C55E', red: '#EF4444', amber: '#F59E0B', blue: '#3B82F6' };
 
@@ -226,36 +227,8 @@ export default function SocialPage() {
         </div>
       )}
 
-      {/* Connect Platforms */}
-      <section style={{ marginBottom: 32 }}>
-        <h2 style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 12 }}>Connected Platforms</h2>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12 }}>
-          {[
-            { platform: 'instagram', label: 'Instagram', connectUrl: '/api/social/connect/facebook', color: '#E1306C' },
-            { platform: 'facebook', label: 'Facebook', connectUrl: '/api/social/connect/facebook', color: '#1877F2' },
-            { platform: 'google_business', label: 'Google Business', connectUrl: '/api/social/connect/google', color: '#4285F4' },
-          ].map(({ platform, label, connectUrl, color }) => {
-            const conn = connections.find(c => c.platform === platform);
-            return (
-              <div key={platform} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div style={{ width: 38, height: 38, borderRadius: 10, background: `${color}15`, border: `1px solid ${color}30`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>
-                  {PLATFORM_ICONS[platform]}
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{label}</p>
-                  {conn ? <p style={{ fontSize: 11, color: C.green }}>@{conn.platform_account_name ?? 'Connected'}</p>
-                    : <p style={{ fontSize: 11, color: C.muted }}>Not connected</p>}
-                </div>
-                {!conn && (
-                  <a href={connectUrl} style={{ fontSize: 11, padding: '5px 10px', borderRadius: 7, border: `1px solid ${color}40`, color, background: `${color}10`, textDecoration: 'none', fontWeight: 600, flexShrink: 0 }}>
-                    Connect
-                  </a>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </section>
+      {/* Connected Accounts — uses new SocialConnections component */}
+      {bid && <SocialConnections businessId={bid} />}
 
       {/* Generate button */}
       <section style={{ marginBottom: 28 }}>
