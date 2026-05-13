@@ -66,7 +66,7 @@ async function _PATCH(req: NextRequest, { params }: Params) {
     // Auto-fetch image if none exists
     if (!data.image_url && data.name) {
       supabase.from('businesses').select('industry').eq('id', bid).maybeSingle()
-        .then(({ data: biz }) => autoFetchProductImage({ productId: id, productName: data.name, industry: biz?.industry ?? null }))
+        .then(({ data: biz }) => autoFetchProductImage({ productId: id, productName: data.name, industry: biz?.industry ?? null, businessId: bid }))
     }
     return NextResponse.json({ product: data })
   }
@@ -267,7 +267,7 @@ async function _PATCH(req: NextRequest, { params }: Params) {
   if (!product.image_url) {
     const productName = (body.name as string | undefined) ?? product.name
     supabase.from('businesses').select('industry').eq('id', bid).maybeSingle()
-      .then(({ data: biz }) => autoFetchProductImage({ productId: id, productName, industry: biz?.industry ?? null }))
+      .then(({ data: biz }) => autoFetchProductImage({ productId: id, productName, industry: biz?.industry ?? null, businessId: bid }))
   }
   return NextResponse.json({ product })
 }

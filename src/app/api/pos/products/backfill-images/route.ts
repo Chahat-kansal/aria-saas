@@ -35,7 +35,7 @@ async function _POST(_req: Request) {
   }
 
   for (const p of products) {
-    autoFetchProductImage({ productId: p.id, productName: p.name, industry: business.industry })
+    autoFetchProductImage({ productId: p.id, productName: p.name, industry: business.industry, businessId: active.business_id })
   }
 
   return NextResponse.json({

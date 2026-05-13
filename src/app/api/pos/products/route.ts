@@ -191,6 +191,7 @@ async function _POST(req: Request) {
       productId:   product.id,
       productName: (body.name as string).trim(),
       industry:    bizInfo?.industry ?? null,
+      businessId:  bid,
     })
   }
 

@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { ImageCreditModal } from '@/components/pos/ImageCreditModal';
 
 interface Category { id: string; name: string; color: string; }
 interface Product {
@@ -49,6 +50,9 @@ export default function ProductsPage() {
   const [csvRows, setCsvRows]     = useState<CSVRow[]>([]);
   const [importing, setImporting] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const [bid, setBid]     = useState<string | null>(null);
+  const [credits, setCredits] = useState<{ free_remaining: number; paid_credits: number; free_limit: number } | null>(null);
+  const [creditModal, setCreditModal] = useState<{ productId: string; productName: string } | null>(null);
 
   useEffect(() => {
     fetch('/api/pos/products')
@@ -56,6 +60,11 @@ export default function ProductsPage() {
       .then(d => {
         setProducts(d.products || []);
         setCategories(d.categories || []);
+        if (d.business_id) {
+          setBid(d.business_id);
+          fetch(`/api/pos/image-credits?business_id=${d.business_id}`)
+            .then(r => r.json()).then(c => { if (!c.error) setCredits(c); }).catch(() => {});
+        }
         setLoading(false);
       }).catch(() => setLoading(false));
   }, []);
@@ -216,6 +225,15 @@ export default function ProductsPage() {
               style={{ padding: '8px 16px', borderRadius: 9, border: `1px solid ${C.border}`, background: 'transparent', color: C.muted, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
               Export CSV
             </button>
+            {credits && (
+              <span style={{ fontSize: 11, padding: '4px 10px', borderRadius: 20, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.4)', whiteSpace: 'nowrap' }}>
+                🖼 {credits.free_remaining > 0
+                  ? `${credits.free_remaining} free image${credits.free_remaining !== 1 ? 's' : ''}`
+                  : credits.paid_credits > 0
+                  ? `${credits.paid_credits} credit${credits.paid_credits !== 1 ? 's' : ''}`
+                  : 'No credits'}
+              </span>
+            )}
             <button
               onClick={async () => {
                 const res = await fetch('/api/pos/products/backfill-images', { method: 'POST' })
@@ -525,6 +543,24 @@ export default function ProductsPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Image credit modal — shown when free limit reached */}
+      {creditModal && bid && (
+        <ImageCreditModal
+          businessId={bid}
+          productName={creditModal.productName}
+          onUseWithBackground={() => {
+            // Free path: fetch scene photo without bg removal
+            fetch('/api/pos/products/backfill-images', { method: 'POST' }).catch(() => {})
+            setCreditModal(null)
+          }}
+          onCreditsPurchased={(newCredits) => {
+            setCredits(prev => prev ? { ...prev, paid_credits: prev.paid_credits + newCredits } : null)
+            setCreditModal(null)
+          }}
+          onClose={() => setCreditModal(null)}
+        />
       )}
     </div>
   );
