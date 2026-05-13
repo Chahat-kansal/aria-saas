@@ -75,10 +75,10 @@ export default function ProductCard({ product, onAdd, quantity = 0 }: Props) {
       {quantity > 0 && (
         <div style={{
           position: 'absolute', top: 8, right: 8, zIndex: 2,
-          width: 24, height: 24, borderRadius: '50%',
+          width: 22, height: 22, borderRadius: '50%',
           background: '#2D5240',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          color: 'white', fontSize: 12, fontWeight: 700,
+          color: 'white', fontSize: 11, fontWeight: 700,
         }}>
           {quantity}
         </div>
@@ -105,7 +105,7 @@ export default function ProductCard({ product, onAdd, quantity = 0 }: Props) {
         width: '100%',
         paddingTop: '75%',
         position: 'relative',
-        background: 'rgba(255,255,255,0.04)',
+        background: '#ffffff',
         overflow: 'hidden',
       }}>
         {product.image_url && !imgError ? (
@@ -117,7 +117,7 @@ export default function ProductCard({ product, onAdd, quantity = 0 }: Props) {
             style={{
               position: 'absolute', inset: 0,
               width: '100%', height: '100%',
-              objectFit: 'cover',
+              objectFit: 'contain',
             }}
           />
         ) : (
@@ -144,7 +144,7 @@ export default function ProductCard({ product, onAdd, quantity = 0 }: Props) {
         }}>
           {product.name}
         </p>
-        <p style={{ color: '#7FB897', fontSize: 14, fontWeight: 700, margin: 0 }}>
+        <p style={{ color: '#7FB897', fontSize: 14, fontWeight: 700, margin: 0, fontStyle: 'italic', fontFamily: "'Instrument Serif', Georgia, serif" }}>
           A${product.price.toFixed(2)}
         </p>
       </div>

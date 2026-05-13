@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { getRelevantImage } from '@/lib/images/pixabay'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
   const { data: active } = await supabase
@@ -181,6 +182,23 @@ async function _POST(req: Request) {
         outlet_id: o.id,
       }))
     )
+  }
+
+  // Fire-and-forget: fetch an image if none was provided
+  if (!body.image_url && product?.id) {
+    const name = (body.name as string).trim()
+    const cat = body.category as string | undefined
+    const query = cat ? `${name} ${cat}` : name
+    getRelevantImage(query, { category: 'food' })
+      .then(url => {
+        if (!url) return
+        return supabase
+          .from('pos_products')
+          .update({ image_url: url, image_source: 'auto' })
+          .eq('id', product.id)
+          .eq('business_id', bid)
+      })
+      .catch(() => {})
   }
 
   return NextResponse.json({ product });

@@ -1515,7 +1515,9 @@ export default function TerminalPage() {
           )}
           {!registerLoading && registerIsOpen && (
             <button onClick={() => setShowCashierModal(true)} className="px-2 py-0.5 rounded text-xs" style={{ color: 'var(--text-secondary)', border: '1px solid #2A2540', background: 'rgba(255,255,255,0.03)' }}>
-              {registerSession?.opened_by ? `👤 ${registerSession.opened_by}` : 'Switch cashier'}
+              {registerSession?.opened_by
+                ? `👤 ${registerSession.opened_by.includes('@') ? registerSession.opened_by.split('@')[0] : registerSession.opened_by}`
+                : 'Switch cashier'}
             </button>
           )}
           {!registerLoading && (
@@ -1530,12 +1532,12 @@ export default function TerminalPage() {
         </div>
       </div>
 
-      {/* 2-column grid — Aria panel is now floating */}
-      <div className="flex-1 min-h-0 grid overflow-hidden" style={{ gridTemplateColumns: '300px 1fr', position: 'relative', zIndex: 1 }}>
+      {/* 2-column layout — products 60%, cart 40% */}
+      <div className="pos-terminal-layout-root flex-1 min-h-0 flex overflow-hidden" style={{ position: 'relative', zIndex: 1 }}>
 
         {/* ── LEFT: Product browser ──────────────────────────────── */}
-        <div className={`relative flex flex-col overflow-hidden ${mobileTab !== 'products' ? 'hidden md:flex' : 'flex'}`}
-          style={{ borderRight: '1px solid var(--terminal-sage-rim,rgba(127,184,151,0.18))', background: 'var(--terminal-glass-2,rgba(20,33,26,0.72))', backdropFilter: 'blur(40px) saturate(1.4)', WebkitBackdropFilter: 'blur(40px) saturate(1.4)' }}>
+        <div className={`pos-products-panel relative flex flex-col overflow-hidden ${mobileTab !== 'products' ? 'hidden md:flex' : 'flex'}`}
+          style={{ flex: '1 1 60%', minWidth: 0, borderRight: '1px solid var(--terminal-sage-rim,rgba(127,184,151,0.18))', background: 'var(--terminal-glass-2,rgba(20,33,26,0.72))', backdropFilter: 'blur(40px) saturate(1.4)', WebkitBackdropFilter: 'blur(40px) saturate(1.4)' }}>
 
           {/* Quick panel slide-out */}
           {showQuickPanel && (
@@ -1729,7 +1731,7 @@ export default function TerminalPage() {
           )}
 
           {/* Product grid */}
-          <div className="flex-1 overflow-y-auto p-3">
+          <div className="pos-product-grid flex-1 overflow-y-auto p-3">
             {loading ? (
               <div className="grid grid-cols-2 gap-2">
                 {[...Array(8)].map((_, i) => (
@@ -1917,8 +1919,8 @@ export default function TerminalPage() {
         </div>
 
         {/* ── CENTRE: Cart ──────────────────────────────────────── */}
-        <div className={`flex flex-col overflow-hidden ${mobileTab !== 'cart' ? 'hidden md:flex' : 'flex'}`}
-          style={{ background: 'var(--terminal-glass-1,rgba(28,44,36,0.55))', backdropFilter: 'blur(40px) saturate(1.4)', WebkitBackdropFilter: 'blur(40px) saturate(1.4)', borderLeft: '1px solid var(--terminal-sage-rim,rgba(127,184,151,0.18))', minHeight: 0 }}>
+        <div className={`pos-cart-panel flex flex-col overflow-hidden ${mobileTab !== 'cart' ? 'hidden md:flex' : 'flex'}`}
+          style={{ flex: '0 0 40%', minWidth: 380, maxWidth: 560, background: 'var(--terminal-glass-1,rgba(28,44,36,0.55))', backdropFilter: 'blur(40px) saturate(1.4)', WebkitBackdropFilter: 'blur(40px) saturate(1.4)', borderLeft: '1px solid var(--terminal-sage-rim,rgba(127,184,151,0.18))', minHeight: 0 }}>
 
           {showReceipt && terminalView !== 'confirm' ? (
             /* ── RECEIPT VIEW (non-confirm, e.g. reprint) ─────── */

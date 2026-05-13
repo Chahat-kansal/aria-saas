@@ -4,6 +4,7 @@ import * as https from 'https'
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!
 const PIXABAY_KEY = process.env.PIXABAY_API_KEY
+const UNSPLASH_KEY = process.env.UNSPLASH_ACCESS_KEY
 const BUCKET = 'reusable-images'
 
 export type ImageCategory =
@@ -69,7 +70,7 @@ export async function getRelevantImage(
   const apiUrl = `https://pixabay.com/api/?key=${PIXABAY_KEY}&q=${encodeURIComponent(query)}&image_type=photo&orientation=${orientation}${catParam}&safesearch=true&per_page=10&min_width=${minWidth}`
 
   const imageUrl = await fetchPixabayUrl(apiUrl, options.preferIsolated ?? false)
-  if (!imageUrl) return null
+  if (!imageUrl) return fetchUnsplashUrl(query)
 
   // 4. Download and upload to Supabase Storage
   try {
@@ -133,6 +134,21 @@ function fetchPixabayUrl(apiUrl: string, preferIsolated: boolean): Promise<strin
       })
     }).on('error', () => resolve(null))
   })
+}
+
+async function fetchUnsplashUrl(query: string): Promise<string | null> {
+  if (!UNSPLASH_KEY) return null
+  try {
+    const res = await fetch(
+      `https://api.unsplash.com/search/photos?query=${encodeURIComponent(query)}&per_page=1`,
+      { headers: { Authorization: `Client-ID ${UNSPLASH_KEY}` } }
+    )
+    if (!res.ok) return null
+    const json = await res.json() as { results: Array<{ urls: { regular: string } }> }
+    return json.results[0]?.urls?.regular ?? null
+  } catch {
+    return null
+  }
 }
 
 function downloadToBuffer(url: string): Promise<Buffer> {

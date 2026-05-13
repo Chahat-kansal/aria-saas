@@ -224,3 +224,23 @@ html, body { height: 100%; }
   0%, 100% { opacity: 0.4; }
   50%       { opacity: 1;   }
 }
+
+/* ── POS TERMINAL RESPONSIVE LAYOUT ───────────────────────── */
+@media (max-width: 767px) {
+  /* On mobile each panel is full-width — visibility controlled by hidden/flex Tailwind classes */
+  .pos-products-panel {
+    flex: 1 1 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+  }
+  .pos-cart-panel {
+    flex: 1 1 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+  }
+  /* 2-column product grid on mobile */
+  .pos-product-grid .grid,
+  .pos-product-grid [style*="grid-template-columns"] {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
