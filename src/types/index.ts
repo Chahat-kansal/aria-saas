@@ -1,1 +1,2 @@
 export type { BestTimeSlot, EngagementBucket, SchedulingPreferences } from './scheduler'
+export type { ModifierGroup, Modifier, ProductVariation, ProductModifierGroup, SelectedModifier, ConfiguredCartItem, ModifierGroupSelectionType } from './pos-modifiers'

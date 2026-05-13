@@ -1,5 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { ModifierModal } from '@/components/pos/ModifierModal';
+import type { ConfiguredCartItem } from '@/types/pos-modifiers';
 import Link from 'next/link';
 import { isMobileDevice, hasCameraSupport } from '@/lib/mobile-detect';
 import { SFX } from '@/lib/pos-utils';
@@ -248,6 +250,8 @@ export default function TerminalPage() {
   const [businessType, setBusinessType] = useState<string>('liquor');
   const [terminalLayoutOverride, setTerminalLayoutOverride] = useState<TerminalLayout | null>(null);
   const [showCafeSetup, setShowCafeSetup] = useState(false);
+  // Cafe modifier modal (Sprint A) — additive, cafe-only
+  const [modifierModalProduct, setModifierModalProduct] = useState<Product | null>(null);
 
   // Outlet awareness — additive
   const [activeOutletId, setActiveOutletId] = useState<string | null>(null);
@@ -652,8 +656,37 @@ export default function TerminalPage() {
     if (window.innerWidth < 768) setMobileTab('cart');
   }
 
+  // Converts a ConfiguredCartItem (from ModifierModal) into the cart — cafe-only
+  function addConfiguredItemToCart(item: ConfiguredCartItem) {
+    const mods = item.selected_modifiers.map(sm => ({
+      id: sm.modifier_id,
+      name: sm.modifier_name,
+      price_adjustment: sm.price,
+      is_active: true,
+      group_id: sm.group_id,
+    } as any))
+    const fakeProduct = {
+      ...(cart.find(c => c.product.id === item.product_id)?.product ?? { id: item.product_id, name: item.product_name, price: item.base_price, is_active: true } as any),
+      price: item.base_price,
+    }
+    addToCartDirect(fakeProduct, item.quantity, undefined, item.display_summary || item.product_name, mods)
+  }
+
   async function checkAndAddToCart(p: Product, fromEl?: HTMLElement | null) {
     if (!p.is_active) return;
+    // Cafe modifier groups check — Sprint A (additive)
+    if (businessType === 'cafe') {
+      try {
+        const modRes = await fetch(`/api/pos/products/${p.id}/modifiers`)
+        if (modRes.ok) {
+          const modData = await modRes.json()
+          if ((modData.data ?? []).length > 0) {
+            setModifierModalProduct(p)
+            return
+          }
+        }
+      } catch { /* fall through to existing behavior */ }
+    }
     setVariantLoading(true);
     try {
       const res = await fetch(`/api/pos/variants?product_id=${p.id}`);
@@ -1109,6 +1142,17 @@ export default function TerminalPage() {
           businessName={businessName}
           onComplete={() => { setShowCafeSetup(false); window.location.reload(); }}
           onSkip={() => setShowCafeSetup(false)}
+        />
+      )}
+      {/* Cafe modifier modal — Sprint A, cafe-only, additive */}
+      {modifierModalProduct && businessType === 'cafe' && (
+        <ModifierModal
+          product={modifierModalProduct}
+          onClose={() => setModifierModalProduct(null)}
+          onConfirm={(item: ConfiguredCartItem) => {
+            setModifierModalProduct(null)
+            addConfiguredItemToCart(item)
+          }}
         />
       )}
       {/* Training mode amber banner — additive */}

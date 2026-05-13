@@ -49,7 +49,13 @@
     "src/app/api/webhooks/stripe-image-credits/route.ts":    { "maxDuration": 30 },
     "src/app/api/social/scheduler/best-times/route.ts":      { "maxDuration": 30 },
     "src/app/api/social/scheduler/analyze/route.ts":          { "maxDuration": 30 },
-    "src/app/api/cron/sync-engagement/route.ts":              { "maxDuration": 60 }
+    "src/app/api/cron/sync-engagement/route.ts":              { "maxDuration": 60 },
+    "src/app/api/pos/modifier-groups/route.ts":               { "maxDuration": 30 },
+    "src/app/api/pos/modifier-groups/[id]/route.ts":          { "maxDuration": 30 },
+    "src/app/api/pos/modifiers/[id]/route.ts":                { "maxDuration": 30 },
+    "src/app/api/pos/products/[id]/modifiers/route.ts":       { "maxDuration": 30 },
+    "src/app/api/pos/products/[id]/variations/route.ts":      { "maxDuration": 30 },
+    "src/app/api/pos/cafe/seed-modifiers/route.ts":           { "maxDuration": 60 }
   },
   "crons": [
     { "path": "/api/cron/nightly-sync",                "schedule": "0 2 * * *"   },
