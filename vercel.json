@@ -46,7 +46,10 @@
     "src/app/api/pos/products/backfill-images/route.ts":      { "maxDuration": 60 },
     "src/app/api/pos/image-credits/route.ts":                { "maxDuration": 30 },
     "src/app/api/pos/image-credits/purchase/route.ts":       { "maxDuration": 30 },
-    "src/app/api/webhooks/stripe-image-credits/route.ts":    { "maxDuration": 30 }
+    "src/app/api/webhooks/stripe-image-credits/route.ts":    { "maxDuration": 30 },
+    "src/app/api/social/scheduler/best-times/route.ts":      { "maxDuration": 30 },
+    "src/app/api/social/scheduler/analyze/route.ts":          { "maxDuration": 30 },
+    "src/app/api/cron/sync-engagement/route.ts":              { "maxDuration": 60 }
   },
   "crons": [
     { "path": "/api/cron/nightly-sync",                "schedule": "0 2 * * *"   },
@@ -57,6 +60,7 @@
     { "path": "/api/cron/briefing-daily",               "schedule": "0 18 * * *"  },
     { "path": "/api/cron/promo-cleanup",                "schedule": "0 14 * * *"  },
     { "path": "/api/cron/generate-briefings",           "schedule": "0 16 * * *"  },
-    { "path": "/api/cron/publish-scheduled",            "schedule": "0 9 * * *"   }
+    { "path": "/api/cron/publish-scheduled",            "schedule": "0 9 * * *"   },
+    { "path": "/api/cron/sync-engagement",              "schedule": "0 3 * * *"   }
   ]
 }

@@ -4,6 +4,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { buildSocialSystemPrompt, getSocialIndustryConfig } from '@/lib/social/industry-prompts'
+import { getBestSlotForPlatform } from '@/lib/social/smart-scheduler'
 import { getRelevantImage } from '@/lib/images/pixabay'
 
 async function _POST(req: Request) {
@@ -62,12 +63,16 @@ async function _POST(req: Request) {
 
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 
-  // Determine schedule time
+  // Determine schedule time — use smart scheduler for asap
   let scheduledFor: string | null = null
   if (schedule_kind === 'specific_date' && specific_date) {
     scheduledFor = new Date(specific_date).toISOString()
-  } else if (schedule_kind === 'asap') {
-    scheduledFor = null
+  } else if (schedule_kind === 'asap' || !schedule_kind) {
+    // Pick the next optimal slot for the first connected platform
+    const firstPlatform = activePlatforms[0]
+    if (firstPlatform) {
+      scheduledFor = getBestSlotForPlatform(firstPlatform, biz.industry ?? 'other', new Date())
+    }
   }
 
   const userPrompt = `The business owner just requested:

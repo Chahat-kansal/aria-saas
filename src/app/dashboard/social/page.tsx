@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from 'react';
 import SocialConnections from '@/components/dashboard/social/SocialConnections';
 import ContentCalendar from '@/components/dashboard/social/ContentCalendar';
+import { BestTimesHeatmap } from '@/components/dashboard/social/BestTimesHeatmap';
 
 const C = { bg: 'var(--bg-base)', card: 'var(--bg-surface)', border: 'transparent', text: '#F0F4FF', muted: 'var(--text-secondary)', dim: 'var(--text-tertiary)', violet: '#8B5CF6', green: '#22C55E', red: '#EF4444', amber: '#F59E0B', blue: '#3B82F6' };
 
@@ -22,6 +23,7 @@ function PlatformBadge({ platform }: { platform: string }) {
 }
 
 export default function SocialPage() {
+  const [socialTab, setSocialTab]   = useState<'calendar' | 'best-times'>('calendar');
   const [bid, setBid]               = useState<string | null>(null);
   const [industry, setIndustry]     = useState<string>('retail');
   const [bizName, setBizName]       = useState('');
@@ -231,13 +233,37 @@ export default function SocialPage() {
       {/* Connected Accounts — uses new SocialConnections component */}
       {bid && <SocialConnections businessId={bid} />}
 
-      {/* Content Calendar */}
+      {/* Tab bar */}
       {bid && (
+        <div style={{ display: 'flex', gap: 4, marginBottom: 4 }}>
+          {(['calendar', 'best-times'] as const).map(t => (
+            <button key={t} onClick={() => setSocialTab(t)}
+              style={{
+                padding: '7px 16px', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600,
+                border: 'none', fontFamily: 'inherit',
+                background: socialTab === t ? 'rgba(127,184,151,0.15)' : 'rgba(255,255,255,0.04)',
+                color: socialTab === t ? '#7FB897' : 'rgba(255,255,255,0.4)',
+              }}>
+              {t === 'calendar' ? '📅 Calendar' : '⏰ Best Times'}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Content Calendar */}
+      {bid && socialTab === 'calendar' && (
         <ContentCalendar
           businessId={bid}
           industry={industry}
           activePlatforms={connections.filter(c => c.is_active).map(c => c.platform)}
         />
+      )}
+
+      {/* Best Times heatmap — lazy loaded on tab click */}
+      {bid && socialTab === 'best-times' && (
+        <div style={{ marginTop: 8 }}>
+          <BestTimesHeatmap businessId={bid} />
+        </div>
       )}
 
       {/* Generate button */}
