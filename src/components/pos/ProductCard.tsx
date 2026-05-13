@@ -105,7 +105,7 @@ export default function ProductCard({ product, onAdd, quantity = 0 }: Props) {
         width: '100%',
         paddingTop: '75%',
         position: 'relative',
-        background: '#ffffff',
+        background: 'linear-gradient(135deg, rgba(45,82,64,0.08), rgba(127,184,151,0.04))',
         overflow: 'hidden',
       }}>
         {product.image_url && !imgError ? (
@@ -118,6 +118,7 @@ export default function ProductCard({ product, onAdd, quantity = 0 }: Props) {
               position: 'absolute', inset: 0,
               width: '100%', height: '100%',
               objectFit: 'contain',
+              padding: 10,
             }}
           />
         ) : (
