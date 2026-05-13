@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { toNullableUuid } from '@/lib/utils/uuid-helpers'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { autoFetchProductImage } from '@/lib/pos/auto-fetch-image'
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -62,6 +63,11 @@ async function _PATCH(req: NextRequest, { params }: Params) {
     for (const k of allowed) if (k in body) payload[k] = body[k]
     const { data, error } = await supabase.from('pos_products').update(payload).eq('id', id).eq('business_id', bid).select().single()
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    // Auto-fetch image if none exists
+    if (!data.image_url && data.name) {
+      supabase.from('businesses').select('industry').eq('id', bid).maybeSingle()
+        .then(({ data: biz }) => autoFetchProductImage({ productId: id, productName: data.name, industry: biz?.industry ?? null }))
+    }
     return NextResponse.json({ product: data })
   }
 
@@ -257,6 +263,12 @@ async function _PATCH(req: NextRequest, { params }: Params) {
 
   const { data: product, error } = await supabase.from('pos_products').update(updatePayload).eq('id', id).eq('business_id', bid).select().single()
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  // Auto-fetch image if none exists (fire-and-forget)
+  if (!product.image_url) {
+    const productName = (body.name as string | undefined) ?? product.name
+    supabase.from('businesses').select('industry').eq('id', bid).maybeSingle()
+      .then(({ data: biz }) => autoFetchProductImage({ productId: id, productName, industry: biz?.industry ?? null }))
+  }
   return NextResponse.json({ product })
 }
 

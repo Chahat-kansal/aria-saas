@@ -216,6 +216,17 @@ export default function ProductsPage() {
               style={{ padding: '8px 16px', borderRadius: 9, border: `1px solid ${C.border}`, background: 'transparent', color: C.muted, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
               Export CSV
             </button>
+            <button
+              onClick={async () => {
+                const res = await fetch('/api/pos/products/backfill-images', { method: 'POST' })
+                const data = await res.json()
+                alert(data.queued > 0
+                  ? `✨ Aria is fetching images for ${data.queued} products. Refresh in 30 seconds to see them.`
+                  : 'All products already have images.')
+              }}
+              style={{ padding: '8px 14px', borderRadius: 9, border: '1px solid rgba(127,184,151,0.3)', background: 'rgba(127,184,151,0.08)', color: '#7FB897', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+              ✨ Find images
+            </button>
             <button onClick={() => router.push('/pos/products/new')}
               style={{ padding: '9px 20px', borderRadius: 9, border: 'none', background: C.violet, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
               + Add Product

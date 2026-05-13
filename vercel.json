@@ -40,7 +40,8 @@
     "src/app/api/social/owner-request/route.ts":              { "maxDuration": 60 },
     "src/app/api/social/posts/[id]/publish/route.ts":         { "maxDuration": 60 },
     "src/app/api/social/posts/bulk-approve/route.ts":         { "maxDuration": 60 },
-    "src/app/api/cron/publish-scheduled/route.ts":            { "maxDuration": 60 }
+    "src/app/api/cron/publish-scheduled/route.ts":            { "maxDuration": 60 },
+    "src/app/api/pos/products/backfill-images/route.ts":      { "maxDuration": 60 }
   },
   "crons": [
     { "path": "/api/cron/nightly-sync",                "schedule": "0 2 * * *"   },
