@@ -1,4 +1,5 @@
 import { CAFE_SEED_MENU } from '@/lib/seed-menus/cafe'
+import { getCafeProductImage } from '@/lib/pos/cafe-image-map'
 
 export interface CafeSeedProduct {
   name: string
@@ -41,5 +42,5 @@ export const CAFE_SEED_PRODUCTS: CafeSeedProduct[] = CAFE_SEED_MENU.map(p => ({
   unit:        'item',
   description: p.description,
   is_featured: FEATURED_NAMES.has(p.name),
-  image_url:   p.image_url ?? null,
+  image_url:   getCafeProductImage(p.name),
 }))

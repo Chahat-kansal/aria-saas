@@ -14,6 +14,7 @@ import { trackAICall } from '@/lib/aria/ai-telemetry'
 import { getBusinessContext, hasEnoughData } from '@/lib/aria/get-business-context'
 import { getSystemPrompt } from '@/lib/aria/get-system-prompt'
 import { writeAriaOutcome } from '@/lib/aria/write-outcome'
+import { getRelevantImage } from '@/lib/images/pixabay'
 
 function getNextPostTime(timeStr: string, _platform: string, _prefs: any): string {
   const days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
@@ -158,7 +159,7 @@ Return ONLY a valid JSON array, no other text:
     "best_time": "e.g. Friday 5pm or Monday 7am",
     "why": "1 sentence why this will perform well",
     "image_prompt": "detailed description of ideal photo for this post",
-    "image_search_query": "2-4 word Unsplash search query for a real photo matching this post",
+    "image_search_query": "2-4 word search query for a stock photo matching this post (e.g. 'matcha latte oat milk' not 'drink')",
     "topic": "brief topic label",
     "industry_tip": "1 tip specific to this industry for this post type",
     "reel_concept": "15-30 second Instagram Reel idea based on this post",
@@ -251,6 +252,15 @@ Return ONLY a valid JSON array, no other text:
         if (photo) return { url: photo.urls?.regular ?? photo.urls?.small, credit: photo.user?.name ?? 'Unsplash', provider: 'unsplash' };
       } catch { /* fall through */ }
     }
+
+    // 4. Pixabay fallback (cached in Supabase Storage — no rate limit concern)
+    try {
+      const q = searchQuery || prompt?.split(' ').slice(0, 4).join(' ') || '';
+      if (q) {
+        const pixabayUrl = await getRelevantImage(q, { category: 'food', orientation: 'horizontal' });
+        if (pixabayUrl) return { url: pixabayUrl, credit: null, provider: 'pixabay' };
+      }
+    } catch { /* fall through */ }
 
     return { url: null, credit: null, provider: 'none' };
   }

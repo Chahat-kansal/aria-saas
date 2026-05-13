@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { CAFE_SEED_PRODUCTS, CAFE_CATEGORIES } from '@/lib/pos/cafe-seed-products'
+import { getCafeProductImage } from '@/lib/pos/cafe-image-map'
 
 const CATEGORY_COLORS: Record<string, string> = {
   'Coffee':     '#6F4E37',
@@ -183,4 +184,30 @@ async function _POST() {
   return NextResponse.json({ ok: true, seeded: inserted })
 }
 
+async function _GET(_req: Request) {
+  const supabase = createServerSupabaseClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const { data: active } = await supabase
+    .from('user_active_business').select('business_id').eq('user_id', user.id).maybeSingle()
+  const businessId = active?.business_id
+  if (!businessId) return NextResponse.json({ error: 'No business' }, { status: 404 })
+
+  const { data: products } = await supabase
+    .from('pos_products').select('id, name').eq('business_id', businessId)
+
+  let updated = 0
+  for (const product of products ?? []) {
+    const imageUrl = getCafeProductImage(product.name)
+    if (imageUrl) {
+      await supabase.from('pos_products')
+        .update({ image_url: imageUrl, image_source: 'owner' }).eq('id', product.id)
+      updated++
+    }
+  }
+  return NextResponse.json({ ok: true, updated })
+}
+
+export const GET = withErrorCapture('pos/seed-cafe-products', _GET)
 export const POST = withErrorCapture('pos/seed-cafe-products', _POST)
