@@ -11,8 +11,7 @@
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:headed": "playwright test --headed",
     "seed:cafe-images": "tsx scripts/fetch-cafe-images.ts",
-    "seed:dalle-images": "tsx scripts/generate-dalle-cafe-images.ts",
-    "remove:cafe-bg": "tsx scripts/remove-cafe-backgrounds.ts"
+    "seed:dalle-images": "tsx scripts/generate-dalle-cafe-images.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.95.1",
@@ -58,7 +57,6 @@
     "zustand": "^4.5.5"
   },
   "devDependencies": {
-    "@imgly/background-removal-node": "^1.4.5",
     "@playwright/test": "^1.59.1",
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^20.14.15",
