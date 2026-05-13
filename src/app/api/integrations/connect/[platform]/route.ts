@@ -28,26 +28,19 @@ async function _GET(req: Request, { params }: Params) {
   switch (platform) {
     case 'facebook':
     case 'instagram': {
-      const appId = process.env.META_APP_ID ?? process.env.FACEBOOK_APP_ID
-      if (!appId) {
-        return NextResponse.redirect(
-          `${appUrl}/dashboard/social?error=META_APP_ID+not+configured`
-        )
+      if (!process.env.META_FBLB_CONFIG_ID) {
+        return NextResponse.json({
+          error: 'META_FBLB_CONFIG_ID missing — create a Configuration in Meta dashboard'
+        }, { status: 500 })
       }
-      const scopes = [
-        'pages_show_list',
-        'pages_manage_posts',
-        'pages_read_engagement',
-        'instagram_basic',
-        'instagram_content_publish',
-        'business_management',
-      ].join(',')
+
       authUrl = `https://www.facebook.com/v25.0/dialog/oauth?` +
-        `client_id=${appId}` +
-        `&redirect_uri=${encodeURIComponent(`${appUrl}/api/integrations/facebook/callback`)}` +
-        `&scope=${encodeURIComponent(scopes)}` +
+        `client_id=${process.env.META_APP_ID}` +
+        `&redirect_uri=${encodeURIComponent(process.env.FACEBOOK_REDIRECT_URI!)}` +
+        `&config_id=${process.env.META_FBLB_CONFIG_ID}` +
         `&state=${businessId}` +
-        `&response_type=code`
+        `&response_type=code` +
+        `&override_default_response_type=true`
       break
     }
 
