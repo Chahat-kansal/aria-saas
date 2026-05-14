@@ -133,6 +133,7 @@ async function _PATCH(req: Request) {
   const { is_completed } = await req.json();
   const { error } = await supabase.from('compliance_items').update({
     is_completed,
+    status: is_completed ? 'completed' : 'pending',
     completed_at: is_completed ? new Date().toISOString() : null,
   }).eq('id', id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

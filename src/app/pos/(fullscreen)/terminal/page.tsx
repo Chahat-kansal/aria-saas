@@ -1511,7 +1511,7 @@ export default function TerminalPage() {
               <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 6 }}>
                 {showReceipt.is_training
                   ? 'Not recorded · Training mode is on'
-                  : `via ${showReceipt.payment_method ?? 'card'} · R${(showReceipt.sale_number ?? String(showReceipt.id ?? '')).slice(-5).toUpperCase() || Math.floor(Math.random()*90000+10000)}`}
+                  : `via ${showReceipt.payment_method ?? 'card'} · R${(showReceipt.sale_number ?? String(showReceipt.id ?? '')).slice(-5).toUpperCase() || '—'}`}
               </div>
             </div>
             {/* Receipt card */}
