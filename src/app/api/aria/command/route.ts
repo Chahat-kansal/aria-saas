@@ -138,6 +138,10 @@ function mapQueryToAction(query: string): ActionResult {
 }
 
 async function _POST(req: Request): Promise<Response> {
+  if (!process.env.ANTHROPIC_API_KEY) {
+    console.error('[aria/command] ANTHROPIC_API_KEY is not set')
+    return NextResponse.json({ error: 'AI not configured' }, { status: 503 })
+  }
   const supabase = createServerSupabaseClient();
   const {
     data: { user },

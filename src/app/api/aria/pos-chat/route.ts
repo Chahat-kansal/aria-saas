@@ -15,6 +15,10 @@ import { getSystemPrompt } from '@/lib/aria/get-system-prompt'
 import { writeAriaOutcome } from '@/lib/aria/write-outcome'
 
 async function _POST(req: Request) {
+  if (!process.env.ANTHROPIC_API_KEY) {
+    console.error('[pos-chat] ANTHROPIC_API_KEY is not set')
+    return NextResponse.json({ error: 'AI not configured' }, { status: 503 })
+  }
   const supabase = createServerSupabaseClient()
   const { data: { user }, error: authError } = await supabase.auth.getUser()
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

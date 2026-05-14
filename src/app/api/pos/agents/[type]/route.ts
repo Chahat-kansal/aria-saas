@@ -23,6 +23,36 @@ async function getBid(supabase: Supa, userId: string) {
 }
 
 async function executeReorderApproval(supabase: Supa, bid: string, dec: Record<string, unknown>): Promise<{ success: boolean; error?: string }> {
+  // Create a real pos_purchase_orders entry from the agent decision
+  const poData = dec.decision_data as { supplier_id?: string | null; supplier_name?: string; supplier_email?: string | null; lines?: Array<{ product_id: string; product_name: string; qty: number; unit_cost: number; total: number }>; total_cost?: number };
+  const poLines = Array.isArray(poData?.lines) ? poData.lines : [];
+  const poTotal = Number(poData?.total_cost ?? 0);
+
+  const { data: newPO } = await supabase.from('pos_purchase_orders').insert({
+    business_id: bid,
+    supplier_id: poData?.supplier_id ?? null,
+    status: 'draft',
+    subtotal: poTotal,
+    total: poTotal,
+    created_by: 'Aria Agent',
+    source: 'agent',
+    notes: poData?.supplier_name ? `Aria reorder agent — ${poData.supplier_name}` : 'Aria reorder agent',
+  }).select().single();
+
+  if (newPO && poLines.length > 0) {
+    await supabase.from('pos_purchase_order_items').insert(
+      poLines.map(l => ({
+        order_id: newPO.id,
+        product_id: l.product_id,
+        product_name: l.product_name,
+        quantity_ordered: l.qty,
+        quantity_received: 0,
+        unit_cost: l.unit_cost,
+        line_total: l.qty * l.unit_cost,
+      }))
+    );
+  }
+
   await supabase.from('purchase_order_drafts')
     .update({ status: 'approved' })
     .eq('business_id', bid)
@@ -30,9 +60,6 @@ async function executeReorderApproval(supabase: Supa, bid: string, dec: Record<s
     .eq('status', 'pending_approval');
 
   const resendKey = process.env.RESEND_API_KEY;
-  const poData = dec.decision_data as { supplier_name?: string; supplier_email?: string | null; lines?: Array<{ product_name?: string; qty?: number; unit_cost?: number; total?: number }>; total_cost?: number };
-  const poLines = Array.isArray(poData?.lines) ? poData.lines : [];
-  const poTotal = Number(poData?.total_cost ?? 0);
 
   if (resendKey && poData?.supplier_email) {
     try {
