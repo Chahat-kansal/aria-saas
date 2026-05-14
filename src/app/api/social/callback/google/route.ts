@@ -20,7 +20,8 @@ async function _GET(req: Request) {
     if (!user) return NextResponse.redirect(`${appUrl}/dashboard/social?error=not_authenticated`);
 
     const { data: biz } = await supabase.from('businesses').select('id')
-      .eq('user_id', user.id).eq('is_active', true).order('created_at', { ascending: true }).limit(1).maybeSingle();
+      .eq('user_id', user.id).eq('is_active', true)
+      .order('created_at', { ascending: true }).limit(1).maybeSingle();
     if (!biz) return NextResponse.redirect(`${appUrl}/dashboard/social?error=no_business`);
 
     // Exchange code for tokens
@@ -37,46 +38,71 @@ async function _GET(req: Request) {
     const tokens = await tokenRes.json();
     if (!tokens.access_token) throw new Error(tokens.error_description || 'No access token');
 
-    // Get GMB accounts
-    const accountsRes = await fetch('https://mybusinessaccountmanagement.googleapis.com/v1/accounts', {
-      headers: { 'Authorization': `Bearer ${tokens.access_token}` },
+    // Get Google profile info (always works — basic openid scope)
+    const profileRes = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+      headers: { Authorization: `Bearer ${tokens.access_token}` }
     });
-    const accountsData = await accountsRes.json();
-    console.log('[google/callback] accounts response:', JSON.stringify(accountsData))
-    const account = accountsData.accounts?.[0] ?? null;
-    // Don't crash — save connection even without account data
-    // The user can retry fetching account info later
+    const profile = await profileRes.json();
 
-    // Get first location (only if we have an account)
-    let location: any = null;
-    if (account) {
-      try {
-        const locRes = await fetch(
-          `https://mybusiness.googleapis.com/v4/${account.name}/locations`,
-          { headers: { 'Authorization': `Bearer ${tokens.access_token}` } }
-        );
-        const locData = await locRes.json();
-        location = locData.locations?.[0] ?? null;
-      } catch { /* non-fatal */ }
+    // Try to get GMB accounts — non-fatal if it fails
+    let accountName = profile.name ?? 'Google Business';
+    let accountId = profile.id ?? 'unknown';
+    let locationName: string | null = null;
+
+    try {
+      const accountsRes = await fetch(
+        'https://mybusinessaccountmanagement.googleapis.com/v1/accounts',
+        { headers: { Authorization: `Bearer ${tokens.access_token}` } }
+      );
+      const accountsData = await accountsRes.json();
+      console.log('[google/callback] accounts:', JSON.stringify(accountsData));
+
+      const account = accountsData.accounts?.[0];
+      if (account) {
+        accountId = account.name;
+        accountName = account.accountName || account.name;
+
+        // Try to get location
+        try {
+          const locRes = await fetch(
+            `https://mybusiness.googleapis.com/v4/${account.name}/locations`,
+            { headers: { Authorization: `Bearer ${tokens.access_token}` } }
+          );
+          const locData = await locRes.json();
+          console.log('[google/callback] locations:', JSON.stringify(locData));
+          locationName = locData.locations?.[0]?.name ?? null;
+        } catch { /* non-fatal */ }
+      }
+    } catch (e) {
+      console.error('[google/callback] accounts API error:', e);
+      // Continue — save token anyway so user doesn't have to re-auth
     }
 
+    // Save connection — always save even without account data
+    // Token is stored so we can retry API calls after app verification
     await supabase.from('social_connections').upsert({
       business_id: biz.id,
       platform: 'google_business',
-      platform_account_id: account?.name ?? null,
-      platform_account_name: account?.accountName ?? account?.name ?? null,
-      platform_page_id: location?.name ?? null,
+      platform_account_id: accountId,
+      platform_account_name: accountName,
+      platform_page_id: locationName,
+      account_handle: profile.email ?? null,
+      profile_picture: profile.picture ?? null,
       access_token: tokens.refresh_token ?? tokens.access_token,
-      token_expires_at: tokens.expires_in ? new Date(Date.now() + tokens.expires_in * 1000).toISOString() : null,
+      token_expires_at: tokens.expires_in
+        ? new Date(Date.now() + tokens.expires_in * 1000).toISOString()
+        : null,
       is_active: true,
+      connected_at: new Date().toISOString(),
+      last_synced_at: new Date().toISOString(),
     }, { onConflict: 'business_id,platform' });
 
-    const msg = account
-      ? 'connected=google'
-      : 'connected=google&warning=no_gmb_account_found'
-    return NextResponse.redirect(`${appUrl}/dashboard/social?${msg}`);
+    return NextResponse.redirect(`${appUrl}/dashboard/social?connected=google`);
   } catch (err: any) {
-    return NextResponse.redirect(`${appUrl}/dashboard/social?error=${encodeURIComponent(err.message)}`);
+    console.error('[google/callback] fatal error:', err.message);
+    return NextResponse.redirect(
+      `${appUrl}/dashboard/social?error=${encodeURIComponent(err.message)}`
+    );
   }
 }
 
