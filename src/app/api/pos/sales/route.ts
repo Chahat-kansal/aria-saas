@@ -73,6 +73,9 @@ async function _POST(req: Request) {
     split_payments,
     // Direct deposit
     direct_deposit_ref,
+    // Optional — client can pass these; if missing, we look them up
+    outlet_id: requestOutletId,
+    register_id: requestRegisterId,
   } = await req.json();
 
   if (!items?.length) return NextResponse.json({ error: 'No items provided' }, { status: 400 });
@@ -111,6 +114,18 @@ async function _POST(req: Request) {
     .is('closed_at', null)
     .maybeSingle();
 
+  // Resolve outlet_id + register_id — use request values, else look up first active ones
+  let resolvedOutletId: string | null = requestOutletId ?? null;
+  let resolvedRegisterId: string | null = requestRegisterId ?? null;
+  if (!resolvedOutletId) {
+    const { data: firstOutlet } = await supabase.from('pos_outlets').select('id').eq('business_id', bid).limit(1).maybeSingle();
+    resolvedOutletId = firstOutlet?.id ?? null;
+  }
+  if (!resolvedRegisterId && resolvedOutletId) {
+    const { data: firstReg } = await supabase.from('pos_registers').select('id').eq('outlet_id', resolvedOutletId).eq('is_active', true).limit(1).maybeSingle();
+    resolvedRegisterId = firstReg?.id ?? null;
+  }
+
   // Build sale insert — include new columns if they exist
   const salePayload: Record<string, unknown> = {
     business_id: bid,
@@ -126,6 +141,8 @@ async function _POST(req: Request) {
   // but will error on schema mismatch; these are added by migration 20260506000003)
   if (served_by !== undefined) salePayload.served_by = served_by;
   if (notes !== undefined) salePayload.notes = notes;
+  if (resolvedOutletId) salePayload.outlet_id = resolvedOutletId;
+  if (resolvedRegisterId) salePayload.register_id = resolvedRegisterId;
   if (direct_deposit_ref) salePayload.direct_deposit_ref = direct_deposit_ref;
   if (isSplit && split_payments?.length) salePayload.split_payments = split_payments;
   if (gift_card_code) {
@@ -177,6 +194,58 @@ async function _POST(req: Request) {
   if (customer_id) {
     const pts = Math.floor(total_amount);
     await supabase.rpc('increment_loyalty_points', { customer_id, points: pts }).maybeSingle();
+  }
+
+  // ── Save payment record(s) — amount_cents is CENTS not dollars ──────────────
+  try {
+    const paymentsToInsert: Array<{ sale_id: string; method: string; amount_cents: number; reference?: string | null }> = [];
+    if (isSplit && Array.isArray(split_payments) && split_payments.length > 0) {
+      for (const sp of split_payments as Array<{ method: string; amount: number }>) {
+        paymentsToInsert.push({ sale_id: sale.id, method: sp.method, amount_cents: Math.round((sp.amount ?? 0) * 100) });
+      }
+    } else {
+      paymentsToInsert.push({
+        sale_id: sale.id,
+        method: payment_method,
+        amount_cents: Math.round((total_amount ?? 0) * 100),
+        reference: direct_deposit_ref ?? null,
+      });
+    }
+    if (paymentsToInsert.length > 0) {
+      await supabase.from('pos_sale_payments').insert(paymentsToInsert);
+    }
+  } catch (payErr) {
+    console.error('[pos/sales] payment save failed (non-fatal):', (payErr as Error).message);
+  }
+
+  // ── Decrement stock — pos_products.stock_quantity + pos_outlet_inventory.items_on_hand ──
+  try {
+    for (const item of (items as Array<{ product_id: string; quantity: number }>) ?? []) {
+      // pos_products.stock_quantity
+      const { data: prod } = await supabase.from('pos_products')
+        .select('stock_quantity').eq('id', item.product_id).maybeSingle();
+      if (prod?.stock_quantity != null) {
+        await supabase.from('pos_products')
+          .update({ stock_quantity: Math.max(0, prod.stock_quantity - item.quantity) })
+          .eq('id', item.product_id);
+      }
+
+      // pos_outlet_inventory.items_on_hand (source of truth)
+      if (resolvedOutletId) {
+        const { data: inv } = await supabase.from('pos_outlet_inventory')
+          .select('id, items_on_hand')
+          .eq('product_id', item.product_id)
+          .eq('outlet_id', resolvedOutletId)
+          .maybeSingle();
+        if (inv) {
+          await supabase.from('pos_outlet_inventory')
+            .update({ items_on_hand: Math.max(0, (inv.items_on_hand ?? 0) - item.quantity), updated_at: new Date().toISOString() })
+            .eq('id', inv.id);
+        }
+      }
+    }
+  } catch (stockErr) {
+    console.error('[pos/sales] stock decrement failed (non-fatal):', (stockErr as Error).message);
   }
 
   return NextResponse.json({ sale });
