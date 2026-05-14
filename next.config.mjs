@@ -24,7 +24,7 @@ const nextConfig = {
             value: [
               "default-src 'self'",
               // Scripts: allow CDNs needed for live preview (React, Babel, Tailwind, etc.)
-              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com https://cdn.tailwindcss.com https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://cdn.skypack.dev https://esm.sh https://eu-assets.i.posthog.com https://us-assets.i.posthog.com",
+              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com https://cdn.tailwindcss.com https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://cdn.skypack.dev https://esm.sh https://eu-assets.i.posthog.com https://us-assets.i.posthog.com https://js.stripe.com https://m.stripe.com https://m.stripe.network",
               // Styles: allow inline + Google Fonts + CDNs
               "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.tailwindcss.com https://unpkg.com https://cdnjs.cloudflare.com",
               // Fonts

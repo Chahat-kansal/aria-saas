@@ -398,7 +398,16 @@ async function _POST(req: Request): Promise<Response> {
     // Default — no insight for unhandled pages
     return NextResponse.json({ insight: null } satisfies PageInsightResult);
   } catch (err) {
-    console.error('[aria/page-insight] error', err);
+    const e = err as Error;
+    console.error('[aria/page-insight] error', {
+      message: e?.message,
+      stack: e?.stack,
+      name: e?.name,
+      raw: err,
+      anthropicKeySet: !!process.env.ANTHROPIC_API_KEY,
+      page,
+      business_id,
+    });
     return NextResponse.json({ insight: null } satisfies PageInsightResult);
   }
 }
