@@ -15,6 +15,7 @@ interface Props {
   product: Product
   onAdd: (product: Product) => void
   quantity?: number
+  fromPrice?: number  // when set, shows "from $X" instead of fixed price
 }
 
 const CATEGORY_EMOJI: Record<string, string> = {
@@ -32,7 +33,7 @@ const CATEGORY_EMOJI: Record<string, string> = {
   'default':    '🍽️',
 }
 
-export default function ProductCard({ product, onAdd, quantity = 0 }: Props) {
+export default function ProductCard({ product, onAdd, quantity = 0, fromPrice }: Props) {
   const [imgError, setImgError] = useState(false)
   const key = (product.category ?? 'default').toLowerCase()
   const emoji = CATEGORY_EMOJI[key] ?? CATEGORY_EMOJI.default
@@ -146,7 +147,9 @@ export default function ProductCard({ product, onAdd, quantity = 0 }: Props) {
           {product.name}
         </p>
         <p style={{ color: '#7FB897', fontSize: 14, fontWeight: 700, margin: 0, fontStyle: 'italic', fontFamily: "'Instrument Serif', Georgia, serif" }}>
-          A${product.price.toFixed(2)}
+          {fromPrice != null && fromPrice < product.price
+            ? <>from A${fromPrice.toFixed(2)}</>
+            : <>A${product.price.toFixed(2)}</>}
         </p>
       </div>
     </button>

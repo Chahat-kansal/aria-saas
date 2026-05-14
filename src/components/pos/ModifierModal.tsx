@@ -84,7 +84,7 @@ function reducer(state: ModalState, action: Action): ModalState {
 function buildSummary(groups: ModifierGroup[], state: ModalState): string {
   const parts: string[] = []
   if (state.variationName) parts.push(state.variationName)
-  for (const g of groups) {
+  for (const g of groups.filter(g => isGroupVisible(g as any, groups, state))) {
     for (const m of g.modifiers ?? []) {
       const sel = state.selected[m.id]
       if (!sel) continue
@@ -99,7 +99,7 @@ function buildSummary(groups: ModifierGroup[], state: ModalState): string {
 
 function calcTotal(basePrice: number, variationPrice: number | null, groups: ModifierGroup[], state: ModalState, sizeKey: string | null): number {
   let total = variationPrice ?? basePrice
-  for (const g of groups) {
+  for (const g of groups.filter(g => isGroupVisible(g as any, groups, state))) {
     for (const m of g.modifiers ?? []) {
       const sel = state.selected[m.id]
       if (!sel || sel.operator === 'no') continue
@@ -110,9 +110,26 @@ function calcTotal(basePrice: number, variationPrice: number | null, groups: Mod
   return Math.max(0, total)
 }
 
+/** Evaluate show_when — returns true if the group should be rendered */
+function isGroupVisible(
+  group: ModifierGroup & { show_when?: { group_name: string; modifier_name: string } | null },
+  allGroups: ModifierGroup[],
+  state: ModalState
+): boolean {
+  const sw = (group as any).show_when
+  if (!sw) return true
+  const parentGroup = allGroups.find(g => g.name === sw.group_name)
+  if (!parentGroup) return false
+  const targetMod = (parentGroup.modifiers ?? []).find(m => m.name === sw.modifier_name)
+  if (!targetMod) return false
+  return !!state.selected[targetMod.id]
+}
+
 function isValid(groups: ModifierGroup[], state: ModalState): { valid: boolean; errors: string[] } {
   const errors: string[] = []
   for (const g of groups) {
+    // Skip hidden groups in validation
+    if (!isGroupVisible(g as any, groups, state)) continue
     const required = g.is_required
     const min = g.min_selections
     const modIds = (g.modifiers ?? []).map(m => m.id)
@@ -135,7 +152,7 @@ export function ModifierModal({ product, onClose, onConfirm }: ModifierModalProp
 
   useEffect(() => {
     Promise.all([
-      fetch(`/api/pos/products/${product.id}/modifiers`).then(r => r.json()).catch(() => ({ data: [] })),
+      fetch(`/api/pos/products/${product.id}/modifiers`).then(r => r.json()).catch(() => ({ data: [], product_defaults: [] })),
       fetch(`/api/pos/products/${product.id}/variations`).then(r => r.json()).catch(() => ({ data: [] })),
     ]).then(([modData, varData]) => {
       const rawGroups: ModifierGroup[] = (modData.data ?? []).map((pmg: any) => ({
@@ -145,6 +162,23 @@ export function ModifierModal({ product, onClose, onConfirm }: ModifierModalProp
         min_selections: pmg.override_min ?? pmg.pos_modifier_groups?.min_selections ?? 0,
         max_selections: pmg.override_max ?? pmg.pos_modifier_groups?.max_selections ?? null,
       }))
+      // Per-product defaults override group-level is_default
+      const productDefaultMap: Record<string, number> = {}
+      for (const pd of (modData.product_defaults ?? [])) {
+        productDefaultMap[pd.modifier_id] = pd.quantity
+      }
+      if (Object.keys(productDefaultMap).length > 0) {
+        // Clear group-level defaults and apply product-level ones
+        const sel: ModalState['selected'] = {}
+        for (const g of rawGroups) {
+          for (const m of g.modifiers ?? []) {
+            if (productDefaultMap[m.id] != null) {
+              sel[m.id] = { quantity: productDefaultMap[m.id], operator: 'add' }
+            }
+          }
+        }
+        Object.assign(initialState.selected, sel)
+      }
       setGroups(rawGroups)
       setVariations(varData.data ?? [])
 
@@ -284,8 +318,8 @@ export function ModifierModal({ product, onClose, onConfirm }: ModifierModalProp
                   </div>
                 )}
 
-                {/* Modifier groups */}
-                {groups.map(g => {
+                {/* Modifier groups — filtered by show_when */}
+                {groups.filter(g => isGroupVisible(g as any, groups, state)).map(g => {
                   const modIds = (g.modifiers ?? []).map(m => m.id)
                   const selectedCount = modIds.filter(id => state.selected[id]).length
                   const atMax = g.max_selections != null && selectedCount >= g.max_selections

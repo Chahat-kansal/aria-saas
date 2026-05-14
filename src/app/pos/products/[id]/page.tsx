@@ -5,6 +5,80 @@ import Link from 'next/link';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import AriaInsightCard from '@/components/reports/AriaInsightCard';
 
+// Modifier attachment panel — cafe-only, additive
+function ModifierAttachmentPanel({ productId }: { productId: string }) {
+  const [groups, setGroups] = useState<any[]>([])
+  const [allGroups, setAllGroups] = useState<any[]>([])
+  const [bid, setBid] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    if (!productId) return
+    fetch('/api/pos/products').then(r => r.json()).then(d => {
+      if (!d.business_id) { setLoading(false); return }
+      setBid(d.business_id)
+      Promise.all([
+        fetch(`/api/pos/products/${productId}/modifiers`).then(r => r.json()).catch(() => ({ data: [] })),
+        fetch(`/api/pos/modifier-groups?business_id=${d.business_id}`).then(r => r.json()).catch(() => ({ data: [] })),
+      ]).then(([attached, all]) => {
+        setGroups(attached.data ?? [])
+        setAllGroups(all.data ?? [])
+        setLoading(false)
+      })
+    }).catch(() => setLoading(false))
+  }, [productId])
+
+  const attachedIds = new Set(groups.map((pmg: any) => pmg.pos_modifier_groups?.id ?? pmg.group_id))
+  const available = allGroups.filter((g: any) => !attachedIds.has(g.id))
+
+  const attach = async (groupId: string) => {
+    await fetch(`/api/pos/products/${productId}/modifiers`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ group_id: groupId, display_order: groups.length }),
+    })
+    const res = await fetch(`/api/pos/products/${productId}/modifiers`).then(r => r.json())
+    setGroups(res.data ?? [])
+  }
+
+  const detach = async (pmgId: string) => {
+    await fetch(`/api/pos/products/${productId}/modifiers?pmg_id=${pmgId}`, { method: 'DELETE' })
+    const res = await fetch(`/api/pos/products/${productId}/modifiers`).then(r => r.json())
+    setGroups(res.data ?? [])
+  }
+
+  if (loading) return <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: 13 }}>Loading modifiers…</p>
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {groups.length === 0 && <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: 13 }}>No modifier groups attached. Add one below.</p>}
+      {groups.map((pmg: any) => {
+        const g = pmg.pos_modifier_groups ?? {}
+        return (
+          <div key={pmg.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderRadius: 8, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}>
+            <div style={{ width: 10, height: 10, borderRadius: '50%', background: g.color ?? '#7FB897', flexShrink: 0 }} />
+            <span style={{ flex: 1, fontSize: 13, color: '#fff' }}>{g.name}</span>
+            <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>{g.selection_type} · {(g.pos_modifiers?.length ?? 0)} options</span>
+            <button onClick={() => detach(pmg.id)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 14 }}>×</button>
+          </div>
+        )
+      })}
+      {available.length > 0 && (
+        <div>
+          <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', margin: '4px 0 8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Add modifier group</p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {available.map((g: any) => (
+              <button key={g.id} onClick={() => attach(g.id)}
+                style={{ padding: '5px 12px', borderRadius: 20, border: `1px solid ${g.color ?? '#7FB897'}40`, background: `${g.color ?? '#7FB897'}10`, color: g.color ?? '#7FB897', cursor: 'pointer', fontSize: 12, fontFamily: 'inherit' }}>
+                + {g.name}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 interface Product {
   id: string; name: string; sku: string | null; barcode: string | null;
   price: number; cost_price: number; cost: number | null; stock_quantity: number | null;
@@ -20,7 +94,7 @@ interface PricePoint { id: string; price_set_name: string; price: number; cost: 
 interface Revision { id: string; created_at: string; changed_by: string; field_name: string; old_value: string; new_value: string; }
 
 const C = { bg:'var(--bg-base)', card:'var(--bg-surface)', border:'transparent', text:'var(--text-primary)', muted:'var(--text-secondary)', dim:'var(--text-tertiary)', violet:'#8B5CF6', green:'#22C55E', red:'#EF4444', amber:'#F59E0B' };
-const TABS = ['Overview','Sell & Cost','Outlets','History'];
+const TABS = ['Overview','Sell & Cost','Outlets','History','Modifiers'];
 
 export default function ProductDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -316,6 +390,17 @@ export default function ProductDetailPage() {
         )}
 
         {/* ── HISTORY TAB ── */}
+        {/* Modifiers tab — cafe-only, additive */}
+        {activeTab === 'Modifiers' && (
+          <div style={{ background: C.card, borderRadius: 14, padding: 20 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+              <p style={{ color: C.text, fontSize: 14, fontWeight: 700, margin: 0 }}>Modifier Groups</p>
+              <a href={`/dashboard/pos/modifiers`} style={{ fontSize: 12, color: C.violet, textDecoration: 'none' }}>Manage library →</a>
+            </div>
+            <ModifierAttachmentPanel productId={id ?? ''} />
+          </div>
+        )}
+
         {activeTab === 'History' && (
           <div style={{ background: C.card, borderRadius: 14, overflow: 'hidden' }}>
             <div style={{ padding: '13px 18px', borderBottom: '1px solid var(--divider)' }}>
