@@ -24,12 +24,19 @@ export default function OrdersPage() {
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<typeof TABS[number]>('all')
   const [deleting, setDeleting] = useState<string | null>(null)
+  const [expiryAlerts, setExpiryAlerts] = useState<Array<{
+    id: string; product_name: string; expiry_date: string;
+    days_until_expiry: number; quantity_at_risk: number; alert_type: string;
+  }>>([])
 
   useEffect(() => {
     fetch('/api/pos/orders').then(r => r.json()).then(d => {
       setOrders(d.orders ?? [])
       setLoading(false)
     }).catch(() => setLoading(false))
+    fetch('/api/pos/expiry-alerts').then(r => r.json())
+      .then(d => setExpiryAlerts((d.alerts ?? []).slice(0, 5)))
+      .catch(() => {})
   }, [])
 
   async function deleteOrder(id: string) {
@@ -53,6 +60,21 @@ export default function OrdersPage() {
           <Plus size={14} /> New Order
         </Link>
       </div>
+
+      {expiryAlerts.length > 0 && (
+        <div style={{ padding: '12px 24px', background: 'rgba(249,115,22,0.06)', borderBottom: '1px solid rgba(249,115,22,0.15)' }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: '#f97316', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>⚠ Expiry Alerts</div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {expiryAlerts.map(a => (
+              <div key={a.id} style={{ background: 'var(--bg-surface)', borderRadius: 8, padding: '6px 12px', fontSize: 12, display: 'flex', alignItems: 'center', gap: 8, border: `1px solid ${a.days_until_expiry <= 7 ? 'rgba(239,68,68,0.3)' : 'rgba(249,115,22,0.2)'}` }}>
+                <span style={{ fontWeight: 600 }}>{a.product_name}</span>
+                <span style={{ color: a.days_until_expiry <= 7 ? '#ef4444' : '#f97316', fontWeight: 700 }}>{a.days_until_expiry}d</span>
+                <span style={{ color: 'var(--text-tertiary)' }}>{new Date(a.expiry_date).toLocaleDateString('en-AU')} · {a.quantity_at_risk} units</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div style={{ display: 'flex', borderBottom: '1px solid var(--divider)', padding: '0 24px' }}>
         {TABS.map(t => (

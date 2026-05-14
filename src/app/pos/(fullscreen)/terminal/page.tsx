@@ -216,6 +216,14 @@ export default function TerminalPage() {
   /* ── Quick access panel ───────────────────────────────────────── */
   const [showQuickPanel,   setShowQuickPanel]   = useState(false);
 
+  /* ── Expiry tracking ──────────────────────────────────────────── */
+  const [expiryPrompt, setExpiryPrompt] = useState<{
+    product_id: string; product_name: string;
+    existing_batch: { id: string; expiry_date: string; quantity_remaining: number } | null;
+    mode: 'confirm_existing' | 'ask_new' | 'ask_track';
+    pending_date: string;
+  } | null>(null);
+
   /* ── Custom item / Note ───────────────────────────────────────── */
   const [showCustomItem,   setShowCustomItem]   = useState(false);
   const [customItemForm,   setCustomItemForm]   = useState({ desc: '', price: '', qty: '1', taxable: true, isNote: false });
@@ -687,6 +695,15 @@ export default function TerminalPage() {
     addToCartDirect(fakeProduct, item.quantity, undefined, item.display_summary || item.product_name, mods)
   }
 
+  async function getProductBatches(productId: string): Promise<Array<{ id: string; expiry_date: string; quantity_remaining: number }>> {
+    if (!businessId) return []
+    try {
+      const res = await fetch(`/api/pos/product-batches?product_id=${productId}&business_id=${businessId}`)
+      const data = await res.json()
+      return data.batches ?? []
+    } catch { return [] }
+  }
+
   async function checkAndAddToCart(p: Product, fromEl?: HTMLElement | null) {
     if (!p.is_active) return;
     // Cafe routing — Sprint C: sandwich builder, Sprint A: modifier modal
@@ -725,6 +742,17 @@ export default function TerminalPage() {
     } catch { /* fall through */ }
     setVariantLoading(false);
     addToCartDirect(p, 1, undefined, undefined, [], fromEl);
+    // Non-blocking expiry check after adding to cart
+    getProductBatches(p.id).then(batches => {
+      const activeBatch = batches.find(b =>
+        b.quantity_remaining > 0 && new Date(b.expiry_date).getTime() > Date.now()
+      )
+      if (activeBatch) {
+        setExpiryPrompt({ product_id: p.id, product_name: p.name, existing_batch: activeBatch, mode: 'confirm_existing', pending_date: activeBatch.expiry_date })
+      } else if ((p as any).track_stock) {
+        setExpiryPrompt({ product_id: p.id, product_name: p.name, existing_batch: null, mode: 'ask_new', pending_date: '' })
+      }
+    }).catch(() => {})
   }
 
   function confirmVariantSelection() {
@@ -1225,6 +1253,67 @@ export default function TerminalPage() {
           }}
         />
       )}
+      {/* Expiry tracking prompt — slides up from bottom */}
+      {expiryPrompt && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 300, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', padding: '0 0 32px' }}>
+          <div style={{ background: 'var(--pos-elevated,#162030)', borderRadius: 20, padding: 24, width: '100%', maxWidth: 400, border: '1px solid rgba(20,184,166,0.2)', boxShadow: '0 -24px 64px rgba(0,0,0,0.5)' }}>
+            {expiryPrompt.mode === 'confirm_existing' && expiryPrompt.existing_batch && (
+              <>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#f97316', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>⏰ Expiry Tracked</div>
+                <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 6px' }}>{expiryPrompt.product_name}</p>
+                <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '0 0 20px' }}>
+                  Selling from batch expiring{' '}
+                  <strong style={{ color: new Date(expiryPrompt.existing_batch.expiry_date).getTime() < Date.now() + 7*86400000 ? '#ef4444' : '#f97316' }}>
+                    {new Date(expiryPrompt.existing_batch.expiry_date).toLocaleDateString('en-AU')}
+                  </strong>
+                  {' '}· {expiryPrompt.existing_batch.quantity_remaining} units remaining
+                </p>
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <button onClick={() => {
+                    fetch(`/api/pos/product-batches/${expiryPrompt.existing_batch!.id}/decrement`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ qty: 1 }) }).catch(() => {})
+                    setExpiryPrompt(null)
+                  }} style={{ flex: 1, padding: '10px 0', borderRadius: 10, border: 'none', background: 'var(--success,#65B179)', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>✓ Confirmed</button>
+                  <button onClick={() => setExpiryPrompt(null)} style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid var(--divider)', background: 'transparent', color: 'var(--text-secondary)', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>Skip</button>
+                </div>
+              </>
+            )}
+            {expiryPrompt.mode === 'ask_new' && (
+              <>
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>Add Expiry Date?</div>
+                <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 6px' }}>{expiryPrompt.product_name}</p>
+                <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '0 0 14px' }}>No expiry date on file. Add one so Aria can track this stock?</p>
+                <input type="date" value={expiryPrompt.pending_date} min={new Date().toISOString().split('T')[0]}
+                  onChange={e => setExpiryPrompt(p => p ? { ...p, pending_date: e.target.value } : p)}
+                  style={{ width: '100%', padding: '9px 12px', borderRadius: 10, border: '1px solid var(--divider)', background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: 14, fontFamily: 'inherit', marginBottom: 14, boxSizing: 'border-box' }} />
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <button disabled={!expiryPrompt.pending_date} onClick={() => { if (expiryPrompt.pending_date) setExpiryPrompt(p => p ? { ...p, mode: 'ask_track' } : p) }}
+                    style={{ flex: 1, padding: '10px 0', borderRadius: 10, border: 'none', background: expiryPrompt.pending_date ? 'var(--success,#65B179)' : 'var(--bg-elevated)', color: expiryPrompt.pending_date ? '#fff' : 'var(--text-tertiary)', fontSize: 13, fontWeight: 700, cursor: expiryPrompt.pending_date ? 'pointer' : 'not-allowed', fontFamily: 'inherit' }}>Add Date</button>
+                  <button onClick={() => setExpiryPrompt(null)} style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid var(--divider)', background: 'transparent', color: 'var(--text-secondary)', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>Skip</button>
+                </div>
+              </>
+            )}
+            {expiryPrompt.mode === 'ask_track' && (
+              <>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#7FB897', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>Track in System?</div>
+                <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 6px' }}>{expiryPrompt.product_name}</p>
+                <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '0 0 20px' }}>
+                  Add <strong style={{ color: 'var(--text-primary)' }}>{new Date(expiryPrompt.pending_date).toLocaleDateString('en-AU')}</strong> to the system and let Aria monitor expiry for this product?
+                </p>
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <button onClick={async () => {
+                    try {
+                      await fetch('/api/pos/product-batches', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ business_id: businessId, product_id: expiryPrompt.product_id, expiry_date: expiryPrompt.pending_date, quantity_received: 1, quantity_remaining: 0, expiry_tracked: true, source: 'pos_sale' }) })
+                    } catch { /* non-fatal */ }
+                    setExpiryPrompt(null)
+                  }} style={{ flex: 1, padding: '10px 0', borderRadius: 10, border: 'none', background: '#7FB897', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>Yes, Track It</button>
+                  <button onClick={() => setExpiryPrompt(null)} style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid var(--divider)', background: 'transparent', color: 'var(--text-secondary)', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>No Thanks</button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Training mode amber banner — additive */}
       {trainingMode && (
         <>
