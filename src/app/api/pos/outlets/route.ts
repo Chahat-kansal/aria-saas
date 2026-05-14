@@ -44,6 +44,15 @@ async function _POST(req: Request) {
   const body = await req.json();
   const { data: outlet, error } = await supabase.from('pos_outlets').insert({ ...body, business_id: bid }).select().single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // Auto-create a default register for every new outlet
+  await supabase.from('pos_registers').insert({
+    business_id: bid,
+    outlet_id: outlet.id,
+    name: 'Main Register',
+    is_active: true,
+  });
+
   return NextResponse.json({ outlet });
 }
 

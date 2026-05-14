@@ -64,7 +64,7 @@ export default function TermsPage() {
         </div>
 
         <p style={{ fontSize: 12, color: 'rgba(130,160,200,0.35)', textAlign: 'center', marginTop: 40 }}>
-          Questions? <a href="mailto:cnkansal1105@gmail.com" style={{ color: 'rgba(130,160,200,0.5)', textDecoration: 'none' }}>cnkansal1105@gmail.com</a>
+          Questions? <a href="mailto:hello@ariaos.site" style={{ color: 'rgba(130,160,200,0.5)', textDecoration: 'none' }}>hello@ariaos.site</a>
         </p>
       </div>
     </div>

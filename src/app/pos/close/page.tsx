@@ -25,6 +25,7 @@ export default function CloseRegisterPage() {
   const [float, setFloat] = useState('200.00');
   const [note, setNote] = useState('');
   const [closing, setClosing] = useState(false);
+  const [closeError, setCloseError] = useState('');
   const [showMore, setShowMore] = useState(false);
   const [businessId, setBusinessId] = useState<string | null>(null);
 
@@ -112,15 +113,21 @@ export default function CloseRegisterPage() {
       return;
     }
     setClosing(true);
+    setCloseError('');
+
+    const timeout = setTimeout(() => {
+      setClosing(false);
+      setCloseError('Request timed out. Please check your connection and try again.');
+    }, 10000);
+
     try {
-      // Build closure note with variance reason if applicable
       let closureNote = note;
       if (Math.abs(cashDiff) > 0.01 && varianceReason) {
         const varianceStr = `Variance: ${cashDiff >= 0 ? '+' : ''}A$${cashDiff.toFixed(2)} — ${varianceReason}`;
         closureNote = closureNote ? `${closureNote}\n${varianceStr}` : varianceStr;
       }
 
-      await fetch(`/api/pos/sessions?id=${session.id}`, {
+      const res = await fetch(`/api/pos/sessions?id=${session.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -131,8 +138,18 @@ export default function CloseRegisterPage() {
           closure_note: closureNote,
         }),
       });
+      clearTimeout(timeout);
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        setCloseError(d.error ?? 'Failed to close register. Please try again.');
+        setClosing(false);
+        return;
+      }
       router.push(`/pos/reports/closures/${session.id}`);
-    } catch {
+    } catch (err) {
+      clearTimeout(timeout);
+      console.error('Close register error:', err);
+      setCloseError('Failed to close register. Please check your connection and try again.');
       setClosing(false);
     }
   }
@@ -283,6 +300,11 @@ export default function CloseRegisterPage() {
               style={{ width: '100%', background: 'rgba(10,9,16,0.8)', border: `1px solid ${C.border}`, borderRadius: 10, padding: '10px 14px', fontSize: 13, color: C.text, outline: 'none', fontFamily: 'inherit', resize: 'vertical', boxSizing: 'border-box' as const }} />
           </div>
 
+          {closeError && (
+            <div style={{ padding: '10px 14px', borderRadius: 10, background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.25)', color: C.red, fontSize: 13 }}>
+              {closeError}
+            </div>
+          )}
           <button onClick={closeRegister} disabled={closing}
             style={{ padding: '14px', borderRadius: 12, border: 'none', background: `linear-gradient(135deg,${C.violet},#6D28D9)`, color: '#fff', fontSize: 15, fontWeight: 800, cursor: closing ? 'not-allowed' : 'pointer', fontFamily: 'inherit', opacity: closing ? 0.6 : 1 }}>
             {closing ? 'Closing register…' : needsManagerPin ? '⚠ Close Register (Manager PIN required)' : '🔒 Close Register'}

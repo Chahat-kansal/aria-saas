@@ -299,12 +299,14 @@ export default function ProductWizard({ step, id, businessId, draft, suppliers, 
               <h2 style={{ fontSize: 15, fontWeight: 700, margin: '0 0 24px' }}>Pricing</h2>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                 <Field label="Sale price (AUD) *">
-                  <input style={inp} type="number" min="0" step="0.01" value={price}
-                    onChange={e => setPrice(e.target.value)} placeholder="0.00" autoFocus />
+                  <input style={inp} type="text" inputMode="decimal" pattern="^\d*\.?\d{0,2}$" value={price}
+                    onChange={e => setPrice(e.target.value)} placeholder="0.00" autoFocus
+                    onKeyDown={e => { const ok = ['0','1','2','3','4','5','6','7','8','9','.','Backspace','Delete','Tab','ArrowLeft','ArrowRight','ArrowUp','ArrowDown']; if (!ok.includes(e.key) && !e.metaKey && !e.ctrlKey) e.preventDefault() }} />
                 </Field>
                 <Field label="Cost price (AUD)">
-                  <input style={inp} type="number" min="0" step="0.01" value={costPrice}
-                    onChange={e => setCostPrice(e.target.value)} placeholder="0.00" />
+                  <input style={inp} type="text" inputMode="decimal" pattern="^\d*\.?\d{0,2}$" value={costPrice}
+                    onChange={e => setCostPrice(e.target.value)} placeholder="0.00"
+                    onKeyDown={e => { const ok = ['0','1','2','3','4','5','6','7','8','9','.','Backspace','Delete','Tab','ArrowLeft','ArrowRight','ArrowUp','ArrowDown']; if (!ok.includes(e.key) && !e.metaKey && !e.ctrlKey) e.preventDefault() }} />
                 </Field>
               </div>
               <Field label="GST rate (%)">

@@ -20,7 +20,7 @@ export default function DemoPage() {
 
         <div style={{ textAlign: 'center', marginBottom: 40 }}>
           <h1 style={{ fontSize: 40, fontWeight: 900, margin: '0 0 12px', letterSpacing: '-0.03em' }}>See Aria in action</h1>
-          <p style={{ fontSize: 16, color: 'rgba(130,160,200,0.75)', margin: 0 }}>60 seconds. No signup needed.</p>
+          <p style={{ fontSize: 16, color: 'rgba(130,160,200,0.75)', margin: 0 }}>60 seconds. Free 14-day trial — no credit card required.</p>
         </div>
 
         <div style={{ aspectRatio: '16/9', background: '#0A0E1E', borderRadius: 20, border: '1px solid #1A2240', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', marginBottom: 40, overflow: 'hidden', position: 'relative' }}>
@@ -30,8 +30,8 @@ export default function DemoPage() {
         </div>
 
         <div style={{ textAlign: 'center', marginBottom: 56 }}>
-          <Link href="/pos/ask" style={{ display: 'inline-block', padding: '14px 32px', borderRadius: 12, background: '#8B5CF6', color: '#fff', fontSize: 15, fontWeight: 700, textDecoration: 'none', marginRight: 12 }}>
-            Talk to Aria →
+          <Link href="/signup" style={{ display: 'inline-block', padding: '14px 32px', borderRadius: 12, background: '#8B5CF6', color: '#fff', fontSize: 15, fontWeight: 700, textDecoration: 'none', marginRight: 12 }}>
+            Start Free Trial →
           </Link>
           <Link href="/signup" style={{ display: 'inline-block', padding: '14px 28px', borderRadius: 12, border: '1px solid #1A2240', color: 'rgba(220,240,255,0.8)', fontSize: 15, fontWeight: 600, textDecoration: 'none' }}>
             Start Free Trial

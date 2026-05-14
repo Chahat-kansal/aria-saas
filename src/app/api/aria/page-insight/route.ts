@@ -58,6 +58,11 @@ async function callClaude(prompt: string, systemPrompt?: string): Promise<string
 }
 
 async function _POST(req: Request): Promise<Response> {
+  if (!process.env.ANTHROPIC_API_KEY) {
+    console.error('[page-insight] ANTHROPIC_API_KEY is not set')
+    return NextResponse.json({ insight: null }, { status: 503 });
+  }
+
   const supabase = createServerSupabaseClient();
   const {
     data: { user },
