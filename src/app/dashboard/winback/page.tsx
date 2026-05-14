@@ -149,10 +149,31 @@ export default function WinbackPage() {
               </div>
             </div>
             {customers.length === 0 ? (
-              <div className="px-5 py-12 text-center" style={{ background: '#0d0d14' }}>
-                <div className="text-3xl mb-3">👥</div>
-                <p className="text-sm font-medium text-white mb-1">No lapsed customers</p>
-                <p className="text-xs" style={{ color: '#6b7280' }}>Customers who haven't visited in 60+ days will appear here.</p>
+              <div className="px-5 py-8" style={{ background: '#0d0d14' }}>
+                <p className="text-sm font-medium text-white mb-1">No lapsed customers yet</p>
+                <p className="text-xs mb-6" style={{ color: '#6b7280' }}>
+                  Winback campaigns activate automatically as customers make purchases. Customers who haven&apos;t returned in 60+ days will appear here with a personalised SMS ready to send.
+                </p>
+                <p className="text-xs font-semibold mb-3" style={{ color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Preview — what winback looks like</p>
+                {[
+                  { name: 'Sarah M.', days: 65, spent: 234 },
+                  { name: 'James K.', days: 78, spent: 189 },
+                  { name: 'Liu W.',   days: 92, spent: 312 },
+                ].map(c => (
+                  <div key={c.name} className="flex items-center justify-between px-4 py-3 mb-2 rounded-lg" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', opacity: 0.6 }}>
+                    <div>
+                      <div className="text-sm font-medium text-white">{c.name}</div>
+                      <div className="text-xs" style={{ color: '#6b7280' }}>Last visit {c.days} days ago · A${c.spent} lifetime</div>
+                    </div>
+                    <span className="text-xs px-2 py-1 rounded" style={{ background: 'rgba(239,68,68,0.1)', color: '#f87171' }}>Lapsed</span>
+                  </div>
+                ))}
+                <div className="mt-4 px-4 py-3 rounded-lg" style={{ background: 'rgba(29,158,117,0.07)', border: '1px solid rgba(29,158,117,0.15)' }}>
+                  <div className="text-xs font-semibold mb-1" style={{ color: '#1D9E75' }}>Sample SMS</div>
+                  <div className="text-xs italic" style={{ color: '#9ca3af' }}>
+                    &ldquo;Hi Sarah! We miss you at {business?.name ?? '[Your Business]'}. It&apos;s been a while — here&apos;s 10% off your next visit. Reply STOP to opt out.&rdquo;
+                  </div>
+                </div>
               </div>
             ) : (
               <table className="w-full text-sm" style={{ background: '#0d0d14' }}>
