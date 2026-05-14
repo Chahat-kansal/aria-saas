@@ -1,72 +1,52 @@
 {
   "functions": {
-    "src/app/api/cron/nightly-sync/route.ts":                  { "maxDuration": 300 },
-
-    "src/app/api/builder/route.ts":                            { "maxDuration": 120 },
-    "src/app/api/chat/route.ts":                               { "maxDuration": 120 },
-    "src/app/api/plugins/route.ts":                            { "maxDuration": 120 },
-    "src/app/api/research/route.ts":                           { "maxDuration": 120 },
-
-    "src/app/api/aria/social-suggest/route.ts":               { "maxDuration": 60 },
-    "src/app/api/aria/receipt-scan/route.ts":                  { "maxDuration": 60 },
-    "src/app/api/aria/reorder-forecast/route.ts":              { "maxDuration": 60 },
-    "src/app/api/aria/generate-purchase-orders/route.ts":      { "maxDuration": 60 },
-    "src/app/api/integrations/square/sync/route.ts":           { "maxDuration": 60 },
-
-    "src/app/api/aria/daily-briefing/route.ts":                { "maxDuration": 30 },
-    "src/app/api/aria/business-chat/route.ts":                 { "maxDuration": 30 },
-    "src/app/api/aria/variance/route.ts":                      { "maxDuration": 30 },
-    "src/app/api/aria/widget-insights/route.ts":               { "maxDuration": 30 },
-    "src/app/api/aria/warehouse-slotting/route.ts":            { "maxDuration": 30 },
-    "src/app/api/aria/supplier-insights/route.ts":             { "maxDuration": 30 },
-    "src/app/api/aria/profit-analysis/route.ts":               { "maxDuration": 60 },
-    "src/app/api/aria/missed-demand-analysis/route.ts":        { "maxDuration": 30 },
-    "src/app/api/warehouse/grn/route.ts":                      { "maxDuration": 30 },
-    "src/app/api/warehouse/cycle-count/generate/route.ts":     { "maxDuration": 30 },
-    "src/app/api/aria/warehouse-intelligence/route.ts":        { "maxDuration": 30 },
-
-    "src/app/api/pos/products/scan/route.ts":                  { "maxDuration": 10 },
-    "src/app/api/pos/sync-offline/route.ts":                   { "maxDuration": 30 },
-    "src/app/api/pos/customer-greet/route.ts":                 { "maxDuration": 15 },
-    "src/app/api/pos/seed-cafe-products/route.ts":             { "maxDuration": 30 },
-    "src/app/api/pos/refresh-product-images/route.ts":        { "maxDuration": 60 },
-    "src/app/api/integrations/instagram/callback/route.ts":   { "maxDuration": 30 },
-    "src/app/api/integrations/instagram/deauthorize/route.ts":{ "maxDuration": 10 },
-    "src/app/api/integrations/instagram/data-deletion/route.ts":{ "maxDuration": 10 },
-    "src/app/api/integrations/facebook/callback/route.ts":    { "maxDuration": 30 },
-    "src/app/api/integrations/google/callback/route.ts":      { "maxDuration": 30 },
-    "src/app/api/integrations/connect/[platform]/route.ts":   { "maxDuration": 10 },
-    "src/app/api/social/posts/route.ts":                      { "maxDuration": 30 },
-    "src/app/api/social/connections/route.ts":                { "maxDuration": 10 },
-    "src/app/api/social/connections/[id]/route.ts":           { "maxDuration": 10 },
-    "src/app/api/social/owner-request/route.ts":              { "maxDuration": 60 },
-    "src/app/api/social/posts/[id]/publish/route.ts":         { "maxDuration": 60 },
-    "src/app/api/social/posts/bulk-approve/route.ts":         { "maxDuration": 60 },
-    "src/app/api/cron/publish-scheduled/route.ts":            { "maxDuration": 60 },
-    "src/app/api/pos/products/backfill-images/route.ts":      { "maxDuration": 60 },
-    "src/app/api/pos/image-credits/route.ts":                { "maxDuration": 30 },
-    "src/app/api/pos/image-credits/purchase/route.ts":       { "maxDuration": 30 },
-    "src/app/api/webhooks/stripe-image-credits/route.ts":    { "maxDuration": 30 },
-    "src/app/api/social/scheduler/best-times/route.ts":      { "maxDuration": 30 },
-    "src/app/api/social/scheduler/analyze/route.ts":          { "maxDuration": 30 },
-    "src/app/api/cron/sync-engagement/route.ts":              { "maxDuration": 60 },
-    "src/app/api/pos/modifier-groups/route.ts":               { "maxDuration": 30 },
-    "src/app/api/pos/modifier-groups/[id]/route.ts":          { "maxDuration": 30 },
-    "src/app/api/pos/modifiers/[id]/route.ts":                { "maxDuration": 30 },
-    "src/app/api/pos/products/[id]/modifiers/route.ts":       { "maxDuration": 30 },
-    "src/app/api/pos/products/[id]/variations/route.ts":      { "maxDuration": 30 },
-    "src/app/api/pos/cafe/seed-modifiers/route.ts":           { "maxDuration": 60 }
+    "src/app/api/**/*.ts": {
+      "maxDuration": 30
+    },
+    "src/app/api/cron/**/*.ts": {
+      "maxDuration": 60
+    }
   },
   "crons": [
-    { "path": "/api/cron/nightly-sync",                "schedule": "0 2 * * *"   },
-    { "path": "/api/cron/rfm-daily",                    "schedule": "0 16 * * *"  },
-    { "path": "/api/cron/reorder-daily",                "schedule": "0 19 * * *"  },
-    { "path": "/api/cron/pricing-daily",                "schedule": "0 20 * * *"  },
-    { "path": "/api/cron/schedule-weekly",              "schedule": "0 21 * * 0"  },
-    { "path": "/api/cron/briefing-daily",               "schedule": "0 18 * * *"  },
-    { "path": "/api/cron/promo-cleanup",                "schedule": "0 14 * * *"  },
-    { "path": "/api/cron/generate-briefings",           "schedule": "0 16 * * *"  },
-    { "path": "/api/cron/publish-scheduled",            "schedule": "0 9 * * *"   },
-    { "path": "/api/cron/sync-engagement",              "schedule": "0 3 * * *"   }
+    {
+      "path": "/api/cron/nightly-sync",
+      "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/cron/rfm-daily",
+      "schedule": "0 16 * * *"
+    },
+    {
+      "path": "/api/cron/reorder-daily",
+      "schedule": "0 19 * * *"
+    },
+    {
+      "path": "/api/cron/pricing-daily",
+      "schedule": "0 20 * * *"
+    },
+    {
+      "path": "/api/cron/schedule-weekly",
+      "schedule": "0 21 * * 0"
+    },
+    {
+      "path": "/api/cron/briefing-daily",
+      "schedule": "0 18 * * *"
+    },
+    {
+      "path": "/api/cron/promo-cleanup",
+      "schedule": "0 14 * * *"
+    },
+    {
+      "path": "/api/cron/generate-briefings",
+      "schedule": "0 16 * * *"
+    },
+    {
+      "path": "/api/cron/publish-scheduled",
+      "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/cron/sync-engagement",
+      "schedule": "0 3 * * *"
+    }
   ]
 }
