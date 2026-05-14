@@ -156,6 +156,29 @@ async function generateInsight(obs: Observation): Promise<InsightSpec | null> {
       }
     }
 
+    case 'negative_review_received': {
+      const reviewer = m.reviewer as string | undefined
+      const rating   = m.rating as number | undefined
+      const snippet  = m.snippet as string | undefined
+      return {
+        priority: 'high',
+        title: `${rating ?? 1}-star review from ${reviewer ?? 'a customer'}`,
+        description: `You received a negative review${snippet ? `: "${snippet}…"` : ''}. A prompt, genuine reply can turn this around.`,
+        estimatedImpact: 'Protect reputation and win the customer back',
+      }
+    }
+
+    case 'positive_review_received': {
+      const reviewer = m.reviewer as string | undefined
+      const rating   = m.rating as number | undefined
+      return {
+        priority: 'low',
+        title: `${rating ?? 5}-star review from ${reviewer ?? 'a customer'}`,
+        description: `You received a positive review from ${reviewer ?? 'a customer'}. Aria has drafted a thank-you reply.`,
+        estimatedImpact: 'Strengthen customer loyalty',
+      }
+    }
+
     default:
       return null
   }

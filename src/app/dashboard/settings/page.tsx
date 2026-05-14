@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 
-interface Business { id: string; name: string; industry: string; abn?: string; city?: string; address?: string; phone?: string }
+interface Business { id: string; name: string; industry: string; abn?: string; city?: string; address?: string; phone?: string; google_place_id?: string | null; google_average_rating?: number | null; google_total_reviews?: number | null; google_reviews_last_synced?: string | null }
 
 const inp: React.CSSProperties = {
   width: '100%', boxSizing: 'border-box', background: 'var(--bg-input)', border: '1px solid var(--divider)',
@@ -22,6 +22,9 @@ export default function DashboardSettingsPage() {
   const [phone,   setPhone]   = useState('')
   const [saving,  setSaving]  = useState(false)
   const [saved,   setSaved]   = useState(false)
+  const [googlePlaceId, setGooglePlaceId] = useState('')
+  const [syncing,    setSyncing]    = useState(false)
+  const [syncResult, setSyncResult] = useState('')
   const [notifEmail, setNotifEmail] = useState(true)
   const [notifSMS,   setNotifSMS]   = useState(false)
 
@@ -35,6 +38,7 @@ export default function DashboardSettingsPage() {
         setCity(b.city ?? '')
         setAddress(b.address ?? '')
         setPhone(b.phone ?? '')
+        setGooglePlaceId(b.google_place_id ?? '')
       }
     }).catch(() => {})
   }, [])
@@ -43,10 +47,27 @@ export default function DashboardSettingsPage() {
     setSaving(true)
     await fetch('/api/settings/business', {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, abn, city, address, phone }),
+      body: JSON.stringify({ name, abn, city, address, phone, google_place_id: googlePlaceId || null }),
     }).catch(() => {})
     setSaving(false); setSaved(true)
     setTimeout(() => setSaved(false), 2500)
+  }
+
+  async function syncReviews() {
+    setSyncing(true)
+    setSyncResult('')
+    const res = await fetch('/api/aria/sync-reviews', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ business_id: biz?.id, place_id: googlePlaceId }),
+    }).then(r => r.json()).catch(() => ({ error: 'Network error' }))
+    if (res.error === 'not_configured') {
+      setSyncResult('⚠️ Google Places API key not configured in Vercel yet')
+    } else if (res.ok) {
+      setSyncResult(`✅ Synced ${res.reviews_synced} new review${res.reviews_synced !== 1 ? 's' : ''} (${res.total_on_google ?? '?'} total on Google, avg ${res.rating ?? '?'}★)`)
+    } else {
+      setSyncResult(`❌ ${res.error ?? res.message ?? 'Sync failed'}`)
+    }
+    setSyncing(false)
   }
 
   return (
@@ -87,6 +108,39 @@ export default function DashboardSettingsPage() {
             <label style={lbl}>Address</label>
             <input style={inp} value={address} onChange={e => setAddress(e.target.value)} placeholder="123 Collins St, Melbourne VIC 3000" />
           </div>
+          {/* Google Reviews */}
+          <div style={{ marginTop: 8, paddingTop: 20, borderTop: '1px solid var(--divider)' }}>
+            <p style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>Google Reviews</p>
+            <p style={{ fontSize: 12, color: 'var(--text-tertiary)', marginBottom: 12 }}>
+              Enter your Google Place ID so Aria can monitor and respond to your reviews.{' '}
+              <a href="https://developers.google.com/maps/documentation/javascript/examples/places-placeid-finder"
+                target="_blank" rel="noopener" style={{ color: 'var(--violet)' }}>
+                Find your Place ID
+              </a>
+            </p>
+            <input
+              value={googlePlaceId}
+              onChange={e => setGooglePlaceId(e.target.value)}
+              placeholder="ChIJN1t_tDeuEmsRUsoyG83frY4"
+              style={inp}
+            />
+            {googlePlaceId && (
+              <button
+                onClick={syncReviews}
+                disabled={syncing}
+                style={{ marginTop: 10, padding: '8px 16px', borderRadius: 8, border: 'none',
+                  background: syncing ? 'var(--bg-elevated)' : '#4285F4',
+                  color: syncing ? 'var(--text-tertiary)' : '#fff',
+                  fontSize: 12, fontWeight: 700, cursor: syncing ? 'not-allowed' : 'pointer',
+                  fontFamily: 'inherit' }}>
+                {syncing ? '⏳ Syncing…' : '🔄 Sync Reviews Now'}
+              </button>
+            )}
+            {syncResult && (
+              <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 8 }}>{syncResult}</p>
+            )}
+          </div>
+
           {biz?.industry && (
             <div style={{ padding: '10px 14px', background: 'var(--bg-elevated)', borderRadius: 8, fontSize: 12, color: 'var(--text-secondary)' }}>
               Industry: <strong style={{ color: 'var(--text-primary)' }}>{biz.industry}</strong> · To change industry, contact support.

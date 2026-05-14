@@ -1,254 +1,339 @@
-'use client';
-import { useState, useEffect, useCallback } from 'react';
-import { useBusinessContext } from '@/components/providers/BusinessProvider';
+'use client'
+import { useState, useEffect, useCallback } from 'react'
 
-interface Review { id: string; rating: number | null; text: string | null; reviewer_name: string | null; created_at: string; response: string | null; responded_at: string | null; platform: string | null; }
-interface Customer { id: string; name: string; phone: string | null; }
+interface Review {
+  id: string
+  reviewer_name: string | null
+  reviewer_avatar: string | null
+  rating: number | null
+  comment: string | null
+  review_date: string | null
+  has_reply: boolean
+  reply_text: string | null
+  ai_drafted_reply: string | null
+  sentiment: string | null
+  sentiment_score: number | null
+  status: string
+}
 
-function Stars({ rating }: { rating: number | null }) {
-  const n = rating ?? 0;
+interface Stats {
+  google_place_id: string | null
+  average_rating: number | null
+  total_reviews: number | null
+  last_synced: string | null
+  local_count: number
+  distribution: Record<number, number>
+}
+
+const SENTIMENT_COLOR: Record<string, string> = {
+  positive: '#7FB897',
+  neutral:  '#94A3B8',
+  negative: '#EF4444',
+}
+
+function StarRow({ rating, size = 14 }: { rating: number | null; size?: number }) {
+  const n = rating ?? 0
   return (
-    <div className="flex items-center gap-0.5">
+    <span style={{ display: 'inline-flex', gap: 2 }}>
       {[1,2,3,4,5].map(s => (
-        <svg key={s} className="w-3.5 h-3.5" fill={s <= n ? '#f59e0b' : 'none'} stroke={s <= n ? '#f59e0b' : '#4b5563'} viewBox="0 0 24 24" strokeWidth={1.5}>
+        <svg key={s} width={size} height={size} viewBox="0 0 24 24" fill={s <= n ? '#F59E0B' : 'none'} stroke={s <= n ? '#F59E0B' : '#4B5563'} strokeWidth={1.5}>
           <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
         </svg>
       ))}
-    </div>
-  );
+    </span>
+  )
 }
 
+function timeAgo(dateStr: string | null): string {
+  if (!dateStr) return ''
+  const diff = Date.now() - new Date(dateStr).getTime()
+  const days = Math.floor(diff / 86400000)
+  if (days === 0) return 'Today'
+  if (days === 1) return 'Yesterday'
+  if (days < 7)  return `${days} days ago`
+  if (days < 30) return `${Math.floor(days / 7)} week${Math.floor(days / 7) !== 1 ? 's' : ''} ago`
+  if (days < 365) return `${Math.floor(days / 30)} month${Math.floor(days / 30) !== 1 ? 's' : ''} ago`
+  return `${Math.floor(days / 365)} year${Math.floor(days / 365) !== 1 ? 's' : ''} ago`
+}
+
+type FilterTab = 'all' | 'new' | 'replied' | 'negative'
+const TABS: { key: FilterTab; label: string }[] = [
+  { key: 'all',      label: 'All'      },
+  { key: 'new',      label: 'New'      },
+  { key: 'replied',  label: 'Replied'  },
+  { key: 'negative', label: 'Negative' },
+]
+
 export default function ReviewsPage() {
-  const { business } = useBusinessContext();
-  const [reviews, setReviews] = useState<Review[]>([]);
-  const [customers, setCustomers] = useState<Customer[]>([]);
-  const [campaigns, setCampaigns] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [drafts, setDrafts] = useState<Record<string, string>>({});
-  const [draftLoading, setDraftLoading] = useState<Record<string, boolean>>({});
-  const [selectedCustomers, setSelectedCustomers] = useState<Record<string, boolean>>({});
-  const [sending, setSending] = useState(false);
-  const [sendResult, setSendResult] = useState<string | null>(null);
+  const [reviews,    setReviews]    = useState<Review[]>([])
+  const [stats,      setStats]      = useState<Stats | null>(null)
+  const [loading,    setLoading]    = useState(true)
+  const [tab,        setTab]        = useState<FilterTab>('all')
+  const [syncing,    setSyncing]    = useState(false)
+  const [syncMsg,    setSyncMsg]    = useState('')
+  const [drafts,     setDrafts]     = useState<Record<string, string>>({})
+  const [acting,     setActing]     = useState<string | null>(null)
+  const [copied,     setCopied]     = useState<string | null>(null)
 
-  const load = useCallback(async () => {
-    if (!business?.id) return;
-    setLoading(true);
-    const [revRes, custRes, campRes] = await Promise.all([
-      fetch(`/api/reviews?business_id=${business.id}`).then(r => r.json()).catch(() => ({ reviews: [] })),
-      fetch(`/api/customers?business_id=${business.id}&recent=7`).then(r => r.json()).catch(() => ({ customers: [] })),
-      fetch(`/api/campaigns?business_id=${business.id}&type=review_request`).then(r => r.json()).catch(() => ({ campaigns: [] })),
-    ]);
-    const revs = revRes.reviews ?? revRes.data ?? [];
-    setReviews(revs);
-    const custs: Customer[] = custRes.customers ?? custRes.data ?? [];
-    setCustomers(custs);
-    setCampaigns(campRes.campaigns ?? []);
-    const initSel: Record<string, boolean> = {};
-    custs.forEach((c: Customer) => { if (c.phone) initSel[c.id] = true; });
-    setSelectedCustomers(initSel);
-    setLoading(false);
-  }, [business?.id]);
-
-  useEffect(() => { load(); }, [load]);
-
-  async function getDraft(reviewId: string) {
-    if (!business?.id) return;
-    setDraftLoading(p => ({ ...p, [reviewId]: true }));
-    const res = await fetch('/api/aria/draft-review-reply', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ review_id: reviewId, business_id: business.id }),
-    }).then(r => r.json()).catch(() => ({}));
-    if (res.draft) setDrafts(p => ({ ...p, [reviewId]: res.draft }));
-    setDraftLoading(p => ({ ...p, [reviewId]: false }));
-  }
-
-  async function markReplied(reviewId: string) {
-    if (!business?.id || !drafts[reviewId]) return;
-    await fetch('/api/aria/draft-review-reply', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ review_id: reviewId, business_id: business.id, response: drafts[reviewId] }),
-    });
-    load();
-  }
-
-  async function sendReviewRequests() {
-    if (!business?.id) return;
-    const targets = customers.filter(c => selectedCustomers[c.id] && c.phone);
-    if (targets.length === 0) return;
-    const confirmed = window.confirm(`Send review request SMS to ${targets.length} customer${targets.length > 1 ? 's' : ''}? This will send real messages that cannot be undone.`);
-    if (!confirmed) return;
-    setSending(true);
-    let sent = 0;
-    for (const c of targets) {
-      await fetch('/api/aria/review-request', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ customerId: c.id, businessId: business.id }),
-      }).then(r => r.json()).then(d => { if (d.sms_sent || d.success) sent++; }).catch(() => null);
+  const load = useCallback(async (filter?: FilterTab) => {
+    setLoading(true)
+    const q = filter && filter !== 'all' ? `&status=${filter}` : ''
+    const res = await fetch(`/api/aria/reviews?${q}`).then(r => r.json()).catch(() => ({ reviews: [], stats: null }))
+    setReviews(res.reviews ?? [])
+    setStats(res.stats ?? null)
+    // Pre-populate draft textareas with AI replies
+    const initDrafts: Record<string, string> = {}
+    for (const r of res.reviews ?? []) {
+      if (r.ai_drafted_reply && !r.has_reply) initDrafts[r.id] = r.ai_drafted_reply
     }
-    setSendResult(`Sent to ${sent} of ${targets.length} customers.`);
-    setSending(false);
-    load();
+    setDrafts(prev => ({ ...initDrafts, ...prev }))
+    setLoading(false)
+  }, [])
+
+  useEffect(() => { load(tab) }, [load, tab])
+
+  async function syncNow() {
+    setSyncing(true); setSyncMsg('')
+    const res = await fetch('/api/aria/sync-reviews', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    }).then(r => r.json()).catch(() => ({ error: 'Network error' }))
+    if (res.error === 'not_configured') {
+      setSyncMsg('⚠️ Google Places API key not configured')
+    } else if (res.error === 'no_place_id') {
+      setSyncMsg('⚠️ Add your Google Place ID in Settings first')
+    } else if (res.ok) {
+      setSyncMsg(`✅ ${res.reviews_synced} new review${res.reviews_synced !== 1 ? 's' : ''} synced`)
+      load(tab)
+    } else {
+      setSyncMsg(`❌ ${res.error ?? res.message ?? 'Sync failed'}`)
+    }
+    setSyncing(false)
   }
 
-  const unanswered = reviews.filter(r => !r.response && !r.responded_at);
-  const answered = reviews.filter(r => r.response || r.responded_at);
-  const avgRating = reviews.length ? (reviews.filter(r => r.rating).reduce((s, r) => s + (r.rating ?? 0), 0) / reviews.filter(r => r.rating).length) : null;
-  const thisMonthCampaigns = campaigns.filter(c => c.created_at && new Date(c.created_at) > new Date(Date.now() - 30 * 86400000)).length;
-  const withPhone = customers.filter(c => selectedCustomers[c.id] && c.phone).length;
+  async function markReplied(id: string) {
+    setActing(id)
+    await fetch('/api/aria/reviews', {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, has_reply: true, reply_text: drafts[id] ?? null }),
+    }).catch(() => {})
+    setReviews(rs => rs.map(r => r.id === id ? { ...r, has_reply: true, status: 'replied' } : r))
+    setActing(null)
+  }
 
-  if (loading) {
+  function copyDraft(id: string) {
+    const text = drafts[id]
+    if (!text) return
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(id)
+      setTimeout(() => setCopied(null), 2000)
+    }).catch(() => {})
+  }
+
+  // Setup card when no place_id
+  if (!loading && stats && !stats.google_place_id) {
     return (
-      <div className="p-6 max-w-5xl mx-auto animate-pulse space-y-4">
-        <div className="h-8 bg-[rgba(255,255,255,0.06)] rounded-xl w-48" />
-        <div className="grid grid-cols-4 gap-4"><div className="h-24 bg-[rgba(255,255,255,0.04)] rounded-xl col-span-4" /></div>
-        <div className="h-64 bg-[rgba(255,255,255,0.04)] rounded-xl" />
+      <div style={{ minHeight: '100%', background: 'var(--bg-base)', color: 'var(--text-primary)', fontFamily: "'Manrope',sans-serif", padding: '28px 32px', maxWidth: 700, margin: '0 auto' }}>
+        <h1 style={{ fontSize: 22, fontWeight: 700, margin: '0 0 8px' }}>Reviews & Reputation</h1>
+        <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--divider)', borderRadius: 16, padding: '32px 36px', marginTop: 24 }}>
+          <div style={{ fontSize: 36, marginBottom: 16 }}>⭐</div>
+          <h2 style={{ fontSize: 18, fontWeight: 700, margin: '0 0 12px' }}>Connect Google Reviews</h2>
+          <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '0 0 20px', lineHeight: 1.6 }}>
+            Aria monitors your Google reviews and drafts personalised replies automatically. To get started:
+          </p>
+          <ol style={{ paddingLeft: 20, fontSize: 13, color: 'var(--text-secondary)', lineHeight: 2, margin: '0 0 20px' }}>
+            <li>Find your Google Place ID at{' '}
+              <a href="https://developers.google.com/maps/documentation/javascript/examples/places-placeid-finder"
+                target="_blank" rel="noopener" style={{ color: 'var(--violet)' }}>
+                Google Place ID Finder
+              </a>
+            </li>
+            <li>Go to <a href="/dashboard/settings" style={{ color: 'var(--violet)' }}>Settings → Business Profile → Google Reviews</a></li>
+            <li>Paste your Place ID and click Sync Reviews</li>
+          </ol>
+          <p style={{ fontSize: 12, color: 'var(--text-tertiary)', margin: 0 }}>Aria then auto-drafts replies for every review using AI.</p>
+        </div>
       </div>
-    );
+    )
   }
+
+  const avgRating = stats?.average_rating ?? null
+  const totalReviews = stats?.total_reviews ?? stats?.local_count ?? 0
+  const lastSynced = stats?.last_synced ? timeAgo(stats.last_synced) : null
+  const dist = stats?.distribution ?? {}
+  const maxDist = Math.max(1, ...Object.values(dist))
+  const newCount = reviews.filter(r => r.status === 'new' && !r.has_reply).length
 
   return (
-    <div className="p-6 max-w-5xl mx-auto">
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold text-white mb-1">Reviews & Reputation</h1>
-        <p style={{ color: '#6b7280' }}>Manage your Google reviews and send review request campaigns</p>
-      </div>
-
-      {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        {[
-          { label: 'Google rating', value: business?.google_rating ? `${business.google_rating} ★` : avgRating ? `${avgRating.toFixed(1)} ★` : '—', color: '#f59e0b' },
-          { label: 'Total reviews', value: business?.google_review_count ?? reviews.length, color: '#fff' },
-          { label: 'Unanswered', value: unanswered.length, color: unanswered.length > 0 ? '#ef4444' : '#1D9E75' },
-          { label: 'Requests this month', value: thisMonthCampaigns, color: '#fff' },
-        ].map(s => (
-          <div key={s.label} className="rounded-xl p-4" style={{ background: '#13131a', border: '1px solid rgba(255,255,255,0.07)' }}>
-            <p className="text-xs mb-1" style={{ color: '#6b7280' }}>{s.label}</p>
-            <p className="text-xl font-semibold" style={{ color: s.color }}>{s.value}</p>
-          </div>
-        ))}
-      </div>
-
-      {sendResult && (
-        <div className="mb-4 px-4 py-3 rounded-xl" style={{ background: 'rgba(29,158,117,0.1)', border: '1px solid rgba(29,158,117,0.2)' }}>
-          <p className="text-sm" style={{ color: '#1D9E75' }}>{sendResult}</p>
+    <div style={{ minHeight: '100%', background: 'var(--bg-base)', color: 'var(--text-primary)', fontFamily: "'Manrope',sans-serif", padding: '28px 32px', maxWidth: 900, margin: '0 auto' }}>
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
+        <div>
+          <h1 style={{ fontSize: 22, fontWeight: 700, margin: '0 0 4px' }}>Reviews & Reputation</h1>
+          {lastSynced && <p style={{ fontSize: 12, color: 'var(--text-tertiary)', margin: 0 }}>Last synced {lastSynced}</p>}
         </div>
-      )}
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Send review requests */}
-        <div className="rounded-xl overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.07)' }}>
-          <div className="px-5 py-4" style={{ background: '#13131a', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
-            <h2 className="font-medium text-white">Send review requests</h2>
-            <p className="text-xs mt-0.5" style={{ color: '#6b7280' }}>Customers from the last 7 days</p>
-          </div>
-          <div style={{ background: '#0d0d14' }}>
-            {customers.length === 0 ? (
-              <div className="px-5 py-8 text-center">
-                <p className="text-sm" style={{ color: '#6b7280' }}>No recent customers found. Sales in the last 7 days will appear here.</p>
-              </div>
-            ) : (
-              <>
-                {customers.map(c => (
-                  <div key={c.id} className="flex items-center justify-between px-5 py-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                    <div className="flex items-center gap-3">
-                      {c.phone ? (
-                        <input type="checkbox" checked={!!selectedCustomers[c.id]} onChange={e => setSelectedCustomers(p => ({ ...p, [c.id]: e.target.checked }))} className="w-4 h-4 accent-[#1D9E75]" />
-                      ) : <div className="w-4 h-4" />}
-                      <div>
-                        <p className="text-sm text-white">{c.name}</p>
-                        {!c.phone && <p className="text-xs" style={{ color: '#4b5563' }}>No phone</p>}
-                      </div>
-                    </div>
-                    <p className="text-xs" style={{ color: '#6b7280' }}>{c.phone ?? '—'}</p>
-                  </div>
-                ))}
-                <div className="px-5 py-4">
-                  <button onClick={sendReviewRequests} disabled={sending || withPhone === 0}
-                    className="w-full py-2.5 rounded-xl text-sm font-medium text-white disabled:opacity-40"
-                    style={{ background: '#1D9E75' }}>
-                    {sending ? 'Sending…' : `Send to ${withPhone} customer${withPhone !== 1 ? 's' : ''}`}
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* Unanswered reviews */}
-        <div className="rounded-xl overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.07)' }}>
-          <div className="px-5 py-4" style={{ background: '#13131a', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
-            <h2 className="font-medium text-white">Unanswered reviews</h2>
-            {unanswered.length > 0 && <p className="text-xs mt-0.5" style={{ color: '#ef4444' }}>{unanswered.length} need a reply</p>}
-          </div>
-          <div style={{ background: '#0d0d14' }}>
-            {unanswered.length === 0 ? (
-              <div className="px-5 py-8 text-center">
-                <p className="text-sm" style={{ color: '#1D9E75' }}>All reviews answered! 🎉</p>
-                {reviews.length === 0 && <p className="text-xs mt-1" style={{ color: '#4b5563' }}>Reviews will appear here once synced from Google.</p>}
-              </div>
-            ) : (
-              unanswered.map(r => (
-                <div key={r.id} className="px-5 py-4" style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                  <div className="flex items-start justify-between gap-2 mb-2">
-                    <div>
-                      <p className="text-sm font-medium text-white">{r.reviewer_name ?? 'Anonymous'}</p>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        <Stars rating={r.rating} />
-                        <span className="text-xs" style={{ color: '#6b7280' }}>{r.created_at ? new Date(r.created_at).toLocaleDateString() : ''}</span>
-                      </div>
-                    </div>
-                  </div>
-                  {(r.text) && <p className="text-xs mb-3 leading-relaxed" style={{ color: '#9ca3af' }}>"{r.text}"</p>}
-
-                  {drafts[r.id] ? (
-                    <div>
-                      <textarea value={drafts[r.id]} onChange={e => setDrafts(p => ({ ...p, [r.id]: e.target.value }))} rows={3}
-                        className="w-full px-3 py-2 rounded-xl text-xs outline-none resize-none mb-2"
-                        style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', color: '#d1d5db' }} />
-                      <div className="flex gap-2">
-                        <button onClick={() => { navigator.clipboard.writeText(drafts[r.id]); }} className="text-xs px-3 py-1.5 rounded-lg" style={{ background: 'rgba(255,255,255,0.06)', color: '#9ca3af' }}>Copy</button>
-                        <button onClick={() => markReplied(r.id)} className="text-xs px-3 py-1.5 rounded-lg" style={{ background: '#1D9E75', color: '#fff' }}>Mark replied</button>
-                      </div>
-                    </div>
-                  ) : (
-                    <button onClick={() => getDraft(r.id)} disabled={draftLoading[r.id]}
-                      className="text-xs px-3 py-1.5 rounded-lg disabled:opacity-40 flex items-center gap-1"
-                      style={{ background: 'rgba(29,158,117,0.1)', color: '#1D9E75', border: '1px solid rgba(29,158,117,0.2)' }}>
-                      {draftLoading[r.id] ? <><span className="inline-block w-2.5 h-2.5 border border-[#1D9E75] border-t-transparent rounded-full animate-spin" />Drafting…</> : '✦ Draft reply with Aria'}
-                    </button>
-                  )}
-                </div>
-              ))
-            )}
-          </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {syncMsg && <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{syncMsg}</span>}
+          <button onClick={syncNow} disabled={syncing}
+            style={{ padding: '8px 16px', borderRadius: 8, border: 'none',
+              background: syncing ? 'var(--bg-elevated)' : '#4285F4',
+              color: syncing ? 'var(--text-tertiary)' : '#fff',
+              fontSize: 12, fontWeight: 700, cursor: syncing ? 'not-allowed' : 'pointer', fontFamily: 'inherit' }}>
+            {syncing ? '⏳ Syncing…' : '🔄 Sync Now'}
+          </button>
         </div>
       </div>
 
-      {/* Answered reviews */}
-      {answered.length > 0 && (
-        <div className="mt-6 rounded-xl overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.07)' }}>
-          <div className="px-5 py-4" style={{ background: '#13131a', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
-            <h2 className="font-medium text-white">Replied reviews ({answered.length})</h2>
+      {/* Rating summary */}
+      {!loading && stats && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: 24, background: 'var(--bg-surface)', border: '1px solid var(--divider)', borderRadius: 16, padding: '24px 28px', marginBottom: 24 }}>
+          <div style={{ textAlign: 'center', minWidth: 100 }}>
+            <div style={{ fontSize: 48, fontWeight: 800, color: '#F59E0B', lineHeight: 1 }}>{avgRating?.toFixed(1) ?? '—'}</div>
+            <div style={{ marginTop: 8 }}><StarRow rating={Math.round(avgRating ?? 0)} size={18} /></div>
+            <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 6 }}>{totalReviews} review{totalReviews !== 1 ? 's' : ''} on Google</div>
           </div>
-          <div style={{ background: '#0d0d14' }}>
-            {answered.map(r => (
-              <div key={r.id} className="px-5 py-4" style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                <div className="flex items-center justify-between mb-1">
-                  <p className="text-sm font-medium text-white">{r.reviewer_name ?? 'Anonymous'}</p>
-                  <div className="flex items-center gap-2">
-                    <Stars rating={r.rating} />
-                    <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: 'rgba(29,158,117,0.15)', color: '#1D9E75' }}>Replied</span>
-                  </div>
+          <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 6 }}>
+            {[5,4,3,2,1].map(star => (
+              <div key={star} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 11, color: 'var(--text-tertiary)', width: 14, textAlign: 'right' }}>{star}</span>
+                <svg width={12} height={12} viewBox="0 0 24 24" fill="#F59E0B" stroke="none"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                <div style={{ flex: 1, height: 8, borderRadius: 4, background: 'var(--bg-elevated)', overflow: 'hidden' }}>
+                  <div style={{ height: '100%', borderRadius: 4, background: '#F59E0B', width: `${((dist[star] ?? 0) / maxDist) * 100}%`, transition: 'width 0.4s' }} />
                 </div>
-                {r.text && <p className="text-xs" style={{ color: '#6b7280' }}>"{r.text.slice(0, 100)}{r.text.length > 100 ? '…' : ''}"</p>}
+                <span style={{ fontSize: 11, color: 'var(--text-tertiary)', width: 16 }}>{dist[star] ?? 0}</span>
               </div>
             ))}
           </div>
         </div>
       )}
+
+      {/* Filter tabs */}
+      <div style={{ display: 'flex', gap: 4, marginBottom: 20, borderBottom: '1px solid var(--divider)' }}>
+        {TABS.map(t => (
+          <button key={t.key} onClick={() => setTab(t.key)}
+            style={{ padding: '8px 16px', border: 'none', background: 'none', cursor: 'pointer', fontFamily: 'inherit',
+              fontSize: 13, fontWeight: tab === t.key ? 700 : 400,
+              color: tab === t.key ? 'var(--text-primary)' : 'var(--text-secondary)',
+              borderBottom: tab === t.key ? '2px solid var(--violet)' : '2px solid transparent', marginBottom: -1 }}>
+            {t.label}{t.key === 'new' && newCount > 0 ? ` (${newCount})` : ''}
+          </button>
+        ))}
+      </div>
+
+      {/* Review cards */}
+      {loading ? (
+        <div style={{ padding: '40px 0', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: 13 }}>Loading…</div>
+      ) : reviews.length === 0 ? (
+        <div style={{ padding: '48px 0', textAlign: 'center' }}>
+          <div style={{ fontSize: 32, marginBottom: 8 }}>✨</div>
+          <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-secondary)' }}>
+            {tab === 'all' ? 'No reviews yet — click Sync Now to fetch from Google' :
+             tab === 'new' ? 'No new reviews to reply to' :
+             tab === 'replied' ? 'No replied reviews yet' : 'No negative reviews — great work!'}
+          </div>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {reviews.map(review => (
+            <div key={review.id} style={{
+              background: 'var(--bg-surface)', border: '1px solid var(--divider)',
+              borderRadius: 14, padding: '20px 22px',
+              borderLeft: `3px solid ${review.rating != null && review.rating <= 2 ? '#EF4444' : review.has_reply ? '#7FB897' : 'var(--violet)'}`,
+            }}>
+              {/* Reviewer header */}
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 12 }}>
+                {review.reviewer_avatar ? (
+                  <img src={review.reviewer_avatar} alt="" width={36} height={36} style={{ borderRadius: '50%', flexShrink: 0 }} />
+                ) : (
+                  <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'var(--bg-elevated)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, flexShrink: 0 }}>
+                    {(review.reviewer_name ?? '?').charAt(0).toUpperCase()}
+                  </div>
+                )}
+                <div style={{ flex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                    <span style={{ fontWeight: 700, fontSize: 14 }}>{review.reviewer_name ?? 'Anonymous'}</span>
+                    <StarRow rating={review.rating} />
+                    <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>{timeAgo(review.review_date)}</span>
+                    {review.sentiment && (
+                      <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 99, fontWeight: 700,
+                        background: `${SENTIMENT_COLOR[review.sentiment] ?? '#94A3B8'}18`,
+                        color: SENTIMENT_COLOR[review.sentiment] ?? '#94A3B8' }}>
+                        {review.sentiment}
+                      </span>
+                    )}
+                    {review.has_reply && (
+                      <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 99, fontWeight: 700,
+                        background: 'rgba(127,184,151,0.12)', color: '#7FB897' }}>
+                        Replied
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Review text */}
+              {review.comment && (
+                <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '0 0 14px', lineHeight: 1.6, paddingLeft: 48 }}>
+                  &ldquo;{review.comment}&rdquo;
+                </p>
+              )}
+
+              {/* AI draft reply */}
+              {!review.has_reply && (
+                <div style={{ paddingLeft: 48 }}>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-tertiary)', display: 'block', marginBottom: 6 }}>
+                    {drafts[review.id] ? 'AI-drafted reply (edit before copying):' : 'No AI draft yet'}
+                  </label>
+                  {drafts[review.id] !== undefined ? (
+                    <>
+                      <textarea
+                        value={drafts[review.id]}
+                        onChange={e => setDrafts(d => ({ ...d, [review.id]: e.target.value }))}
+                        rows={3}
+                        style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 8,
+                          background: 'var(--bg-elevated)', border: '1px solid var(--divider)',
+                          color: 'var(--text-primary)', fontSize: 12, fontFamily: 'inherit',
+                          resize: 'vertical', outline: 'none', lineHeight: 1.5 }}
+                      />
+                      <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                        <button onClick={() => copyDraft(review.id)}
+                          style={{ padding: '7px 14px', borderRadius: 8, border: '1px solid var(--divider)',
+                            background: 'var(--bg-elevated)', color: 'var(--text-secondary)',
+                            fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+                          {copied === review.id ? '✓ Copied!' : 'Copy Reply'}
+                        </button>
+                        <button onClick={() => markReplied(review.id)} disabled={acting === review.id}
+                          style={{ padding: '7px 14px', borderRadius: 8, border: 'none',
+                            background: 'var(--violet)', color: '#fff',
+                            fontSize: 12, fontWeight: 700, cursor: acting === review.id ? 'not-allowed' : 'pointer',
+                            fontFamily: 'inherit', opacity: acting === review.id ? 0.6 : 1 }}>
+                          {acting === review.id ? '…' : 'Mark Replied'}
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <p style={{ fontSize: 12, color: 'var(--text-tertiary)', margin: 0 }}>
+                      Sync reviews to generate AI draft replies automatically.
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Already replied — show stored reply */}
+              {review.has_reply && review.reply_text && (
+                <div style={{ paddingLeft: 48, marginTop: 8, padding: '10px 14px 10px 48px',
+                  background: 'rgba(127,184,151,0.06)', borderRadius: 8, fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                  <strong style={{ color: 'var(--text-primary)' }}>Your reply: </strong>{review.reply_text}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      <p style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 28 }}>
+        Reviews auto-synced daily at 6 AM. Replies are drafted by Aria AI — always review before posting to Google.
+      </p>
     </div>
-  );
+  )
 }

@@ -51,6 +51,10 @@
     {
       "path": "/api/cron/aria-brain",
       "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/cron/sync-reviews",
+      "schedule": "0 6 * * *"
     }
   ]
 }
