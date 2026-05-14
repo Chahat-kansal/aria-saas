@@ -171,6 +171,48 @@ async function _POST(req: Request) {
 
   if (itemsError) return NextResponse.json({ error: itemsError.message }, { status: 500 });
 
+  // ── KDS ticket creation (fire-and-forget — never blocks the sale response) ──
+  if (!salePayload.is_training) {
+    ;(async () => {
+      try {
+        // Fetch the inserted items with their IDs + KDS fields
+        const { data: saleItems } = await supabase
+          .from('pos_sale_items')
+          .select('id, product_id, seat_number, course')
+          .eq('sale_id', sale.id)
+        if (!saleItems?.length) return
+
+        // Look up kds_station per product
+        const productIds = [...new Set(saleItems.map(i => i.product_id).filter(Boolean))]
+        const { data: products } = await supabase
+          .from('pos_products')
+          .select('id, kds_station')
+          .in('id', productIds as string[])
+        const stationMap: Record<string, string> = {}
+        for (const p of products ?? []) stationMap[p.id] = p.kds_station ?? 'barista'
+
+        const now = new Date().toISOString()
+        await supabase.from('pos_kds_tickets').insert(
+          saleItems.map(item => ({
+            business_id: bid,
+            outlet_id: resolvedOutletId ?? null,
+            sale_id: sale.id,
+            sale_item_id: item.id,
+            station: stationMap[item.product_id as string] ?? 'barista',
+            course: item.course ?? null,
+            seat_number: item.seat_number ?? null,
+            status: 'fired',
+            fired_at: now,
+            created_at: now,
+            updated_at: now,
+          }))
+        )
+      } catch (kdsErr) {
+        console.error('[pos/sales] KDS ticket creation failed (non-fatal):', (kdsErr as Error).message)
+      }
+    })()
+  }
+
   // Deduct from gift card balance
   if (validatedGiftCard && gift_card_amount) {
     const charge = parseFloat(String(gift_card_amount));

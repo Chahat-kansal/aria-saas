@@ -12,7 +12,35 @@ async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, u
 
 type KdsStatus = 'new' | 'in_progress' | 'ready' | 'delivered' | 'void';
 
-async function _PATCH(req: Request, { params }: { params: { id: string } }) {
+// GET /api/pos/kds/[station] — returns open tickets for a station (Sprint F)
+async function _GET(_req: Request, { params }: { params: Promise<{ id: string }> | { id: string } }) {
+  const { id: station } = 'then' in params ? await params : params
+  const supabase = createServerSupabaseClient();
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  const bid = await getBid(supabase, user.id);
+  if (!bid) return NextResponse.json({ tickets: [] });
+
+  let q = supabase
+    .from('pos_kds_tickets')
+    .select('id, station, course, seat_number, status, fired_at, bumped_at, prep_time_seconds, sale_id, sale_item_id, pos_sales ( sale_number, order_type, customer_name, cover_count, notes ), pos_sale_items ( product_name, variant_label, quantity, modifiers, item_notes, seat_number, course )')
+    .eq('business_id', bid)
+    .in('status', ['fired', 'in_progress'])
+    .order('course', { ascending: true, nullsFirst: false })
+    .order('fired_at', { ascending: true })
+    .limit(200)
+
+  if (station !== 'all') q = q.eq('station', station)
+
+  const { data: tickets } = await q
+  return NextResponse.json({ tickets: tickets ?? [] })
+}
+
+export const GET = withErrorCapture('pos/kds/[id]', _GET)
+
+async function _PATCH(req: Request, { params }: { params: Promise<{ id: string }> | { id: string } }) {
+  const { id } = 'then' in params ? await params : params;
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -36,7 +64,7 @@ async function _PATCH(req: Request, { params }: { params: { id: string } }) {
   const { error } = await supabase
     .from('pos_kds_orders')
     .update(updates)
-    .eq('id', params.id)
+    .eq('id', id)
     .eq('business_id', bid);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
