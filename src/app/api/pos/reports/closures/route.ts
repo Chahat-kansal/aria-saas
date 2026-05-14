@@ -31,20 +31,58 @@ async function _GET(req: Request) {
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
+    // Compute per-session sales totals from actual sales (not NULL session columns)
+    const sessionIds = (sessions ?? []).map(s => s.id);
+    const { data: salesData } = sessionIds.length > 0 ? await supabase
+      .from('pos_sales').select('session_id, payment_method, total_amount')
+      .in('session_id', sessionIds).neq('status', 'voided') : { data: [] };
+
+    const salesMap: Record<string, { cash: number; card: number; total: number; count: number }> = {};
+    for (const sale of salesData ?? []) {
+      const sid = sale.session_id as string;
+      if (!sid) continue;
+      if (!salesMap[sid]) salesMap[sid] = { cash: 0, card: 0, total: 0, count: 0 };
+      const amt = Number(sale.total_amount ?? 0);
+      const method = String(sale.payment_method ?? 'cash');
+      salesMap[sid].total += amt;
+      salesMap[sid].count += 1;
+      if (method === 'cash') salesMap[sid].cash += amt;
+      else salesMap[sid].card += amt;
+    }
+
     const rows = (sessions ?? []).map(s => {
-      const expected_cash = (s.opening_float ?? 0) + (s.total_cash_sales ?? 0);
-      const variance = (s.closing_float ?? 0) - expected_cash;
+      const totals = salesMap[s.id] ?? { cash: 0, card: 0, total: 0, count: 0 };
+      const openingFloat = Number(s.opening_float ?? 0);
+      // Map to cent-based columns the closures page expects
+      const open_float_cents    = Math.round(openingFloat * 100);
+      const card_total_cents    = Math.round(totals.card * 100);
+      const total_sales_cents   = Math.round(totals.total * 100);
+      // actual_cash_cents already in DB; fall back to closing_float dollars → cents
+      const counted_cash_cents  = s.actual_cash_cents != null
+        ? Number(s.actual_cash_cents)
+        : Math.round(Number(s.closing_float ?? 0) * 100);
+      const expected_cash_cents = s.expected_cash_cents != null
+        ? Number(s.expected_cash_cents)
+        : Math.round((openingFloat + totals.cash) * 100);
+      const variance_cents = s.variance_cents != null
+        ? Number(s.variance_cents)
+        : counted_cash_cents - expected_cash_cents;
       const opened = s.opened_at ? new Date(s.opened_at) : null;
       const closed = s.closed_at ? new Date(s.closed_at) : null;
       const duration_mins = opened && closed
-        ? Math.round((closed.getTime() - opened.getTime()) / 60000)
-        : null;
+        ? Math.round((closed.getTime() - opened.getTime()) / 60000) : null;
       return {
         ...s,
-        expected_cash,
-        variance,
+        open_float_cents,
+        counted_cash_cents,
+        expected_cash_cents,
+        variance_cents,
+        card_total_cents,
+        eftpos_total_cents: card_total_cents,
+        total_sales_cents,
+        total_revenue: totals.total,
+        transaction_count: totals.count,
         duration_mins,
-        total_revenue: (s.total_cash_sales ?? 0) + (s.total_card_sales ?? 0),
       };
     });
 

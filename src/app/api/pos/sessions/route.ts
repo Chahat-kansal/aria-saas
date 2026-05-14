@@ -177,6 +177,26 @@ async function _PATCH(req: Request) {
   if (body.closure_note !== undefined) updatePayload.closure_note = body.closure_note;
   if (body.closed_by !== undefined) updatePayload.closed_by = body.closed_by;
 
+  // Populate total_cash_sales / total_card_sales from actual sales for this session
+  try {
+    const { data: sessionMeta } = await supabase.from('pos_cash_sessions')
+      .select('opened_at').eq('id', session_id).maybeSingle();
+    if (sessionMeta?.opened_at) {
+      const { data: sales } = await supabase.from('pos_sales')
+        .select('payment_method, total_amount')
+        .eq('business_id', bid).eq('session_id', session_id).neq('status', 'voided');
+      let cashTotal = 0, cardTotal = 0;
+      for (const sale of sales ?? []) {
+        const amt = Number(sale.total_amount ?? 0);
+        if (String(sale.payment_method ?? 'cash') === 'cash') cashTotal += amt;
+        else cardTotal += amt;
+      }
+      updatePayload.total_cash_sales = cashTotal;
+      updatePayload.total_card_sales = cardTotal;
+      updatePayload.total_refunds = 0;
+    }
+  } catch { /* non-fatal */ }
+
   const { error } = await supabase
     .from('pos_cash_sessions')
     .update(updatePayload)
@@ -184,7 +204,24 @@ async function _PATCH(req: Request) {
     .eq('business_id', bid)
     .eq('status', 'open');
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    // Schema cache miss — retry with minimal payload
+    if (error.message?.includes('schema cache') || (error as any).code === 'PGRST204') {
+      console.error('[sessions/PATCH] schema cache error, retrying minimal payload:', error.message);
+      const minPayload: Record<string, unknown> = {
+        status: 'closed',
+        closed_at: updatePayload.closed_at ?? new Date().toISOString(),
+      };
+      if (updatePayload.closing_float !== undefined) minPayload.closing_float = updatePayload.closing_float;
+      if (updatePayload.notes !== undefined) minPayload.notes = updatePayload.notes;
+      if (updatePayload.closure_note !== undefined) minPayload.closure_note = updatePayload.closure_note;
+      const { error: retryErr } = await supabase.from('pos_cash_sessions')
+        .update(minPayload).eq('id', session_id).eq('business_id', bid).eq('status', 'open');
+      if (retryErr) return NextResponse.json({ error: retryErr.message }, { status: 500 });
+      return NextResponse.json({ ok: true, schema_cache_fallback: true });
+    }
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
   return NextResponse.json({ ok: true });
 }
 

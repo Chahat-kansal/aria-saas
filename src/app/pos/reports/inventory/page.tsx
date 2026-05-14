@@ -39,7 +39,7 @@ export default function InventoryReportPage() {
     fetch(`/api/pos/reports/inventory?${qs}`)
       .then(r => r.json())
       .then(d => {
-        setRows(d.inventory ?? []);
+        setRows(d.products ?? d.inventory ?? []);
         setInsight(d.insight?.bullets ?? null);
         setLoading(false);
         track('report_viewed', { type: 'inventory', low_stock: lowStockOnly, dead_stock: deadStockOnly });

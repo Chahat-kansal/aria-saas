@@ -14,6 +14,27 @@ const nextConfig = {
       'oaidalleapiprodscus.blob.core.windows.net',
     ],
   },
+  async redirects() {
+    return [
+      { source: '/pos/closures',                    destination: '/pos/reports/closures',            permanent: false },
+      { source: '/pos/void-refund',                 destination: '/pos/void',                        permanent: false },
+      { source: '/pos/sales-history',               destination: '/pos/history',                     permanent: false },
+      { source: '/pos/dead-stock',                  destination: '/pos/inventory/dead-stock',        permanent: false },
+      { source: '/pos/stocktake/new',               destination: '/pos/inventory/stocktake/new',     permanent: false },
+      { source: '/pos/mobile-scanner',              destination: '/pos/import/scan',                 permanent: false },
+      { source: '/pos/customer-segments',           destination: '/pos/customers/segments',          permanent: false },
+      { source: '/pos/reorder',                     destination: '/pos/agents/reorder',              permanent: false },
+      { source: '/pos/schedule',                    destination: '/pos/agents/schedule',             permanent: false },
+      { source: '/pos/customer-display',            destination: '/pos/display',                     permanent: false },
+      { source: '/pos/import-products',             destination: '/pos/import',                      permanent: false },
+      { source: '/pos/competitor-prices',           destination: '/pos/competitors',                 permanent: false },
+      { source: '/pos/settings/sale-keys',          destination: '/pos/sale-keys',                   permanent: false },
+      { source: '/pos/settings/barcodes',           destination: '/pos/utilities/barcodes',          permanent: false },
+      { source: '/pos/settings/migrate-data',       destination: '/pos/setup/migrate',               permanent: false },
+      { source: '/pos/settings/supplier-integrations', destination: '/pos/settings/vendors',         permanent: false },
+    ]
+  },
+
   async headers() {
     return [
       {

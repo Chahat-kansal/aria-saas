@@ -92,7 +92,7 @@ export default function MobileTerminal() {
         }
       }
 
-      // Load session
+      // Load session (also re-triggered by businessId useEffect below)
       try {
         const r = await fetch('/api/pos/sessions');
         if (r.ok) {
@@ -108,6 +108,15 @@ export default function MobileTerminal() {
       await syncOfflineQueue();
     })();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Re-fetch open session once businessId is resolved (session query is server-side auth'd)
+  useEffect(() => {
+    if (!businessId) return;
+    fetch('/api/pos/sessions')
+      .then(r => r.json())
+      .then(d => setSession(d.openSession ?? null))
+      .catch(() => {});
+  }, [businessId]);
 
   async function syncOfflineQueue() {
     const queue = getOfflineQueue();
