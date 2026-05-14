@@ -39,6 +39,7 @@ import { AriaInlineCard } from '@/components/terminal/AriaInlineCard';
 import { ProductImage } from '@/components/terminal/ProductImage';
 import CafeSetupModal from '@/components/pos/CafeSetupModal';
 import CustomerLookupBar, { type LoyaltyCustomer } from '@/components/pos/CustomerLookupBar';
+import KdsTracker from '@/components/pos/KdsTracker';
 
 /* ─── Types ─────────────────────────────────────────────────────── */
 interface Product {
@@ -281,6 +282,10 @@ export default function TerminalPage() {
   const [activeOutletId, setActiveOutletId] = useState<string | null>(null);
   const [outlets, setOutlets] = useState<any[]>([]);
 
+  // KDS tracker — cafe-only
+  const [showKdsTracker, setShowKdsTracker] = useState(false);
+  const [kdsReadyOrders, setKdsReadyOrders] = useState<string[]>([]);
+
   // Loyalty — Sprint G, cafe-only
   const [loyaltyConfig, setLoyaltyConfig] = useState<{ program_type: string; points_per_dollar: number; point_value_cents: number; stamps_to_reward: number; stamp_reward_text: string } | null>(null);
   const [redeemActive,  setRedeemActive]  = useState(false);
@@ -415,6 +420,17 @@ export default function TerminalPage() {
         fetch('/api/pos/loyalty/config').then(r => r.json()).then(d => {
           if (d.config && d.config.program_type !== 'off') setLoyaltyConfig(d.config);
         }).catch(() => {});
+      }
+      // KDS BroadcastChannel listener for cafe
+      if (prod.business_type === 'cafe') {
+        try {
+          const kdsCh = new BroadcastChannel('aria-kds');
+          kdsCh.onmessage = (e) => {
+            if (e.data?.type === 'order_ready') {
+              setKdsReadyOrders(prev => [...new Set([...prev, e.data.sale_id])]);
+            }
+          };
+        } catch { /* BroadcastChannel not available */ }
       }
       setLoading(false);
       // Load the default receipt template (is_default first, else first template)
@@ -1734,6 +1750,13 @@ export default function TerminalPage() {
                 : 'Switch cashier'}
             </button>
           )}
+          {businessType === 'cafe' && (
+            <button onClick={() => setShowKdsTracker(v => !v)}
+              className="px-2 py-0.5 rounded text-xs"
+              style={{ color: kdsReadyOrders.length > 0 ? '#7FB897' : 'var(--text-secondary)', border: kdsReadyOrders.length > 0 ? '1px solid rgba(127,184,151,0.4)' : '1px solid #2A2540', background: kdsReadyOrders.length > 0 ? 'rgba(127,184,151,0.1)' : 'rgba(255,255,255,0.03)' }}>
+              🍳{kdsReadyOrders.length > 0 ? ` ${kdsReadyOrders.length} ready` : ' Kitchen'}
+            </button>
+          )}
           {!registerLoading && (
             <button onClick={toggleTrainingMode} className="px-2 py-0.5 rounded text-xs" style={{ color: trainingMode ? '#F59E0B' : 'var(--text-secondary)', border: `1px solid ${trainingMode ? 'rgba(245,158,11,0.4)' : '#2A2540'}`, background: trainingMode ? 'rgba(245,158,11,0.08)' : 'rgba(255,255,255,0.03)' }}>
               {trainingMode ? '🎓 Training ON' : '🎓'}
@@ -2435,6 +2458,18 @@ export default function TerminalPage() {
         </div>
 
       </div>
+
+      {/* KDS Tracker drawer - cafe-only, additive */}
+      {showKdsTracker && businessType === 'cafe' && (
+        <div style={{ position: 'fixed', right: 0, top: 0, bottom: 0, width: 320, background: 'var(--pos-elevated,#162030)', borderLeft: '1px solid rgba(127,184,151,0.2)', zIndex: 400, overflowY: 'auto', padding: 16, fontFamily: "'Manrope',sans-serif" }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <p style={{ fontWeight: 700, color: '#7FB897', margin: 0, fontSize: 14 }}>Kitchen Status</p>
+            <button onClick={() => { setShowKdsTracker(false); setKdsReadyOrders([]); }} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', cursor: 'pointer', fontSize: 20 }}>x</button>
+          </div>
+          <KdsTracker businessId={businessId} />
+          <a href='/pos/kitchen' target='_blank' style={{ display: 'block', marginTop: 16, textAlign: 'center', fontSize: 11, color: 'rgba(127,184,151,0.6)', textDecoration: 'none' }}>Open full Kitchen Display</a>
+        </div>
+      )}
 
       {/* ── ARIA FLOATING PANEL ────────────────────────────────────── */}
 

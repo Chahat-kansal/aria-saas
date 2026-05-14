@@ -47,19 +47,30 @@ const STATUS_ACTIONS: Record<string, { next: KDSOrder['status']; label: string; 
   ready:       { next: 'delivered',   label: 'BUMP',   color: '#6b7280' },
 };
 
+const STATIONS = ['All', 'Hot', 'Cold', 'Dessert', 'Drinks'] as const;
+type Station = typeof STATIONS[number];
+
 export default function KitchenPage() {
   const [orders, setOrders] = useState<KDSOrder[]>([]);
   const [loading, setLoading] = useState(true);
-  const [tick, setTick] = useState(0);
+  const [_tick, setTick] = useState(0);
   const [updating, setUpdating] = useState<string | null>(null);
+  const [station, setStation] = useState<Station>('All');
   const pollRef = useRef<ReturnType<typeof setInterval>>();
+  const prevCount = useRef(0);
 
   async function fetchOrders() {
     try {
       const res = await fetch('/api/pos/kds');
       if (res.ok) {
         const d = await res.json();
-        setOrders(d.orders ?? []);
+        const newOrders: KDSOrder[] = d.orders ?? [];
+        // Sound alert when new orders arrive
+        if (newOrders.length > prevCount.current && prevCount.current > 0) {
+          try { new Audio('/pos-sfx/new-order.mp3').play(); } catch { /* ignore */ }
+        }
+        prevCount.current = newOrders.length;
+        setOrders(newOrders);
       }
     } catch { /* silent */ }
     setLoading(false);
@@ -88,6 +99,16 @@ export default function KitchenPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: action.next }),
       });
+      // Broadcast to POS terminal when order is delivered
+      if (action.next === 'delivered') {
+        try {
+          new BroadcastChannel('aria-kds').postMessage({
+            type: 'order_ready',
+            sale_id: order.id,
+            table_label: order.table_label,
+          });
+        } catch { /* BroadcastChannel not available */ }
+      }
       await fetchOrders();
     } catch { /* silent */ }
     setUpdating(null);
@@ -106,7 +127,15 @@ export default function KitchenPage() {
     setUpdating(null);
   }
 
-  const active = orders.filter(o => o.status !== 'delivered' && o.status !== 'void');
+  const active = orders.filter(o => {
+    if (o.status === 'delivered' || o.status === 'void') return false;
+    if (station === 'All') return true;
+    const stLower = station.toLowerCase();
+    return o.items.some(i =>
+      i.name?.toLowerCase().includes(stLower) ||
+      (i.modifiers ?? []).some((m: string) => m?.toLowerCase().includes(stLower))
+    );
+  });
   const avgWait = active.length > 0
     ? Math.floor(active.reduce((s, o) => s + elapsedSeconds(o.created_at), 0) / active.length)
     : 0;
@@ -142,6 +171,18 @@ export default function KitchenPage() {
         <a href="/pos/terminal" style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12, textDecoration: 'none' }}>
           ← Back to POS
         </a>
+      </div>
+
+      {/* Station filter pills */}
+      <div style={{ background: '#f8f9fa', borderBottom: '1px solid #e5e7eb', padding: '6px 20px', display: 'flex', gap: 6 }}>
+        {STATIONS.map(s => (
+          <button key={s} onClick={() => setStation(s)}
+            style={{ padding: '4px 12px', borderRadius: 20, fontSize: 12, fontWeight: station === s ? 700 : 400, cursor: 'pointer', border: 'none',
+              background: station === s ? '#1a1a1a' : 'rgba(0,0,0,0.06)',
+              color: station === s ? '#fff' : '#6b7280', fontFamily: 'inherit' }}>
+            {s}
+          </button>
+        ))}
       </div>
 
       {/* Status legend */}

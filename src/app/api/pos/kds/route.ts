@@ -33,7 +33,41 @@ async function _GET(req: Request) {
 
   const { data, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ orders: data ?? [] });
+  // Map table_number → table_label so kitchen page KDSOrder interface is satisfied
+  const orders = (data ?? []).map((o: Record<string, unknown>) => ({
+    ...o,
+    table_label: o.table_number ?? null,
+    ticket_number: o.ticket_number ?? null,
+  }));
+  return NextResponse.json({ orders });
 }
 
 export const GET = withErrorCapture('pos/kds', _GET)
+
+async function _POST(req: Request) {
+  const supabase = createServerSupabaseClient();
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  const bid = await getBid(supabase, user.id);
+  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 });
+
+  const body = await req.json();
+  const { sale_id, table_number, items, notes, priority = 1 } = body;
+
+  const { data, error } = await supabase.from('pos_kds_orders').insert({
+    business_id: bid,
+    sale_id: sale_id ?? null,
+    table_number: table_number ?? null,
+    items: items ?? [],
+    status: 'new',
+    priority,
+    notes: notes ?? null,
+    created_at: new Date().toISOString(),
+  }).select().single();
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ order: data });
+}
+
+export const POST = withErrorCapture('pos/kds', _POST)

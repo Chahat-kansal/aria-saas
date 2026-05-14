@@ -59,6 +59,7 @@ async function _POST(req: Request) {
   const bid = await getBusinessId(supabase, user.id);
   if (!bid) return NextResponse.json({ error: 'No business found' }, { status: 400 });
 
+  const body = await req.json();
   const {
     items,
     total_amount,
@@ -77,7 +78,10 @@ async function _POST(req: Request) {
     // Optional — client can pass these; if missing, we look them up
     outlet_id: requestOutletId,
     register_id: requestRegisterId,
-  } = await req.json();
+    // KDS / order context
+    table_label,
+    order_notes,
+  } = body;
 
   if (!items?.length) return NextResponse.json({ error: 'No items provided' }, { status: 400 });
 
@@ -310,6 +314,62 @@ async function _POST(req: Request) {
   } catch (stockErr) {
     console.error('[pos/sales] stock decrement failed (non-fatal):', (stockErr as Error).message);
   }
+
+  // ── KDS order creation for cafe (fire-and-forget) ──────────────────────────
+  if (!salePayload.is_training) {
+    ;(async () => {
+      try {
+        const { data: bizInfo } = await supabase.from('businesses').select('industry').eq('id', bid).maybeSingle();
+        if (bizInfo?.industry === 'cafe') {
+          const kdsItems = (items as Array<{ product_name?: string; label?: string; qty?: number; quantity?: number; modifiers?: unknown[]; notes?: string }>).map(i => ({
+            name: i.product_name ?? i.label ?? 'Item',
+            qty: i.qty ?? i.quantity ?? 1,
+            modifiers: i.modifiers ?? [],
+            special_instructions: i.notes ?? null,
+          }));
+          await supabase.from('pos_kds_orders').insert({
+            business_id: bid,
+            sale_id: sale.id,
+            table_number: table_label ?? null,
+            items: kdsItems,
+            status: 'new',
+            priority: 1,
+            notes: order_notes ?? notes ?? null,
+            created_at: new Date().toISOString(),
+          });
+        }
+      } catch (kdsErr) {
+        console.error('[pos/sales] KDS order creation failed (non-fatal):', (kdsErr as Error).message);
+      }
+    })();
+  }
+
+  // ── Recipe ingredient deduction for cafe (fire-and-forget) ──────────────────
+  ;(async () => {
+    try {
+      const { data: bizInfo } = await supabase.from('businesses').select('industry').eq('id', bid).maybeSingle();
+      if (bizInfo?.industry === 'cafe') {
+        for (const item of (items as Array<{ product_id?: string; qty?: number; quantity?: number }>) ?? []) {
+          if (!item.product_id) continue;
+          const { data: recipe } = await supabase.from('recipes')
+            .select('id, recipe_ingredients(product_id, quantity)')
+            .eq('business_id', bid).eq('product_id', item.product_id).maybeSingle();
+          if (!recipe?.recipe_ingredients) continue;
+          const qty = item.qty ?? item.quantity ?? 1;
+          for (const ing of recipe.recipe_ingredients as Array<{ product_id?: string; quantity?: number }>) {
+            if (!ing.product_id) continue;
+            const { data: ingProd } = await supabase.from('pos_products')
+              .select('stock_quantity').eq('id', ing.product_id).eq('business_id', bid).maybeSingle();
+            if (ingProd) {
+              await supabase.from('pos_products').update({
+                stock_quantity: Math.max(0, (ingProd.stock_quantity ?? 0) - (ing.quantity ?? 0) * qty),
+              }).eq('id', ing.product_id).eq('business_id', bid);
+            }
+          }
+        }
+      }
+    } catch { /* non-fatal — ingredient tracking never blocks a sale */ }
+  })();
 
   // Log to activity_log (fire-and-forget — non-blocking)
   supabase.from('activity_log').insert({

@@ -37,21 +37,25 @@ const NAV: NavSection[] = [
       { label: 'Purchase Orders',       href: '/pos/orders'     },
       { label: 'Stocktake',             href: '/pos/stocktake'  },
       { label: 'Barcodes',              href: '/pos/barcodes'   },
+      { label: 'Recipes & Costing',     href: '/pos/recipes'    },
+      { label: 'Waste Log',             href: '/pos/waste'      },
     ],
   },
   {
     type: 'group', id: 'customers', label: 'Customers', icon: <UsersIcon />,
     items: [
-      { label: 'Customers',       href: '/pos/customers'       },
-      { label: 'Customer Groups', href: '/pos/customer-groups' },
-      { label: 'Gift Cards',      href: '/pos/gift-cards'      },
+      { label: 'Customers',       href: '/pos/customers'        },
+      { label: 'Customer Groups', href: '/pos/customer-groups'  },
+      { label: 'Gift Cards',      href: '/pos/gift-cards'       },
       { label: 'Loyalty',         href: '/pos/settings/loyalty' },
+      { label: 'Loyalty Program', href: '/pos/loyalty'          },
     ],
   },
   {
     type: 'group', id: 'marketing', label: 'Marketing', icon: <MegaphoneIcon />,
     items: [
-      { label: 'Promotions', href: '/pos/promotions' },
+      { label: 'Promotions',    href: '/pos/promotions'    },
+      { label: 'Shelf Tickets', href: '/pos/shelf-tickets' },
     ],
   },
   {
@@ -62,7 +66,10 @@ const NAV: NavSection[] = [
       { label: 'Inventory',           href: '/pos/reports/inventory' },
       { label: 'Customers',           href: '/pos/reports/customers' },
       { label: 'Purchase Orders',     href: '/pos/reports/purchases' },
-      { label: 'End of Day / Z-Report', href: '/pos/reports/closures' },
+      { label: 'End of Day / Z-Report', href: '/pos/reports/closures'   },
+      { label: 'Cashier',               href: '/pos/reports/cashier'    },
+      { label: 'Commission',            href: '/pos/reports/commission' },
+      { label: 'Actions',               href: '/pos/reports/actions'    },
     ],
   },
   {
