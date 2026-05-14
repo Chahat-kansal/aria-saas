@@ -144,7 +144,7 @@ async function _POST(req: Request) {
   if (resolvedOutletId) salePayload.outlet_id = resolvedOutletId;
   if (resolvedRegisterId) salePayload.register_id = resolvedRegisterId;
   if (direct_deposit_ref) salePayload.direct_deposit_ref = direct_deposit_ref;
-  if (isSplit && split_payments?.length) salePayload.split_payments = split_payments;
+  // split_payments array not stored in pos_sales — split_cash/split_card columns handle the amounts
   if (gift_card_code) {
     salePayload.gift_card_code = String(gift_card_code).toUpperCase().trim();
     salePayload.gift_card_amount = gift_card_amount ?? 0;
