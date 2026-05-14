@@ -76,9 +76,14 @@ export default function BillingPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ tier }),
       })
-      const { url, error } = await res.json() as { url?: string; error?: string }
-      if (error) { setErrMsg(error); return }
-      if (url) window.location.href = url
+      const data = await res.json() as { url?: string; error?: string; message?: string }
+      if (data.error) {
+        const msg = data.error === 'billing_not_configured'
+          ? (data.message ?? 'Stripe billing is not configured. Add STRIPE_PRICE_ID_STARTER, STRIPE_PRICE_ID_GROWTH, and STRIPE_PRICE_ID_PRO to your Vercel environment variables.')
+          : data.error
+        setErrMsg(msg); return
+      }
+      if (data.url) window.location.href = data.url
     } catch (e) {
       setErrMsg((e as Error).message)
     } finally {

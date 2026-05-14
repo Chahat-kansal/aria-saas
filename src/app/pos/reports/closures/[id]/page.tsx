@@ -68,7 +68,11 @@ export default function ClosureDetailPage() {
     setSavingReceived(false);
   }
 
-  const { session, revenue, tax, discounts, transaction_count, payment_totals, by_cashier, hourly } = data;
+  const { session, payment_totals, by_cashier, hourly } = data;
+  const revenue = data.revenue ?? 0;
+  const tax = data.tax ?? 0;
+  const discounts = data.discounts ?? 0;
+  const transaction_count = data.transaction_count ?? 0;
   const variance = receivedAmount > 0 ? receivedAmount - revenue : null;
   const chartKey = activeTab === 'revenue' ? 'revenue' : activeTab === 'transactions' ? 'transactions' : activeTab === 'customers' ? 'customers' : 'avg_sale';
 
