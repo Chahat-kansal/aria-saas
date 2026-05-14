@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { ariaObserve } from '@/lib/aria/brain'
 
 async function getBusinessId(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
   const { data: active } = await supabase
@@ -239,6 +240,14 @@ async function _PATCH(req: Request) {
     metadata: { session_id: session_id },
     created_at: new Date().toISOString(),
   }).then(({ error: logErr }) => { if (logErr) console.warn('[sessions/PATCH] activity_log:', logErr.message); });
+
+  // Aria Brain — observe register close with variance (fire-and-forget)
+  ariaObserve({
+    businessId: bid,
+    category: 'operations',
+    event: 'register_closed',
+    metadata: { session_id, variance_cents: body.variance_cents ?? 0 },
+  }).catch(() => {});
 
   return NextResponse.json({ ok: true });
 }

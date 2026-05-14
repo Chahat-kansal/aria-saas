@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { ariaObserve } from '@/lib/aria/brain'
 
 async function getBusinessId(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
   const { data: active } = await supabase
@@ -282,9 +283,15 @@ async function _POST(req: Request) {
       const { data: prod } = await supabase.from('pos_products')
         .select('stock_quantity').eq('id', item.product_id).maybeSingle();
       if (prod?.stock_quantity != null) {
+        const newQty = Math.max(0, prod.stock_quantity - item.quantity);
         await supabase.from('pos_products')
-          .update({ stock_quantity: Math.max(0, prod.stock_quantity - item.quantity) })
+          .update({ stock_quantity: newQty })
           .eq('id', item.product_id);
+        // Observe low stock for Aria Brain (fire-and-forget)
+        if (newQty <= 5) {
+          const { data: prodInfo } = await supabase.from('pos_products').select('name, reorder_point').eq('id', item.product_id).maybeSingle();
+          ariaObserve({ businessId: bid, category: 'inventory', event: 'low_stock', metadata: { product_id: item.product_id, product_name: prodInfo?.name ?? item.product_id, quantity: newQty, reorder_point: prodInfo?.reorder_point } }).catch(() => {});
+        }
       }
 
       // pos_outlet_inventory.items_on_hand (source of truth)
@@ -313,6 +320,14 @@ async function _POST(req: Request) {
     metadata: { sale_id: sale.id, total: total_amount, method: payment_method },
     created_at: new Date().toISOString(),
   }).then(({ error }) => { if (error) console.warn('[pos/sales] activity_log write failed:', error.message); });
+
+  // Aria Brain — observe large sale (fire-and-forget)
+  ariaObserve({
+    businessId: bid,
+    category: 'sales',
+    event: 'sale_completed',
+    metadata: { sale_id: sale.id, total_cents: Math.round((total_amount ?? 0) * 100), method: payment_method },
+  }).catch(() => {});
 
   return NextResponse.json({ sale });
 }

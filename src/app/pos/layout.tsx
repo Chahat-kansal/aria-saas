@@ -5,6 +5,7 @@ import { headers } from 'next/headers';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import POSShell from '@/components/pos/POSShell';
 import { POSThemeProvider } from '@/components/pos/ThemeProvider';
+import AriaBrainPanel from '@/components/aria/AriaBrainPanel';
 
 export const metadata = { title: 'AriaPOS — Point of Sale' };
 
@@ -41,6 +42,7 @@ export default async function PosLayout({ children }: { children: React.ReactNod
       <POSShell businessId={biz.id} businessName={biz.name ?? 'AriaPOS'}>
         {children}
       </POSShell>
+      <AriaBrainPanel businessId={biz.id} />
     </POSThemeProvider>
   );
 }
