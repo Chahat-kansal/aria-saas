@@ -97,7 +97,6 @@ export default function OrderDetailPage() {
     if (!order) return
     setActing(true)
     const patch: Record<string, string> = { status }
-    if (status === 'sent') patch.sent_at = new Date().toISOString()
     if (status === 'received') patch.received_at = new Date().toISOString()
     const res = await fetch(`/api/pos/orders/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch) }).then(r => r.json())
     if (res.order) setOrder(res.order)

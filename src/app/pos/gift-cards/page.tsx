@@ -7,7 +7,7 @@ const iStyle: React.CSSProperties = { background: 'var(--bg-base)', border: `1px
 const lStyle: React.CSSProperties = { display: 'block', fontSize: 11, fontWeight: 700, color: C.muted, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' };
 
 interface GiftCard {
-  id: string; code: string; initial_balance: number; current_balance: number;
+  id: string; code: string; initial_balance: number; balance: number;
   recipient_name: string | null; status: string; created_at: string; expires_at: string | null; is_active: boolean;
 }
 
@@ -88,7 +88,7 @@ export default function GiftCardsPage() {
 
   const filtered = cards.filter(c => !search || c.code.toLowerCase().includes(search.toLowerCase()) || (c.recipient_name ?? '').toLowerCase().includes(search.toLowerCase()));
   const activeCount = cards.filter(c => c.is_active && c.status !== 'used' && c.status !== 'cancelled').length;
-  const totalBalance = cards.filter(c => c.is_active).reduce((s, c) => s + (c.current_balance ?? 0), 0);
+  const totalBalance = cards.filter(c => c.is_active).reduce((s, c) => s + (c.balance ?? 0), 0);
 
   function statusColor(gc: GiftCard) {
     if (!gc.is_active || gc.status === 'cancelled') return C.red;
@@ -140,7 +140,7 @@ export default function GiftCardsPage() {
             <p style={{ fontSize: 13, color: C.green }}>
               Gift card issued! Code: <strong style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 14, color: C.text }}>{issued.code}</strong>
               {issued.recipient_name && <span style={{ color: C.muted }}> · {issued.recipient_name}</span>}
-              {' '}· Balance: <strong>A${(issued.current_balance ?? issued.initial_balance).toFixed(2)}</strong>
+              {' '}· Balance: <strong>A${(issued.balance ?? issued.initial_balance).toFixed(2)}</strong>
             </p>
             <button onClick={() => setIssued(null)} style={{ background: 'none', border: 'none', color: C.muted, cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>✕</button>
           </div>
@@ -162,7 +162,7 @@ export default function GiftCardsPage() {
           {checkResult && (
             <div style={{ marginTop: 10, padding: '10px 14px', background: 'rgba(139,92,246,0.08)', borderRadius: 8, border: `1px solid rgba(139,92,246,0.2)` }}>
               <p style={{ fontSize: 13, color: C.text }}>Code: <strong style={{ fontFamily: "'JetBrains Mono',monospace" }}>{checkResult.code}</strong></p>
-              <p style={{ fontSize: 13, color: C.text }}>Balance: <strong style={{ color: C.violet }}>A${(checkResult.current_balance ?? 0).toFixed(2)}</strong> / A${(checkResult.initial_balance ?? 0).toFixed(2)}</p>
+              <p style={{ fontSize: 13, color: C.text }}>Balance: <strong style={{ color: C.violet }}>A${(checkResult.balance ?? 0).toFixed(2)}</strong> / A${(checkResult.initial_balance ?? 0).toFixed(2)}</p>
               <p style={{ fontSize: 12, color: statusColor(checkResult) }}>{statusLabel(checkResult)}</p>
             </div>
           )}
@@ -198,7 +198,7 @@ export default function GiftCardsPage() {
                   <td style={{ padding: '10px 14px', fontFamily: "'JetBrains Mono',monospace", fontWeight: 700, fontSize: 14, color: C.text }}>{card.code}</td>
                   <td style={{ padding: '10px 14px', fontSize: 13, color: C.muted }}>{card.recipient_name || '—'}</td>
                   <td style={{ padding: '10px 14px', fontSize: 13, color: C.muted, fontFamily: "'JetBrains Mono',monospace" }}>A${(card.initial_balance ?? 0).toFixed(2)}</td>
-                  <td style={{ padding: '10px 14px', fontSize: 14, fontWeight: 700, color: C.text, fontFamily: "'JetBrains Mono',monospace" }}>A${(card.current_balance ?? 0).toFixed(2)}</td>
+                  <td style={{ padding: '10px 14px', fontSize: 14, fontWeight: 700, color: C.text, fontFamily: "'JetBrains Mono',monospace" }}>A${(card.balance ?? 0).toFixed(2)}</td>
                   <td style={{ padding: '10px 14px', fontSize: 11, color: C.muted }}>{new Date(card.created_at).toLocaleDateString()}</td>
                   <td style={{ padding: '10px 14px', fontSize: 11, color: C.muted }}>{card.expires_at ? new Date(card.expires_at).toLocaleDateString() : '—'}</td>
                   <td style={{ padding: '10px 14px' }}>

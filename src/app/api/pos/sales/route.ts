@@ -89,12 +89,12 @@ async function _POST(req: Request) {
   const isSplit = payment_method === 'split' || (split_payments?.length > 1);
 
   // If paying by Aria gift card, validate it first before creating the sale
-  let validatedGiftCard: { id: string; current_balance: number } | null = null;
+  let validatedGiftCard: { id: string; balance: number } | null = null;
   if (isGiftCard && gift_card_code) {
     const code = String(gift_card_code).toUpperCase().trim();
     const { data: gc, error: gcErr } = await supabase
       .from('pos_gift_cards')
-      .select('id, current_balance, is_active, status, expires_at')
+      .select('id, balance, is_active, status, expires_at')
       .eq('business_id', bid)
       .eq('code', code)
       .maybeSingle();
@@ -103,7 +103,7 @@ async function _POST(req: Request) {
       if (!gc) return NextResponse.json({ error: 'Gift card not found' }, { status: 400 });
       if (!gc.is_active || gc.status === 'cancelled') return NextResponse.json({ error: 'Gift card is cancelled' }, { status: 400 });
       if (gc.expires_at && new Date(gc.expires_at) < new Date()) return NextResponse.json({ error: 'Gift card has expired' }, { status: 400 });
-      if ((gc.current_balance ?? 0) <= 0) return NextResponse.json({ error: 'Gift card has no remaining balance' }, { status: 400 });
+      if ((gc.balance ?? 0) <= 0) return NextResponse.json({ error: 'Gift card has no remaining balance' }, { status: 400 });
       validatedGiftCard = gc;
     }
   }
@@ -217,11 +217,10 @@ async function _POST(req: Request) {
   // Deduct from gift card balance
   if (validatedGiftCard && gift_card_amount) {
     const charge = parseFloat(String(gift_card_amount));
-    const newBalance = Math.max(0, (validatedGiftCard.current_balance ?? 0) - charge);
+    const newBalance = Math.max(0, (validatedGiftCard.balance ?? 0) - charge);
     await supabase.from('pos_gift_cards').update({
-      current_balance: newBalance,
+      balance: newBalance,
       status: newBalance <= 0 ? 'used' : 'active',
-      last_used_at: new Date().toISOString(),
     }).eq('id', validatedGiftCard.id);
   }
 

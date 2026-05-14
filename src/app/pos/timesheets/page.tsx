@@ -4,9 +4,9 @@ import { useState, useEffect, useCallback } from 'react';
 interface EmployeeSession {
   id: string;
   staff_name: string | null;
-  staff_member_id: string | null;
-  clocked_in_at: string;
-  clocked_out_at: string | null;
+  staff_id: string | null;
+  clock_in: string;
+  clock_out: string | null;
   break_minutes: number;
   total_minutes: number | null;
   pay_rate_cents?: number;
@@ -74,9 +74,9 @@ export default function TimesheetsPage() {
     sessions.forEach(s => {
       rows.push([
         s.staff_name ?? '',
-        s.clocked_in_at ? new Date(s.clocked_in_at).toLocaleDateString('en-AU') : '',
-        s.clocked_in_at ? new Date(s.clocked_in_at).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' }) : '',
-        s.clocked_out_at ? new Date(s.clocked_out_at).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' }) : 'Active',
+        s.clock_in ? new Date(s.clock_in).toLocaleDateString('en-AU') : '',
+        s.clock_in ? new Date(s.clock_in).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' }) : '',
+        s.clock_out ? new Date(s.clock_out).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' }) : 'Active',
         String(s.break_minutes ?? 0) + ' min',
         formatDuration(s.total_minutes),
         estimatedPay(s.total_minutes, s.pay_rate_cents ?? 0),
@@ -121,17 +121,17 @@ export default function TimesheetsPage() {
       </div>
 
       {/* Active sessions */}
-      {sessions.filter(s => !s.clocked_out_at).length > 0 && (
+      {sessions.filter(s => !s.clock_out).length > 0 && (
         <div className="mb-5">
           <p className="text-xs font-semibold text-[rgba(26,26,22,0.6)] mb-2 uppercase tracking-wide">Currently clocked in</p>
           <div className="space-y-2">
-            {sessions.filter(s => !s.clocked_out_at).map(s => (
+            {sessions.filter(s => !s.clock_out).map(s => (
               <div key={s.id} className="bg-white rounded-xl border border-[rgba(22,163,74,0.3)] p-4 flex items-center justify-between">
                 <div>
                   <p className="text-sm font-semibold text-[#1a1a16]">{s.staff_name ?? 'Unknown'}</p>
                   <p className="text-xs text-[rgba(26,26,22,0.5)]">
-                    Since {new Date(s.clocked_in_at).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}
-                    {' · '}{formatDuration(Math.floor((Date.now() - new Date(s.clocked_in_at).getTime()) / 60000))} so far
+                    Since {new Date(s.clock_in).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}
+                    {' · '}{formatDuration(Math.floor((Date.now() - new Date(s.clock_in).getTime()) / 60000))} so far
                   </p>
                 </div>
                 <button onClick={() => clockOut(s.id)}
@@ -154,7 +154,7 @@ export default function TimesheetsPage() {
             className="bg-white border border-[rgba(0,0,0,0.1)] rounded-xl px-3 py-2 text-xs text-[#1a1a16] outline-none" />
         </div>
         <p className="text-xs text-[rgba(26,26,22,0.5)]">
-          {sessions.filter(s => s.clocked_out_at).length} shifts · {totalHours.toFixed(1)} total hours
+          {sessions.filter(s => s.clock_out).length} shifts · {totalHours.toFixed(1)} total hours
         </p>
       </div>
 
@@ -163,7 +163,7 @@ export default function TimesheetsPage() {
         <div className="space-y-2">
           {[1, 2, 3].map(i => <div key={i} className="h-14 bg-[rgba(0,0,0,0.05)] rounded-xl animate-pulse" />)}
         </div>
-      ) : sessions.filter(s => s.clocked_out_at).length === 0 ? (
+      ) : sessions.filter(s => s.clock_out).length === 0 ? (
         <div className="bg-white rounded-2xl border border-[rgba(0,0,0,0.08)] p-8 text-center">
           <p className="text-sm text-[rgba(26,26,22,0.4)]">No completed shifts in this period.</p>
         </div>
@@ -178,17 +178,17 @@ export default function TimesheetsPage() {
               </tr>
             </thead>
             <tbody>
-              {sessions.filter(s => s.clocked_out_at).map(s => (
+              {sessions.filter(s => s.clock_out).map(s => (
                 <tr key={s.id} className="border-b border-[rgba(0,0,0,0.04)] hover:bg-[rgba(0,0,0,0.02)]">
                   <td className="px-4 py-3 font-medium text-[#1a1a16]">{s.staff_name ?? '—'}</td>
                   <td className="px-4 py-3 text-[rgba(26,26,22,0.6)]">
-                    {new Date(s.clocked_in_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}
+                    {new Date(s.clock_in).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}
                   </td>
                   <td className="px-4 py-3 text-[rgba(26,26,22,0.6)]">
-                    {new Date(s.clocked_in_at).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}
+                    {new Date(s.clock_in).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}
                   </td>
                   <td className="px-4 py-3 text-[rgba(26,26,22,0.6)]">
-                    {s.clocked_out_at ? new Date(s.clocked_out_at).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' }) : '—'}
+                    {s.clock_out ? new Date(s.clock_out).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' }) : '—'}
                   </td>
                   <td className="px-4 py-3 text-[rgba(26,26,22,0.6)]">{s.break_minutes ?? 0} min</td>
                   <td className="px-4 py-3 font-semibold text-[#1a1a16]">{formatDuration(s.total_minutes)}</td>

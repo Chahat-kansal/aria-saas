@@ -28,20 +28,21 @@ async function _GET(req: Request) {
   const from = fromParam ? new Date(fromParam) : new Date(to.getTime() - 14 * 24 * 60 * 60 * 1000);
 
   const { data, error } = await supabase
-    .from('pos_employee_sessions')
-    .select('*, staff_members(name)')
+    .from('pos_timesheets')
+    .select('id, business_id, staff_id, staff_name, clock_in, clock_out, break_minutes, pay_rate_cents, notes, created_at')
     .eq('business_id', bid)
-    .gte('clocked_in_at', from.toISOString())
-    .lte('clocked_in_at', to.toISOString())
-    .order('clocked_in_at', { ascending: false });
+    .gte('clock_in', from.toISOString())
+    .lte('clock_in', to.toISOString())
+    .order('clock_in', { ascending: false });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
+  // Compute total_minutes for the client (clock_in → clock_out diff)
   const sessions = (data ?? []).map((s) => {
-    const totalMinutes = s.clocked_out_at
-      ? Math.round((new Date(s.clocked_out_at as string).getTime() - new Date(s.clocked_in_at as string).getTime()) / 60000)
+    const total_minutes = s.clock_out
+      ? Math.round((new Date(s.clock_out as string).getTime() - new Date(s.clock_in as string).getTime()) / 60000) - (s.break_minutes ?? 0)
       : null;
-    return { ...s, total_minutes: totalMinutes };
+    return { ...s, total_minutes };
   });
 
   return NextResponse.json({ sessions });
@@ -55,27 +56,27 @@ async function _POST(req: Request) {
   const bid = await getBid(supabase, user.id);
   if (!bid) return NextResponse.json({ error: 'No business found' }, { status: 400 });
 
-  const { staff_member_id, staff_name } = await req.json();
-  if (!staff_member_id) return NextResponse.json({ error: 'staff_member_id required' }, { status: 400 });
+  const { staff_id, staff_name } = await req.json();
+  if (!staff_id) return NextResponse.json({ error: 'staff_id required' }, { status: 400 });
 
   // Check for existing open session
   const { data: existing } = await supabase
-    .from('pos_employee_sessions')
+    .from('pos_timesheets')
     .select('id')
-    .eq('staff_member_id', staff_member_id)
+    .eq('staff_id', staff_id)
     .eq('business_id', bid)
-    .is('clocked_out_at', null)
+    .is('clock_out', null)
     .maybeSingle();
 
   if (existing) return NextResponse.json({ error: 'Staff member already clocked in' }, { status: 409 });
 
   const { data, error } = await supabase
-    .from('pos_employee_sessions')
+    .from('pos_timesheets')
     .insert({
-      staff_member_id,
+      staff_id,
       staff_name: staff_name ?? null,
       business_id: bid,
-      clocked_in_at: new Date().toISOString(),
+      clock_in: new Date().toISOString(),
     })
     .select()
     .single();
@@ -92,26 +93,27 @@ async function _PATCH(req: Request) {
   const bid = await getBid(supabase, user.id);
   if (!bid) return NextResponse.json({ error: 'No business found' }, { status: 400 });
 
-  const { session_id } = await req.json();
+  const { session_id, break_minutes } = await req.json();
   if (!session_id) return NextResponse.json({ error: 'session_id required' }, { status: 400 });
 
-  // Fetch session to compute total_minutes
+  // Fetch session to verify it's open
   const { data: session, error: fetchError } = await supabase
-    .from('pos_employee_sessions')
-    .select('id, clocked_in_at')
+    .from('pos_timesheets')
+    .select('id, clock_in')
     .eq('id', session_id)
     .eq('business_id', bid)
-    .is('clocked_out_at', null)
+    .is('clock_out', null)
     .single();
 
   if (fetchError || !session) return NextResponse.json({ error: 'Open session not found' }, { status: 404 });
 
   const now = new Date();
-  const totalMinutes = Math.round((now.getTime() - new Date(session.clocked_in_at as string).getTime()) / 60000);
+  const updates: Record<string, unknown> = { clock_out: now.toISOString() };
+  if (break_minutes !== undefined) updates.break_minutes = break_minutes;
 
   const { data, error } = await supabase
-    .from('pos_employee_sessions')
-    .update({ clocked_out_at: now.toISOString(), total_minutes: totalMinutes })
+    .from('pos_timesheets')
+    .update(updates)
     .eq('id', session_id)
     .eq('business_id', bid)
     .select()
