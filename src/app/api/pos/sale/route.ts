@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { ariaObserve } from '@/lib/aria/brain'
 
 async function _POST(req: Request) {
   const supabase = createServerSupabaseClient();
@@ -175,6 +176,56 @@ async function _POST(req: Request) {
         visit_count: (customer.visit_count ?? 0) + 1,
         last_visit: new Date().toISOString(),
       }).eq('id', customer_id);
+    }
+  }
+
+  // Activity log (non-blocking)
+  supabase.from('activity_log').insert({
+    business_id: business.id,
+    action_type: 'sale_completed',
+    description: `Sale ${sale.sale_number ?? sale.id?.slice(-6)} · A$${(total_amount ?? 0).toFixed(2)} · ${payment_method ?? 'cash'}`,
+    metadata: { sale_id: sale.id, total: total_amount, method: payment_method },
+    created_at: new Date().toISOString(),
+  }).then(() => null, () => null)
+
+  // Aria Brain — observe sale (non-blocking)
+  ariaObserve({
+    businessId: business.id,
+    category: 'sales',
+    event: 'sale_completed',
+    metadata: {
+      sale_id: sale.id,
+      total_cents: Math.round((total_amount ?? 0) * 100),
+      method: payment_method,
+      items: body.items?.length ?? 0,
+      hour: new Date().getHours(),
+    },
+  }).catch(() => {})
+
+  // Low-stock check per sold item (non-blocking)
+  if (body.items?.length) {
+    for (const item of body.items as Array<{ product_id?: string; quantity?: number }>) {
+      if (!item.product_id) continue
+      supabase.from('pos_products')
+        .select('name, stock_quantity, low_stock_threshold')
+        .eq('id', item.product_id)
+        .maybeSingle()
+        .then(({ data: p }) => {
+          if (p && p.stock_quantity != null && p.low_stock_threshold != null
+              && p.stock_quantity <= p.low_stock_threshold) {
+            void ariaObserve({
+              businessId: business.id,
+              category: 'inventory',
+              event: 'low_stock',
+              metadata: {
+                product_id: item.product_id,
+                product_name: p.name,
+                quantity: p.stock_quantity,
+                reorder_point: p.low_stock_threshold,
+              },
+            })
+          }
+        }, () => {})
     }
   }
 
