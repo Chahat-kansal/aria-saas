@@ -73,6 +73,15 @@ async function _POST(req: Request) {
   const { name, email, phone, group_id, group_name, account_number } = await req.json();
   if (!name) return NextResponse.json({ error: 'name is required' }, { status: 400 });
 
+  // Duplicate email check — prevent creating two customers with the same email
+  if (email) {
+    const { data: existing } = await supabase.from('pos_customers')
+      .select('id').eq('business_id', bid).eq('email', email).maybeSingle();
+    if (existing) {
+      return NextResponse.json({ error: 'customer_exists', customer_id: existing.id }, { status: 409 });
+    }
+  }
+
   const { data: customer, error } = await supabase
     .from('pos_customers')
     .insert({ business_id: bid, name, email: email || null, phone: phone || null, loyalty_points: 0, group_id: group_id || null, group_name: group_name || null, account_number: account_number || null })

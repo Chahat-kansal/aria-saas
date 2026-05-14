@@ -103,6 +103,23 @@ async function _POST(req: Request) {
     return NextResponse.json({ error: 'name_required' }, { status: 400 });
   }
 
+  // Price validation — block $0 products (prevents silent $0 duplicates)
+  const priceVal = body.price !== undefined && body.price !== null && body.price !== ''
+    ? parseFloat(String(body.price))
+    : null;
+  if (priceVal !== null && priceVal <= 0) {
+    return NextResponse.json({ error: 'price_required', message: 'Price must be greater than $0' }, { status: 400 });
+  }
+
+  // 30-second deduplication — prevent double-submit creating identical products
+  const { data: recentDup } = await supabase.from('pos_products')
+    .select('id, name')
+    .eq('business_id', bid)
+    .eq('name', (body.name as string).trim())
+    .gte('created_at', new Date(Date.now() - 30000).toISOString())
+    .maybeSingle();
+  if (recentDup) return NextResponse.json({ product: recentDup, duplicate: true });
+
   // Explicit allowlist — only confirmed pos_products columns.
   // Unknown fields from callers are silently dropped here rather than
   // letting Supabase reject them with a 500.
