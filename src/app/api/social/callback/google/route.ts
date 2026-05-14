@@ -42,29 +42,39 @@ async function _GET(req: Request) {
       headers: { 'Authorization': `Bearer ${tokens.access_token}` },
     });
     const accountsData = await accountsRes.json();
-    const account = accountsData.accounts?.[0];
-    if (!account) throw new Error('No Google Business Profile accounts found.');
+    console.log('[google/callback] accounts response:', JSON.stringify(accountsData))
+    const account = accountsData.accounts?.[0] ?? null;
+    // Don't crash — save connection even without account data
+    // The user can retry fetching account info later
 
-    // Get first location
-    const locRes = await fetch(
-      `https://mybusiness.googleapis.com/v4/${account.name}/locations`,
-      { headers: { 'Authorization': `Bearer ${tokens.access_token}` } }
-    );
-    const locData = await locRes.json();
-    const location = locData.locations?.[0];
+    // Get first location (only if we have an account)
+    let location: any = null;
+    if (account) {
+      try {
+        const locRes = await fetch(
+          `https://mybusiness.googleapis.com/v4/${account.name}/locations`,
+          { headers: { 'Authorization': `Bearer ${tokens.access_token}` } }
+        );
+        const locData = await locRes.json();
+        location = locData.locations?.[0] ?? null;
+      } catch { /* non-fatal */ }
+    }
 
     await supabase.from('social_connections').upsert({
       business_id: biz.id,
       platform: 'google_business',
-      platform_account_id: account.name,
-      platform_account_name: account.accountName || account.name,
+      platform_account_id: account?.name ?? null,
+      platform_account_name: account?.accountName ?? account?.name ?? null,
       platform_page_id: location?.name ?? null,
-      access_token: tokens.access_token,
+      access_token: tokens.refresh_token ?? tokens.access_token,
       token_expires_at: tokens.expires_in ? new Date(Date.now() + tokens.expires_in * 1000).toISOString() : null,
       is_active: true,
     }, { onConflict: 'business_id,platform' });
 
-    return NextResponse.redirect(`${appUrl}/dashboard/social?connected=google`);
+    const msg = account
+      ? 'connected=google'
+      : 'connected=google&warning=no_gmb_account_found'
+    return NextResponse.redirect(`${appUrl}/dashboard/social?${msg}`);
   } catch (err: any) {
     return NextResponse.redirect(`${appUrl}/dashboard/social?error=${encodeURIComponent(err.message)}`);
   }
