@@ -10,17 +10,30 @@ async function _POST(req: Request) {
   const { data: { user }, error } = await supabase.auth.getUser();
   if (error || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const { sale_id, method, amount_cents, reference } = await req.json();
+  const body = await req.json();
+  const sale_id = body.sale_id;
+  const method = body.method;
+  // Accept both amount_cents (correct) and amount (legacy, convert)
+  const amount_cents = body.amount_cents != null
+    ? Math.round(Number(body.amount_cents))
+    : body.amount != null
+      ? Math.round(Number(body.amount) * 100)
+      : null;
+  const reference = body.reference ?? null;
+
   if (!sale_id || !method || !amount_cents) {
-    return NextResponse.json({ error: 'sale_id, method, amount_cents required' }, { status: 400 });
+    return NextResponse.json({ error: 'sale_id, method, and amount_cents (or amount) are required' }, { status: 400 });
   }
 
   const { data, error: insertErr } = await supabase.from('pos_sale_payments').insert({
-    sale_id, method, amount_cents, reference: reference ?? null,
+    sale_id,
+    method,
+    amount_cents,
+    reference,
   }).select('id').single();
 
   if (insertErr) {
-    console.error('[sale-payments] insert failed:', insertErr.message);
+    console.error('[sale-payments] insert failed:', JSON.stringify({ code: insertErr.code, message: insertErr.message, details: insertErr.details, hint: insertErr.hint }));
     return NextResponse.json({ error: insertErr.message }, { status: 500 });
   }
 

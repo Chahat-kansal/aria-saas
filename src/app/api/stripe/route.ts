@@ -128,10 +128,14 @@ async function _POST(request: NextRequest) {
     const { tier } = await request.json() as { tier: string }
 
     const { getPriceId } = await import('@/lib/stripe')
+    const validTiers = ['starter', 'growth', 'pro']
     const normTier = tier === 'autonomous' ? 'pro' : tier
+    if (!validTiers.includes(normTier)) {
+      return NextResponse.json({ error: 'invalid_tier', message: `Tier must be one of: ${validTiers.join(', ')}` }, { status: 400 })
+    }
     let priceId: string
     try { priceId = getPriceId(normTier as 'starter' | 'growth' | 'pro') }
-    catch { return NextResponse.json({ error: 'invalid_tier' }, { status: 400 }) }
+    catch { return NextResponse.json({ error: 'billing_not_configured', message: `Add STRIPE_PRICE_ID_${normTier.toUpperCase()} to Vercel environment variables` }, { status: 503 }) }
 
     const { data: existingSub } = await supabase
       .from('business_subscriptions')

@@ -31,6 +31,8 @@ export default function AgentsDashboardPage() {
   const [allDecisions, setAllDecisions] = useState<Decision[]>([]);
   const [loading, setLoading] = useState(true);
   const [settingsDrawer, setSettingsDrawer] = useState<string | null>(null);
+  const [runningAgent, setRunningAgent] = useState<string | null>(null);
+  const [runResult, setRunResult] = useState<Record<string, { ok: boolean; msg: string }>>({});
   const [settingsData, setSettingsData] = useState<Record<string, { enabled: boolean; auto_approve_below_cents: number }>>({});
   const [businessCreatedAt, setBusinessCreatedAt] = useState<string | null>(null);
   const [totalDecisionCount, setTotalDecisionCount] = useState(0);
@@ -75,8 +77,27 @@ export default function AgentsDashboardPage() {
   }
 
   async function runNow(type: string) {
-    await fetch(`/api/pos/agents/${type}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'run_now' }) });
+    setRunningAgent(type);
+    setRunResult(prev => ({ ...prev, [type]: { ok: true, msg: '' } }));
+    try {
+      const res = await fetch(`/api/pos/agents/${type}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'run_now' }) });
+      const data = await res.json();
+      const n = (data.decisions ?? []).length;
+      setRunResult(prev => ({
+        ...prev,
+        [type]: {
+          ok: res.ok,
+          msg: res.ok
+            ? (n > 0 ? `${n} decision${n !== 1 ? 's' : ''} ready for review` : 'No action needed right now')
+            : (data.error ?? 'Agent failed — check logs'),
+        },
+      }));
+    } catch {
+      setRunResult(prev => ({ ...prev, [type]: { ok: false, msg: 'Network error — please retry' } }));
+    }
+    setRunningAgent(null);
     loadAll();
+    setTimeout(() => setRunResult(prev => { const next = { ...prev }; delete next[type]; return next; }), 5000);
   }
 
   async function saveSettings(type: string) {
@@ -140,7 +161,17 @@ export default function AgentsDashboardPage() {
                 <Link href={a.href} style={{ textDecoration: 'none' }}>
                   <span style={{ ...sBtn(color, dim) }}>View decisions</span>
                 </Link>
-                <button style={sBtn()} onClick={() => runNow(a.type)}>⚡ Run now</button>
+                <button
+                  style={{ ...sBtn(), opacity: runningAgent === a.type ? 0.6 : 1, cursor: runningAgent === a.type ? 'not-allowed' : 'pointer' }}
+                  disabled={runningAgent === a.type}
+                  onClick={() => runNow(a.type)}>
+                  {runningAgent === a.type ? '⏳ Running…' : '⚡ Run now'}
+                </button>
+                {runResult[a.type] && (
+                  <span style={{ fontSize: 11, color: runResult[a.type].ok ? '#34D399' : '#F87171', marginLeft: 4 }}>
+                    {runResult[a.type].ok ? '✓' : '✗'} {runResult[a.type].msg}
+                  </span>
+                )}
                 <button style={sBtn('#94A3B8', 'rgba(148,163,184,0.10)')} onClick={() => setSettingsDrawer(a.type)}>⚙ Settings</button>
               </div>
             </div>

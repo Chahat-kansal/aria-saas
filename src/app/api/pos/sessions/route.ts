@@ -86,7 +86,9 @@ async function _GET(req: Request) {
     .from('pos_cash_sessions')
     .select('*')
     .eq('business_id', bid)
-    .eq('status', 'open')
+    .is('closed_at', null)
+    .order('opened_at', { ascending: false })
+    .limit(1)
     .maybeSingle();
 
   // ?open=true — return open session under 'session' key for close page
@@ -163,15 +165,12 @@ async function _PATCH(req: Request) {
   if (body.closing_float !== undefined) updatePayload.closing_float = body.closing_float;
   if (body.closing_float_cents !== undefined) updatePayload.closing_float = body.closing_float_cents / 100;
   if (body.actual_cash_cents !== undefined) {
-    updatePayload.actual_cash = body.actual_cash_cents / 100;
     updatePayload.actual_cash_cents = body.actual_cash_cents;
   }
   if (body.expected_cash_cents !== undefined) {
-    updatePayload.expected_cash = body.expected_cash_cents / 100;
     updatePayload.expected_cash_cents = body.expected_cash_cents;
   }
   if (body.variance_cents !== undefined) {
-    updatePayload.variance = body.variance_cents / 100;
     updatePayload.variance_cents = body.variance_cents;
   }
   if (body.notes !== undefined) updatePayload.notes = body.notes;
