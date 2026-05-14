@@ -120,11 +120,12 @@ async function _POST(req: Request) {
   const _bizCtx = await getBusinessContext(business_id)
   const _industry = (JSON.parse(_bizCtx))?.business?.industry ?? 'retail'
   const systemPrompt = getSystemPrompt(_industry as string, _bizCtx, 'social-suggest')
-  const msg = 
-await trackAICall({ route: 'aria/social-suggest', model: 'claude-sonnet-4-6', businessId: business_id, purpose: 'social-post-generate' }, () => client.messages.create({
-    model: 'claude-sonnet-4-6',
-    max_tokens: 2000,
-      temperature: 0.75,
+  const controller = new AbortController()
+  const abortTimeout = setTimeout(() => controller.abort(), 25000)
+  const msg = await trackAICall({ route: 'aria/social-suggest', model: 'claude-haiku-4-5-20251001', businessId: business_id, purpose: 'social-post-generate' }, () => client.messages.create({
+    model: 'claude-haiku-4-5-20251001',
+    max_tokens: 600,
+    temperature: 0.75,
     system: [{ type: 'text' as const, text: systemPrompt, cache_control: { type: 'ephemeral' as const } }],
     messages: [{
       role: 'user',
@@ -167,7 +168,7 @@ Return ONLY a valid JSON array, no other text:
   }
 ]`,
     }],
-  }));
+  }, { signal: controller.signal })).finally(() => clearTimeout(abortTimeout))
 
   const text = msg.content[0].type === 'text' ? msg.content[0].text : '[]';
   let suggestions: any[] = [];
@@ -297,6 +298,9 @@ Return ONLY a valid JSON array, no other text:
 
   return NextResponse.json({ posts: saved, count: saved.length });
   } catch (err: unknown) {
+    if (err instanceof Error && err.name === 'AbortError') {
+      return NextResponse.json({ error: 'timeout', message: 'Content generation timed out. Try again.' }, { status: 504 })
+    }
     Sentry.captureException(err, { tags: { route: 'aria/social-suggest' } });
     return NextResponse.json({ posts: [], count: 0, status: 'error', message: 'temporarily_unavailable' }, { status: 200 });
   }

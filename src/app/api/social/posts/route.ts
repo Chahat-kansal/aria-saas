@@ -24,7 +24,7 @@ async function _GET(req: Request) {
 
   let query = supabase
     .from('social_posts')
-    .select('id, platform, caption, hashtags, image_urls, post_type, status, approval_status, scheduled_for, published_at, platform_url, publish_error, owner_request, ai_generated, created_at')
+    .select('id, platform, caption, hashtags, image_url, image_prompt, status, approval_status, scheduled_for, published_at, owner_request, aria_reasoning, reel_concept, reel_script, created_at')
     .eq('business_id', business_id)
     .order('scheduled_for', { ascending: true, nullsFirst: false })
     .order('created_at', { ascending: false });
