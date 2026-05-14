@@ -307,22 +307,14 @@ async function _POST(request: NextRequest) {
         const userText = (incomingMessages ?? []).filter(m => m.role === 'user').slice(-1)[0]?.content ?? ''
         const assistantText = conversationMessages.filter(m => m.role === 'assistant' && typeof m.content === 'string').slice(-1)[0]?.content as string ?? ''
 
-        if (savedConvId) {
-          await supabase.from('aria_conversations').update({
-            messages: conversationMessages,
-            last_message_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          }).eq('id', savedConvId).eq('user_id', user.id)
-        } else {
-          const { data: nc } = await supabase.from('aria_conversations').insert({
-            business_id: biz.id, user_id: user.id,
-            title: userText.slice(0, 50),
-            messages: conversationMessages,
-            last_message_at: new Date().toISOString(),
-          }).select('id').single()
-          savedConvId = nc?.id ?? null
+        // Save conversation — schema: business_id, role, content, created_at (fire-and-forget)
+        if (userText || assistantText) {
+          const rows = []
+          if (userText)      rows.push({ business_id: biz.id, role: 'user',      content: String(userText),      created_at: new Date().toISOString() })
+          if (assistantText) rows.push({ business_id: biz.id, role: 'assistant', content: String(assistantText), created_at: new Date().toISOString() })
+          if (rows.length) supabase.from('aria_conversations').insert(rows).then(() => null, () => null)
         }
-        void assistantText
+        savedConvId = null
 
         send({ type: 'done', conversation_id: savedConvId })
         controller.close()
@@ -350,14 +342,21 @@ async function _GET(request: NextRequest) {
   if (!biz) return Response.json({ conversations: [] })
 
   if (id) {
-    const { data } = await supabase.from('aria_conversations').select('messages').eq('id', id).eq('user_id', user.id).single()
-    return Response.json({ messages: data?.messages ?? [] })
+    // Return recent role/content rows for this business as message history
+    const { data } = await supabase.from('aria_conversations')
+      .select('role, content, created_at')
+      .eq('business_id', biz.id)
+      .order('created_at', { ascending: true })
+      .limit(100)
+    return Response.json({ messages: (data ?? []).map(r => ({ role: r.role, content: r.content })) })
   }
 
+  // Conversation list — return recent entries grouped by business
   const { data } = await supabase.from('aria_conversations')
-    .select('id, title, last_message_at, created_at')
-    .eq('user_id', user.id).eq('business_id', biz.id)
-    .order('last_message_at', { ascending: false }).limit(50)
+    .select('id, created_at')
+    .eq('business_id', biz.id)
+    .order('created_at', { ascending: false })
+    .limit(50)
   return Response.json({ conversations: data ?? [] })
 }
 
