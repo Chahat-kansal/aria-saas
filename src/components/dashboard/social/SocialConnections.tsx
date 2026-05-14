@@ -55,7 +55,11 @@ export default function SocialConnections({ businessId }: { businessId: string }
   }, [businessId])
 
   const handleConnect = (platform: string) => {
-    window.location.href = `/api/integrations/connect/${platform}?business_id=${businessId}`
+    if (platform === 'google_business') {
+      window.location.href = `/api/social/google/connect?business_id=${businessId}`
+    } else {
+      window.location.href = `/api/integrations/connect/${platform}?business_id=${businessId}`
+    }
   }
 
   const handleDisconnect = async (id: string, platformName: string) => {
