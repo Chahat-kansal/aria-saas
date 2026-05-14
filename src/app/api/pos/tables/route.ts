@@ -22,7 +22,8 @@ async function _GET(req: Request) {
     .from('pos_tables')
     .select('*')
     .eq('business_id', bid)
-    .order('table_number', { ascending: true });
+    .order('section', { nullsFirst: true })
+    .order('name', { ascending: true });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ tables: data ?? [] });
@@ -36,18 +37,22 @@ async function _POST(req: Request) {
   const bid = await getBid(supabase, user.id);
   if (!bid) return NextResponse.json({ error: 'No business found' }, { status: 400 });
 
-  const { table_number, seats, zone, shape, x_position, y_position } = await req.json();
-  if (!table_number) return NextResponse.json({ error: 'table_number required' }, { status: 400 });
+  const body = await req.json();
+  const { name, section, seats, shape, pos_x, pos_y,
+          // legacy field aliases
+          table_number, zone, x_position, y_position } = body;
+  const resolvedName = name ?? table_number;
+  if (!resolvedName) return NextResponse.json({ error: 'name required' }, { status: 400 });
 
   const { data, error } = await supabase
     .from('pos_tables')
     .insert({
-      table_number,
-      seats: seats ?? null,
-      zone: zone ?? null,
+      name: resolvedName,
+      section: section ?? zone ?? null,
+      seats: seats ?? 2,
       shape: shape ?? 'square',
-      x_position: x_position ?? 0,
-      y_position: y_position ?? 0,
+      pos_x: pos_x ?? x_position ?? 0,
+      pos_y: pos_y ?? y_position ?? 0,
       status: 'available',
       business_id: bid,
     })

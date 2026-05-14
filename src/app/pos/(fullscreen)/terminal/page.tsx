@@ -2,6 +2,9 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { ModifierModal } from '@/components/pos/ModifierModal';
 import { SandwichBuilder } from '@/components/pos/SandwichBuilder';
+import { OrderTypeSelector, type OrderType } from '@/components/pos/OrderTypeSelector';
+import { CustomerCaptureModal, type CustomerDetails } from '@/components/pos/CustomerCaptureModal';
+import { FloorPlan } from '@/components/pos/FloorPlan';
 import type { ConfiguredCartItem } from '@/types/pos-modifiers';
 import Link from 'next/link';
 import { isMobileDevice, hasCameraSupport } from '@/lib/mobile-detect';
@@ -257,6 +260,13 @@ export default function TerminalPage() {
   const [modifierModalProduct,  setModifierModalProduct]  = useState<Product | null>(null);
   // Sandwich/food builder (Sprint C) — additive, cafe-only
   const [sandwichBuilderProduct, setSandwichBuilderProduct] = useState<Product | null>(null);
+  // Order context (Sprint D) — additive, cafe-only
+  const [orderType,            setOrderType]            = useState<OrderType>('takeaway');
+  const [showCustomerCapture,  setShowCustomerCapture]  = useState(false);
+  const [showFloorPlan,        setShowFloorPlan]        = useState(false);
+  const [customerDetails,      setCustomerDetails]      = useState<CustomerDetails | null>(null);
+  const [selectedTable,        setSelectedTable]        = useState<{ id: string; name: string } | null>(null);
+  const [floorPlanEditMode,    setFloorPlanEditMode]    = useState(false);
 
   // Outlet awareness — additive
   const [activeOutletId, setActiveOutletId] = useState<string | null>(null);
@@ -1166,6 +1176,44 @@ export default function TerminalPage() {
           }}
         />
       )}
+      {/* Customer capture modal — Sprint D, cafe-only */}
+      {showCustomerCapture && businessType === 'cafe' && (
+        <CustomerCaptureModal
+          orderType={orderType}
+          onConfirm={details => { setCustomerDetails(details); setShowCustomerCapture(false) }}
+          onSkip={() => setShowCustomerCapture(false)}
+          onClose={() => setShowCustomerCapture(false)}
+        />
+      )}
+      {/* Floor plan — Sprint D, cafe dine-in */}
+      {showFloorPlan && businessType === 'cafe' && (
+        <div onClick={() => setShowFloorPlan(false)}
+          style={{ position: 'fixed', inset: 0, zIndex: 299, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(4px)', display: 'flex', flexDirection: 'column' }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ background: '#090e0b', border: '1px solid rgba(127,184,151,0.2)', borderRadius: '0 0 16px 16px', maxHeight: '80vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid rgba(127,184,151,0.15)' }}>
+              <span style={{ color: '#7FB897', fontWeight: 700, fontSize: 14, fontFamily: "'Fraunces',serif" }}>Floor Plan — Select Table</span>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={() => setFloorPlanEditMode(v => !v)}
+                  style={{ fontSize: 11, padding: '3px 10px', borderRadius: 6, border: `1px solid ${floorPlanEditMode ? 'rgba(127,184,151,0.4)' : 'rgba(255,255,255,0.1)'}`, background: floorPlanEditMode ? 'rgba(127,184,151,0.1)' : 'transparent', color: floorPlanEditMode ? '#7FB897' : 'rgba(255,255,255,0.4)', cursor: 'pointer', fontFamily: 'inherit' }}>
+                  {floorPlanEditMode ? '✓ Done editing' : '⚙ Edit layout'}
+                </button>
+                <button onClick={() => setShowFloorPlan(false)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', cursor: 'pointer', fontSize: 20 }}>×</button>
+              </div>
+            </div>
+            <FloorPlan
+              businessId={businessId ?? ''}
+              editMode={floorPlanEditMode}
+              onTableSelect={table => {
+                if (table.status === 'available') {
+                  setSelectedTable({ id: table.id, name: table.name })
+                  setShowFloorPlan(false)
+                }
+              }}
+            />
+          </div>
+        </div>
+      )}
       {/* Sandwich/food builder — Sprint C, cafe-only, additive */}
       {sandwichBuilderProduct && businessType === 'cafe' && (
         <SandwichBuilder
@@ -2002,6 +2050,24 @@ export default function TerminalPage() {
           ) : (
             /* ── CART VIEW ────────────────────────────────────── */
             <>
+              {/* Order type selector — Sprint D, cafe-only, additive */}
+              {businessType === 'cafe' && (
+                <OrderTypeSelector value={orderType} onChange={type => {
+                  setOrderType(type)
+                  if (type === 'dine_in') setShowFloorPlan(true)
+                  else if (type === 'takeaway' || type === 'pickup') setShowCustomerCapture(true)
+                  else if (type === 'delivery') setShowCustomerCapture(true)
+                }} />
+              )}
+              {/* Table + customer context bar — cafe, additive */}
+              {businessType === 'cafe' && (selectedTable || customerDetails?.name) && (
+                <div style={{ display: 'flex', gap: 8, padding: '5px 12px', background: 'rgba(127,184,151,0.06)', borderBottom: '1px solid rgba(127,184,151,0.15)', fontSize: 11, alignItems: 'center' }}>
+                  {selectedTable && <span style={{ color: '#7FB897' }}>🪑 {selectedTable.name}</span>}
+                  {customerDetails?.name && <span style={{ color: 'rgba(255,255,255,0.6)' }}>👤 {customerDetails.name}</span>}
+                  {customerDetails?.pickup_time && <span style={{ color: 'rgba(255,255,255,0.4)' }}>⏰ {new Date(customerDetails.pickup_time).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}</span>}
+                  <button onClick={() => { setSelectedTable(null); setCustomerDetails(null) }} style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'rgba(255,255,255,0.3)', cursor: 'pointer', fontSize: 13 }}>×</button>
+                </div>
+              )}
               {/* Cart header */}
               <div ref={cartAnchor} className="flex-shrink-0 px-4 py-3 flex items-center gap-2" style={{ borderBottom: '1px solid #1C1928' }}>
                 <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Order</span>
