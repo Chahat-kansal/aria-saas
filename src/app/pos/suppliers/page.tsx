@@ -39,6 +39,11 @@ export default function SuppliersPage() {
     if (modal.mode === 'add') {
       const res = await fetch('/api/pos/suppliers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       const d = await res.json();
+      if (!res.ok || d.error) {
+        alert(d.error ?? 'Failed to create supplier. Please try again.');
+        setSaving(false);
+        return;
+      }
       if (d.supplier) setSuppliers(ss => [...ss, d.supplier]);
     } else if (modal.sup) {
       await fetch(`/api/pos/suppliers?id=${modal.sup.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });

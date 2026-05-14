@@ -138,6 +138,15 @@ async function _POST(req: Request) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // Log register open (fire-and-forget)
+  supabase.from('activity_log').insert({
+    business_id: bid, action_type: 'register_opened',
+    description: `Register opened with A$${opening_float ?? 0} float`,
+    metadata: { session_id: cashSession?.id, opening_float: opening_float ?? 0 },
+    created_at: new Date().toISOString(),
+  }).then(({ error: logErr }) => { if (logErr) console.warn('[sessions/POST] activity_log:', logErr.message); });
+
   return NextResponse.json({ cashSession });
 }
 
@@ -222,6 +231,15 @@ async function _PATCH(req: Request) {
     }
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+
+  // Log register close (fire-and-forget)
+  supabase.from('activity_log').insert({
+    business_id: bid, action_type: 'register_closed',
+    description: `Register closed`,
+    metadata: { session_id: session_id },
+    created_at: new Date().toISOString(),
+  }).then(({ error: logErr }) => { if (logErr) console.warn('[sessions/PATCH] activity_log:', logErr.message); });
+
   return NextResponse.json({ ok: true });
 }
 

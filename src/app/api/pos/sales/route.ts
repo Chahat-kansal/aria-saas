@@ -263,6 +263,15 @@ async function _POST(req: Request) {
     console.error('[pos/sales] stock decrement failed (non-fatal):', (stockErr as Error).message);
   }
 
+  // Log to activity_log (fire-and-forget — non-blocking)
+  supabase.from('activity_log').insert({
+    business_id: bid,
+    action_type: 'sale_completed',
+    description: `Sale completed — A$${(total_amount ?? 0).toFixed(2)} via ${payment_method ?? 'unknown'}`,
+    metadata: { sale_id: sale.id, total: total_amount, method: payment_method },
+    created_at: new Date().toISOString(),
+  }).then(({ error }) => { if (error) console.warn('[pos/sales] activity_log write failed:', error.message); });
+
   return NextResponse.json({ sale });
 }
 

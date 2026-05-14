@@ -259,11 +259,11 @@ async function getCashier(
     .gte('created_at', fromISO).lte('created_at', toISO)
     .limit(2000);
 
-  const { data: actions } = await supabase.from('pos_action_log')
-    .select('action_type,user_id,created_at')
+  const { data: actions } = await supabase.from('activity_log')
+    .select('action_type,metadata,created_at')
     .eq('business_id', bid)
     .gte('created_at', fromISO).lte('created_at', toISO)
-    .in('action_type', ['void','refund','no_sale_open','discount_apply'])
+    .in('action_type', ['void','refund','no_sale_open','discount_apply','register_opened','register_closed','sale_completed'])
     .limit(2000);
 
   // served_by is already a text display name — no join needed
@@ -282,8 +282,8 @@ async function getCashier(
     cashierMap.set(key, e);
   }
 
-  for (const a of (actions ?? []) as Array<{ action_type: string; user_id: string; created_at: string }>) {
-    const key = a.user_id ?? 'Unknown';
+  for (const a of (actions ?? []) as Array<{ action_type: string; metadata?: Record<string, unknown>; created_at: string }>) {
+    const key = (a.metadata?.user_id as string | undefined) ?? 'Unknown';
     const e = cashierMap.get(key) ?? { name: key, sales: 0, transactions: 0, voids: 0, refunds: 0, noSaleOpens: 0, discountTotal: 0 };
     if (a.action_type === 'void')        e.voids += 1;
     else if (a.action_type === 'refund') e.refunds += 1;
@@ -361,26 +361,63 @@ async function getClosures(
   const fromISO = toAESTStart(from);
   const toISO   = toAESTEnd(to);
 
-  const { data: closures } = await supabase.from('pos_closures')
+  // pos_closures table doesn't exist — query pos_cash_sessions instead
+  const { data: sessions } = await supabase.from('pos_cash_sessions')
     .select('*')
     .eq('business_id', bid)
-    .gte('opened_at', fromISO).lte('opened_at', toISO)
-    .order('opened_at', { ascending: false })
+    .eq('status', 'closed')
+    .gte('closed_at', fromISO).lte('closed_at', toISO)
+    .order('closed_at', { ascending: false })
     .limit(200);
 
-  const rows = (closures ?? []).map((c: Record<string, unknown>) => ({
-    ...c,
-    variance_cents: ((c.counted_cash_cents as number ?? 0) - (c.expected_cash_cents as number ?? 0)),
-  }));
+  // Compute per-session totals from actual pos_sales (session columns may be null)
+  const sessionIds = (sessions ?? []).map((s: Record<string, unknown>) => s.id as string);
+  const { data: salesData } = sessionIds.length > 0
+    ? await supabase.from('pos_sales').select('session_id, payment_method, total_amount')
+        .in('session_id', sessionIds).neq('status', 'voided')
+    : { data: [] };
 
-  const totalVariance = rows.reduce((s, r) => s + r.variance_cents, 0);
-  const worstRow = [...rows].sort((a, b) => Math.abs(b.variance_cents) - Math.abs(a.variance_cents))[0];
+  const salesMap: Record<string, { cash: number; card: number; total: number; count: number }> = {};
+  for (const sale of salesData ?? []) {
+    const sid = sale.session_id as string;
+    if (!sid) continue;
+    if (!salesMap[sid]) salesMap[sid] = { cash: 0, card: 0, total: 0, count: 0 };
+    const amt = Number(sale.total_amount ?? 0);
+    const method = String(sale.payment_method ?? 'cash');
+    salesMap[sid].total += amt; salesMap[sid].count += 1;
+    if (method === 'cash') salesMap[sid].cash += amt; else salesMap[sid].card += amt;
+  }
+
+  const rows = (sessions ?? []).map((s: Record<string, unknown>) => {
+    const totals = salesMap[s.id as string] ?? { cash: 0, card: 0, total: 0, count: 0 };
+    const opening = Number(s.opening_float ?? 0);
+    const actualCash = s.actual_cash_cents != null
+      ? Number(s.actual_cash_cents) / 100 : (s.closing_float != null ? Number(s.closing_float) : null);
+    const expectedCash = opening + totals.cash;
+    const variance_cents = actualCash != null ? Math.round((actualCash - expectedCash) * 100) : 0;
+    const opened = s.opened_at ? new Date(s.opened_at as string) : null;
+    const closed = s.closed_at ? new Date(s.closed_at as string) : null;
+    const duration_mins = opened && closed ? Math.round((closed.getTime() - opened.getTime()) / 60000) : null;
+    return {
+      ...s,
+      total_cash_sales: totals.cash, total_card_sales: totals.card,
+      total_revenue: totals.total, transaction_count: totals.count,
+      expected_cash: expectedCash, actual_cash: actualCash, variance_cents, duration_mins,
+      open_float_cents: Math.round(opening * 100),
+      counted_cash_cents: s.actual_cash_cents != null ? Number(s.actual_cash_cents) : Math.round((actualCash ?? 0) * 100),
+      expected_cash_cents: Math.round(expectedCash * 100),
+      card_total_cents: Math.round(totals.card * 100),
+      total_sales_cents: Math.round(totals.total * 100),
+    };
+  });
+
+  const totalVariance = rows.reduce((s, r) => s + (r.variance_cents as number ?? 0), 0);
 
   let insight: { bullets: string[] } | null = null;
-  if (bid) {
-    const res = await generateInsight({ business_id: bid, context: 'register closures report', data: { closures: rows.length, totalVarianceCents: totalVariance, worst: worstRow ? { variance: worstRow.variance_cents } : null }, maxBullets: 2 });
+  try {
+    const res = await generateInsight({ business_id: bid, context: 'register closures report', data: { closures: rows.length, totalVarianceCents: totalVariance }, maxBullets: 2 });
     insight = { bullets: res.bullets };
-  }
+  } catch { /* insight is optional */ }
 
   return NextResponse.json({ closures: rows, insight });
 }
@@ -396,7 +433,8 @@ async function getActions(
   const fromISO    = toAESTStart(from);
   const toISO      = toAESTEnd(to);
 
-  let q = supabase.from('pos_action_log').select('*', { count: 'exact' })
+  // pos_action_log doesn't exist — activity_log is the real table
+  let q = supabase.from('activity_log').select('*', { count: 'exact' })
     .eq('business_id', bid)
     .gte('created_at', fromISO).lte('created_at', toISO)
     .order('created_at', { ascending: false })

@@ -56,6 +56,11 @@ export default function CategoriesPage() {
         body: JSON.stringify(payload),
       });
       const d = await res.json();
+      if (!res.ok || d.error) {
+        alert(d.error ?? 'Failed to create category. Please try again.');
+        setSaving(false);
+        return;
+      }
       if (d.category) setCategories(cs => [...cs, d.category]);
     } else if (modal.cat) {
       await fetch(`/api/pos/categories?id=${modal.cat.id}`, {
