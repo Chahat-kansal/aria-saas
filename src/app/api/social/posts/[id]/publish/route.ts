@@ -8,18 +8,38 @@ type Params = { params: Promise<{ id: string }> }
 async function _POST(req: Request, { params }: Params) {
   const { id } = await params
   const supabase = createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  // Fetch post with ownership check via business join
-  const { data: post } = await supabase
-    .from('social_posts')
-    .select('*, businesses!inner(user_id, name)')
-    .eq('id', id)
-    .single()
+  // Allow cron invocations authenticated with CRON_SECRET (no user session in cron context)
+  const authHeader = req.headers.get('authorization')?.replace('Bearer ', '')
+  const isCron = !!authHeader && !!process.env.CRON_SECRET && authHeader === process.env.CRON_SECRET
 
-  if (!post || (post as any).businesses?.user_id !== user.id) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let post: any = null
+
+  if (isCron) {
+    // Cron path: fetch post directly (no user ownership check needed — cron is trusted)
+    const { data } = await supabase
+      .from('social_posts')
+      .select('*, businesses!inner(user_id, name)')
+      .eq('id', id)
+      .single()
+    post = data as Record<string, unknown> | null
+    if (!post) return NextResponse.json({ error: 'Post not found' }, { status: 404 })
+  } else {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+    // Fetch post with ownership check via business join
+    const { data } = await supabase
+      .from('social_posts')
+      .select('*, businesses!inner(user_id, name)')
+      .eq('id', id)
+      .single()
+
+    if (!data || (data as any).businesses?.user_id !== user.id) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+    post = data as Record<string, unknown>
   }
 
   // Get the active connection for this platform

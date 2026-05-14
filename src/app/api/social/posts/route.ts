@@ -66,6 +66,8 @@ async function _PATCH(req: Request) {
   if (scheduled_for !== undefined) {
     updates.scheduled_for = scheduled_for;
     updates.status = scheduled_for ? 'scheduled' : 'draft';
+    // Owner scheduling their own post → auto-approve so publish cron picks it up
+    if (scheduled_for) updates.approval_status = 'approved';
   }
   if (caption       !== undefined) updates.caption = caption;
   if (approval_status !== undefined) updates.approval_status = approval_status;

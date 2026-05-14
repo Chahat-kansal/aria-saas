@@ -86,7 +86,7 @@ async function _GET(req: Request) {
     .from('pos_cash_sessions')
     .select('*')
     .eq('business_id', bid)
-    .is('closed_at', null)
+    .eq('status', 'open')
     .order('opened_at', { ascending: false })
     .limit(1)
     .maybeSingle();
