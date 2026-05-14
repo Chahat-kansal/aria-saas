@@ -279,7 +279,8 @@ Return ONLY a valid JSON array, no other text:
     const { data: post } = await supabase.from('social_posts').insert({
       business_id,
       platform: s.platform,
-      status: 'draft',
+      status: 'scheduled',
+      approval_status: 'approved',
       caption: s.caption,
       hashtags: [...(s.hashtags || []), ...(prefs?.auto_hashtags || [])],
       image_prompt: s.image_prompt,

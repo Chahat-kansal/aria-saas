@@ -30,6 +30,35 @@ export async function getImageCreditStatus(businessId: string): Promise<ImageCre
   }
 }
 
+function buildProductSearchQuery(productName: string, industry: string | null | undefined): string {
+  const name = productName.toLowerCase().trim()
+
+  const beerWords    = ['vb', 'victoria bitter', 'carlton', 'tooheys', 'xxxx', 'great northern', 'corona', 'heineken', 'beer', 'lager', 'ale', 'stout', 'ipa', 'pale ale']
+  const wineWords    = ['wine', 'shiraz', 'chardonnay', 'merlot', 'sauvignon', 'pinot', 'cab sav', 'riesling', 'prosecco', 'sparkling', 'rose', 'rosé']
+  const spiritWords  = ['whisky', 'whiskey', 'bourbon', 'vodka', 'gin', 'rum', 'tequila', 'brandy', 'scotch', 'jack daniel', 'johnnie walker', 'baileys', 'kahlua', 'absolut', 'grey goose']
+  const ciderWords   = ['cider', 'hard cider']
+  const softDrWords  = ['coca cola', 'coke', 'pepsi', 'sprite', 'fanta', 'solo', 'mountain dew', 'red bull', 'monster', 'v energy', 'soda', 'lemonade', 'juice', 'water', 'sparkling water']
+  const snackWords   = ['nobby', 'chips', 'crisps', 'nuts', 'peanuts', 'popcorn', 'jerky', 'biscuit', 'cookie', 'chocolate', 'candy', 'lolly', 'tim tam', 'smiths', 'doritos']
+  const coffeeWords  = ['coffee', 'espresso', 'latte', 'cappuccino', 'flat white', 'long black', 'mocha', 'cold brew', 'ristretto', 'macchiato']
+  const foodWords    = ['sandwich', 'burger', 'wrap', 'salad', 'cake', 'pastry', 'croissant', 'muffin', 'bagel', 'toast', 'eggs', 'bacon', 'avocado', 'sushi', 'pizza', 'pasta']
+
+  if (beerWords.some(k => name.includes(k)))    return 'beer cans bottles cold drinks bar'
+  if (wineWords.some(k => name.includes(k)))    return 'wine bottle glass vineyard'
+  if (spiritWords.some(k => name.includes(k)))  return 'spirits whisky bottle bar glass'
+  if (ciderWords.some(k => name.includes(k)))   return 'cider apple bottle drink'
+  if (softDrWords.some(k => name.includes(k)))  return 'soft drink can bottle cold beverage'
+  if (snackWords.some(k => name.includes(k)))   return 'snacks chips packet food retail'
+  if (coffeeWords.some(k => name.includes(k)))  return `${name} coffee drink cafe`
+  if (foodWords.some(k => name.includes(k)))    return `${name} food fresh plate`
+
+  if (industry === 'liquor')     return 'alcoholic drink bottle retail bar'
+  if (industry === 'cafe')       return `${name} cafe drink food`
+  if (industry === 'bakery')     return `${name} bakery fresh baked`
+  if (industry === 'restaurant') return `${name} restaurant food plate`
+
+  return `${name} retail product`
+}
+
 /**
  * Fire-and-forget image fetcher for products without an image.
  *
@@ -49,8 +78,7 @@ export function autoFetchProductImage(opts: {
   const category: 'food' | 'all' =
     industry === 'cafe' || industry === 'restaurant' || industry === 'bakery' ? 'food' : 'all'
 
-  const searchQuery =
-    category === 'food' ? productName.toLowerCase() : `${productName} product`
+  const searchQuery = buildProductSearchQuery(productName, industry)
 
   ;(async () => {
     const supabase = createClient(

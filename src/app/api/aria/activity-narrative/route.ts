@@ -47,6 +47,10 @@ interface RawEvent {
   link: string | null;
 }
 
+// Per-business in-memory cache — prevents hammering Anthropic on every page load
+const _narrativeCache = new Map<string, { payload: unknown; ts: number }>();
+const NARRATIVE_CACHE_MS = 5 * 60 * 1000; // 5 minutes
+
 // Row shapes
 interface ActivityRow {
   action_type: string | null;
@@ -107,6 +111,12 @@ async function _GET(req: Request) {
     searchParams.get('business_id') ?? (await getBid(supabase, user.id));
   if (!businessId) {
     return NextResponse.json({ error: 'No active business found' }, { status: 404 });
+  }
+
+  // Return cached response if fresh (5-min TTL per business)
+  const cached = _narrativeCache.get(businessId);
+  if (cached && Date.now() - cached.ts < NARRATIVE_CACHE_MS) {
+    return NextResponse.json(cached.payload);
   }
 
   const now = new Date();
@@ -289,7 +299,9 @@ await trackAICall({ route: 'aria/activity-narrative', model: 'claude-sonnet-4-6'
               link: typeof item.link === 'string' ? item.link : null,
             }),
           );
-          return NextResponse.json({ events: aiEntries, generated_at: generatedAt });
+          const aiPayload = { events: aiEntries, generated_at: generatedAt };
+          _narrativeCache.set(businessId, { payload: aiPayload, ts: Date.now() });
+          return NextResponse.json(aiPayload);
         }
       }
     } catch {
@@ -297,7 +309,9 @@ await trackAICall({ route: 'aria/activity-narrative', model: 'claude-sonnet-4-6'
     }
   }
 
-  return NextResponse.json({ events: fallbackEntries, generated_at: generatedAt });
+  const fallbackPayload = { events: fallbackEntries, generated_at: generatedAt };
+  _narrativeCache.set(businessId, { payload: fallbackPayload, ts: Date.now() });
+  return NextResponse.json(fallbackPayload);
 }
 
 export const GET = withErrorCapture('aria/activity-narrative', _GET)

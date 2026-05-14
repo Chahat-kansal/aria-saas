@@ -190,10 +190,14 @@ async function _POST(req: Request) {
     }).eq('id', openSession.id);
   }
 
-  // Loyalty points
+  // Loyalty points — wrapped so RPC failure cannot block payment save
   if (customer_id) {
-    const pts = Math.floor(total_amount);
-    await supabase.rpc('increment_loyalty_points', { customer_id, points: pts }).maybeSingle();
+    try {
+      const pts = Math.floor(total_amount);
+      await supabase.rpc('increment_loyalty_points', { customer_id, points: pts }).maybeSingle();
+    } catch (loyaltyErr) {
+      console.error('[pos/sales] loyalty rpc skipped:', (loyaltyErr as Error).message);
+    }
   }
 
   // ── Save payment record(s) — amount_cents is CENTS not dollars ──────────────
@@ -212,7 +216,18 @@ async function _POST(req: Request) {
       });
     }
     if (paymentsToInsert.length > 0) {
-      await supabase.from('pos_sale_payments').insert(paymentsToInsert);
+      const { error: payInsertErr } = await supabase.from('pos_sale_payments').insert(paymentsToInsert);
+      if (payInsertErr) {
+        console.error('[pos/sales] PAYMENT INSERT FAILED:', JSON.stringify({
+          code: payInsertErr.code,
+          message: payInsertErr.message,
+          details: payInsertErr.details,
+          hint: payInsertErr.hint,
+          attempted_rows: paymentsToInsert,
+        }));
+      } else {
+        console.log('[pos/sales] payment saved:', paymentsToInsert.length, 'rows');
+      }
     }
   } catch (payErr) {
     console.error('[pos/sales] payment save failed (non-fatal):', (payErr as Error).message);
