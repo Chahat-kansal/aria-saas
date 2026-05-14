@@ -38,6 +38,7 @@ import { LivePulseRail } from '@/components/terminal/LivePulseRail';
 import { AriaInlineCard } from '@/components/terminal/AriaInlineCard';
 import { ProductImage } from '@/components/terminal/ProductImage';
 import CafeSetupModal from '@/components/pos/CafeSetupModal';
+import CustomerLookupBar, { type LoyaltyCustomer } from '@/components/pos/CustomerLookupBar';
 
 /* ─── Types ─────────────────────────────────────────────────────── */
 interface Product {
@@ -61,7 +62,7 @@ interface CartItem {
   product: Product; qty: number; discount_percent?: number;
   label?: string; variantLabel?: string; modifierDetails?: Modifier[]; unitPrice: number;
 }
-interface Customer { id: string; name: string; email: string | null; phone: string | null; loyalty_points: number; total_spent: number; }
+interface Customer { id: string; name: string; email: string | null; phone: string | null; loyalty_points: number; total_spent: number; points_balance?: number; stamps_count?: number; tags?: string[]; visit_count?: number; last_visit_at?: string | null; }
 interface ParkedSale { id: string; label: string | null; items: CartItem[]; total: number; customer_id: string | null; created_at: string; }
 interface RegisterSession { id: string; status: string; opening_float: number; opened_at: string; opened_by: string | null; }
 interface VariantModalState { product: Product; variantGroups: VariantGroup[]; modifiers: Modifier[]; }
@@ -280,6 +281,10 @@ export default function TerminalPage() {
   const [activeOutletId, setActiveOutletId] = useState<string | null>(null);
   const [outlets, setOutlets] = useState<any[]>([]);
 
+  // Loyalty — Sprint G, cafe-only
+  const [loyaltyConfig, setLoyaltyConfig] = useState<{ program_type: string; points_per_dollar: number; point_value_cents: number; stamps_to_reward: number; stamp_reward_text: string } | null>(null);
+  const [redeemActive,  setRedeemActive]  = useState(false);
+
   // Training mode — additive
   const [trainingMode, setTrainingMode] = useState(false);
   const [trainingOffTimer, setTrainingOffTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
@@ -404,6 +409,12 @@ export default function TerminalPage() {
       // First-run cafe setup
       if (prod.business_type === 'cafe' && prods.length === 0) {
         setShowCafeSetup(true);
+      }
+      // Load loyalty config for cafe (fire-and-forget)
+      if (prod.business_type === 'cafe') {
+        fetch('/api/pos/loyalty/config').then(r => r.json()).then(d => {
+          if (d.config && d.config.program_type !== 'off') setLoyaltyConfig(d.config);
+        }).catch(() => {});
       }
       setLoading(false);
       // Load the default receipt template (is_default first, else first template)
@@ -2157,6 +2168,18 @@ export default function TerminalPage() {
                   <button onClick={() => { setSelectedTable(null); setCustomerDetails(null) }} style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'rgba(255,255,255,0.3)', cursor: 'pointer', fontSize: 13 }}>×</button>
                 </div>
               )}
+              {/* Customer lookup bar — Sprint G, cafe + loyalty, additive */}
+              {businessType === 'cafe' && loyaltyConfig && (
+                <CustomerLookupBar
+                  selected={customer as LoyaltyCustomer | null}
+                  loyaltyConfig={loyaltyConfig}
+                  cartTotal={total}
+                  onSelect={c => {
+                    if (!c) { setCustomer(null); setCustomerSearch(''); return; }
+                    setCustomer({ id: c.id, name: c.name, email: c.email, phone: c.phone, loyalty_points: c.points_balance ?? 0, total_spent: c.total_spent, points_balance: c.points_balance, stamps_count: c.stamps_count, tags: c.tags, visit_count: c.visit_count, last_visit_at: c.last_visit_at });
+                  }}
+                />
+              )}
               {/* Cart header */}
               <div ref={cartAnchor} className="flex-shrink-0 px-4 py-3 flex items-center gap-2" style={{ borderBottom: '1px solid #1C1928' }}>
                 <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Order</span>
@@ -2346,6 +2369,28 @@ export default function TerminalPage() {
                           </span>
                         </div>
                       </div>
+                      {/* Loyalty earn/redeem preview — Sprint G, cafe + loyalty, additive */}
+                      {businessType === 'cafe' && loyaltyConfig && customer && (() => {
+                        const earnPts = Math.floor(roundedTotal * (loyaltyConfig.points_per_dollar ?? 1));
+                        const redeemThreshold = Math.round(100 / (loyaltyConfig.point_value_cents ?? 1));
+                        const canRedeem = (customer.points_balance ?? customer.loyalty_points ?? 0) >= redeemThreshold;
+                        const redeemDiscount = redeemActive ? Math.min((customer.points_balance ?? customer.loyalty_points ?? 0), redeemThreshold) * (loyaltyConfig.point_value_cents ?? 1) / 100 : 0;
+                        return (
+                          <div style={{ padding: '6px 16px', display: 'flex', flexDirection: 'column', gap: 5 }}>
+                            {earnPts > 0 && (
+                              <div style={{ fontSize: 11, color: '#7FB897', fontWeight: 600 }}>
+                                +{earnPts} point{earnPts !== 1 ? 's' : ''} earned this sale
+                              </div>
+                            )}
+                            {canRedeem && (
+                              <button onClick={() => setRedeemActive(r => !r)}
+                                style={{ textAlign: 'left', background: redeemActive ? 'rgba(139,92,246,0.12)' : 'transparent', border: `1px solid ${redeemActive ? 'rgba(139,92,246,0.4)' : 'rgba(139,92,246,0.2)'}`, borderRadius: 8, padding: '6px 10px', cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 700, color: '#8B5CF6' }}>
+                                {redeemActive ? `✓ Redeeming ${redeemThreshold} pts = −A$${redeemDiscount.toFixed(2)}` : `Redeem ${redeemThreshold} pts = −A$${((redeemThreshold * (loyaltyConfig.point_value_cents ?? 1)) / 100).toFixed(2)}`}
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })()}
                       <div className="cart-action">
                         {!registerIsOpen && !registerLoading ? (
                           <button className="charge-btn" onClick={() => setShowRegisterModal(true)}>

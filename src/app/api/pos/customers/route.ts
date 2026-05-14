@@ -47,17 +47,30 @@ async function _GET(req: Request) {
     return NextResponse.json({ customer: customer ?? null });
   }
 
+  const { searchParams: sp } = new URL(req.url);
+  const tag    = sp.get('tag');
+  const sortBy = sp.get('sort') ?? 'last_visit_at';
+  const limit  = Math.min(parseInt(sp.get('limit') ?? '50'), 200);
+  const offset = parseInt(sp.get('offset') ?? '0');
+
   let query = supabase
     .from('pos_customers')
-    .select('*')
+    .select('id, name, phone, email, birthday, tags, points_balance, stamps_count, loyalty_points, total_spent, visit_count, last_visit_at, last_visit, marketing_consent, notes, created_at')
     .eq('business_id', bid)
-    .order('name');
+    .range(offset, offset + limit - 1);
+
+  if (sortBy === 'total_spent') query = query.order('total_spent', { ascending: false });
+  else if (sortBy === 'visit_count') query = query.order('visit_count', { ascending: false });
+  else query = query.order('last_visit_at', { ascending: false, nullsFirst: false });
 
   if (q) {
     query = query.or(`name.ilike.%${q}%,email.ilike.%${q}%,phone.ilike.%${q}%`);
   }
+  if (tag) {
+    query = query.contains('tags', [tag]);
+  }
 
-  const { data: customers, error } = await query.limit(50);
+  const { data: customers, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ customers: customers || [] });
 }
@@ -70,10 +83,18 @@ async function _POST(req: Request) {
   const bid = await getBusinessId(supabase, user.id);
   if (!bid) return NextResponse.json({ error: 'No business found' }, { status: 400 });
 
-  const { name, email, phone, group_id, group_name, account_number } = await req.json();
+  const { name, email, phone, birthday, notes, tags, marketing_consent, group_id, group_name, account_number } = await req.json();
   if (!name) return NextResponse.json({ error: 'name is required' }, { status: 400 });
 
-  // Duplicate email check — prevent creating two customers with the same email
+  // Duplicate phone check
+  if (phone) {
+    const { data: existingPhone } = await supabase.from('pos_customers')
+      .select('id').eq('business_id', bid).eq('phone', phone).maybeSingle();
+    if (existingPhone) {
+      return NextResponse.json({ error: 'customer_exists', customer_id: existingPhone.id, message: 'A customer with that phone number already exists' }, { status: 409 });
+    }
+  }
+
   if (email) {
     const { data: existing } = await supabase.from('pos_customers')
       .select('id').eq('business_id', bid).eq('email', email).maybeSingle();
@@ -84,7 +105,17 @@ async function _POST(req: Request) {
 
   const { data: customer, error } = await supabase
     .from('pos_customers')
-    .insert({ business_id: bid, name, email: email || null, phone: phone || null, loyalty_points: 0, group_id: group_id || null, group_name: group_name || null, account_number: account_number || null })
+    .insert({
+      business_id: bid, name,
+      email: email || null, phone: phone || null,
+      birthday: birthday || null, notes: notes || null,
+      tags: tags ?? [], marketing_consent: !!marketing_consent,
+      loyalty_points: 0, points_balance: 0, stamps_count: 0,
+      total_spent: 0, visit_count: 0,
+      group_id: group_id || null, group_name: group_name || null,
+      account_number: account_number || null,
+      created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+    })
     .select()
     .single();
 

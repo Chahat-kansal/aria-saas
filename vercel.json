@@ -55,6 +55,14 @@
     {
       "path": "/api/cron/sync-reviews",
       "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/cron/loyalty-birthday",
+      "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/cron/loyalty-winback",
+      "schedule": "0 10 * * *"
     }
   ]
 }
