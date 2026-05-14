@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { ModifierModal } from '@/components/pos/ModifierModal';
+import { SandwichBuilder } from '@/components/pos/SandwichBuilder';
 import type { ConfiguredCartItem } from '@/types/pos-modifiers';
 import Link from 'next/link';
 import { isMobileDevice, hasCameraSupport } from '@/lib/mobile-detect';
@@ -43,6 +44,8 @@ interface Product {
   track_stock: boolean; is_active: boolean; is_age_restricted?: boolean;
   category_id: string | null;
   pos_categories?: { name: string; color: string } | null;
+  builder_type?: string | null;  // Sprint C — 'sandwich' | null
+  image_url?: string | null;
 }
 interface GlobalProductHit {
   name: string; brand?: string; category?: string;
@@ -251,7 +254,9 @@ export default function TerminalPage() {
   const [terminalLayoutOverride, setTerminalLayoutOverride] = useState<TerminalLayout | null>(null);
   const [showCafeSetup, setShowCafeSetup] = useState(false);
   // Cafe modifier modal (Sprint A) — additive, cafe-only
-  const [modifierModalProduct, setModifierModalProduct] = useState<Product | null>(null);
+  const [modifierModalProduct,  setModifierModalProduct]  = useState<Product | null>(null);
+  // Sandwich/food builder (Sprint C) — additive, cafe-only
+  const [sandwichBuilderProduct, setSandwichBuilderProduct] = useState<Product | null>(null);
 
   // Outlet awareness — additive
   const [activeOutletId, setActiveOutletId] = useState<string | null>(null);
@@ -674,8 +679,14 @@ export default function TerminalPage() {
 
   async function checkAndAddToCart(p: Product, fromEl?: HTMLElement | null) {
     if (!p.is_active) return;
-    // Cafe modifier groups check — Sprint A (additive)
+    // Cafe routing — Sprint C: sandwich builder, Sprint A: modifier modal
     if (businessType === 'cafe') {
+      // Check builder_type first
+      if ((p as any).builder_type === 'sandwich') {
+        setSandwichBuilderProduct(p)
+        return
+      }
+      // Fall through to modifier modal if groups attached
       try {
         const modRes = await fetch(`/api/pos/products/${p.id}/modifiers`)
         if (modRes.ok) {
@@ -1151,6 +1162,17 @@ export default function TerminalPage() {
           onClose={() => setModifierModalProduct(null)}
           onConfirm={(item: ConfiguredCartItem) => {
             setModifierModalProduct(null)
+            addConfiguredItemToCart(item)
+          }}
+        />
+      )}
+      {/* Sandwich/food builder — Sprint C, cafe-only, additive */}
+      {sandwichBuilderProduct && businessType === 'cafe' && (
+        <SandwichBuilder
+          product={sandwichBuilderProduct}
+          onClose={() => setSandwichBuilderProduct(null)}
+          onConfirm={(item: ConfiguredCartItem) => {
+            setSandwichBuilderProduct(null)
             addConfiguredItemToCart(item)
           }}
         />

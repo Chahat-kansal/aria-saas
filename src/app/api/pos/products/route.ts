@@ -57,7 +57,7 @@ async function _GET(req: Request) {
   const [{ data: products }, { data: categories }, { data: saleKeys }] = await Promise.all([
     supabase
       .from('pos_products')
-      .select('id,name,sku,barcode,description,price,cost_price,tax_rate,stock_quantity,low_stock_threshold,track_stock,is_active,show_online,image_url,category_id,supplier_id,pos_categories(name,color)')
+      .select('id,name,sku,barcode,description,price,cost_price,tax_rate,stock_quantity,low_stock_threshold,track_stock,is_active,show_online,image_url,builder_type,category_id,supplier_id,pos_categories(name,color)')
       .eq('business_id', bid)
       .order('name'),
     supabase
