@@ -44,11 +44,11 @@ export default function DiscountBar({ cart, appliedDiscounts, onApply, onRemove,
   const [loading,     setLoading]     = useState(false)
   const [error,       setError]       = useState('')
 
-  // cafe-only gate
-  if (businessType && businessType !== 'cafe') return null
+  // All hooks must be above any conditional return (React rules of hooks)
+  const isCafe = !businessType || businessType === 'cafe'
 
   const fetchAuto = useCallback(async () => {
-    if (!cart.length) { setAutoDiscounts([]); setManualDiscounts([]); return }
+    if (!isCafe || !cart.length) { setAutoDiscounts([]); setManualDiscounts([]); return }
     try {
       const res = await fetch('/api/pos/promotions/applicable', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -58,18 +58,22 @@ export default function DiscountBar({ cart, appliedDiscounts, onApply, onRemove,
       setAutoDiscounts(d.auto ?? [])
       setManualDiscounts(d.manual ?? [])
     } catch { /* silent */ }
-  }, [cart.map(i => `${i.product_id}:${i.qty}`).join(',')])
+  }, [isCafe, cart.map(i => `${i.product_id}:${i.qty}`).join(',')])
 
   useEffect(() => { fetchAuto() }, [fetchAuto])
 
   // Auto-apply detections when they appear
   useEffect(() => {
+    if (!isCafe) return
     for (const d of autoDiscounts) {
       if (!appliedDiscounts.some(a => a.promotion_id === d.promotion_id)) {
         onApply(d)
       }
     }
-  }, [autoDiscounts])
+  }, [autoDiscounts, isCafe])
+
+  // cafe-only gate — after all hooks
+  if (!isCafe) return null
 
   const totalOff = appliedDiscounts.reduce((s, d) => s + d.amount_off, 0) + manualDiscountAmount
 
