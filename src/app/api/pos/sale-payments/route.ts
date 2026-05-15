@@ -21,6 +21,8 @@ async function _POST(req: Request) {
       : null;
   const reference = body.reference ?? null;
 
+  console.log('[sale-payments] received:', JSON.stringify({ sale_id, method, amount_cents: body.amount_cents, amount: body.amount }))
+
   if (!sale_id || !method || !amount_cents) {
     return NextResponse.json({ error: 'sale_id, method, and amount_cents (or amount) are required' }, { status: 400 });
   }
