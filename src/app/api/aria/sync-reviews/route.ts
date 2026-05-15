@@ -2,7 +2,6 @@ export const dynamic = 'force-dynamic'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { NextResponse } from 'next/server'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
-import { ariaObserve } from '@/lib/aria/brain'
 
 const PLACES_KEY = process.env.GOOGLE_PLACES_API_KEY
 
@@ -134,23 +133,21 @@ Respond ONLY with JSON: { "reply": "...", "sentiment": "positive|neutral|negativ
 
     // Aria Brain observations (fire-and-forget)
     if ((review.rating ?? 3) <= 2) {
-      ariaObserve({
-        businessId: business_id,
-        category: 'customer',
-        event: 'negative_review_received',
-        metadata: {
-          reviewer: review.author_name,
-          rating: review.rating,
-          snippet: (review.text ?? '').slice(0, 100),
-        },
-      }).catch(() => {})
+      import('@/lib/aria/brain').then(({ ariaObserve }) => ariaObserve({
+        business_id,
+        category: 'customers',
+        event_type: 'negative_review_received',
+        triggered_by: 'sync',
+        data: { reviewer: review.author_name, rating: review.rating, snippet: (review.text ?? '').slice(0, 100) },
+      }).catch(() => {})).catch(() => {})
     } else if ((review.rating ?? 3) >= 4) {
-      ariaObserve({
-        businessId: business_id,
-        category: 'customer',
-        event: 'positive_review_received',
-        metadata: { reviewer: review.author_name, rating: review.rating },
-      }).catch(() => {})
+      import('@/lib/aria/brain').then(({ ariaObserve }) => ariaObserve({
+        business_id,
+        category: 'customers',
+        event_type: 'positive_review_received',
+        triggered_by: 'sync',
+        data: { reviewer: review.author_name, rating: review.rating },
+      }).catch(() => {})).catch(() => {})
     }
   }
 

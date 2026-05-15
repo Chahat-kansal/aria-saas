@@ -25,6 +25,7 @@ async function _POST(req: Request) {
     return NextResponse.json({ error: 'sale_id, method, and amount_cents (or amount) are required' }, { status: 400 });
   }
 
+  console.log('[sale-payments] inserting:', JSON.stringify({ sale_id, method, amount_cents }))
   const { data, error: insertErr } = await supabase.from('pos_sale_payments').insert({
     sale_id,
     method,

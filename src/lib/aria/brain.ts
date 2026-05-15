@@ -1,185 +1,105 @@
-/**
- * Aria Brain — central observation engine.
- * Call ariaObserve() fire-and-forget from any route after a significant event.
- * All DB writes are best-effort; never throw to the caller.
- */
 import { createClient } from '@supabase/supabase-js'
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const SERVICE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY!
+const getSupabase = () => createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  { auth: { persistSession: false } }
+)
 
-function adminClient() {
-  return createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } })
+export type AriaCategory =
+  | 'sales' | 'inventory' | 'orders' | 'receipts' | 'customers'
+  | 'pricing' | 'staff' | 'compliance' | 'cashflow' | 'expiry' | 'promotions'
+
+export interface AriaObservation {
+  business_id: string
+  category: AriaCategory
+  event_type: string
+  data: Record<string, unknown>
+  triggered_by?: string
 }
 
-export type ObservationCategory =
-  | 'sales'
-  | 'inventory'
-  | 'staffing'
-  | 'compliance'
-  | 'operations'
-  | 'customer'
-
-export interface Observation {
-  businessId: string
-  category: ObservationCategory
-  event: string          // e.g. 'sale_completed', 'low_stock', 'register_closed'
-  metadata?: Record<string, unknown>
-}
-
-/** Log an activity entry (non-Aria, just audit trail). */
-export async function logActivity(
-  businessId: string,
-  actionType: string,
-  description: string,
-  metadata?: Record<string, unknown>,
-) {
+export async function isTracking(business_id: string, category: AriaCategory): Promise<boolean> {
   try {
-    const sb = adminClient()
-    await sb.from('activity_log').insert({
-      business_id: businessId,
-      action_type: actionType,
-      description,
-      metadata: metadata ?? {},
-    })
-  } catch { /* best-effort */ }
-}
-
-/** Check whether Aria is tracking a given category for a business. */
-export async function isTracking(businessId: string, category: ObservationCategory): Promise<boolean> {
-  try {
-    const sb = adminClient()
-    const { data } = await sb
+    const supabase = getSupabase()
+    const { data } = await supabase
       .from('aria_tracking_preferences')
       .select('is_tracking')
-      .eq('business_id', businessId)
+      .eq('business_id', business_id)
       .eq('category', category)
       .maybeSingle()
-    // If no preference row, default to tracking = true
-    return data?.is_tracking ?? true
+    return data?.is_tracking !== false
   } catch { return true }
 }
 
-/** The main observation entry point. Call fire-and-forget. */
-export async function ariaObserve(obs: Observation): Promise<void> {
+export async function logActivity(
+  business_id: string,
+  action_type: string,
+  description: string,
+  metadata: Record<string, unknown> = {}
+): Promise<void> {
   try {
-    const tracking = await isTracking(obs.businessId, obs.category)
+    const supabase = getSupabase()
+    await supabase.from('activity_log').insert({
+      business_id,
+      action_type,
+      description,
+      metadata,
+      created_at: new Date().toISOString(),
+    })
+  } catch { /* non-fatal */ }
+}
+
+export async function ariaObserve(obs: AriaObservation): Promise<void> {
+  try {
+    const tracking = await isTracking(obs.business_id, obs.category)
     if (!tracking) return
 
-    const insight = await generateInsight(obs)
-    if (!insight) return
+    const apiKey = process.env.ANTHROPIC_API_KEY
+    if (!apiKey) return // skip if Claude not configured
 
-    const sb = adminClient()
-    await sb.from('aria_autopilot_actions').insert({
-      business_id: obs.businessId,
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 300,
+        system: `You are Aria, a silent business intelligence brain for an Australian small business.
+Observe business events and generate ONE actionable insight. Be specific and concise.
+Respond ONLY with valid JSON: {"title":"","description":"","priority":"critical|high|medium|low","estimated_impact":""}`,
+        messages: [{
+          role: 'user',
+          content: `Business event:\nCategory: ${obs.category}\nEvent: ${obs.event_type}\nData: ${JSON.stringify(obs.data)}\nTriggered by: ${obs.triggered_by ?? 'system'}\n\nGenerate ONE insight.`
+        }]
+      })
+    })
+
+    if (!response.ok) return
+
+    const result = await response.json() as { content?: Array<{ text?: string }> }
+    const text = result.content?.[0]?.text ?? ''
+
+    let insight: { title?: string; description?: string; priority?: string; estimated_impact?: string }
+    try {
+      insight = JSON.parse(text.replace(/```json|```/g, '').trim())
+    } catch { return }
+
+    if (!insight.title || !insight.description) return
+
+    const supabase = getSupabase()
+    await supabase.from('aria_autopilot_actions').insert({
+      business_id: obs.business_id,
       category: obs.category,
-      priority: insight.priority,
+      priority: insight.priority ?? 'medium',
       title: insight.title,
       description: insight.description,
-      action_data: { event: obs.event, ...obs.metadata },
-      estimated_impact: insight.estimatedImpact,
+      action_data: obs.data,
+      estimated_impact: insight.estimated_impact ?? null,
       status: 'pending',
+      created_at: new Date().toISOString(),
     })
-  } catch { /* best-effort, never propagate */ }
-}
-
-interface InsightSpec {
-  priority: 'high' | 'medium' | 'low'
-  title: string
-  description: string
-  estimatedImpact: string
-}
-
-async function generateInsight(obs: Observation): Promise<InsightSpec | null> {
-  const m = obs.metadata ?? {}
-
-  switch (obs.event) {
-    case 'low_stock': {
-      const product = m.product_name as string | undefined
-      const qty     = m.quantity as number | undefined
-      if (!product || qty === undefined) return null
-      return {
-        priority: qty === 0 ? 'high' : 'medium',
-        title: qty === 0 ? `${product} is out of stock` : `${product} is running low`,
-        description: `${product} has ${qty} unit${qty === 1 ? '' : 's'} remaining. Consider reordering soon to avoid lost sales.`,
-        estimatedImpact: qty === 0 ? 'Prevent lost sales immediately' : 'Prevent stockout within days',
-      }
-    }
-
-    case 'sale_completed': {
-      const total = m.total_cents as number | undefined
-      if (!total || total < 50000) return null // only flag sales >$500
-      return {
-        priority: 'low',
-        title: `Large sale: A$${(total / 100).toFixed(2)}`,
-        description: `A high-value transaction was just completed. Check if a receipt or invoice is needed.`,
-        estimatedImpact: 'Ensure customer satisfaction on big orders',
-      }
-    }
-
-    case 'register_closed': {
-      const variance = m.variance_cents as number | undefined
-      if (variance === undefined || Math.abs(variance) < 500) return null // ignore <$5 variance
-      const sign = variance < 0 ? 'short' : 'over'
-      const amt  = Math.abs(variance) / 100
-      return {
-        priority: Math.abs(variance) > 5000 ? 'high' : 'medium',
-        title: `Register ${sign} by A$${amt.toFixed(2)}`,
-        description: `The register was ${sign} by A$${amt.toFixed(2)} at close. Review cash handling.`,
-        estimatedImpact: 'Identify cash discrepancies early',
-      }
-    }
-
-    case 'order_received': {
-      return null // informational only, no insight needed
-    }
-
-    case 'expiry_alert_created': {
-      const product = m.product_name as string | undefined
-      const days    = m.days_until_expiry as number | undefined
-      if (!product) return null
-      return {
-        priority: (days ?? 60) <= 7 ? 'high' : 'medium',
-        title: `${product} expiring soon`,
-        description: `A batch of ${product} expires in ${days ?? 'a few'} days. Consider discounting or using it first.`,
-        estimatedImpact: 'Reduce food waste and markdown losses',
-      }
-    }
-
-    case 'compliance_item_overdue': {
-      const item = m.item_name as string | undefined
-      return {
-        priority: 'high',
-        title: `Compliance item overdue${item ? `: ${item}` : ''}`,
-        description: `A compliance checklist item is overdue${item ? ` (${item})` : ''}. Complete it to stay compliant.`,
-        estimatedImpact: 'Avoid regulatory risk',
-      }
-    }
-
-    case 'negative_review_received': {
-      const reviewer = m.reviewer as string | undefined
-      const rating   = m.rating as number | undefined
-      const snippet  = m.snippet as string | undefined
-      return {
-        priority: 'high',
-        title: `${rating ?? 1}-star review from ${reviewer ?? 'a customer'}`,
-        description: `You received a negative review${snippet ? `: "${snippet}…"` : ''}. A prompt, genuine reply can turn this around.`,
-        estimatedImpact: 'Protect reputation and win the customer back',
-      }
-    }
-
-    case 'positive_review_received': {
-      const reviewer = m.reviewer as string | undefined
-      const rating   = m.rating as number | undefined
-      return {
-        priority: 'low',
-        title: `${rating ?? 5}-star review from ${reviewer ?? 'a customer'}`,
-        description: `You received a positive review from ${reviewer ?? 'a customer'}. Aria has drafted a thank-you reply.`,
-        estimatedImpact: 'Strengthen customer loyalty',
-      }
-    }
-
-    default:
-      return null
-  }
+  } catch { /* non-fatal — never blocks a sale */ }
 }

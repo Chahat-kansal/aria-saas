@@ -46,10 +46,10 @@ export async function GET(req: Request) {
 
     for (const product of lowStockProducts ?? []) {
       await ariaObserve({
-        businessId: bid,
+        business_id: bid,
         category: 'inventory',
-        event: 'low_stock',
-        metadata: {
+        event_type: 'low_stock',
+        data: {
           product_id: product.id,
           product_name: product.name,
           quantity: product.stock_quantity,
@@ -71,10 +71,10 @@ export async function GET(req: Request) {
 
     for (const item of overdueItems ?? []) {
       await ariaObserve({
-        businessId: bid,
+        business_id: bid,
         category: 'compliance',
-        event: 'compliance_item_overdue',
-        metadata: { item_id: item.id, item_name: item.title, due_date: item.due_date },
+        event_type: 'compliance_item_overdue',
+        data: { item_id: item.id, item_name: item.title, due_date: item.due_date },
       })
       observations++
     }

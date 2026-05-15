@@ -4,7 +4,6 @@ export const dynamic = 'force-dynamic';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
-import { ariaObserve } from '@/lib/aria/brain'
 
 async function _POST(req: Request) {
   const supabase = createServerSupabaseClient();
@@ -109,7 +108,9 @@ async function _POST(req: Request) {
           });
           // Aria Brain — expiry alert (fire-and-forget)
           const { data: prodName } = await supabase.from('pos_products').select('name').eq('id', item.product_id).maybeSingle();
-          ariaObserve({ businessId: bid, category: 'inventory', event: 'expiry_alert_created', metadata: { product_id: item.product_id, product_name: prodName?.name, days_until_expiry: daysUntil, quantity: item.received_qty } }).catch(() => {});
+          import('@/lib/aria/brain').then(({ ariaObserve }) => {
+            ariaObserve({ business_id: bid, category: 'expiry', event_type: 'expiry_alert_created', triggered_by: 'order_receive', data: { product_id: item.product_id, product_name: prodName?.name, days_until_expiry: daysUntil, quantity: item.received_qty } }).catch(() => {})
+          }).catch(() => {})
         }
       }
     }

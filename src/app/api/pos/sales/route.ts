@@ -293,7 +293,7 @@ async function _POST(req: Request) {
         // Observe low stock for Aria Brain (fire-and-forget)
         if (newQty <= 5) {
           const { data: prodInfo } = await supabase.from('pos_products').select('name, reorder_point').eq('id', item.product_id).maybeSingle();
-          ariaObserve({ businessId: bid, category: 'inventory', event: 'low_stock', metadata: { product_id: item.product_id, product_name: prodInfo?.name ?? item.product_id, quantity: newQty, reorder_point: prodInfo?.reorder_point } }).catch(() => {});
+          ariaObserve({ business_id: bid, category: 'inventory', event_type: 'low_stock', data: { product_id: item.product_id, product_name: prodInfo?.name ?? item.product_id, quantity: newQty, reorder_point: prodInfo?.reorder_point } }).catch(() => {});
         }
       }
 
@@ -382,10 +382,10 @@ async function _POST(req: Request) {
 
   // Aria Brain — observe large sale (fire-and-forget)
   ariaObserve({
-    businessId: bid,
+    business_id: bid,
     category: 'sales',
-    event: 'sale_completed',
-    metadata: { sale_id: sale.id, total_cents: Math.round((total_amount ?? 0) * 100), method: payment_method },
+    event_type: 'sale_completed',
+    data: { sale_id: sale.id, total_cents: Math.round((total_amount ?? 0) * 100), method: payment_method },
   }).catch(() => {});
 
   return NextResponse.json({ sale });

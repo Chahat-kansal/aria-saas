@@ -4,7 +4,6 @@ export const dynamic = 'force-dynamic';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
-import { ariaObserve } from '@/lib/aria/brain'
 
 async function getBusinessId(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
   const { data: active } = await supabase
@@ -140,13 +139,11 @@ async function _POST(req: Request) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  // Log register open (fire-and-forget)
-  supabase.from('activity_log').insert({
-    business_id: bid, action_type: 'register_opened',
-    description: `Register opened with A$${opening_float ?? 0} float`,
-    metadata: { session_id: cashSession?.id, opening_float: opening_float ?? 0 },
-    created_at: new Date().toISOString(),
-  }).then(({ error: logErr }) => { if (logErr) console.warn('[sessions/POST] activity_log:', logErr.message); });
+  // Log register open (non-blocking dynamic import)
+  import('@/lib/aria/brain').then(({ logActivity }) => {
+    logActivity(bid, 'register_opened', `Register opened · A$${opening_float ?? 0} float`,
+      { session_id: cashSession?.id, opening_float: opening_float ?? 0 }).catch(() => {})
+  }).catch(() => {})
 
   return NextResponse.json({ cashSession });
 }
@@ -233,21 +230,22 @@ async function _PATCH(req: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  // Log register close (fire-and-forget)
-  supabase.from('activity_log').insert({
-    business_id: bid, action_type: 'register_closed',
-    description: `Register closed`,
-    metadata: { session_id: session_id },
-    created_at: new Date().toISOString(),
-  }).then(({ error: logErr }) => { if (logErr) console.warn('[sessions/PATCH] activity_log:', logErr.message); });
-
-  // Aria Brain — observe register close with variance (fire-and-forget)
-  ariaObserve({
-    businessId: bid,
-    category: 'operations',
-    event: 'register_closed',
-    metadata: { session_id, variance_cents: body.variance_cents ?? 0 },
-  }).catch(() => {});
+  // Log register close + Aria brain (non-blocking dynamic import)
+  import('@/lib/aria/brain').then(({ logActivity, ariaObserve }) => {
+    logActivity(bid, 'register_closed', 'Register closed', { session_id }).catch(() => {})
+    ariaObserve({
+      business_id: bid,
+      category: 'cashflow',
+      event_type: 'register_closed',
+      triggered_by: 'register_close',
+      data: {
+        session_id,
+        variance_cents: body.variance_cents ?? 0,
+        total_cash: updatePayload.total_cash_sales ?? 0,
+        total_card: updatePayload.total_card_sales ?? 0,
+      },
+    }).catch(() => {})
+  }).catch(() => {})
 
   return NextResponse.json({ ok: true });
 }
