@@ -66,6 +66,17 @@ function SkeletonCard() {
   );
 }
 
+// Exported so other components can trigger the briefing manually.
+// Clears any local dismiss flag for today, then dispatches an event
+// the modal listens for. The modal re-runs load() on the event.
+export function showAriaBriefing() {
+  if (typeof window === 'undefined') return;
+  const d = new Date();
+  const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  localStorage.removeItem(`aria_briefing_dismissed_${today}`);
+  window.dispatchEvent(new CustomEvent('aria:show-briefing'));
+}
+
 export function DailyBriefingModal() {
   const { business } = useBusinessContext();
   const router = useRouter();
@@ -80,7 +91,15 @@ export function DailyBriefingModal() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [hasLiveData, setHasLiveData] = useState(false);
 
-  const today = new Date().toISOString().split('T')[0];
+  // LOCAL date (YYYY-MM-DD) — UTC caused dismissals to persist across
+  // the user's local day in AU timezones until UTC midnight rolled over.
+  const today = (() => {
+    const d = new Date();
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  })();
 
   const load = useCallback(async () => {
     if (!business?.id) return;
@@ -122,7 +141,11 @@ export function DailyBriefingModal() {
 
       // Only respect DB dismiss if it was specifically set today
       if (data.dismissed_at) {
-        const dismissedDate = new Date(data.dismissed_at).toISOString().split('T')[0];
+        const dd = new Date(data.dismissed_at);
+        const yyyy = dd.getFullYear();
+        const mm = String(dd.getMonth() + 1).padStart(2, '0');
+        const day = String(dd.getDate()).padStart(2, '0');
+        const dismissedDate = `${yyyy}-${mm}-${day}`;
         if (dismissedDate === today) {
           setHasUserDismissedBriefing(true);
           setIsBriefingLoading(false);
@@ -153,6 +176,18 @@ export function DailyBriefingModal() {
   }, [business?.id, today, authFailed]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Listen for manual trigger from header button
+  useEffect(() => {
+    const handler = () => {
+      setHasUserDismissedBriefing(false);
+      setIsBriefingOpen(false);
+      // Brief delay so React commits the closed state before reopening
+      setTimeout(() => { load(); }, 100);
+    };
+    window.addEventListener('aria:show-briefing', handler);
+    return () => window.removeEventListener('aria:show-briefing', handler);
+  }, [load]);
 
   // Dismiss: user explicitly closes — set localStorage + PATCH DB
   async function dismiss() {
