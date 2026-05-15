@@ -78,7 +78,7 @@ export default function PublicMenuPage() {
   async function placeOrder() {
     if (!form.customer_name.trim()) { setErrMsg('Please enter your name'); return }
     setOrdering(true); setErrMsg('')
-    const res = await fetch(`/api/public/order/${business_id}`, {
+    const res = await fetch(`/api/public/place-order/${business_id}`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         customer_name: form.customer_name,

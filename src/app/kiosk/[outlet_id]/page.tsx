@@ -57,7 +57,7 @@ export default function KioskPage() {
   async function placeOrder() {
     if (!form.customer_name.trim() && !tableId) return
     setOrdering(true)
-    const res = await fetch(`/api/public/order/${bizId}`, {
+    const res = await fetch(`/api/public/place-order/${bizId}`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         customer_name: form.customer_name || (tableId ? `Table ${tableId}` : 'Kiosk'),

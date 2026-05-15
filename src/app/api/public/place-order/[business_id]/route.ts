@@ -81,7 +81,7 @@ export async function POST(req: Request, { params }: Params) {
   }).select('id, order_number, status').single()
 
   if (ooErr || !onlineOrder) {
-    console.error('[public/order] insert failed:', ooErr?.message)
+    console.error('[public/place-order] insert failed:', ooErr?.message)
     return NextResponse.json({ error: 'Failed to place order' }, { status: 500 })
   }
 
