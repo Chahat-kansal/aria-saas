@@ -104,12 +104,12 @@ async function _POST(req: Request) {
       // Update session totals
       if (sale.session_id) {
         const isCard = sale.payment_method === 'card' || sale.payment_method === 'eftpos';
-        supabase.rpc('increment_session_totals', {
+        Promise.resolve(supabase.rpc('increment_session_totals', {
           p_session_id:        sale.session_id,
           p_cash_delta:        isCard ? 0 : totalDollars,
           p_card_delta:        isCard ? totalDollars : 0,
           p_transaction_delta: 1,
-        }).then(() => null, () => null); // non-blocking
+        })).then(() => null, () => null); // non-blocking
       }
 
       synced++;
