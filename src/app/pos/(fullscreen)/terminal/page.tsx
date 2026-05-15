@@ -407,68 +407,83 @@ export default function TerminalPage() {
   /* ── Initial data load ────────────────────────────────────────── */
   useEffect(() => {
     loadRegister();
+
+    let onlineOrderInterval: ReturnType<typeof setInterval> | null = null;
+    let kdsChannel: BroadcastChannel | null = null;
+
     Promise.all([
       fetch('/api/pos/products').then(r => r.json()),
       fetch('/api/pos/park').then(r => r.json()),
       fetch('/api/pos/receipt-templates').then(r => r.json()).catch(() => ({ templates: [] })),
     ]).then(([prod, park, tmplData]) => {
+      // ALWAYS run these — no early returns until after setLoading(false)
       if (prod.business_id) setBusinessId(prod.business_id);
       if (prod.business_name) setBusinessName(prod.business_name);
-      // Layout init — additive
       if (prod.business_type) setBusinessType(prod.business_type);
       if (prod.terminal_layout) setTerminalLayoutOverride(prod.terminal_layout as TerminalLayout);
+
       const prods: Product[] = prod.products || [];
       setProducts(prods);
       setParkedSales(park.parked_sales || []);
       setLowStockItems(prods.filter(p => p.track_stock && p.stock_quantity <= (p.low_stock_threshold ?? 5) && p.is_active));
+
       // First-run cafe setup
       if (prod.business_type === 'cafe' && prods.length === 0) {
         setShowCafeSetup(true);
       }
-      // Load loyalty config for cafe (fire-and-forget)
+
+      // Cafe-only side effects (NON-blocking — must not prevent setLoading)
       if (prod.business_type === 'cafe') {
+        // Load loyalty config
         fetch('/api/pos/loyalty/config').then(r => r.json()).then(d => {
           if (d.config && d.config.program_type !== 'off') setLoyaltyConfig(d.config);
         }).catch(() => {});
-      }
-      // KDS BroadcastChannel listener for cafe
-      if (prod.business_type === 'cafe') {
+
+        // KDS BroadcastChannel listener
         try {
-          const kdsCh = new BroadcastChannel('aria-kds');
-          kdsCh.onmessage = (e) => {
+          kdsChannel = new BroadcastChannel('aria-kds');
+          kdsChannel.onmessage = (e) => {
             if (e.data?.type === 'order_ready') {
               setKdsReadyOrders(prev => [...new Set([...prev, e.data.sale_id])]);
             }
           };
         } catch { /* BroadcastChannel not available */ }
 
-        // Poll for pending online orders every 30s — Sprint J, cafe-only
+        // Poll for pending online orders every 30s — Sprint J
         const pollOnlineOrders = async () => {
           try {
-            const res = await fetch('/api/pos/online-orders?status=pending&limit=10')
+            const res = await fetch('/api/pos/online-orders?status=pending&limit=10');
             if (res.ok) {
-              const d = await res.json()
-              const newOrders = d.orders ?? []
+              const d = await res.json();
+              const newOrders = d.orders ?? [];
               if (newOrders.length > 0) {
-                setPendingOnlineOrders(newOrders)
-                setShowOnlineBell(true)
-                try { new Audio('/pos-sfx/new-order.mp3').play() } catch { /* ignore */ }
+                setPendingOnlineOrders(newOrders);
+                setShowOnlineBell(true);
+                try { new Audio('/pos-sfx/new-order.mp3').play(); } catch { /* ignore */ }
               }
             }
           } catch { /* non-fatal */ }
-        }
-        pollOnlineOrders()
-        const onlineOrderInterval = setInterval(pollOnlineOrders, 30000)
-        return () => clearInterval(onlineOrderInterval)
+        };
+        pollOnlineOrders();
+        onlineOrderInterval = setInterval(pollOnlineOrders, 30000);
       }
+
+      // CRITICAL: runs for every business type — no early return above this line
       setLoading(false);
-      // Load the default receipt template (is_default first, else first template)
+
+      // Load default receipt template (non-blocking, after terminal renders)
       const templates: ReceiptTemplate[] = tmplData.templates || [];
       if (templates.length > 0) {
         const def = templates.find((t: ReceiptTemplate) => t.is_default) ?? templates[0];
         if (def?.elements?.length) setReceiptTemplate(def);
       }
     }).catch(() => setLoading(false));
+
+    // Cleanup — correct location: useEffect return, not .then() callback
+    return () => {
+      if (onlineOrderInterval) clearInterval(onlineOrderInterval);
+      if (kdsChannel) { try { kdsChannel.close(); } catch { /* ignore */ } }
+    };
   }, [loadRegister]);
 
   /* ── Layout init from business_type + localStorage — additive ── */
