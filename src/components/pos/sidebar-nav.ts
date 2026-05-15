@@ -63,6 +63,8 @@ export const NAV_STRUCTURE: NavSection[] = [
     defaultOpen: true,
     items: [
       { label: 'Products', href: '/pos/products', icon: Package },
+      { label: 'Recipes & Costing', href: '/pos/recipes', icon: BookOpen },
+      { label: 'Waste Log', href: '/pos/waste', icon: TrendingDown },
       { label: 'Classifications', href: '/pos/categories', icon: FolderOpen },
       { label: 'Suppliers', href: '/pos/suppliers', icon: Truck },
       { label: 'Purchase Orders', href: '/pos/orders', icon: ShoppingBag },

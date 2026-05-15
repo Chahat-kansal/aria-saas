@@ -29,9 +29,9 @@ export function OrderTypeSelector({ value, onChange }: Props) {
           style={{
             padding: '5px 10px', borderRadius: 20, cursor: 'pointer',
             fontSize: 11, fontWeight: value === t.id ? 700 : 400, border: 'none',
-            background: value === t.id ? 'rgba(127,184,151,0.25)' : 'rgba(255,255,255,0.08)',
-            color: value === t.id ? '#7FB897' : 'rgba(255,255,255,0.75)',
-            outline: value === t.id ? '1px solid rgba(127,184,151,0.5)' : '1px solid rgba(255,255,255,0.1)',
+            background: value === t.id ? 'rgba(127,184,151,0.25)' : 'rgba(255,255,255,0.13)',
+            color: value === t.id ? '#7FB897' : '#e2e8f0',
+            outline: value === t.id ? '1.5px solid rgba(127,184,151,0.65)' : '1px solid rgba(255,255,255,0.22)',
             whiteSpace: 'nowrap', fontFamily: 'inherit', flexShrink: 0,
             transition: 'all 0.12s',
           }}>

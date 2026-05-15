@@ -28,6 +28,7 @@ async function _POST(req: Request) {
     cash_tendered, change_given, notes,
     split_cash, split_card, outlet_id, served_by,
     session_id: bodySessionId, age_verified,
+    table_id, order_type,
   } = body;
 
   if (!items?.length) return NextResponse.json({ error: 'No items' }, { status: 400 });
@@ -177,6 +178,50 @@ async function _POST(req: Request) {
       }).eq('id', customer_id);
     }
   }
+
+  // Cafe KDS + ingredient deduction (non-blocking)
+  ;(async () => {
+    try {
+      const { data: biz } = await supabase.from('businesses').select('industry').eq('id', business.id).maybeSingle()
+      if (biz?.industry !== 'cafe') return
+
+      // KDS ticket
+      const tableLabel = table_id ? `Table ${table_id}` : (order_type === 'dine_in' ? 'Dine-in' : 'Takeaway')
+      await supabase.from('pos_kds_orders').insert({
+        business_id: business.id,
+        sale_id: sale.id,
+        table_number: tableLabel,
+        items: items.map((i: any) => ({
+          name: i.product_name,
+          qty: i.quantity,
+          modifiers: i.modifiers ?? [],
+        })),
+        status: 'new',
+        priority: 1,
+        notes: notes ?? null,
+        created_at: new Date().toISOString(),
+      })
+
+      // Ingredient deduction via recipe_ingredients
+      for (const item of items as Array<{ product_id: string; quantity: number }>) {
+        const { data: recipe } = await supabase
+          .from('recipes')
+          .select('id, serves, recipe_ingredients(product_id, quantity)')
+          .eq('business_id', business.id)
+          .eq('product_id', item.product_id)
+          .eq('is_active', true)
+          .maybeSingle()
+        if (!recipe || !(recipe as any).recipe_ingredients?.length) continue
+        for (const ing of (recipe as any).recipe_ingredients as Array<{ product_id: string | null; quantity: number }>) {
+          if (!ing.product_id) continue
+          const { data: prod } = await supabase.from('pos_products').select('stock_quantity').eq('id', ing.product_id).maybeSingle()
+          if (prod?.stock_quantity == null) continue
+          const deduct = (ing.quantity * item.quantity) / ((recipe as any).serves || 1)
+          await supabase.from('pos_products').update({ stock_quantity: Math.max(0, (prod.stock_quantity as number) - deduct) }).eq('id', ing.product_id)
+        }
+      }
+    } catch { /* non-fatal */ }
+  })()
 
   // Aria Brain — observe sale + low stock + activity log (non-blocking dynamic import)
   const bid = business.id
