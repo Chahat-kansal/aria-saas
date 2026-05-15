@@ -7,10 +7,10 @@ const getDb = () => createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
 
-type Params = { params: Promise<{ id: string }> | { id: string } }
+type Params = { params: Promise<{ business_id: string }> | { business_id: string } }
 
 export async function GET(_req: Request, { params }: Params) {
-  const { id } = 'then' in params ? await params : params
+  const { business_id: id } = 'then' in params ? await params : params
   const db = getDb()
 
   const { data: order } = await db
