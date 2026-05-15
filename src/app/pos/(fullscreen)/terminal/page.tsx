@@ -40,6 +40,8 @@ import { ProductImage } from '@/components/terminal/ProductImage';
 import CafeSetupModal from '@/components/pos/CafeSetupModal';
 import CustomerLookupBar, { type LoyaltyCustomer } from '@/components/pos/CustomerLookupBar';
 import KdsTracker from '@/components/pos/KdsTracker';
+import DiscountBar, { type DiscountBarCartItem } from '@/components/pos/DiscountBar';
+import type { AppliedDiscount } from '@/lib/pos/discount-engine';
 
 /* ─── Types ─────────────────────────────────────────────────────── */
 interface Product {
@@ -289,6 +291,10 @@ export default function TerminalPage() {
   // Loyalty — Sprint G, cafe-only
   const [loyaltyConfig, setLoyaltyConfig] = useState<{ program_type: string; points_per_dollar: number; point_value_cents: number; stamps_to_reward: number; stamp_reward_text: string } | null>(null);
   const [redeemActive,  setRedeemActive]  = useState(false);
+
+  // Discounts & promotions — Sprint I, cafe-only
+  const [appliedDiscounts, setAppliedDiscounts] = useState<AppliedDiscount[]>([])
+  const [manualDiscountAmt, setManualDiscountAmt] = useState(0)
 
   // Training mode — additive
   const [trainingMode, setTrainingMode] = useState(false);
@@ -677,6 +683,7 @@ export default function TerminalPage() {
     setCashTendered(''); setSplitCash(''); setCustomerSearch('');
     setDiscountMode(null); setDiscountVal('');
     setAgeVerified(false); setSuggestions([]);
+    setAppliedDiscounts([]); setManualDiscountAmt(0);
     try { sessionStorage.removeItem(CART_SESSION_KEY); } catch { /* ignore */ }
     searchRef.current?.focus();
   }
@@ -2355,9 +2362,29 @@ export default function TerminalPage() {
                   />
                 )}
 
+                {/* Discount Bar — Sprint I, cafe-only, additive */}
+                {businessType === 'cafe' && cart.length > 0 && (
+                  <DiscountBar
+                    businessType={businessType}
+                    cart={cart.map((i): DiscountBarCartItem => ({
+                      product_id: i.product.id,
+                      product_name: i.product.name,
+                      category_id: i.product.category_id,
+                      qty: i.qty,
+                      unit_price: i.unitPrice,
+                    }))}
+                    appliedDiscounts={appliedDiscounts}
+                    onApply={d => setAppliedDiscounts(prev => prev.some(x => x.promotion_id === d.promotion_id) ? prev : [...prev, d])}
+                    onRemove={pid => setAppliedDiscounts(prev => prev.filter(x => x.promotion_id !== pid))}
+                    manualDiscountAmount={manualDiscountAmt}
+                    onManualDiscount={(amt) => setManualDiscountAmt(amt)}
+                  />
+                )}
+
                 {/* Pay panel — totals + grand total halo + charge + quick actions */}
                 {cart.length > 0 && (() => {
-                  const discountAmt = cart.reduce((s, i) => s + i.unitPrice * i.qty * ((i.discount_percent ?? 0) / 100), 0);
+                  const promoOff = appliedDiscounts.reduce((s, d) => s + d.amount_off, 0) + manualDiscountAmt;
+                  const discountAmt = cart.reduce((s, i) => s + i.unitPrice * i.qty * ((i.discount_percent ?? 0) / 100), 0) + promoOff;
                   const tFloor = Math.floor(total);
                   const tCents = String(Math.round((total - tFloor) * 100)).padStart(2, '0');
                   return (
