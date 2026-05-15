@@ -1076,12 +1076,12 @@ export default function TerminalPage() {
           if (!sb) return;
           cart.forEach(i => {
             if (!i.product.track_stock) return;
-            sb.rpc('decrement_outlet_inventory', {
+            Promise.resolve(sb.rpc('decrement_outlet_inventory', {
               p_business_id: businessId,
               p_product_id: i.product.id,
               p_outlet_id: activeOutletId,
               p_qty: i.qty,
-            }).catch(() => {}); // non-blocking — local state already updated above
+            })).catch(() => {}); // non-blocking — local state already updated above
           });
         });
       }
