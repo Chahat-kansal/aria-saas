@@ -57,6 +57,7 @@ const NAV: NavSection[] = [
     items: [
       { label: 'Promotions',    href: '/pos/promotions'    },
       { label: 'Shelf Tickets', href: '/pos/shelf-tickets' },
+      { label: 'Online Orders', href: '/pos/online-orders' },
     ],
   },
   {

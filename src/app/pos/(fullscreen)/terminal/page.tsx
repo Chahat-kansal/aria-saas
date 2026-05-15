@@ -285,8 +285,12 @@ export default function TerminalPage() {
   const [outlets, setOutlets] = useState<any[]>([]);
 
   // KDS tracker — cafe-only
-  const [showKdsTracker, setShowKdsTracker] = useState(false);
-  const [kdsReadyOrders, setKdsReadyOrders] = useState<string[]>([]);
+  const [showKdsTracker,   setShowKdsTracker]   = useState(false);
+  const [kdsReadyOrders,   setKdsReadyOrders]   = useState<string[]>([]);
+
+  // Online orders bell — Sprint J, cafe-only
+  const [pendingOnlineOrders, setPendingOnlineOrders] = useState<Array<{ id: string; order_number: string; customer_name: string; total: number }>>([])
+  const [showOnlineBell,      setShowOnlineBell]      = useState(false)
 
   // Loyalty — Sprint G, cafe-only
   const [loyaltyConfig, setLoyaltyConfig] = useState<{ program_type: string; points_per_dollar: number; point_value_cents: number; stamps_to_reward: number; stamp_reward_text: string } | null>(null);
@@ -437,6 +441,25 @@ export default function TerminalPage() {
             }
           };
         } catch { /* BroadcastChannel not available */ }
+
+        // Poll for pending online orders every 30s — Sprint J, cafe-only
+        const pollOnlineOrders = async () => {
+          try {
+            const res = await fetch('/api/pos/online-orders?status=pending&limit=10')
+            if (res.ok) {
+              const d = await res.json()
+              const newOrders = d.orders ?? []
+              if (newOrders.length > 0) {
+                setPendingOnlineOrders(newOrders)
+                setShowOnlineBell(true)
+                try { new Audio('/pos-sfx/new-order.mp3').play() } catch { /* ignore */ }
+              }
+            }
+          } catch { /* non-fatal */ }
+        }
+        pollOnlineOrders()
+        const onlineOrderInterval = setInterval(pollOnlineOrders, 30000)
+        return () => clearInterval(onlineOrderInterval)
       }
       setLoading(false);
       // Load the default receipt template (is_default first, else first template)
@@ -1745,6 +1768,14 @@ export default function TerminalPage() {
               Parked ({parkedSales.length})
             </button>
           )}
+          {/* Online orders bell — Sprint J, cafe-only */}
+          {businessType === 'cafe' && pendingOnlineOrders.length > 0 && (
+            <button onClick={() => setShowOnlineBell(v => !v)}
+              className="px-2 py-0.5 rounded text-xs"
+              style={{ color: '#F59E0B', border: '1px solid rgba(245,158,11,0.4)', background: 'rgba(245,158,11,0.08)', position: 'relative' }}>
+              🔔 {pendingOnlineOrders.length} online
+            </button>
+          )}
           {!registerLoading && (
             <button onClick={() => setShowRefundModal(true)} className="px-2 py-0.5 rounded text-xs" style={{ color: 'var(--text-secondary)', border: '1px solid #2A2540', background: 'rgba(255,255,255,0.03)' }}>
               ⟳ Refund
@@ -2485,6 +2516,34 @@ export default function TerminalPage() {
         </div>
 
       </div>
+
+      {/* Online orders bell drawer — Sprint J, cafe-only */}
+      {showOnlineBell && businessType === 'cafe' && pendingOnlineOrders.length > 0 && (
+        <div style={{ position: 'fixed', top: 48, right: 0, width: 320, zIndex: 410, background: 'var(--pos-elevated,#162030)', borderLeft: '1px solid rgba(245,158,11,0.3)', borderBottom: '1px solid rgba(245,158,11,0.3)', borderBottomLeftRadius: 14, boxShadow: '0 8px 32px rgba(0,0,0,0.5)', fontFamily: "'Manrope',sans-serif", maxHeight: '60vh', overflowY: 'auto' }}>
+          <div style={{ padding: '12px 16px', borderBottom: '1px solid rgba(255,255,255,0.07)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: '#F59E0B' }}>🔔 Incoming online orders</span>
+            <button onClick={() => setShowOnlineBell(false)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', cursor: 'pointer', fontSize: 18 }}>×</button>
+          </div>
+          <div style={{ padding: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {pendingOnlineOrders.map(o => (
+              <div key={o.id} style={{ background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.2)', borderRadius: 10, padding: '10px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: '#e8f4f8' }}>{o.order_number} · {o.customer_name}</div>
+                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>A${(o.total ?? 0).toFixed(2)}</div>
+                </div>
+                <button
+                  onClick={async () => {
+                    await fetch(`/api/pos/online-orders/${o.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'confirmed' }) })
+                    setPendingOnlineOrders(prev => prev.filter(x => x.id !== o.id))
+                  }}
+                  style={{ padding: '5px 10px', borderRadius: 7, border: 'none', background: '#7FB897', color: '#0f1a26', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}>
+                  Confirm
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* KDS Tracker drawer - cafe-only, additive */}
       {showKdsTracker && businessType === 'cafe' && (
