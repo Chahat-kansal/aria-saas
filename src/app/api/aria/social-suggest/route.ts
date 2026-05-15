@@ -108,6 +108,10 @@ async function _POST(req: Request) {
     .sort((a, b) => b[1] - a[1]).slice(0, 5)
     .map(([name, qty]) => `${name} (${qty} sold this week)`);
 
+  if (topProducts.length === 0) {
+    return NextResponse.json({ posts: [], count: 0, status: 'skipped', reason: 'no_products' });
+  }
+
   const strategyContext = INDUSTRY_STRATEGIES[biz.industry] || INDUSTRY_STRATEGIES.retail;
   const promoContext = (promotions || []).length > 0
     ? `ACTIVE PROMOTIONS: ${promotions!.map(p => `${p.name} (${p.discount_value}${p.discount_type === 'percentage' ? '%' : 'A$'} off)`).join(', ')}`

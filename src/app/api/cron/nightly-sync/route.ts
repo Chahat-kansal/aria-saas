@@ -172,8 +172,17 @@ async function _GET(req: Request) {
         }
       } catch { /* non-critical */ }
 
+      // Skip AI calls for businesses with no recent sales
+      const { count: recentSalesCount } = await supabaseAdmin
+        .from('pos_sales')
+        .select('id', { count: 'exact', head: true })
+        .eq('business_id', biz.id)
+        .gte('created_at', new Date(Date.now() - 7 * 86400000).toISOString())
+      const hasSales = (recentSalesCount ?? 0) > 0
+
       // Generate social post suggestions (if business has connections and frequency matches)
       try {
+        if (!hasSales) throw new Error('skip: no sales')
         const { data: socialPrefs } = await supabaseAdmin
           .from('social_preferences').select('post_frequency').eq('business_id', biz.id).maybeSingle();
         const { data: socialConns } = await supabaseAdmin
@@ -194,6 +203,7 @@ async function _GET(req: Request) {
 
       // Generate weekly order draft on Sunday nights
       try {
+        if (!hasSales) throw new Error('skip: no sales')
         const dayOfWeek = new Date().getDay();
         if (dayOfWeek === 0) {
           const weekStart = new Date();

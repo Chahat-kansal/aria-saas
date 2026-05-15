@@ -152,8 +152,13 @@ async function _POST(req: NextRequest) {
       .eq('right_to_work_verified', false),
   ]);
 
-  // Revenue calculations
+  // Data guard — skip Claude if no sales data at all
   const rev7     = sales7.reduce((s, x) => s + x.totalCents, 0);
+  if (rev7 === 0 && sales7.length === 0) {
+    return NextResponse.json({ recommendations: [], skipped: true, reason: 'no_data' });
+  }
+
+  // Revenue calculations (rev7 already computed above)
   const revPrev7 = salesPrev7.reduce((s, x) => s + x.totalCents, 0);
   const revTrendPct = revPrev7 > 0 ? Math.round(((rev7 - revPrev7) / revPrev7) * 100) : 0;
   const salesToday = sales14daily.filter(s => s.soldAt >= todayStart);
@@ -325,16 +330,14 @@ Each item must match this exact type:
   "trend": "up"|"down"|"flat"|null
 }`;
 
+  const _briefingSysPrompt = `You are Aria, business intelligence for an Australian small business. Return a JSON array of 5 actionable recommendations. Each item: {id,priority,category,title(max 8 words),description(max 25 words with specific numbers),action_label,action_type,action_payload,metric,metric_label,trend}. Output only valid JSON array.`;
+
   let recommendations: unknown[] = [];
   try {
-    const _bizCtx = await getBusinessContext(business_id)
-  const _industry = (JSON.parse(_bizCtx))?.business?.industry ?? 'retail'
-  const systemPrompt = getSystemPrompt(_industry as string, _bizCtx)
-  const msg = 
-await trackAICall({ route: 'aria/daily-briefing', model: 'claude-sonnet-4-6', businessId: business_id, purpose: 'daily-briefing' }, () => anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 1500,
-      system: systemPrompt,
+    const msg = await trackAICall({ route: 'aria/daily-briefing', model: 'claude-haiku-4-5-20251001', businessId: business_id, purpose: 'daily-briefing' }, () => anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 600,
+      system: _briefingSysPrompt,
       messages: [{ role: 'user', content: JSON.stringify(context) }],
     }));
     const raw = msg.content[0].type === 'text' ? msg.content[0].text : '';
@@ -343,9 +346,9 @@ await trackAICall({ route: 'aria/daily-briefing', model: 'claude-sonnet-4-6', bu
   } catch {
     // Retry with simpler prompt
     try {
-      const retry = await trackAICall({ route: 'aria/daily-briefing', model: 'claude-sonnet-4-6', businessId: business_id, purpose: 'daily-briefing' }, () => anthropic.messages.create({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 1000,
+      const retry = await trackAICall({ route: 'aria/daily-briefing', model: 'claude-haiku-4-5-20251001', businessId: business_id, purpose: 'daily-briefing' }, () => anthropic.messages.create({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 300,
         messages: [{
           role: 'user',
           content: `Return a JSON array of 3 business recommendations for: ${JSON.stringify(context)}. Format: [{id,priority,category,title,description,action_label,action_type,action_payload,metric,metric_label,trend}]`,
