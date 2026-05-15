@@ -1,21 +1,13 @@
-import Anthropic from '@anthropic-ai/sdk';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { trackUsage } from '@/lib/track-usage';
 import { getBusinessSales, getBusinessCustomers, getBusinessItems } from '@/lib/business-data';
 import { NextRequest, NextResponse } from 'next/server';
-import { ARIA_VOICE } from '@/lib/aria-voice-guide';
 import { getWeatherForecast, getUpcomingHolidays, getABSRetailBenchmarks, getRBAData } from '@/lib/external-apis';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
-import { trackAICall } from '@/lib/aria/ai-telemetry'
-import { getBusinessContext, hasEnoughData } from '@/lib/aria/get-business-context'
-import { getSystemPrompt } from '@/lib/aria/get-system-prompt'
-import { writeAriaOutcome } from '@/lib/aria/write-outcome'
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
-
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 // Simple in-memory rate limit — 6 req/min per IP. Resets per minute.
 // Module-level map survives across warm invocations in the same lambda instance.
@@ -302,63 +294,17 @@ async function _POST(req: NextRequest) {
     });
   };
 
-  // Claude — haiku for speed and cost
-  const systemPrompt = `${ARIA_VOICE}
-
-Generate exactly 5 specific, actionable recommendations based on the business data provided.
-Rules:
-- Every recommendation MUST reference actual numbers from the data
-- Use Australian English, A$ for currency
-- Priority 'high' = act today, 'medium' = this week, 'low' = this month
-- Never fabricate numbers not in the data
-- Return ONLY a valid JSON array, no markdown, no preamble, no explanation
-- If external_context.upcoming_holidays has items, factor holiday uplift into stock/revenue recs
-- If external_context.weather_next_3_days shows hot weather, mention beer/cold drink stock opportunity
-- If visa_alerts > 0, this is HIGH PRIORITY — visa expiry for staff is a legal compliance issue. Name the staff member(s) with expiry date.
-Each item must match this exact type:
-{
-  "id": "short-slug-001",
-  "priority": "high"|"medium"|"low",
-  "category": "customers"|"revenue"|"stock"|"reviews"|"marketing"|"compliance",
-  "title": "max 8 words",
-  "description": "max 30 words with specific numbers",
-  "action_label": "max 4 words",
-  "action_type": "winback"|"review_reply"|"promotion"|"reorder"|"campaign"|"navigate"|"dismiss",
-  "action_payload": {},
-  "metric": "headline number e.g. 14 or A$2,340",
-  "metric_label": "e.g. lapsed 60+ days",
-  "trend": "up"|"down"|"flat"|null
-}`;
-
-  const _briefingSysPrompt = `You are Aria, business intelligence for an Australian small business. Return a JSON array of 5 actionable recommendations. Each item: {id,priority,category,title(max 8 words),description(max 25 words with specific numbers),action_label,action_type,action_payload,metric,metric_label,trend}. Output only valid JSON array.`;
-
   let recommendations: unknown[] = [];
   try {
-    const msg = await trackAICall({ route: 'aria/daily-briefing', model: 'claude-haiku-4-5-20251001', businessId: business_id, purpose: 'daily-briefing' }, () => anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 600,
-      system: _briefingSysPrompt,
-      messages: [{ role: 'user', content: JSON.stringify(context) }],
-    }));
-    const raw = msg.content[0].type === 'text' ? msg.content[0].text : '';
-    const match = raw.match(/\[[\s\S]*\]/);
-    if (match) recommendations = JSON.parse(match[0]);
-  } catch {
-    // Retry with simpler prompt
-    try {
-      const retry = await trackAICall({ route: 'aria/daily-briefing', model: 'claude-haiku-4-5-20251001', businessId: business_id, purpose: 'daily-briefing' }, () => anthropic.messages.create({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 300,
-        messages: [{
-          role: 'user',
-          content: `Return a JSON array of 3 business recommendations for: ${JSON.stringify(context)}. Format: [{id,priority,category,title,description,action_label,action_type,action_payload,metric,metric_label,trend}]`,
-        }],
-      }));
-      const raw = retry.content[0].type === 'text' ? retry.content[0].text : '';
-      const match = raw.match(/\[[\s\S]*\]/);
-      if (match) recommendations = JSON.parse(match[0]);
-    } catch { /* return empty */ }
-  }
+    const { ariaBriefing } = await import('@/lib/ai-router')
+    const raw = await ariaBriefing({
+      businessName: business.name as string,
+      industry: business.industry as string,
+      context,
+    })
+    const match = raw.match(/\[[\s\S]*\]/)
+    if (match) recommendations = JSON.parse(match[0])
+  } catch { /* return empty on total failure */ }
 
   // Build plain-text content from recommendations for display in content column
   const briefingContent = Array.isArray(recommendations) && recommendations.length > 0

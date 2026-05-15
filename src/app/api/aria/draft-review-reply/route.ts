@@ -3,15 +3,8 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 20;
 
 import { createServerSupabaseClient } from '@/lib/supabase-server';
-import Anthropic from '@anthropic-ai/sdk';
 import { NextResponse } from 'next/server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
-import { trackAICall } from '@/lib/aria/ai-telemetry'
-import { getBusinessContext, hasEnoughData } from '@/lib/aria/get-business-context'
-import { getSystemPrompt } from '@/lib/aria/get-system-prompt'
-import { writeAriaOutcome } from '@/lib/aria/write-outcome'
-
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 async function _POST(req: Request) {
   const supabase = createServerSupabaseClient();
@@ -28,18 +21,13 @@ async function _POST(req: Request) {
   if (!review) return NextResponse.json({ error: 'Review not found' }, { status: 404 });
 
   try {
-    const msg = await trackAICall({ route: 'aria/draft-review-reply', model: 'claude-sonnet-4-6', businessId: business_id, purpose: 'review-reply-draft' }, () => anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 300,
-      temperature: 0.75,
-      system: `You are writing a professional reply to a Google review for an Australian business. Be warm, genuine, specific. Under 100 words. Thank them for the feedback. If negative, acknowledge and offer to resolve.`,
-      messages: [{
-        role: 'user',
-        content: `Write a reply to this ${review.rating ?? '?'}-star review for ${biz.name} (${biz.industry}): "${review.text ?? review.review_text ?? review.content ?? 'No text provided'}"`,
-      }],
-    }));
-    const draft = msg.content[0].type === 'text' ? msg.content[0].text.trim() : '';
-    return NextResponse.json({ draft });
+    const { ariaChat } = await import('@/lib/ai-router')
+    const draft = await ariaChat(
+      'review_reply',
+      `Write a reply to this ${review.rating ?? '?'}-star review for ${biz.name} (${biz.industry}): "${review.text ?? review.review_text ?? review.content ?? 'No text provided'}"`,
+      300
+    )
+    return NextResponse.json({ draft: draft.trim() });
   } catch {
     return NextResponse.json({ draft: `Thank you so much for your feedback! We really appreciate you taking the time to share your experience with ${biz.name}. We hope to see you again soon!` });
   }

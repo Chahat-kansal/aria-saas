@@ -4,16 +4,10 @@ export const dynamic = 'force-dynamic';
 import * as Sentry from '@sentry/nextjs';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { createClient } from '@supabase/supabase-js';
-import { ARIA_VOICE } from '@/lib/aria-voice-guide';
 import { getWeatherForecast, getUpcomingHolidays } from '@/lib/external-apis';
 import { trackUsage } from '@/lib/track-usage';
-import Anthropic from '@anthropic-ai/sdk';
 import { NextResponse } from 'next/server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
-import { trackAICall } from '@/lib/aria/ai-telemetry'
-import { getBusinessContext, hasEnoughData } from '@/lib/aria/get-business-context'
-import { getSystemPrompt } from '@/lib/aria/get-system-prompt'
-import { writeAriaOutcome } from '@/lib/aria/write-outcome'
 import { getRelevantImage } from '@/lib/images/pixabay'
 
 function getNextPostTime(timeStr: string, _platform: string, _prefs: any): string {
@@ -120,20 +114,8 @@ async function _POST(req: Request) {
   const requestedPlatforms: string[] = platforms || ['instagram', 'facebook'];
   const count = Math.min(req_count || 3, 5);
 
-  const client = new Anthropic();
-  const _bizCtx = await getBusinessContext(business_id)
-  const _industry = (JSON.parse(_bizCtx))?.business?.industry ?? 'retail'
-  const systemPrompt = getSystemPrompt(_industry as string, _bizCtx, 'social-suggest')
-  const controller = new AbortController()
-  const abortTimeout = setTimeout(() => controller.abort(), 25000)
-  const msg = await trackAICall({ route: 'aria/social-suggest', model: 'claude-haiku-4-5-20251001', businessId: business_id, purpose: 'social-post-generate' }, () => client.messages.create({
-    model: 'claude-haiku-4-5-20251001',
-    max_tokens: 600,
-    temperature: 0.75,
-    system: [{ type: 'text' as const, text: systemPrompt, cache_control: { type: 'ephemeral' as const } }],
-    messages: [{
-      role: 'user',
-      content: `Generate ${count} social media post suggestions for this business.
+  const { ariaChat } = await import('@/lib/ai-router')
+  const userPrompt = `Generate ${count} social media post suggestions for this business.
 
 BUSINESS: ${biz.name}
 INDUSTRY: ${biz.industry}
@@ -144,37 +126,18 @@ BRAND VOICE: ${prefs?.brand_voice || 'friendly'}
 TOPICS TO AVOID: ${prefs?.topics_to_avoid || 'None specified'}
 
 SALES DATA THIS WEEK:
-Top sellers: ${topProducts.join(', ') || 'No sales data yet'}
+Top sellers: ${topProducts.join(', ')}
 ${promoContext}
 
 EXTERNAL CONTEXT:
 Weather this weekend: ${hotWeekend ? 'Hot (30°C+) — great for cold drinks/beer' : 'Mild/cool'}
 Upcoming events: ${holidays.slice(0, 3).map((h: any) => `${h.name} in ${h.days_away} days`).join(', ') || 'None soon'}
 
-PLATFORMS TO POST ON: ${requestedPlatforms.join(', ')}
+PLATFORMS: ${requestedPlatforms.join(', ')}
 
-GENERATE ${count} posts. Vary the platforms. Each post should feel written by a real person at this business.
+Return ONLY a valid JSON array.`
 
-Return ONLY a valid JSON array, no other text:
-[
-  {
-    "platform": "instagram" | "facebook" | "google_business",
-    "caption": "the full post text, natural and authentic",
-    "hashtags": ["relevant","hashtags","max8"],
-    "best_time": "e.g. Friday 5pm or Monday 7am",
-    "why": "1 sentence why this will perform well",
-    "image_prompt": "detailed description of ideal photo for this post",
-    "image_search_query": "2-4 word search query for a stock photo matching this post (e.g. 'matcha latte oat milk' not 'drink')",
-    "topic": "brief topic label",
-    "industry_tip": "1 tip specific to this industry for this post type",
-    "reel_concept": "15-30 second Instagram Reel idea based on this post",
-    "reel_script": "Word-for-word script for the owner to record this reel"
-  }
-]`,
-    }],
-  }, { signal: controller.signal })).finally(() => clearTimeout(abortTimeout))
-
-  const text = msg.content[0].type === 'text' ? msg.content[0].text : '[]';
+  const text = await ariaChat('social_post', userPrompt, 800);
   let suggestions: any[] = [];
   try {
     suggestions = JSON.parse(text.replace(/```json|```/g, '').trim());

@@ -4,17 +4,9 @@ export const maxDuration = 60;
 
 import * as Sentry from '@sentry/nextjs';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
-import Anthropic from '@anthropic-ai/sdk';
 import { NextResponse } from 'next/server';
-import { ARIA_VOICE } from '@/lib/aria-voice-guide';
 import { getRBAData, getABSRetailBenchmarks } from '@/lib/external-apis';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
-import { trackAICall } from '@/lib/aria/ai-telemetry'
-import { getBusinessContext, hasEnoughData } from '@/lib/aria/get-business-context'
-import { getSystemPrompt } from '@/lib/aria/get-system-prompt'
-import { writeAriaOutcome } from '@/lib/aria/write-outcome'
-
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 async function _POST(req: Request) {
   const supabase = createServerSupabaseClient();
@@ -204,52 +196,12 @@ async function _POST(req: Request) {
 
   if (hasAnyData) {
     try {
-      const economicContext = rbaData || absData ? `
-Economic context:
-- RBA cash rate: ${rbaData?.cash_rate_pct ?? 'N/A'}% (${rbaData?.economic_outlook ?? ''})
-- ABS retail growth: ${absData?.monthly_retail_turnover_growth_pct ?? 'N/A'}% monthly
-- CPI: ${absData?.cpi_annual_pct ?? 'N/A'}% annual
-Dead stock opportunity cost: capital locked at ${rbaData?.cash_rate_pct ?? 4.1}% cost of money.` : '';
+      const economicContext = rbaData || absData ? `RBA cash rate: ${rbaData?.cash_rate_pct ?? 'N/A'}%, ABS retail growth: ${absData?.monthly_retail_turnover_growth_pct ?? 'N/A'}%, CPI: ${absData?.cpi_annual_pct ?? 'N/A'}%` : '';
 
-      const _bizCtx = await getBusinessContext(business_id)
-  const _industry = (JSON.parse(_bizCtx))?.business?.industry ?? 'retail'
-  const systemPrompt = getSystemPrompt(_industry as string, _bizCtx)
-  const msg = 
-await trackAICall({ route: 'aria/profit-analysis', model: 'claude-sonnet-4-6', businessId: business_id, purpose: 'profit-leak-analysis' }, () => anthropic.messages.create({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 2000,
-      temperature: 0.4,
-        system: [{ type: 'text' as const, text: systemPrompt, cache_control: { type: 'ephemeral' as const } }],
-        messages: [{
-          role: 'user',
-          content: `You are analysing profit leaks for ${business.name}, a ${business.industry} in ${business.city ?? 'Australia'}.
-
-First, think through what the data is actually telling you. Which numbers are genuinely alarming vs just low? What would a sharp operator notice first? What's the single most urgent thing to fix this week?
-
-Then return your analysis as JSON:
-{
-  "leaks": [{
-    "id": "leak-001",
-    "type": "dead_stock|discounting|stockout|expiry_risk|slow_days|below_cost",
-    "title": "max 8 words, specific — name the product or category",
-    "description": "max 40 words — cite real dollar amounts and product names",
-    "estimated_monthly_impact_cents": number,
-    "priority": "critical|high|medium",
-    "action": "one specific sentence the owner can act on today",
-    "action_type": "navigate|promote|reorder|reprice|review",
-    "action_href": "/dashboard/... or null"
-  }],
-  "total_monthly_impact_cents": number,
-  "ai_summary": "2-3 sentences. Lead with the biggest number. Name specific SKUs. End with the one thing to do today."
-}
-Only include leaks with actual non-zero data.
-Data to analyse:
-${JSON.stringify(analyses, null, 2)}`,
-        }],
-      }));
-
-      const raw = msg.content[0].type === 'text' ? msg.content[0].text : '';
-      const match = raw.match(/\{[\s\S]*\}/);
+      const { ariaValidate } = await import('@/lib/ai-router')
+      const decision = `Identify profit leaks for ${business.name}, a ${business.industry} in ${business.city ?? 'Australia'}. Return JSON: {"leaks":[{"id","type","title","description","estimated_monthly_impact_cents","priority","action","action_type","action_href"}],"total_monthly_impact_cents","ai_summary"}`
+      const raw = await ariaValidate(decision, { analyses, economic: economicContext })
+      const match = raw.match(/\{[\s\S]*\}/)
       if (match) {
         const parsed = JSON.parse(match[0]);
         leaks = parsed.leaks ?? [];
@@ -298,22 +250,20 @@ ${JSON.stringify(analyses, null, 2)}`,
 
   // Generate a discovery moment — the single most surprising finding
   let discovery = '';
-  if (leaks.length > 0 && process.env.ANTHROPIC_API_KEY) {
+  if (leaks.length > 0) {
     try {
       const topLeak = leaks.sort((a: any, b: any) => b.estimated_monthly_impact_cents - a.estimated_monthly_impact_cents)[0] as any;
-      const discoveryMsg = await trackAICall({ route: 'aria/profit-analysis', model: 'claude-sonnet-4-6', businessId: business_id, purpose: 'profit-leak-discovery' }, () => anthropic.messages.create({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 100,
-        messages: [{
-          role: 'user',
-          content: `You are Aria, a sharp business analyst. Write 2 sentences that sound like you JUST discovered something surprising while analysing this business's data. Reference the specific finding: "${topLeak.title}" — ${topLeak.description}. Total monthly impact: A$${(totalMonthlyCents / 100).toFixed(0)}. Sound like a CFO who just spotted something the owner didn't know. Be specific with numbers. Australian context.`,
-        }],
-      }));
-      discovery = discoveryMsg.content[0].type === 'text' ? discoveryMsg.content[0].text.trim() : '';
-    } catch { /* non-fatal — return without discovery */ }
-  } else if (leaks.length > 0) {
-    const top = leaks.sort((a: any, b: any) => b.estimated_monthly_impact_cents - a.estimated_monthly_impact_cents)[0] as any;
-    discovery = `I found ${leaks.length} profit leak${leaks.length > 1 ? 's' : ''} costing an estimated A$${(totalMonthlyCents / 100).toFixed(0)}/month. The biggest: ${top.title}.`;
+      const { ariaChat } = await import('@/lib/ai-router')
+      discovery = (await ariaChat(
+        'profit_leaks',
+        `Write 2 sentences as Aria discovering a profit leak for an Australian business. Finding: "${topLeak.title}" — ${topLeak.description}. Monthly impact: A$${(totalMonthlyCents / 100).toFixed(0)}. Be specific with numbers.`,
+        120
+      )).trim()
+    } catch { /* non-fatal */ }
+    if (!discovery) {
+      const top = leaks.sort((a: any, b: any) => b.estimated_monthly_impact_cents - a.estimated_monthly_impact_cents)[0] as any;
+      discovery = `I found ${leaks.length} profit leak${leaks.length > 1 ? 's' : ''} costing an estimated A$${(totalMonthlyCents / 100).toFixed(0)}/month. The biggest: ${top.title}.`;
+    }
   }
 
   return NextResponse.json({ leaks, total_monthly_impact_cents: totalMonthlyCents, ai_summary: aiSummary, discovery, analyses });

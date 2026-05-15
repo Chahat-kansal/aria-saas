@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.95.1",
+    "@google/generative-ai": "^0.24.1",
     "@mendable/firecrawl-js": "^4.18.5",
     "@react-email/components": "^1.0.12",
     "@react-email/render": "^2.0.8",
@@ -35,7 +36,7 @@
     "motion": "^12.38.0",
     "next": "14.2.5",
     "next-auth": "^4.24.7",
-    "openai": "^4.56.0",
+    "openai": "^4.104.0",
     "papaparse": "^5.5.3",
     "playwright": "^1.52.0",
     "posthog-js": "^1.372.9",

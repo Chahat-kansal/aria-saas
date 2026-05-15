@@ -54,35 +54,15 @@ export async function ariaObserve(obs: AriaObservation): Promise<void> {
     const tracking = await isTracking(obs.business_id, obs.category)
     if (!tracking) return
 
-    const apiKey = process.env.ANTHROPIC_API_KEY
-    if (!apiKey) return // skip if Claude not configured
-
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 300,
-        system: `You are Aria, a silent business intelligence brain for an Australian small business.
-Observe business events and generate ONE actionable insight. Be specific and concise.
-Respond ONLY with valid JSON: {"title":"","description":"","priority":"critical|high|medium|low","estimated_impact":""}`,
-        messages: [{
-          role: 'user',
-          content: `Business event:\nCategory: ${obs.category}\nEvent: ${obs.event_type}\nData: ${JSON.stringify(obs.data)}\nTriggered by: ${obs.triggered_by ?? 'system'}\n\nGenerate ONE insight.`
-        }]
-      })
+    const { ariaInsight } = await import('@/lib/ai-router')
+    const text = await ariaInsight({
+      event_type: obs.event_type,
+      category: obs.category,
+      data: obs.data,
+      triggered_by: obs.triggered_by,
     })
 
-    if (!response.ok) return
-
-    const result = await response.json() as { content?: Array<{ text?: string }> }
-    const text = result.content?.[0]?.text ?? ''
-
-    let insight: { title?: string; description?: string; priority?: string; estimated_impact?: string }
+    let insight: { title?: string; description?: string; priority?: string; estimated_impact?: string; suggested_action?: string }
     try {
       insight = JSON.parse(text.replace(/```json|```/g, '').trim())
     } catch { return }
@@ -96,7 +76,7 @@ Respond ONLY with valid JSON: {"title":"","description":"","priority":"critical|
       priority: insight.priority ?? 'medium',
       title: insight.title,
       description: insight.description,
-      action_data: obs.data,
+      action_data: { ...obs.data, suggested_action: insight.suggested_action ?? null },
       estimated_impact: insight.estimated_impact ?? null,
       status: 'pending',
       created_at: new Date().toISOString(),

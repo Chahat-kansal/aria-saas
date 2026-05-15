@@ -1,0 +1,229 @@
+/**
+ * Aria Multi-Model Intelligence Router
+ * Routes tasks to the best provider based on task type.
+ * Fallback chain: Claude → Gemini → GPT-4o mini → Haiku (emergency)
+ */
+import Anthropic from '@anthropic-ai/sdk'
+import OpenAI from 'openai'
+import { GoogleGenerativeAI } from '@google/generative-ai'
+
+// ── Evidence rules — injected into every system prompt ────────────────
+const EVIDENCE_RULES = `EVIDENCE-BASED OUTPUTS — MANDATORY:
+- Back every claim with a specific number from the provided data
+- Never "sales are down" — say "sales dropped 23% (A$1,240→A$954 this week)"
+- Never "popular product" — say "Coopers Pale: 47 units, #1 volume this week"
+- Never "some customers" — say "14 customers lapsed 60+ days, worth A$2,340 avg LTV"
+- If data doesn't support a claim, omit it entirely
+- Silence > vague statement
+- Round percentages to 1 decimal place`
+
+// ── Australian business context ────────────────────────────────────────
+const AUSTRALIAN_CONTEXT = `AUSTRALIAN BUSINESS CONTEXT:
+- Currency: A$ always (never USD or $). Format: A$1,234.56
+- Date format: DD/MM/YYYY
+- GST: 10% included in prices; report ex-GST and inc-GST separately
+- Common payments: EFTPOS, cash, Tap & Go
+- Tax obligations: BAS (quarterly), STP (payroll), TPAR (contractors)
+- Australian spelling: colour, favour, recognise, organise, licence`
+
+// ── Task type ──────────────────────────────────────────────────────────
+export type AiTask =
+  | 'chat' | 'profit_leaks' | 'churn' | 'quote' | 'compliance'
+  | 'briefing' | 'social_post' | 'review_reply' | 'competitor' | 'receipt_scan'
+  | 'reorder' | 'pricing' | 'rfm' | 'commission' | 'insight'
+
+// ── System prompts — one per task ──────────────────────────────────────
+const SYSTEM_PROMPTS: Record<AiTask, string> = {
+  chat: `You are Aria, a business intelligence assistant for Australian small businesses. Answer questions directly using the data provided. ${EVIDENCE_RULES} ${AUSTRALIAN_CONTEXT}`,
+
+  profit_leaks: `You are Aria, a profit optimisation specialist for Australian small businesses. Identify specific profit leaks from financial data. ${EVIDENCE_RULES} ${AUSTRALIAN_CONTEXT} Focus on: margin erosion, shrinkage, waste, pricing gaps, and labour inefficiency. Quantify every leak in A$ terms. Return valid JSON.`,
+
+  churn: `You are Aria, a customer retention specialist. Analyse customer behaviour to identify churn risk. ${EVIDENCE_RULES} ${AUSTRALIAN_CONTEXT} Identify at-risk segments, calculate LTV at risk in A$, and recommend specific win-back actions. Return valid JSON.`,
+
+  quote: `You are Aria, a business quoting assistant for Australian businesses. Generate professional, accurate quotes. ${EVIDENCE_RULES} ${AUSTRALIAN_CONTEXT} Include GST breakdown (ex-GST + 10% GST = total inc-GST), payment terms, and validity period. Return valid JSON.`,
+
+  compliance: `You are Aria, an Australian business compliance assistant. Identify compliance risks and obligations. ${EVIDENCE_RULES} ${AUSTRALIAN_CONTEXT} Cover: Fair Work Act, GST/BAS, right-to-work checks, food safety (HACCP), and liquor licensing where relevant. Return valid JSON with risk severity and remediation steps.`,
+
+  briefing: `You are Aria, a business intelligence briefing engine for Australian small businesses. Generate a concise daily briefing for the business owner. ${EVIDENCE_RULES} ${AUSTRALIAN_CONTEXT} Return ONLY a valid JSON array. Each item must have: id (string slug), priority ("high"|"medium"|"low"), category ("customers"|"revenue"|"stock"|"reviews"|"marketing"|"compliance"), title (max 8 words), description (max 25 words with specific numbers), action_label (max 4 words), action_type ("winback"|"review_reply"|"promotion"|"reorder"|"campaign"|"navigate"|"dismiss"), action_payload (object), metric (headline number e.g. "A$2,340"), metric_label (e.g. "lapsed 60+ days"), trend ("up"|"down"|"flat"|null).`,
+
+  social_post: `You are Aria, a social media content specialist for Australian small businesses. Generate authentic, engaging posts that sound like a real business owner wrote them — not a marketing robot. ${EVIDENCE_RULES} ${AUSTRALIAN_CONTEXT} Return ONLY a valid JSON array. Each post: platform, caption, hashtags (array, max 8), best_time, why (1 sentence), image_prompt, image_search_query (2-4 words), topic, industry_tip, reel_concept, reel_script.`,
+
+  review_reply: `You are Aria, a customer experience specialist for Australian businesses. Draft professional, personalised replies to customer reviews. ${EVIDENCE_RULES} ${AUSTRALIAN_CONTEXT} Replies must: acknowledge specific feedback mentioned in the review, be genuine and not formulaic, never be defensive, stay under 100 words, thank them by name if available. Return plain text only.`,
+
+  competitor: `You are Aria, a competitive intelligence analyst for Australian businesses. Analyse competitor pricing and market positioning. ${EVIDENCE_RULES} ${AUSTRALIAN_CONTEXT} Identify price gaps (in A$), positioning opportunities, and strategic responses. Return valid JSON with specific numbers for every finding.`,
+
+  receipt_scan: `You are Aria, an OCR and data extraction specialist. Extract structured data from supplier receipts and invoices. ${EVIDENCE_RULES} ${AUSTRALIAN_CONTEXT} Return ONLY valid JSON: {supplier_name, invoice_number, date (DD/MM/YYYY), items: [{name, qty, unit_price_excl_gst, line_total_incl_gst}], subtotal_excl_gst, gst_amount, total_incl_gst, payment_terms}.`,
+
+  reorder: `You are Aria, an inventory and procurement specialist for Australian businesses. Generate data-driven reorder recommendations. ${EVIDENCE_RULES} ${AUSTRALIAN_CONTEXT} Return ONLY valid JSON. Base every recommendation on sales velocity, current stock, lead time, and seasonal factors. Never guess — only recommend when data justifies it. Format: [{product_id, product_name, current_stock, days_cover, recommended_order_qty, supplier, estimated_cost_aud, urgency: "critical"|"high"|"medium"}].`,
+
+  pricing: `You are Aria, a pricing intelligence specialist for Australian businesses. Analyse pricing strategy and recommend optimisations. ${EVIDENCE_RULES} ${AUSTRALIAN_CONTEXT} Return ONLY valid JSON. Every recommendation must include: current_price_aud, recommended_price_aud, expected_revenue_impact_aud (monthly), basis (data justification). Format: [{product_id, product_name, current_price_aud, recommended_price_aud, margin_current_pct, margin_recommended_pct, expected_revenue_impact_aud, basis, confidence: "high"|"medium"|"low"}].`,
+
+  rfm: `You are Aria, a customer segmentation specialist. Perform RFM (Recency, Frequency, Monetary) analysis. ${EVIDENCE_RULES} ${AUSTRALIAN_CONTEXT} Return ONLY valid JSON with: segments (Champions, Loyal, At Risk, Lost, New), customer_count per segment, avg_spend_aud, recommended_campaign per segment. Be specific — name the A$ value at stake in each segment.`,
+
+  commission: `You are Aria, a sales performance and commission analyst. Calculate and analyse staff commission performance. ${EVIDENCE_RULES} ${AUSTRALIAN_CONTEXT} Return ONLY valid JSON. Per-staff metrics with: name, total_sales_aud, commission_aud, transaction_count, avg_basket_aud, rank (1=best). Include team totals and top performer callout with specific numbers.`,
+
+  insight: `You are Aria, a business event intelligence engine for Australian small businesses. Observe a business event and generate ONE specific, actionable insight. ${EVIDENCE_RULES} ${AUSTRALIAN_CONTEXT} Return ONLY valid JSON — no other text: {"title":"max 8 words","description":"max 25 words with specific number","priority":"critical|high|medium|low","estimated_impact":"A$ estimate or qualitative","suggested_action":"one specific action"}`,
+}
+
+// ── Provider routing ───────────────────────────────────────────────────
+const TASK_PROVIDERS: Record<AiTask, 'claude' | 'gemini' | 'openai'> = {
+  // Claude Sonnet — complex reasoning, user-facing chat
+  chat:         'claude',
+  profit_leaks: 'claude',
+  churn:        'claude',
+  quote:        'claude',
+  compliance:   'claude',
+  // Gemini Flash — content generation, free tier 1500 req/day
+  briefing:     'gemini',
+  social_post:  'gemini',
+  review_reply: 'gemini',
+  competitor:   'gemini',
+  receipt_scan: 'gemini',
+  // GPT-4o mini — structured JSON, calculations, scoring
+  reorder:      'openai',
+  pricing:      'openai',
+  rfm:          'openai',
+  commission:   'openai',
+  insight:      'openai',
+}
+
+// ── Claude Sonnet ──────────────────────────────────────────────────────
+async function callClaude(task: AiTask, userPrompt: string, maxTokens: number): Promise<string> {
+  const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+  const msg = await anthropic.messages.create({
+    model: 'claude-sonnet-4-6',
+    max_tokens: maxTokens,
+    system: SYSTEM_PROMPTS[task],
+    messages: [{ role: 'user', content: userPrompt }],
+  })
+  return msg.content[0].type === 'text' ? msg.content[0].text : ''
+}
+
+// ── Gemini Flash ───────────────────────────────────────────────────────
+async function callGemini(task: AiTask, userPrompt: string, maxTokens: number): Promise<string> {
+  const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY ?? '')
+  const model = genAI.getGenerativeModel({
+    model: 'gemini-1.5-flash',
+    systemInstruction: SYSTEM_PROMPTS[task],
+    generationConfig: { maxOutputTokens: maxTokens },
+  })
+  const result = await model.generateContent(userPrompt)
+  return result.response.text()
+}
+
+// ── GPT-4o mini (JSON mode) ───────────────────────────────────────────
+async function callOpenAI(task: AiTask, userPrompt: string, maxTokens: number): Promise<string> {
+  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+  const resp = await openai.chat.completions.create({
+    model: 'gpt-4o-mini',
+    max_tokens: maxTokens,
+    response_format: { type: 'json_object' },
+    messages: [
+      { role: 'system', content: SYSTEM_PROMPTS[task] },
+      { role: 'user', content: userPrompt },
+    ],
+  })
+  return resp.choices[0]?.message?.content ?? ''
+}
+
+// ── Haiku — emergency fallback only ───────────────────────────────────
+async function callHaiku(task: AiTask, userPrompt: string, maxTokens: number): Promise<string> {
+  const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+  const msg = await anthropic.messages.create({
+    model: 'claude-haiku-4-5-20251001',
+    max_tokens: Math.min(maxTokens, 400),
+    system: SYSTEM_PROMPTS[task],
+    messages: [{ role: 'user', content: userPrompt }],
+  })
+  return msg.content[0].type === 'text' ? msg.content[0].text : ''
+}
+
+// ── Main router with fallback chain ───────────────────────────────────
+export async function ariaChat(task: AiTask, userPrompt: string, maxTokens = 800): Promise<string> {
+  const primary = TASK_PROVIDERS[task]
+  const providerFns: Record<string, () => Promise<string>> = {
+    claude: () => callClaude(task, userPrompt, maxTokens),
+    gemini: () => callGemini(task, userPrompt, maxTokens),
+    openai: () => callOpenAI(task, userPrompt, maxTokens),
+    haiku:  () => callHaiku(task, userPrompt, maxTokens),
+  }
+  // Order: primary first, then fallback sequence
+  const fallbackOrder = ['claude', 'gemini', 'openai', 'haiku'].filter(p => p !== primary)
+  const sequence = [primary, ...fallbackOrder]
+
+  for (const provider of sequence) {
+    try {
+      const result = await providerFns[provider]()
+      if (result) return result
+    } catch (e) {
+      console.warn(`[ai-router] ${provider} failed for task="${task}":`, (e as Error).message?.slice(0, 120))
+    }
+  }
+  return ''
+}
+
+// ── Cross-model validation (GPT calculates → Gemini contextualises → Claude synthesises)
+export async function ariaValidate(decision: string, data: Record<string, unknown>): Promise<string> {
+  const raw = JSON.stringify({ decision, data })
+
+  // Step 1: GPT-4o mini — quantify and calculate
+  let calculation = ''
+  try { calculation = await callOpenAI('insight', `Quantify and calculate: ${raw}`, 600) } catch { /* skip */ }
+
+  // Step 2: Gemini — add Australian market context
+  let context = ''
+  try { context = await callGemini('competitor', `Add Australian market context to this analysis: ${calculation || raw}`, 400) } catch { /* skip */ }
+
+  // Step 3: Claude — synthesise final recommendation
+  try {
+    const synthesis = await callClaude(
+      'profit_leaks',
+      `Synthesise into a final recommendation:\n\nCalculation: ${calculation}\n\nContext: ${context}\n\nOriginal: ${raw}`,
+      800
+    )
+    return synthesis
+  } catch {
+    return calculation || context || ''
+  }
+}
+
+// ── Convenience wrappers ───────────────────────────────────────────────
+
+export async function ariaInsight(params: {
+  event_type: string
+  category: string
+  data: Record<string, unknown>
+  triggered_by?: string
+}): Promise<string> {
+  const prompt = `Business event:\nCategory: ${params.category}\nEvent: ${params.event_type}\nData: ${JSON.stringify(params.data)}\nTriggered by: ${params.triggered_by ?? 'system'}\n\nGenerate ONE insight backed by the data above.`
+  return ariaChat('insight', prompt, 300)
+}
+
+export async function ariaBriefing(params: {
+  businessName: string
+  industry: string
+  context: Record<string, unknown>
+}): Promise<string> {
+  const prompt = `Generate a daily business briefing for ${params.businessName} (${params.industry} industry).\n\nBusiness data: ${JSON.stringify(params.context)}`
+  return ariaChat('briefing', prompt, 600)
+}
+
+export async function ariaReorder(params: {
+  businessName: string
+  products: unknown[]
+  salesVelocity: unknown[]
+  suppliers: unknown[]
+}): Promise<string> {
+  const prompt = `Generate reorder recommendations for ${params.businessName}.\n\nCurrent products + stock: ${JSON.stringify(params.products)}\nSales velocity (last 30 days): ${JSON.stringify(params.salesVelocity)}\nSuppliers: ${JSON.stringify(params.suppliers)}`
+  return ariaChat('reorder', prompt, 800)
+}
+
+export async function ariaPricing(params: {
+  businessName: string
+  products: unknown[]
+  salesData: unknown[]
+  competitors?: unknown[]
+}): Promise<string> {
+  const prompt = `Analyse pricing strategy for ${params.businessName}.\n\nProducts: ${JSON.stringify(params.products)}\nRecent sales data: ${JSON.stringify(params.salesData)}${params.competitors ? '\nCompetitor prices: ' + JSON.stringify(params.competitors) : ''}`
+  return ariaChat('pricing', prompt, 800)
+}
