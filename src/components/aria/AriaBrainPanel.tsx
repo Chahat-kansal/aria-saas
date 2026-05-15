@@ -18,7 +18,7 @@ const PRIORITY_COLOR: Record<string, string> = {
   low:    '#7FB897',
 }
 
-export default function AriaBrainPanel({ businessId }: { businessId: string }) {
+export default function AriaBrainPanel({ businessId }: { businessId?: string }) {
   const [open, setOpen]       = useState(false)
   const [insights, setInsights] = useState<Insight[]>([])
   const [loading, setLoading] = useState(false)

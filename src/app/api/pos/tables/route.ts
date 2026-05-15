@@ -48,7 +48,9 @@ async function _POST(req: Request) {
     .from('pos_tables')
     .insert({
       name: resolvedName,
+      table_number: resolvedName,
       section: section ?? zone ?? null,
+      zone: zone ?? section ?? null,
       seats: seats ?? 2,
       shape: shape ?? 'square',
       pos_x: pos_x ?? x_position ?? 0,

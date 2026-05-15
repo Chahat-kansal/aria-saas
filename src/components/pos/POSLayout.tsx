@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
+import AriaBrainPanel from '@/components/aria/AriaBrainPanel';
 
 /* ─── Nav data ──────────────────────────────────────────────────── */
 type NavItem = { label: string; href: string; soon?: true };
@@ -307,6 +308,7 @@ export function POSLayout({ children, userName }: { children: React.ReactNode; u
           {children}
         </main>
       </div>
+      <AriaBrainPanel />
     </div>
   );
 }
