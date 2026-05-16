@@ -1,12 +1,12 @@
 'use client'
-import { useState, useEffect, use } from 'react'
+import { useState, useEffect } from 'react'
 import SettleIouModal from '@/components/pos/SettleIouModal'
 import DisputeIouModal from '@/components/pos/DisputeIouModal'
 
 type Tab = 'members' | 'history' | 'ious' | 'settings'
 
-export default function SplitGroupDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params)
+export default function SplitGroupDetailPage({ params }: { params: { id: string } }) {
+  const { id } = params
   const [tab, setTab] = useState<Tab>('members')
   const [group, setGroup] = useState<any>(null)
   const [members, setMembers] = useState<any[]>([])
