@@ -33,7 +33,7 @@ async function _POST(req: Request) {
       business_id: bid,
       outlet_id: outlet_id ?? null,
       status: 'draft',
-      payment_method: 'pending',
+      payment_method: 'split',
       total_amount,
       subtotal: total_amount - tax_amount,
       tax_amount,
