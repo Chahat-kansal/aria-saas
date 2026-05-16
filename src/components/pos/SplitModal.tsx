@@ -1,5 +1,5 @@
 'use client'
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useEffect } from 'react'
 
 export interface CartItemForSplit {
   id: string
@@ -32,7 +32,76 @@ const TABS: { id: Tab; label: string }[] = [
 
 const inp: React.CSSProperties = { background: 'var(--bg-base)', border: '1px solid var(--divider)', borderRadius: 8, padding: '6px 10px', color: 'var(--text-primary)', fontSize: 13, fontFamily: 'inherit', outline: 'none', width: '100%', boxSizing: 'border-box' }
 
+const OVERLAY: React.CSSProperties = { position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center' }
+const PANEL: React.CSSProperties = { background: 'var(--bg-elevated)', borderRadius: 16, width: 'min(680px, 96vw)', maxHeight: '90vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 80px rgba(0,0,0,0.5)' }
+
 export default function SplitModal({ saleId, saleTotal, saleTax, cartItems, onSaved, onClose }: Props) {
+  // ── Draft bootstrapping ────────────────────────────────────────────
+  const [resolvedSaleId, setResolvedSaleId] = useState(saleId || '')
+  const [bootstrapping, setBootstrapping] = useState(!saleId)
+  const [bootstrapError, setBootstrapError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (saleId) {
+      setResolvedSaleId(saleId)
+      setBootstrapping(false)
+      return
+    }
+    if (!cartItems || cartItems.length === 0) {
+      setBootstrapError('No items in cart to split')
+      setBootstrapping(false)
+      return
+    }
+    let cancelled = false
+    ;(async () => {
+      try {
+        const r = await fetch('/api/pos/sales/draft', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            cart_items: cartItems.map(c => ({
+              product_id: (c as any).product_id ?? c.id ?? null,
+              product_name: c.product_name,
+              quantity: c.quantity,
+              unit_price: c.unit_price,
+              line_total: c.line_total,
+            })),
+            total_amount: saleTotal,
+            tax_amount: saleTax,
+          }),
+        })
+        const d = await r.json()
+        if (cancelled) return
+        if (!r.ok) {
+          setBootstrapError(d.error ?? 'Failed to start split')
+        } else {
+          setResolvedSaleId(d.sale_id)
+        }
+      } catch (e: any) {
+        if (!cancelled) setBootstrapError(e.message ?? 'Failed to start split')
+      } finally {
+        if (!cancelled) setBootstrapping(false)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [saleId, cartItems, saleTotal, saleTax])
+
+  // ── Helpers: void draft on cancel, promote on save ─────────────────
+  const voidDraftAndClose = async () => {
+    if (resolvedSaleId && !saleId) {
+      try { await fetch(`/api/pos/sales/draft/${resolvedSaleId}/void`, { method: 'POST' }) } catch { /* ignore */ }
+    }
+    onClose()
+  }
+
+  const promoteAndSave = async () => {
+    if (resolvedSaleId && !saleId) {
+      try { await fetch(`/api/pos/sales/draft/${resolvedSaleId}/promote`, { method: 'POST' }) } catch { /* ignore */ }
+    }
+    onSaved()
+  }
+
+  // ── UI state ───────────────────────────────────────────────────────
   const [tab, setTab] = useState<Tab>('manual')
   const [method, setMethod] = useState<SplitMethod>('even')
   const [splits, setSplits] = useState<SplitRow[]>([
@@ -96,7 +165,7 @@ export default function SplitModal({ saleId, saleTotal, saleTax, cartItems, onSa
     setSaving(true); setError('')
     try {
       const payload = {
-        sale_id: saleId,
+        sale_id: resolvedSaleId,
         splits: splits.map(s => ({
           split_method: method,
           person_label: s.label,
@@ -108,7 +177,7 @@ export default function SplitModal({ saleId, saleTotal, saleTax, cartItems, onSa
       }
       const res = await fetch('/api/pos/splits', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
       if (!res.ok) { const d = await res.json(); setError(d.error ?? 'Failed'); return }
-      onSaved()
+      await promoteAndSave()
     } finally { setSaving(false) }
   }
 
@@ -133,7 +202,7 @@ export default function SplitModal({ saleId, saleTotal, saleTax, cartItems, onSa
       const members = groupMembers.filter(m => selectedMemberIds.has(m.id))
       const perPerson = saleTotal / members.length
       const payload = {
-        sale_id: saleId,
+        sale_id: resolvedSaleId,
         group_id: selectedGroup.id,
         splits: members.map((m, i) => ({
           split_method: 'even',
@@ -147,7 +216,7 @@ export default function SplitModal({ saleId, saleTotal, saleTax, cartItems, onSa
       }
       const res = await fetch('/api/pos/splits', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
       if (!res.ok) { const d = await res.json(); setError(d.error ?? 'Failed'); return }
-      onSaved()
+      await promoteAndSave()
     } finally { setSaving(false) }
   }
 
@@ -178,7 +247,7 @@ export default function SplitModal({ saleId, saleTotal, saleTax, cartItems, onSa
       const d = await fetch('/api/pos/splits/ocr/from-scan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ scan_id: ocrScanId }) }).then(r => r.json())
       if (d.error) { setError(d.error); return }
       alert(`Created draft sale ${d.sale_number} — open it in Sales to split`)
-      onClose()
+      await voidDraftAndClose()
     } finally { setSaving(false) }
   }
 
@@ -189,7 +258,7 @@ export default function SplitModal({ saleId, saleTotal, saleTax, cartItems, onSa
     try {
       const d = await fetch('/api/pos/splits/ai-suggest', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sale_id: saleId, members: names.map(name => ({ name })) }),
+        body: JSON.stringify({ sale_id: resolvedSaleId, members: names.map(name => ({ name })) }),
       }).then(r => r.json())
       setAiResult(d)
     } catch { setError('AI suggestion failed') } finally { setAiLoading(false) }
@@ -201,23 +270,45 @@ export default function SplitModal({ saleId, saleTotal, saleTax, cartItems, onSa
     try {
       const res = await fetch('/api/pos/splits/ai-suggest/confirm', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sale_id: saleId, ai_response: aiResult }),
+        body: JSON.stringify({ sale_id: resolvedSaleId, ai_response: aiResult }),
       })
       if (!res.ok) { const d = await res.json(); setError(d.error ?? 'Failed'); return }
-      onSaved()
+      await promoteAndSave()
     } finally { setSaving(false) }
   }
 
+  // ── Bootstrap guards ───────────────────────────────────────────────
+  if (bootstrapping) {
+    return (
+      <div style={OVERLAY}>
+        <div style={{ ...PANEL, alignItems: 'center', justifyContent: 'center', minHeight: 200 }}>
+          <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 14 }}>Starting split…</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (bootstrapError) {
+    return (
+      <div style={OVERLAY}>
+        <div style={{ ...PANEL, alignItems: 'center', justifyContent: 'center', gap: 16, padding: 32, minHeight: 200 }}>
+          <p style={{ color: '#ef4444', fontSize: 14, textAlign: 'center' }}>{bootstrapError}</p>
+          <button onClick={onClose} style={{ padding: '8px 20px', borderRadius: 8, border: '1px solid var(--divider)', background: 'transparent', color: 'var(--text-secondary)', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>Close</button>
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div style={{ background: 'var(--bg-elevated)', borderRadius: 16, width: 'min(680px, 96vw)', maxHeight: '90vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 80px rgba(0,0,0,0.5)' }}>
+    <div style={OVERLAY}>
+      <div style={PANEL}>
         {/* Header */}
         <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--divider)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
             <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>Split Bill</h2>
             <p style={{ margin: '2px 0 0', fontSize: 12, color: 'var(--text-tertiary)' }}>Total: A${saleTotal.toFixed(2)}</p>
           </div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--text-tertiary)' }}>×</button>
+          <button onClick={voidDraftAndClose} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--text-tertiary)' }}>×</button>
         </div>
 
         {/* Tab bar */}
@@ -236,7 +327,6 @@ export default function SplitModal({ saleId, saleTotal, saleTax, cartItems, onSa
           {/* TAB 1: Manual */}
           {tab === 'manual' && (
             <div>
-              {/* Method */}
               <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
                 {(['even', 'by_amount'] as SplitMethod[]).map(m => (
                   <button key={m} onClick={() => { setMethod(m); if (m === 'even') rebalanceEven() }}
@@ -246,7 +336,6 @@ export default function SplitModal({ saleId, saleTotal, saleTax, cartItems, onSa
                 ))}
               </div>
 
-              {/* Split rows */}
               {splits.map((s, i) => (
                 <div key={s.id} style={{ display: 'grid', gridTemplateColumns: '1fr 100px 80px auto', gap: 8, marginBottom: 8, alignItems: 'center' }}>
                   <input style={inp} value={s.label} onChange={e => setSplits(p => p.map(r => r.id === s.id ? { ...r, label: e.target.value } : r))} placeholder={`Person ${i + 1}`} />
@@ -365,7 +454,7 @@ export default function SplitModal({ saleId, saleTotal, saleTax, cartItems, onSa
 
         {/* Footer */}
         <div style={{ padding: '14px 20px', borderTop: '1px solid var(--divider)', display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-          <button onClick={onClose} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid var(--divider)', background: 'transparent', color: 'var(--text-secondary)', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>
+          <button onClick={voidDraftAndClose} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid var(--divider)', background: 'transparent', color: 'var(--text-secondary)', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>
           {tab === 'manual' && (
             <button onClick={saveManual} disabled={saving || diff > 0.05}
               style={{ padding: '8px 20px', borderRadius: 8, border: 'none', background: 'var(--violet)', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', opacity: saving || diff > 0.05 ? 0.5 : 1 }}>

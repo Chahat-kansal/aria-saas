@@ -40,6 +40,7 @@ async function _GET(req: Request) {
     .from('pos_sales')
     .select('*, pos_customers(name), pos_sale_items(quantity, unit_price, discount_amount, pos_products(name))')
     .eq('business_id', bid)
+    .neq('status', 'draft')
     .order('created_at', { ascending: false })
     .limit(limit);
 
