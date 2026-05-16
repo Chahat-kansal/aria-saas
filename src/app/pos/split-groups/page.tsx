@@ -87,20 +87,21 @@ export default function SplitGroupsPage() {
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 14 }}>
           {groups.map(g => {
-            const activeMembers = (g.split_group_members ?? []).filter(m => m.is_active)
+            const members = Array.isArray(g.split_group_members) ? g.split_group_members : []
+            const activeMembers = members.filter((m: any) => m.is_active)
             return (
               <Link key={g.id} href={`/pos/split-groups/${g.id}`} style={{ textDecoration: 'none' }}>
                 <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--divider)', borderRadius: 14, padding: '16px 18px', cursor: 'pointer', transition: 'border-color 0.15s' }}
                   onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--violet)'}
                   onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--divider)'}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                    <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>{g.name}</h3>
+                    <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>{String(g.name ?? '')}</h3>
                     <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>{activeMembers.length} members</span>
                   </div>
-                  <div style={{ display: 'flex', gap: -8, marginBottom: 10 }}>
-                    {activeMembers.slice(0, 5).map((m, i) => (
-                      <div key={m.id} style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--violet)', border: '2px solid var(--bg-surface)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 11, fontWeight: 700, marginLeft: i > 0 ? -8 : 0 }}>
-                        {m.name[0]}
+                  <div style={{ display: 'flex', gap: 0, marginBottom: 10 }}>
+                    {activeMembers.slice(0, 5).map((m: any, i: number) => (
+                      <div key={String(m.id ?? i)} style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--violet)', border: '2px solid var(--bg-surface)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 11, fontWeight: 700, marginLeft: i > 0 ? -8 : 0 }}>
+                        {String(m.name ?? '?')[0] ?? '?'}
                       </div>
                     ))}
                     {activeMembers.length > 5 && <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--bg-base)', border: '2px solid var(--bg-surface)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--text-tertiary)', marginLeft: -8 }}>+{activeMembers.length - 5}</div>}
@@ -108,7 +109,7 @@ export default function SplitGroupsPage() {
                   <div style={{ display: 'flex', gap: 16, fontSize: 12 }}>
                     <div><span style={{ color: 'var(--text-tertiary)' }}>Visits</span> <strong>{Number(g.total_visits) || 0}</strong></div>
                     <div><span style={{ color: 'var(--text-tertiary)' }}>Spent</span> <strong>A${(Number(g.total_spend) || 0).toFixed(0)}</strong></div>
-                    {g.last_visit_at && <div style={{ marginLeft: 'auto', color: 'var(--text-tertiary)' }}>{new Date(g.last_visit_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}</div>}
+                    {g.last_visit_at ? <div style={{ marginLeft: 'auto', color: 'var(--text-tertiary)' }}>{new Date(String(g.last_visit_at)).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}</div> : null}
                   </div>
                 </div>
               </Link>

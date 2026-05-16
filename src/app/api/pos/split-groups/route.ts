@@ -20,7 +20,7 @@ async function _GET(_req: Request) {
 
   const { data: groups } = await supabase
     .from('split_groups')
-    .select('*, split_group_members(id, name, current_balance, is_active)')
+    .select('id, name, description, total_visits, total_spend, last_visit_at, is_active, split_group_members(id, name, is_active)')
     .eq('business_id', bid)
     .eq('is_active', true)
     .order('last_visit_at', { ascending: false, nullsFirst: false })
