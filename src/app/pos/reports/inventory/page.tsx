@@ -54,7 +54,7 @@ export default function InventoryReportPage() {
     { key: 'sku', label: 'SKU', format: (v) => <span style={{ color: 'var(--text-secondary)', fontSize: 12 }}>{v ? String(v) : '—'}</span> },
     { key: 'category', label: 'CATEGORY' },
     { key: 'stock_quantity', label: 'ON HAND', align: 'right', sortable: true },
-    { key: 'avg_daily', label: 'AVG/DAY', align: 'right', sortable: true, format: (v) => String((v as number).toFixed(1)) },
+    { key: 'avg_daily', label: 'AVG/DAY', align: 'right', sortable: true, format: (v) => String((Number(v) || 0).toFixed(1)) },
     { key: 'days_of_stock', label: 'DAYS LEFT', align: 'right', sortable: true, format: (v, row) => (row.status === 'dead' ? <span style={{ color: '#94A3B8', fontSize: 11 }}>Dead Stock</span> : v == null ? '—' : String(Math.round(v as number))) },
     { key: 'status', label: 'STATUS', format: (v) => {
       const st = STATUS_COLORS[v as string] ?? STATUS_COLORS.unknown;

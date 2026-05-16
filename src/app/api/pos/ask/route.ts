@@ -100,28 +100,47 @@ If the answer suggests an action, end with:
   style=primary
 ]`
 
-function parseRelativeDate(input: string): Date {
+// endOfDay=false (default) → snap to 00:00:00 (use for from_date)
+// endOfDay=true           → snap to 23:59:59.999 (use for to_date)
+function parseRelativeDate(input: string, endOfDay = false): Date {
   const now = new Date()
   const s = input.toLowerCase().trim()
-  if (s === 'today') return now
-  if (s === 'yesterday') { const d = new Date(now); d.setDate(d.getDate() - 1); d.setHours(0,0,0,0); return d }
-  if (s === 'last_friday') {
-    const d = new Date(now); const day = d.getDay()
-    const diff = day >= 5 ? day - 5 : day + 2; d.setDate(d.getDate() - diff); d.setHours(0,0,0,0); return d
+  let d: Date
+
+  if (s === 'today') {
+    d = new Date(now)
+  } else if (s === 'yesterday') {
+    d = new Date(now); d.setDate(d.getDate() - 1)
+  } else if (s === 'last_friday') {
+    d = new Date(now); const day = d.getDay()
+    const diff = day >= 5 ? day - 5 : day + 2; d.setDate(d.getDate() - diff)
+  } else if (s === 'this_week') {
+    d = new Date(now); d.setDate(d.getDate() - d.getDay())
+  } else if (s === 'last_week') {
+    d = new Date(now); d.setDate(d.getDate() - d.getDay() - 7)
+  } else if (s === 'this_month') {
+    d = new Date(now.getFullYear(), now.getMonth(), 1)
+  } else if (s === 'last_month') {
+    d = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+  } else {
+    const p = new Date(input)
+    d = isNaN(p.getTime()) ? new Date(now) : p
   }
-  if (s === 'this_week') { const d = new Date(now); d.setDate(d.getDate() - d.getDay()); d.setHours(0,0,0,0); return d }
-  if (s === 'last_week') { const d = new Date(now); d.setDate(d.getDate() - d.getDay() - 7); d.setHours(0,0,0,0); return d }
-  if (s === 'this_month') return new Date(now.getFullYear(), now.getMonth(), 1)
-  if (s === 'last_month') return new Date(now.getFullYear(), now.getMonth() - 1, 1)
-  const p = new Date(input); return isNaN(p.getTime()) ? now : p
+
+  if (endOfDay) {
+    d.setHours(23, 59, 59, 999)
+  } else {
+    d.setHours(0, 0, 0, 0)
+  }
+  return d
 }
 
 async function executeTool(name: string, input: Record<string, unknown>, businessId: string) {
   const supabase = createServerSupabaseClient()
 
   if (name === 'query_sales') {
-    const from = parseRelativeDate(input.from_date as string)
-    const to = input.to_date === 'today' ? new Date() : parseRelativeDate(input.to_date as string)
+    const from = parseRelativeDate(input.from_date as string, false)
+    const to = parseRelativeDate(input.to_date as string, true)
     const groupBy = (input.group_by as string) ?? 'day'
 
     const { data: sales } = await supabase.from('pos_sales')
@@ -204,8 +223,8 @@ async function executeTool(name: string, input: Record<string, unknown>, busines
   }
 
   if (name === 'query_staff') {
-    const from = parseRelativeDate(input.from_date as string)
-    const to = input.to_date === 'today' ? new Date() : parseRelativeDate(input.to_date as string)
+    const from = parseRelativeDate(input.from_date as string, false)
+    const to = parseRelativeDate(input.to_date as string, true)
     const { data } = await supabase.from('pos_sales').select('total_amount, served_by').eq('business_id', businessId).neq('status', 'voided').gte('created_at', from.toISOString()).lte('created_at', to.toISOString())
     const map: Record<string, { revenue: number; count: number }> = {}
     ;(data ?? []).forEach(s => { const n = s.served_by ?? 'Unknown'; if (!map[n]) map[n] = { revenue: 0, count: 0 }; map[n].revenue += s.total_amount ?? 0; map[n].count++ })

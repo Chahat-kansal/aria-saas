@@ -301,7 +301,7 @@ export default function AskAriaPage() {
               onMouseEnter={e => { if (convId !== c.id) (e.currentTarget as HTMLElement).style.background = 'var(--bg-elevated)' }}
               onMouseLeave={e => { if (convId !== c.id) (e.currentTarget as HTMLElement).style.background = 'transparent' }}>
               <div style={{ fontSize: 12, fontWeight: 500, color: convId === c.id ? 'var(--text-violet)' : 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.title || 'Untitled'}</div>
-              <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: 2 }}>{new Date(c.last_message_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}</div>
+              <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: 2 }}>{(() => { const raw = c.last_message_at ?? (c as any).created_at; if (!raw) return ''; const d = new Date(raw); return isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' }); })()}</div>
             </div>
           ))}
         </div>
