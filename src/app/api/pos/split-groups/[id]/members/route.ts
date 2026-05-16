@@ -37,7 +37,7 @@ async function _POST(req: Request, ctx: Ctx) {
     total_paid_to_date: 0,
     total_owed_to_date: 0,
     is_active: true,
-    created_at: new Date().toISOString(),
+    joined_at: new Date().toISOString(),
   }).select().single()
   if (e) return NextResponse.json({ error: e.message }, { status: 500 })
   return NextResponse.json({ member }, { status: 201 })
