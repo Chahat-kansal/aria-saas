@@ -1,5 +1,6 @@
 'use client';
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { parseLLMJsonOr } from '@/lib/ai-json';
 import { useBusinessContext } from '@/components/providers/BusinessProvider';
 import dynamic from 'next/dynamic';
 import FeatureRenderer, { type BusinessFeature } from '@/components/features/FeatureRenderer';
@@ -221,9 +222,9 @@ export default function AskAriaPage() {
           const raw = line.slice(6).trim();
           if (!raw) continue;
           try {
-            const parsed = JSON.parse(raw);
+            const parsed = parseLLMJsonOr<{ type?: string; feature_config?: Record<string, unknown>; preview_description?: string; text?: string; chart?: unknown; done?: boolean }>(raw, {}, 'ask-aria/sse');
             if (parsed.type === 'feature_preview') {
-              featurePreview = { feature_config: parsed.feature_config, preview_description: parsed.preview_description ?? '' };
+              featurePreview = { feature_config: parsed.feature_config ?? {}, preview_description: parsed.preview_description ?? '' };
             }
             if (parsed.text) {
               const clean = parsed.text.replace(/<chart>[\s\S]*?<\/chart>/g, '');
@@ -235,7 +236,7 @@ export default function AskAriaPage() {
                 return updated;
               });
             }
-            if (parsed.chart) chart = parsed.chart;
+            if (parsed.chart) chart = parsed.chart as typeof chart;
             if (parsed.done) break;
           } catch { /* malformed chunk */ }
         }

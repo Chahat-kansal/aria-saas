@@ -199,15 +199,15 @@ async function _POST(req: Request) {
       const economicContext = rbaData || absData ? `RBA cash rate: ${rbaData?.cash_rate_pct ?? 'N/A'}%, ABS retail growth: ${absData?.monthly_retail_turnover_growth_pct ?? 'N/A'}%, CPI: ${absData?.cpi_annual_pct ?? 'N/A'}%` : '';
 
       const { ariaValidate } = await import('@/lib/ai-router')
-      const decision = `Identify profit leaks for ${business.name}, a ${business.industry} in ${business.city ?? 'Australia'}. Return JSON: {"leaks":[{"id","type","title","description","estimated_monthly_impact_cents","priority","action","action_type","action_href"}],"total_monthly_impact_cents","ai_summary"}`
+      const { parseLLMJsonOr } = await import('@/lib/ai-json')
+      const decision = `Identify profit leaks for ${business.name}, a ${business.industry} in ${business.city ?? 'Australia'}. Return STRICT JSON only. No prose. No code fences.\n{"leaks":[{"id":"","type":"","title":"","description":"","estimated_monthly_impact_cents":0,"priority":"","action":"","action_type":"","action_href":""}],"total_monthly_impact_cents":0,"ai_summary":""}`
       const raw = await ariaValidate(decision, { analyses, economic: economicContext })
-      const match = raw.match(/\{[\s\S]*\}/)
-      if (match) {
-        const parsed = JSON.parse(match[0]);
-        leaks = parsed.leaks ?? [];
-        aiSummary = parsed.ai_summary ?? '';
-        totalMonthlyCents = parsed.total_monthly_impact_cents ?? 0;
-      }
+      const parsed = parseLLMJsonOr<{ leaks: any[]; total_monthly_impact_cents: number; ai_summary: string }>(
+        raw, { leaks: [], total_monthly_impact_cents: 0, ai_summary: '' }, 'profit-analysis'
+      )
+      leaks = parsed.leaks ?? []
+      aiSummary = parsed.ai_summary ?? ''
+      totalMonthlyCents = parsed.total_monthly_impact_cents ?? 0
     } catch (err) {
       Sentry.captureException(err, { tags: { route: 'aria/profit-analysis' } });
       // Build basic leaks from raw data without AI

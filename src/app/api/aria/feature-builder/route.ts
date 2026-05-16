@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import Anthropic from '@anthropic-ai/sdk';
+import { parseLLMJson } from '@/lib/ai-json';
 import { NextResponse } from 'next/server';
 import { ARIA_VOICE } from '@/lib/aria-voice-guide';
 import { withErrorCapture } from '@/lib/api/with-error-capture';
@@ -127,10 +128,8 @@ await trackAICall(
       );
 
       const raw = msg.content[0].type === 'text' ? msg.content[0].text : '';
-      const match = raw.match(/\{[\s\S]*\}/);
-      if (!match) return NextResponse.json({ error: 'Config generation failed — no JSON returned' }, { status: 500 });
-
-      const config = JSON.parse(match[0]);
+      const { ok: cfgOk, data: config } = parseLLMJson<{ preview_description?: string; feature_name?: string }>(raw);
+      if (!cfgOk || !config) return NextResponse.json({ error: 'Config generation failed — no JSON returned' }, { status: 500 });
       return NextResponse.json({ phase: 'generate', feature_config: config, preview_description: config.preview_description ?? `This will show you ${config.feature_name} updated in real time.` });
     } catch (e) {
       console.error('[feature-builder/generate]', e);

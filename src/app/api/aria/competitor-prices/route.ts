@@ -4,6 +4,7 @@ export const maxDuration = 30
 
 import * as Sentry from '@sentry/nextjs'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { parseLLMJsonOr } from '@/lib/ai-json'
 import Anthropic from '@anthropic-ai/sdk'
 import { NextResponse } from 'next/server'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
@@ -117,8 +118,7 @@ await trackAICall({ route: 'aria/competitor-prices', model: 'claude-sonnet-4-6',
 
       const textBlocks = response.content.filter((b: any) => b.type === 'text')
       const jsonText = textBlocks.map((b: any) => b.text).join('')
-      const match = jsonText.match(/\[[\s\S]*\]/)
-      if (match) prices = JSON.parse(match[0])
+      prices = parseLLMJsonOr<any[]>(jsonText, [], 'competitor-prices', 'array')
     } catch {
       // Web search unavailable — never estimate; return honest "no data" response
       return NextResponse.json({

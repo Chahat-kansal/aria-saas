@@ -4,6 +4,7 @@ export const dynamic = "force-dynamic";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
+import { parseLLMJsonOr } from '@/lib/ai-json';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { trackAICall } from '@/lib/aria/ai-telemetry'
 import { getBusinessContext, hasEnoughData } from '@/lib/aria/get-business-context'
@@ -115,14 +116,13 @@ Return ONLY a valid JSON object with this exact structure:
       system: systemPrompt,
     }));
     const text = ((resp.content[0] as { type: string; text: string }).text ?? "").trim();
-    const match = text.match(/\{[\s\S]*\}/);
-    if (match) {
-      const parsed = JSON.parse(match[0]);
-      shifts = parsed.shifts ?? [];
-      reasoning = parsed.reasoning ?? reasoning;
-      totalHours = parsed.total_hours ?? shifts.reduce((s: number, sh: unknown) => s + ((sh as {hours?: number}).hours ?? 0), 0);
-      totalCostCents = parsed.total_cost_cents ?? shifts.reduce((s: number, sh: unknown) => s + ((sh as {cost_cents?: number}).cost_cents ?? 0), 0);
-    }
+    const parsed = parseLLMJsonOr<{ shifts?: unknown[]; reasoning?: string; total_hours?: number; total_cost_cents?: number }>(
+      text, {}, 'roster'
+    );
+    shifts = parsed.shifts ?? [];
+    reasoning = parsed.reasoning ?? reasoning;
+    totalHours = parsed.total_hours ?? shifts.reduce((s: number, sh: unknown) => s + ((sh as {hours?: number}).hours ?? 0), 0);
+    totalCostCents = parsed.total_cost_cents ?? shifts.reduce((s: number, sh: unknown) => s + ((sh as {cost_cents?: number}).cost_cents ?? 0), 0);
   } catch (e) {
     // Fallback: simple roster with all staff Mon-Fri 9-5
     const days = Array.from({ length: 7 }, (_, i) => {

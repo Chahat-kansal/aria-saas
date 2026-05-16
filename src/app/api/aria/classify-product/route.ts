@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import Anthropic from '@anthropic-ai/sdk';
+import { parseLLMJsonOr } from '@/lib/ai-json';
 import { NextResponse } from 'next/server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { trackAICall } from '@/lib/aria/ai-telemetry'
@@ -48,10 +49,8 @@ Return ONLY valid JSON (no markdown, no explanation):
     }));
 
     const raw = msg.content[0].type === 'text' ? msg.content[0].text : '';
-    const match = raw.match(/\{[\s\S]*\}/);
-    if (!match) return NextResponse.json({ error: 'Could not parse response' }, { status: 500 });
-
-    const result = JSON.parse(match[0]);
+    const result = parseLLMJsonOr(raw, null, 'classify-product');
+    if (!result) return NextResponse.json({ error: 'Could not parse response' }, { status: 500 });
     return NextResponse.json(result);
   } catch (err) {
     console.error('[classify-product]', err);

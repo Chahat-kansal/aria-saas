@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { NextResponse } from "next/server";
+import { parseLLMJsonOr } from '@/lib/ai-json';
 import Anthropic from "@anthropic-ai/sdk";
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 
@@ -55,8 +56,7 @@ Map all ${headers.length} headers. Do not include markdown or explanation.`;
       messages: [{ role: "user", content: prompt }],
     });
     const text = ((resp.content[0] as { type: string; text: string }).text ?? "").trim();
-    const match = text.match(/\{[\s\S]*\}/);
-    if (match) mapping = JSON.parse(match[0]);
+    mapping = parseLLMJsonOr<Record<string, string>>(text, {}, 'import/map-columns');
   } catch {
     // Heuristic fallback
     for (const h of headers) {

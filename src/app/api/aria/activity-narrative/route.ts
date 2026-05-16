@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 20;
 
 import { createServerSupabaseClient } from '@/lib/supabase-server';
+import { parseLLMJsonOr } from '@/lib/ai-json';
 import Anthropic from '@anthropic-ai/sdk';
 import { NextResponse } from 'next/server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
@@ -283,14 +284,10 @@ await trackAICall({ route: 'aria/activity-narrative', model: 'claude-sonnet-4-6'
       if (textBlock && textBlock.type === 'text') {
         const rawText = textBlock.text.trim();
         // Extract JSON array, handle optional markdown code fences
-        const match = rawText.match(/\[[\s\S]*\]/);
-        if (match) {
-          const parsed = JSON.parse(match[0]) as Array<{
-            time: unknown;
-            icon: unknown;
-            narrative: unknown;
-            link: unknown;
-          }>;
+        const parsed = parseLLMJsonOr<Array<{ time: unknown; icon: unknown; narrative: unknown; link: unknown }>>(
+          rawText, [], 'activity-narrative', 'array'
+        );
+        if (parsed.length > 0) {
           const aiEntries: NarrativeEntry[] = parsed.map(
             (item): NarrativeEntry => ({
               time: typeof item.time === 'string' ? item.time : '00:00',

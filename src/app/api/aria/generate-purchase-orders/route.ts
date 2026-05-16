@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
 import { createServerSupabaseClient } from '@/lib/supabase-server';
+import { parseLLMJsonOr } from '@/lib/ai-json';
 import { getBusinessSales, getBusinessItems } from '@/lib/business-data';
 import Anthropic from '@anthropic-ai/sdk';
 import { NextResponse } from 'next/server';
@@ -177,8 +178,7 @@ Data: ${JSON.stringify(groupedSuggestions)}`,
       }],
     }));
     const raw = msg.content[0].type === 'text' ? msg.content[0].text : '';
-    const match = raw.match(/\{[\s\S]*\}/);
-    if (match) result = JSON.parse(match[0]);
+    result = parseLLMJsonOr(raw, null, 'generate-purchase-orders') ?? null;
   } catch { /* use raw suggestions */ }
 
   if (!result) {

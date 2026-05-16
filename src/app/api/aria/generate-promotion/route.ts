@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 20;
 
 import { createServerSupabaseClient } from '@/lib/supabase-server';
+import { parseLLMJsonOr } from '@/lib/ai-json';
 import Anthropic from '@anthropic-ai/sdk';
 import { ARIA_VOICE } from '@/lib/aria-voice-guide';
 import { NextResponse } from 'next/server';
@@ -53,8 +54,7 @@ Return JSON:
     }));
 
     const raw = msg.content[0].type === 'text' ? msg.content[0].text : '';
-    const match = raw.match(/\{[\s\S]*\}/);
-    const promo = match ? JSON.parse(match[0]) : null;
+    const promo = parseLLMJsonOr(raw, null, 'generate-promotion');
     if (!promo) throw new Error('No JSON');
     return NextResponse.json(promo);
   } catch {

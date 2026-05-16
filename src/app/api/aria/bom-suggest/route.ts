@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import Anthropic from '@anthropic-ai/sdk';
+import { parseLLMJsonOr } from '@/lib/ai-json';
 import { NextResponse } from 'next/server';
 import { ARIA_VOICE } from '@/lib/aria-voice-guide';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
@@ -49,11 +50,8 @@ Maximum 8 components. Be specific to Australian products and industry context.`,
     }));
 
     const raw = msg.content[0].type === 'text' ? msg.content[0].text : '';
-    const match = raw.match(/\{[\s\S]*\}/);
-    if (match) {
-      const parsed = JSON.parse(match[0]);
-      return NextResponse.json({ components: parsed.components ?? [] });
-    }
+    const parsed = parseLLMJsonOr<{ components?: unknown[] }>(raw, { components: [] }, 'bom-suggest');
+    return NextResponse.json({ components: parsed.components ?? [] });
   } catch { /* fall through */ }
 
   return NextResponse.json({ components: [] });

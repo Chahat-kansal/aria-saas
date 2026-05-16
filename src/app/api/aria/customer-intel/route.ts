@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import Anthropic from '@anthropic-ai/sdk';
+import { parseLLMJsonOr } from '@/lib/ai-json';
 import { NextResponse } from 'next/server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { trackAICall } from '@/lib/aria/ai-telemetry'
@@ -79,10 +80,7 @@ Return ONLY valid JSON:
     }));
 
     const raw = msg.content[0].type === 'text' ? msg.content[0].text : '';
-    const match = raw.match(/\{[\s\S]*\}/);
-    if (!match) throw new Error('No JSON in response');
-
-    const intel = JSON.parse(match[0]);
+    const intel = parseLLMJsonOr(raw, { clv_estimate: 'Unknown', churn_risk: 'MEDIUM', churn_reason: 'Insufficient data', top_product_affinity: 'Mixed', personalised_offer: null, winback_sms: null, insight: 'More purchase history needed.' }, 'customer-intel');
     return NextResponse.json({ intel, customer, total_spend: totalSpend, avg_basket: avgBasket, visit_count: salesSummary.length });
   } catch {
     return NextResponse.json({

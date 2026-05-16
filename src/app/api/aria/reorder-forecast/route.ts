@@ -1,5 +1,6 @@
 import * as Sentry from '@sentry/nextjs';
 import Anthropic from '@anthropic-ai/sdk';
+import { parseLLMJsonOr } from '@/lib/ai-json';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { getBusinessItems, getBusinessSales } from '@/lib/business-data';
 import { NextResponse } from 'next/server';
@@ -169,8 +170,7 @@ Return: {"summary":"2-3 sentences with specific items/quantities","urgent_items"
         }],
       }));
       const raw = msg.content[0].type === 'text' ? msg.content[0].text : '';
-      const match = raw.match(/\{[\s\S]*\}/);
-      if (match) aiSummary = JSON.parse(match[0]);
+      aiSummary = parseLLMJsonOr(raw, {}, 'reorder-forecast');
     } catch { /* non-critical — continue without summary */ }
   }
 

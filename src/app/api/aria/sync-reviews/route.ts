@@ -1,5 +1,6 @@
 export const dynamic = 'force-dynamic'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { parseLLMJsonOr } from '@/lib/ai-json'
 import { NextResponse } from 'next/server'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 
@@ -104,8 +105,10 @@ Respond ONLY with JSON: { "reply": "...", "sentiment": "positive|neutral|negativ
         }),
       })
       const aiData = await aiRes.json() as { content?: Array<{ text?: string }> }
-      const raw = aiData.content?.[0]?.text?.replace(/```json|```/g, '').trim() ?? '{}'
-      const parsed = JSON.parse(raw) as { reply?: string; sentiment?: string; score?: number }
+      const raw = aiData.content?.[0]?.text ?? ''
+      const parsed = parseLLMJsonOr<{ reply?: string; sentiment?: string; score?: number }>(
+        raw, {}, 'sync-reviews'
+      )
       ai_drafted_reply = parsed.reply ?? null
       sentiment        = parsed.sentiment ?? null
       sentiment_score  = parsed.score ?? null

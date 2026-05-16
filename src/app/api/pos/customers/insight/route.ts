@@ -3,6 +3,7 @@ export const maxDuration = 20;
 
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
+import { parseLLMJsonOr } from '@/lib/ai-json';
 import Anthropic from '@anthropic-ai/sdk';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 
@@ -37,7 +38,7 @@ Predicted next visit: ${predicted_next_visit_days != null ? `in ${predicted_next
       messages: [{ role: 'user', content: context }],
     });
     const text = msg.content[0]?.type === 'text' ? msg.content[0].text : '';
-    const parsed = JSON.parse(text.replace(/```json?\n?/g, '').replace(/```\n?/g, '').trim()) as { bullets: string[] };
+    const parsed = parseLLMJsonOr<{ bullets?: string[] }>(text, { bullets: [] }, 'customers/insight');
     return NextResponse.json({ bullets: parsed.bullets ?? [] });
   } catch (e) {
     console.warn('[customer-insight] failed:', e);

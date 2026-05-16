@@ -1,3 +1,4 @@
+import { parseLLMJsonOr } from '@/lib/ai-json';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { trackUsage } from '@/lib/track-usage';
 import { getBusinessSales, getBusinessCustomers, getBusinessItems } from '@/lib/business-data';
@@ -302,8 +303,7 @@ async function _POST(req: NextRequest) {
       industry: business.industry as string,
       context,
     })
-    const match = raw.match(/\[[\s\S]*\]/)
-    if (match) recommendations = JSON.parse(match[0])
+    recommendations = parseLLMJsonOr<unknown[]>(raw, [], 'daily-briefing', 'array')
   } catch { /* return empty on total failure */ }
 
   // Build plain-text content from recommendations for display in content column

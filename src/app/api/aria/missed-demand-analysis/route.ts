@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 
 import * as Sentry from '@sentry/nextjs';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
+import { parseLLMJsonOr } from '@/lib/ai-json';
 import Anthropic from '@anthropic-ai/sdk';
 import { NextResponse } from 'next/server';
 import { ARIA_VOICE } from '@/lib/aria-voice-guide';
@@ -96,16 +97,11 @@ Return JSON:
   }));
 
   const raw = msg.content[0].type === 'text' ? msg.content[0].text : '';
-  const match = raw.match(/\{[\s\S]*\}/);
-  if (!match) {
-    return NextResponse.json({
-      analysis: `Product requested ${item.times_requested} times — consider adding to catalogue.`,
-      confidence: 'low',
-      estimated_monthly_revenue_cents: null,
-    });
-  }
-
-  const parsed = JSON.parse(match[0]);
+  const parsed = parseLLMJsonOr<{ analysis?: string; confidence?: string; estimated_monthly_revenue_cents?: number | null; recommendation?: string; reasoning?: string }>(
+    raw,
+    { analysis: `Product requested ${item.times_requested} times — consider adding to catalogue.`, confidence: 'low', estimated_monthly_revenue_cents: null },
+    'missed-demand-analysis'
+  );
 
   // Update missed_demand record with Aria's analysis
   await supabase

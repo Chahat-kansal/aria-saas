@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import Anthropic from '@anthropic-ai/sdk';
+import { parseLLMJsonOr } from '@/lib/ai-json';
 import { NextResponse } from 'next/server';
 import { lookupBarcode } from '@/lib/external-apis';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
@@ -56,12 +57,9 @@ Return JSON only: {"name":"cleaned full product name","category":"single categor
         }],
       });
       const raw = msg.content[0].type === 'text' ? msg.content[0].text : '';
-      const match = raw.match(/\{[\s\S]*\}/);
-      if (match) {
-        const parsed = JSON.parse(match[0]);
-        cleanName = parsed.name || cleanName;
-        cleanCategory = parsed.category || cleanCategory;
-      }
+      const parsed = parseLLMJsonOr<{ name?: string; category?: string }>(raw, {}, 'barcode-lookup');
+      cleanName = parsed.name || cleanName;
+      cleanCategory = parsed.category || cleanCategory;
     } catch { /* use raw values */ }
   }
 

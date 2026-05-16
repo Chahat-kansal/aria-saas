@@ -2,6 +2,7 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 import * as Sentry from '@sentry/nextjs';
+import { parseLLMJsonOr } from '@/lib/ai-json';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { createClient } from '@supabase/supabase-js';
 import { getWeatherForecast, getUpcomingHolidays } from '@/lib/external-apis';
@@ -140,7 +141,7 @@ Return ONLY a valid JSON array.`
   const text = await ariaChat('social_post', userPrompt, 800);
   let suggestions: any[] = [];
   try {
-    suggestions = JSON.parse(text.replace(/```json|```/g, '').trim());
+    suggestions = parseLLMJsonOr<any[]>(text, [], 'social-suggest', 'array');
   } catch {
     return NextResponse.json({ posts: [], count: 0, status: 'error' }, { status: 200 });
   }

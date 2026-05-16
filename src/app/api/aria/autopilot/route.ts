@@ -2,6 +2,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 import { createServerSupabaseClient } from "@/lib/supabase-server";
+import { parseLLMJsonOr } from '@/lib/ai-json';
 import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { withErrorCapture } from '@/lib/api/with-error-capture'
@@ -91,8 +92,7 @@ Generate 5-10 realistic, specific actions based on the data provided. Return ONL
       system: systemPrompt,
     }));
     const text = ((resp.content[0] as { type: string; text: string }).text ?? "").trim();
-    const match = text.match(/\[[\s\S]*\]/);
-    if (match) actions = JSON.parse(match[0]);
+    actions = parseLLMJsonOr<any[]>(text, [], 'autopilot', 'array');
   } catch {
     actions = [
       { category: "INVENTORY", priority: "routine", title: "Review low stock items", description: `${lowStock.length} products are running low on stock.`, action_data: {}, estimated_impact: "Prevent stockouts" },
