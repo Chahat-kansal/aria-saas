@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { ModifierModal } from '@/components/pos/ModifierModal';
 import { SandwichBuilder } from '@/components/pos/SandwichBuilder';
+import SplitModal from '@/components/pos/SplitModal';
 import { OrderTypeSelector, type OrderType } from '@/components/pos/OrderTypeSelector';
 import { CustomerCaptureModal, type CustomerDetails } from '@/components/pos/CustomerCaptureModal';
 import { FloorPlan } from '@/components/pos/FloorPlan';
@@ -283,6 +284,10 @@ export default function TerminalPage() {
   // Outlet awareness — additive
   const [activeOutletId, setActiveOutletId] = useState<string | null>(null);
   const [outlets, setOutlets] = useState<any[]>([]);
+
+  // Bill splitting
+  const [showSplitModal,   setShowSplitModal]   = useState(false);
+  const [splitSaleId,      setSplitSaleId]      = useState<string | null>(null);
 
   // KDS tracker — cafe-only
   const [showKdsTracker,   setShowKdsTracker]   = useState(false);
@@ -1791,6 +1796,11 @@ export default function TerminalPage() {
               🔔 {pendingOnlineOrders.length} online
             </button>
           )}
+          {!registerLoading && cart.length > 0 && (
+            <button onClick={() => { setShowSplitModal(true); setSplitSaleId(null) }} className="px-2 py-0.5 rounded text-xs" style={{ color: '#8B5CF6', border: '1px solid rgba(139,92,246,0.4)', background: 'rgba(139,92,246,0.08)' }}>
+              ✂ Split Bill
+            </button>
+          )}
           {!registerLoading && (
             <button onClick={() => setShowRefundModal(true)} className="px-2 py-0.5 rounded text-xs" style={{ color: 'var(--text-secondary)', border: '1px solid #2A2540', background: 'rgba(255,255,255,0.03)' }}>
               ⟳ Refund
@@ -3144,6 +3154,18 @@ export default function TerminalPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Split Bill modal */}
+      {showSplitModal && (
+        <SplitModal
+          saleId={splitSaleId ?? ''}
+          saleTotal={total}
+          saleTax={+((total / 11)).toFixed(2)}
+          cartItems={cart.map(i => ({ id: i.product.id, product_name: i.product.name, quantity: i.qty, unit_price: i.product.price, line_total: i.product.price * i.qty }))}
+          onSaved={() => { setShowSplitModal(false); setCart([]); }}
+          onClose={() => setShowSplitModal(false)}
+        />
       )}
 
       {/* Refund modal */}

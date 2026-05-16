@@ -41,6 +41,7 @@ export const NAV_STRUCTURE: NavSection[] = [
       { label: 'Terminal', href: '/pos/terminal', icon: ShoppingCart },
       { label: 'Customer Display', href: '/pos/display', icon: Monitor, external: true },
       { label: 'Laybys', href: '/pos/laybys', icon: ClipboardList },
+      { label: 'Split Groups', href: '/pos/split-groups', icon: Scissors },
       { label: 'Promotions', href: '/pos/promotions', icon: Tag },
     ],
   },
