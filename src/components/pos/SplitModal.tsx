@@ -374,10 +374,10 @@ export default function SplitModal({ saleId, saleTotal, saleTax, cartItems, onSa
                   {ocrItems.map((item: any, i) => (
                     <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, padding: '4px 0', borderBottom: '1px solid var(--divider)' }}>
                       <span>{item.name} ×{item.qty}</span>
-                      <span style={{ color: item.confidence > 0.8 ? '#22c55e' : item.confidence > 0.5 ? '#f59e0b' : '#ef4444' }}>A${item.total?.toFixed(2)} ({Math.round(item.confidence * 100)}%)</span>
+                      <span style={{ color: item.confidence > 0.8 ? '#22c55e' : item.confidence > 0.5 ? '#f59e0b' : '#ef4444' }}>A${(Number(item.total) || 0).toFixed(2)} ({Math.round((Number(item.confidence) || 0) * 100)}%)</span>
                     </div>
                   ))}
-                  {ocrTotal && <p style={{ fontWeight: 700, textAlign: 'right', marginTop: 8 }}>Total: A${ocrTotal.toFixed(2)}</p>}
+                  {ocrTotal && <p style={{ fontWeight: 700, textAlign: 'right', marginTop: 8 }}>Total: A${(Number(ocrTotal) || 0).toFixed(2)}</p>}
                   <button onClick={convertOcrToSale} disabled={saving} style={{ marginTop: 12, padding: '8px 16px', borderRadius: 8, border: 'none', background: 'var(--violet)', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', opacity: saving ? 0.6 : 1 }}>
                     {saving ? 'Creating…' : 'Convert to splittable sale'}
                   </button>
@@ -411,7 +411,7 @@ export default function SplitModal({ saleId, saleTotal, saleTax, cartItems, onSa
                       <div style={{ width: 32, height: 32, borderRadius: '50%', background: m.avatar_color ?? '#8B5CF6', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700, fontSize: 13 }}>{m.name[0]}</div>
                       <div>
                         <div style={{ fontWeight: 600, fontSize: 13 }}>{m.name}</div>
-                        {m.current_balance !== 0 && <div style={{ fontSize: 11, color: m.current_balance > 0 ? '#22c55e' : '#ef4444' }}>{m.current_balance > 0 ? `Owed A$${m.current_balance.toFixed(2)}` : `Owes A$${Math.abs(m.current_balance).toFixed(2)}`}</div>}
+                        {(Number(m.current_balance) || 0) !== 0 && <div style={{ fontSize: 11, color: (Number(m.current_balance) || 0) > 0 ? '#22c55e' : '#ef4444' }}>{(Number(m.current_balance) || 0) > 0 ? `Owed A$${(Number(m.current_balance) || 0).toFixed(2)}` : `Owes A$${Math.abs(Number(m.current_balance) || 0).toFixed(2)}`}</div>}
                       </div>
                     </div>
                   ))}
@@ -439,7 +439,7 @@ export default function SplitModal({ saleId, saleTotal, saleTax, cartItems, onSa
                     <div key={i} style={{ background: 'var(--bg-surface)', border: '1px solid var(--divider)', borderRadius: 10, padding: '12px 14px', marginBottom: 8 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
                         <span style={{ fontWeight: 700, fontSize: 14 }}>{sp.person}</span>
-                        <span style={{ fontWeight: 700, fontSize: 14 }}>A${(sp.total ?? sp.subtotal ?? 0).toFixed(2)}</span>
+                        <span style={{ fontWeight: 700, fontSize: 14 }}>A${(Number(sp.total ?? sp.subtotal) || 0).toFixed(2)}</span>
                       </div>
                       <p style={{ fontSize: 11, color: 'var(--text-tertiary)', margin: 0 }}>{sp.reasoning}</p>
                     </div>

@@ -32,7 +32,7 @@ export default function DisputeIouModal({ iou, onDone, onClose }: Props) {
       <div style={{ background: 'var(--bg-elevated)', borderRadius: 14, width: 380, padding: 24, boxShadow: '0 20px 60px rgba(0,0,0,0.4)' }}>
         <h3 style={{ margin: '0 0 4px', fontSize: 15, fontWeight: 700 }}>Dispute IOU</h3>
         <p style={{ margin: '0 0 16px', fontSize: 13, color: 'var(--text-secondary)' }}>
-          {iou.from_name} → {iou.to_name} · A${iou.amount.toFixed(2)}
+          {iou.from_name} → {iou.to_name} · A${(Number(iou.amount) || 0).toFixed(2)}
         </p>
         <p style={{ margin: '0 0 8px', fontSize: 12, color: '#f59e0b' }}>⚠ This will lock the IOU until the dispute is resolved.</p>
 

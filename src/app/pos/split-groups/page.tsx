@@ -4,7 +4,7 @@ import Link from 'next/link'
 
 interface Group {
   id: string; name: string; description: string | null
-  total_visits: number; total_spend: number; last_visit_at: string | null; is_active: boolean
+  total_visits: number | string; total_spend: number | string; last_visit_at: string | null; is_active: boolean
   split_group_members: Array<{ id: string; name: string; is_active: boolean }>
 }
 
@@ -106,8 +106,8 @@ export default function SplitGroupsPage() {
                     {activeMembers.length > 5 && <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--bg-base)', border: '2px solid var(--bg-surface)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--text-tertiary)', marginLeft: -8 }}>+{activeMembers.length - 5}</div>}
                   </div>
                   <div style={{ display: 'flex', gap: 16, fontSize: 12 }}>
-                    <div><span style={{ color: 'var(--text-tertiary)' }}>Visits</span> <strong>{g.total_visits ?? 0}</strong></div>
-                    <div><span style={{ color: 'var(--text-tertiary)' }}>Spent</span> <strong>A${(g.total_spend ?? 0).toFixed(0)}</strong></div>
+                    <div><span style={{ color: 'var(--text-tertiary)' }}>Visits</span> <strong>{Number(g.total_visits) || 0}</strong></div>
+                    <div><span style={{ color: 'var(--text-tertiary)' }}>Spent</span> <strong>A${(Number(g.total_spend) || 0).toFixed(0)}</strong></div>
                     {g.last_visit_at && <div style={{ marginLeft: 'auto', color: 'var(--text-tertiary)' }}>{new Date(g.last_visit_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}</div>}
                   </div>
                 </div>

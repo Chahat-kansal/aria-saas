@@ -88,7 +88,7 @@ export default function SplitGroupDetailPage({ params }: { params: Promise<{ id:
       <div style={{ marginBottom: 24 }}>
         <a href="/pos/split-groups" style={{ fontSize: 12, color: 'var(--violet)', textDecoration: 'none' }}>← Groups</a>
         <h1 style={{ fontSize: 20, fontWeight: 700, margin: '6px 0 2px' }}>{group.name}</h1>
-        <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: 0 }}>{members.length} members · {group.total_visits ?? 0} visits · A${(group.total_spend ?? 0).toFixed(2)} total</p>
+        <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: 0 }}>{members.length} members · {Number(group.total_visits) || 0} visits · A${(Number(group.total_spend) || 0).toFixed(2)} total</p>
       </div>
 
       <div style={{ display: 'flex', borderBottom: '1px solid var(--divider)', marginBottom: 24 }}>
@@ -117,11 +117,11 @@ export default function SplitGroupDetailPage({ params }: { params: Promise<{ id:
                       <div style={{ width: 28, height: 28, borderRadius: '50%', background: m.avatar_color ?? 'var(--violet)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700, fontSize: 12 }}>{m.name[0]}</div>
                       {m.name}
                     </div></td>
-                    <td style={{ padding: '10px 14px', fontWeight: 700, color: (m.current_balance ?? 0) > 0 ? '#22c55e' : (m.current_balance ?? 0) < 0 ? '#ef4444' : 'var(--text-tertiary)' }}>
-                      {(m.current_balance ?? 0) === 0 ? 'Settled' : `A$${Math.abs(m.current_balance ?? 0).toFixed(2)} ${(m.current_balance ?? 0) > 0 ? 'owed' : 'owes'}`}
+                    <td style={{ padding: '10px 14px', fontWeight: 700, color: (Number(m.current_balance) || 0) > 0 ? '#22c55e' : (Number(m.current_balance) || 0) < 0 ? '#ef4444' : 'var(--text-tertiary)' }}>
+                      {(Number(m.current_balance) || 0) === 0 ? 'Settled' : `A$${Math.abs(Number(m.current_balance) || 0).toFixed(2)} ${(Number(m.current_balance) || 0) > 0 ? 'owed' : 'owes'}`}
                     </td>
-                    <td style={{ padding: '10px 14px', color: 'var(--text-secondary)' }}>A${(m.total_paid_to_date ?? 0).toFixed(2)}</td>
-                    <td style={{ padding: '10px 14px', color: 'var(--text-secondary)' }}>A${(m.total_owed_to_date ?? 0).toFixed(2)}</td>
+                    <td style={{ padding: '10px 14px', color: 'var(--text-secondary)' }}>A${(Number(m.total_paid_to_date) || 0).toFixed(2)}</td>
+                    <td style={{ padding: '10px 14px', color: 'var(--text-secondary)' }}>A${(Number(m.total_owed_to_date) || 0).toFixed(2)}</td>
                     <td style={{ padding: '10px 14px' }}><button onClick={() => removeMember(m.id)} style={{ background: 'none', border: 'none', color: 'var(--text-tertiary)', cursor: 'pointer', fontSize: 14 }}>Remove</button></td>
                   </tr>
                 ))}
@@ -144,12 +144,12 @@ export default function SplitGroupDetailPage({ params }: { params: Promise<{ id:
             <div key={i} style={{ background: 'var(--bg-surface)', border: '1px solid var(--divider)', borderRadius: 12, padding: '14px 16px', marginBottom: 10 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
                 <span style={{ fontWeight: 700, fontSize: 14 }}>{new Date(visit.visit_date).toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
-                <span style={{ fontWeight: 700, fontSize: 14 }}>A${(visit.total ?? 0).toFixed(2)}</span>
+                <span style={{ fontWeight: 700, fontSize: 14 }}>A${(Number(visit.total) || 0).toFixed(2)}</span>
               </div>
               {(visit.splits ?? []).map((sp: any) => (
                 <div key={sp.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--text-secondary)', padding: '2px 0' }}>
                   <span>{sp.person_label}</span>
-                  <span style={{ color: sp.status === 'paid' ? '#22c55e' : 'var(--text-secondary)' }}>A${(sp.total_amount ?? 0).toFixed(2)} · {sp.status}</span>
+                  <span style={{ color: sp.status === 'paid' ? '#22c55e' : 'var(--text-secondary)' }}>A${(Number(sp.total_amount) || 0).toFixed(2)} · {sp.status}</span>
                 </div>
               ))}
             </div>
@@ -177,7 +177,7 @@ export default function SplitGroupDetailPage({ params }: { params: Promise<{ id:
             <div key={iou.id} style={{ background: 'var(--bg-surface)', border: `1px solid ${iou.status === 'disputed' ? '#f59e0b40' : 'var(--divider)'}`, borderRadius: 10, padding: '12px 14px', marginBottom: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div>
                 <div style={{ fontWeight: 600, fontSize: 13 }}>{iou.from_name} → {iou.to_name}</div>
-                <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 2 }}>A${iou.amount.toFixed(2)} · {iou.status}</div>
+                <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 2 }}>A${(Number(iou.amount) || 0).toFixed(2)} · {iou.status}</div>
                 {iou.dispute_reason && <div style={{ fontSize: 11, color: '#f59e0b', marginTop: 2 }}>⚠ {iou.dispute_reason}</div>}
               </div>
               <div style={{ display: 'flex', gap: 6 }}>
