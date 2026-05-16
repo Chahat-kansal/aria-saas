@@ -66,7 +66,7 @@ async function _POST(req: Request) {
     detected_tip: result.tip,
     detected_total: result.total,
     confidence_score: result.confidence,
-    ocr_status: result.error ? 'error' : 'done',
+    ocr_status: result.error ? 'failed' : 'done',
     completed_at: new Date().toISOString(),
   }).eq('id', scan.id)
 

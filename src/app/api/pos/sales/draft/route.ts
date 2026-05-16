@@ -53,7 +53,7 @@ async function _POST(req: Request) {
     business_id: bid,
     product_id: it.product_id ?? it.id ?? null,
     product_name: it.product_name ?? it.name ?? 'Unknown',
-    quantity: it.quantity ?? it.qty ?? 1,
+    quantity: Math.max(1, Math.round(Number(it.quantity ?? it.qty ?? 1))),
     unit_price: it.unit_price ?? it.price ?? 0,
     line_total: it.line_total ?? ((it.quantity ?? it.qty ?? 1) * (it.unit_price ?? it.price ?? 0)),
     tax_rate: 10,

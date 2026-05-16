@@ -16,7 +16,7 @@ async function _POST(_req: Request, ctx: Ctx) {
   if (!split) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   if (split.status === 'paid') return NextResponse.json({ error: 'Cannot void a paid split' }, { status: 400 })
 
-  await supabase.from('pos_sale_splits').update({ status: 'void' }).eq('id', id)
+  await supabase.from('pos_sale_splits').update({ status: 'voided' }).eq('id', id)
   return NextResponse.json({ ok: true })
 }
 

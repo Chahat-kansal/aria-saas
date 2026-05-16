@@ -38,7 +38,7 @@ async function _POST(req: Request, ctx: Ctx) {
   ])
 
   // Void the merged-away split
-  await supabase.from('pos_sale_splits').update({ status: 'void' }).eq('id', merge_split_id)
+  await supabase.from('pos_sale_splits').update({ status: 'voided' }).eq('id', merge_split_id)
 
   return NextResponse.json({ ok: true })
 }

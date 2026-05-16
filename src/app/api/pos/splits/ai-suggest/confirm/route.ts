@@ -29,15 +29,15 @@ async function _POST(req: Request) {
     business_id: bid,
     group_id: group_id ?? null,
     split_number: i + 1,
-    split_method: 'ai_suggested',
+    split_method: 'by_item',
     person_label: sp.person,
     subtotal: sp.subtotal ?? 0,
     tax_amount: 0,
     tip_amount: sp.tip_suggestion ?? 0,
     total_amount: sp.total ?? sp.subtotal ?? 0,
-    status: 'pending',
+    status: 'unpaid',
     ai_suggested: true,
-    ai_reasoning: sp.reasoning ?? null,
+    ai_reasoning: sp.reasoning ?? ai_response.overall_reasoning ?? null,
   }))
 
   const { data: inserted, error: insErr } = await supabase.from('pos_sale_splits').insert(splits).select()

@@ -59,7 +59,7 @@ async function _DELETE(_req: Request, ctx: Ctx) {
   await supabase.from('pos_sale_splits').delete().eq('id', id)
 
   // Re-check if any splits remain
-  const { count } = await supabase.from('pos_sale_splits').select('id', { count: 'exact', head: true }).eq('sale_id', split.sale_id).neq('status', 'void')
+  const { count } = await supabase.from('pos_sale_splits').select('id', { count: 'exact', head: true }).eq('sale_id', split.sale_id).neq('status', 'voided')
   if ((count ?? 0) === 0) {
     await supabase.from('pos_sales').update({ status: 'completed' }).eq('id', split.sale_id)
   }

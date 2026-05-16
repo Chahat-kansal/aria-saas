@@ -25,7 +25,7 @@ async function _POST(req: Request, ctx: Ctx) {
   const { data: split } = await supabase.from('pos_sale_splits').select('id, sale_id, total_amount, status').eq('id', id).eq('business_id', bid).maybeSingle()
   if (!split) return NextResponse.json({ error: 'Split not found' }, { status: 404 })
   if (split.status === 'paid') return NextResponse.json({ error: 'Already paid' }, { status: 400 })
-  if (split.status === 'void') return NextResponse.json({ error: 'Split is voided' }, { status: 400 })
+  if (split.status === 'voided') return NextResponse.json({ error: 'Split is voided' }, { status: 400 })
 
   const body = await req.json()
   const { method, amount, tip_portion, reference, processor } = body
@@ -54,7 +54,7 @@ async function _POST(req: Request, ctx: Ctx) {
     await supabase.from('pos_sale_splits').update({ status: 'paid', paid_at: new Date().toISOString() }).eq('id', id)
 
     // Check if ALL splits for the sale are paid
-    const { data: allSplits } = await supabase.from('pos_sale_splits').select('status').eq('sale_id', split.sale_id).neq('status', 'void')
+    const { data: allSplits } = await supabase.from('pos_sale_splits').select('status').eq('sale_id', split.sale_id).neq('status', 'voided')
     const allPaid = (allSplits ?? []).every((s: any) => s.status === 'paid')
     await supabase.from('pos_sales').update({ status: allPaid ? 'completed' : 'partial_paid' }).eq('id', split.sale_id)
   }

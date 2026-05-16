@@ -54,7 +54,7 @@ async function _POST(req: Request) {
   if (sale.status === 'voided') return NextResponse.json({ error: 'Cannot split a voided sale' }, { status: 400 })
 
   // Reject if splits already exist
-  const { count } = await supabase.from('pos_sale_splits').select('id', { count: 'exact', head: true }).eq('sale_id', sale_id).neq('status', 'void')
+  const { count } = await supabase.from('pos_sale_splits').select('id', { count: 'exact', head: true }).eq('sale_id', sale_id).neq('status', 'voided')
   if ((count ?? 0) > 0) return NextResponse.json({ error: 'Splits already exist — delete them first to re-split' }, { status: 409 })
 
   // Validate totals sum (±$0.05 tolerance)
@@ -79,7 +79,7 @@ async function _POST(req: Request) {
     tip_type: sp.tip_type ?? null,
     tip_value: sp.tip_value ?? null,
     total_amount: sp.total_amount ?? 0,
-    status: 'pending',
+    status: 'unpaid',
     ai_suggested: sp.ai_suggested ?? false,
     ai_reasoning: sp.ai_reasoning ?? null,
   }))
