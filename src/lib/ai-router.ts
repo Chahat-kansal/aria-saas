@@ -91,7 +91,7 @@ const TASK_PROVIDERS: Record<AiTask, 'claude' | 'gemini' | 'openai'> = {
 async function callClaude(task: AiTask, userPrompt: string, maxTokens: number): Promise<string> {
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
   const msg = await anthropic.messages.create({
-    model: 'claude-sonnet-4-6',
+    model: 'claude-sonnet-4-5-20250929',
     max_tokens: maxTokens,
     system: SYSTEM_PROMPTS[task],
     messages: [{ role: 'user', content: userPrompt }],

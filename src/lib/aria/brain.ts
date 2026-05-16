@@ -62,10 +62,12 @@ export async function ariaObserve(obs: AriaObservation): Promise<void> {
       triggered_by: obs.triggered_by,
     })
 
-    let insight: { title?: string; description?: string; priority?: string; estimated_impact?: string; suggested_action?: string }
-    try {
-      insight = JSON.parse(text.replace(/```json|```/g, '').trim())
-    } catch { return }
+    const { parseLLMJsonOr } = await import('@/lib/ai-json')
+    const insight = parseLLMJsonOr<{ title?: string; description?: string; priority?: string; estimated_impact?: string; suggested_action?: string }>(
+      text,
+      {},
+      'aria-brain/ariaObserve'
+    )
 
     if (!insight.title || !insight.description) return
 
