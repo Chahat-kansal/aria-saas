@@ -8,8 +8,16 @@ async function _POST(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error } = await supabase.auth.getUser();
   if (error || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const { data: _ab } = await supabase.from('user_active_business').select('business_id').eq('user_id', user.id).maybeSingle()
+  const bid = (_ab?.business_id as string) ?? null
+  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 });
 
   const { customer_id, message } = await req.json() as { customer_id: string; message: string };
+  // Ownership: customer must belong to this business
+  if (customer_id) {
+    const { data: _cCheck } = await supabase.from('pos_customers').select('id').eq('id', customer_id).eq('business_id', bid).maybeSingle()
+    if (!_cCheck) return NextResponse.json({ error: 'Customer not found' }, { status: 404 });
+  }
   if (!customer_id || !message?.trim()) {
     return NextResponse.json({ error: 'missing_params' }, { status: 400 });
   }

@@ -79,7 +79,7 @@ Zones available: ${JSON.stringify([...new Set((locations.data ?? []).map((l: any
 
     const raw = msg.content[0].type === 'text' ? msg.content[0].text : '';
     const { parseLLMJsonOr } = await import('@/lib/ai-json');
-    const suggestions = parseLLMJsonOr<unknown[]>(raw, [], 'aria/warehouse-slotting');
+    const suggestions = parseLLMJsonOr<any[]>(raw, [], 'aria/warehouse-slotting');
 
     // Upsert slotting suggestions
     for (const s of suggestions) {

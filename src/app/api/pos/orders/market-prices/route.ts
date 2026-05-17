@@ -8,6 +8,9 @@ async function _GET(req: NextRequest) {
   const supabase = createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  const { data: _ab } = await supabase.from('user_active_business').select('business_id').eq('user_id', user.id).maybeSingle()
+  const bid = (_ab?.business_id as string) ?? null
+  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
 
   const sp = req.nextUrl.searchParams
   const productId = sp.get('productId')

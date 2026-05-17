@@ -20,6 +20,11 @@ async function _POST(req: Request, ctx: Ctx) {
     supabase.from('pos_sale_splits').select('*').eq('id', merge_split_id).maybeSingle(),
   ])
   if (!target || !source) return NextResponse.json({ error: 'Split not found' }, { status: 404 })
+
+  // Ownership: both splits must belong to user's business
+  if (target.business_id !== source.business_id) return NextResponse.json({ error: 'Cannot combine across businesses' }, { status: 400 })
+  const { data: bizCheck } = await supabase.from('businesses').select('id').eq('id', target.business_id).eq('user_id', user.id).maybeSingle()
+  if (!bizCheck) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   if (source.status === 'paid' || target.status === 'paid') return NextResponse.json({ error: 'Cannot combine paid splits' }, { status: 400 })
 
   // Merge source into target

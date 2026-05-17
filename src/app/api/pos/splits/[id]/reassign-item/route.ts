@@ -12,6 +12,12 @@ async function _POST(req: Request, ctx: Ctx) {
   const { data: { user }, error } = await supabase.auth.getUser()
   if (error || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
+  // Ownership: confirm split belongs to user's business
+  const { data: split } = await supabase.from('pos_sale_splits').select('id, business_id').eq('id', id).maybeSingle()
+  if (!split) return NextResponse.json({ error: 'Split not found' }, { status: 404 })
+  const { data: bizCheck } = await supabase.from('businesses').select('id').eq('id', split.business_id).eq('user_id', user.id).maybeSingle()
+  if (!bizCheck) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
   const { sale_item_id, to_split_id, quantity_assigned, amount_assigned } = await req.json()
   if (!sale_item_id || !to_split_id) return NextResponse.json({ error: 'sale_item_id and to_split_id required' }, { status: 400 })
 
