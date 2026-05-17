@@ -118,14 +118,21 @@ const inp: React.CSSProperties = { background: 'var(--bg-base)', border: '1px so
 
 export default function RolesPage() {
   const [staff, setStaff]           = useState<Staff[]>([])
+  const [bid, setBid]               = useState<string | null>(null)
   const [loading, setLoading]       = useState(true)
   const [saving, setSaving]         = useState<string | null>(null)
   const [localPerms, setLocalPerms] = useState<Record<string, Record<string, boolean | number>>>({})
 
   async function load() {
     setLoading(true)
-    const res = await fetch('/api/pos/staff').then(r => r.json()).catch(() => ({ staff: [] }))
-    const list: Staff[] = res.staff ?? res.data ?? []
+    const prodRes = await fetch('/api/pos/products').then(r => r.json()).catch(() => null)
+    const resolvedBid = prodRes?.business_id
+    if (!resolvedBid) { setStaff([]); setLocalPerms({}); setLoading(false); return }
+    setBid(resolvedBid)
+    const res = await fetch(`/api/pos/users?business_id=${resolvedBid}`).then(r => r.json()).catch(() => ({ users: [] }))
+    const list: Staff[] = (res.users ?? []).map((u: { id: string; name: string; role: string; is_active: boolean; permissions: Record<string, unknown> | null }) => ({
+      id: u.id, name: u.name, role: u.role, email: null, is_active: u.is_active, permissions: u.permissions,
+    }))
     setStaff(list)
     const perms: Record<string, Record<string, boolean | number>> = {}
     for (const s of list) {
@@ -139,7 +146,7 @@ export default function RolesPage() {
   async function changeRole(id: string, role: Role) {
     setSaving(id)
     const defaults = ROLE_DEFAULTS[role]
-    await fetch(`/api/pos/staff?id=${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role, permissions: defaults }) })
+    await fetch(`/api/pos/users/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ business_id: bid, role, permissions: defaults }) })
     setStaff(ss => ss.map(s => s.id === id ? { ...s, role } : s))
     setLocalPerms(p => ({ ...p, [id]: defaults }))
     setSaving(null)
@@ -147,7 +154,7 @@ export default function RolesPage() {
 
   async function savePerms(id: string) {
     setSaving(id)
-    await fetch(`/api/pos/staff?id=${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ permissions: localPerms[id] }) })
+    await fetch(`/api/pos/users/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ business_id: bid, permissions: localPerms[id] }) })
     setSaving(null)
   }
 

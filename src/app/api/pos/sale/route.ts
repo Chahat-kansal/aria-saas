@@ -33,30 +33,46 @@ async function _POST(req: Request) {
 
   if (!items?.length) return NextResponse.json({ error: 'No items' }, { status: 400 });
 
-  // ── Permission check: discount limit ──────────────────────────────
-  if (pos_user_id && (Number(discount_amount) || 0) > 0) {
-    const { getPosUser, resolvePermissions, writeAuditLog } = await import('@/lib/pos/check-permission')
-    const posUser = await getPosUser(supabase, pos_user_id, business.id)
-    if (posUser) {
-      const perms = resolvePermissions(posUser)
-      const discountPct = (Number(subtotal) || 0) + (Number(discount_amount) || 0) > 0
-        ? ((Number(discount_amount) || 0) / ((Number(subtotal) || 0) + (Number(discount_amount) || 0))) * 100
-        : 0
-      if (discountPct > (perms.max_discount_pct ?? 10)) {
-        return NextResponse.json({
-          error: `Discount of ${discountPct.toFixed(0)}% exceeds your limit of ${perms.max_discount_pct ?? 10}%`,
-          requires_override: true,
-          flag: 'max_discount_pct',
-        }, { status: 403 })
+  // ── Permission check: discount limit (line-item and total) ────────
+  if (pos_user_id) {
+    // Compute max line discount and effective total discount from items
+    let maxLinePct = 0
+    let preDiscountGross = 0
+    let actualGross = 0
+    for (const it of (items as Array<{ unit_price?: number; quantity?: number; discount_percent?: number }>) ?? []) {
+      const pct = Number(it.discount_percent) || 0
+      const unit = Number(it.unit_price) || 0
+      const qty = Number(it.quantity) || 0
+      if (pct > maxLinePct) maxLinePct = pct
+      preDiscountGross += unit * qty
+      actualGross += unit * qty * (1 - pct / 100)
+    }
+    const totalDiscountAmt = preDiscountGross - actualGross + (Number(discount_amount) || 0)
+    const effectivePct = preDiscountGross > 0 ? (totalDiscountAmt / preDiscountGross) * 100 : 0
+    const triggeringPct = Math.max(maxLinePct, effectivePct)
+
+    if (triggeringPct > 0) {
+      const { getPosUser, resolvePermissions, writeAuditLog } = await import('@/lib/pos/check-permission')
+      const posUser = await getPosUser(supabase, pos_user_id, business.id)
+      if (posUser) {
+        const perms = resolvePermissions(posUser)
+        const limit = Number(perms.max_discount_pct ?? 10)
+        if (triggeringPct > limit + 0.01) {
+          return NextResponse.json({
+            error: `Discount of ${triggeringPct.toFixed(0)}% exceeds your limit of ${limit}%`,
+            requires_override: true,
+            flag: 'max_discount_pct',
+          }, { status: 403 })
+        }
+        await writeAuditLog(supabase, {
+          business_id: business.id,
+          action: 'discount_applied',
+          pos_user_id,
+          performed_by: user.id,
+          amount: totalDiscountAmt,
+          metadata: { discount_pct: triggeringPct.toFixed(1), max_allowed: limit, max_line_pct: maxLinePct.toFixed(1) },
+        })
       }
-      await writeAuditLog(supabase, {
-        business_id: business.id,
-        action: 'discount_applied',
-        pos_user_id,
-        performed_by: user.id,
-        amount: Number(discount_amount) || 0,
-        metadata: { discount_pct: discountPct.toFixed(1), max_allowed: perms.max_discount_pct },
-      })
     }
   }
 
