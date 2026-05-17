@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { track } from '@/lib/analytics';
 
@@ -23,7 +23,16 @@ export default function NewPromotionPage() {
     // Sprint D fields
     stackPriority: '100', maxTotalUses: '', maxUsesPerCustomer: '', maxUsesPerDay: '',
     minLifetimeSpend: '', minVisits: '', excludeDiscounted: false,
+    customer_group_id: null as string | null,
   });
+  const [customerGroups, setCustomerGroups] = useState<Array<{ id: string; name: string }>>([]);
+
+  useEffect(() => {
+    fetch('/api/pos/customer-groups')
+      .then(r => r.json())
+      .then(d => setCustomerGroups(d.groups ?? []))
+      .catch(() => setCustomerGroups([]))
+  }, [])
 
   function upd(field: string, value: unknown) { setForm(f => ({ ...f, [field]: value })); }
 
@@ -45,6 +54,7 @@ export default function NewPromotionPage() {
       min_customer_lifetime_spend: form.minLifetimeSpend ? Number(form.minLifetimeSpend) : null,
       min_customer_visits: form.minVisits ? Number(form.minVisits) : null,
       exclude_discounted: form.excludeDiscounted,
+      customer_group_id: form.customer_group_id,
     }) }).catch(() => {});
     track('promotion_created', { type: form.type });
     setSaving(false);
@@ -158,6 +168,19 @@ export default function NewPromotionPage() {
           {/* Customer tier conditions */}
           <div style={{ borderTop: '1px solid var(--divider)', paddingTop: 20, marginBottom: 20 }}>
             <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 14 }}>Tier conditions (optional)</h3>
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ display: 'block', fontSize: 12, color: 'var(--text-secondary)', marginBottom: 6 }}>Customer group (optional)</label>
+              <select
+                value={form.customer_group_id ?? ''}
+                onChange={e => setForm(f => ({ ...f, customer_group_id: e.target.value || null }))}
+                style={iS}
+              >
+                <option value="">All customers</option>
+                {customerGroups.map(g => (
+                  <option key={g.id} value={g.id}>{g.name}</option>
+                ))}
+              </select>
+            </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
               <div>
                 <label style={{ display: 'block', fontSize: 12, color: 'var(--text-secondary)', marginBottom: 6 }}>Min lifetime spend (A$)</label>
