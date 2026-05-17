@@ -8,6 +8,7 @@ export interface Business {
   name: string;
   owner_name: string | null;
   industry: string | null;
+  industry_subtype: string | null;
   address: string | null;
   city: string | null;
   phone: string | null;
