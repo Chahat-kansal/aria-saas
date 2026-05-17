@@ -4,121 +4,48 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { NextResponse } from 'next/server'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 
-// Identical pattern to all working POS routes (promotions, products, customers, etc.)
-async function getBid(
-  supabase: ReturnType<typeof createServerSupabaseClient>,
-  userId: string
-): Promise<string | null> {
-  const { data: active } = await supabase
-    .from('user_active_business')
-    .select('business_id')
-    .eq('user_id', userId)
-    .maybeSingle()
+async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
+  const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
   if (active?.business_id) return active.business_id as string
-
-  const { data } = await supabase
-    .from('businesses')
-    .select('id')
-    .eq('user_id', userId)
-    .eq('is_active', true)
-    .order('created_at', { ascending: true })
-    .limit(1)
-    .maybeSingle()
+  const { data } = await supabase.from('businesses').select('id').eq('user_id', userId).eq('is_active', true).order('created_at', { ascending: true }).limit(1).maybeSingle()
   return data?.id ?? null
 }
 
-async function _GET(_req: Request, { params }: { params: { id: string } }) {
-  try {
-    const supabase = createServerSupabaseClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-    const { data, error } = await supabase.from('pos_receipt_templates')
-      .select('*').eq('id', params.id).maybeSingle()
-    if (error?.code === '42P01') return NextResponse.json({ template: null })
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    return NextResponse.json({ template: data })
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : 'Server error'
-    console.error('[receipt-templates GET]', msg)
-    return NextResponse.json({ error: msg }, { status: 500 })
-  }
-}
-
 async function _PATCH(req: Request, { params }: { params: { id: string } }) {
-  try {
-    // Exact same client + auth + bid pattern as promotions/route.ts, products/route.ts, etc.
-    const supabase = createServerSupabaseClient()
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-    const bid = await getBid(supabase, user.id)
-    if (!bid) return NextResponse.json({ error: 'No business found' }, { status: 404 })
-
-    const id = params.id
-    if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })
-
-    let body: Record<string, unknown> = {}
-    try {
-      body = await req.json()
-    } catch {
-      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
-    }
-
-    // Only update columns that were sent AND confirmed to exist in the table:
-    // id, business_id, name, type, for_type, components, created_at,
-    // canvas_width, canvas_height, background_color, elements, is_default
-    // Note: updated_at does NOT exist in this table — never include it
-    const update: Record<string, unknown> = {}
-
-    if (body.name             !== undefined) update.name             = String(body.name)
-    if (body.elements         !== undefined) update.elements         = body.elements
-    if (body.canvas_width     !== undefined) update.canvas_width     = Number(body.canvas_width)
-    if (body.canvas_height    !== undefined) update.canvas_height    = Number(body.canvas_height)
-    if (body.background_color !== undefined) update.background_color = String(body.background_color)
-    if (body.is_default       !== undefined) update.is_default       = Boolean(body.is_default)
-    if (body.components       !== undefined) update.components       = body.components
-    // type and for_type excluded: 'type' is a Postgres reserved word
-
-    if (Object.keys(update).length === 0) {
-      return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 })
-    }
-
-    console.log('[PATCH receipt] id:', id, 'bid:', bid, 'fields:', Object.keys(update))
-
-    const { data, error } = await supabase
-      .from('pos_receipt_templates')
-      .update(update)
-      .eq('id', id)
-      .eq('business_id', bid)
-      .select('id, name, elements, canvas_width, canvas_height, background_color, is_default')
-      .single()
-
-    if (error) {
-      console.error('[PATCH receipt] supabase error:', {
-        message: error.message,
-        code: error.code,
-        details: error.details,
-        hint: error.hint,
-      })
-      return NextResponse.json({ error: error.message }, { status: 500 })
-    }
-
-    if (!data) {
-      return NextResponse.json(
-        { error: 'Template not found or does not belong to this business' },
-        { status: 404 }
-      )
-    }
-
-    return NextResponse.json(data)
-
-  } catch (err: unknown) {
-    const e = err as { message?: string; code?: string }
-    console.error('[PATCH receipt] caught:', { message: e?.message, code: e?.code })
-    return NextResponse.json({ error: e?.message || 'Internal server error' }, { status: 500 })
-  }
+  const supabase = createServerSupabaseClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const bid = await getBid(supabase, user.id)
+  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 404 })
+  const body = await req.json()
+  const update: Record<string, unknown> = {}
+  if (body.template_name    !== undefined) update.template_name    = String(body.template_name)
+  if (body.width_mm         !== undefined && [58, 76, 80, 112].includes(Number(body.width_mm))) update.width_mm = Number(body.width_mm)
+  if (body.header_text      !== undefined) update.header_text      = body.header_text
+  if (body.footer_text      !== undefined) update.footer_text      = body.footer_text
+  if (body.logo_url         !== undefined) update.logo_url         = body.logo_url
+  if (body.show_tax_breakdown !== undefined) update.show_tax_breakdown = Boolean(body.show_tax_breakdown)
+  if (body.show_qr_code     !== undefined) update.show_qr_code     = Boolean(body.show_qr_code)
+  if (body.show_loyalty_balance !== undefined) update.show_loyalty_balance = Boolean(body.show_loyalty_balance)
+  if (body.paper_cut_mode   !== undefined && ['full', 'partial', 'none'].includes(body.paper_cut_mode)) update.paper_cut_mode = body.paper_cut_mode
+  if (body.outlet_id        !== undefined) update.outlet_id        = body.outlet_id
+  if (Object.keys(update).length === 0) return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 })
+  const { data, error } = await supabase.from('pos_receipt_templates').update(update).eq('id', params.id).eq('business_id', bid).select().single()
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (!data) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  return NextResponse.json({ template: data })
 }
 
-export const GET = withErrorCapture('pos/receipt-templates/[id]', _GET)
+async function _DELETE(_req: Request, { params }: { params: { id: string } }) {
+  const supabase = createServerSupabaseClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const bid = await getBid(supabase, user.id)
+  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 404 })
+  const { error } = await supabase.from('pos_receipt_templates').delete().eq('id', params.id).eq('business_id', bid)
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ ok: true })
+}
+
 export const PATCH = withErrorCapture('pos/receipt-templates/[id]', _PATCH)
+export const DELETE = withErrorCapture('pos/receipt-templates/[id]', _DELETE)
