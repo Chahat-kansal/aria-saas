@@ -109,8 +109,8 @@ Return ONLY a valid JSON object with this exact structure:
   let totalCostCents = 0;
 
   try {
-    const resp = await trackAICall({ route: 'aria/roster', model: 'claude-sonnet-4-6', businessId: undefined, purpose: 'roster-optimization' }, () => anthropic.messages.create({
-      model: "claude-sonnet-4-6",
+    const resp = await trackAICall({ route: 'aria/roster', model: 'claude-sonnet-4-5-20250929', businessId: undefined, purpose: 'roster-optimization' }, () => anthropic.messages.create({
+      model: "claude-sonnet-4-5-20250929",
       max_tokens: 4000,
       messages: [{ role: "user", content: `Generate the roster for this business:\n${context}` }],
       system: systemPrompt,

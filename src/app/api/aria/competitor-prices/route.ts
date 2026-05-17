@@ -102,7 +102,7 @@ Return [] if no prices found.`
 
     try {
       const createParams: any = {
-        model: 'claude-sonnet-4-6',
+        model: 'claude-sonnet-4-5-20250929',
         max_tokens: 800,
       temperature: 0.4,
         tools: [{ type: 'web_search_20250305', name: 'web_search' }],
@@ -112,7 +112,7 @@ Return [] if no prices found.`
   const _industry = (JSON.parse(_bizCtx))?.business?.industry ?? 'retail'
   const systemPrompt = getSystemPrompt(_industry as string, _bizCtx)
   const response = 
-await trackAICall({ route: 'aria/competitor-prices', model: 'claude-sonnet-4-6', businessId: business_id, purpose: 'competitor-price-search' }, () => client.messages.create(createParams, {
+await trackAICall({ route: 'aria/competitor-prices', model: 'claude-sonnet-4-5-20250929', businessId: business_id, purpose: 'competitor-price-search' }, () => client.messages.create(createParams, {
         headers: { 'anthropic-beta': 'web-search-2025-03-05' },
       } as any))
 

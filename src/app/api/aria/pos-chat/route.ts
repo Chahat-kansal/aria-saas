@@ -410,8 +410,8 @@ TONE: Direct, specific, Australian English, A$ always.`
   }
 
   const client = new Anthropic()
-  const response = await trackAICall({ route: 'aria/pos-chat', model: 'claude-sonnet-4-6', businessId: business_id, purpose: 'pos-chat' }, () => client.messages.create({
-    model: 'claude-sonnet-4-6',
+  const response = await trackAICall({ route: 'aria/pos-chat', model: 'claude-sonnet-4-5-20250929', businessId: business_id, purpose: 'pos-chat' }, () => client.messages.create({
+    model: 'claude-sonnet-4-5-20250929',
     max_tokens: 1000,
       temperature: 0.75,
     system: systemPrompt,

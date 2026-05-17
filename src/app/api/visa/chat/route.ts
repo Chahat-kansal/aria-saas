@@ -39,7 +39,7 @@ Current date: ${today}
 This agent has ${clientCount || 0} active clients.${alertContext}`;
 
   const stream = anthropic.messages.stream({
-    model: 'claude-sonnet-4-6',
+    model: 'claude-sonnet-4-5-20250929',
     max_tokens: 2048,
     system: systemPrompt,
     messages: messages.map((m: any) => ({ role: m.role, content: m.content })),

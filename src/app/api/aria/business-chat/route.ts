@@ -85,7 +85,7 @@ export const POST = withErrorCapture('aria/business-chat', async (req: Request) 
   }
 
   const _aiStart = Date.now()
-  console.log(JSON.stringify({ type: 'aria_ai_call', status: 'started', route: 'aria/business-chat', model: 'claude-sonnet-4-6', purpose: 'chat-stream', ts: new Date().toISOString() }))
+  console.log(JSON.stringify({ type: 'aria_ai_call', status: 'started', route: 'aria/business-chat', model: 'claude-sonnet-4-5-20250929', purpose: 'chat-stream', ts: new Date().toISOString() }))
 
   const stream = new ReadableStream({
     async start(controller) {
@@ -107,7 +107,7 @@ export const POST = withErrorCapture('aria/business-chat', async (req: Request) 
         const responseText = formatAnswer(output)
         send({ text: responseText });
         send({ done: true });
-        console.log(JSON.stringify({ type: 'aria_ai_call', status: 'success', route: 'aria/business-chat', model: 'claude-sonnet-4-6', purpose: 'chat-stream', durationMs: Date.now() - _aiStart, ts: new Date().toISOString() }))
+        console.log(JSON.stringify({ type: 'aria_ai_call', status: 'success', route: 'aria/business-chat', model: 'claude-sonnet-4-5-20250929', purpose: 'chat-stream', durationMs: Date.now() - _aiStart, ts: new Date().toISOString() }))
         await writeAriaOutcome(business_id, 'business-chat', responseText.slice(0, 500)).catch(() => null)
         // Save conversation — schema: business_id, role, content, created_at
         try {

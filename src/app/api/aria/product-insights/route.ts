@@ -75,8 +75,8 @@ async function _POST(req: Request) {
     const bestMonth  = months.reduce((b, m) => m[1] > (b[1] || 0) ? m : b, ['—', 0] as [string, number])
 
     const client = new Anthropic()
-    const response = await trackAICall({ route: 'aria/product-insights', model: 'claude-sonnet-4-6', businessId: business_id, purpose: 'product-insights' }, () => client.messages.create({
-      model: 'claude-sonnet-4-6',
+    const response = await trackAICall({ route: 'aria/product-insights', model: 'claude-sonnet-4-5-20250929', businessId: business_id, purpose: 'product-insights' }, () => client.messages.create({
+      model: 'claude-sonnet-4-5-20250929',
       max_tokens: 300,
       system: 'You are Aria, an AI business analyst. Give concise product insights. Max 3 bullet points. Australian dollars. Be specific with numbers. No preamble.',
       messages: [{

@@ -85,8 +85,8 @@ Generate 5-10 realistic, specific actions based on the data provided. Return ONL
 
   let actions: unknown[] = [];
   try {
-    const resp = await trackAICall({ route: 'aria/autopilot', model: 'claude-sonnet-4-6', businessId: undefined, purpose: 'autopilot-analysis' }, () => anthropic.messages.create({
-      model: "claude-sonnet-4-6",
+    const resp = await trackAICall({ route: 'aria/autopilot', model: 'claude-sonnet-4-5-20250929', businessId: undefined, purpose: 'autopilot-analysis' }, () => anthropic.messages.create({
+      model: "claude-sonnet-4-5-20250929",
       max_tokens: 3000,
       messages: [{ role: "user", content: `Analyse this business and generate action recommendations:\n${context}` }],
       system: systemPrompt,

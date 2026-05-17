@@ -35,7 +35,7 @@ async function _POST(req: Request) {
   if (!promptFn) return NextResponse.json({ error: 'Unknown document type' }, { status: 400 });
 
   const msg = await anthropic.messages.create({
-    model: 'claude-sonnet-4-6',
+    model: 'claude-sonnet-4-5-20250929',
     max_tokens: 2048,
     messages: [{ role: 'user', content: promptFn(client) }],
   });

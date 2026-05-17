@@ -106,8 +106,8 @@ async function _POST(req: Request) {
   let invoiceTotal: number | null = null;
 
   try {
-    const response = await trackAICall({ route: 'aria/receipt-scan', model: 'claude-sonnet-4-6', businessId: business_id, purpose: 'receipt-scan-vision' }, () => anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
+    const response = await trackAICall({ route: 'aria/receipt-scan', model: 'claude-sonnet-4-5-20250929', businessId: business_id, purpose: 'receipt-scan-vision' }, () => anthropic.messages.create({
+      model: 'claude-sonnet-4-5-20250929',
       max_tokens: 4096,
       temperature: 0.2,
       messages: [{

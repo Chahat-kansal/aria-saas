@@ -63,8 +63,8 @@ Recent reviews: ${(recentReviews || []).map(r => `${r.rating}★`).join(', ') ||
   const _industry = (JSON.parse(_bizCtx))?.business?.industry ?? 'retail'
   const systemPrompt = getSystemPrompt(_industry as string, _bizCtx)
   const response = 
-await trackAICall({ route: 'aria/briefing', model: 'claude-sonnet-4-6', businessId: businessId, purpose: 'daily-briefing' }, () => anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
+await trackAICall({ route: 'aria/briefing', model: 'claude-sonnet-4-5-20250929', businessId: businessId, purpose: 'daily-briefing' }, () => anthropic.messages.create({
+      model: 'claude-sonnet-4-5-20250929',
       max_tokens: 300,
       messages: [{
         role: 'user',

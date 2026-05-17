@@ -26,7 +26,7 @@ export async function ocrReceipt(imageBase64: string, mimeType: string): Promise
 
   try {
     const msg = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
+      model: 'claude-sonnet-4-5-20250929',
       max_tokens: 1500,
       system: `You are a receipt parser. Extract every line item from this receipt with quantity, unit price, and total. Also extract subtotal, tax, tip, and grand total. Output strict JSON only — no prose, no code fences:
 {"items":[{"name":"string","qty":1,"unit_price":0.00,"total":0.00,"confidence":0.9}],"subtotal":0.00,"tax":0.00,"tip":0.00,"total":0.00,"confidence":0.9}

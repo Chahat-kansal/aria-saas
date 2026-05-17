@@ -113,13 +113,13 @@ export const POST = withErrorCapture('aria/feature-builder', async (req: Request
 await trackAICall(
         {
           route: 'aria/feature-builder',
-          model: 'claude-sonnet-4-6',
+          model: 'claude-sonnet-4-5-20250929',
           businessId: business_id,
           industry: (biz as any).industry ?? undefined,
           purpose: 'feature-generate',
         },
         () => anthropic.messages.create({
-          model: 'claude-sonnet-4-6',
+          model: 'claude-sonnet-4-5-20250929',
           max_tokens: 1200,
       temperature: 0.2,
           system: GENERATE_SYSTEM,

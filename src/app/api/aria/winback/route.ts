@@ -129,8 +129,8 @@ async function _POST(req: Request) {
   const _industry = (JSON.parse(_bizCtx))?.business?.industry ?? 'retail'
   const systemPrompt = getSystemPrompt(_industry as string, _bizCtx)
   const response = 
-await trackAICall({ route: 'aria/winback', model: 'claude-sonnet-4-6', businessId: business_id, purpose: 'winback-sms-draft' }, () => anthropic.messages.create({
-      model: 'claude-sonnet-4-6', max_tokens: 200,
+await trackAICall({ route: 'aria/winback', model: 'claude-sonnet-4-5-20250929', businessId: business_id, purpose: 'winback-sms-draft' }, () => anthropic.messages.create({
+      model: 'claude-sonnet-4-5-20250929', max_tokens: 200,
       temperature: 0.75,
       system: [{ type: 'text' as const, text: systemPrompt, cache_control: { type: 'ephemeral' as const } }],
       messages: [{ role: 'user', content: `Write a short, friendly winback SMS (max 160 chars) for customer: ${customer.name}, business: ${business.name} (${business.industry}), days since last visit: ${daysSince ?? 'unknown'}. Include a personalised offer.` }],

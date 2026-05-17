@@ -265,7 +265,7 @@ async function _POST(request: NextRequest) {
         while (iterations < MAX) {
           iterations++
           const response = await anthropic.messages.create({
-            model: 'claude-sonnet-4-6',
+            model: 'claude-sonnet-4-5-20250929',
             max_tokens: 2048,
             system: SYSTEM,
             tools,

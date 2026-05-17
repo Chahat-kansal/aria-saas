@@ -22,8 +22,8 @@ async function _POST(req: Request) {
   if (!name) return NextResponse.json({ error: 'name required' }, { status: 400 });
 
   try {
-    const msg = await trackAICall({ route: 'aria/classify-product', model: 'claude-sonnet-4-6', businessId: undefined, purpose: 'product-classification' }, () => anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
+    const msg = await trackAICall({ route: 'aria/classify-product', model: 'claude-sonnet-4-5-20250929', businessId: undefined, purpose: 'product-classification' }, () => anthropic.messages.create({
+      model: 'claude-sonnet-4-5-20250929',
       max_tokens: 300,
       messages: [{
         role: 'user',

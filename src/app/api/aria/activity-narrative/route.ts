@@ -268,8 +268,8 @@ async function _GET(req: Request) {
   const _industry = (JSON.parse(_bizCtx))?.business?.industry ?? 'retail'
   const systemPrompt = getSystemPrompt(_industry as string, _bizCtx)
   const response = 
-await trackAICall({ route: 'aria/activity-narrative', model: 'claude-sonnet-4-6', businessId: businessId, purpose: 'activity-narrative' }, () => anthropic.messages.create({
-        model: 'claude-sonnet-4-6',
+await trackAICall({ route: 'aria/activity-narrative', model: 'claude-sonnet-4-5-20250929', businessId: businessId, purpose: 'activity-narrative' }, () => anthropic.messages.create({
+        model: 'claude-sonnet-4-5-20250929',
         max_tokens: 400,
         system: [{ type: 'text' as const, text: systemPrompt, cache_control: { type: 'ephemeral' as const } }],
         messages: [

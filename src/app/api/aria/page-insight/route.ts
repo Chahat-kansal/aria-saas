@@ -45,9 +45,9 @@ interface PageInsightResult {
 async function callClaude(prompt: string, systemPrompt?: string): Promise<string> {
   const sys = systemPrompt ?? 'You are Aria, an AI business co-owner. Be specific and concise.'
   const msg = await trackAICall(
-    { route: 'aria/page-insight', model: 'claude-sonnet-4-6', businessId: undefined, purpose: 'page-insight' },
+    { route: 'aria/page-insight', model: 'claude-sonnet-4-5-20250929', businessId: undefined, purpose: 'page-insight' },
     () => anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
+      model: 'claude-sonnet-4-5-20250929',
       max_tokens: 80,
       temperature: 0.4,
       system: [{ type: 'text' as const, text: sys, cache_control: { type: 'ephemeral' as const } }],

@@ -31,8 +31,8 @@ async function _POST(req: Request) {
   const _industry = (JSON.parse(_bizCtx))?.business?.industry ?? 'retail'
   const systemPrompt = getSystemPrompt(_industry as string, _bizCtx)
   const msg = 
-await trackAICall({ route: 'aria/generate-promotion', model: 'claude-sonnet-4-6', businessId: business_id, purpose: 'slow-day-promotion' }, () => anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
+await trackAICall({ route: 'aria/generate-promotion', model: 'claude-sonnet-4-5-20250929', businessId: business_id, purpose: 'slow-day-promotion' }, () => anthropic.messages.create({
+      model: 'claude-sonnet-4-5-20250929',
       max_tokens: 500,
       temperature: 0.75,
       system: [{ type: 'text' as const, text: systemPrompt, cache_control: { type: 'ephemeral' as const } }],

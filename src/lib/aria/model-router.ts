@@ -101,7 +101,7 @@ export function parseModelJson(text: string) {
 async function callAnthropic(input: RunInput) {
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
   const createParams: any = {
-    model: SMART_TASKS.has(input.task) ? 'claude-sonnet-4-6' : 'claude-haiku-4-5-20251001',
+    model: SMART_TASKS.has(input.task) ? 'claude-sonnet-4-5-20250929' : 'claude-haiku-4-5-20251001',
     max_tokens: input.maxTokens ?? 2500,
     temperature: input.temperature ?? 0.2,
     system: input.systemPrompt,

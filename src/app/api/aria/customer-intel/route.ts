@@ -49,8 +49,8 @@ async function _POST(req: Request) {
   const avgBasket = salesSummary.length > 0 ? totalSpend / salesSummary.length : 0;
 
   try {
-    const msg = await trackAICall({ route: 'aria/customer-intel', model: 'claude-sonnet-4-6', businessId: undefined, purpose: 'customer-intel' }, () => anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
+    const msg = await trackAICall({ route: 'aria/customer-intel', model: 'claude-sonnet-4-5-20250929', businessId: undefined, purpose: 'customer-intel' }, () => anthropic.messages.create({
+      model: 'claude-sonnet-4-5-20250929',
       max_tokens: 400,
       temperature: 0.6,
       messages: [{

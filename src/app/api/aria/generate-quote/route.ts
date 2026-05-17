@@ -72,8 +72,8 @@ Use realistic Australian pricing for the industry. Return ONLY the JSON.`;
   const _industry = (JSON.parse(_bizCtx))?.business?.industry ?? 'retail'
   const systemPrompt = getSystemPrompt(_industry as string, _bizCtx)
   const response =
-await trackAICall({ route: 'aria/generate-quote', model: 'claude-sonnet-4-6', businessId: bid, purpose: 'quote-generate' }, () => anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
+await trackAICall({ route: 'aria/generate-quote', model: 'claude-sonnet-4-5-20250929', businessId: bid, purpose: 'quote-generate' }, () => anthropic.messages.create({
+      model: 'claude-sonnet-4-5-20250929',
       max_tokens: 1500,
       temperature: 0.2,
       system: [{ type: 'text' as const, text: systemPrompt, cache_control: { type: 'ephemeral' as const } }],

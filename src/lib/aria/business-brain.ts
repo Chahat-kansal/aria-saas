@@ -245,7 +245,7 @@ async function analyse(mode: AriaBrainMode, data: AriaBusinessData, context?: ob
   }
 
   const smartModes = new Set<AriaBrainMode>(['reorder', 'profit', 'supplier', 'explain'])
-  const model = smartModes.has(mode) ? 'claude-sonnet-4-6' : 'claude-haiku-4-5-20251001'
+  const model = smartModes.has(mode) ? 'claude-sonnet-4-5-20250929' : 'claude-haiku-4-5-20251001'
 
   const result = await trackAICall(
     {

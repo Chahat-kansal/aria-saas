@@ -116,8 +116,8 @@ async function _POST(req: NextRequest) {
   const _industry = (JSON.parse(_bizCtx))?.business?.industry ?? 'retail'
   const systemPrompt = getSystemPrompt(_industry as string, _bizCtx)
   const resp = 
-await trackAICall({ route: 'aria/price-intelligence', model: 'claude-sonnet-4-6', businessId: business_id, purpose: 'price-intelligence' }, () => anthropic.messages.create({
-        model: 'claude-sonnet-4-6',
+await trackAICall({ route: 'aria/price-intelligence', model: 'claude-sonnet-4-5-20250929', businessId: business_id, purpose: 'price-intelligence' }, () => anthropic.messages.create({
+        model: 'claude-sonnet-4-5-20250929',
         max_tokens: 60,
         messages: [{ role: 'user', content: `Cart: ${itemNames}. Total: A$${cartTotal.toFixed(2)}. One 1-sentence upsell tip for staff. Be specific, short, Australian.` }],
       }));

@@ -45,8 +45,8 @@ async function _POST(req: Request) {
     : null;
 
   try {
-    const msg = await trackAICall({ route: 'aria/staff-visa-insight', model: 'claude-sonnet-4-6', businessId: business_id, purpose: 'staff-visa-insight' }, () => anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
+    const msg = await trackAICall({ route: 'aria/staff-visa-insight', model: 'claude-sonnet-4-5-20250929', businessId: business_id, purpose: 'staff-visa-insight' }, () => anthropic.messages.create({
+      model: 'claude-sonnet-4-5-20250929',
       max_tokens: 400,
       system: `You are Aria, an AI advisor for Australian businesses. Provide factual, helpful guidance about a staff member's visa situation in 2-4 plain English sentences. Note: you cannot give immigration legal advice — recommend consulting a registered migration agent for complex matters. Be specific and actionable.`,
       messages: [{
