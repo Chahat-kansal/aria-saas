@@ -63,7 +63,7 @@ async function _PATCH(req: Request, { params }: { params: Promise<{ id: string }
 
   const body = await req.json()
   const allowed: Record<string, unknown> = { updated_at: new Date().toISOString() }
-  const SAFE = ['name','phone','email','birthday','notes','tags','marketing_consent','points_balance','stamps_count'] as const
+  const SAFE = ['name','phone','email','birthday','notes','tags','marketing_consent','points_balance','stamps_count','abn','tax_exempt','tax_exempt_type','tax_exempt_certificate','tax_exempt_expires_at'] as const
   for (const k of SAFE) {
     if (k in body) allowed[k] = body[k]
   }

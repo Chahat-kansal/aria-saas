@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
+import { computeSaleTax, type TaxableLine } from '@/lib/pos/tax-engine';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 async function _POST(req: Request) {
@@ -105,6 +106,33 @@ async function _POST(req: Request) {
 
   const saleNumber = `POS-${String((count ?? 0) + 1).padStart(4, '0')}`;
 
+  // ── Sprint E: per-item tax breakdown ──
+  let computedTaxBreakdown: unknown[] = []
+  let computedTaxTotal = Number(tax_amount) || 0
+  try {
+    const [taxCodesRes, outletOvRes, holidaysRes, customerRes] = await Promise.all([
+      supabase.from('pos_tax_codes').select('*').eq('business_id', business.id).eq('is_active', true),
+      outlet_id ? supabase.from('pos_outlet_tax_codes').select('*').eq('outlet_id', outlet_id).eq('is_active', true) : Promise.resolve({ data: [] }),
+      supabase.from('pos_tax_holidays').select('*').eq('business_id', business.id).eq('is_active', true),
+      customer_id ? supabase.from('pos_customers').select('id, tax_exempt, tax_exempt_type, tax_exempt_expires_at').eq('id', customer_id).eq('business_id', business.id).maybeSingle() : Promise.resolve({ data: null }),
+    ])
+    const taxLines: TaxableLine[] = (items as Array<{ product_id: string; category_id?: string; quantity: number; unit_price: number; tax_code_id?: string; additional_tax_code_ids?: string[] }>).map(i => ({
+      product_id: i.product_id,
+      category_id: i.category_id ?? null,
+      quantity: Number(i.quantity) || 0,
+      unit_price: Number(i.unit_price) || 0,
+      line_subtotal: (Number(i.unit_price) || 0) * (Number(i.quantity) || 0),
+      discount_amount: 0,
+      tax_code_id: i.tax_code_id ?? null,
+      additional_tax_code_ids: i.additional_tax_code_ids ?? [],
+    }))
+    if (taxLines.some(l => l.tax_code_id)) {
+      const result = computeSaleTax(taxLines, taxCodesRes.data ?? [], (outletOvRes.data ?? []) as Parameters<typeof computeSaleTax>[2], (holidaysRes.data ?? []) as Parameters<typeof computeSaleTax>[3], customerRes.data ?? null, new Date())
+      computedTaxTotal = result.total_tax
+      computedTaxBreakdown = result.tax_breakdown
+    }
+  } catch { /* fall back to flat tax_amount */ }
+
   // Get open session
   const { data: openSession } = await supabase
     .from('pos_cash_sessions')
@@ -123,7 +151,8 @@ async function _POST(req: Request) {
       session_id: openSession?.id || null,
       payment_method: payment_method ?? 'cash',
       subtotal: +subtotal.toFixed(2),
-      tax_amount: +tax_amount.toFixed(2),
+      tax_amount: +(computedTaxTotal || tax_amount).toFixed(2),
+      tax_breakdown: computedTaxBreakdown,
       discount_amount: +(discount_amount ?? 0).toFixed(2),
       pos_user_id: pos_user_id ?? null,
       total_amount: +total_amount.toFixed(2),
@@ -176,6 +205,7 @@ async function _POST(req: Request) {
     unit_price: +i.unit_price.toFixed(2),
     discount_percent: i.discount_percent ?? 0,
     tax_rate: i.tax_rate ?? 10,
+    tax_code_id: i.tax_code_id ?? null,
     line_total: +i.line_total.toFixed(2),
   }));
 

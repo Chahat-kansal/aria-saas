@@ -48,6 +48,7 @@ import type { AppliedDiscount } from '@/lib/pos/discount-engine';
 interface Product {
   id: string; name: string; sku: string | null; barcode: string | null;
   price: number; cost_price: number; tax_rate: number;
+  tax_code_id?: string | null; additional_tax_code_ids?: string[] | null;
   stock_quantity: number; low_stock_threshold: number;
   track_stock: boolean; is_active: boolean; is_age_restricted?: boolean;
   category_id: string | null;
@@ -712,6 +713,7 @@ export default function TerminalPage() {
   /* ─── Cart calculations ──────────────────────────────────────── */
   const cartKey    = (i: CartItem) => `${i.product.id}::${i.label ?? i.product.name}`;
   const subtotal   = cart.reduce((s, i) => s + i.unitPrice * i.qty * (1 - (i.discount_percent ?? 0) / 100), 0);
+  // Sprint E: engine computes authoritative tax on finalize. Display uses flat 1.1 estimate.
   const taxAmount  = subtotal - subtotal / 1.1;
   const netAmount  = subtotal / 1.1;
   const total      = subtotal;
@@ -1105,6 +1107,9 @@ export default function TerminalPage() {
           items: cart.map(i => ({
             product_id: i.product.id, product_name: i.label ?? i.product.name, product_sku: i.product.sku,
             quantity: i.qty, unit_price: i.unitPrice, tax_rate: i.product.tax_rate ?? 10,
+            tax_code_id: i.product.tax_code_id ?? null,
+            additional_tax_code_ids: i.product.additional_tax_code_ids ?? [],
+            category_id: i.product.category_id ?? null,
             discount_percent: i.discount_percent ?? 0,
             line_total: +(i.unitPrice * i.qty * (1 - (i.discount_percent ?? 0) / 100)).toFixed(2),
             variant_label: i.variantLabel ?? null,

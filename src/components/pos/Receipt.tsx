@@ -52,6 +52,7 @@ export interface ReceiptSale {
   }>;
   total_amount?: number;
   tax_amount?: number;
+  tax_breakdown?: Array<{ tax_code_id: string; code: string; name: string; rate: number; taxable_amount: number; tax_amount: number }>;
   payment_method?: string;
   cash_tendered?: number;
   change_given?: number;
@@ -221,10 +222,19 @@ function TemplateReceipt({ template, sale, businessName, settings, onClose, wate
                   <span>Subtotal</span>
                   <span style={{ fontFamily: "'Courier New',monospace" }}>A${(subTotal / 1.1).toFixed(2)}</span>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2, fontSize: el.fontSize || 10, color: '#666' }}>
-                  <span>GST (10%)</span>
-                  <span style={{ fontFamily: "'Courier New',monospace" }}>A${gst.toFixed(2)}</span>
-                </div>
+                {Array.isArray(sale.tax_breakdown) && sale.tax_breakdown.length > 0 ? (
+                  sale.tax_breakdown.map((b) => (
+                    <div key={b.code} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2, fontSize: el.fontSize || 10, color: '#666' }}>
+                      <span>{b.code} ({(Number(b.rate) || 0).toFixed(1)}%)</span>
+                      <span style={{ fontFamily: "'Courier New',monospace" }}>A${(Number(b.tax_amount) || 0).toFixed(2)}</span>
+                    </div>
+                  ))
+                ) : (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2, fontSize: el.fontSize || 10, color: '#666' }}>
+                    <span>GST (10%)</span>
+                    <span style={{ fontFamily: "'Courier New',monospace" }}>A${gst.toFixed(2)}</span>
+                  </div>
+                )}
               </>
             )}
             <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', borderTop: '1px solid #000', paddingTop: 3, marginTop: 2, fontSize: (el.fontSize || 10) + 2 }}>
@@ -458,13 +468,22 @@ function SettingsReceipt({ sale, settings, businessName, ariaMessage, onClose, w
               {showGst && (
                 <>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 2 }}>
-                    <span style={{ color: '#666' }}>Subtotal (excl. GST)</span>
+                    <span style={{ color: '#666' }}>Subtotal (excl. tax)</span>
                     <span>A${(subTotal / 1.1).toFixed(2)}</span>
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 4 }}>
-                    <span style={{ color: '#666' }}>GST (10%)</span>
-                    <span>A${gstAmt.toFixed(2)}</span>
-                  </div>
+                  {Array.isArray(sale.tax_breakdown) && sale.tax_breakdown.length > 0 ? (
+                    sale.tax_breakdown.map((b) => (
+                      <div key={b.code} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 2 }}>
+                        <span style={{ color: '#666' }}>{b.code} ({(Number(b.rate) || 0).toFixed(1)}%)</span>
+                        <span>A${(Number(b.tax_amount) || 0).toFixed(2)}</span>
+                      </div>
+                    ))
+                  ) : (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 4 }}>
+                      <span style={{ color: '#666' }}>GST (10%)</span>
+                      <span>A${gstAmt.toFixed(2)}</span>
+                    </div>
+                  )}
                 </>
               )}
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, fontWeight: 700, marginBottom: 8 }}>

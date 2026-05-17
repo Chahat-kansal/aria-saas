@@ -12,11 +12,16 @@ interface Customer {
   rfm_score?: string | null; customer_segment?: string | null;
   churn_risk?: number | null; predicted_next_visit?: string | null;
   group_name?: string | null;
+  abn?: string | null;
+  tax_exempt?: boolean;
+  tax_exempt_type?: string | null;
+  tax_exempt_certificate?: string | null;
+  tax_exempt_expires_at?: string | null;
 }
 interface Sale { id: string; created_at: string; total_amount: number; payment_method: string; sale_number?: string; }
 
 const C = { bg: 'var(--bg-base)', card: 'var(--bg-surface)', border: 'transparent', text: 'var(--text-primary)', muted: 'var(--text-secondary)', dim: 'var(--text-tertiary)', violet: '#8B5CF6', green: '#22C55E', red: '#EF4444', amber: '#F59E0B' };
-const TABS = ['Purchase History','Loyalty','Notes'];
+const TABS = ['Purchase History','Loyalty','Notes','Tax Settings'];
 
 const SEGMENT_COLORS: Record<string, string> = {
   Champions: '#34D399', Loyal: '#60A5FA', Promising: '#A78BFA',
@@ -41,6 +46,8 @@ export default function CustomerDetailPage() {
   const [activeTab, setActiveTab] = useState('Purchase History');
   const [notes, setNotes] = useState('');
   const [notesSaving, setNotesSaving] = useState(false);
+  const [taxForm, setTaxForm] = useState<{ abn: string; tax_exempt: boolean; tax_exempt_type: string; tax_exempt_certificate: string; tax_exempt_expires_at: string }>({ abn: '', tax_exempt: false, tax_exempt_type: '', tax_exempt_certificate: '', tax_exempt_expires_at: '' });
+  const [taxSaving, setTaxSaving] = useState(false);
   const [insight, setInsight] = useState<string[] | null>(null);
   const [insightLoading, setInsightLoading] = useState(true);
   const [showSmsModal, setShowSmsModal] = useState(false);
@@ -87,6 +94,7 @@ export default function CustomerDetailPage() {
       custRef = d.customer ?? null;
       setCustomer(custRef);
       setNotes(custRef?.notes ?? '');
+      setTaxForm({ abn: custRef?.abn ?? '', tax_exempt: custRef?.tax_exempt ?? false, tax_exempt_type: custRef?.tax_exempt_type ?? '', tax_exempt_certificate: custRef?.tax_exempt_certificate ?? '', tax_exempt_expires_at: custRef?.tax_exempt_expires_at ?? '' });
       setLoading(false);
       tryInsight();
     }).catch(() => { setLoading(false); tryInsight(); });
@@ -133,6 +141,13 @@ export default function CustomerDetailPage() {
     setNotesSaving(true);
     await fetch(`/api/pos/customers?id=${customer.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ notes }) }).catch(() => {});
     setNotesSaving(false);
+  }
+
+  async function saveTaxSettings() {
+    if (!customer) return;
+    setTaxSaving(true);
+    await fetch(`/api/pos/customers/${customer.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ abn: taxForm.abn || null, tax_exempt: taxForm.tax_exempt, tax_exempt_type: taxForm.tax_exempt_type || null, tax_exempt_certificate: taxForm.tax_exempt_certificate || null, tax_exempt_expires_at: taxForm.tax_exempt_expires_at || null }) }).catch(() => {});
+    setTaxSaving(false);
   }
 
   if (loading) return (
@@ -304,6 +319,52 @@ export default function CustomerDetailPage() {
             <button onClick={saveNotes} disabled={notesSaving}
               style={{ padding: '8px 20px', borderRadius: 8, border: 'none', background: C.violet, color: '#fff', fontSize: 13, fontWeight: 700, cursor: notesSaving ? 'not-allowed' : 'pointer', fontFamily: 'inherit', opacity: notesSaving ? 0.6 : 1 }}>
               {notesSaving ? 'Saving…' : 'Save Notes'}
+            </button>
+          </div>
+        )}
+
+        {/* Tax Settings */}
+        {activeTab === 'Tax Settings' && (
+          <div style={{ background: 'var(--bg-surface)', borderRadius: 12, padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div>
+              <label style={{ display: 'block', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: C.dim, marginBottom: 5 }}>ABN (Australian Business Number)</label>
+              <input value={taxForm.abn} onChange={e => setTaxForm(f => ({ ...f, abn: e.target.value }))} placeholder="e.g. 12 345 678 901" maxLength={14}
+                style={{ width: '100%', background: 'var(--bg-input)', border: '1px solid var(--border-default)', color: C.text, borderRadius: 8, padding: '9px 12px', fontSize: 13, outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' }} />
+            </div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, cursor: 'pointer' }}>
+              <input type="checkbox" checked={taxForm.tax_exempt} onChange={e => setTaxForm(f => ({ ...f, tax_exempt: e.target.checked }))} />
+              Tax exempt customer
+            </label>
+            {taxForm.tax_exempt && (
+              <>
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: C.dim, marginBottom: 5 }}>Exemption type</label>
+                  <select value={taxForm.tax_exempt_type} onChange={e => setTaxForm(f => ({ ...f, tax_exempt_type: e.target.value }))}
+                    style={{ width: '100%', background: 'var(--bg-input)', border: '1px solid var(--border-default)', color: C.text, borderRadius: 8, padding: '9px 12px', fontSize: 13, outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' }}>
+                    <option value="">— Select —</option>
+                    <option value="abn_holder">ABN holder</option>
+                    <option value="charity">Charity</option>
+                    <option value="diplomatic">Diplomatic</option>
+                    <option value="government">Government</option>
+                    <option value="export">Export buyer</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: C.dim, marginBottom: 5 }}>Certificate / reference</label>
+                  <input value={taxForm.tax_exempt_certificate} onChange={e => setTaxForm(f => ({ ...f, tax_exempt_certificate: e.target.value }))} placeholder="Cert ID or URL"
+                    style={{ width: '100%', background: 'var(--bg-input)', border: '1px solid var(--border-default)', color: C.text, borderRadius: 8, padding: '9px 12px', fontSize: 13, outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' }} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: C.dim, marginBottom: 5 }}>Exemption expires</label>
+                  <input type="date" value={taxForm.tax_exempt_expires_at} onChange={e => setTaxForm(f => ({ ...f, tax_exempt_expires_at: e.target.value }))}
+                    style={{ background: 'var(--bg-input)', border: '1px solid var(--border-default)', color: C.text, borderRadius: 8, padding: '9px 12px', fontSize: 13, outline: 'none', fontFamily: 'inherit' }} />
+                </div>
+              </>
+            )}
+            <button onClick={saveTaxSettings} disabled={taxSaving}
+              style={{ alignSelf: 'flex-start', padding: '8px 20px', borderRadius: 8, border: 'none', background: C.violet, color: '#fff', fontSize: 13, fontWeight: 700, cursor: taxSaving ? 'not-allowed' : 'pointer', fontFamily: 'inherit', opacity: taxSaving ? 0.6 : 1 }}>
+              {taxSaving ? 'Saving…' : 'Save Tax Settings'}
             </button>
           </div>
         )}

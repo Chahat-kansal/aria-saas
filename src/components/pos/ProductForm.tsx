@@ -18,6 +18,8 @@ export interface ProductFormData {
   cost_price: number
   price: number
   tax_rate: number
+  tax_code_id: string | null
+  additional_tax_code_ids: string[]
   stock_quantity: number
   low_stock_threshold: number
   case_quantity: number
@@ -32,6 +34,7 @@ const EMPTY: ProductFormData = {
   category_id: '', brand: '', supplier_id: '',
   container_type: 'unknown',
   cost_price: 0, price: 0, tax_rate: 10,
+  tax_code_id: null, additional_tax_code_ids: [],
   stock_quantity: 0, low_stock_threshold: 5, case_quantity: 1,
   is_active: true, track_stock: true,
   image_url: '', is_age_restricted: false,
@@ -67,6 +70,11 @@ export function ProductForm({ initial, mode, suppliers = [], categories = [] }: 
   const [data, setData] = useState<ProductFormData>({ ...EMPTY, ...initial })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [taxCodes, setTaxCodes] = useState<Array<{ id: string; code: string; name: string }>>([])
+
+  useEffect(() => {
+    fetch('/api/pos/tax-codes').then(r => r.json()).then(d => setTaxCodes(d.tax_codes ?? [])).catch(() => {})
+  }, [])
 
   // Auto-detect container type from product name
   useEffect(() => {
@@ -99,6 +107,8 @@ export function ProductForm({ initial, mode, suppliers = [], categories = [] }: 
         cost_price: data.cost_price,
         price: data.price,
         tax_rate: data.tax_rate,
+        tax_code_id: data.tax_code_id || null,
+        additional_tax_code_ids: data.additional_tax_code_ids ?? [],
         stock_quantity: data.stock_quantity,
         low_stock_threshold: data.low_stock_threshold,
         case_quantity: data.case_quantity,
@@ -199,6 +209,14 @@ export function ProductForm({ initial, mode, suppliers = [], categories = [] }: 
             <div style={{ ...iS, display: 'flex', alignItems: 'center', background: 'var(--bg-base)', fontWeight: 700, color: margin > 30 ? 'var(--success)' : margin > 10 ? 'var(--warning)' : 'var(--destructive)' }}>
               {margin}%
             </div>
+          </Field>
+        </div>
+        <div style={{ marginTop: 12 }}>
+          <Field label="Tax code">
+            <select value={data.tax_code_id ?? ''} onChange={e => set('tax_code_id', e.target.value || null)} style={iS}>
+              <option value="">— Auto (from tax rate) —</option>
+              {taxCodes.map(tc => <option key={tc.id} value={tc.id}>{tc.code} — {tc.name}</option>)}
+            </select>
           </Field>
         </div>
       </GlassPanel>

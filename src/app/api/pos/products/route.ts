@@ -39,7 +39,7 @@ async function _GET(req: Request) {
   if (singleId) {
     const { data: product, error } = await supabase
       .from('pos_products')
-      .select('id,name,sku,barcode,description,price,cost_price,tax_rate,stock_quantity,low_stock_threshold,track_stock,is_active,show_online,image_url,category_id,supplier_id,brand_id,family_id,loyalty_earn_rate,case_quantity,is_age_restricted,pos_categories(name,color)')
+      .select('id,name,sku,barcode,description,price,cost_price,tax_rate,tax_code_id,additional_tax_code_ids,stock_quantity,low_stock_threshold,track_stock,is_active,show_online,image_url,category_id,supplier_id,brand_id,family_id,loyalty_earn_rate,case_quantity,is_age_restricted,pos_categories(name,color)')
       .eq('id', singleId)
       .eq('business_id', bid)
       .maybeSingle();
@@ -57,7 +57,7 @@ async function _GET(req: Request) {
   const [{ data: products }, { data: categories }, { data: saleKeys }] = await Promise.all([
     supabase
       .from('pos_products')
-      .select('id,name,sku,barcode,description,price,cost_price,tax_rate,stock_quantity,low_stock_threshold,track_stock,is_active,show_online,image_url,builder_type,category_id,supplier_id,pos_categories(name,color)')
+      .select('id,name,sku,barcode,description,price,cost_price,tax_rate,tax_code_id,additional_tax_code_ids,stock_quantity,low_stock_threshold,track_stock,is_active,show_online,image_url,builder_type,category_id,supplier_id,pos_categories(name,color)')
       .eq('business_id', bid)
       .order('name'),
     supabase
@@ -133,6 +133,8 @@ async function _POST(req: Request) {
     cost_price: body.cost_price != null ? (parseFloat(String(body.cost_price)) || null) : (body.cost != null ? parseFloat(String(body.cost)) || null : null),
     cost: body.cost != null ? parseFloat(String(body.cost)) || null : null,
     tax_rate: parseFloat(String(body.tax_rate ?? 10)) || 10,
+    tax_code_id: body.tax_code_id || null,
+    additional_tax_code_ids: Array.isArray(body.additional_tax_code_ids) ? body.additional_tax_code_ids : [],
     stock_quantity: parseInt(String(body.stock_quantity ?? 0)) || 0,
     low_stock_threshold: body.low_stock_threshold != null ? parseInt(String(body.low_stock_threshold)) || null : (body.reorder_point != null ? parseInt(String(body.reorder_point)) || null : null),
     track_stock: body.track_stock !== undefined ? !!body.track_stock : (body.track_inventory !== undefined ? !!body.track_inventory : true),
@@ -233,6 +235,7 @@ async function _PATCH(req: Request) {
   // when any key doesn't map to a real column, so we pick only known columns.
   const patchable = [
     'name','sku','barcode','description','price','cost_price','cost','tax_rate',
+    'tax_code_id','additional_tax_code_ids',
     'stock_quantity','low_stock_threshold','track_stock','track_inventory',
     'is_active','status','show_online','case_quantity','age_restricted',
     'is_age_restricted','gst_exempt','image_url','image_source','container_type',

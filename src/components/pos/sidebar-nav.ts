@@ -12,6 +12,7 @@ import {
   Banknote, Wrench,
   Clock, Smartphone, Timer, Scissors,
   ShoppingBag, CalendarClock, Plug,
+  Calculator, CalendarOff,
 } from 'lucide-react'
 
 export interface NavItem {
@@ -153,6 +154,8 @@ export const NAV_STRUCTURE: NavSection[] = [
       { label: 'Integrations', href: '/pos/setup/integrations', icon: Plug },
       { label: 'Supplier Integrations', href: '/pos/setup/suppliers', icon: Truck },
       { label: 'Migrate Data', href: '/pos/setup/migrate', icon: Database },
+      { label: 'Tax Codes', href: '/pos/settings/tax-codes', icon: Calculator },
+      { label: 'Tax Holidays', href: '/pos/settings/tax-holidays', icon: CalendarOff },
       { label: 'Billing', href: '/pos/settings/billing', icon: Banknote },
     ],
   },
