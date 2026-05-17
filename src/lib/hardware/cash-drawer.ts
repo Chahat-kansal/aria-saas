@@ -23,7 +23,7 @@ export async function openCashDrawerViaNetwork(address: string, port = 9100, opt
       'x-printer-host': address,
       'x-printer-port': String(port),
     },
-    body: bytes,
+    body: bytes.buffer as BodyInit,
   })
   if (!resp.ok) throw new Error(`Cash drawer pulse failed: ${resp.status}`)
 }

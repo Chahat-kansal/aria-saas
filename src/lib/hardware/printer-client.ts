@@ -1,5 +1,35 @@
 'use client'
 
+// Minimal ambient stubs for WebUSB + WebHID (browsers expose these; no @types package installed)
+declare global {
+  interface USBDevice {
+    productName: string | null
+    configuration: { interfaces: USBInterface[] } | null
+    open(): Promise<void>
+    close(): Promise<void>
+    selectConfiguration(n: number): Promise<void>
+    claimInterface(n: number): Promise<void>
+    transferOut(endpoint: number, data: Uint8Array): Promise<{ status: 'ok' | 'stall' | 'babble' }>
+  }
+  interface USBInterface {
+    alternates: Array<{ endpoints: Array<{ direction: 'in' | 'out'; endpointNumber: number }> }>
+  }
+  interface HIDDevice {
+    productName: string
+    open(): Promise<void>
+    close(): Promise<void>
+    sendReport(reportId: number, data: BufferSource): Promise<void>
+  }
+  interface Navigator {
+    usb?: {
+      requestDevice(opt: { filters: unknown[] }): Promise<USBDevice>
+    }
+    hid?: {
+      requestDevice(opt: { filters: unknown[] }): Promise<HIDDevice[]>
+    }
+  }
+}
+
 export type PrinterConnectionType = 'usb' | 'hid' | 'network' | 'none'
 
 export interface PrinterDevice {
@@ -67,7 +97,7 @@ export async function sendBytesToPrinter(printer: PrinterDevice, data: Uint8Arra
     const resp = await fetch('/api/pos/hardware-proxy', {
       method: 'POST',
       headers: { 'Content-Type': 'application/octet-stream', 'x-printer-host': printer.networkAddress, 'x-printer-port': String(printer.networkPort ?? 9100) },
-      body: data,
+      body: data.buffer as BodyInit,
     })
     if (!resp.ok) throw new Error(`Network print failed: ${resp.status}`)
     return

@@ -42,6 +42,7 @@ import CafeSetupModal from '@/components/pos/CafeSetupModal';
 import CustomerLookupBar, { type LoyaltyCustomer } from '@/components/pos/CustomerLookupBar';
 import KdsTracker from '@/components/pos/KdsTracker';
 import DiscountBar, { type DiscountBarCartItem } from '@/components/pos/DiscountBar';
+import { useScanner } from '@/lib/hardware/scanner';
 import type { AppliedDiscount } from '@/lib/pos/discount-engine';
 
 /* ─── Types ─────────────────────────────────────────────────────── */
@@ -638,6 +639,26 @@ export default function TerminalPage() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [products, variantModal]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Hardware scanner hook — enabled when a dedicated USB/HID scanner is registered
+  const [hasDedicatedScanner, setHasDedicatedScanner] = useState(false);
+  useEffect(() => {
+    fetch('/api/pos/hardware-devices')
+      .then(r => r.json())
+      .then(d => {
+        const scanners = (d.devices ?? []).filter((dev: { device_type: string; is_active: boolean }) => dev.device_type === 'barcode_scanner' && dev.is_active);
+        setHasDedicatedScanner(scanners.length > 0);
+      })
+      .catch(() => null);
+  }, []);
+  useScanner(
+    (code) => {
+      const hit = products.find(p => p.barcode === code || p.sku === code);
+      if (hit && hit.is_active) { SFX.scan(); checkAndAddToCart(hit); }
+    },
+    { minLength: 4, maxGapMs: 50 },
+    hasDedicatedScanner,
+  );
 
   /* ── Customer search ──────────────────────────────────────────── */
   const searchCustomers = useCallback(async (q: string) => {
