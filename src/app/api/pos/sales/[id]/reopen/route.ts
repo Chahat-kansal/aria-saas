@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
-import { verifyManagerToken } from '@/app/api/pos/manager-verify/route'
+import { verifyManagerToken } from '@/lib/pos/manager-token'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 type Params = { params: Promise<{ id: string }> }

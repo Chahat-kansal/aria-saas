@@ -57,7 +57,7 @@ async function _POST(req: Request) {
   let managerApprovedBy: string | null = null
   if (manager_token) {
     try {
-      const mod = await import('@/app/api/pos/manager-verify/route')
+      const mod = await import('@/lib/pos/manager-token')
       managerApprovedBy = mod.verifyManagerToken(manager_token)
     } catch { /* non-fatal */ }
   }
