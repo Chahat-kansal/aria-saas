@@ -20,7 +20,7 @@ async function _GET() {
 
   const { data: rows } = await supabase
     .from('aria_actions')
-    .select('id, category, priority, title, recommendation, expected_impact, status, created_at')
+    .select('id, category, priority, title, recommendation, expected_impact, status, source, payload, created_at')
     .eq('business_id', bid)
     .eq('status', 'pending')
     .order('created_at', { ascending: false })
@@ -38,6 +38,8 @@ async function _GET() {
       description: r.recommendation,       // aria_actions uses 'recommendation'
       estimated_impact: r.expected_impact,  // aria_actions uses 'expected_impact'
       status: r.status,
+      source: r.source,
+      payload: r.payload,
       created_at: r.created_at,
     }))
 

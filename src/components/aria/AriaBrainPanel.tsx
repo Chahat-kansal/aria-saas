@@ -1,5 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
+import { routeForInsight } from '@/lib/aria/insight-route'
 
 interface Insight {
   id: string
@@ -9,6 +11,8 @@ interface Insight {
   description: string
   estimated_impact: string
   status: string
+  source?: string | null
+  payload?: Record<string, unknown> | null
   created_at: string
 }
 
@@ -19,6 +23,7 @@ const PRIORITY_COLOR: Record<string, string> = {
 }
 
 export default function AriaBrainPanel({ businessId }: { businessId?: string }) {
+  const router = useRouter()
   const [open, setOpen]       = useState(false)
   const [insights, setInsights] = useState<Insight[]>([])
   const [loading, setLoading] = useState(false)
@@ -145,6 +150,17 @@ export default function AriaBrainPanel({ businessId }: { businessId?: string }) 
                   </p>
                 )}
                 <div style={{ display: 'flex', gap: 6 }}>
+                  <button
+                    onClick={() => { setOpen(false); router.push(routeForInsight(insight)) }}
+                    style={{
+                      flex: 1, padding: '6px 10px', borderRadius: 8,
+                      border: '1px solid rgba(127,184,151,.4)', background: 'transparent',
+                      color: '#7FB897',
+                      fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
+                    }}
+                  >
+                    View
+                  </button>
                   <button
                     onClick={() => approve(insight.id)}
                     disabled={acting === insight.id}
