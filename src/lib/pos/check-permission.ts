@@ -128,6 +128,22 @@ export const ROLE_PERMISSION_DEFAULTS: Record<string, PosPermissions> = {
   },
 }
 
+export async function checkPermissionForOutlet(
+  posUser: { id: string; role: string; permissions: Record<string, unknown> },
+  flag: string,
+  outletId: string | null,
+  supabase: SupabaseClient
+): Promise<boolean> {
+  const base = (posUser.permissions ?? {})[flag] ?? ROLE_PERMISSION_DEFAULTS[posUser.role]?.[flag as keyof typeof ROLE_PERMISSION_DEFAULTS[string]] ?? false
+  if (!outletId) return Boolean(base)
+  const { data: overlay } = await supabase.from('pos_outlet_role_permissions')
+    .select('permission_overlay').eq('outlet_id', outletId).eq('pos_user_id', posUser.id).maybeSingle()
+  if (overlay?.permission_overlay && flag in (overlay.permission_overlay as Record<string, unknown>)) {
+    return Boolean((overlay.permission_overlay as Record<string, unknown>)[flag])
+  }
+  return Boolean(base)
+}
+
 export async function getPosUser(
   supabase: SupabaseClient,
   pos_user_id: string,

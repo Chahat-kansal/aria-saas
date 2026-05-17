@@ -22,7 +22,7 @@ async function _POST(req: Request, ctx: Ctx) {
   const bid = await getBid(supabase, user.id)
   if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
 
-  const { data: split } = await supabase.from('pos_sale_splits').select('id, sale_id, total_amount, status').eq('id', id).eq('business_id', bid).maybeSingle()
+  const { data: split } = await supabase.from('pos_sale_splits').select('id, sale_id, total_amount, amount_paid, status').eq('id', id).eq('business_id', bid).maybeSingle()
   if (!split) return NextResponse.json({ error: 'Split not found' }, { status: 404 })
   if (split.status === 'paid') return NextResponse.json({ error: 'Already paid' }, { status: 400 })
   if (split.status === 'voided') return NextResponse.json({ error: 'Split is voided' }, { status: 400 })
@@ -49,9 +49,15 @@ async function _POST(req: Request, ctx: Ctx) {
   const { data: payments } = await supabase.from('pos_split_payments').select('amount').eq('split_id', id)
   const totalPaid = (payments ?? []).reduce((s: number, p: any) => s + (p.amount ?? 0), 0)
 
-  // Mark paid if fully covered (±$0.05 tolerance)
-  if (totalPaid >= split.total_amount - 0.05) {
-    await supabase.from('pos_sale_splits').update({ status: 'paid', paid_at: new Date().toISOString() }).eq('id', id)
+  // Sprint A depth: track amount_paid on split record; flip to 'paid' when fully covered
+  const newStatus = totalPaid >= (Number(split.total_amount) || 0) - 0.05 ? 'paid' : 'unpaid'
+  await supabase.from('pos_sale_splits').update({
+    amount_paid: +totalPaid.toFixed(2),
+    status: newStatus,
+    paid_at: newStatus === 'paid' ? new Date().toISOString() : null,
+  }).eq('id', id)
+
+  if (newStatus === 'paid') {
 
     // Check if ALL splits for the sale are paid
     const { data: allSplits } = await supabase.from('pos_sale_splits').select('status').eq('sale_id', split.sale_id).neq('status', 'voided')
