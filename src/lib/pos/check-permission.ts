@@ -10,6 +10,7 @@ export type PermissionFlag =
   | 'can_send_sms' | 'can_access_timesheets' | 'can_edit_own_timesheet'
   | 'can_approve_timesheets' | 'can_access_waste_log' | 'can_access_kds'
   | 'can_print_labels' | 'can_export_data' | 'can_view_reports'
+  | 'can_create_transfer' | 'can_approve_transfer' | 'can_receive_transfer'
 
 export interface PosPermissions {
   can_apply_discount?: boolean
@@ -42,6 +43,9 @@ export interface PosPermissions {
   can_print_labels?: boolean
   can_export_data?: boolean
   can_view_reports?: boolean
+  can_create_transfer?: boolean
+  can_approve_transfer?: boolean
+  can_receive_transfer?: boolean
 }
 
 export interface PosUserRow {
@@ -64,6 +68,7 @@ export const ROLE_PERMISSION_DEFAULTS: Record<string, PosPermissions> = {
     can_access_timesheets: true, can_edit_own_timesheet: true, can_approve_timesheets: true,
     can_access_waste_log: true, can_access_kds: true, can_print_labels: true,
     can_export_data: true, can_view_reports: true,
+    can_create_transfer: true, can_approve_transfer: true, can_receive_transfer: true,
   },
   admin: {
     can_apply_discount: true, max_discount_pct: 100, can_void: true, can_refund: true,
@@ -77,6 +82,7 @@ export const ROLE_PERMISSION_DEFAULTS: Record<string, PosPermissions> = {
     can_access_timesheets: true, can_edit_own_timesheet: true, can_approve_timesheets: true,
     can_access_waste_log: true, can_access_kds: true, can_print_labels: true,
     can_export_data: true, can_view_reports: true,
+    can_create_transfer: true, can_approve_transfer: true, can_receive_transfer: true,
   },
   manager: {
     can_apply_discount: true, max_discount_pct: 50, can_void: true, can_refund: true,
@@ -90,6 +96,7 @@ export const ROLE_PERMISSION_DEFAULTS: Record<string, PosPermissions> = {
     can_access_timesheets: true, can_edit_own_timesheet: true, can_approve_timesheets: true,
     can_access_waste_log: true, can_access_kds: true, can_print_labels: true,
     can_export_data: true, can_view_reports: true,
+    can_create_transfer: true, can_approve_transfer: true, can_receive_transfer: true,
   },
   supervisor: {
     can_apply_discount: true, max_discount_pct: 25, can_void: true, can_refund: true,
@@ -103,6 +110,7 @@ export const ROLE_PERMISSION_DEFAULTS: Record<string, PosPermissions> = {
     can_access_timesheets: true, can_edit_own_timesheet: true, can_approve_timesheets: false,
     can_access_waste_log: true, can_access_kds: true, can_print_labels: true,
     can_export_data: false, can_view_reports: true,
+    can_create_transfer: true, can_approve_transfer: false, can_receive_transfer: true,
   },
   cashier: {
     can_apply_discount: true, max_discount_pct: 10, can_void: false, can_refund: false,
@@ -116,6 +124,7 @@ export const ROLE_PERMISSION_DEFAULTS: Record<string, PosPermissions> = {
     can_access_timesheets: false, can_edit_own_timesheet: true, can_approve_timesheets: false,
     can_access_waste_log: false, can_access_kds: true, can_print_labels: true,
     can_export_data: false, can_view_reports: false,
+    can_create_transfer: false, can_approve_transfer: false, can_receive_transfer: false,
   },
 }
 
