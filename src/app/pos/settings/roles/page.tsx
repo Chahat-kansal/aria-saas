@@ -85,6 +85,7 @@ export default function RolesPage() {
       )}
       {(showAdd || editing) && (
         <RoleModal
+          key={editing?.id ?? 'new'}
           initial={editing ?? undefined}
           onSave={(f) => editing ? saveEdit(editing.id, f) : saveNew(f)}
           onClose={() => { setShowAdd(false); setEditing(null) }}
@@ -95,12 +96,22 @@ export default function RolesPage() {
 }
 
 function RoleModal({ initial, onSave, onClose }: { initial?: Partial<Role>; onSave: (f: Partial<Role>) => void; onClose: () => void }) {
-  const [form, setForm] = useState<Partial<Role>>({
+  const [form, setForm] = useState<Partial<Role>>(() => ({
     role_key: initial?.role_key ?? '',
     display_name: initial?.display_name ?? '',
     description: initial?.description ?? null,
     permissions: initial?.permissions ?? {},
-  })
+  }))
+  useEffect(() => {
+    if (initial) {
+      setForm({
+        role_key: initial.role_key ?? '',
+        display_name: initial.display_name ?? '',
+        description: initial.description ?? null,
+        permissions: initial.permissions ?? {},
+      })
+    }
+  }, [initial?.id])
   function setFlag(flag: string, value: unknown) {
     setForm(f => ({ ...f, permissions: { ...(f.permissions ?? {}), [flag]: value } }))
   }

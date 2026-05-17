@@ -41,7 +41,14 @@ async function _POST(req: Request) {
     permissions: body.permissions ?? {},
     is_system: false,
   }).select().single()
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    if (error.code === '23505' || /duplicate key|unique constraint/i.test(error.message)) {
+      return NextResponse.json({
+        error: `A role with key "${role_key}" already exists. Pick a different key or edit the existing one.`,
+      }, { status: 409 })
+    }
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
   return NextResponse.json({ role: data })
 }
 
