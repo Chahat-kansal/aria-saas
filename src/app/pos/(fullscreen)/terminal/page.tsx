@@ -153,6 +153,7 @@ export default function TerminalPage() {
       setCart([])
       if (typeof window !== 'undefined') {
         sessionStorage.removeItem('aria_pos_products_cache')
+        sessionStorage.removeItem('aria_pos_cart_v1')
       }
       window.location.reload()
     }

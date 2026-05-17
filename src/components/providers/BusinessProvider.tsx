@@ -137,6 +137,8 @@ export function BusinessProvider({ children }: { children: React.ReactNode }) {
     setBusiness(target);
     if (typeof window !== 'undefined') {
       localStorage.setItem('aria_active_business_id', id);
+      // Clear cart so it doesn't bleed into the new business
+      sessionStorage.removeItem('aria_pos_cart_v1');
       // Broadcast — all listeners (terminal, product list) reset
       window.dispatchEvent(new CustomEvent('aria:business-changed', {
         detail: { previousId, newId: id }
