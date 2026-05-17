@@ -73,40 +73,40 @@ export default function BasPage() {
 
   return (
     <div className="p-6 max-w-3xl mx-auto">
-      <h1 className="text-xl font-semibold mb-2">BAS export</h1>
-      <p className="text-xs text-[rgba(26,26,22,.5)] mb-6">Generate an ATO-aligned BAS summary from completed sales. Default range is the current quarter.</p>
-      <div className="bg-white rounded-2xl border p-4 mb-4">
+      <h1 className="text-xl font-semibold mb-2 text-[var(--text-primary)]">BAS export</h1>
+      <p className="text-xs text-[var(--text-secondary)] mb-6">Generate an ATO-aligned BAS summary from completed sales. Default range is the current quarter.</p>
+      <div className="bg-[var(--bg-elevated)] rounded-2xl border border-[var(--divider)] p-4 mb-4">
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="block text-xs mb-1">Period starts</label>
-            <input type="date" value={startsAt} onChange={e => setStartsAt(e.target.value)} className="w-full border rounded-xl px-3 py-2 text-sm" />
+            <label className="block text-xs mb-1 text-[var(--text-secondary)]">Period starts</label>
+            <input type="date" value={startsAt} onChange={e => setStartsAt(e.target.value)} className="w-full border border-[var(--divider)] rounded-xl px-3 py-2 text-sm bg-[var(--bg-input)] text-[var(--text-primary)]" />
           </div>
           <div>
-            <label className="block text-xs mb-1">Period ends</label>
-            <input type="date" value={endsAt} onChange={e => setEndsAt(e.target.value)} className="w-full border rounded-xl px-3 py-2 text-sm" />
+            <label className="block text-xs mb-1 text-[var(--text-secondary)]">Period ends</label>
+            <input type="date" value={endsAt} onChange={e => setEndsAt(e.target.value)} className="w-full border border-[var(--divider)] rounded-xl px-3 py-2 text-sm bg-[var(--bg-input)] text-[var(--text-primary)]" />
           </div>
         </div>
-        <button onClick={generate} disabled={loading} className="mt-4 px-4 py-2 rounded-xl text-sm font-semibold bg-[#1a1a16] text-white">{loading ? 'Generating…' : 'Generate'}</button>
+        <button onClick={generate} disabled={loading} className="mt-4 px-4 py-2 rounded-xl text-sm font-semibold bg-[var(--violet-700)] text-[var(--text-primary)] disabled:opacity-50">{loading ? 'Generating…' : 'Generate'}</button>
       </div>
       {result && (
-        <div className="bg-white rounded-2xl border p-4">
+        <div className="bg-[var(--bg-elevated)] rounded-2xl border border-[var(--divider)] p-4">
           <div className="flex items-center justify-between mb-3">
-            <h2 className="font-semibold">Quarterly summary</h2>
+            <h2 className="font-semibold text-[var(--text-primary)]">Quarterly summary</h2>
             <div className="flex gap-2">
-              <button onClick={downloadCsv} className="px-3 py-1.5 rounded-lg text-xs border">Download CSV</button>
-              <button onClick={save} className="px-3 py-1.5 rounded-lg text-xs bg-[#1a1a16] text-white">Save run</button>
+              <button onClick={downloadCsv} className="px-3 py-1.5 rounded-lg text-xs border border-[var(--divider)] text-[var(--text-secondary)]">Download CSV</button>
+              <button onClick={save} className="px-3 py-1.5 rounded-lg text-xs bg-[var(--violet-700)] text-[var(--text-primary)]">Save run</button>
             </div>
           </div>
-          <table className="w-full text-sm">
+          <table className="w-full text-sm text-[var(--text-primary)]">
             <tbody>
-              <tr className="border-t"><td className="py-2">Sales count</td><td className="text-right py-2">{result.sales_count}</td></tr>
-              <tr className="border-t"><td className="py-2 font-medium">G1 — Total sales</td><td className="text-right py-2 font-semibold">A${(Number(result.bas_g1) || 0).toFixed(2)}</td></tr>
-              <tr className="border-t"><td className="py-2 font-medium">1A — GST on sales</td><td className="text-right py-2 font-semibold">A${(Number(result.bas_1a) || 0).toFixed(2)}</td></tr>
-              <tr className="border-t"><td className="py-2 font-medium">G3 — GST-free sales</td><td className="text-right py-2 font-semibold">A${(Number(result.bas_g3) || 0).toFixed(2)}</td></tr>
-              <tr className="border-t"><td className="py-2 text-[rgba(26,26,22,.5)]">  ↳ GST collected</td><td className="text-right py-2">A${(Number(result.total_gst_collected) || 0).toFixed(2)}</td></tr>
-              <tr className="border-t"><td className="py-2 text-[rgba(26,26,22,.5)]">  ↳ WET collected</td><td className="text-right py-2">A${(Number(result.total_wet_collected) || 0).toFixed(2)}</td></tr>
-              <tr className="border-t"><td className="py-2 text-[rgba(26,26,22,.5)]">  ↳ LCT collected</td><td className="text-right py-2">A${(Number(result.total_lct_collected) || 0).toFixed(2)}</td></tr>
-              <tr className="border-t"><td className="py-2 text-[rgba(26,26,22,.5)]">  ↳ Other tax</td><td className="text-right py-2">A${(Number(result.total_other_tax) || 0).toFixed(2)}</td></tr>
+              <tr className="border-t border-[var(--divider)]"><td className="py-2 text-[var(--text-secondary)]">Sales count</td><td className="text-right py-2">{result.sales_count}</td></tr>
+              <tr className="border-t border-[var(--divider)]"><td className="py-2 font-medium text-[var(--violet)]">G1 — Total sales</td><td className="text-right py-2 font-semibold">A${(Number(result.bas_g1) || 0).toFixed(2)}</td></tr>
+              <tr className="border-t border-[var(--divider)]"><td className="py-2 font-medium text-[var(--violet)]">1A — GST on sales</td><td className="text-right py-2 font-semibold">A${(Number(result.bas_1a) || 0).toFixed(2)}</td></tr>
+              <tr className="border-t border-[var(--divider)]"><td className="py-2 font-medium text-[var(--violet)]">G3 — GST-free sales</td><td className="text-right py-2 font-semibold">A${(Number(result.bas_g3) || 0).toFixed(2)}</td></tr>
+              <tr className="border-t border-[var(--divider)]"><td className="py-2 text-[var(--text-secondary)]">  ↳ GST collected</td><td className="text-right py-2">A${(Number(result.total_gst_collected) || 0).toFixed(2)}</td></tr>
+              <tr className="border-t border-[var(--divider)]"><td className="py-2 text-[var(--text-secondary)]">  ↳ WET collected</td><td className="text-right py-2">A${(Number(result.total_wet_collected) || 0).toFixed(2)}</td></tr>
+              <tr className="border-t border-[var(--divider)]"><td className="py-2 text-[var(--text-secondary)]">  ↳ LCT collected</td><td className="text-right py-2">A${(Number(result.total_lct_collected) || 0).toFixed(2)}</td></tr>
+              <tr className="border-t border-[var(--divider)]"><td className="py-2 text-[var(--text-secondary)]">  ↳ Other tax</td><td className="text-right py-2">A${(Number(result.total_other_tax) || 0).toFixed(2)}</td></tr>
             </tbody>
           </table>
         </div>
