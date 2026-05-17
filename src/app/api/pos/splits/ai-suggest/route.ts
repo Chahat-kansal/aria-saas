@@ -31,8 +31,12 @@ async function _POST(req: Request) {
   }
 
   // Fetch sale + items
-  const { data: saleItems } = await supabase.from('pos_sale_items').select('id, product_name, quantity, unit_price, line_total').eq('sale_id', sale_id)
+  const [{ data: saleItems }, { data: saleRow }] = await Promise.all([
+    supabase.from('pos_sale_items').select('id, product_name, quantity, unit_price, line_total').eq('sale_id', sale_id),
+    supabase.from('pos_sales').select('total_amount').eq('id', sale_id).maybeSingle(),
+  ])
   if (!saleItems?.length) return NextResponse.json({ error: 'No items found for sale' }, { status: 400 })
+  const saleTotal = Number(saleRow?.total_amount) || 0
 
   // Fetch group history if group_id provided
   let groupHistory = undefined
@@ -56,6 +60,7 @@ async function _POST(req: Request) {
     saleItems.map(i => ({ id: i.id, product_name: i.product_name, quantity: i.quantity, unit_price: i.unit_price, line_total: i.line_total })),
     membersToUse,
     groupHistory,
+    saleTotal,
   )
 
   return NextResponse.json(result)

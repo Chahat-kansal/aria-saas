@@ -42,6 +42,7 @@ export async function suggestSplit(
   saleItems: SaleItemForSplit[],
   members: SplitMember[],
   groupHistory?: GroupHistoryEntry[],
+  saleTotal?: number,
 ): Promise<AISplitResponse> {
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
@@ -53,7 +54,7 @@ export async function suggestSplit(
 
   try {
     const msg = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
+      model: 'claude-sonnet-4-5-20250929',
       max_tokens: 1500,
       system: `You are an AI bill-splitter for an Australian cafe/restaurant POS. Given sale items and a list of people, propose a fair split. Consider:
 - Items each person likely ordered (use dietary preferences and historical patterns)
@@ -64,12 +65,25 @@ Respond with valid JSON only. No prose before or after. No code fences.
 Schema: {"splits":[{"person":"name","items":["sale_item_id"],"subtotal":0.00,"tip_suggestion":0.00,"total":0.00,"reasoning":"1 sentence"}],"overall_reasoning":"string","confidence":0.9}`,
       messages: [{
         role: 'user',
-        content: `Sale items:\n${itemList}\n\nPeople:\n${memberList}${historySection}\n\nPropose a fair split. Return JSON only.`,
+        content: `Sale items:\n${itemList}\n\nPeople:\n${memberList}${historySection}\n\nActual sale total to split: A$${(saleTotal ?? saleItems.reduce((s, i) => s + (Number(i.line_total) || 0), 0)).toFixed(2)}\n\nIMPORTANT: The sum of all splits' "total" fields MUST equal the actual sale total exactly. Assign the last person any rounding remainder. Return JSON only.`,
       }],
     })
 
     const raw = msg.content[0].type === 'text' ? msg.content[0].text : ''
-    return parseLLMJsonOr<AISplitResponse>(raw, FALLBACK, 'ai-split')
+    const result = parseLLMJsonOr<AISplitResponse>(raw, FALLBACK, 'ai-split')
+
+    // Force splits to sum to exact sale total
+    if (result.splits.length > 0 && saleTotal && saleTotal > 0) {
+      const assignedTotal = result.splits.reduce((s, sp) => s + (Number(sp.total) || 0), 0)
+      const diff = Math.round((saleTotal - assignedTotal) * 100) / 100
+      if (Math.abs(diff) > 0.001) {
+        const last = result.splits[result.splits.length - 1]
+        last.total = Math.round((Number(last.total) + diff) * 100) / 100
+        last.subtotal = Math.round((Number(last.subtotal) + diff) * 100) / 100
+      }
+    }
+
+    return result
   } catch {
     return FALLBACK
   }
