@@ -20,10 +20,16 @@ export function LivePulseRail({ businessId }: { businessId: string | null }) {
 
       const today = new Date().toISOString().split('T')[0]
       const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0]
+      const currentHour = new Date().getHours()
+
+      // Guard: at hour 0 (midnight) the yesterday window collapses to zero range — skip it
+      const yQueryProm = currentHour > 0
+        ? supabase!.from('pos_sales').select('total_amount').eq('business_id', businessId!).gte('created_at', `${yesterday}T00:00:00`).lt('created_at', `${yesterday}T${String(currentHour).padStart(2, '0')}:00:00`).neq('status', 'voided')
+        : Promise.resolve({ data: [] as { total_amount: number }[] })
 
       const [todayRes, yRes, recentRes] = await Promise.allSettled([
         supabase!.from('pos_sales').select('total_amount').eq('business_id', businessId!).gte('created_at', `${today}T00:00:00`).neq('status', 'voided'),
-        supabase!.from('pos_sales').select('total_amount').eq('business_id', businessId!).gte('created_at', `${yesterday}T00:00:00`).lt('created_at', `${yesterday}T${String(new Date().getHours()).padStart(2,'0')}:00:00`).neq('status', 'voided'),
+        yQueryProm,
         supabase!.from('pos_sales').select('total_amount').eq('business_id', businessId!).gte('created_at', new Date(Date.now() - 15 * 60_000).toISOString()).neq('status', 'voided'),
       ])
 

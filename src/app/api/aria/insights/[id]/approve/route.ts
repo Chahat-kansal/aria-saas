@@ -20,8 +20,8 @@ async function _POST(_req: Request, { params }: { params: Promise<{ id: string }
   if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
 
   const { error } = await supabase
-    .from('aria_autopilot_actions')
-    .update({ status: 'approved', approved_at: new Date().toISOString() })
+    .from('aria_actions')
+    .update({ status: 'approved', updated_at: new Date().toISOString() })
     .eq('id', id)
     .eq('business_id', bid)
 

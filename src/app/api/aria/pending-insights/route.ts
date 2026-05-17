@@ -18,20 +18,30 @@ async function _GET() {
   const bid = await getBid(supabase, user.id)
   if (!bid) return NextResponse.json({ insights: [] })
 
-  const { data: insights } = await supabase
-    .from('aria_autopilot_actions')
-    .select('id, category, priority, title, description, estimated_impact, status, created_at')
+  const { data: rows } = await supabase
+    .from('aria_actions')
+    .select('id, category, priority, title, recommendation, expected_impact, status, created_at')
     .eq('business_id', bid)
     .eq('status', 'pending')
-    .order('priority', { ascending: true }) // high < low alphabetically, use created_at fallback
     .order('created_at', { ascending: false })
     .limit(20)
 
-  // Sort: high → medium → low
+  // Sort: high → medium → low; remap column names to what the panel expects
   const order: Record<string, number> = { high: 0, medium: 1, low: 2 }
-  const sorted = (insights ?? []).sort((a, b) => (order[a.priority] ?? 3) - (order[b.priority] ?? 3))
+  const insights = (rows ?? [])
+    .sort((a, b) => (order[a.priority] ?? 3) - (order[b.priority] ?? 3))
+    .map(r => ({
+      id: r.id,
+      category: r.category,
+      priority: r.priority,
+      title: r.title,
+      description: r.recommendation,       // aria_actions uses 'recommendation'
+      estimated_impact: r.expected_impact,  // aria_actions uses 'expected_impact'
+      status: r.status,
+      created_at: r.created_at,
+    }))
 
-  return NextResponse.json({ insights: sorted })
+  return NextResponse.json({ insights })
 }
 
 export const GET = withErrorCapture('aria/pending-insights', _GET)
