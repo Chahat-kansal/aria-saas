@@ -19,7 +19,7 @@ export interface ProductRiskContext {
 }
 
 export interface PromoSuggestion {
-  type: 'bogo' | 'percent_off' | 'fixed_off' | 'bundle' | 'happy_hour' | 'tiered' | 'free_item'
+  type: 'bogo' | 'percent_off' | 'fixed_off' | 'bundle' | 'happy_hour' | 'tiered' | 'free_item' | 'none'
   target_product_id?: string
   discount_percent?: number
   discount_amount?: number
@@ -85,9 +85,8 @@ export function validatePromoSuggestion(
       break
   }
 
-  // Rule 2: hard profit floor
-  if (suggestion.type !== 'happy_hour' && suggestion.type !== 'bundle' && suggestion.type !== 'tiered' &&
-      profitPerRedemption < MIN_PROFIT_PER_REDEMPTION_CENTS) {
+  // Rule 2: hard profit floor (bundle/happy_hour/tiered already returned above)
+  if (profitPerRedemption < MIN_PROFIT_PER_REDEMPTION_CENTS) {
     const safe = rewriteToSaferAlternative(suggestion, product, marginCents)
     return {
       ok: false,
