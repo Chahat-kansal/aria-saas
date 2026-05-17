@@ -716,7 +716,7 @@ export default function TerminalPage() {
   const posUserPerms = useMemo<Record<string, boolean>>(() => {
     try { const u = localStorage.getItem('aria_pos_user'); return u ? (JSON.parse(u).permissions ?? {}) : {} } catch { return {} }
   }, []);
-  const canVoid = posUserPerms.can_void_sales !== false;
+  const canVoid = posUserPerms.can_void !== false;
   const roundedTotal = payMethod === 'cash' ? roundCash(total) : total;
   const change     = payMethod === 'cash' && tendered >= roundedTotal ? tendered - roundedTotal : 0;
   const splitCardAmt = payMethod === 'split' ? Math.max(0, total - (parseFloat(splitCash) || 0)) : 0;
