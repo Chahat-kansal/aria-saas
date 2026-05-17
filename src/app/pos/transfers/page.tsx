@@ -271,7 +271,11 @@ export default function TransfersPage() {
                           </button>
                         )}
                         {t.status === 'received' && (
-                          <button onClick={() => transition(t.id, 'reconciled')}
+                          <button onClick={() => {
+                            const reason = prompt('Variance reason (leave blank if none):\ndamaged_in_transit · miscounted · lost · theft · overshipped · other')
+                            if (reason === null) return // cancelled
+                            transition(t.id, 'reconciled', reason ? { item_updates: [{ variance_reason: reason }] } : {})
+                          }}
                             className="text-[10px] px-2 py-1 rounded-lg bg-green-50 text-green-800 border border-green-200 hover:bg-green-100 transition-colors">
                             Reconcile
                           </button>

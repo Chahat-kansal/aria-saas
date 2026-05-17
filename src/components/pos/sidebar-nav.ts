@@ -12,7 +12,7 @@ import {
   Banknote, Wrench,
   Clock, Smartphone, Timer, Scissors,
   ShoppingBag, CalendarClock, Plug,
-  Calculator, CalendarOff,
+  Calculator, CalendarOff, MapPin,
 } from 'lucide-react'
 
 export interface NavItem {
@@ -92,6 +92,7 @@ export const NAV_STRUCTURE: NavSection[] = [
       { label: 'Price Sets', href: '/pos/price-sets', icon: Tag },
       { label: 'Balances', href: '/pos/balances', icon: Scale },
       { label: 'Gift Cards', href: '/pos/gift-cards', icon: Gift },
+      { label: 'Return Policies', href: '/pos/customers/return-policies', icon: RotateCcw },
     ],
   },
   {
@@ -102,6 +103,7 @@ export const NAV_STRUCTURE: NavSection[] = [
     items: [
       { label: 'Promotions', href: '/pos/promotions', icon: Tag },
       { label: 'New Promotion', href: '/pos/promotions/new', icon: Tag },
+      { label: 'Promo Attribution', href: '/pos/promotions/attribution', icon: TrendingUp },
       { label: 'Shelf Tickets', href: '/pos/shelf-tickets', icon: Ticket },
       { label: 'Loyalty', href: '/pos/loyalty', icon: Heart },
     ],
@@ -156,6 +158,7 @@ export const NAV_STRUCTURE: NavSection[] = [
       { label: 'Migrate Data', href: '/pos/setup/migrate', icon: Database },
       { label: 'Tax Codes', href: '/pos/settings/tax-codes', icon: Calculator },
       { label: 'Tax Holidays', href: '/pos/settings/tax-holidays', icon: CalendarOff },
+      { label: 'Per-outlet tax', href: '/pos/settings/outlet-tax', icon: MapPin },
       { label: 'Billing', href: '/pos/settings/billing', icon: Banknote },
     ],
   },
