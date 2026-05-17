@@ -57,27 +57,27 @@ export default function RolesPage() {
     <div className="p-6 max-w-5xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-xl font-semibold">Custom roles</h1>
-          <p className="text-xs text-[rgba(26,26,22,.45)] mt-0.5">Define roles beyond the 5 system defaults (cashier, supervisor, manager, admin, owner). Each role is a subset of the 33 canonical permission flags.</p>
+          <h1 className="text-xl font-semibold text-[var(--text-primary)]">Custom roles</h1>
+          <p className="text-xs text-[var(--text-secondary)] mt-0.5">Define roles beyond the 5 system defaults (cashier, supervisor, manager, admin, owner). Each role is a subset of the 33 canonical permission flags.</p>
         </div>
-        <button onClick={() => setShowAdd(true)} className="px-4 py-2 rounded-xl text-sm font-semibold bg-[#1a1a16] text-white">+ New role</button>
+        <button onClick={() => setShowAdd(true)} className="px-4 py-2 rounded-xl text-sm font-semibold bg-[var(--violet-700)] text-[var(--text-primary)]">+ New role</button>
       </div>
-      {loading ? <div>Loading…</div> : roles.length === 0 ? (
-        <div className="bg-white rounded-2xl border p-8 text-center text-sm text-[rgba(26,26,22,.5)]">No custom roles yet. The 5 system roles (cashier/supervisor/manager/admin/owner) are always available.</div>
+      {loading ? <div className="text-[var(--text-secondary)]">Loading…</div> : roles.length === 0 ? (
+        <div className="bg-[var(--bg-elevated)] rounded-2xl border border-[var(--divider)] p-8 text-center text-sm text-[var(--text-secondary)]">No custom roles yet. The 5 system roles (cashier/supervisor/manager/admin/owner) are always available.</div>
       ) : (
         <div className="space-y-2">
           {roles.map(r => (
-            <div key={r.id} className="bg-white rounded-xl border p-4 flex items-center justify-between">
+            <div key={r.id} className="bg-[var(--bg-elevated)] rounded-xl border border-[var(--divider)] p-4 flex items-center justify-between">
               <div>
-                <div className="font-medium text-sm">{r.display_name} <span className="text-xs text-[rgba(26,26,22,.4)] font-mono">{r.role_key}</span></div>
-                {r.description && <div className="text-xs text-[rgba(26,26,22,.5)] mt-0.5">{r.description}</div>}
-                <div className="text-xs text-[rgba(26,26,22,.4)] mt-1">
+                <div className="font-medium text-sm text-[var(--text-primary)]">{r.display_name} <span className="text-xs text-[var(--text-secondary)] font-mono">{r.role_key}</span></div>
+                {r.description && <div className="text-xs text-[var(--text-secondary)] mt-0.5">{r.description}</div>}
+                <div className="text-xs text-[var(--text-secondary)] mt-1">
                   {Object.keys(r.permissions ?? {}).filter(k => (r.permissions as Record<string, unknown>)[k] === true || typeof (r.permissions as Record<string, unknown>)[k] === 'number').length} permissions granted
                 </div>
               </div>
               <div className="flex gap-2">
-                <button onClick={() => setEditing(r)} className="text-xs text-[#8B5CF6]">Edit</button>
-                <button onClick={() => remove(r.id)} className="text-xs text-red-600">Deactivate</button>
+                <button onClick={() => setEditing(r)} className="text-xs text-[var(--violet)]">Edit</button>
+                <button onClick={() => remove(r.id)} className="text-xs text-[var(--destructive)]">Deactivate</button>
               </div>
             </div>
           ))}
@@ -117,31 +117,31 @@ function RoleModal({ initial, onSave, onClose }: { initial?: Partial<Role>; onSa
   }
   return (
     <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center p-4 overflow-y-auto" onClick={onClose}>
-      <div className="bg-white rounded-2xl p-6 w-full max-w-2xl my-8" onClick={e => e.stopPropagation()}>
-        <h2 className="text-lg font-semibold mb-4">{initial ? 'Edit role' : 'New role'}</h2>
+      <div className="bg-[var(--bg-elevated)] rounded-2xl p-6 w-full max-w-2xl my-8" onClick={e => e.stopPropagation()}>
+        <h2 className="text-lg font-semibold mb-4 text-[var(--text-primary)]">{initial ? 'Edit role' : 'New role'}</h2>
         <div className="grid grid-cols-2 gap-3 mb-4">
           <div>
-            <label className="block text-xs mb-1">Role key (snake_case)</label>
-            <input disabled={!!initial} value={form.role_key ?? ''} onChange={e => setForm(f => ({ ...f, role_key: e.target.value }))} className="w-full border rounded-xl px-3 py-2 text-sm font-mono disabled:bg-gray-50" placeholder="shift_lead" />
+            <label className="block text-xs mb-1 text-[var(--text-secondary)]">Role key (snake_case)</label>
+            <input disabled={!!initial} value={form.role_key ?? ''} onChange={e => setForm(f => ({ ...f, role_key: e.target.value }))} className="w-full border border-[var(--divider)] rounded-xl px-3 py-2 text-sm font-mono bg-[var(--bg-input)] text-[var(--text-primary)] disabled:opacity-50" placeholder="shift_lead" />
           </div>
           <div>
-            <label className="block text-xs mb-1">Display name</label>
-            <input value={form.display_name ?? ''} onChange={e => setForm(f => ({ ...f, display_name: e.target.value }))} className="w-full border rounded-xl px-3 py-2 text-sm" placeholder="Shift Lead" />
+            <label className="block text-xs mb-1 text-[var(--text-secondary)]">Display name</label>
+            <input value={form.display_name ?? ''} onChange={e => setForm(f => ({ ...f, display_name: e.target.value }))} className="w-full border border-[var(--divider)] rounded-xl px-3 py-2 text-sm bg-[var(--bg-input)] text-[var(--text-primary)]" placeholder="Shift Lead" />
           </div>
         </div>
         <div className="mb-4">
-          <label className="block text-xs mb-1">Description</label>
-          <textarea value={form.description ?? ''} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} rows={2} className="w-full border rounded-xl px-3 py-2 text-sm" />
+          <label className="block text-xs mb-1 text-[var(--text-secondary)]">Description</label>
+          <textarea value={form.description ?? ''} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} rows={2} className="w-full border border-[var(--divider)] rounded-xl px-3 py-2 text-sm bg-[var(--bg-input)] text-[var(--text-primary)]" />
         </div>
-        <h3 className="text-sm font-semibold mb-2">Permissions ({CANONICAL_FLAGS.length} flags)</h3>
-        <div className="grid grid-cols-2 gap-1 max-h-72 overflow-y-auto bg-gray-50 p-3 rounded-xl mb-4">
+        <h3 className="text-sm font-semibold mb-2 text-[var(--text-primary)]">Permissions ({CANONICAL_FLAGS.length} flags)</h3>
+        <div className="grid grid-cols-2 gap-1 max-h-72 overflow-y-auto bg-[var(--bg-surface)] p-3 rounded-xl mb-4">
           {CANONICAL_FLAGS.map(flag => {
             const isNumeric = NUMERIC_FLAGS.includes(flag)
             const val = (form.permissions as Record<string, unknown>)?.[flag]
             return (
-              <label key={flag} className="flex items-center gap-2 text-xs py-1">
+              <label key={flag} className="flex items-center gap-2 text-xs py-1 text-[var(--text-primary)]">
                 {isNumeric ? (
-                  <input type="number" min={0} value={typeof val === 'number' ? val : 0} onChange={e => setFlag(flag, parseFloat(e.target.value) || 0)} className="w-16 border rounded px-2 py-1 text-xs" />
+                  <input type="number" min={0} value={typeof val === 'number' ? val : 0} onChange={e => setFlag(flag, parseFloat(e.target.value) || 0)} className="w-16 border border-[var(--divider)] rounded px-2 py-1 text-xs bg-[var(--bg-input)] text-[var(--text-primary)]" />
                 ) : (
                   <input type="checkbox" checked={val === true} onChange={e => setFlag(flag, e.target.checked)} />
                 )}
@@ -151,8 +151,8 @@ function RoleModal({ initial, onSave, onClose }: { initial?: Partial<Role>; onSa
           })}
         </div>
         <div className="flex gap-2 justify-end">
-          <button onClick={onClose} className="px-4 py-2 rounded-xl text-sm">Cancel</button>
-          <button onClick={() => onSave(form)} className="px-4 py-2 rounded-xl text-sm font-semibold bg-[#1a1a16] text-white">Save role</button>
+          <button onClick={onClose} className="px-4 py-2 rounded-xl text-sm text-[var(--text-secondary)]">Cancel</button>
+          <button onClick={() => onSave(form)} className="px-4 py-2 rounded-xl text-sm font-semibold bg-[var(--violet-700)] text-[var(--text-primary)]">Save role</button>
         </div>
       </div>
     </div>
