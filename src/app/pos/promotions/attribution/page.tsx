@@ -21,7 +21,7 @@ export default function PromoAttributionPage() {
   }, [])
   useEffect(() => { load() }, [load])
 
-  if (loading) return <div className="p-6">Loading…</div>
+  if (loading) return <div className="p-6 text-[var(--text-secondary)]">Loading…</div>
 
   const totalRedemptions = rows.reduce((s, r) => s + r.total_redemptions, 0)
   const totalDiscounted = rows.reduce((s, r) => s + (Number(r.total_amount_off) || 0), 0)
@@ -29,25 +29,25 @@ export default function PromoAttributionPage() {
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
-      <h1 className="text-xl font-semibold mb-2">Promotion Attribution</h1>
-      <p className="text-xs text-[rgba(26,26,22,.5)] mb-6">Which promos drove which sales. Compares discount given vs revenue captured.</p>
+      <h1 className="text-xl font-semibold mb-2 text-[var(--text-primary)]">Promotion Attribution</h1>
+      <p className="text-xs text-[var(--text-secondary)] mb-6">Which promos drove which sales. Compares discount given vs revenue captured.</p>
       <div className="grid grid-cols-3 gap-3 mb-6">
-        <div className="bg-white rounded-2xl border p-4">
-          <div className="text-xs text-[rgba(26,26,22,.5)]">Total redemptions</div>
-          <div className="text-2xl font-semibold">{totalRedemptions}</div>
+        <div className="bg-[var(--bg-elevated)] rounded-2xl border border-[var(--divider)] p-4">
+          <div className="text-xs text-[var(--text-secondary)]">Total redemptions</div>
+          <div className="text-2xl font-semibold text-[var(--text-primary)]">{totalRedemptions}</div>
         </div>
-        <div className="bg-white rounded-2xl border p-4">
-          <div className="text-xs text-[rgba(26,26,22,.5)]">Total discounted</div>
-          <div className="text-2xl font-semibold">A${totalDiscounted.toFixed(2)}</div>
+        <div className="bg-[var(--bg-elevated)] rounded-2xl border border-[var(--divider)] p-4">
+          <div className="text-xs text-[var(--text-secondary)]">Total discounted</div>
+          <div className="text-2xl font-semibold text-[var(--text-primary)]">A${totalDiscounted.toFixed(2)}</div>
         </div>
-        <div className="bg-white rounded-2xl border p-4">
-          <div className="text-xs text-[rgba(26,26,22,.5)]">Sales attributed</div>
-          <div className="text-2xl font-semibold">A${totalSales.toFixed(2)}</div>
+        <div className="bg-[var(--bg-elevated)] rounded-2xl border border-[var(--divider)] p-4">
+          <div className="text-xs text-[var(--text-secondary)]">Sales attributed</div>
+          <div className="text-2xl font-semibold text-[var(--text-primary)]">A${totalSales.toFixed(2)}</div>
         </div>
       </div>
-      <div className="bg-white rounded-2xl border overflow-hidden">
+      <div className="bg-[var(--bg-elevated)] rounded-2xl border border-[var(--divider)] overflow-hidden">
         <table className="w-full text-sm">
-          <thead className="bg-[rgba(0,0,0,.02)] text-xs font-medium text-[rgba(26,26,22,.5)]">
+          <thead className="bg-[var(--bg-surface)] text-xs font-medium text-[var(--text-secondary)]">
             <tr>
               <th className="text-left px-4 py-3">Promo</th>
               <th className="text-right px-4 py-3">Redemptions</th>
@@ -58,7 +58,7 @@ export default function PromoAttributionPage() {
           </thead>
           <tbody>
             {rows.map(r => (
-              <tr key={r.promotion_id} className="border-t border-[rgba(0,0,0,.04)]">
+              <tr key={r.promotion_id} className="border-t border-[var(--divider)] text-[var(--text-primary)]">
                 <td className="px-4 py-3">{r.promotion_name}</td>
                 <td className="px-4 py-3 text-right">{r.total_redemptions}</td>
                 <td className="px-4 py-3 text-right">A${(Number(r.total_amount_off) || 0).toFixed(2)}</td>
@@ -71,7 +71,7 @@ export default function PromoAttributionPage() {
               </tr>
             ))}
             {rows.length === 0 && (
-              <tr><td colSpan={5} className="px-4 py-8 text-center text-sm text-[rgba(26,26,22,.4)]">No promo redemptions yet.</td></tr>
+              <tr><td colSpan={5} className="px-4 py-8 text-center text-sm text-[var(--text-secondary)]">No promo redemptions yet.</td></tr>
             )}
           </tbody>
         </table>
