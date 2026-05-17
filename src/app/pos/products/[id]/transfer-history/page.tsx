@@ -38,18 +38,18 @@ export default function ProductTransferHistory() {
   }, [productId])
   useEffect(() => { load() }, [load])
 
-  if (loading) return <div className="p-6">Loading…</div>
+  if (loading) return <div className="p-6 text-[var(--text-secondary)]">Loading…</div>
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
-      <h1 className="text-xl font-semibold mb-2">Transfer history</h1>
-      <p className="text-xs text-[rgba(26,26,22,.5)] mb-6">All inventory transfers that have included this product.</p>
+      <h1 className="text-xl font-semibold mb-2 text-[var(--text-primary)]">Transfer history</h1>
+      <p className="text-xs text-[var(--text-secondary)] mb-6">All inventory transfers that have included this product.</p>
       {history.length === 0 ? (
-        <div className="bg-white rounded-2xl border p-8 text-center text-sm text-[rgba(26,26,22,.5)]">No transfer history for this product yet.</div>
+        <div className="bg-[var(--bg-elevated)] rounded-2xl border border-[var(--divider)] p-8 text-center text-sm text-[var(--text-secondary)]">No transfer history for this product yet.</div>
       ) : (
-        <div className="bg-white rounded-2xl border overflow-hidden">
+        <div className="bg-[var(--bg-elevated)] rounded-2xl border border-[var(--divider)] overflow-hidden">
           <table className="w-full text-sm">
-            <thead className="bg-[rgba(0,0,0,.02)] text-xs font-medium text-[rgba(26,26,22,.5)]">
+            <thead className="bg-[var(--bg-surface)] text-xs font-medium text-[var(--text-secondary)]">
               <tr>
                 <th className="text-left px-4 py-3">Transfer</th>
                 <th className="text-left px-4 py-3">Status</th>
@@ -66,16 +66,16 @@ export default function ProductTransferHistory() {
                 const lastDate = t.reconciled_at ?? t.received_at ?? t.shipped_at ?? null
                 const variance = Number(h.variance_units) || 0
                 return (
-                  <tr key={h.id} className="border-t border-[rgba(0,0,0,.04)]">
-                    <td className="px-4 py-3 font-mono text-xs text-violet-600">{t.transfer_number}</td>
+                  <tr key={h.id} className="border-t border-[var(--divider)] text-[var(--text-primary)]">
+                    <td className="px-4 py-3 font-mono text-xs text-[var(--violet)]">{t.transfer_number}</td>
                     <td className="px-4 py-3 text-xs capitalize">{t.status.replace('_', ' ')}</td>
                     <td className="px-4 py-3 text-right">{h.quantity_requested}</td>
                     <td className="px-4 py-3 text-right">{h.quantity_sent}</td>
                     <td className="px-4 py-3 text-right">{h.quantity_received}</td>
-                    <td className={`px-4 py-3 text-right font-medium ${variance < 0 ? 'text-red-600' : variance > 0 ? 'text-emerald-600' : ''}`}>
+                    <td className={`px-4 py-3 text-right font-medium ${variance < 0 ? 'text-[var(--destructive)]' : variance > 0 ? 'text-[var(--success)]' : ''}`}>
                       {variance > 0 ? '+' : ''}{variance || '—'}
                     </td>
-                    <td className="px-4 py-3 text-xs text-[rgba(26,26,22,.5)]">
+                    <td className="px-4 py-3 text-xs text-[var(--text-secondary)]">
                       {lastDate ? new Date(lastDate).toLocaleDateString('en-AU') : '—'}
                     </td>
                   </tr>
