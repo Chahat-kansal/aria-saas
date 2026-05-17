@@ -20,6 +20,9 @@ export default function NewPromotionPage() {
     name: '', type: PROMO_TYPES[0], rate: '10', conditions: 'All products', conditionValue: '',
     startsAt: new Date().toISOString().split('T')[0], endsAt: '',
     days: DAYS.map((_, i) => i), hours: [] as number[], customerType: 'All customers', customerValue: '', active: true,
+    // Sprint D fields
+    stackPriority: '100', maxTotalUses: '', maxUsesPerCustomer: '', maxUsesPerDay: '',
+    minLifetimeSpend: '', minVisits: '', excludeDiscounted: false,
   });
 
   function upd(field: string, value: unknown) { setForm(f => ({ ...f, [field]: value })); }
@@ -35,6 +38,13 @@ export default function NewPromotionPage() {
       days_of_week: form.days,
       customer_eligibility: form.customerType.toLowerCase().replace(' ', '_'),
       active: form.active,
+      stack_priority: form.stackPriority ? Number(form.stackPriority) : 100,
+      max_total_uses: form.maxTotalUses ? Number(form.maxTotalUses) : null,
+      max_uses_per_customer: form.maxUsesPerCustomer ? Number(form.maxUsesPerCustomer) : null,
+      max_uses_per_day: form.maxUsesPerDay ? Number(form.maxUsesPerDay) : null,
+      min_customer_lifetime_spend: form.minLifetimeSpend ? Number(form.minLifetimeSpend) : null,
+      min_customer_visits: form.minVisits ? Number(form.minVisits) : null,
+      exclude_discounted: form.excludeDiscounted,
     }) }).catch(() => {});
     track('promotion_created', { type: form.type });
     setSaving(false);
@@ -144,6 +154,49 @@ export default function NewPromotionPage() {
           {form.customerType !== 'All customers' && (
             <input value={form.customerValue} onChange={e => upd('customerValue', e.target.value)} placeholder={`Select ${form.customerType.toLowerCase()}…`} style={{ ...iS, width: '100%', boxSizing: 'border-box', marginBottom: 20 }} />
           )}
+
+          {/* Customer tier conditions */}
+          <div style={{ borderTop: '1px solid var(--divider)', paddingTop: 20, marginBottom: 20 }}>
+            <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 14 }}>Tier conditions (optional)</h3>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, color: 'var(--text-secondary)', marginBottom: 6 }}>Min lifetime spend (A$)</label>
+                <input type="number" min={0} value={form.minLifetimeSpend} onChange={e => upd('minLifetimeSpend', e.target.value)} placeholder="e.g. 500" style={iS} />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, color: 'var(--text-secondary)', marginBottom: 6 }}>Min visit count</label>
+                <input type="number" min={0} value={form.minVisits} onChange={e => upd('minVisits', e.target.value)} placeholder="e.g. 5" style={iS} />
+              </div>
+            </div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontSize: 14 }}>
+              <input type="checkbox" checked={form.excludeDiscounted} onChange={e => upd('excludeDiscounted', e.target.checked)} style={{ accentColor: 'var(--violet)' }} />
+              Exclude items already on sale
+            </label>
+          </div>
+
+          {/* Usage limits */}
+          <div style={{ borderTop: '1px solid var(--divider)', paddingTop: 20, marginBottom: 24 }}>
+            <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 14 }}>Usage limits</h3>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, color: 'var(--text-secondary)', marginBottom: 6 }}>Stack priority (lower = first)</label>
+                <input type="number" min={1} value={form.stackPriority} onChange={e => upd('stackPriority', e.target.value)} placeholder="100" style={iS} />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, color: 'var(--text-secondary)', marginBottom: 6 }}>Max total uses</label>
+                <input type="number" min={1} value={form.maxTotalUses} onChange={e => upd('maxTotalUses', e.target.value)} placeholder="Unlimited" style={iS} />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, color: 'var(--text-secondary)', marginBottom: 6 }}>Max per customer</label>
+                <input type="number" min={1} value={form.maxUsesPerCustomer} onChange={e => upd('maxUsesPerCustomer', e.target.value)} placeholder="Unlimited" style={iS} />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, color: 'var(--text-secondary)', marginBottom: 6 }}>Max per day</label>
+                <input type="number" min={1} value={form.maxUsesPerDay} onChange={e => upd('maxUsesPerDay', e.target.value)} placeholder="Unlimited" style={iS} />
+              </div>
+            </div>
+          </div>
+
           <div style={{ display: 'flex', gap: 10 }}>
             <button onClick={() => setStep(3)} style={{ padding: '10px 20px', borderRadius: 9, border: '1px solid var(--border-default)', background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>← Back</button>
             <button onClick={() => setStep(5)} style={{ padding: '10px 28px', borderRadius: 9, border: 'none', background: 'var(--violet)', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>Review →</button>

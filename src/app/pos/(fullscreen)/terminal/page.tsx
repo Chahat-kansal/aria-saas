@@ -1113,6 +1113,7 @@ export default function TerminalPage() {
           customer_id: customer?.id ?? null, payment_method: payMethod,
           served_by: servedBy || null,
           pos_user_id: posUserId,
+          applied_discounts: appliedDiscounts ?? [],
           subtotal: +subtotal.toFixed(2), tax_amount: +taxAmount.toFixed(2),
           discount_amount: 0, total_amount: +roundedTotal.toFixed(2),
           cash_tendered: payMethod === 'cash' ? tendered : null,

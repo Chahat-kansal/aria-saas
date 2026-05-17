@@ -20,6 +20,8 @@ interface Promo {
   ends_at: string | null;
   active: boolean;
   notes: string | null;
+  current_uses?: number | null;
+  max_total_uses?: number | null;
 }
 
 const TYPE_LABELS: Record<string, string> = {
@@ -67,6 +69,18 @@ export default function PromotionsPage() {
   useEffect(() => { load(); }, [load]);
 
   const [error, setError] = useState<string | null>(null);
+  const [aiSuggestion, setAiSuggestion] = useState<Record<string, unknown> | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+
+  async function getAiSuggestion() {
+    setAiLoading(true);
+    try {
+      const res = await fetch('/api/aria/promo-suggest', { method: 'POST' });
+      const d = await res.json();
+      setAiSuggestion(d.suggestion ?? null);
+    } catch { /* silent */ }
+    setAiLoading(false);
+  }
 
   function openAdd() {
     setEditPromo(null);
@@ -157,10 +171,16 @@ export default function PromotionsPage() {
             <h1 style={{ fontSize: 20, fontWeight: 700, color: C.text, marginBottom: 2 }}>Promotions</h1>
             <p style={{ fontSize: 12, color: C.muted }}>Create discounts and promotional offers</p>
           </div>
-          <button onClick={openAdd}
-            style={{ padding: '9px 20px', borderRadius: 9, border: 'none', background: C.violet, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}>
-            + New Promotion
-          </button>
+          <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+            <button onClick={getAiSuggestion} disabled={aiLoading}
+              style={{ padding: '9px 16px', borderRadius: 9, border: '1px solid rgba(139,92,246,0.4)', background: 'rgba(139,92,246,0.08)', color: C.violet, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', opacity: aiLoading ? 0.6 : 1 }}>
+              {aiLoading ? 'Aria thinking…' : '✨ AI Suggest'}
+            </button>
+            <button onClick={openAdd}
+              style={{ padding: '9px 20px', borderRadius: 9, border: 'none', background: C.violet, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+              + New Promotion
+            </button>
+          </div>
         </div>
 
         {/* Stats */}
@@ -173,21 +193,45 @@ export default function PromotionsPage() {
           ))}
         </div>
 
+        {/* AI suggestion card */}
+        {aiSuggestion && Object.keys(aiSuggestion).length > 0 && (
+          <div style={{ background: 'rgba(139,92,246,0.07)', border: '1px solid rgba(139,92,246,0.3)', borderRadius: 12, padding: '16px 20px', marginBottom: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+              <div style={{ flex: 1 }}>
+                <p style={{ fontSize: 11, fontWeight: 700, color: C.violet, textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 6px' }}>✨ Aria Suggestion</p>
+                <p style={{ fontSize: 14, fontWeight: 700, color: C.text, margin: '0 0 4px' }}>{String(aiSuggestion.promotion_name ?? '')}</p>
+                <p style={{ fontSize: 12, color: C.muted, margin: '0 0 10px' }}>{String(aiSuggestion.reasoning ?? '')}</p>
+                <p style={{ fontSize: 11, color: C.dim, margin: 0 }}>Type: {String(aiSuggestion.promotion_type ?? '')} · Est. impact: A${Number(aiSuggestion.estimated_impact_aud || 0).toFixed(2)}</p>
+              </div>
+              <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                <button onClick={() => { sessionStorage.setItem('aria_promo_suggestion', JSON.stringify(aiSuggestion)); window.location.href = '/pos/promotions/new'; }}
+                  style={{ padding: '7px 14px', borderRadius: 8, border: 'none', background: C.violet, color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                  Create this
+                </button>
+                <button onClick={() => setAiSuggestion(null)}
+                  style={{ padding: '7px 10px', borderRadius: 8, border: '1px solid var(--divider)', background: 'transparent', color: C.muted, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Table */}
         <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, overflow: 'hidden' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: 'rgba(255,255,255,0.03)', borderBottom: `1px solid ${C.border}` }}>
-                {['Name', 'Type', 'Discount', 'Starts', 'Ends', 'Status', 'Actions'].map(h => (
+                {['Name', 'Type', 'Discount', 'Uses', 'Starts', 'Ends', 'Status', 'Actions'].map(h => (
                   <th key={h} style={{ textAlign: 'left', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: C.dim, padding: '10px 14px' }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={7} style={{ padding: '48px', textAlign: 'center', color: C.dim, fontSize: 13 }}>Loading…</td></tr>
+                <tr><td colSpan={8} style={{ padding: '48px', textAlign: 'center', color: C.dim, fontSize: 13 }}>Loading…</td></tr>
               ) : promos.length === 0 ? (
-                <tr><td colSpan={7} style={{ padding: '48px', textAlign: 'center' }}>
+                <tr><td colSpan={8} style={{ padding: '48px', textAlign: 'center' }}>
                   <p style={{ fontSize: 14, fontWeight: 600, color: C.text, marginBottom: 4 }}>No promotions yet</p>
                   <p style={{ fontSize: 12, color: C.muted }}>Create your first promotion to offer discounts at checkout.</p>
                 </td></tr>
@@ -200,6 +244,11 @@ export default function PromotionsPage() {
                     </span>
                   </td>
                   <td style={{ padding: '10px 14px', fontSize: 13, fontWeight: 600, color: C.text }}>{discountSummary(p)}</td>
+                  <td style={{ padding: '10px 14px' }}>
+                    <span style={{ fontSize: 11, color: C.muted }}>
+                      {(p.current_uses ?? 0)}{p.max_total_uses ? ` / ${p.max_total_uses}` : ' uses'}
+                    </span>
+                  </td>
                   <td style={{ padding: '10px 14px', fontSize: 11, color: C.muted }}>{p.starts_at ? new Date(p.starts_at).toLocaleDateString() : '—'}</td>
                   <td style={{ padding: '10px 14px', fontSize: 11, color: C.muted }}>{p.ends_at ? new Date(p.ends_at).toLocaleDateString() : '—'}</td>
                   <td style={{ padding: '10px 14px' }}>

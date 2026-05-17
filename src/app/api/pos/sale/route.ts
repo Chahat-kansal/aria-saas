@@ -28,7 +28,7 @@ async function _POST(req: Request) {
     cash_tendered, change_given, notes,
     split_cash, split_card, outlet_id, served_by, pos_user_id,
     session_id: bodySessionId, age_verified,
-    table_id, order_type,
+    table_id, order_type, applied_discounts,
   } = body;
 
   if (!items?.length) return NextResponse.json({ error: 'No items' }, { status: 400 });
@@ -142,6 +142,28 @@ async function _POST(req: Request) {
 
   if (saleErr || !sale) {
     return NextResponse.json({ error: saleErr?.message ?? 'Failed to create sale' }, { status: 500 });
+  }
+
+  // ── Sprint D: record promotion redemptions ──────────────────────
+  if (Array.isArray(applied_discounts) && applied_discounts.length > 0) {
+    const redemptionRows = (applied_discounts as Array<{
+      promotion_id: string; promotion_name: string; type: string;
+      amount_off: number; code?: string;
+    }>).map(d => ({
+      business_id: business.id,
+      promotion_id: d.promotion_id,
+      sale_id: sale.id,
+      customer_id: customer_id ?? null,
+      pos_user_id: pos_user_id ?? null,
+      amount_off: Number(d.amount_off) || 0,
+      code_used: d.code ?? null,
+      promotion_name: d.promotion_name,
+      promotion_type: d.type,
+      was_auto: !d.code,
+    }))
+    try {
+      await supabase.from('pos_promotion_redemptions').insert(redemptionRows)
+    } catch { /* non-fatal */ }
   }
 
   // Create sale items
