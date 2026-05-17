@@ -146,6 +146,19 @@ export default function TerminalPage() {
 
   /* ── Cart ─────────────────────────────────────────────────────── */
   const [cart,           setCart]           = useState<CartItem[]>([]);
+
+  // Sprint Business Fix: reset cart + reload products when active business switches
+  useEffect(() => {
+    function handleBusinessChange() {
+      setCart([])
+      if (typeof window !== 'undefined') {
+        sessionStorage.removeItem('aria_pos_products_cache')
+      }
+      window.location.reload()
+    }
+    window.addEventListener('aria:business-changed', handleBusinessChange)
+    return () => window.removeEventListener('aria:business-changed', handleBusinessChange)
+  }, [])
   const [selectedItem,   setSelectedItem]   = useState<string | null>(null);
   const [customer,       setCustomer]       = useState<Customer | null>(null);
   const [customerSearch, setCustomerSearch] = useState('');

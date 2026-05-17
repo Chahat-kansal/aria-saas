@@ -77,21 +77,34 @@ export function BusinessProvider({ children }: { children: React.ReactNode }) {
     try {
       const businesses = await fetchAllBusinesses();
       setAllBusinesses(businesses);
+      if (businesses.length === 0) { setBusiness(null); setLoading(false); return; }
 
-      if (businesses.length === 0) {
-        setBusiness(null);
-        setLoading(false);
-        return;
+      // ── Reconcile: DB is source of truth ──
+      const { data: { user } } = await supabase.auth.getUser();
+      let activeId: string | null = null;
+      if (user) {
+        const { data: dbActive } = await supabase
+          .from('user_active_business').select('business_id').eq('user_id', user.id).maybeSingle();
+        if (dbActive?.business_id && businesses.some(b => b.id === dbActive.business_id)) {
+          activeId = dbActive.business_id;
+        }
       }
-
-      const savedId = typeof window !== 'undefined'
-        ? localStorage.getItem('aria_active_business_id')
-        : null;
-      const savedBusiness = savedId ? businesses.find(b => b.id === savedId) : null;
-      const activeBusiness = savedBusiness || businesses[0];
+      // If DB has no active or active doesn't exist in user's businesses, fall back
+      if (!activeId) {
+        const savedId = typeof window !== 'undefined' ? localStorage.getItem('aria_active_business_id') : null;
+        const savedExists = savedId && businesses.some(b => b.id === savedId);
+        activeId = savedExists ? savedId : businesses[0].id;
+        // Persist this fallback so future loads agree
+        if (user) {
+          await supabase.from('user_active_business').upsert(
+            { user_id: user.id, business_id: activeId, updated_at: new Date().toISOString() },
+            { onConflict: 'user_id' }
+          );
+        }
+      }
+      const activeBusiness = businesses.find(b => b.id === activeId) || businesses[0];
       setBusiness(activeBusiness);
-
-      if (!savedId && activeBusiness) {
+      if (typeof window !== 'undefined') {
         localStorage.setItem('aria_active_business_id', activeBusiness.id);
       }
     } catch (err) {
@@ -108,16 +121,28 @@ export function BusinessProvider({ children }: { children: React.ReactNode }) {
   const switchBusiness = useCallback(async (id: string) => {
     const target = allBusinesses.find(b => b.id === id);
     if (!target) return;
-    setBusiness(target);
-    localStorage.setItem('aria_active_business_id', id);
+    const previousId = business?.id;
     const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-      await supabase.from('user_active_business').upsert(
-        { user_id: user.id, business_id: id, updated_at: new Date().toISOString() },
-        { onConflict: 'user_id' }
-      );
+    if (!user) return;
+    // DB FIRST — single source of truth
+    const { error } = await supabase.from('user_active_business').upsert(
+      { user_id: user.id, business_id: id, updated_at: new Date().toISOString() },
+      { onConflict: 'user_id' }
+    );
+    if (error) {
+      console.error('switchBusiness DB upsert failed:', error);
+      return; // do NOT update local state if DB failed
     }
-  }, [allBusinesses]);
+    // Only after DB success: update local state + localStorage
+    setBusiness(target);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('aria_active_business_id', id);
+      // Broadcast — all listeners (terminal, product list) reset
+      window.dispatchEvent(new CustomEvent('aria:business-changed', {
+        detail: { previousId, newId: id }
+      }));
+    }
+  }, [allBusinesses, business?.id]);
 
   const refreshBusiness = useCallback(async () => {
     if (!business) return;
