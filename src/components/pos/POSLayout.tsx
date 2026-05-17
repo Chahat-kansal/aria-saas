@@ -4,6 +4,7 @@ import { usePathname } from 'next/navigation';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import AriaBrainPanel from '@/components/aria/AriaBrainPanel';
+import BusinessSwitcher from '@/components/pos/BusinessSwitcher';
 
 /* ─── Nav data ──────────────────────────────────────────────────── */
 type NavItem = { label: string; href: string; soon?: true };
@@ -292,7 +293,8 @@ export function POSLayout({ children, userName }: { children: React.ReactNode; u
             </nav>
 
             {/* Footer */}
-            <div className="px-3 py-3 border-t border-[rgba(0,0,0,0.07)] flex-shrink-0">
+            <div className="px-3 py-3 border-t border-[rgba(0,0,0,0.07)] flex-shrink-0 space-y-2">
+              <BusinessSwitcher />
               <Link href="/dashboard"
                 className="flex items-center gap-1.5 text-[11px] text-[rgba(26,26,22,0.35)] hover:text-[#1a1a16] transition-colors">
                 <svg viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5">

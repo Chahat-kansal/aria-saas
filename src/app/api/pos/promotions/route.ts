@@ -9,6 +9,9 @@ async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, u
   const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle();
   if (active?.business_id) return active.business_id as string;
   const { data } = await supabase.from('businesses').select('id').eq('user_id', userId).eq('is_active', true).order('created_at', { ascending: true }).limit(1).maybeSingle();
+  if (data?.id) {
+    console.warn('[getBid] No user_active_business row, falling back to oldest active business', { userId, fallback_business_id: data.id });
+  }
   return data?.id ?? null;
 }
 
