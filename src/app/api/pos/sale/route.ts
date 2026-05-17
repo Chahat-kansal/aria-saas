@@ -106,6 +106,9 @@ async function _POST(req: Request) {
 
   const saleNumber = `POS-${String((count ?? 0) + 1).padStart(4, '0')}`;
 
+  // Note on jurisdiction: AU GST is uniform 10% nationally. Per-outlet
+  // overrides (state_code, NZ outlets, etc) configured via pos_outlet_tax_codes
+  // and fetched by the engine below.
   // ── Sprint E: per-item tax breakdown ──
   let computedTaxBreakdown: unknown[] = []
   let computedTaxTotal = Number(tax_amount) || 0

@@ -12,7 +12,7 @@ import {
   Banknote, Wrench,
   Clock, Smartphone, Timer, Scissors,
   ShoppingBag, CalendarClock, Plug,
-  Calculator, CalendarOff, MapPin,
+  Calculator, CalendarOff, MapPin, ShieldCheck,
 } from 'lucide-react'
 
 export interface NavItem {
@@ -115,6 +115,7 @@ export const NAV_STRUCTURE: NavSection[] = [
     defaultOpen: true,
     items: [
       { label: 'Ask Aria', href: '/pos/ask', icon: Sparkles, isHero: true },
+      { label: 'BAS export', href: '/pos/reports/bas', icon: FileText },
       { label: 'Sales Reports', href: '/pos/reports/sales', icon: BarChart3 },
       { label: 'Inventory', href: '/pos/reports/inventory', icon: Package },
       { label: 'Cashier', href: '/pos/reports/cashier', icon: UserCheck },
@@ -159,6 +160,7 @@ export const NAV_STRUCTURE: NavSection[] = [
       { label: 'Tax Codes', href: '/pos/settings/tax-codes', icon: Calculator },
       { label: 'Tax Holidays', href: '/pos/settings/tax-holidays', icon: CalendarOff },
       { label: 'Per-outlet tax', href: '/pos/settings/outlet-tax', icon: MapPin },
+      { label: 'Custom roles', href: '/pos/settings/roles', icon: ShieldCheck },
       { label: 'Billing', href: '/pos/settings/billing', icon: Banknote },
     ],
   },
