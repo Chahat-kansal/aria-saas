@@ -1,0 +1,84 @@
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+
+import { NextResponse } from 'next/server'
+import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { withErrorCapture } from '@/lib/api/with-error-capture'
+
+async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string) {
+  const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
+  if (active?.business_id) return active.business_id as string
+  const { data } = await supabase.from('businesses').select('id').eq('user_id', userId).eq('is_active', true).limit(1).maybeSingle()
+  return data?.id ?? null
+}
+
+async function _GET(req: Request) {
+  const supabase = createServerSupabaseClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const bid = await getBid(supabase, user.id)
+  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
+
+  const { searchParams } = new URL(req.url)
+  const code = searchParams.get('code')
+  const customer_id = searchParams.get('customer_id')
+
+  if (code) {
+    const { data } = await supabase.from('pos_store_credits')
+      .select('*').eq('business_id', bid).eq('code', code.toUpperCase()).eq('is_active', true).maybeSingle()
+    if (!data) return NextResponse.json({ error: 'Store credit not found or inactive' }, { status: 404 })
+    if (data.expires_at && new Date(data.expires_at) < new Date()) {
+      return NextResponse.json({ error: 'Store credit has expired' }, { status: 400 })
+    }
+    return NextResponse.json({ credit: data })
+  }
+
+  let q = supabase.from('pos_store_credits').select('*').eq('business_id', bid).eq('is_active', true).order('created_at', { ascending: false }).limit(200)
+  if (customer_id) q = q.eq('customer_id', customer_id)
+  const { data } = await q
+  return NextResponse.json({ credits: data ?? [] })
+}
+
+async function _POST(req: Request) {
+  const supabase = createServerSupabaseClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const bid = await getBid(supabase, user.id)
+  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
+
+  const { code, amount, sale_id } = await req.json().catch(() => ({}))
+  if (!code || !amount || amount <= 0) return NextResponse.json({ error: 'code and amount required' }, { status: 400 })
+
+  const { data: credit } = await supabase.from('pos_store_credits')
+    .select('*').eq('business_id', bid).eq('code', String(code).toUpperCase()).eq('is_active', true).maybeSingle()
+  if (!credit) return NextResponse.json({ error: 'Store credit not found' }, { status: 404 })
+  const currentBalance = Number(credit.balance) || 0
+  if (currentBalance < amount) {
+    return NextResponse.json({ error: `Insufficient balance. Available: A$${currentBalance.toFixed(2)}` }, { status: 400 })
+  }
+  if (credit.expires_at && new Date(credit.expires_at) < new Date()) {
+    return NextResponse.json({ error: 'Store credit has expired' }, { status: 400 })
+  }
+
+  const newBalance = Math.max(0, currentBalance - amount)
+  await supabase.from('pos_store_credits').update({
+    balance: newBalance,
+    is_active: newBalance > 0,
+    redeemed_at: newBalance === 0 ? new Date().toISOString() : null,
+  }).eq('id', credit.id)
+
+  await supabase.from('pos_store_credit_txns').insert({
+    business_id: bid,
+    credit_id: credit.id,
+    sale_id: sale_id ?? null,
+    amount: -amount,
+    type: 'redeem',
+    balance_after: newBalance,
+    note: sale_id ? `Redeemed on sale ${String(sale_id).slice(-6).toUpperCase()}` : 'Redeemed at register',
+  })
+
+  return NextResponse.json({ ok: true, balance_after: newBalance, credit_id: credit.id })
+}
+
+export const GET = withErrorCapture('pos/store-credits', _GET)
+export const POST = withErrorCapture('pos/store-credits', _POST)

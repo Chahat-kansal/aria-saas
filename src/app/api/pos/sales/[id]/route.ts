@@ -48,7 +48,7 @@ async function _GET(req: Request, { params }: { params: { id: string } }) {
 
   const { data: sale } = await supabase
     .from('pos_sales')
-    .select('*, pos_customers(id, name, email, phone, loyalty_points), pos_sale_items(id, product_id, product_name, product_sku, quantity, unit_price, discount_percent, line_total, tax_rate, cost_price, margin_percent)')
+    .select('*, pos_customers(id, name, email, phone, loyalty_points), pos_sale_items(id, product_id, product_name, product_sku, quantity, unit_price, discount_percent, line_total, tax_rate, cost_price, margin_percent, returned_quantity)')
     .eq('id', params.id)
     .eq('business_id', bid)
     .maybeSingle();

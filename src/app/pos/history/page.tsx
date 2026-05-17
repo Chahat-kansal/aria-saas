@@ -2,8 +2,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import Receipt from '@/components/pos/Receipt';
 import type { ReceiptTemplate } from '@/components/pos/Receipt';
+import ReturnModal from '@/components/pos/ReturnModal';
 
-interface SaleItem { id: string; product_name: string; quantity: number; unit_price: number; line_total: number; tax_rate: number; discount_percent: number; }
+interface SaleItem { id: string; product_id?: string | null; product_name: string; quantity: number; returned_quantity?: number; unit_price: number; line_total: number; tax_rate: number; discount_percent: number; }
 interface Sale {
   id: string; sale_number?: string; total_amount: number; tax_amount?: number;
   payment_method?: string; status?: string; created_at: string;
@@ -51,6 +52,9 @@ export default function HistoryPage() {
   const [returnMode, setReturnMode] = useState(false);
   const [returnItems, setReturnItems] = useState<Record<string, boolean>>({});
   const [processing, setProcessing] = useState(false);
+  // ── Sprint C ReturnModal ──
+  const [showReturnModal, setShowReturnModal] = useState(false);
+  const [returnSuccess, setReturnSuccess] = useState<{ return_number: string; total_refund: number; store_credit_code?: string | null } | null>(null);
   // Audit trail
   const [auditTrail, setAuditTrail] = useState<AuditEntry[]>([]);
   const [auditLoading, setAuditLoading] = useState(false);
@@ -387,7 +391,7 @@ export default function HistoryPage() {
               <button onClick={() => setShowReceipt(true)} style={{ padding: '8px 12px', borderRadius: 8, border: `1px solid ${C.border}`, background: 'rgba(255,255,255,0.04)', color: C.text, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>🖨️ Reprint</button>
               <button onClick={() => { setEditMode(e => !e); setReturnMode(false); }} style={{ padding: '8px 12px', borderRadius: 8, border: `1px solid ${C.border}`, background: 'rgba(255,255,255,0.04)', color: C.text, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>✏️ Modify</button>
             </div>
-            <button onClick={() => { setReturnMode(r => !r); setEditMode(false); setReturnItems({}); }} style={{ padding: '8px 12px', borderRadius: 8, border: `1px solid rgba(239,68,68,0.3)`, background: 'rgba(239,68,68,0.07)', color: '#EF4444', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+            <button onClick={() => { if (selected) setShowReturnModal(true) }} style={{ padding: '8px 12px', borderRadius: 8, border: `1px solid rgba(239,68,68,0.3)`, background: 'rgba(239,68,68,0.07)', color: '#EF4444', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
               ↩️ Return Items
             </button>
           </div>
@@ -400,6 +404,31 @@ export default function HistoryPage() {
           template={receiptTemplate}
           onClose={() => setShowReceipt(false)}
         />
+      )}
+      {showReturnModal && selected && detail && (
+        <ReturnModal
+          saleId={selected.id}
+          saleItems={(detail.pos_sale_items ?? []).map(i => ({
+            id: i.id,
+            product_id: (i as SaleItem).product_id ?? null,
+            product_name: i.product_name,
+            quantity: Number(i.quantity) || 0,
+            returned_quantity: Number((i as SaleItem).returned_quantity) || 0,
+            unit_price: Number(i.unit_price) || 0,
+          }))}
+          paymentMethod={selected.payment_method ?? 'card'}
+          customerId={selected.customer_id ?? null}
+          onClose={() => setShowReturnModal(false)}
+          onSuccess={result => { setShowReturnModal(false); setReturnSuccess(result); load(); }}
+        />
+      )}
+      {returnSuccess && (
+        <div onClick={() => setReturnSuccess(null)} style={{ position:'fixed', bottom:24, left:'50%', transform:'translateX(-50%)', zIndex:600, background:'#0d1a10', border:'1px solid rgba(127,184,151,0.4)', borderRadius:12, padding:'14px 20px', cursor:'pointer', boxShadow:'0 8px 32px rgba(0,0,0,0.6)', minWidth:280 }}>
+          <p style={{ fontWeight:700, color:'#7FB897', margin:'0 0 4px', fontSize:14 }}>✓ Return {returnSuccess.return_number} processed</p>
+          <p style={{ color:'rgba(255,255,255,0.6)', fontSize:12, margin:0 }}>
+            A${(Number(returnSuccess.total_refund)||0).toFixed(2)} refunded{returnSuccess.store_credit_code ? ` · Store credit code: ${returnSuccess.store_credit_code}` : ''}
+          </p>
+        </div>
       )}
     </div>
   );
