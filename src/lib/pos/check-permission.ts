@@ -128,6 +128,21 @@ export const ROLE_PERMISSION_DEFAULTS: Record<string, PosPermissions> = {
   },
 }
 
+/**
+ * Resolve a role's permission map for a business.
+ * Order: pos_custom_roles → ROLE_PERMISSION_DEFAULTS → empty.
+ */
+export async function resolveRolePermissions(
+  role: string,
+  businessId: string,
+  supabase: SupabaseClient
+): Promise<Record<string, unknown>> {
+  const { data: custom } = await supabase.from('pos_custom_roles')
+    .select('permissions').eq('business_id', businessId).eq('role_key', role).eq('is_active', true).maybeSingle()
+  if (custom?.permissions) return custom.permissions as Record<string, unknown>
+  return (ROLE_PERMISSION_DEFAULTS as Record<string, Record<string, unknown>>)[role] ?? {}
+}
+
 export async function checkPermissionForOutlet(
   posUser: { id: string; role: string; permissions: Record<string, unknown> },
   flag: string,
