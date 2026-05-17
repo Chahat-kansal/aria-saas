@@ -1,6 +1,8 @@
 'use client'
 import { useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
+import IndustryProductForm from '@/components/products/industry/IndustryProductForm'
+import type { ProductDraft } from '@/components/products/industry/CommonFields'
 
 interface Supplier { id: string; name: string }
 interface Category { id: string; name: string }
@@ -74,11 +76,18 @@ export default function ProductWizard({ step, id, businessId, draft, suppliers, 
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
-  // Step 1 state
-  const [name, setName] = useState(draft.name ?? '')
-  const [sku, setSku] = useState(draft.sku ?? '')
-  const [barcode, setBarcode] = useState(draft.barcode ?? '')
-  const [description, setDescription] = useState(draft.description ?? '')
+  // Step 1 state — unified ProductDraft for IndustryProductForm
+  const [ipDraft, setIpDraft] = useState<ProductDraft>({
+    name: draft.name ?? '',
+    sku: draft.sku ?? '',
+    barcode: draft.barcode ?? '',
+    description: draft.description ?? '',
+  })
+  // Keep individual vars as aliases for save logic below
+  const name = String(ipDraft.name ?? '')
+  const sku = String(ipDraft.sku ?? '')
+  const barcode = String(ipDraft.barcode ?? '')
+  const description = String(ipDraft.description ?? '')
 
   // Step 2 state
   const [categoryId, setCategoryId] = useState(draft.category_id ?? '')
@@ -245,22 +254,7 @@ export default function ProductWizard({ step, id, businessId, draft, suppliers, 
           {step === 1 && (
             <>
               <h2 style={{ fontSize: 15, fontWeight: 700, margin: '0 0 24px' }}>Product Identity</h2>
-              <Field label="Product name *">
-                <input style={inp} value={name} onChange={e => setName(e.target.value)}
-                  placeholder="e.g. Carlton Dry 375ml" autoFocus />
-              </Field>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-                <Field label="SKU">
-                  <input style={inp} value={sku} onChange={e => setSku(e.target.value)} placeholder="Auto-generated if blank" />
-                </Field>
-                <Field label="Barcode">
-                  <input style={inp} value={barcode} onChange={e => setBarcode(e.target.value)} placeholder="EAN / UPC" />
-                </Field>
-              </div>
-              <Field label="Description">
-                <textarea style={{ ...inp, minHeight: 80, resize: 'vertical' }} value={description}
-                  onChange={e => setDescription(e.target.value)} placeholder="Short product description…" />
-              </Field>
+              <IndustryProductForm form={ipDraft} setForm={setIpDraft} />
             </>
           )}
 

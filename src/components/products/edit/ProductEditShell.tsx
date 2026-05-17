@@ -7,6 +7,8 @@ import {
   Save, ArrowLeft, Loader2,
 } from 'lucide-react'
 import GeneralTab from './tabs/GeneralTab'
+import IndustryProductForm from '@/components/products/industry/IndustryProductForm'
+import type { ProductDraft } from '@/components/products/industry/CommonFields'
 import ClassificationsTab from './tabs/ClassificationsTab'
 import SellCostTab from './tabs/SellCostTab'
 import InventoryTab from './tabs/InventoryTab'
@@ -71,6 +73,33 @@ export default function ProductEditShell(props: Props) {
   const [supplierDeletedIds, setSupplierDeletedIds] = useState<string[]>([])
   const [images, setImages] = useState<any[]>(props.images)
   const [imageDeletedIds, setImageDeletedIds] = useState<string[]>([])
+  const [industryDraft, setIndustryDraft] = useState<ProductDraft>({
+    name: product.name ?? '',
+    price: product.price ?? '',
+    cost_price: product.cost_price ?? '',
+    description: product.description ?? '',
+    category_id: product.category_id ?? null,
+    sku: product.sku ?? '',
+    barcode: product.barcode ?? '',
+    // industry-specific fields
+    kds_station: product.kds_station ?? null,
+    prep_time_seconds: product.prep_time_seconds ?? null,
+    allergens: product.allergens ?? [],
+    shelf_life_days: product.shelf_life_days ?? null,
+    course_type: product.course_type ?? null,
+    alcohol_percentage: product.alcohol_percentage ?? null,
+    standard_drinks: product.standard_drinks ?? null,
+    vintage: product.vintage ?? null,
+    age_restricted: product.age_restricted ?? false,
+    container_type: product.container_type ?? null,
+    stock_quantity: product.stock_quantity ?? 0,
+    low_stock_threshold: product.low_stock_threshold ?? 5,
+    bin_location: product.bin_location ?? '',
+    case_quantity: product.case_quantity ?? 1,
+    supplier_sku: product.supplier_sku ?? '',
+    supplier_barcode: product.supplier_barcode ?? '',
+  })
+
   const [loyalty, setLoyalty] = useState({
     earns_points: props.loyalty?.earns_points ?? true,
     points_multiplier: props.loyalty?.points_multiplier ?? 1,
@@ -91,7 +120,7 @@ export default function ProductEditShell(props: Props) {
     setSaving(true); setError('')
     try {
       await Promise.all([
-        patch('update_general', { ...general }),
+        patch('update_general', { ...general, ...industryDraft }),
         patch('update_classifications', { ...classifications }),
         patch('update_pricing', { prices: prices.filter(p => !p.id?.startsWith('new-') || p.price > 0), deleted_ids: priceDeletedIds, default_price: prices.find(p => p.outlet_id == null && p.quantity === 1)?.price }),
         patch('update_costs', { costs }),
@@ -152,7 +181,14 @@ export default function ProductEditShell(props: Props) {
 
       {/* Tab content */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '28px 28px 80px' }}>
-        {activeTab === 'general' && <GeneralTab data={general} onChange={setGeneral} />}
+        {activeTab === 'general' && (
+          <>
+            <GeneralTab data={general} onChange={setGeneral} />
+            <div style={{ marginTop: 28 }}>
+              <IndustryProductForm form={industryDraft} setForm={setIndustryDraft} />
+            </div>
+          </>
+        )}
         {activeTab === 'classifications' && <ClassificationsTab data={classifications} categories={categories} brands={brands} families={families} onChange={setClassifications} />}
         {activeTab === 'sell-cost' && (
           <SellCostTab
