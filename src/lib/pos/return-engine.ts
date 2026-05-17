@@ -79,10 +79,29 @@ export async function processReturn(
 
   // 1. Validate original sale
   const { data: origSale } = await supabase
-    .from('pos_sales').select('id, total_amount, payment_method, status, outlet_id')
+    .from('pos_sales').select('id, total_amount, payment_method, status, outlet_id, created_at')
     .eq('id', original_sale_id).eq('business_id', business_id).maybeSingle()
   if (!origSale) return { ok: false, error: 'Original sale not found' }
   if (origSale.status === 'voided') return { ok: false, error: 'Cannot return a voided sale' }
+
+  // 1b. Sprint C depth: enforce return window per category
+  try {
+    const saleAgeDays = (Date.now() - new Date(origSale.created_at ?? 0).getTime()) / (86400 * 1000)
+    const { data: saleItems } = await supabase
+      .from('pos_sale_items')
+      .select('product_id, pos_products(category_id)')
+      .eq('sale_id', original_sale_id)
+    const categoryIds = [...new Set((saleItems ?? []).map((si: any) => si.pos_products?.category_id).filter(Boolean))]
+    const { data: policies } = await supabase.from('pos_return_policies')
+      .select('*').eq('business_id', business_id)
+    if (policies?.length) {
+      const matched = policies.find((p: any) => p.category_id && categoryIds.includes(p.category_id))
+                   ?? policies.find((p: any) => p.category_id == null)
+      if (matched && saleAgeDays > (Number(matched.return_window_days) || 30)) {
+        return { ok: false, error: `Return window expired (${Math.floor(saleAgeDays)} days since sale, policy is ${matched.return_window_days} days)` }
+      }
+    }
+  } catch { /* non-fatal — don't block if policy table missing */ }
 
   // 2. Validate returned_quantity guard per line
   for (const line of lines) {
