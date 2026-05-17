@@ -46,13 +46,8 @@ async function _POST(req: Request) {
   const { data: biz } = await supabase.from('businesses').select('id').eq('id', business_id).eq('user_id', user.id).single();
   if (!biz) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-  const defaultPermissions = {
-    can_apply_discount: true,
-    can_refund: role === 'manager' || role === 'owner',
-    max_discount_pct: role === 'manager' || role === 'owner' ? 100 : 10,
-    can_close_register: role !== 'cashier',
-    can_override_price: role === 'manager' || role === 'owner',
-  };
+  const { ROLE_PERMISSION_DEFAULTS } = await import('@/lib/pos/check-permission')
+  const defaultPermissions = ROLE_PERMISSION_DEFAULTS[role] ?? ROLE_PERMISSION_DEFAULTS.cashier
 
   const { data, error } = await supabase.from('pos_users').insert({
     business_id, name: name.trim(), pin, role,

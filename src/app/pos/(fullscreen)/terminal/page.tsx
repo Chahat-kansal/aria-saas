@@ -711,6 +711,12 @@ export default function TerminalPage() {
   const netAmount  = subtotal / 1.1;
   const total      = subtotal;
   const tendered   = parseFloat(cashTendered) || 0;
+
+  // POS user permission gates (set at cashier login, stored in localStorage)
+  const posUserPerms = useMemo<Record<string, boolean>>(() => {
+    try { const u = localStorage.getItem('aria_pos_user'); return u ? (JSON.parse(u).permissions ?? {}) : {} } catch { return {} }
+  }, []);
+  const canVoid = posUserPerms.can_void_sales !== false;
   const roundedTotal = payMethod === 'cash' ? roundCash(total) : total;
   const change     = payMethod === 'cash' && tendered >= roundedTotal ? tendered - roundedTotal : 0;
   const splitCardAmt = payMethod === 'split' ? Math.max(0, total - (parseFloat(splitCash) || 0)) : 0;
@@ -1802,7 +1808,7 @@ export default function TerminalPage() {
             </button>
           )}
           {!registerLoading && (
-            <button onClick={() => setShowRefundModal(true)} className="px-2 py-0.5 rounded text-xs" style={{ color: 'var(--text-secondary)', border: '1px solid #2A2540', background: 'rgba(255,255,255,0.03)' }}>
+            <button onClick={() => { if (!canVoid) { alert('Manager permission required to process refunds.'); return; } setShowRefundModal(true); }} className="px-2 py-0.5 rounded text-xs" style={{ color: canVoid ? 'var(--text-secondary)' : '#6B7280', border: '1px solid #2A2540', background: 'rgba(255,255,255,0.03)' }}>
               ⟳ Refund
             </button>
           )}

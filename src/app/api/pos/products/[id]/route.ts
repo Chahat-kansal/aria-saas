@@ -56,6 +56,20 @@ async function _PATCH(req: NextRequest, { params }: Params) {
   const action = new URL(req.url).searchParams.get('action')
   const body = await req.json() as Record<string, unknown>
 
+  // ── Permission check: edit products ───────────────────────────────
+  const prod_pos_user_id = (body?.pos_user_id as string) ?? null
+  if (prod_pos_user_id) {
+    const { getPosUser, resolvePermissions, checkFlag, writeAuditLog } = await import('@/lib/pos/check-permission')
+    const posUser = await getPosUser(supabase, prod_pos_user_id, bid)
+    if (posUser) {
+      const perms = resolvePermissions(posUser)
+      if (!checkFlag(perms, 'can_edit_products')) {
+        return NextResponse.json({ error: 'You do not have permission to edit products', requires_override: true, flag: 'can_edit_products' }, { status: 403 })
+      }
+      await writeAuditLog(supabase, { business_id: bid, action: 'product_edited', pos_user_id: prod_pos_user_id, performed_by: user.id, item_id: id })
+    }
+  }
+
   // ── update_general ──────────────────────────────────────────────
   if (action === 'update_general') {
     const allowed = ['name', 'sku', 'description', 'is_active', 'show_online', 'is_age_restricted']

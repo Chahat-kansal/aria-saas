@@ -11,7 +11,7 @@ async function _POST(req: Request) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const body = await req.json().catch(() => ({}));
-  const { pin, business_id, action } = body;
+  const { pin, business_id, action, required_flag } = body;
   if (!pin || !business_id) {
     return NextResponse.json({ error: 'pin and business_id required' }, { status: 400 });
   }
@@ -29,6 +29,18 @@ async function _POST(req: Request) {
   if (!manager) {
     return NextResponse.json({ authorized: false, error: 'Invalid manager PIN' }, { status: 403 });
   }
+
+  // Write audit row for manager override
+  try {
+    const { writeAuditLog } = await import('@/lib/pos/check-permission')
+    await writeAuditLog(supabase, {
+      business_id,
+      action: 'manager_override',
+      manager_approved_by: manager.id,
+      performed_by: user.id,
+      metadata: { override_action: action ?? null, required_flag: required_flag ?? null },
+    })
+  } catch { /* non-fatal */ }
 
   return NextResponse.json({
     authorized: true,

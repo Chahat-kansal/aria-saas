@@ -26,12 +26,39 @@ async function _POST(req: Request) {
     items, customer_id, payment_method,
     subtotal, tax_amount, discount_amount, total_amount,
     cash_tendered, change_given, notes,
-    split_cash, split_card, outlet_id, served_by,
+    split_cash, split_card, outlet_id, served_by, pos_user_id,
     session_id: bodySessionId, age_verified,
     table_id, order_type,
   } = body;
 
   if (!items?.length) return NextResponse.json({ error: 'No items' }, { status: 400 });
+
+  // ── Permission check: discount limit ──────────────────────────────
+  if (pos_user_id && (Number(discount_amount) || 0) > 0) {
+    const { getPosUser, resolvePermissions, writeAuditLog } = await import('@/lib/pos/check-permission')
+    const posUser = await getPosUser(supabase, pos_user_id, business.id)
+    if (posUser) {
+      const perms = resolvePermissions(posUser)
+      const discountPct = (Number(subtotal) || 0) + (Number(discount_amount) || 0) > 0
+        ? ((Number(discount_amount) || 0) / ((Number(subtotal) || 0) + (Number(discount_amount) || 0))) * 100
+        : 0
+      if (discountPct > (perms.max_discount_pct ?? 10)) {
+        return NextResponse.json({
+          error: `Discount of ${discountPct.toFixed(0)}% exceeds your limit of ${perms.max_discount_pct ?? 10}%`,
+          requires_override: true,
+          flag: 'max_discount_pct',
+        }, { status: 403 })
+      }
+      await writeAuditLog(supabase, {
+        business_id: business.id,
+        action: 'discount_applied',
+        pos_user_id,
+        performed_by: user.id,
+        amount: Number(discount_amount) || 0,
+        metadata: { discount_pct: discountPct.toFixed(1), max_allowed: perms.max_discount_pct },
+      })
+    }
+  }
 
   // Validate stock for each item that tracks stock
   const productIds = items.map((i: any) => i.product_id);
@@ -82,6 +109,7 @@ async function _POST(req: Request) {
       subtotal: +subtotal.toFixed(2),
       tax_amount: +tax_amount.toFixed(2),
       discount_amount: +(discount_amount ?? 0).toFixed(2),
+      pos_user_id: pos_user_id ?? null,
       total_amount: +total_amount.toFixed(2),
       cash_tendered: cash_tendered ?? null,
       change_given: change_given ?? null,

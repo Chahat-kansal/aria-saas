@@ -123,7 +123,21 @@ async function _POST(req: Request) {
 
   if (existing) return NextResponse.json({ error: 'A session is already open' }, { status: 400 });
 
-  const { opening_float } = await req.json();
+  const { opening_float, pos_user_id: session_pos_user_id } = await req.json();
+
+  // ── Permission check: open register ───────────────────────────────
+  if (session_pos_user_id) {
+    const { getPosUser, resolvePermissions, checkFlag, writeAuditLog } = await import('@/lib/pos/check-permission')
+    const posUser = await getPosUser(supabase, session_pos_user_id, bid)
+    if (posUser) {
+      const perms = resolvePermissions(posUser)
+      if (!checkFlag(perms, 'can_open_register')) {
+        return NextResponse.json({ error: 'You do not have permission to open the register', requires_override: true, flag: 'can_open_register' }, { status: 403 })
+      }
+      await writeAuditLog(supabase, { business_id: bid, action: 'register_opened', pos_user_id: session_pos_user_id, performed_by: user.id })
+    }
+  }
+
   const { data: cashSession, error } = await supabase
     .from('pos_cash_sessions')
     .insert({
@@ -163,6 +177,20 @@ async function _PATCH(req: Request) {
   // Support both legacy { session_id } body and new ?id= query param
   const session_id = queryId ?? body.session_id;
   if (!session_id) return NextResponse.json({ error: 'session_id required' }, { status: 400 });
+  const patch_pos_user_id: string | null = body.pos_user_id ?? null;
+
+  // ── Permission check: close register ─────────────────────────────
+  if (patch_pos_user_id) {
+    const { getPosUser, resolvePermissions, checkFlag, writeAuditLog } = await import('@/lib/pos/check-permission')
+    const posUser = await getPosUser(supabase, patch_pos_user_id, bid)
+    if (posUser) {
+      const perms = resolvePermissions(posUser)
+      if (!checkFlag(perms, 'can_close_register')) {
+        return NextResponse.json({ error: 'You do not have permission to close the register', requires_override: true, flag: 'can_close_register' }, { status: 403 })
+      }
+      await writeAuditLog(supabase, { business_id: bid, action: 'register_closed', pos_user_id: patch_pos_user_id, performed_by: user.id })
+    }
+  }
 
   // Build update payload — support both legacy closing_float and new detailed fields
   const updatePayload: Record<string, unknown> = {

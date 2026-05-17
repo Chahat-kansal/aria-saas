@@ -27,6 +27,19 @@ async function _GET(req: Request, { params }: Params) {
 
   const { searchParams } = new URL(req.url);
 
+  // ── Permission check: view reports ────────────────────────────────
+  const report_pos_user_id = searchParams.get('pos_user_id')
+  if (report_pos_user_id) {
+    const { getPosUser, resolvePermissions, checkFlag } = await import('@/lib/pos/check-permission')
+    const posUser = await getPosUser(supabase, report_pos_user_id, bid)
+    if (posUser) {
+      const perms = resolvePermissions(posUser)
+      if (!checkFlag(perms, 'can_view_reports')) {
+        return NextResponse.json({ error: 'You do not have permission to view reports' }, { status: 403 })
+      }
+    }
+  }
+
   // Default to last 30 days in AEST if not supplied
   const defaultRange = buildDateRange('month');
   const from = searchParams.get('from') ?? defaultRange.from.split('T')[0];

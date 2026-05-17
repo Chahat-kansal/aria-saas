@@ -53,6 +53,7 @@ export const NAV_STRUCTURE: NavSection[] = [
     items: [
       { label: 'Open / Close', href: '/pos', icon: Home },
       { label: 'Manage Cash', href: '/pos/cash', icon: DollarSign },
+      { label: 'Audit Log', href: '/pos/audit-log', icon: ClipboardList },
       { label: 'Close Register', href: '/pos/close', icon: Power },
       { label: 'Sales History', href: '/pos/reports/sales', icon: History },
     ],
