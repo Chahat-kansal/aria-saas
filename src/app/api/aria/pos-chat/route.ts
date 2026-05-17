@@ -420,15 +420,13 @@ TONE: Direct, specific, Australian English, A$ always.`
 
   const raw = response.content[0].type === 'text' ? response.content[0].text : '{}'
 
+  const _fallback = { message: raw, cards: [], data_tables: null, chart: null, actions: [], context_type: 'general' }
   let structured: any
   try {
-    const cleaned = raw
-      .replace(/```json\n?/g, '')
-      .replace(/```\n?/g, '')
-      .trim()
-    structured = JSON.parse(cleaned)
+    const { parseLLMJsonOr } = await import('@/lib/ai-json');
+    structured = parseLLMJsonOr<typeof _fallback>(raw, _fallback, 'aria/pos-chat')
   } catch {
-    structured = { message: raw, cards: [], data_tables: null, chart: null, actions: [], context_type: 'general' }
+    structured = _fallback
   }
 
   // Auto-create draft order for low stock if action requests it

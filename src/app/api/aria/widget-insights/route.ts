@@ -68,8 +68,8 @@ Questions: ${JSON.stringify(userMessages.slice(0, 50))}`,
       }],
     }));
     const raw = msg.content[0].type === 'text' ? msg.content[0].text : '';
-    const m = raw.match(/\[[\s\S]*\]/);
-    if (m) themes = JSON.parse(m[0]);
+    const { parseLLMJsonOr } = await import('@/lib/ai-json');
+    themes = parseLLMJsonOr<typeof themes>(raw, themes, 'aria/widget-insights');
   } catch { /* return empty themes */ }
 
   return NextResponse.json({ themes, total_conversations: convos.length });

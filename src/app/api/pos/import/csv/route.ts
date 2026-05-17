@@ -177,8 +177,9 @@ Map every column. Use null for unrecognised columns. Do not add markdown or expl
       messages: [{ role: 'user', content: aiPrompt }],
     });
     const text = (aiResponse.content[0] as { type: string; text: string }).text.trim();
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (jsonMatch) mapping = JSON.parse(jsonMatch[0]);
+    const { parseLLMJsonOr } = await import('@/lib/ai-json');
+    const aiMapping = parseLLMJsonOr<Record<string, unknown>>(text, {}, 'pos/import/csv');
+    if (aiMapping && Object.keys(aiMapping).length > 0) mapping = aiMapping as typeof mapping;
   } catch {
     // Fallback: simple heuristic mapping
     for (const h of headers) {

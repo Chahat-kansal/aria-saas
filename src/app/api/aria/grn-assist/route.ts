@@ -211,7 +211,8 @@ await trackAICall({ route: 'aria/grn-assist', model: 'claude-sonnet-4-5-20250929
       const jsonMatch = rawText.match(/```(?:json)?\s*([\s\S]*?)```/) ??
         rawText.match(/(\{[\s\S]*\})/);
       const jsonStr = jsonMatch ? jsonMatch[1] : rawText;
-      const candidate = JSON.parse(jsonStr) as Partial<GrnAssistResponse>;
+      const { parseLLMJsonOr } = await import('@/lib/ai-json');
+      const candidate = parseLLMJsonOr<Partial<GrnAssistResponse>>(jsonStr, {}, 'aria/grn-assist');
       parsed = {
         observations: Array.isArray(candidate.observations)
           ? (candidate.observations as string[])

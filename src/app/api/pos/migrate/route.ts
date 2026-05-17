@@ -168,9 +168,8 @@ If a column doesn't match any target, set target: null.
 
     const text = response.content[0]?.type === 'text' ? response.content[0].text : '{}'
     try {
-      const cleaned = text.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '').trim()
-      const { firstBrace, lastBrace } = { firstBrace: cleaned.indexOf('{'), lastBrace: cleaned.lastIndexOf('}') }
-      const parsed = JSON.parse(firstBrace >= 0 && lastBrace >= 0 ? cleaned.slice(firstBrace, lastBrace + 1) : cleaned)
+      const { parseLLMJsonOr } = await import('@/lib/ai-json');
+      const parsed = parseLLMJsonOr<Record<string, unknown>>(text, { mappings: [] }, 'pos/migrate/suggest_mapping')
       return NextResponse.json(parsed)
     } catch {
       return NextResponse.json({ mappings: headers.map((h: string) => ({ source: h, target: null, confidence: 0, reason: 'parse error' })) })

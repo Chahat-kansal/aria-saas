@@ -64,8 +64,8 @@ Items: ${JSON.stringify(significant.map(v => ({
         }],
       }));
       const raw = msg.content[0].type === 'text' ? msg.content[0].text : '';
-      const m = raw.match(/\[[\s\S]*\]/);
-      if (m) aiInsights = JSON.parse(m[0]);
+      const { parseLLMJsonOr } = await import('@/lib/ai-json');
+      aiInsights = parseLLMJsonOr<typeof aiInsights>(raw, aiInsights, 'aria/variance');
     } catch { /* non-critical */ }
   }
 

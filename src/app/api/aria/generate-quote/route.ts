@@ -81,10 +81,11 @@ await trackAICall({ route: 'aria/generate-quote', model: 'claude-sonnet-4-5-2025
     }));
 
     const text = response.content.filter(b => b.type === 'text').map(b => b.text).join('');
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error('No JSON returned');
-
-    const quoteData = JSON.parse(jsonMatch[0]);
+    const { parseLLMJsonOr } = await import('@/lib/ai-json');
+    const quoteData = parseLLMJsonOr<Record<string, unknown>>(text, {}, 'aria/generate-quote');
+    if (!quoteData || Object.keys(quoteData).length === 0) {
+      return NextResponse.json({ error: 'Could not parse Aria quote response' }, { status: 502 });
+    }
 
     // Save to quotes table
     const { data: saved, error: saveErr } = await supabase

@@ -44,8 +44,8 @@ Suppliers: ${JSON.stringify(suppliers.slice(0, 10))}`,
     }));
 
     const raw = msg.content[0].type === 'text' ? msg.content[0].text : '';
-    const arrMatch = raw.match(/\[[\s\S]*\]/);
-    const insights = arrMatch ? JSON.parse(arrMatch[0]) : [];
+    const { parseLLMJsonOr } = await import('@/lib/ai-json');
+    const insights = parseLLMJsonOr<unknown[]>(raw, [], 'aria/supplier-insights');
     return NextResponse.json({ insights });
   } catch { return NextResponse.json({ insights: [] }); }
 }
