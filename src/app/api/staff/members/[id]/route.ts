@@ -17,16 +17,24 @@ async function _GET(_req: Request, { params }: { params: { id: string } }) {
   const supabase = createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
 
+  // Fetch the member directly by ID using admin client (no RLS interference)
   const { data, error } = await supabaseAdmin.from('staff_members')
     .select('*, staff_member_skills(skill_id, certified_at, staff_skills(id, name, color)), staff_pay_rates(*), staff_documents(*), staff_leave(id, leave_type, start_date, end_date, days_taken, status)')
     .eq('id', params.id)
-    .eq('business_id', bid)
     .maybeSingle()
 
   if (!data || error) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+  // Verify the member belongs to a business owned by this user
+  const { data: biz } = await supabaseAdmin.from('businesses')
+    .select('id')
+    .eq('id', data.business_id)
+    .eq('user_id', user.id)
+    .maybeSingle()
+
+  if (!biz) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
   return NextResponse.json({ member: data })
 }
 
