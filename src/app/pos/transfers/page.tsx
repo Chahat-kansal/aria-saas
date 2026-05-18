@@ -212,10 +212,17 @@ export default function TransfersPage() {
             <div className="w-6 h-6 rounded-full border-2 border-gray-300 border-t-gray-600 animate-spin" />
           </div>
         ) : transfers.length === 0 ? (
-          <div className="bg-white rounded-2xl border border-gray-200 p-12 text-center">
+          <div className="rounded-2xl p-12 text-center" style={{ background: 'var(--bg-elevated, #1A2620)', border: '1px solid var(--divider, rgba(232,237,231,0.04))' }}>
             <p className="text-2xl mb-2">🔄</p>
-            <p className="text-sm text-gray-500">No transfers yet.</p>
-            <p className="text-xs text-gray-400 mt-1">Create a transfer to move stock between outlets.</p>
+            <p className="text-sm" style={{ color: 'var(--text-secondary, #A8B5A8)' }}>No transfers yet.</p>
+            <p className="text-xs mt-1" style={{ color: 'var(--text-tertiary, #6E7C6E)' }}>Create a transfer to move stock between outlets.</p>
+            {outlets.length < 2 && (
+              <div className="mt-4 rounded-xl p-4 text-left max-w-xs mx-auto" style={{ background: 'rgba(255,179,71,0.08)', border: '1px solid rgba(255,179,71,0.4)' }}>
+                <div className="text-sm font-semibold text-[#FFB347]">You only have {outlets.length === 0 ? 'no' : '1'} outlet</div>
+                <div className="text-xs mt-1" style={{ color: 'var(--text-secondary, #A8B5A8)' }}>Inventory transfers move stock between outlets. Create a second outlet first.</div>
+                <a href="/pos/settings/registers" className="inline-block mt-3 text-xs px-3 py-1.5 rounded-lg font-medium" style={{ background: '#2D5240', color: '#7FB897' }}>+ Add outlet</a>
+              </div>
+            )}
           </div>
         ) : (
           <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">

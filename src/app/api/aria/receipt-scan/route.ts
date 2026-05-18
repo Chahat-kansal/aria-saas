@@ -1,3 +1,7 @@
+// Requires Supabase Storage bucket: receipt-ocr-scans (private, image/jpeg|png|webp, 10MB max).
+// Create via Supabase dashboard → Storage → New bucket → name "receipt-ocr-scans", public OFF.
+// If the bucket is missing, persistence is skipped with a console warning — the Claude vision
+// call itself still works on the in-memory buffer.
 import Anthropic from '@anthropic-ai/sdk';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { getBusinessItems } from '@/lib/business-data';
@@ -168,6 +172,23 @@ Be precise — these numbers update real inventory.`,
   } catch (err: any) {
     return NextResponse.json({ error: `Vision processing failed: ${err.message}` }, { status: 500 });
   }
+
+  // Optional: persist the uploaded file to receipt-ocr-scans bucket for audit.
+  // Non-fatal — if the bucket is missing we log and continue.
+  try {
+    const path = `${business_id}/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`
+    const { error: uploadErr } = await supabase.storage
+      .from('receipt-ocr-scans')
+      .upload(path, buffer, { contentType: file.type, upsert: false })
+    if (uploadErr) {
+      const msg = uploadErr.message ?? ''
+      if (/bucket not found|not found/i.test(msg)) {
+        console.warn('[receipt-scan] receipt-ocr-scans bucket missing — image not persisted. Create the bucket in Supabase Storage to enable audit persistence.')
+      } else {
+        console.warn('[receipt-scan] storage upload failed (non-fatal):', msg)
+      }
+    }
+  } catch { /* non-fatal */ }
 
   if (extractedLines.length === 0) {
     return NextResponse.json({
