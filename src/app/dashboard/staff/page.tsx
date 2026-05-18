@@ -60,7 +60,13 @@ export default function StaffPage() {
             {members.length} {statusFilter !== 'all' ? statusFilter : ''} staff member{members.length !== 1 ? 's' : ''}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
+          <Link href="/dashboard/staff/timesheets" className="px-4 py-2 rounded-lg text-sm font-medium" style={{ background: 'rgba(45,82,64,0.3)', border: '1px solid rgba(45,82,64,0.5)', color: '#7FB897' }}>
+            Timesheets
+          </Link>
+          <Link href="/dashboard/staff/leave" className="px-4 py-2 rounded-lg text-sm font-medium" style={{ background: 'rgba(45,82,64,0.3)', border: '1px solid rgba(45,82,64,0.5)', color: '#7FB897' }}>
+            Leave
+          </Link>
           <Link href="/dashboard/staff/roster" className="px-4 py-2 rounded-lg text-sm font-medium" style={{ background: 'rgba(45,82,64,0.3)', border: '1px solid rgba(45,82,64,0.5)', color: '#7FB897' }}>
             Roster Builder
           </Link>

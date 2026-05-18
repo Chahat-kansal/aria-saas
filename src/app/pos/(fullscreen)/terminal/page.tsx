@@ -148,6 +148,34 @@ export default function TerminalPage() {
   const [recentSales,    setRecentSales]    = useState<RecentSale[]>([]);
   const [showMobileBanner, setShowMobileBanner] = useState(false);
 
+  /* ── Clock In/Out ─────────────────────────────────────────────── */
+  const [showClockModal,  setShowClockModal]  = useState(false);
+  const [clockPin,        setClockPin]        = useState('');
+  const [clockMode,       setClockMode]       = useState<'in' | 'out'>('in');
+  const [clockResult,     setClockResult]     = useState<string | null>(null);
+  const [clockLoading,    setClockLoading]    = useState(false);
+
+  const submitClock = async () => {
+    if (!clockPin.trim() || clockLoading) return;
+    setClockLoading(true);
+    setClockResult(null);
+    try {
+      const endpoint = clockMode === 'in' ? '/api/staff/timesheets/clock-in' : '/api/staff/timesheets/clock-out';
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pin: clockPin }),
+      });
+      const data = await res.json() as { ok?: boolean; message?: string; error?: string };
+      setClockResult(data.message ?? data.error ?? 'Done');
+      setClockPin('');
+      if (data.ok) setTimeout(() => { setShowClockModal(false); setClockResult(null); }, 2000);
+    } catch {
+      setClockResult('Network error — try again');
+    }
+    setClockLoading(false);
+  };
+
   /* ── Cart ─────────────────────────────────────────────────────── */
   const [cart,           setCart]           = useState<CartItem[]>([]);
 
@@ -1956,7 +1984,7 @@ export default function TerminalPage() {
                   { icon: '🎁', label: 'Gift Cards',       href: '/pos/gift-cards' },
                   { icon: '🏷️', label: 'Promotions',      href: '/pos/promotions' },
                   { icon: '📊', label: 'Reports',          href: '/pos/reports' },
-                  { icon: '⏰', label: 'Timesheets',       href: '/pos/timesheets' },
+                  { icon: '⏰', label: 'Timesheets',       href: '/dashboard/staff/timesheets' },
                   { icon: '💰', label: 'Cash Management',  href: '/pos/cash' },
                 ].map(link => (
                   <a key={link.href} href={link.href}
@@ -1968,6 +1996,18 @@ export default function TerminalPage() {
                     <span>{link.label}</span>
                   </a>
                 ))}
+                {/* Clock In / Out — Sprint M */}
+                <div className="pt-2 mt-1" style={{ borderTop: '1px solid var(--divider)' }}>
+                  <div className="flex gap-1 px-1">
+                    {(['in', 'out'] as const).map(m => (
+                      <button key={m} onClick={() => { setClockMode(m); setShowClockModal(true); setClockPin(''); setClockResult(null); }}
+                        className="flex-1 py-2 rounded-lg text-xs font-medium transition-colors capitalize"
+                        style={{ background: m === 'in' ? 'rgba(45,82,64,0.4)' : 'rgba(239,68,68,0.15)', color: m === 'in' ? '#7FB897' : '#fca5a5', border: `1px solid ${m === 'in' ? 'rgba(45,82,64,0.5)' : 'rgba(239,68,68,0.3)'}` }}>
+                        Clock {m}
+                      </button>
+                    ))}
+                  </div>
+                </div>
                 <button
                   onClick={() => {
                     try {
@@ -3550,6 +3590,39 @@ export default function TerminalPage() {
             <div className="flex gap-2 justify-end mt-3">
               <button onClick={() => setEditNotesState(null)} className="px-4 py-2 rounded-xl text-sm border border-[rgba(127,184,151,0.2)] text-[rgba(232,237,232,0.7)]">Done</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Clock In/Out PIN modal — Sprint M */}
+      {showClockModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.75)' }}
+          onClick={e => { if (e.target === e.currentTarget) { setShowClockModal(false); setClockPin(''); setClockResult(null); } }}>
+          <div className="rounded-2xl p-6 w-full max-w-xs space-y-4" style={{ background: '#1a2420', border: '1px solid rgba(127,184,151,0.3)' }}>
+            <div className="flex justify-between items-center">
+              <h3 className="font-semibold text-white text-base">Clock {clockMode === 'in' ? 'In' : 'Out'}</h3>
+              <button onClick={() => { setShowClockModal(false); setClockPin(''); setClockResult(null); }} className="text-sm" style={{ color: 'rgba(255,255,255,0.4)' }}>✕</button>
+            </div>
+            <p className="text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>Enter your staff PIN</p>
+            <input
+              type="password" inputMode="numeric" maxLength={8}
+              value={clockPin} onChange={e => setClockPin(e.target.value.replace(/\D/g, ''))}
+              onKeyDown={e => { if (e.key === 'Enter') submitClock(); }}
+              placeholder="••••" autoFocus
+              className="w-full px-4 py-3 rounded-xl text-center text-2xl font-mono outline-none tracking-widest"
+              style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.15)', color: '#fff' }}
+            />
+            {clockResult && (
+              <div className="text-sm text-center rounded-xl px-4 py-2.5"
+                style={{ background: clockResult.toLowerCase().includes('error') || clockResult.toLowerCase().includes('invalid') ? 'rgba(239,68,68,0.1)' : 'rgba(34,197,94,0.1)', color: clockResult.toLowerCase().includes('error') || clockResult.toLowerCase().includes('invalid') ? '#fca5a5' : '#86efac' }}>
+                {clockResult}
+              </div>
+            )}
+            <button onClick={submitClock} disabled={!clockPin || clockLoading}
+              className="w-full py-3 rounded-xl text-sm font-medium text-white transition-opacity disabled:opacity-40"
+              style={{ background: clockMode === 'in' ? '#2D5240' : 'rgba(239,68,68,0.4)' }}>
+              {clockLoading ? 'Processing…' : `Clock ${clockMode === 'in' ? 'In' : 'Out'}`}
+            </button>
           </div>
         </div>
       )}
