@@ -1,3 +1,11 @@
+export interface BarcodeProduct {
+  name: string
+  brand?: string
+  category?: string
+  image_url?: string
+  source: 'go-upc' | 'upcitemdb'
+}
+
 export type AgentKey =
   | 'promo' | 'pricing' | 'inventory' | 'compliance'
   | 'product_lookup' | 'hardware' | 'ops_narrative' | 'generic'
