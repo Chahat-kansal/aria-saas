@@ -164,7 +164,7 @@ async function _POST(req: Request) {
 
       // Mark conversation as escalated
       if (conversationId) {
-        await supabaseAdmin.from('aria_conversations').update({ has_escalated: true }).eq('id', conversationId).catch(() => {/* non-fatal */})
+        void (async () => { try { await supabaseAdmin.from('aria_conversations').update({ has_escalated: true }).eq('id', conversationId) } catch { /* non-fatal */ } })()
       }
     } catch (e) {
       actionResult = { type: 'escalate_error', message: (e as Error).message }
