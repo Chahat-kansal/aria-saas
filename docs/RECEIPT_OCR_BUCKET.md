@@ -7,7 +7,7 @@ re-run extraction if needed.
 ## Required setup (one-time per Supabase project)
 
 1. Open Supabase dashboard → Storage → New bucket
-2. Name: `receipt-ocr-scans`
+2. Name: `receipt-ocr`
 3. Public: **NO** (private)
 4. Allowed MIME types: `image/jpeg`, `image/png`, `image/webp`
 5. Max file size: `10485760` (10 MB)
@@ -22,5 +22,5 @@ items are still returned to the client. Only the audit trail image is lost.
 ## Verification
 
 After creating the bucket, upload a test receipt via the POS terminal's
-"Scan receipt" button. Check Supabase Storage → receipt-ocr-scans — there
+"Scan receipt" button. Check Supabase Storage → receipt-ocr — there
 should be 1 file under `<business_id>/`.
