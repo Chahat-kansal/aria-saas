@@ -73,6 +73,31 @@ export async function GET(req: Request) {
       }
     }
 
+    // Integration delta sync — daily at 3am AEST
+    if (hourAEST === 3) {
+      try {
+        const { runSquareFullSync } = await import('@/lib/integrations/square')
+        const { data: sqConn } = await supabaseAdmin.from('square_connections')
+          .select('id').eq('business_id', businessId).eq('sync_status', 'connected').maybeSingle()
+        if (sqConn) {
+          await runSquareFullSync(businessId)
+        }
+      } catch (e) {
+        results.errors.push(`square_delta:${businessId}: ${(e as Error).message}`)
+      }
+
+      try {
+        const { runShopifyFullSync } = await import('@/lib/integrations/shopify')
+        const { data: shConn } = await supabaseAdmin.from('shopify_connections')
+          .select('id').eq('business_id', businessId).eq('sync_status', 'connected').maybeSingle()
+        if (shConn) {
+          await runShopifyFullSync(businessId)
+        }
+      } catch (e) {
+        results.errors.push(`shopify_delta:${businessId}: ${(e as Error).message}`)
+      }
+    }
+
     // Workforce brain insights — daily
     try {
       const { runWorkforceInsights } = await import('@/lib/staff/workforce-brain')
