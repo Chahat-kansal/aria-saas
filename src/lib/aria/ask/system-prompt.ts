@@ -16,9 +16,9 @@ export function buildSystemPrompt(ctx: AskAriaContext): string {
 
 ## Business Snapshot (right now)
 - Revenue today: ${formatCurrency(ctx.revenue_today_cents, currency)}
-- Revenue this week: ${formatCurrency(ctx.revenue_week_cents, currency)}
-- Revenue this month: ${formatCurrency(ctx.revenue_month_cents, currency)}
-- Average transaction: ${formatCurrency(ctx.avg_ticket_cents, currency)}
+- Revenue this week (last 7 days): ${formatCurrency(ctx.revenue_week_cents, currency)}
+- Revenue this month to date (1st–today): ${formatCurrency(ctx.revenue_month_cents, currency)}
+- Average transaction (this month): ${formatCurrency(ctx.avg_ticket_cents, currency)}
 - Staff count: ${ctx.staff_count}
 - Open support tickets: ${ctx.open_support_tickets}
 - Pending Aria recommendations: ${ctx.pending_aria_actions}

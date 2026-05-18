@@ -36,13 +36,13 @@ export async function buildAskAriaContext(
   const now = new Date()
   const todayStart = new Date(now); todayStart.setHours(0,0,0,0)
   const weekStart = new Date(now); weekStart.setDate(now.getDate() - 7)
-  const monthStart = new Date(now); monthStart.setDate(now.getDate() - 30)
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1) // first of current month
 
   const [bizRes, salesTodayRes, salesWeekRes, salesMonthRes, lowStockRes, staffRes, ticketsRes, actionsRes, convHistRes, recentConvsRes] = await Promise.all([
     supabaseAdmin.from('businesses').select('name,industry,owner_name,currency').eq('id', businessId).maybeSingle(),
-    supabaseAdmin.from('pos_sales').select('total_price').eq('business_id', businessId).gte('created_at', todayStart.toISOString()),
-    supabaseAdmin.from('pos_sales').select('total_price').eq('business_id', businessId).gte('created_at', weekStart.toISOString()),
-    supabaseAdmin.from('pos_sales').select('total_price').eq('business_id', businessId).gte('created_at', monthStart.toISOString()),
+    supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', businessId).gte('created_at', todayStart.toISOString()),
+    supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', businessId).gte('created_at', weekStart.toISOString()),
+    supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', businessId).gte('created_at', monthStart.toISOString()),
     supabaseAdmin.from('pos_outlet_inventory').select('id,product_id,quantity_on_hand,reorder_point,pos_products(name)').eq('business_id', businessId).lt('quantity_on_hand', 5).limit(10),
     supabaseAdmin.from('pos_users').select('id', { count: 'exact', head: true }).eq('business_id', businessId),
     supabaseAdmin.from('support_tickets').select('id', { count: 'exact', head: true }).eq('business_id', businessId).eq('status', 'open'),
@@ -54,14 +54,15 @@ export async function buildAskAriaContext(
   ])
 
   const biz = bizRes.data
-  const sumCents = (rows: Array<{ total_price: number | null }> | null) =>
-    (rows ?? []).reduce((s, r) => s + Math.round((Number(r.total_price) || 0) * 100), 0)
+  const sumCents = (rows: Array<{ total_amount: number | null }> | null) =>
+    (rows ?? []).reduce((s, r) => s + Math.round((Number(r.total_amount) || 0) * 100), 0)
 
   const todayCents = sumCents(salesTodayRes.data)
   const weekCents = sumCents(salesWeekRes.data)
   const monthCents = sumCents(salesMonthRes.data)
   const salesCount = (salesMonthRes.data ?? []).length
   const avgTicket = salesCount > 0 ? Math.round(monthCents / salesCount) : 0
+  console.log('[aria/context] month_revenue_cents', monthCents, 'rows', salesCount, 'business', businessId)
 
   const lowStock = (lowStockRes.data ?? []).map((r: Record<string, unknown>) => ({
     id: String(r.product_id ?? r.id),

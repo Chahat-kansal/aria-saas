@@ -37,10 +37,10 @@ export async function sendDailySummaryReport(
   const yesterdayStart = new Date(Date.now() - 86400_000); yesterdayStart.setHours(0, 0, 0, 0)
 
   const [todayQ, yesterdayQ, lowStockQ, bizQ] = await Promise.all([
-    supabase.from('pos_sales').select('total_price')
+    supabase.from('pos_sales').select('total_amount')
       .eq('business_id', businessId)
       .gte('created_at', todayStart.toISOString()),
-    supabase.from('pos_sales').select('total_price')
+    supabase.from('pos_sales').select('total_amount')
       .eq('business_id', businessId)
       .gte('created_at', yesterdayStart.toISOString())
       .lt('created_at', todayStart.toISOString()),
@@ -51,8 +51,8 @@ export async function sendDailySummaryReport(
     supabase.from('businesses').select('name').eq('id', businessId).maybeSingle(),
   ])
 
-  const todayRevenue = (todayQ.data ?? []).reduce((s, x: Record<string,unknown>) => s + (Number(x.total_price) || 0), 0)
-  const yesterdayRevenue = (yesterdayQ.data ?? []).reduce((s, x: Record<string,unknown>) => s + (Number(x.total_price) || 0), 0)
+  const todayRevenue = (todayQ.data ?? []).reduce((s, x: Record<string,unknown>) => s + (Number(x.total_amount) || 0), 0)
+  const yesterdayRevenue = (yesterdayQ.data ?? []).reduce((s, x: Record<string,unknown>) => s + (Number(x.total_amount) || 0), 0)
   const changeSign = todayRevenue >= yesterdayRevenue ? '+' : ''
   const changePct = yesterdayRevenue > 0
     ? ((todayRevenue - yesterdayRevenue) / yesterdayRevenue * 100).toFixed(1)
