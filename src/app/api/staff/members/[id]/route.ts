@@ -2,6 +2,7 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { dollarsToCents } from '@/lib/staff/pay-rates'
 
@@ -19,7 +20,7 @@ async function _GET(_req: Request, { params }: { params: { id: string } }) {
   const bid = await getBid(supabase, user.id)
   if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
 
-  const { data, error } = await supabase.from('staff_members')
+  const { data, error } = await supabaseAdmin.from('staff_members')
     .select('*, staff_member_skills(skill_id, certified_at, staff_skills(id, name, color)), staff_pay_rates(*), staff_documents(*), staff_leave(id, leave_type, start_date, end_date, days_taken, status)')
     .eq('id', params.id)
     .eq('business_id', bid)
