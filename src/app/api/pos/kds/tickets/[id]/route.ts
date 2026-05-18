@@ -2,6 +2,7 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
@@ -31,20 +32,20 @@ async function _PATCH(req: Request, { params }: { params: { id: string } }) {
 
   switch (action) {
     case 'bump':
-      if (ticket.status !== 'fired' && ticket.status !== 'preparing') {
+      if (ticket.status !== 'fired' && ticket.status !== 'in_progress') {
         return NextResponse.json({ error: `Cannot bump ticket in status '${ticket.status}'` }, { status: 400 })
       }
-      update.status = 'bumped'
+      update.status = 'ready'
       update.bumped_at = now
       if (ticket.prep_time_seconds && ticket.fired_at) {
         const elapsed = (Date.parse(now) - Date.parse(ticket.fired_at)) / 1000
         if (elapsed > 2 * Number(ticket.prep_time_seconds)) aria_event = 'slow_ticket_bumped'
       }
       break
+    case 'start':
     case 'unfire':
-    case 'preparing':
       if (ticket.status !== 'fired') return NextResponse.json({ error: `Cannot start in status '${ticket.status}'` }, { status: 400 })
-      update.status = 'preparing'
+      update.status = 'in_progress'
       break
     case 'recall':
       if (ticket.status !== 'bumped') return NextResponse.json({ error: 'Only bumped tickets can be recalled' }, { status: 400 })
@@ -68,7 +69,7 @@ async function _PATCH(req: Request, { params }: { params: { id: string } }) {
       return NextResponse.json({ error: `Unknown action '${action}'` }, { status: 400 })
   }
 
-  const { data, error } = await supabase.from('pos_kds_tickets').update(update).eq('id', params.id).select('*').single()
+  const { error } = await supabaseAdmin.from('pos_kds_tickets').update(update).eq('id', params.id).eq('business_id', bid)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
   if (aria_event) {
@@ -91,7 +92,7 @@ async function _PATCH(req: Request, { params }: { params: { id: string } }) {
     } catch {}
   }
 
-  return NextResponse.json({ ticket: data })
+  return NextResponse.json({ ok: true })
 }
 
 export const PATCH = withErrorCapture('pos/kds/tickets/[id]', _PATCH)
