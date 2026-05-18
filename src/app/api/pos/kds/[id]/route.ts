@@ -10,7 +10,7 @@ async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, u
   return data?.id ?? null;
 }
 
-type KdsStatus = 'fired' | 'in_progress' | 'ready' | 'bumped';
+type KdsStatus = 'new' | 'in_progress' | 'ready' | 'delivered' | 'void' | 'fired' | 'bumped';
 
 // GET /api/pos/kds/[station] — returns open tickets for a station (Sprint F)
 async function _GET(_req: Request, { params }: { params: Promise<{ id: string }> | { id: string } }) {
@@ -51,15 +51,26 @@ async function _PATCH(req: Request, { params }: { params: Promise<{ id: string }
   const { status }: { status: KdsStatus } = await req.json();
   if (!status) return NextResponse.json({ error: 'status required' }, { status: 400 });
 
-  const validStatuses: KdsStatus[] = ['fired', 'in_progress', 'ready', 'bumped'];
+  const validStatuses: KdsStatus[] = ['new', 'in_progress', 'ready', 'delivered', 'void', 'fired', 'bumped'];
   if (!validStatuses.includes(status)) {
     return NextResponse.json({ error: 'Invalid status' }, { status: 400 });
   }
 
   const updates: Record<string, unknown> = { status, updated_at: new Date().toISOString() };
-  if (status === 'ready' || status === 'bumped') {
+  if (status === 'delivered' || status === 'bumped' || status === 'ready') {
     updates.bumped_at = new Date().toISOString();
   }
+
+  // pos_kds_orders is the legacy kitchen-page table; pos_kds_tickets is used by the station KDS
+  // Try pos_kds_orders first (used by /pos/kitchen), fall back to pos_kds_tickets
+  const { error: e1, data: d1 } = await supabase
+    .from('pos_kds_orders')
+    .update(updates)
+    .eq('id', id)
+    .eq('business_id', bid)
+    .select('id')
+
+  if (!e1 && d1 && d1.length > 0) return NextResponse.json({ ok: true })
 
   const { error } = await supabase
     .from('pos_kds_tickets')
