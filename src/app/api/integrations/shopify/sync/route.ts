@@ -5,7 +5,7 @@ export const maxDuration = 60
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
-import { runSquareFullSync } from '@/lib/integrations/square'
+import { runShopifyFullSync } from '@/lib/integrations/shopify'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
   const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
@@ -14,29 +14,19 @@ async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, u
   return data?.id ?? null
 }
 
-async function _POST(req: Request) {
+async function _POST(_req: Request) {
   const supabase = createServerSupabaseClient()
-
-  // Support both auth'd user calls and internal cron/server calls with business_id
-  const body = await req.json().catch(() => ({})) as { business_id?: string; _cron?: boolean }
-  let bid: string | null = null
-
-  if (body._cron && body.business_id) {
-    bid = body.business_id
-  } else {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    bid = await getBid(supabase, user.id)
-  }
-
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const bid = await getBid(supabase, user.id)
   if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
 
   try {
-    const result = await runSquareFullSync(bid)
+    const result = await runShopifyFullSync(bid)
     return NextResponse.json({ ok: true, ...result })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })
   }
 }
 
-export const POST = withErrorCapture('integrations/square/sync', _POST)
+export const POST = withErrorCapture('integrations/shopify/sync', _POST)

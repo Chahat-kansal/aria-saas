@@ -1,42 +1,37 @@
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+export const maxDuration = 10
 
-import { createServerSupabaseClient } from '@/lib/supabase-server';
-import { encryptField } from '@/lib/encryption';
-import { NextResponse } from 'next/server';
+import { NextResponse } from 'next/server'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { runSquareFullSync } from '@/lib/integrations/square'
+import { supabaseAdmin } from '@/lib/supabase-admin'
 
-// Token exchange uses the environment-specific API base
 const SQUARE_BASE = process.env.SQUARE_ENVIRONMENT === 'production'
   ? 'https://connect.squareup.com'
-  : 'https://connect.squareupsandbox.com';
+  : 'https://connect.squareupsandbox.com'
 
 async function _GET(req: Request) {
-  const { searchParams } = new URL(req.url);
-  const code = searchParams.get('code');
-  const state = searchParams.get('state');
-  const error = searchParams.get('error');
+  const url = new URL(req.url)
+  const code = url.searchParams.get('code')
+  const state = url.searchParams.get('state') ?? ''
+  const error = url.searchParams.get('error')
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? ''
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? '';
+  if (error) return NextResponse.redirect(`${appUrl}/dashboard/integrations?error=${encodeURIComponent(error)}`)
+  if (!code || !state) return NextResponse.redirect(`${appUrl}/dashboard/integrations?error=missing_params`)
 
-  if (error) {
-    return NextResponse.redirect(`${appUrl}/dashboard/integrations?error=${encodeURIComponent(error)}`);
-  }
-
-  if (!code || !state) {
-    return NextResponse.redirect(`${appUrl}/dashboard/integrations?error=missing_params`);
-  }
-
-  // Decode state
-  let bid: string;
+  // Decode state — supports both base64url ({bid,uid,ts}) and "bid:timestamp" formats
+  let businessId: string
   try {
-    const decoded = JSON.parse(Buffer.from(state, 'base64url').toString('utf8'));
-    bid = decoded.bid;
-    if (!bid) throw new Error('No business_id in state');
-    // Reject stale states older than 10 minutes
-    if (Date.now() - decoded.ts > 600_000) throw new Error('State expired');
+    const decoded = JSON.parse(Buffer.from(state, 'base64url').toString('utf8'))
+    businessId = decoded.bid
+    if (!businessId) throw new Error('No bid')
+    if (Date.now() - (decoded.ts ?? 0) > 600_000) throw new Error('State expired')
   } catch {
-    return NextResponse.redirect(`${appUrl}/dashboard/integrations?error=invalid_state`);
+    // Fallback for "bid:timestamp" format
+    businessId = state.split(':')[0]
+    if (!businessId) return NextResponse.redirect(`${appUrl}/dashboard/integrations?error=invalid_state`)
   }
 
   // Exchange code for tokens
@@ -50,53 +45,35 @@ async function _GET(req: Request) {
       grant_type: 'authorization_code',
       redirect_uri: `${appUrl}/api/integrations/square/callback`,
     }),
-  });
+  })
 
   if (!tokenRes.ok) {
-    const err = await tokenRes.text();
-    console.error('Square token exchange failed:', err);
-    return NextResponse.redirect(`${appUrl}/dashboard/integrations?error=token_exchange_failed`);
+    console.error('Square token exchange failed:', await tokenRes.text())
+    return NextResponse.redirect(`${appUrl}/dashboard/integrations?error=token_exchange_failed`)
   }
 
-  const tokens = await tokenRes.json();
-  const { access_token, refresh_token, expires_at, merchant_id } = tokens;
+  const tokens = await tokenRes.json() as Record<string, unknown>
 
-  // Encrypt tokens before storing
-  const encryptedAccess = encryptField(access_token, bid);
-  const encryptedRefresh = encryptField(refresh_token ?? '', bid);
-
-  const supabase = createServerSupabaseClient();
-
-  // Upsert the Square connection
-  const { error: upsertErr } = await supabase.from('square_connections').upsert({
-    business_id: bid,
-    square_merchant_id: merchant_id,
-    access_token: encryptedAccess,
-    refresh_token: encryptedRefresh,
-    token_expires_at: expires_at ?? null,
-    sync_status: 'pending',
+  await supabaseAdmin.from('square_connections').upsert({
+    business_id: businessId,
+    square_merchant_id: String(tokens.merchant_id ?? ''),
+    access_token: String(tokens.access_token ?? ''),
+    refresh_token: String(tokens.refresh_token ?? ''),
+    token_expires_at: tokens.expires_at ?? null,
+    sync_status: 'connected',
     connected_at: new Date().toISOString(),
-  }, { onConflict: 'business_id' });
+  }, { onConflict: 'business_id' })
 
-  if (upsertErr) {
-    console.error('Failed to save Square connection:', upsertErr.message);
-    return NextResponse.redirect(`${appUrl}/dashboard/integrations?error=db_error`);
-  }
-
-  // Mark business as Square-connected
-  await supabase.from('businesses').update({
-    data_source: 'square',
+  await supabaseAdmin.from('businesses').update({
     square_connected: true,
-  }).eq('id', bid);
+  }).eq('id', businessId)
 
-  // Trigger initial sync (fire-and-forget — don't await)
-  fetch(`${appUrl}/api/integrations/square/sync`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ business_id: bid }),
-  }).catch(console.error);
+  // Fire full sync in background — do not await
+  runSquareFullSync(businessId).catch(e =>
+    console.error('Square background sync failed:', businessId, e)
+  )
 
-  return NextResponse.redirect(`${appUrl}/dashboard/integrations?connected=square`);
+  return NextResponse.redirect(`${appUrl}/dashboard/integrations?connected=square`)
 }
 
 export const GET = withErrorCapture('integrations/square/callback', _GET)
