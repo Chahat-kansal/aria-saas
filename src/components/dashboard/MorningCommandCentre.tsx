@@ -363,18 +363,19 @@ export function MorningCommandCentre() {
               </div>
             ) : live ? (
               <>
+                {live.live_summary && (
                 <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-4">
                   <div className="rounded-xl border border-white/10 bg-black/20 p-3">
                     <p className="text-[10px] uppercase tracking-[.12em] text-white/35">Today&apos;s revenue</p>
-                    <p className="mt-1 text-xl font-semibold text-white">A${(live.live_summary.today_revenue_cents / 100).toFixed(0)}</p>
+                    <p className="mt-1 text-xl font-semibold text-white">A${((live.live_summary.today_revenue_cents ?? 0) / 100).toFixed(0)}</p>
                   </div>
                   <div className="rounded-xl border border-white/10 bg-black/20 p-3">
                     <p className="text-[10px] uppercase tracking-[.12em] text-white/35">Transactions</p>
-                    <p className="mt-1 text-xl font-semibold text-white">{live.live_summary.today_transaction_count}</p>
+                    <p className="mt-1 text-xl font-semibold text-white">{live.live_summary.today_transaction_count ?? 0}</p>
                   </div>
                   <div className="rounded-xl border border-white/10 bg-black/20 p-3">
                     <p className="text-[10px] uppercase tracking-[.12em] text-white/35">vs Yesterday</p>
-                    {live.live_summary.today_vs_yesterday_pct !== null ? (
+                    {live.live_summary.today_vs_yesterday_pct != null ? (
                       <p className={`mt-1 flex items-center gap-1 text-xl font-semibold ${live.live_summary.today_vs_yesterday_pct >= 0 ? 'text-[#8ff1c9]' : 'text-red-300'}`}>
                         {live.live_summary.today_vs_yesterday_pct >= 0 ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
                         {live.live_summary.today_vs_yesterday_pct > 0 ? '+' : ''}{live.live_summary.today_vs_yesterday_pct}%
@@ -383,7 +384,7 @@ export function MorningCommandCentre() {
                   </div>
                   <div className="rounded-xl border border-white/10 bg-black/20 p-3">
                     <p className="text-[10px] uppercase tracking-[.12em] text-white/35">vs Last week</p>
-                    {live.live_summary.today_vs_last_week_pct !== null ? (
+                    {live.live_summary.today_vs_last_week_pct != null ? (
                       <p className={`mt-1 flex items-center gap-1 text-xl font-semibold ${live.live_summary.today_vs_last_week_pct >= 0 ? 'text-[#8ff1c9]' : 'text-red-300'}`}>
                         {live.live_summary.today_vs_last_week_pct >= 0 ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
                         {live.live_summary.today_vs_last_week_pct > 0 ? '+' : ''}{live.live_summary.today_vs_last_week_pct}%
@@ -391,8 +392,9 @@ export function MorningCommandCentre() {
                     ) : <p className="mt-1 text-sm text-white/35">No prior data</p>}
                   </div>
                 </div>
+                )}
 
-                {live.alerts.length > 0 && (
+                {(live.alerts ?? []).length > 0 && (
                   <div className="mt-3 space-y-2">
                     {live.alerts.slice(0, 4).map((alert, i) => (
                       <div key={i} className={`flex items-start gap-3 rounded-xl border p-3 ${
@@ -420,7 +422,7 @@ export function MorningCommandCentre() {
                   </div>
                 )}
 
-                {live.live_summary.top_products_today.length > 0 && (
+                {live.live_summary && (live.live_summary.top_products_today ?? []).length > 0 && (
                   <div className="mt-3">
                     <p className="mb-2 text-[10px] uppercase tracking-[.12em] text-white/30">Top sellers today</p>
                     <div className="flex flex-wrap gap-2">
