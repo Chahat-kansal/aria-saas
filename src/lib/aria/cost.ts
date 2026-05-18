@@ -4,13 +4,25 @@ export interface ModelCost {
   search_per_1k_usd?: number
 }
 
+// Prices verified live from vendor docs 2026-05-18
+// Anthropic: https://platform.claude.com/docs/en/about-claude/pricing
+// OpenAI:    https://openai.com/api/pricing/
+// Perplexity: https://docs.perplexity.ai/docs/getting-started/pricing
 export const PRICING: Record<string, ModelCost> = {
-  'claude-haiku-4-5-20251001':  { input_per_m_usd: 0.25,  output_per_m_usd: 1.25 },
+  // Anthropic — 4.5 / 4.6 / 4.7 generation share the same rates within tier
+  'claude-haiku-4-5-20251001':  { input_per_m_usd: 1.00,  output_per_m_usd: 5.00 },
   'claude-sonnet-4-5-20250929': { input_per_m_usd: 3.00,  output_per_m_usd: 15.00 },
   'claude-opus-4-5-20251101':   { input_per_m_usd: 5.00,  output_per_m_usd: 25.00 },
+
+  // OpenAI — workhorse + embeddings only (we don't use flagship GPT-5.5)
   'gpt-5.4':                    { input_per_m_usd: 2.50,  output_per_m_usd: 15.00 },
+  'gpt-5.4-mini':               { input_per_m_usd: 0.75,  output_per_m_usd: 4.50 },
   'text-embedding-3-small':     { input_per_m_usd: 0.02,  output_per_m_usd: 0 },
+
+  // Perplexity Sonar — request fee tracked separately via search_per_1k_usd
+  // (low context $5/1K; we use low context by default)
   'sonar':                      { input_per_m_usd: 1.00,  output_per_m_usd: 1.00, search_per_1k_usd: 5.00 },
+  'sonar-pro':                  { input_per_m_usd: 3.00,  output_per_m_usd: 15.00, search_per_1k_usd: 6.00 },
 }
 
 // Anthropic prompt cache pricing: cached write = 1.25x base, cached read = 0.10x base
