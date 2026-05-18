@@ -13,7 +13,7 @@ import {
   Clock, Smartphone, Timer, Scissors,
   ShoppingBag, CalendarClock, Plug,
   Calculator, CalendarOff, MapPin, ShieldCheck,
-  Printer, ScrollText, ListOrdered,
+  Printer, ScrollText, ListOrdered, ChefHat, UtensilsCrossed,
 } from 'lucide-react'
 
 export interface NavItem {
@@ -46,6 +46,7 @@ export const NAV_STRUCTURE: NavSection[] = [
       { label: 'Split Groups', href: '/pos/split-groups', icon: Scissors },
       { label: 'Returns', href: '/pos/returns', icon: RotateCcw },
       { label: 'Promotions', href: '/pos/promotions', icon: Tag },
+      { label: 'Kitchen (Expo)', href: '/pos/kds/expo', icon: UtensilsCrossed },
     ],
   },
   {
@@ -152,6 +153,7 @@ export const NAV_STRUCTURE: NavSection[] = [
       { label: 'Receipt Templates', href: '/pos/settings/receipt-templates', icon: ScrollText },
       { label: 'Hardware Devices', href: '/pos/settings/hardware', icon: Printer },
       { label: 'Modifiers', href: '/pos/settings/modifiers', icon: Settings },
+      { label: 'Kitchen Stations', href: '/pos/settings/kds-stations', icon: ChefHat },
       { label: 'Staff & Users', href: '/pos/settings/users', icon: Users },
       { label: 'Roles & Permissions', href: '/pos/settings/roles', icon: Shield },
       { label: 'Surcharging', href: '/pos/settings/surcharging', icon: CreditCard },

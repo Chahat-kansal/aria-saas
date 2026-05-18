@@ -1194,6 +1194,26 @@ export default function TerminalPage() {
       });
       const d = await r.json();
       if (d.error) { alert(d.error); return; }
+      // Sprint J: auto-fire KDS tickets (non-blocking)
+      if (d.sale?.id) {
+        fetch('/api/pos/kds/auto-fire', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sale_id: d.sale.id,
+            outlet_id: outletId ?? null,
+            table_label: customerDetails?.name ?? null,
+            items: cart.map(i => ({
+              id: i.product.id, // sale_item_id resolved server-side from product_id + sale_id
+              product_id: i.product.id,
+              quantity: i.qty,
+              notes: null,
+              seat_number: null,
+              course: null,
+            })),
+          }),
+        }).catch(() => {})
+      }
       setProducts(ps => ps.map(p => {
         const item = cart.find(i => i.product.id === p.id);
         if (!item || !p.track_stock) return p;
