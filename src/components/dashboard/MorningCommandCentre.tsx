@@ -337,22 +337,22 @@ export function MorningCommandCentre() {
 
       <div className="space-y-5 p-4 md:p-5">
         {/* Live Now panel — only shown when POS data exists */}
-        {(liveLoading || (live && live.data_status.freshness !== 'empty')) && (
+        {(liveLoading || (live && live.data_status?.freshness !== 'empty')) && (
           <Panel>
             <div className="mb-3 flex items-center justify-between gap-2">
               <div className="flex items-center gap-2 text-white">
                 <span className="text-[#8ff1c9]"><Activity className="h-4 w-4" /></span>
                 <h3 className="text-sm font-semibold">Live Now</h3>
-                {live && live.data_status.freshness === 'live' && (
+                {live?.data_status?.freshness === 'live' && (
                   <span className="flex items-center gap-1 rounded-full bg-[#1D9E75]/20 px-2 py-0.5 text-[10px] font-semibold text-[#8ff1c9]">
                     <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#1D9E75]" />LIVE
                   </span>
                 )}
-                {live && live.data_status.freshness === 'stale' && (
+                {live?.data_status?.freshness === 'stale' && (
                   <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-300">STALE</span>
                 )}
               </div>
-              {live?.data_status.last_sale_at && (
+              {live?.data_status?.last_sale_at && (
                 <p className="text-[10px] text-white/30">Last sale: {new Date(live.data_status.last_sale_at).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}</p>
               )}
             </div>
