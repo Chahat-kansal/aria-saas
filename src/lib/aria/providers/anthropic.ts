@@ -61,8 +61,8 @@ export async function callAnthropic<T = Record<string, unknown>>(
         system: [{
           type: 'text',
           text: params.systemPrompt,
-          // @ts-expect-error cache_control is an Anthropic beta feature
-          cache_control: { type: 'ephemeral' },
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          cache_control: { type: 'ephemeral' } as any,
         }],
         messages: [{ role: 'user', content: params.userPrompt }],
       }, {

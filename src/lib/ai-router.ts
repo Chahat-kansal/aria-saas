@@ -227,3 +227,15 @@ export async function ariaPricing(params: {
   const prompt = `Analyse pricing strategy for ${params.businessName}.\n\nProducts: ${JSON.stringify(params.products)}\nRecent sales data: ${JSON.stringify(params.salesData)}${params.competitors ? '\nCompetitor prices: ' + JSON.stringify(params.competitors) : ''}`
   return ariaChat('pricing', prompt, 800)
 }
+
+// ── INTEL ARCHITECTURE (Sprint Intel) ─────────────────────────────────────
+// src/lib/aria/invoke.ts  →  ariaInvoke(agent, businessId, opts)
+// Layer 1: context.ts     →  buildBusinessContext (geocoded weather, dismissals)
+// Layer 2: agents.ts      →  runAgent (industry-aware, prompt-cached)
+// Layer 3: judge.ts       →  3-pass: deterministic → Opus → GPT-5 (high-stakes)
+// Layer 4: router.ts      →  rate-limited orchestration, aria_actions persistence
+// Cost controls: prompt caching (60% savings), rate limit (30/min/business),
+//   deterministic pre-filter (free), GPT-5 only on high-stakes.
+// Semantic dismissal: embedding similarity >0.85 blocks repeat suggestions.
+// All new agents route through ariaInvoke(), not ai-router.ts tasks.
+// See src/lib/aria/AGENT_RULES.md for full architecture reference.
