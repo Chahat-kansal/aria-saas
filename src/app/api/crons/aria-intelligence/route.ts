@@ -73,6 +73,14 @@ export async function GET(req: Request) {
       }
     }
 
+    // Workforce brain insights — daily
+    try {
+      const { runWorkforceInsights } = await import('@/lib/staff/workforce-brain')
+      await runWorkforceInsights(businessId)
+    } catch (e) {
+      results.errors.push(`workforce_brain:${businessId}: ${(e as Error).message}`)
+    }
+
     // Expired announcements cleanup — once daily at midnight AEST
     if (hourAEST === 0) {
       try {
