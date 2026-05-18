@@ -2,6 +2,7 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { dollarsToCents, centsToDisplay } from '@/lib/staff/pay-rates'
 
@@ -19,7 +20,7 @@ async function _GET(_req: Request, { params }: { params: { id: string } }) {
   const bid = await getBid(supabase, user.id)
   if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
 
-  const { data: member } = await supabase.from('staff_members').select('id').eq('id', params.id).eq('business_id', bid).maybeSingle()
+  const { data: member } = await supabaseAdmin.from('staff_members').select('id').eq('id', params.id).eq('business_id', bid).maybeSingle()
   if (!member) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   const { data, error } = await supabase.from('staff_pay_rates').select('*').eq('staff_member_id', params.id).order('effective_from', { ascending: false })
@@ -36,7 +37,7 @@ async function _POST(req: Request, { params }: { params: { id: string } }) {
   const bid = await getBid(supabase, user.id)
   if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
 
-  const { data: member } = await supabase.from('staff_members').select('id').eq('id', params.id).eq('business_id', bid).maybeSingle()
+  const { data: member } = await supabaseAdmin.from('staff_members').select('id').eq('id', params.id).eq('business_id', bid).maybeSingle()
   if (!member) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   const body = await req.json().catch(() => ({}))
