@@ -5,7 +5,7 @@ export const maxDuration = 30
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
-import { planAction } from '@/lib/aria/ask/action-planner'
+import { planAction, isConfirmation } from '@/lib/aria/ask/action-planner'
 import { executeAction } from '@/lib/aria/ask/action-executor'
 import type { PlannedAction } from '@/lib/aria/ask/action-planner'
 
@@ -14,13 +14,6 @@ async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, u
   if (active?.business_id) return active.business_id as string
   const { data } = await supabase.from('businesses').select('id').eq('user_id', userId).eq('is_active', true).limit(1).maybeSingle()
   return data?.id ?? null
-}
-
-const CONFIRM_WORDS = ['yes', 'confirm', 'do it', 'go ahead', 'execute', 'proceed', 'yep', 'yeah', 'sure', 'ok']
-
-export function isConfirmation(message: string): boolean {
-  const lower = message.toLowerCase().trim()
-  return CONFIRM_WORDS.some(w => lower === w || lower.startsWith(w + ' ') || lower.endsWith(' ' + w))
 }
 
 async function _POST(req: Request) {

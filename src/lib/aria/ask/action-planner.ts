@@ -49,6 +49,12 @@ HARD RULES:
 Return ONLY valid JSON matching this shape:
 {"type":"...","title":"...","description":"...","preview":["..."],"affected_count":0,"payload":{},"estimated_impact":"...","reversible":true,"risk":"low|medium|high","requires_confirmation":true}`
 
+const CONFIRM_WORDS = ['yes', 'confirm', 'do it', 'go ahead', 'execute', 'proceed', 'yep', 'yeah', 'sure', 'ok']
+export function isConfirmation(message: string): boolean {
+  const lower = message.toLowerCase().trim()
+  return CONFIRM_WORDS.some(w => lower === w || lower.startsWith(w + ' ') || lower.endsWith(' ' + w))
+}
+
 export async function planAction(
   userMessage: string,
   businessId: string,

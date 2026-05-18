@@ -4,19 +4,18 @@ import { useBusinessContext } from '@/components/providers/BusinessProvider'
 import dynamic from 'next/dynamic'
 import VoiceInput from '@/components/aria/VoiceInput'
 import ChatSuggestions from '@/components/aria/ChatSuggestions'
+import ActionPreviewCard from '@/components/aria/ActionPreviewCard'
+import AuditLogCard from '@/components/aria/AuditLogCard'
+import type { PlannedAction } from '@/lib/aria/ask/action-planner'
 
 const ChartBlock = dynamic(() => import('@/components/dashboard/ChartBlock'), { ssr: false })
 
-interface ExportAction {
-  type: 'export'
-  url: string
-  filename: string
-  format: string
-  row_count: number
-}
+interface ExportAction { type: 'export'; url: string; filename: string; format: string; row_count: number }
 interface EscalateAction { type: 'escalate'; ticket_id: string }
 interface ErrorAction { type: 'export_error' | 'escalate_error'; message: string }
-type MessageAction = ExportAction | EscalateAction | ErrorAction | null
+interface PreviewAction { type: 'action_preview'; planned: PlannedAction }
+interface ExecutionResultAction { type: 'execution_result'; ok: boolean; affected_count: number; error?: string; rollback_available?: boolean; rollback_expires_at?: string; action_log_id?: string }
+type MessageAction = ExportAction | EscalateAction | ErrorAction | PreviewAction | ExecutionResultAction | null
 
 interface Message {
   role: 'user' | 'assistant'
@@ -53,12 +52,9 @@ function ActionCard({ action }: { action: MessageAction }) {
   if (!action) return null
   if (action.type === 'export') {
     return (
-      <a
-        href={action.url}
-        download={action.filename}
+      <a href={action.url} download={action.filename}
         className="mt-2 flex items-center gap-3 px-4 py-3 rounded-xl text-sm transition-opacity hover:opacity-80"
-        style={{ background: 'rgba(45,82,64,0.3)', border: '1px solid rgba(45,82,64,0.5)', color: '#7FB897', textDecoration: 'none' }}
-      >
+        style={{ background: 'rgba(45,82,64,0.3)', border: '1px solid rgba(45,82,64,0.5)', color: '#7FB897', textDecoration: 'none' }}>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-4 h-4 flex-shrink-0">
           <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
         </svg>
@@ -68,11 +64,26 @@ function ActionCard({ action }: { action: MessageAction }) {
   }
   if (action.type === 'escalate') {
     return (
-      <div className="mt-2 flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', color: '#fca5a5' }}>
+      <div className="mt-2 flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm"
+        style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', color: '#fca5a5' }}>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-4 h-4 flex-shrink-0">
           <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
         </svg>
         Support ticket created (#{action.ticket_id.slice(0,8)})
+      </div>
+    )
+  }
+  if (action.type === 'execution_result') {
+    return (
+      <div className="mt-2 px-4 py-2.5 rounded-xl text-xs"
+        style={{
+          background: action.ok ? 'rgba(34,197,94,0.08)' : 'rgba(239,68,68,0.08)',
+          border: `1px solid ${action.ok ? 'rgba(34,197,94,0.2)' : 'rgba(239,68,68,0.2)'}`,
+          color: action.ok ? '#86efac' : '#fca5a5',
+        }}>
+        {action.ok
+          ? `✓ ${action.affected_count} item${action.affected_count !== 1 ? 's' : ''} updated${action.rollback_available ? ' · Undo available for 1 hour' : ''}`
+          : `✗ Failed: ${action.error}`}
       </div>
     )
   }
@@ -87,6 +98,9 @@ export default function AskAriaPage() {
   const [conversationId, setConversationId] = useState<string | null>(null)
   const [history, setHistory] = useState<ConvSummary[]>([])
   const [showHistory, setShowHistory] = useState(false)
+  const [pendingAction, setPendingAction] = useState<PlannedAction | null>(null)
+  const [confirmingAction, setConfirmingAction] = useState(false)
+  const [showAudit, setShowAudit] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
@@ -149,10 +163,29 @@ export default function AskAriaPage() {
       }
 
       const data = await res.json() as {
-        response?: string; conversation_id?: string; intent?: string; action?: MessageAction; cost_usd_cents?: number
+        response?: string; conversation_id?: string; intent?: string
+        action?: { action?: string; planned?: PlannedAction; type?: string; [k: string]: unknown }
+        cost_usd_cents?: number
       }
 
       if (data.conversation_id) setConversationId(data.conversation_id)
+
+      // Detect action preview — show ActionPreviewCard
+      if (data.action?.action === 'preview' && data.action.planned) {
+        setPendingAction(data.action.planned as PlannedAction)
+      }
+
+      // Detect execution result
+      const msgAction: MessageAction = (() => {
+        const a = data.action
+        if (!a) return null
+        if (a.action === 'preview') return { type: 'action_preview', planned: a.planned as PlannedAction }
+        if (a.type === 'execution_result') return a as unknown as ExecutionResultAction
+        if (a.type === 'export') return a as unknown as ExportAction
+        if (a.type === 'escalate') return a as unknown as EscalateAction
+        if (a.type === 'export_error' || a.type === 'escalate_error') return a as unknown as ErrorAction
+        return null
+      })()
 
       setMessages(prev => {
         const updated = [...prev]
@@ -162,7 +195,7 @@ export default function AskAriaPage() {
             ...last,
             content: data.response ?? '',
             streaming: false,
-            action: data.action ?? null,
+            action: msgAction,
             intent: data.intent,
           }
         }
@@ -186,10 +219,45 @@ export default function AskAriaPage() {
     }
   }, [input, sending, conversationId, loadHistory])
 
+  const confirmAction = useCallback(async () => {
+    if (!pendingAction || !conversationId) return
+    setConfirmingAction(true)
+    try {
+      const res = await fetch('/api/aria/ask/action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ intent: 'confirm', message: 'yes', conversation_id: conversationId }),
+      })
+      const data = await res.json() as { execution_result?: ExecutionResultAction; status?: string }
+      const result = data.execution_result
+      const resultText = result?.ok
+        ? `Done — ${result.affected_count} item${result.affected_count !== 1 ? 's' : ''} updated.${result.rollback_available ? ' You can undo within 1 hour.' : ''}`
+        : `Action failed: ${result?.error ?? 'Unknown error'}`
+      setMessages(prev => [...prev, { role: 'assistant', content: resultText, action: result ? { ...result, type: 'execution_result' } as ExecutionResultAction : null, timestamp: new Date() }])
+      setPendingAction(null)
+      loadHistory()
+    } finally {
+      setConfirmingAction(false)
+    }
+  }, [pendingAction, conversationId, loadHistory])
+
+  const cancelAction = useCallback(() => {
+    if (conversationId) {
+      fetch('/api/aria/ask/action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ intent: 'cancel', conversation_id: conversationId }),
+      }).catch(() => { /* non-fatal */ })
+    }
+    setPendingAction(null)
+    setMessages(prev => [...prev, { role: 'assistant', content: 'Action cancelled.', timestamp: new Date() }])
+  }, [conversationId])
+
   function newConversation() {
     setMessages([])
     setConversationId(null)
     setInput('')
+    setPendingAction(null)
     inputRef.current?.focus()
   }
 
@@ -313,8 +381,39 @@ export default function AskAriaPage() {
               </div>
             </div>
           ))}
+          {/* Pending action confirmation card */}
+          {pendingAction && (
+            <div className="max-w-2xl w-full mx-auto">
+              <ActionPreviewCard
+                action={pendingAction}
+                onConfirm={confirmAction}
+                onCancel={cancelAction}
+                loading={confirmingAction}
+              />
+            </div>
+          )}
+
           <div ref={bottomRef} />
         </div>
+
+        {/* Audit log collapsible */}
+        {messages.length > 0 && (
+          <div className="px-6 border-t flex-shrink-0" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
+            <button
+              onClick={() => setShowAudit(v => !v)}
+              className="w-full flex items-center justify-between py-2 text-xs transition-colors"
+              style={{ color: 'rgba(255,255,255,0.3)' }}
+            >
+              <span>Recent actions</span>
+              <span>{showAudit ? '▲' : '▼'}</span>
+            </button>
+            {showAudit && (
+              <div className="pb-3">
+                <AuditLogCard />
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Input */}
         <div className="px-6 py-4 border-t flex-shrink-0"
