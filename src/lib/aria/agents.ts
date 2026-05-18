@@ -1,5 +1,10 @@
 import { callAnthropic } from './providers/anthropic'
+import { searchWeb } from './signals/web'
 import type { AgentKey, BusinessContext, Recommendation } from './types'
+
+export function isPerplexityAvailable(): boolean {
+  return !!process.env.PERPLEXITY_API_KEY
+}
 
 const FALLBACK_REC: Recommendation = {
   agent: 'generic', type: 'none', title: 'No suggestion', description: 'Insufficient data.',
@@ -57,6 +62,16 @@ export async function runAgent(
   taskHint?: string,
 ): Promise<{ recommendation: Recommendation; cost_cents: number; latency_ms: number }> {
   const systemPrompt = buildSystemPrompt(agentKey, ctx)
+  // Inject web grounding for compliance and pricing agents when Perplexity is available
+  let webGrounding = ''
+  if ((agentKey === 'compliance' || agentKey === 'pricing') && isPerplexityAvailable()) {
+    const query = agentKey === 'compliance'
+      ? `Australian ${ctx.industry} compliance rules 2024 GST WET RSA food standards`
+      : `Australian ${ctx.industry} retail pricing strategy current market`
+    const webSignal = await searchWeb(query, ctx.business_id)
+    if (webSignal?.answer) webGrounding = `\n\nWeb grounding (Perplexity):\n${webSignal.answer}`
+  }
+
   const userPrompt = `Business context:\n${JSON.stringify({
     industry: ctx.industry,
     industry_subtype: ctx.industry_subtype,
@@ -66,7 +81,7 @@ export async function runAgent(
     product: ctx.product ?? null,
     weather: ctx.external_signals.weather,
     recent_observations: ctx.recent_observations.slice(0, 5),
-  }, null, 2)}${taskHint ? `\n\nAdditional context:\n${taskHint}` : ''}\n\nGenerate the best ${agentKey} recommendation. Return ONLY JSON.`
+  }, null, 2)}${webGrounding}${taskHint ? `\n\nAdditional context:\n${taskHint}` : ''}\n\nGenerate the best ${agentKey} recommendation. Return ONLY JSON.`
 
   const modelByAgent: Record<AgentKey, 'haiku' | 'sonnet' | 'opus'> = {
     promo: 'sonnet', pricing: 'sonnet', inventory: 'haiku',
