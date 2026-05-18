@@ -9,8 +9,9 @@ export interface BarcodeProduct {
 export type AgentKey =
   | 'promo' | 'pricing' | 'inventory' | 'compliance'
   | 'product_lookup' | 'hardware' | 'ops_narrative' | 'generic'
+  | 'intent_classifier' | 'ask_aria' | 'ask_suggestions' | 'ask_files' | 'ask_troubleshoot'
 
-export type AgentRole = 'agent' | 'judge' | 'data' | 'narrative'
+export type AgentRole = 'agent' | 'judge' | 'data' | 'narrative' | 'classify' | 'chat' | 'export'
 
 export interface ProductContext {
   id: string
