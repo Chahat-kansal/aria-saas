@@ -26,7 +26,7 @@ async function _GET(req: Request) {
   let q = supabase.from('pos_kds_tickets')
     .select('*')
     .eq('business_id', bid)
-    .in('status', ['fired', 'preparing'])
+    .in('status', ['fired', 'in_progress'])
     .gte('fired_at', cutoff)
     .order('fired_at', { ascending: true })
 

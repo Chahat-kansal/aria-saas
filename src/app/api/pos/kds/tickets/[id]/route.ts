@@ -19,10 +19,10 @@ async function _PATCH(req: Request, { params }: { params: { id: string } }) {
   const bid = await getBid(supabase, user.id)
   if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
 
-  const { data: ticket } = await supabase.from('pos_kds_tickets')
+  const { data: ticket } = await supabaseAdmin.from('pos_kds_tickets')
     .select('id, business_id, status, fired_at, bumped_at, prep_time_seconds, station')
-    .eq('id', params.id).maybeSingle()
-  if (!ticket || ticket.business_id !== bid) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    .eq('id', params.id).eq('business_id', bid).maybeSingle()
+  if (!ticket) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   const body = await req.json().catch(() => ({}))
   const action = String(body.action ?? '').toLowerCase()
