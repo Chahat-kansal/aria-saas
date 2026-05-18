@@ -1,5 +1,6 @@
 export const dynamic = 'force-dynamic';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
+import { supabaseAdmin } from '@/lib/supabase-admin';
 import { NextResponse } from 'next/server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 
@@ -63,7 +64,8 @@ async function _PATCH(req: Request, { params }: { params: Promise<{ id: string }
   if (status === 'ready' || status === 'bumped') ordersUpdate.bumped_at = now
   if (status === 'delivered') { ordersUpdate.bumped_at = now; ordersUpdate.completed_at = now }
 
-  const { error: e1, data: d1 } = await supabase
+  // supabaseAdmin bypasses RLS — pos_kds_orders has RLS enabled with no policies
+  const { error: e1, data: d1 } = await supabaseAdmin
     .from('pos_kds_orders')
     .update(ordersUpdate)
     .eq('id', id)
