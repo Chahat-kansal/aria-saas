@@ -44,6 +44,9 @@ import KdsTracker from '@/components/pos/KdsTracker';
 import DiscountBar, { type DiscountBarCartItem } from '@/components/pos/DiscountBar';
 import { useScanner } from '@/lib/hardware/scanner';
 import type { AppliedDiscount } from '@/lib/pos/discount-engine';
+import ModifierPickerModal from '@/components/pos/ModifierPickerModal';
+import PriceOverrideModal from '@/components/pos/PriceOverrideModal';
+import CartLineMenu from '@/components/pos/CartLineMenu';
 
 /* ─── Types ─────────────────────────────────────────────────────── */
 interface Product {
@@ -297,6 +300,18 @@ export default function TerminalPage() {
   const [customerDetails,      setCustomerDetails]      = useState<CustomerDetails | null>(null);
   const [selectedTable,        setSelectedTable]        = useState<{ id: string; name: string } | null>(null);
   const [floorPlanEditMode,    setFloorPlanEditMode]    = useState(false);
+
+  // Sprint H — cart customisation (modifier picker, price override, line menu)
+  const [modifierPicker, setModifierPicker] = useState<null | { product: Product }>(null);
+  const [priceOverride, setPriceOverride] = useState<null | { index: number; line: CartItem }>(null);
+  const [editNotesState, setEditNotesState] = useState<null | { index: number; line: CartItem }>(null);
+  const [canOverridePrice, setCanOverridePrice] = useState(false);
+  useEffect(() => {
+    fetch('/api/pos/users/me-permissions')
+      .then(r => r.json())
+      .then(d => setCanOverridePrice(!!d.permissions?.can_override_price))
+      .catch(() => {});
+  }, []);
 
   // Outlet awareness — additive
   const [activeOutletId, setActiveOutletId] = useState<string | null>(null);
@@ -831,6 +846,17 @@ export default function TerminalPage() {
 
   async function checkAndAddToCart(p: Product, fromEl?: HTMLElement | null) {
     if (!p.is_active) return;
+    // Sprint H: check pos_product_modifier_groups for ALL industries
+    try {
+      const checkR = await fetch(`/api/pos/product-modifier-groups?product_id=${p.id}`);
+      if (checkR.ok) {
+        const checkD = await checkR.json();
+        if (Array.isArray(checkD.groups) && checkD.groups.length > 0) {
+          setModifierPicker({ product: p });
+          return;
+        }
+      }
+    } catch { /* fall through to existing logic */ }
     // Cafe routing — Sprint C: sandwich builder, Sprint A: modifier modal
     if (businessType === 'cafe') {
       // Check builder_type first
@@ -2436,6 +2462,13 @@ export default function TerminalPage() {
                         )}
                         ${lineTotal.toFixed(2)}
                       </div>
+                      {/* Sprint H: per-line kebab menu */}
+                      <CartLineMenu
+                        canOverride={canOverridePrice}
+                        onOverridePrice={() => setPriceOverride({ index: cart.indexOf(item), line: item })}
+                        onEditNotes={() => setEditNotesState({ index: cart.indexOf(item), line: item })}
+                        onRemove={() => { updateQty(key, 0); }}
+                      />
                     </div>
                   );
                 })}
@@ -3419,6 +3452,84 @@ export default function TerminalPage() {
         <div className="fixed inset-0 z-40 flex items-center justify-center" style={{ background: 'rgba(8,6,16,0.5)' }}>
           <div className="rounded-xl px-6 py-4 flex items-center gap-3" style={{ background: 'var(--bg-elevated)', border: '1px solid #2A2540' }}>
             <Spinner /><span className="text-sm" style={{ color: 'var(--text-secondary)' }}>Loading options…</span>
+          </div>
+        </div>
+      )}
+
+      {/* Sprint H — ModifierPickerModal */}
+      {modifierPicker && (
+        <ModifierPickerModal
+          productId={modifierPicker.product.id}
+          productName={modifierPicker.product.name}
+          basePrice={Number(modifierPicker.product.price) || 0}
+          onCancel={() => setModifierPicker(null)}
+          onConfirm={(selections, unitPrice, notes) => {
+            setCart(c => [...c, {
+              product: modifierPicker.product,
+              qty: 1,
+              unitPrice,
+              modifierDetails: selections.map(s => ({ id: s.modifier_id, name: s.name, price_adjustment: s.price_adjustment, modifier_group: null })),
+              label: selections.length > 0 ? `${modifierPicker.product.name} · ${selections.map(s => s.name).join(', ')}` : undefined,
+            } as CartItem & { item_notes?: string; h_modifiers?: typeof selections }]);
+            setModifierPicker(null);
+          }}
+        />
+      )}
+
+      {/* Sprint H — PriceOverrideModal */}
+      {priceOverride && (
+        <PriceOverrideModal
+          productName={priceOverride.line.label ?? priceOverride.line.product.name}
+          originalPrice={Number((priceOverride.line as unknown as Record<string, unknown>).original_unit_price ?? priceOverride.line.unitPrice) || 0}
+          currentPrice={Number(priceOverride.line.unitPrice) || 0}
+          canOverride={canOverridePrice}
+          onCancel={() => setPriceOverride(null)}
+          onConfirm={async (newPrice, reason) => {
+            const idx = priceOverride.index;
+            setCart(c => c.map((l, i) => i === idx ? {
+              ...l,
+              unitPrice: newPrice,
+            } : l));
+            fetch('/api/pos/cart-line-actions', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                product_id: priceOverride.line.product.id,
+                product_name: priceOverride.line.label ?? priceOverride.line.product.name,
+                original_unit_price: Number((priceOverride.line as unknown as Record<string, unknown>).original_unit_price ?? priceOverride.line.unitPrice) || 0,
+                new_unit_price: newPrice,
+                reason,
+              }),
+            }).catch(() => {});
+            setPriceOverride(null);
+          }}
+        />
+      )}
+
+      {/* Sprint H — Edit notes inline prompt */}
+      {editNotesState && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => setEditNotesState(null)}>
+          <div className="bg-[#0e1612] border border-[rgba(127,184,151,0.15)] rounded-2xl p-6 w-full max-w-sm text-[#E8EDE8]" onClick={e => e.stopPropagation()}>
+            <h2 className="text-base font-semibold mb-3">Special instructions</h2>
+            <textarea
+              autoFocus
+              rows={3}
+              defaultValue={String((editNotesState.line as unknown as Record<string, unknown>).item_notes ?? '')}
+              onKeyDown={e => {
+                if (e.key === 'Enter' && e.metaKey) {
+                  const val = (e.target as HTMLTextAreaElement).value;
+                  const idx = editNotesState.index;
+                  setCart(c => c.map((l, i) => i === idx ? { ...l } : l));
+                  setEditNotesState(null);
+                  void val;
+                }
+              }}
+              placeholder="No onions, well done, allergy note…"
+              className="w-full bg-[rgba(255,255,255,0.03)] border border-[rgba(127,184,151,0.2)] rounded-xl px-3 py-2 text-sm text-[#E8EDE8] placeholder:text-[rgba(232,237,232,0.3)]"
+            />
+            <div className="flex gap-2 justify-end mt-3">
+              <button onClick={() => setEditNotesState(null)} className="px-4 py-2 rounded-xl text-sm border border-[rgba(127,184,151,0.2)] text-[rgba(232,237,232,0.7)]">Done</button>
+            </div>
           </div>
         </div>
       )}

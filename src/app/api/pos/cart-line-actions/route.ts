@@ -31,31 +31,19 @@ async function _POST(req: Request) {
   const deltaPct = origPrice > 0 ? (Math.abs(delta) / origPrice) * 100 : 0
 
   // Log audit trail
-  await supabase.from('pos_audit_log').insert({
-    business_id: bid,
-    action: 'price_override',
-    performed_by: user.id,
-    sale_id: null,
-    amount: newPrice,
-    reason_note: String(body.reason ?? '').slice(0, 500),
-    reason_code: 'price_override',
-  }).catch(() => {
-    // fallback: some schemas use different columns — try alternate
-    return supabase.from('pos_audit_log').insert({
+  try {
+    await supabase.from('pos_audit_log').insert({
       business_id: bid,
-      event_type: 'price_override',
-      triggered_by: user.id,
-      data: {
-        product_id: body.product_id,
-        product_name: body.product_name,
-        original_unit_price: origPrice,
-        new_unit_price: newPrice,
-        delta: +delta.toFixed(2),
-        delta_pct: +deltaPct.toFixed(2),
-        reason: String(body.reason ?? '').slice(0, 500),
-      },
+      action: 'price_override',
+      performed_by: user.id,
+      sale_id: null,
+      amount: newPrice,
+      reason_note: String(body.reason ?? '').slice(0, 500),
+      reason_code: 'price_override',
     })
-  })
+  } catch {
+    // non-fatal — table schema varies
+  }
 
   // Fire ariaObserve — non-fatal
   try {

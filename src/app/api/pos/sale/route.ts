@@ -210,6 +210,13 @@ async function _POST(req: Request) {
     tax_rate: i.tax_rate ?? 10,
     tax_code_id: i.tax_code_id ?? null,
     line_total: +i.line_total.toFixed(2),
+    modifiers: i.modifiers ?? [],
+    item_notes: i.item_notes ?? null,
+    price_overridden: !!i.price_overridden,
+    original_unit_price: i.original_unit_price != null ? (Number(i.original_unit_price) || 0) : null,
+    price_override_reason: i.price_override_reason ?? null,
+    price_override_by: i.price_overridden ? user.id : null,
+    price_override_at: i.price_overridden ? new Date().toISOString() : null,
   }));
 
   const { error: itemsErr } = await supabase.from('pos_sale_items').insert(saleItems);

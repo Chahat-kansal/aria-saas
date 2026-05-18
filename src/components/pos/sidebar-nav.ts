@@ -150,6 +150,7 @@ export const NAV_STRUCTURE: NavSection[] = [
       { label: 'Sale Keys', href: '/pos/sale-keys', icon: Key },
       { label: 'Receipt Templates', href: '/pos/settings/receipt-templates', icon: ScrollText },
       { label: 'Hardware Devices', href: '/pos/settings/hardware', icon: Printer },
+      { label: 'Modifiers', href: '/pos/settings/modifiers', icon: Settings },
       { label: 'Staff & Users', href: '/pos/settings/users', icon: Users },
       { label: 'Roles & Permissions', href: '/pos/settings/roles', icon: Shield },
       { label: 'Surcharging', href: '/pos/settings/surcharging', icon: CreditCard },

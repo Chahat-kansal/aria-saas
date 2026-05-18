@@ -42,7 +42,7 @@ export default function ModifiersPage() {
 
   useEffect(() => { fetchGroups() }, [fetchGroups])
 
-  async function saveNew(form: Record<string, unknown>) {
+  async function saveNew(form: object) {
     const r = await fetch('/api/pos/modifier-groups', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(form),
@@ -51,8 +51,8 @@ export default function ModifiersPage() {
     else alert('Failed to save modifier group')
   }
 
-  async function saveEdit(form: Record<string, unknown> & { id?: string }) {
-    const { id, ...updates } = form
+  async function saveEdit(form: object & { id?: string }) {
+    const { id, ...updates } = form as { id?: string; [k: string]: unknown }
     const r = await fetch(`/api/pos/modifier-groups/${id}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updates),

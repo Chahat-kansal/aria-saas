@@ -44,9 +44,9 @@ async function _GET(req: Request) {
       max_selections: binding?.override_max ?? g.max_selections,
       modifiers: (mods ?? []).filter(m => m.group_id === g.id),
     }
-  }).sort((a, b) => {
-    const oa = bindings.find(b => b.group_id === a.id)?.display_order ?? 0
-    const ob = bindings.find(b => b.group_id === b.id)?.display_order ?? 0
+  }).sort((ga, gb) => {
+    const oa = bindings.find(bnd => bnd.group_id === ga.id)?.display_order ?? 0
+    const ob = bindings.find(bnd => bnd.group_id === gb.id)?.display_order ?? 0
     return oa - ob
   })
 
