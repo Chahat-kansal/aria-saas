@@ -172,7 +172,7 @@ export default function AskAriaPage() {
   const urlConvLoaded = useRef(false)
 
   const fetchConvs = useCallback(() => {
-    fetch('/api/pos/ask').then(r => r.json()).then(d => setConversations(d.conversations ?? [])).catch(() => {})
+    fetch('/api/aria/ask/history').then(r => r.json()).then((d: { conversations?: ConvMeta[] }) => setConversations(d.conversations ?? [])).catch(() => {})
   }, [])
 
   useEffect(() => { document.title = 'Ask Aria | Aria POS'; }, [])
@@ -190,16 +190,16 @@ export default function AskAriaPage() {
   }, [messages])
 
   const loadConversation = useCallback(async (id: string) => {
-    const res = await fetch(`/api/pos/ask?id=${id}`)
-    const { messages: stored } = await res.json() as { messages: { role: string; content: unknown }[] }
+    const res = await fetch(`/api/aria/ask/history?id=${id}&messages=true`)
+    const data = await res.json() as { conversation?: { messages?: Array<{ role: string; content: string }> } }
+    const stored = data.conversation?.messages ?? []
     setConvId(id)
     setMessages(
-      (stored ?? [])
-        .filter(m => m.role === 'user' || m.role === 'assistant')
-        .map(m => ({
+      stored
+        .filter((m: { role: string }) => m.role === 'user' || m.role === 'assistant')
+        .map((m: { role: string; content: string }) => ({
           type: m.role === 'user' ? 'user' : 'aria',
-          text: typeof m.content === 'string' ? m.content
-            : Array.isArray(m.content) ? (m.content as { type: string; text?: string }[]).filter(b => b.type === 'text').map(b => b.text ?? '').join('') : '',
+          text: m.content,
           streaming: false,
         } as DisplayMsg))
     )
@@ -223,65 +223,57 @@ export default function AskAriaPage() {
     setMessages(prev => [...prev, { type: 'user', text: content }])
     const nextHistory = [...history, { role: 'user' as const, content }]
 
-    const res = await fetch('/api/pos/ask', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messages: nextHistory, conversation_id: convId }),
-    })
+    try {
+      const res = await fetch('/api/aria/ask', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: content, conversation_id: convId ?? null }),
+      })
 
-    if (!res.body) { setStreaming(false); return }
-
-    const reader = res.body.getReader(); const decoder = new TextDecoder()
-    let buffer = ''; let accumulated = ''
-
-    while (true) {
-      const { value, done } = await reader.read(); if (done) break
-      buffer += decoder.decode(value, { stream: true })
-      const lines = buffer.split('\n'); buffer = lines.pop() ?? ''
-      for (const line of lines) {
-        if (!line.startsWith('data: ')) continue
-        try {
-          const ev = JSON.parse(line.slice(6)) as Record<string, unknown>
-          if (ev.type === 'text') {
-            accumulated += ev.value as string
-            setMessages(prev => {
-              if (ariaIdxRef.current >= 0) {
-                const next = [...prev]; (next[ariaIdxRef.current] as { type: 'aria'; text: string; streaming: boolean }).text = accumulated; return next
-              }
-              ariaIdxRef.current = prev.length
-              return [...prev, { type: 'aria', text: accumulated, streaming: true }]
-            })
-          } else if (ev.type === 'tool_use') {
-            const toolName = ev.name as string
-            setMessages(prev => {
-              toolIdxRef.current[toolName] = prev.length
-              return [...prev, { type: 'tool', toolName, status: 'running' }]
-            })
-          } else if (ev.type === 'tool_result') {
-            const toolName = ev.name as string
-            const count = getResultCount(ev.result)
-            setMessages(prev => {
-              const idx = toolIdxRef.current[toolName] ?? -1
-              if (idx < 0) return prev
-              const next = [...prev]; (next[idx] as { type: 'tool'; toolName: string; status: 'running' | 'done'; count?: number }).status = 'done'; if (count !== undefined) (next[idx] as { count?: number }).count = count; return next
-            })
-          } else if (ev.type === 'done') {
-            const newId = ev.conversation_id as string
-            setConvId(newId)
-            if (newId) router.replace(`/pos/ask?conversation_id=${newId}`, { scroll: false })
-            setHistory(h => [...h, { role: 'user', content }, { role: 'assistant', content: accumulated }])
-            setMessages(prev => prev.map(m => m.type === 'aria' ? { ...m, streaming: false } : m))
-            setStreaming(false)
-            if (!convId) fetchConvs()
-          } else if (ev.type === 'error') {
-            setMessages(prev => [...prev, { type: 'error', text: ev.value as string }])
-            setStreaming(false)
-          }
-        } catch {}
+      const data = await res.json() as {
+        response?: string; conversation_id?: string; intent?: string
+        action?: Record<string, unknown>
       }
+      const reply = data.response ?? 'No response'
+
+      if (data.conversation_id) {
+        setConvId(data.conversation_id)
+        router.replace(`/pos/ask?conversation_id=${data.conversation_id}`, { scroll: false })
+      }
+
+      // Handle export action — fetch download URL
+      if (data.action?.action === 'export') {
+        const exportRes = await fetch('/api/aria/ask/export', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            format: data.action.format ?? 'csv',
+            subject: data.action.subject ?? 'sales',
+            period: data.action.period ?? 'month',
+          }),
+        })
+        const exportData = await exportRes.json() as { url?: string; filename?: string; row_count?: number }
+        if (exportData.url) {
+          setMessages(prev => [...prev, {
+            type: 'aria',
+            text: `${reply}\n\n[Download ${exportData.filename}](${exportData.url}) — ${exportData.row_count} rows, expires in 1 hour.`,
+            streaming: false,
+          }])
+          setHistory(h => [...h, { role: 'user', content }, { role: 'assistant', content: reply }])
+          setStreaming(false)
+          if (!convId) fetchConvs()
+          return
+        }
+      }
+
+      setMessages(prev => [...prev, { type: 'aria', text: reply, streaming: false }])
+      setHistory(h => [...h, { role: 'user', content }, { role: 'assistant', content: reply }])
+      if (!convId) fetchConvs()
+    } catch (err) {
+      setMessages(prev => [...prev, { type: 'error', text: err instanceof Error ? err.message : 'Request failed' }])
     }
     setStreaming(false)
-  }, [streaming, history, convId, fetchConvs])
+  }, [streaming, history, convId, fetchConvs, router])
 
   const isEmpty = messages.length === 0
 
