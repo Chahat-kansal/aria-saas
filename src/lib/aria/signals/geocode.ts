@@ -1,4 +1,4 @@
-import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { supabaseAdmin } from '@/lib/supabase-admin'
 
 const KEY = process.env.GEOAPIFY_API_KEY ?? ''
 
@@ -10,8 +10,7 @@ export async function geocodeAddress(address: string): Promise<GeocodedAddress |
 
   if (KEY) {
     try {
-      const supabase = createServerSupabaseClient()
-      const { data: cached } = await supabase.from('aria_signal_cache')
+      const { data: cached } = await supabaseAdmin.from('aria_signal_cache')
         .select('payload, expires_at').eq('cache_key', cacheKey).maybeSingle()
       if (cached && new Date(String(cached.expires_at)).getTime() > Date.now()) {
         return cached.payload as GeocodedAddress
@@ -33,8 +32,7 @@ export async function geocodeAddress(address: string): Promise<GeocodedAddress |
             formatted: f.properties.formatted,
           }
           try {
-            const supabase = createServerSupabaseClient()
-            await supabase.from('aria_signal_cache').upsert({
+            await supabaseAdmin.from('aria_signal_cache').upsert({
               cache_key: cacheKey, signal_type: 'geocode', payload: result,
               expires_at: new Date(Date.now() + 365 * 24 * 3600_000).toISOString(),
             }, { onConflict: 'cache_key' })

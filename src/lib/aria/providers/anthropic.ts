@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { parseLLMJsonOr } from '@/lib/ai-json'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { supabaseAdmin } from '@/lib/supabase-admin'
 import { computeCostCentsWithCache } from '../cost'
 import type { AgentKey, AgentRole } from '../types'
 
@@ -86,8 +86,7 @@ export async function callAnthropic<T = Record<string, unknown>>(
 
   if (params.businessId) {
     try {
-      const supabase = createServerSupabaseClient()
-      await supabase.from('aria_ai_calls').insert({
+      await supabaseAdmin.from('aria_ai_calls').insert({
         business_id: params.businessId,
         agent_key: params.agentKey,
         provider: 'anthropic',

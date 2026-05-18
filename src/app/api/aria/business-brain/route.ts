@@ -19,6 +19,7 @@ import {
   generateReorderPlan,
 } from '@/lib/aria/business-brain';
 import { withErrorCapture } from '@/lib/api/with-error-capture';
+import { ariaInvoke } from '@/lib/aria/invoke';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -190,11 +191,13 @@ export const POST = withErrorCapture('aria/business-brain', async (req: Request)
       throw err;
     }
 
-    // ── Parallel save recommendations ─────────────────────────────────
-    const shouldSave = ['daily','health','sales','inventory','reorder','profit','supplier','customer','staff'].includes(mode);
-    const saved_actions = shouldSave
-      ? await saveRecommendations(supabase, businessId, mode, output)
-      : [];
+    // ── Sprint Intel v2: route suggestions through judge via ariaInvoke ──
+    // saveRecommendations() was removed — it wrote directly to aria_actions
+    // bypassing the 3-pass judge. ariaInvoke handles persistence after validation.
+    if (['daily', 'health', 'sales'].includes(mode)) {
+      ariaInvoke('ops_narrative', businessId, { includeWeather: mode === 'daily' }).catch(() => {})
+    }
+    const saved_actions: unknown[] = [];
 
     // Prepend live weather opener to daily briefing summary
     let weatherPrefix = ''

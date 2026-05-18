@@ -1,5 +1,5 @@
 import { parseLLMJsonOr } from '@/lib/ai-json'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { supabaseAdmin } from '@/lib/supabase-admin'
 import { computeCostCentsWithCache } from '../cost'
 import type { AgentKey, AgentRole } from '../types'
 
@@ -64,8 +64,7 @@ export async function callOpenAIChat<T = Record<string, unknown>>(
 
   if (params.businessId) {
     try {
-      const supabase = createServerSupabaseClient()
-      await supabase.from('aria_ai_calls').insert({
+      await supabaseAdmin.from('aria_ai_calls').insert({
         business_id: params.businessId, agent_key: params.agentKey, provider: 'openai',
         model_id: modelId, role: params.role, input_tokens: inputTokens, output_tokens: outputTokens,
         latency_ms: latency, cost_usd_cents: cost, success, error_message: errorMessage,
@@ -91,9 +90,8 @@ export async function embedText(text: string, businessId?: string): Promise<numb
     if (!Array.isArray(vec)) return null
     if (businessId) {
       try {
-        const supabase = createServerSupabaseClient()
         const inputTokens = j.usage?.prompt_tokens ?? 0
-        await supabase.from('aria_ai_calls').insert({
+        await supabaseAdmin.from('aria_ai_calls').insert({
           business_id: businessId, agent_key: 'product_lookup', provider: 'openai',
           model_id: 'text-embedding-3-small', role: 'data',
           input_tokens: inputTokens, output_tokens: 0, latency_ms: 0,

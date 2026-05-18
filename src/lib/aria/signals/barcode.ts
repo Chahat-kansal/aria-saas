@@ -1,4 +1,4 @@
-import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { supabaseAdmin } from '@/lib/supabase-admin'
 import type { BarcodeProduct } from '../types'
 
 // ─────────────────────────────────────────────────────────────────────
@@ -71,11 +71,10 @@ export async function lookupBarcode(code: string): Promise<BarcodeProduct | null
   if (!code || code.trim().length < 6) return null
   const cleaned = code.trim()
   const cacheKey = `barcode:${cleaned}`
-  const supabase = createServerSupabaseClient()
 
   // Cache check (cached results are fastest path)
   try {
-    const { data: cached } = await supabase.from('aria_signal_cache')
+    const { data: cached } = await supabaseAdmin.from('aria_signal_cache')
       .select('payload, expires_at').eq('cache_key', cacheKey).maybeSingle()
     if (cached && new Date(String(cached.expires_at)).getTime() > Date.now()) {
       return cached.payload as BarcodeProduct
@@ -97,7 +96,7 @@ export async function lookupBarcode(code: string): Promise<BarcodeProduct | null
   // Cache successful lookup for 30 days (saves quota + reduces latency)
   if (result) {
     try {
-      await supabase.from('aria_signal_cache').upsert({
+      await supabaseAdmin.from('aria_signal_cache').upsert({
         cache_key: cacheKey,
         signal_type: 'barcode',
         payload: result,
