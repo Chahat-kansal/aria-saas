@@ -193,29 +193,41 @@ export default function PromotionsPage() {
           ))}
         </div>
 
-        {/* AI suggestion card */}
-        {aiSuggestion && Object.keys(aiSuggestion).length > 0 && (
-          <div style={{ background: 'rgba(139,92,246,0.07)', border: '1px solid rgba(139,92,246,0.3)', borderRadius: 12, padding: '16px 20px', marginBottom: 16 }}>
-            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
-              <div style={{ flex: 1 }}>
-                <p style={{ fontSize: 11, fontWeight: 700, color: C.violet, textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 6px' }}>✨ Aria Suggestion</p>
-                <p style={{ fontSize: 14, fontWeight: 700, color: C.text, margin: '0 0 4px' }}>{String(aiSuggestion.promotion_name ?? '')}</p>
-                <p style={{ fontSize: 12, color: C.muted, margin: '0 0 10px' }}>{String(aiSuggestion.reasoning ?? '')}</p>
-                <p style={{ fontSize: 11, color: C.dim, margin: 0 }}>Type: {String(aiSuggestion.promotion_type ?? '')} · Est. impact: A${Number(aiSuggestion.estimated_impact_aud || 0).toFixed(2)}</p>
-              </div>
-              <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-                <button onClick={() => { sessionStorage.setItem('aria_promo_suggestion', JSON.stringify(aiSuggestion)); window.location.href = '/pos/promotions/new'; }}
-                  style={{ padding: '7px 14px', borderRadius: 8, border: 'none', background: C.violet, color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
-                  Create this
-                </button>
-                <button onClick={() => setAiSuggestion(null)}
-                  style={{ padding: '7px 10px', borderRadius: 8, border: '1px solid var(--divider)', background: 'transparent', color: C.muted, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>
-                  Dismiss
-                </button>
+        {/* AI suggestion card — Sprint Intel v2 field names */}
+        {(() => {
+          const s = aiSuggestion
+          const typeLabels: Record<string, string> = { percent_off: 'Discount', fixed_off: 'Fixed off', bogo: 'Buy one get one', bundle: 'Bundle', tiered: 'Tiered' }
+          const isActionable = !!(s && s.type && s.type !== 'none' && s.title && String(s.title).trim().length > 0)
+          if (!isActionable) return null
+          const impact = Number(s!.estimated_impact) || 0
+          const payload = (s!.payload as Record<string, unknown> | null) ?? {}
+          return (
+            <div style={{ background: 'rgba(139,92,246,0.07)', border: '1px solid rgba(139,92,246,0.3)', borderRadius: 12, padding: '16px 20px', marginBottom: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+                <div style={{ flex: 1 }}>
+                  <p style={{ fontSize: 11, fontWeight: 700, color: C.violet, textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 6px' }}>✨ Aria Suggestion</p>
+                  <p style={{ fontSize: 14, fontWeight: 700, color: C.text, margin: '0 0 4px' }}>{String(s!.title)}</p>
+                  <p style={{ fontSize: 12, color: C.muted, margin: '0 0 10px' }}>{String(s!.description ?? payload.rationale ?? '')}</p>
+                  <p style={{ fontSize: 11, color: C.dim, margin: 0 }}>
+                    {typeLabels[String(s!.type)] ?? String(s!.type)}
+                    {impact > 0 ? ` · Est. +A$${impact.toFixed(0)} revenue` : ''}
+                    {s!.confidence ? ` · ${String(s!.confidence)} confidence` : ''}
+                  </p>
+                </div>
+                <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                  <button onClick={() => { sessionStorage.setItem('aria_promo_suggestion', JSON.stringify(s)); window.location.href = '/pos/promotions/new'; }}
+                    style={{ padding: '7px 14px', borderRadius: 8, border: 'none', background: C.violet, color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                    Create this
+                  </button>
+                  <button onClick={() => setAiSuggestion(null)}
+                    style={{ padding: '7px 10px', borderRadius: 8, border: '1px solid var(--divider)', background: 'transparent', color: C.muted, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>
+                    Dismiss
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          )
+        })()}
 
         {/* Table */}
         <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, overflow: 'hidden' }}>
