@@ -10,6 +10,8 @@ function agentToCategory(key: AgentKey): string {
     promo: 'promotions', pricing: 'pricing', inventory: 'inventory',
     compliance: 'compliance', product_lookup: 'inventory', hardware: 'sales',
     ops_narrative: 'sales', generic: 'sales',
+    intent_classifier: 'sales', ask_aria: 'sales', ask_suggestions: 'sales',
+    ask_files: 'sales', ask_troubleshoot: 'sales',
   }
   return map[key] ?? 'sales'
 }
