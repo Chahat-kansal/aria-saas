@@ -12,6 +12,7 @@ function agentToCategory(key: AgentKey): string {
     ops_narrative: 'sales', generic: 'sales',
     intent_classifier: 'sales', ask_aria: 'sales', ask_suggestions: 'sales',
     ask_files: 'sales', ask_troubleshoot: 'sales',
+    rostering: 'staff',
   }
   return map[key] ?? 'sales'
 }

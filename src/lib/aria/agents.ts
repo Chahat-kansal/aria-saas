@@ -56,6 +56,7 @@ Return ONLY valid JSON. No prose. No code fences.`
     ask_suggestions: `Schema: { "type": "insight", "title": "suggestions", "description": "contextual questions", "rationale": "n/a", "confidence": "high", "estimated_impact_dollars": 0, "payload": {} }`,
     ask_files: `Schema: { "type": "insight", "title": "export", "description": "file export", "rationale": "n/a", "confidence": "high", "estimated_impact_dollars": 0, "payload": {} }`,
     ask_troubleshoot: `Schema: { "type": "insight", "title": "diagnosis", "description": "troubleshoot response", "rationale": "n/a", "confidence": "high", "estimated_impact_dollars": 0, "payload": {} }`,
+    rostering: `Schema: { "type": "roster", "title": "week description", "description": "1 sentence rationale", "rationale": "data-driven", "confidence": "high"|"medium"|"low", "estimated_impact_dollars": number, "payload": { "shifts": [...], "reasoning": "..." } }`,
   }
 
   return `${baseRules}\n\n${schemas[agentKey] ?? schemas.generic}`
@@ -94,6 +95,7 @@ export async function runAgent(
     ops_narrative: 'sonnet', generic: 'haiku',
     intent_classifier: 'haiku', ask_aria: 'sonnet', ask_suggestions: 'haiku',
     ask_files: 'haiku', ask_troubleshoot: 'sonnet',
+    rostering: 'sonnet',
   }
 
   const result = await callAnthropic<Recommendation>({
