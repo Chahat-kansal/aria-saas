@@ -96,6 +96,17 @@ export async function GET(req: Request) {
       } catch (e) {
         results.errors.push(`shopify_delta:${businessId}: ${(e as Error).message}`)
       }
+
+      try {
+        const { runLightspeedXFullSync } = await import('@/lib/integrations/lightspeed-x')
+        const { data: lsConn } = await supabaseAdmin.from('lightspeed_connections')
+          .select('id').eq('business_id', businessId).eq('integration_type', 'x_series').eq('sync_status', 'connected').maybeSingle()
+        if (lsConn) {
+          await runLightspeedXFullSync(businessId)
+        }
+      } catch (e) {
+        results.errors.push(`lightspeed_x_delta:${businessId}: ${(e as Error).message}`)
+      }
     }
 
     // Workforce brain insights — daily
