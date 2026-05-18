@@ -15,12 +15,18 @@ export interface ClassifiedIntent {
 
 const SYSTEM = `You are an intent classifier for a business AI assistant. Classify the user message into one of these intents:
 - question: asking for information, analysis, or advice about their business
-- file_export: wants to download a CSV, Excel, or PDF report
+- file_export: wants to download or generate a CSV, Excel, or PDF file
 - troubleshoot: reporting a technical problem (hardware, sync, data, POS issues)
 - escalate: explicitly asking to speak to support or lodge a complaint
 - smalltalk: greetings, thanks, general chitchat
 
-For file_export, identify: export_format (csv/excel/pdf), export_subject (sales/inventory/staff/customers/products), export_period (today/week/month/custom).
+FILE_EXPORT triggers — classify as file_export if the message contains ANY of:
+  "export", "download", "give me a file", "as a csv", "as excel", "as pdf",
+  "generate a report", "pull a report", "get me a list", "send me a report",
+  "csv of", "excel of", "pdf of", "spreadsheet", "extract", "dump",
+  "can you export", "i need a file", "get a report", "run a report"
+
+For file_export, identify: export_format (csv/excel/pdf — default csv if unspecified), export_subject (sales/inventory/staff/customers/products — infer from context), export_period (today/week/month — default month if unspecified).
 For troubleshoot/escalate, identify: issue_summary (brief), issue_category (hardware/billing/bug/data/general).
 
 Respond with JSON only: {"type":"...","confidence":"high|medium|low","export_format":"...","export_subject":"...","export_period":"...","issue_summary":"...","issue_category":"..."}`
