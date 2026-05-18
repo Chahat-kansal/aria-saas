@@ -7,6 +7,7 @@ import { supabaseAdmin } from '@/lib/supabase-admin'
 import { checkCompetitorPrices } from '@/lib/aria/intelligence/competitor'
 import { sendDailySummaryReport } from '@/lib/aria/intelligence/email-report'
 import { checkConditionAlerts } from '@/lib/aria/intelligence/alerts'
+import { sendWeeklyLabourReport } from '@/lib/staff/reports'
 
 export async function GET(req: Request) {
   const authHeader = req.headers.get('authorization')
@@ -24,6 +25,8 @@ export async function GET(req: Request) {
     competitor_checks: 0,
     reports_sent: 0,
     alerts_fired: 0,
+    labour_reports_sent: 0,
+    announcements_cleaned: 0,
     errors: [] as string[],
   }
 
@@ -57,6 +60,29 @@ export async function GET(req: Request) {
         } catch (e) {
           results.errors.push(`competitor:${String(watch.id)}: ${(e as Error).message}`)
         }
+      }
+    }
+
+    // Weekly labour report — Monday 8am AEST
+    if (dayOfWeek === 1 && hourAEST === 8) {
+      try {
+        const sent = await sendWeeklyLabourReport(businessId)
+        if (sent) results.labour_reports_sent++
+      } catch (e) {
+        results.errors.push(`labour_report:${businessId}: ${(e as Error).message}`)
+      }
+    }
+
+    // Expired announcements cleanup — once daily at midnight AEST
+    if (hourAEST === 0) {
+      try {
+        await supabaseAdmin.from('staff_announcements')
+          .delete().eq('business_id', businessId)
+          .not('expires_at', 'is', null)
+          .lt('expires_at', now.toISOString())
+        results.announcements_cleaned++
+      } catch (e) {
+        results.errors.push(`announcements_cleanup:${businessId}: ${(e as Error).message}`)
       }
     }
 
