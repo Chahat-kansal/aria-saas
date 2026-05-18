@@ -67,11 +67,17 @@ export default function StaffProfilePage() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [mr, rr] = await Promise.all([
-      fetch(`/api/staff/members/${params.id}`).then(r => r.json()),
-      fetch(`/api/staff/members/${params.id}/pay-rates`).then(r => r.json()),
+    const [memberRes, ratesRes] = await Promise.all([
+      fetch(`/api/staff/members/${params.id}`),
+      fetch(`/api/staff/members/${params.id}/pay-rates`),
     ])
-    if (mr.error || !mr.member) {
+    if (!memberRes.ok) {
+      setNotFound(true)
+      setLoading(false)
+      return
+    }
+    const [mr, rr] = await Promise.all([memberRes.json(), ratesRes.json()])
+    if (!mr.member) {
       setNotFound(true)
       setLoading(false)
       return
