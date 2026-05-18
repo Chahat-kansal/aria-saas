@@ -56,21 +56,25 @@ async function _PATCH(req: Request, { params }: { params: Promise<{ id: string }
     return NextResponse.json({ error: 'Invalid status' }, { status: 400 });
   }
 
-  const updates: Record<string, unknown> = { status, updated_at: new Date().toISOString() };
-  if (status === 'delivered' || status === 'bumped' || status === 'ready') {
-    updates.bumped_at = new Date().toISOString();
-  }
+  const now = new Date().toISOString()
+  // pos_kds_orders has no updated_at — build a separate, column-safe update object
+  const ordersUpdate: Record<string, unknown> = { status }
+  if (status === 'in_progress') ordersUpdate.started_at = now
+  if (status === 'ready' || status === 'bumped') ordersUpdate.bumped_at = now
+  if (status === 'delivered') { ordersUpdate.bumped_at = now; ordersUpdate.completed_at = now }
 
-  // pos_kds_orders is the legacy kitchen-page table; pos_kds_tickets is used by the station KDS
-  // Try pos_kds_orders first (used by /pos/kitchen), fall back to pos_kds_tickets
   const { error: e1, data: d1 } = await supabase
     .from('pos_kds_orders')
-    .update(updates)
+    .update(ordersUpdate)
     .eq('id', id)
     .eq('business_id', bid)
     .select('id')
 
   if (!e1 && d1 && d1.length > 0) return NextResponse.json({ ok: true })
+
+  // pos_kds_tickets does have updated_at
+  const updates: Record<string, unknown> = { status, updated_at: now }
+  if (status === 'delivered' || status === 'bumped' || status === 'ready') updates.bumped_at = now
 
   const { error } = await supabase
     .from('pos_kds_tickets')
