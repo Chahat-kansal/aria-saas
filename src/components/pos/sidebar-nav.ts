@@ -13,7 +13,7 @@ import {
   Clock, Smartphone, Timer, Scissors,
   ShoppingBag, CalendarClock, Plug,
   Calculator, CalendarOff, MapPin, ShieldCheck,
-  Printer, ScrollText,
+  Printer, ScrollText, ListOrdered,
 } from 'lucide-react'
 
 export interface NavItem {
@@ -58,7 +58,8 @@ export const NAV_STRUCTURE: NavSection[] = [
       { label: 'Manage Cash', href: '/pos/cash', icon: DollarSign },
       { label: 'Audit Log', href: '/pos/audit-log', icon: ClipboardList },
       { label: 'Close Register', href: '/pos/close', icon: Power },
-      { label: 'Sales History', href: '/pos/reports/sales', icon: History },
+      { label: 'Sales History', href: '/pos/sales-history', icon: ListOrdered },
+      { label: 'End of Day', href: '/pos/end-of-day', icon: Calculator },
     ],
   },
   {
