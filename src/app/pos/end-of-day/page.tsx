@@ -82,7 +82,7 @@ export default function EndOfDayPage() {
       {closedSessionId && sessionData && (
         <div className="mb-6">
           <ZReportView
-            session={sessionData as Parameters<typeof ZReportView>[0]['session']}
+            session={sessionData as unknown as Parameters<typeof ZReportView>[0]['session']}
             summary={summaryData ? {
               count: (summaryData.totals as Record<string, number>)?.count ?? 0,
               gross_revenue: (summaryData.totals as Record<string, number>)?.gross_revenue ?? 0,
