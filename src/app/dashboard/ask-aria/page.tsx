@@ -2,11 +2,13 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useBusinessContext } from '@/components/providers/BusinessProvider'
 import dynamic from 'next/dynamic'
+import Link from 'next/link'
 import VoiceInput from '@/components/aria/VoiceInput'
 import ChatSuggestions from '@/components/aria/ChatSuggestions'
 import ActionPreviewCard from '@/components/aria/ActionPreviewCard'
 import AuditLogCard from '@/components/aria/AuditLogCard'
 import type { PlannedAction } from '@/lib/aria/ask/action-planner'
+import type { DocumentReadResult } from '@/lib/aria/intelligence/document-vision'
 
 const ChartBlock = dynamic(() => import('@/components/dashboard/ChartBlock'), { ssr: false })
 
@@ -15,7 +17,8 @@ interface EscalateAction { type: 'escalate'; ticket_id: string }
 interface ErrorAction { type: 'export_error' | 'escalate_error'; message: string }
 interface PreviewAction { type: 'action_preview'; planned: PlannedAction }
 interface ExecutionResultAction { type: 'execution_result'; ok: boolean; affected_count: number; error?: string; rollback_available?: boolean; rollback_expires_at?: string; action_log_id?: string }
-type MessageAction = ExportAction | EscalateAction | ErrorAction | PreviewAction | ExecutionResultAction | null
+interface DocumentAction { type: 'document'; document: DocumentReadResult }
+type MessageAction = ExportAction | EscalateAction | ErrorAction | PreviewAction | ExecutionResultAction | DocumentAction | null
 
 interface Message {
   role: 'user' | 'assistant'
@@ -45,6 +48,49 @@ function CopyButton({ text }: { text: string }) {
     >
       {copied ? '✓ Copied' : 'Copy'}
     </button>
+  )
+}
+
+function DocumentResultCard({ doc }: { doc: DocumentReadResult }) {
+  const TYPE_LABEL: Record<string, string> = { invoice: 'Invoice', receipt: 'Receipt', product_list: 'Product List', unknown: 'Document' }
+  return (
+    <div className="mt-2 rounded-xl overflow-hidden" style={{ border: '1px solid rgba(127,184,151,0.3)', background: 'rgba(127,184,151,0.05)' }}>
+      <div className="px-4 py-2.5 flex items-center gap-2" style={{ borderBottom: '1px solid rgba(127,184,151,0.15)' }}>
+        <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ background: 'rgba(127,184,151,0.2)', color: '#7FB897' }}>
+          {TYPE_LABEL[doc.type] ?? 'Document'}
+        </span>
+        {doc.supplier && <span className="text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>{doc.supplier}</span>}
+        {doc.date && <span className="text-xs" style={{ color: 'rgba(255,255,255,0.3)' }}>{doc.date}</span>}
+        {doc.total != null && <span className="text-xs ml-auto font-medium text-white">${doc.total.toFixed(2)}</span>}
+      </div>
+      {doc.line_items.length > 0 && (
+        <div className="px-4 py-2">
+          <table className="w-full text-xs">
+            <thead>
+              <tr style={{ color: 'rgba(255,255,255,0.4)' }}>
+                <th className="text-left pb-1.5 font-normal">Item</th>
+                <th className="text-right pb-1.5 font-normal">Qty</th>
+                <th className="text-right pb-1.5 font-normal">Unit</th>
+                <th className="text-right pb-1.5 font-normal">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {doc.line_items.slice(0, 10).map((item, i) => (
+                <tr key={i} style={{ borderTop: '1px solid rgba(255,255,255,0.05)', color: '#e5e7eb' }}>
+                  <td className="py-1 pr-2">{item.name}</td>
+                  <td className="py-1 text-right">{item.quantity ?? '—'}</td>
+                  <td className="py-1 text-right">{item.unit_price != null ? `$${item.unit_price.toFixed(2)}` : '—'}</td>
+                  <td className="py-1 text-right">{item.total != null ? `$${item.total.toFixed(2)}` : '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <div className="px-4 pb-3 pt-1">
+        <p className="text-xs italic" style={{ color: 'rgba(255,255,255,0.4)' }}>{doc.suggested_action}</p>
+      </div>
+    </div>
   )
 }
 
@@ -87,6 +133,9 @@ function ActionCard({ action }: { action: MessageAction }) {
       </div>
     )
   }
+  if (action.type === 'document') {
+    return <DocumentResultCard doc={action.document} />
+  }
   return null
 }
 
@@ -101,8 +150,10 @@ export default function AskAriaPage() {
   const [pendingAction, setPendingAction] = useState<PlannedAction | null>(null)
   const [confirmingAction, setConfirmingAction] = useState(false)
   const [showAudit, setShowAudit] = useState(false)
+  const [uploading, setUploading] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
 
@@ -219,6 +270,44 @@ export default function AskAriaPage() {
     }
   }, [input, sending, conversationId, loadHistory])
 
+  const uploadFile = useCallback(async (file: File) => {
+    if (uploading) return
+    setUploading(true)
+    setMessages(prev => [...prev.slice(-20),
+      { role: 'user', content: `📎 ${file.name}`, timestamp: new Date() },
+      { role: 'assistant', content: '', streaming: true, timestamp: new Date() },
+    ])
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      const res = await fetch('/api/aria/ask/upload', { method: 'POST', body: fd })
+      const data = await res.json() as { document?: DocumentReadResult; error?: string }
+      if (data.error) throw new Error(data.error)
+      const doc = data.document!
+      const summary = `Document read: ${doc.type}${doc.supplier ? ` from ${doc.supplier}` : ''}${doc.date ? ` (${doc.date})` : ''}. Found ${doc.line_items.length} line item${doc.line_items.length !== 1 ? 's' : ''}. ${doc.suggested_action}`
+      setMessages(prev => {
+        const updated = [...prev]
+        const last = updated[updated.length - 1]
+        if (last?.role === 'assistant') {
+          updated[updated.length - 1] = { ...last, content: summary, streaming: false, action: { type: 'document', document: doc } }
+        }
+        return updated
+      })
+    } catch (e) {
+      setMessages(prev => {
+        const updated = [...prev]
+        const last = updated[updated.length - 1]
+        if (last?.role === 'assistant') {
+          updated[updated.length - 1] = { ...last, content: `Upload failed: ${(e as Error).message}`, streaming: false }
+        }
+        return updated
+      })
+    } finally {
+      setUploading(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }, [uploading])
+
   const confirmAction = useCallback(async () => {
     if (!pendingAction || !conversationId) return
     setConfirmingAction(true)
@@ -333,13 +422,21 @@ export default function AskAriaPage() {
               </p>
             </div>
           </div>
-          {messages.length > 0 && (
-            <button onClick={newConversation}
+          <div className="flex items-center gap-2">
+            <Link href="/dashboard/ask-aria/intelligence"
               className="text-xs px-3 py-1.5 rounded-lg transition-colors"
-              style={{ color: 'rgba(255,255,255,0.35)', background: 'rgba(255,255,255,0.05)' }}>
-              New chat
-            </button>
-          )}
+              style={{ color: 'rgba(255,255,255,0.35)', background: 'rgba(255,255,255,0.05)' }}
+              title="Intelligence settings">
+              ✦ Intel
+            </Link>
+            {messages.length > 0 && (
+              <button onClick={newConversation}
+                className="text-xs px-3 py-1.5 rounded-lg transition-colors"
+                style={{ color: 'rgba(255,255,255,0.35)', background: 'rgba(255,255,255,0.05)' }}>
+                New chat
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Messages */}
@@ -418,8 +515,30 @@ export default function AskAriaPage() {
         {/* Input */}
         <div className="px-6 py-4 border-t flex-shrink-0"
           style={{ borderColor: 'rgba(255,255,255,0.06)', background: '#13131a' }}>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            className="hidden"
+            onChange={e => { const f = e.target.files?.[0]; if (f) uploadFile(f) }}
+          />
           <div className="flex gap-2 max-w-3xl mx-auto items-end">
             <VoiceInput onTranscript={t => { setInput(p => p ? `${p} ${t}` : t) }} disabled={sending} />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading || sending}
+              title="Upload invoice or receipt"
+              className="flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center transition-all disabled:opacity-40"
+              style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.5)' }}
+            >
+              {uploading
+                ? <div className="w-4 h-4 rounded-full border-2 border-[#7FB897] border-t-transparent animate-spin" />
+                : <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-4 h-4">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                  </svg>
+              }
+            </button>
             <textarea
               ref={inputRef}
               value={input}

@@ -68,7 +68,7 @@ export async function checkCompetitorPrices(
     competitor_name: competitorName,
     products_found: productsFound,
     checked_at: new Date().toISOString(),
-    source_quality: grounding?.available ? 'medium' : 'low',
+    source_quality: grounding ? 'medium' : 'low',
   }
 
   await supabaseAdmin.from('aria_competitor_watches').update({
