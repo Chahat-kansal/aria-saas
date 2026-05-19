@@ -26,15 +26,16 @@ export async function sendStaffInvite(
     if (!existing) return { ok: false, error: `User already registered but not found` }
     userId = existing.id
     // Send magic link so they actually receive an email
-    const { error: linkError } = await supabaseAdmin.auth.admin.generateLink({
-      type: 'magiclink',
+    // generateLink does NOT send email — use signInWithOtp to actually send
+    const { error: otpError } = await supabaseAdmin.auth.admin.generateLink({
+      type: 'invite',
       email,
       options: {
         redirectTo: `https://www.ariaos.site/staff/accept-invite`,
         data: { business_id: businessId, staff_member_id: staffMemberId, role: 'staff' },
       },
     })
-    if (linkError) console.error('[staff/invites] generateLink failed:', linkError.message)
+    if (otpError) console.error('[staff/invites] generateLink invite failed:', otpError.message)
   } else {
     userId = authData.user?.id
   }
@@ -49,11 +50,12 @@ export async function sendStaffInvite(
   })
   if (inviteError && !inviteError.message?.includes('42P01')) return { ok: false, error: inviteError.message }
 
-  await supabaseAdmin.from('staff_members').update({
+  const { error: updateErr } = await supabaseAdmin.from('staff_members').update({
     user_id: userId,
     portal_enabled: false,
     invite_sent_at: new Date().toISOString(),
   }).eq('id', staffMemberId)
+  if (updateErr) console.error('[staff/invites] staff_members update failed:', updateErr.message, 'staff_id:', staffMemberId)
 
   return { ok: true }
 }

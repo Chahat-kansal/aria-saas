@@ -50,7 +50,7 @@ async function _POST(req: Request) {
     if (!alreadyRegistered) return NextResponse.json({ error: inviteError.message }, { status: 500 })
     // Already registered — send magic link so they actually get an email
     const { error: linkError } = await supabaseAdmin.auth.admin.generateLink({
-      type: 'magiclink',
+      type: 'invite',
       email,
       options: {
         redirectTo: `https://www.ariaos.site/staff/accept-invite`,
@@ -71,10 +71,11 @@ async function _POST(req: Request) {
   })
 
   // Update invite_sent_at
-  await supabaseAdmin
+  const { error: smErr } = await supabaseAdmin
     .from('staff_members')
     .update({ invite_sent_at: new Date().toISOString() })
     .eq('id', staff_member_id)
+  if (smErr) console.error('[resend] staff_members update failed:', smErr.message)
 
   return NextResponse.json({ ok: true, email })
 }
