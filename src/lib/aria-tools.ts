@@ -122,7 +122,7 @@ async function querySales(
   const supabase = createServerSupabaseClient();
   const { data: sales } = await supabase
     .from('pos_sales')
-    .select('id, total_amount, payment_method, cashier_id, cashier_name, created_at, status')
+    .select('id, total_amount, payment_method, served_by, created_at, status')
     .eq('business_id', businessId)
     .neq('status', 'voided')
     .gte('created_at', `${input.date_from}T00:00:00`)
@@ -165,7 +165,7 @@ async function querySales(
     if (input.group_by === 'day') key = row.created_at.slice(0, 10);
     else if (input.group_by === 'week') key = getWeekKey(row.created_at.slice(0, 10));
     else if (input.group_by === 'month') key = getMonthKey(row.created_at);
-    else if (input.group_by === 'cashier') key = row.cashier_name ?? row.cashier_id ?? 'unknown';
+    else if (input.group_by === 'cashier') key = row.served_by ?? 'unknown';
     else if (input.group_by === 'payment_method') key = row.payment_method ?? 'unknown';
     else key = row.created_at.slice(0, 10);
 
@@ -230,21 +230,21 @@ async function queryCustomers(
   const supabase = createServerSupabaseClient();
   let query = supabase
     .from('pos_customers')
-    .select('id, first_name, last_name, email, phone, total_spent, last_visit, visit_count, segment, created_at')
+    .select('id, name, email, phone, total_spend, total_spent, last_visit_at, last_visit, visit_count, segment, rfm_score_total, days_since_visit, created_at')
     .eq('business_id', businessId);
 
   if (input.segment) query = query.eq('segment', input.segment);
   if (input.search) {
     query = query.or(
-      `first_name.ilike.%${input.search}%,last_name.ilike.%${input.search}%,email.ilike.%${input.search}%`
+      `name.ilike.%${input.search}%,email.ilike.%${input.search}%,phone.ilike.%${input.search}%`
     );
   }
 
   const sortCol =
-    input.sort_by === 'ltv' ? 'total_spent' :
-    input.sort_by === 'recency' ? 'last_visit' :
+    input.sort_by === 'ltv' ? 'total_spend' :
+    input.sort_by === 'recency' ? 'last_visit_at' :
     input.sort_by === 'frequency' ? 'visit_count' :
-    'total_spent';
+    'rfm_score_total';
 
   const { data: customers } = await query
     .order(sortCol, { ascending: false })

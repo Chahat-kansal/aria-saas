@@ -107,3 +107,107 @@ export async function callAnthropic<T = Record<string, unknown>>(
 
   return { data, raw, cost_cents: cost, latency_ms: latency, success }
 }
+
+import type { Tool } from '@anthropic-ai/sdk/resources/messages'
+
+interface ToolLoopParams {
+  model: keyof typeof MODEL_IDS
+  systemPrompt: string
+  userPrompt: string
+  tools: Tool[]
+  executeTool: (name: string, input: unknown) => Promise<unknown>
+  maxTokens?: number
+  maxIterations?: number
+  businessId?: string
+  agentKey: AgentKey
+  role: AgentRole
+  timeoutMs?: number
+}
+
+export interface ToolLoopResult {
+  raw: string
+  tool_calls: Array<{ name: string; input: unknown; result: unknown; ms: number }>
+  iterations: number
+  cost_cents: number
+  latency_ms: number
+  success: boolean
+}
+
+export async function callAnthropicWithTools(params: ToolLoopParams): Promise<ToolLoopResult> {
+  const modelId = MODEL_IDS[params.model]
+  const t0 = Date.now()
+  let totalInputTokens = 0, totalOutputTokens = 0, totalCachedRead = 0, totalCachedWrite = 0
+  let raw = '', success = true, errorMessage: string | null = null
+  const toolCalls: Array<{ name: string; input: unknown; result: unknown; ms: number }> = []
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const messages: any[] = [{ role: 'user', content: params.userPrompt }]
+  const maxIter = params.maxIterations ?? 5
+
+  try {
+    for (let iter = 0; iter < maxIter; iter++) {
+      const response = await withBackoff(() =>
+        client.messages.create({
+          model: modelId,
+          max_tokens: params.maxTokens ?? 2048,
+          system: [{
+            type: 'text' as const,
+            text: params.systemPrompt,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            cache_control: { type: 'ephemeral' } as any,
+          }],
+          tools: params.tools,
+          messages,
+        }, { signal: AbortSignal.timeout(params.timeoutMs ?? 25_000) })
+      )
+
+      totalInputTokens += response.usage.input_tokens
+      totalOutputTokens += response.usage.output_tokens
+      const usageAny = response.usage as unknown as Record<string, number>
+      totalCachedRead += Number(usageAny.cache_read_input_tokens) || 0
+      totalCachedWrite += Number(usageAny.cache_creation_input_tokens) || 0
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const content = response.content as any[]
+      raw = content.filter(b => b.type === 'text').map(b => b.text as string).join('\n')
+      const toolUseBlocks = content.filter(b => b.type === 'tool_use')
+
+      if (response.stop_reason !== 'tool_use' || toolUseBlocks.length === 0) break
+
+      messages.push({ role: 'assistant', content })
+
+      const toolResults = []
+      for (const block of toolUseBlocks) {
+        const ts = Date.now()
+        let result: unknown
+        try { result = await params.executeTool(block.name, block.input) }
+        catch (e) { result = { error: (e as Error).message } }
+        toolCalls.push({ name: block.name, input: block.input, result, ms: Date.now() - ts })
+        toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(result).slice(0, 50_000) })
+      }
+      messages.push({ role: 'user', content: toolResults })
+    }
+  } catch (e) {
+    success = false
+    errorMessage = (e as Error).message
+  }
+
+  const latency = Date.now() - t0
+  const cost = computeCostCentsWithCache(modelId, totalInputTokens, totalOutputTokens, totalCachedRead, totalCachedWrite)
+
+  if (params.businessId) {
+    try {
+      await supabaseAdmin.from('aria_ai_calls').insert({
+        business_id: params.businessId, agent_key: params.agentKey,
+        provider: 'anthropic', model_id: modelId, role: params.role,
+        input_tokens: totalInputTokens + totalCachedRead + totalCachedWrite,
+        output_tokens: totalOutputTokens, latency_ms: latency, cost_usd_cents: cost,
+        success, error_message: errorMessage,
+        response_summary: `tools:${toolCalls.length}/iter:${Math.max(1, toolCalls.length)}`,
+        cache_write_tokens: totalCachedWrite, cache_read_tokens: totalCachedRead,
+      })
+    } catch { /* non-fatal */ }
+  }
+
+  return { raw, tool_calls: toolCalls, iterations: toolCalls.length, cost_cents: cost, latency_ms: latency, success }
+}

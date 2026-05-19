@@ -6,7 +6,8 @@ import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
-import { callAnthropic } from '@/lib/aria/providers/anthropic'
+import { callAnthropic, callAnthropicWithTools } from '@/lib/aria/providers/anthropic'
+import { ARIA_POS_TOOLS, executePOSTool } from '@/lib/aria-tools'
 import { classifyIntent } from '@/lib/aria/ask/intent'
 import { buildAskAriaContext } from '@/lib/aria/ask/business-context'
 // buildSystemPrompt replaced by inline Aria OS prompt below
@@ -267,6 +268,19 @@ DATA INTEGRITY RULES:
 - Never invent revenue, transactions, customers, or dates.
 - Today is ${new Date().toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney' })}. Never default to January or any other month.
 - When comparing periods, only compare periods present in the context. Do not extrapolate or guess.
+
+TOOLS AVAILABLE (use them — do not guess):
+You have function-calling tools that hit the live database. When the owner asks something not in LIVE BUSINESS DATA above, call a tool instead of saying "I don't have that data". Examples:
+
+- "what was my best Tuesday last quarter" → call query_sales with date_from/date_to spanning the quarter, group_by="day"
+- "who are my top 10 customers" → call query_customers with sort_by="ltv" limit=10
+- "compare this month vs last" → call compare_periods with two date ranges
+- "any dead stock" → call query_inventory with dead_stock_only=true
+- "is X selling well" → call query_sales with group_by="product" for a relevant period
+
+After a tool returns, interpret the results plainly. Quote the exact numbers from the tool result. Do not invent supplementary numbers. If a tool returns no rows, say "no data found for that period" rather than fabricating.
+
+You can chain tools in one response — call query_sales first to find a pattern, then query_inventory to check stock for the products you found, then write your conclusion. Up to 5 tool calls per response.
 ${ARTIFACT_INSTRUCTIONS}`
 
   // 4. Add troubleshoot addendum if needed
@@ -284,20 +298,24 @@ ${ARTIFACT_INSTRUCTIONS}`
 
   const model = intent.type === 'escalate' ? 'opus' : 'sonnet'
 
-  const llmResult = await callAnthropic<Record<string, unknown>>(
-    {
-      model,
-      systemPrompt,
-      userPrompt,
-      maxTokens: 600,
-      businessId: bid,
-      agentKey: 'ask_aria',
-      role: 'chat',
-    },
-    {},
-  )
+  const toolResult = await callAnthropicWithTools({
+    model,
+    systemPrompt,
+    userPrompt,
+    tools: ARIA_POS_TOOLS,
+    executeTool: (name, input) => executePOSTool(name, input, bid),
+    maxTokens: 2048,
+    maxIterations: 5,
+    businessId: bid,
+    agentKey: 'ask_aria',
+    role: 'chat',
+  })
 
-  const rawResponse = llmResult.raw
+  if (toolResult.tool_calls.length > 0) {
+    console.log('[aria/ask] tool_calls', JSON.stringify(toolResult.tool_calls.map(t => ({ name: t.name, ms: t.ms }))), 'business', bid)
+  }
+
+  const rawResponse = toolResult.raw
   const action = extractAction(rawResponse)
   const cleanResponse = stripAction(rawResponse)
 
@@ -346,7 +364,7 @@ ${ARTIFACT_INSTRUCTIONS}`
     conversation_id: savedConvId ?? conversationId,
     intent: intent.type,
     action: Object.keys(actionResult).length > 0 ? actionResult : null,
-    cost_usd_cents: llmResult.cost_cents,
+    cost_usd_cents: toolResult.cost_cents,
   })
 }
 
