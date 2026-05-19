@@ -337,7 +337,7 @@ export function MorningCommandCentre() {
 
       <div className="space-y-5 p-4 md:p-5">
         {/* Live Now panel — only shown when POS data exists */}
-        {(liveLoading || (live && live.data_status?.freshness !== 'empty')) && (
+        {(liveLoading || live) && (
           <Panel>
             <div className="mb-3 flex items-center justify-between gap-2">
               <div className="flex items-center gap-2 text-white">
