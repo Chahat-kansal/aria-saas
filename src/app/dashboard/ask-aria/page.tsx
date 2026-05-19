@@ -144,6 +144,19 @@ type ArtifactSegment = { kind: 'artifact'; type: string; title?: string; data: R
 type TextSegment    = { kind: 'text'; content: string }
 type Segment = TextSegment | ArtifactSegment
 
+function tolerantJSONParse(raw: string): Record<string, unknown> | null {
+  const cleanups: Array<(s: string) => string> = [
+    s => s,
+    s => s.replace(/,(\s*[}\]])/g, '$1'),
+    s => s.replace(/,(\s*[}\]])/g, '$1').replace(/'/g, '"'),
+    s => s.replace(/,(\s*[}\]])/g, '$1').replace(/\r?\n/g, '\\n'),
+  ]
+  for (const fix of cleanups) {
+    try { return JSON.parse(fix(raw).trim()) } catch { /* try next */ }
+  }
+  return null
+}
+
 function parseAriaResponse(text: string): Segment[] {
   const segments: Segment[] = []
   const regex = /<aria_artifact\s+type="([^"]+)"(?:\s+title="([^"]+)")?\s*>([\s\S]*?)<\/aria_artifact>/g
@@ -154,10 +167,16 @@ function parseAriaResponse(text: string): Segment[] {
       const t = text.slice(lastIdx, match.index).trim()
       if (t) segments.push({ kind: 'text', content: t })
     }
-    try {
-      segments.push({ kind: 'artifact', type: match[1], title: match[2], data: JSON.parse(match[3].trim()) })
-    } catch {
-      segments.push({ kind: 'text', content: match[0] })
+    const parsed = tolerantJSONParse(match[3])
+    if (parsed) {
+      segments.push({ kind: 'artifact', type: match[1], title: match[2], data: parsed })
+    } else {
+      segments.push({ kind: 'text', content: 'I tried to show a chart here but the data was malformed. Please ask again.' })
+      fetch('/api/aria/artifact-parse-failure', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ raw: match[0].slice(0, 500), type: match[1] ?? 'unknown' }),
+      }).catch(() => {})
     }
     lastIdx = regex.lastIndex
   }

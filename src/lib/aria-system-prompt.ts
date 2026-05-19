@@ -62,7 +62,7 @@ list_with_status:
 RULES:
 - Only return ONE artifact per response. If two visuals would help, pick the more useful one.
 - Always include a short text intro before the artifact and a short interpretation after.
-- JSON inside the artifact MUST be valid. Use double quotes only. No trailing commas.
+- JSON inside artifact tags MUST use double quotes only. NO trailing commas. NO comments. Escape newlines in strings as \\n. Escape double quotes inside strings. If valid JSON cannot be produced, return plain text instead of a malformed artifact tag.
 - If text alone is sufficient, do not force an artifact.
 - Numbers in artifacts must use real values from LIVE BUSINESS DATA above. Never invent.
 ---`

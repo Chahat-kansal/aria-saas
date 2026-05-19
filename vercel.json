@@ -33,8 +33,12 @@
       "schedule": "0 14 * * *"
     },
     {
-      "path": "/api/cron/generate-briefings",
+      "path": "/api/cron/daily-briefing-submit",
       "schedule": "0 16 * * *"
+    },
+    {
+      "path": "/api/cron/daily-briefing-poll",
+      "schedule": "*/15 * * * *"
     },
     {
       "path": "/api/cron/publish-scheduled",

@@ -11,6 +11,7 @@ import { classifyIntent } from '@/lib/aria/ask/intent'
 import { buildAskAriaContext } from '@/lib/aria/ask/business-context'
 // buildSystemPrompt replaced by inline Aria OS prompt below
 import { ARTIFACT_INSTRUCTIONS } from '@/lib/aria-system-prompt'
+import { checkCostCeiling } from '@/lib/aria-cost-guard'
 import { buildTroubleshootContext, buildTroubleshootAddendum } from '@/lib/aria/ask/troubleshoot'
 import { createSupportTicket } from '@/lib/aria/ask/escalate'
 import { generateExport } from '@/lib/aria/ask/files'
@@ -96,6 +97,34 @@ async function _POST(req: Request) {
   if (!message) return NextResponse.json({ error: 'message required' }, { status: 400 })
 
   const conversationId = body.conversation_id ?? null
+
+  // Rate limit: max requests per minute
+  const rateLimit = parseInt(process.env.ARIA_RATE_LIMIT_PER_MIN ?? '20')
+  const oneMinuteAgo = new Date(Date.now() - 60 * 1000).toISOString()
+  const { count: recentCount } = await supabaseAdmin
+    .from('aria_ai_calls')
+    .select('id', { count: 'exact', head: true })
+    .eq('business_id', bid)
+    .eq('agent_key', 'ask_aria')
+    .gte('created_at', oneMinuteAgo)
+  if ((recentCount ?? 0) >= rateLimit) {
+    return NextResponse.json({
+      error: 'rate_limited',
+      message: `Aria can answer up to ${rateLimit} questions per minute. Please wait a moment.`,
+      retry_after: 60,
+    }, { status: 429 })
+  }
+
+  // Daily cost ceiling
+  const costCheck = await checkCostCeiling(bid)
+  if (!costCheck.ok) {
+    return NextResponse.json({
+      error: 'budget_exceeded',
+      message: `Aria has used $${costCheck.spent.toFixed(2)} of the daily AI budget. Contact support if you need more.`,
+      spent: costCheck.spent,
+      ceiling: costCheck.ceiling,
+    }, { status: 402 })
+  }
 
   // 1. Classify intent
   const intent = await classifyIntent(message)
