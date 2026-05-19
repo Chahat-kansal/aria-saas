@@ -246,8 +246,27 @@ CURRENT BUSINESS: ${ctx.business_name} (${ctx.industry})
 ${ctx.owner_name ? `Owner: ${ctx.owner_name.split(' ')[0]}` : ''}
 Currency: ${ctx.currency}
 
+LIVE BUSINESS DATA (as of right now — use these exact numbers, never invent):
+Current date/time: ${new Date().toLocaleString('en-AU', { timeZone: 'Australia/Sydney', dateStyle: 'full', timeStyle: 'short' })}
+Current month: ${new Date().toLocaleString('en-AU', { timeZone: 'Australia/Sydney', month: 'long', year: 'numeric' })}
+Revenue today: $${(ctx.revenue_today_cents / 100).toFixed(2)}
+Revenue last 7 days: $${(ctx.revenue_week_cents / 100).toFixed(2)}
+Revenue this month so far: $${(ctx.revenue_month_cents / 100).toFixed(2)}
+Avg ticket this month: $${(ctx.avg_ticket_cents / 100).toFixed(2)}
+Low stock items (under 5 on hand): ${ctx.low_stock_items.length ? ctx.low_stock_items.map(p => `${p.name} (${p.qty} left)`).join(', ') : 'none'}
+Staff (POS users): ${ctx.staff_count}
+Pending Aria actions: ${ctx.pending_aria_actions}
+Open support tickets: ${ctx.open_support_tickets}
+
 FRESH SIGNALS (from monitoring engine, last 30 min):
 ${ctx.fresh_signals.filter(s => ['alert','critical','watch'].includes(String((s.payload?.severity ?? 'info')))).map(s => `- ${s.signal_type} (${s.payload.severity}): ${JSON.stringify(s.payload)}`).join('\n') || 'no anomalies detected'}
+
+DATA INTEGRITY RULES:
+- Only quote dollar figures, dates, counts, or stock levels that appear in LIVE BUSINESS DATA above.
+- If the owner asks for something not in the context (e.g. last month's revenue when only this month is available), say: "I don't have that data in this conversation — open the Sales Reports page and I can analyse what you find there."
+- Never invent revenue, transactions, customers, or dates.
+- Today is ${new Date().toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney' })}. Never default to January or any other month.
+- When comparing periods, only compare periods present in the context. Do not extrapolate or guess.
 ${ARTIFACT_INSTRUCTIONS}`
 
   // 4. Add troubleshoot addendum if needed

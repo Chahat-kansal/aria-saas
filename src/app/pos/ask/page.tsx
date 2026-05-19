@@ -5,6 +5,7 @@ import {
   ResponsiveContainer, BarChart, Bar, LineChart, Line, AreaChart, Area,
   PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip,
 } from 'recharts'
+import { AriaArtifact } from '@/components/aria/AriaArtifact'
 
 const COLORS = ['#8B5CF6', '#60A5FA', '#34D399', '#F59E0B', '#F87171']
 const MAX_INPUT = 1000
@@ -117,6 +118,53 @@ function renderText(text: string) {
   return text
     .split(/\*\*(.+?)\*\*/g)
     .map((part, i) => i % 2 === 1 ? <strong key={i}>{part}</strong> : part.split('`').map((s, j) => j % 2 === 1 ? <code key={j} style={{ background: 'var(--bg-elevated)', borderRadius: 3, padding: '1px 5px', fontSize: '0.9em', fontFamily: 'monospace' }}>{s}</code> : s))
+}
+
+type ArtifactSegment = { kind: 'artifact'; type: string; title?: string; data: Record<string, unknown> }
+type TextSegment    = { kind: 'text'; content: string }
+type AriaSegment = TextSegment | ArtifactSegment
+
+function tolerantJSONParse(raw: string): Record<string, unknown> | null {
+  const cleanups: Array<(s: string) => string> = [
+    s => s,
+    s => s.replace(/,(\s*[}\]])/g, '$1'),
+    s => s.replace(/,(\s*[}\]])/g, '$1').replace(/'/g, '"'),
+    s => s.replace(/,(\s*[}\]])/g, '$1').replace(/\r?\n/g, '\\n'),
+  ]
+  for (const fix of cleanups) {
+    try { return JSON.parse(fix(raw).trim()) } catch { /* try next */ }
+  }
+  return null
+}
+
+function parseAriaResponse(text: string): AriaSegment[] {
+  const segments: AriaSegment[] = []
+  const regex = /<aria_artifact\s+type="([^"]+)"(?:\s+title="([^"]+)")?\s*>([\s\S]*?)<\/aria_artifact>/g
+  let lastIdx = 0
+  let match: RegExpExecArray | null
+  while ((match = regex.exec(text)) !== null) {
+    if (match.index > lastIdx) {
+      const t = text.slice(lastIdx, match.index).trim()
+      if (t) segments.push({ kind: 'text', content: t })
+    }
+    const parsed = tolerantJSONParse(match[3])
+    if (parsed) {
+      segments.push({ kind: 'artifact', type: match[1], title: match[2], data: parsed })
+    } else {
+      segments.push({ kind: 'text', content: 'I tried to show a chart here but the data was malformed. Please ask again.' })
+      fetch('/api/aria/artifact-parse-failure', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ raw: match[0].slice(0, 500), type: match[1] ?? 'unknown' }),
+      }).catch(() => {})
+    }
+    lastIdx = regex.lastIndex
+  }
+  if (lastIdx < text.length) {
+    const tail = text.slice(lastIdx).trim()
+    if (tail) segments.push({ kind: 'text', content: tail })
+  }
+  return segments.filter(s => s.kind !== 'text' || (s.content && s.content.length > 0))
 }
 
 function renderAriaContent(text: string) {
@@ -343,7 +391,14 @@ export default function AskAriaPage() {
                   <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
                     <div style={{ width: 24, height: 24, borderRadius: '50%', background: 'var(--gradient-aria)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: '#fff', fontWeight: 800, flexShrink: 0, marginTop: 2 }}>✦</div>
                     <div style={{ flex: 1, fontSize: 14, color: 'var(--text-primary)', lineHeight: 1.7 }}>
-                      {msg.streaming ? msg.text : renderAriaContent(msg.text)}
+                      {msg.streaming
+                        ? msg.text
+                        : parseAriaResponse(msg.text).map((seg, si) =>
+                            seg.kind === 'text'
+                              ? <span key={si}>{renderAriaContent(seg.content)}</span>
+                              : <AriaArtifact key={si} type={seg.type} title={seg.title ?? undefined} data={seg.data} />
+                          )
+                      }
                       {msg.streaming && <span style={{ display: 'inline-block', width: 2, height: 14, background: 'var(--violet)', marginLeft: 2, animation: 'blink 1s step-end infinite', verticalAlign: 'middle' }} />}
                     </div>
                   </div>
