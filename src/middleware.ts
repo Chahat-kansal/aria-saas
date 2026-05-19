@@ -59,7 +59,16 @@ export async function middleware(request: NextRequest) {
     if (pathname.startsWith('/dashboard') || pathname.startsWith('/settings')) {
       const posEmp = request.cookies.get('pos_emp')
       if (posEmp?.value && ['cashier', 'supervisor'].includes(posEmp.value)) {
-        return NextResponse.redirect(new URL('/pos', request.url))
+        const { data: { user } } = await makeSupabase().auth.getUser()
+        if (!user) {
+          return NextResponse.redirect(new URL('/pos', request.url))
+        }
+        const ownerCheck = await makeSupabase().from('businesses')
+          .select('id').eq('user_id', user.id).limit(1).maybeSingle()
+        if (!ownerCheck.data) {
+          return NextResponse.redirect(new URL('/pos', request.url))
+        }
+        response.cookies.delete('pos_emp')
       }
     }
 
