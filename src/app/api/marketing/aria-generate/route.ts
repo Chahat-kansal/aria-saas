@@ -28,7 +28,10 @@ async function _POST() {
     if (s) segments[s] = (segments[s] ?? 0) + 1
   }
 
-  const prompt = `Business: ${biz?.name} (${biz?.industry}, ${biz?.city ?? 'Australia'})
+  const now = new Date()
+  const todayStr = now.toLocaleDateString('en-AU', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: 'Australia/Sydney' })
+  const prompt = `TODAY (Sydney time): ${todayStr}
+Business: ${biz?.name} (${biz?.industry}, ${biz?.city ?? 'Australia'})
 Marketing-consented customer segments: ${JSON.stringify(segments)}
 Recent campaigns (last 5): ${JSON.stringify(recentRes.data ?? [])}
 
@@ -43,7 +46,7 @@ Return JSON ONLY — no preamble:
   "target_segment": "champions|loyal|regular|new|at_risk|hibernating|never_returned|needs_attention or null if target_type=all",
   "target_count": 0,
   "message": "SMS message text (max 160 chars). Use {first_name} and {business_name} variables.",
-  "best_send_time": "ISO datetime within next 7 days",
+  "best_send_time": "ISO datetime within next 7 days from TODAY at an optimal time (Tue-Thu 11am-2pm or 5pm-7pm AEST). Use the exact year ${now.getFullYear()} — never use a past year.",
   "rationale": "2 sentences explaining why this segment now and what you expect.",
   "predicted_response_rate": 0.0,
   "predicted_revenue_cents": 0

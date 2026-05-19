@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from 'react'
 interface Campaign { id: string; name: string; type: string; channel: string; status: string; sent_count: number; recipients_count: number; scheduled_at: string | null; completed_at: string | null; aria_generated: boolean; target_segment: string | null; message: string; created_at: string }
 interface Template { id: string; name: string; type: string; channel: string; sms_body: string; is_global: boolean }
 interface AriaSuggestion { name: string; type: string; channel: string; target_type: string; target_segment: string | null; message: string; best_send_time: string; rationale: string; predicted_response_rate: number; predicted_revenue_cents: number }
-interface SegCount { segment: string; count: number }
+// SegCount retained for type safety in case segCounts is still used elsewhere
 
 const SEGMENTS = ['all','champions','loyal','regular','new','at_risk','hibernating','never_returned','needs_attention']
 const SEG_LABELS: Record<string, string> = { all:'All customers', champions:'Champions', loyal:'Loyal', regular:'Regular', new:'New', at_risk:'At risk', hibernating:'Hibernating', never_returned:'Never returned', needs_attention:'Needs attention' }
@@ -20,7 +20,7 @@ export default function MarketingPage() {
   const [tab, setTab] = useState<'overview'|'create'|'templates'|'analytics'>('overview')
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [templates, setTemplates] = useState<Template[]>([])
-  const [segCounts, setSegCounts] = useState<SegCount[]>([])
+  const [audienceCounts, setAudienceCounts] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(true)
   const [ariaLoading, setAriaLoading] = useState(false)
   const [ariaSuggestion, setAriaSuggestion] = useState<AriaSuggestion | null>(null)
@@ -41,18 +41,23 @@ export default function MarketingPage() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [camRes, tplRes, segRes] = await Promise.all([
+    const [camRes, tplRes] = await Promise.all([
       fetch('/api/marketing/campaigns').then(r => r.json()),
       fetch('/api/marketing/templates').then(r => r.json()),
-      fetch('/api/pos/customers/segments').catch(() => ({ json: () => ({ segments: [] }) })).then(r => (r as Response).json?.() ?? { segments: [] }),
     ])
     setCampaigns(camRes.campaigns ?? [])
     setTemplates(tplRes.templates ?? [])
-    if (Array.isArray(segRes?.segments)) setSegCounts(segRes.segments)
     setLoading(false)
   }, [])
 
   useEffect(() => { load() }, [load])
+
+  useEffect(() => {
+    fetch('/api/marketing/audience-counts')
+      .then(r => r.json())
+      .then((d: { counts?: Record<string, number> }) => { if (d.counts) setAudienceCounts(d.counts) })
+      .catch(() => {})
+  }, [])
 
   // Aria insight on load
   useEffect(() => {
@@ -62,7 +67,7 @@ export default function MarketingPage() {
     }
   }, [campaigns, ariaInsight])
 
-  const getSegCount = (seg: string) => seg === 'all' ? segCounts.reduce((s, x) => s + x.count, 0) : (segCounts.find(s => s.segment === seg)?.count ?? 0)
+  const getSegCount = (seg: string) => audienceCounts[seg] ?? 0
 
   async function handleAriaGenerate() {
     setAriaLoading(true)
