@@ -5,10 +5,7 @@ export const maxDuration = 60
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { submitBatch } from '@/lib/aria-batch'
-import { ARTIFACT_INSTRUCTIONS } from '@/lib/aria-system-prompt'
-
-const ARIA_SYSTEM = `You are Aria, the AI co-owner of this Australian small business. Be direct, warm, and specific. Use Australian English and AUD. Write in plain prose — no bullet points.
-${ARTIFACT_INSTRUCTIONS}`
+import { ARIA_SYSTEM_PROMPT } from '@/lib/aria-system-prompt'
 
 async function buildBriefingContext(businessId: string) {
   const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000)
@@ -44,7 +41,7 @@ export async function GET(req: NextRequest) {
   }
 
   const cronLogId = crypto.randomUUID()
-  await supabaseAdmin.from('cron_logs').insert({ id: cronLogId, cron_name: 'daily-briefing-submit', status: 'running', started_at: new Date().toISOString() })
+  await supabaseAdmin.from('cron_logs').insert({ id: cronLogId, job_name: 'daily-briefing-submit', status: 'running', started_at: new Date().toISOString() })
 
   try {
     const { data: businesses } = await supabaseAdmin
@@ -54,7 +51,7 @@ export async function GET(req: NextRequest) {
       .in('subscription_status', ['active', 'trialing'])
 
     if (!businesses?.length) {
-      await supabaseAdmin.from('cron_logs').update({ status: 'success', finished_at: new Date().toISOString(), result_summary: 'No active businesses' }).eq('id', cronLogId)
+      await supabaseAdmin.from('cron_logs').update({ status: 'success', finished_at: new Date().toISOString(), businesses_processed: 0 }).eq('id', cronLogId)
       return NextResponse.json({ ok: true, count: 0 })
     }
 
@@ -65,7 +62,7 @@ export async function GET(req: NextRequest) {
         params: {
           model: 'claude-haiku-4-5-20251001',
           max_tokens: 512,
-          system: ARIA_SYSTEM,
+          system: ARIA_SYSTEM_PROMPT,
           messages: [{
             role: 'user' as const,
             content: `Write today's morning briefing for ${biz.name}, a ${biz.industry ?? 'business'} in ${biz.city ?? 'Australia'}. Owner: ${biz.owner_name ?? 'there'}.\n\nYesterday: A$${ctx.yesterdayRevenue} from ${ctx.yesterdayTransactions} sales. Top seller: ${ctx.topProduct}.\nWeek so far: A$${ctx.weekRevenue}.\nLow stock: ${ctx.lowStock.join(', ') || 'none'}.\n\nWrite 4 sentences: how yesterday went, one thing to watch today, one specific action they should take now. End with a single priority. No bullet points.`,
@@ -83,13 +80,13 @@ export async function GET(req: NextRequest) {
 
     await supabaseAdmin.from('cron_logs').update({
       status: 'success', finished_at: new Date().toISOString(),
-      result_summary: `Submitted batch ${batchId} for ${businesses.length} businesses`,
+      businesses_processed: businesses.length,
     }).eq('id', cronLogId)
 
     return NextResponse.json({ ok: true, batch_id: batchId, count: businesses.length })
   } catch (e) {
     const msg = (e as Error).message
-    await supabaseAdmin.from('cron_logs').update({ status: 'failed', finished_at: new Date().toISOString(), error_message: msg }).eq('id', cronLogId)
+    await supabaseAdmin.from('cron_logs').update({ status: 'failed', finished_at: new Date().toISOString(), errors: { message: msg } }).eq('id', cronLogId)
     return NextResponse.json({ error: msg }, { status: 500 })
   }
 }

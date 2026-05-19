@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
   }
 
   const cronLogId = crypto.randomUUID()
-  await supabaseAdmin.from('cron_logs').insert({ id: cronLogId, cron_name: 'daily-briefing-poll', status: 'running', started_at: new Date().toISOString() })
+  await supabaseAdmin.from('cron_logs').insert({ id: cronLogId, job_name: 'daily-briefing-poll', status: 'running', started_at: new Date().toISOString() })
 
   try {
     const { data: pending } = await supabaseAdmin
@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
       .in('status', ['submitted', 'processing'])
 
     if (!pending?.length) {
-      await supabaseAdmin.from('cron_logs').update({ status: 'success', finished_at: new Date().toISOString(), result_summary: 'No pending batches' }).eq('id', cronLogId)
+      await supabaseAdmin.from('cron_logs').update({ status: 'success', finished_at: new Date().toISOString(), businesses_processed: 0 }).eq('id', cronLogId)
       return NextResponse.json({ ok: true, polled: 0 })
     }
 
@@ -66,13 +66,13 @@ export async function GET(req: NextRequest) {
 
     await supabaseAdmin.from('cron_logs').update({
       status: 'success', finished_at: new Date().toISOString(),
-      result_summary: `Processed ${processed} briefings`,
+      businesses_processed: processed,
     }).eq('id', cronLogId)
 
     return NextResponse.json({ ok: true, processed })
   } catch (e) {
     const msg = (e as Error).message
-    await supabaseAdmin.from('cron_logs').update({ status: 'failed', finished_at: new Date().toISOString(), error_message: msg }).eq('id', cronLogId)
+    await supabaseAdmin.from('cron_logs').update({ status: 'failed', finished_at: new Date().toISOString(), errors: { message: msg } }).eq('id', cronLogId)
     return NextResponse.json({ error: msg }, { status: 500 })
   }
 }
