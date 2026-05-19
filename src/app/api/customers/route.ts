@@ -45,7 +45,7 @@ async function _GET(req: Request) {
 
   let query = supabaseAdmin
     .from('pos_customers')
-    .select('id, business_id, name, email, phone, birthday, tags, marketing_consent, loyalty_points, points_balance, total_spent, total_spend, visit_count, last_visit, last_visit_at, abn, source, notes, created_at')
+    .select('id, business_id, name, email, phone, birthday, tags, marketing_consent, loyalty_points, points_balance, total_spent, total_spend, visit_count, last_visit, last_visit_at, abn, source, notes, created_at, segment, rfm_recency_score, rfm_frequency_score, rfm_monetary_score, rfm_score_total, days_since_visit, lifetime_value_cents')
     .eq('business_id', business_id)
 
   if (q) query = query.or(`name.ilike.%${q}%,email.ilike.%${q}%,phone.ilike.%${q}%`)
@@ -53,19 +53,22 @@ async function _GET(req: Request) {
   if (consent === 'false') query = query.eq('marketing_consent', false)
   if (tag) query = query.contains('tags', [tag])
 
-  // Segment filters
-  if (segment === 'new')          query = query.gte('last_visit', d30).eq('visit_count', 1)
-  else if (segment === 'regular') query = query.gte('last_visit', d60).gte('visit_count', 3)
-  else if (segment === 'vip')     query = query.or(`total_spent.gte.500,total_spend.gte.500,visit_count.gte.10`)
-  else if (segment === 'at_risk') query = query.gte('last_visit', d120).lt('last_visit', d61).gte('visit_count', 2)
-  else if (segment === 'lost')    query = query.lt('last_visit', d120).gte('visit_count', 2)
-  else if (segment === 'never_returned') query = query.eq('visit_count', 1).lt('last_visit', d30)
+  // Use DB segment column (populated by scoring cron) with fallback to computed logic
+  const SCORED_SEGMENTS = ['champions','loyal','regular','new','at_risk','hibernating','never_returned','needs_attention']
+  if (segment && SCORED_SEGMENTS.includes(segment)) {
+    query = query.eq('segment', segment)
+  } else if (segment === 'vip') {
+    query = query.or(`total_spent.gte.500,total_spend.gte.500,visit_count.gte.10`)
+  } else if (segment === 'lost') {
+    query = query.lt('last_visit', d120).gte('visit_count', 2)
+  }
 
   // Sort
   const sortMap: Record<string, string> = {
-    total_spent: 'total_spent', visit_count: 'visit_count', last_visit: 'last_visit', name: 'name',
+    total_spent: 'total_spent', visit_count: 'visit_count', last_visit: 'last_visit_at', name: 'name',
+    spend: 'lifetime_value_cents',
   }
-  const sortCol = sortMap[sort] ?? 'total_spent'
+  const sortCol = sortMap[sort] ?? 'lifetime_value_cents'
   const asc = sort === 'name'
   query = query.order(sortCol, { ascending: asc, nullsFirst: false })
 

@@ -75,6 +75,10 @@
     {
       "path": "/api/cron/signal-engine",
       "schedule": "*/30 * * * *"
+    },
+    {
+      "path": "/api/cron/customer-scoring",
+      "schedule": "0 3 * * *"
     }
   ]
 }

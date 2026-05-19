@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useBusinessContext } from '@/components/providers/BusinessProvider'
-import { calcRFM, TIER_COLOR, type RfmTier } from '@/lib/rfm'
+import { SEGMENT_COLORS, SEGMENT_ORDER } from '@/lib/customer-segments'
 
 type Customer = {
   id: string; name: string; email: string | null; phone: string | null
@@ -10,22 +10,22 @@ type Customer = {
   visit_count: number | null; last_visit: string | null; last_visit_at: string | null
   loyalty_points: number | null; points_balance: number | null
   tags: string[] | null; marketing_consent: boolean | null
+  segment: string | null; rfm_score_total: number | null
+  lifetime_value_cents: number | null; days_since_visit: number | null
 }
-type Segments = { total: number; new: number; regular: number; vip: number; at_risk: number; lost: number; never_returned: number }
+type SegmentCounts = Record<string, number> & { total?: number }
 
-const SEGMENT_LABELS: Record<string, string> = {
-  '': 'All', new: 'New', regular: 'Regular', vip: 'VIP', at_risk: 'At-risk', lost: 'Lost', never_returned: 'Never returned',
-}
-const SORT_LABELS: Record<string, string> = { total_spent: 'Top spenders', visit_count: 'Most visits', last_visit: 'Recent visit', name: 'Name A–Z' }
+const SORT_LABELS: Record<string, string> = { spend: 'Top spenders', visit_count: 'Most visits', last_visit: 'Recent visit', name: 'Name A–Z' }
 
 function coalesce(...vals: (number | null | undefined)[]) {
   for (const v of vals) if (v != null) return Number(v)
   return 0
 }
-function lv(c: Customer) { return c.last_visit ?? c.last_visit_at ?? null }
+function lv(c: Customer) { return c.last_visit_at ?? c.last_visit ?? null }
 
-function RfmBadge({ tier, total }: { tier: RfmTier; total: number }) {
-  return <span style={{ color: TIER_COLOR[tier] }} className="text-xs font-semibold">{tier.charAt(0).toUpperCase() + tier.slice(1)} {total}</span>
+function SegmentBadge({ segment }: { segment: string | null }) {
+  const s = SEGMENT_COLORS[segment ?? 'unscored'] ?? SEGMENT_COLORS.unscored
+  return <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ background: s.bg, color: s.text }}>{s.label}</span>
 }
 
 function relDate(iso: string | null) {
@@ -41,11 +41,11 @@ function relDate(iso: string | null) {
 export default function CustomersPage() {
   const { business } = useBusinessContext()
   const [customers, setCustomers] = useState<Customer[]>([])
-  const [segments, setSegments] = useState<Segments | null>(null)
+  const [segCounts, setSegCounts] = useState<SegmentCounts>({})
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [segment, setSegment] = useState('')
-  const [sort, setSort] = useState('total_spent')
+  const [sort, setSort] = useState('spend')
   const [page, setPage] = useState(0)
   const [importing, setImporting] = useState(false)
   const [importMsg, setImportMsg] = useState('')
@@ -53,7 +53,7 @@ export default function CustomersPage() {
   const loadSegments = useCallback(async () => {
     if (!business?.id) return
     const r = await fetch(`/api/customers/segments?business_id=${business.id}`)
-    if (r.ok) setSegments(await r.json())
+    if (r.ok) setSegCounts(await r.json())
   }, [business?.id])
 
   const load = useCallback(async (q: string, seg: string, s: string, p: number) => {
@@ -95,7 +95,7 @@ export default function CustomersPage() {
         <div>
           <h1 className="text-2xl font-medium">Customers</h1>
           <p className="text-sm mt-1" style={{ color: 'var(--text-secondary, #A8B5A8)' }}>
-            {segments ? `${segments.total} total` : ''}
+            {segCounts.total ? `${segCounts.total} total` : ''}
           </p>
         </div>
         <div className="flex gap-2 flex-wrap items-center">
@@ -108,20 +108,25 @@ export default function CustomersPage() {
       </header>
 
       {/* Segment pills */}
-      {segments && (
-        <div className="flex gap-2 flex-wrap">
-          {Object.entries(SEGMENT_LABELS).map(([key, label]) => {
-            const count = key === '' ? segments.total : segments[key as keyof Segments] ?? 0
-            return (
-              <button key={key} onClick={() => setSegment(key)}
-                className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${segment === key ? 'bg-[#2D5240] text-[#7FB897]' : 'bg-[rgba(255,255,255,0.06)] hover:bg-[rgba(255,255,255,0.1)]'}`}
-                style={{ border: segment === key ? '1px solid rgba(127,184,151,0.4)' : '1px solid transparent', color: segment === key ? '#7FB897' : 'var(--text-secondary, #A8B5A8)' }}>
-                {label} <span className="opacity-60">({count})</span>
-              </button>
-            )
-          })}
-        </div>
-      )}
+      <div className="flex gap-2 flex-wrap">
+        <button onClick={() => setSegment('')}
+          className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${segment === '' ? 'bg-[#2D5240] text-[#7FB897]' : 'bg-[rgba(255,255,255,0.06)] hover:bg-[rgba(255,255,255,0.1)]'}`}
+          style={{ border: segment === '' ? '1px solid rgba(127,184,151,0.4)' : '1px solid transparent', color: segment === '' ? '#7FB897' : 'var(--text-secondary, #A8B5A8)' }}>
+          All <span className="opacity-60">({segCounts.total ?? 0})</span>
+        </button>
+        {SEGMENT_ORDER.map(seg => {
+          const count = segCounts[seg] ?? 0
+          if (!count) return null
+          const c = SEGMENT_COLORS[seg]
+          return (
+            <button key={seg} onClick={() => setSegment(segment === seg ? '' : seg)}
+              className={`px-3 py-1 rounded-full text-xs font-medium transition-colors`}
+              style={{ background: segment === seg ? '#2D5240' : c.bg, color: segment === seg ? '#7FB897' : c.text, border: `1px solid ${segment === seg ? 'rgba(127,184,151,0.4)' : 'transparent'}` }}>
+              {c.label} <span className="opacity-60">({count})</span>
+            </button>
+          )
+        })}
+      </div>
 
       {/* Controls */}
       <div className="flex gap-3 flex-wrap">
@@ -148,19 +153,17 @@ export default function CustomersPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr style={{ background: 'var(--bg-elevated, #1A2620)', borderBottom: '1px solid var(--divider, rgba(232,237,231,0.04))' }}>
-                  {['Customer', 'Phone', 'Last visit', 'Lifetime spend', 'Visits', 'Loyalty', 'RFM', ''].map(h => (
+                  {['Customer', 'Phone', 'Last visit', 'Lifetime spend', 'Visits', 'Segment', ''].map(h => (
                     <th key={h} className="text-left px-4 py-3 text-xs uppercase tracking-wide font-medium" style={{ color: 'var(--text-secondary, #A8B5A8)' }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {customers.map(c => {
-                  const spend = coalesce(c.total_spent, c.total_spend)
+                  const spend = c.lifetime_value_cents != null ? Number(c.lifetime_value_cents) / 100 : coalesce(c.total_spent, c.total_spend)
                   const visits = coalesce(c.visit_count)
                   const lastV = lv(c)
-                  const rfm = calcRFM(spend, visits, lastV)
-                  const pts = coalesce(c.loyalty_points, c.points_balance)
-                  const initials = c.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
+                  const initials = (c.name ?? '?').split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()
                   return (
                     <tr key={c.id} className="hover:bg-white/[0.02] transition-colors" style={{ borderBottom: '1px solid var(--divider, rgba(232,237,231,0.04))' }}>
                       <td className="px-4 py-3">
@@ -176,8 +179,7 @@ export default function CustomersPage() {
                       <td className="px-4 py-3" style={{ color: 'var(--text-secondary, #A8B5A8)' }}>{relDate(lastV)}</td>
                       <td className="px-4 py-3 font-medium">${spend.toFixed(2)}</td>
                       <td className="px-4 py-3" style={{ color: 'var(--text-secondary, #A8B5A8)' }}>{visits}</td>
-                      <td className="px-4 py-3" style={{ color: 'var(--text-secondary, #A8B5A8)' }}>{pts > 0 ? `${pts} pts` : '—'}</td>
-                      <td className="px-4 py-3"><RfmBadge tier={rfm.tier} total={rfm.total} /></td>
+                      <td className="px-4 py-3"><SegmentBadge segment={c.segment} /></td>
                       <td className="px-4 py-3">
                         <Link href={`/dashboard/customers/${c.id}`} className="text-xs hover:underline" style={{ color: '#7FB897' }}>View →</Link>
                       </td>
