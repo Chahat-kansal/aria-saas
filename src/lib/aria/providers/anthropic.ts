@@ -118,6 +118,7 @@ interface ToolLoopParams {
   executeTool: (name: string, input: unknown) => Promise<unknown>
   maxTokens?: number
   maxIterations?: number
+  thinking?: { enabled: boolean; budget_tokens?: number }
   businessId?: string
   agentKey: AgentKey
   role: AgentRole
@@ -128,6 +129,7 @@ export interface ToolLoopResult {
   raw: string
   tool_calls: Array<{ name: string; input: unknown; result: unknown; ms: number }>
   iterations: number
+  thinking_tokens: number
   cost_cents: number
   latency_ms: number
   success: boolean
@@ -139,6 +141,7 @@ export async function callAnthropicWithTools(params: ToolLoopParams): Promise<To
   let totalInputTokens = 0, totalOutputTokens = 0, totalCachedRead = 0, totalCachedWrite = 0
   let raw = '', success = true, errorMessage: string | null = null
   const toolCalls: Array<{ name: string; input: unknown; result: unknown; ms: number }> = []
+  let thinkingTokensTotal = 0
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const messages: any[] = [{ role: 'user', content: params.userPrompt }]
@@ -146,19 +149,28 @@ export async function callAnthropicWithTools(params: ToolLoopParams): Promise<To
 
   try {
     for (let iter = 0; iter < maxIter; iter++) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const requestBody: any = {
+        model: modelId,
+        max_tokens: params.maxTokens ?? 2048,
+        system: [{
+          type: 'text',
+          text: params.systemPrompt,
+          cache_control: { type: 'ephemeral' },
+        }],
+        tools: params.tools,
+        messages,
+      }
+      if (params.thinking?.enabled) {
+        const budget = Math.max(1024, params.thinking.budget_tokens ?? 2000)
+        requestBody.thinking = { type: 'enabled', budget_tokens: budget }
+        if (requestBody.max_tokens < budget + 1024) requestBody.max_tokens = budget + 1024
+      }
+
       const response = await withBackoff(() =>
-        client.messages.create({
-          model: modelId,
-          max_tokens: params.maxTokens ?? 2048,
-          system: [{
-            type: 'text' as const,
-            text: params.systemPrompt,
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            cache_control: { type: 'ephemeral' } as any,
-          }],
-          tools: params.tools,
-          messages,
-        }, { signal: AbortSignal.timeout(params.timeoutMs ?? 25_000) })
+        client.messages.create(requestBody, {
+          signal: AbortSignal.timeout(params.timeoutMs ?? 45_000),
+        })
       )
 
       totalInputTokens += response.usage.input_tokens
@@ -169,6 +181,13 @@ export async function callAnthropicWithTools(params: ToolLoopParams): Promise<To
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const content = response.content as any[]
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const thinkingBlocks = content.filter((b: any) => b.type === 'thinking' || b.type === 'redacted_thinking')
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      thinkingTokensTotal += thinkingBlocks.reduce((sum: number, b: any) => {
+        const t = b.thinking
+        return sum + (typeof t === 'string' ? Math.ceil(t.length / 4) : 0)
+      }, 0)
       raw = content.filter(b => b.type === 'text').map(b => b.text as string).join('\n')
       const toolUseBlocks = content.filter(b => b.type === 'tool_use')
 
@@ -203,11 +222,11 @@ export async function callAnthropicWithTools(params: ToolLoopParams): Promise<To
         input_tokens: totalInputTokens + totalCachedRead + totalCachedWrite,
         output_tokens: totalOutputTokens, latency_ms: latency, cost_usd_cents: cost,
         success, error_message: errorMessage,
-        response_summary: `tools:${toolCalls.length}/iter:${Math.max(1, toolCalls.length)}`,
+        response_summary: `tools:${toolCalls.length}/iter:${Math.max(1, toolCalls.length)}/think:${thinkingTokensTotal}`,
         cache_write_tokens: totalCachedWrite, cache_read_tokens: totalCachedRead,
       })
     } catch { /* non-fatal */ }
   }
 
-  return { raw, tool_calls: toolCalls, iterations: toolCalls.length, cost_cents: cost, latency_ms: latency, success }
+  return { raw, tool_calls: toolCalls, iterations: toolCalls.length, thinking_tokens: thinkingTokensTotal, cost_cents: cost, latency_ms: latency, success }
 }

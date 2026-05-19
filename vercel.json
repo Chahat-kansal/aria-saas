@@ -5,6 +5,9 @@
     },
     "src/app/api/cron/**/*.ts": {
       "maxDuration": 60
+    },
+    "src/app/api/aria/ask/route.ts": {
+      "maxDuration": 60
     }
   },
   "crons": [

@@ -298,18 +298,27 @@ ${ARTIFACT_INSTRUCTIONS}`
 
   const model = intent.type === 'escalate' ? 'opus' : 'sonnet'
 
+  const useThinking = intent.complexity === 'complex' || intent.type === 'troubleshoot' || intent.type === 'escalate'
+  const thinkingBudget = intent.type === 'escalate' ? 4000 : 2000
+
   const toolResult = await callAnthropicWithTools({
     model,
     systemPrompt,
     userPrompt,
     tools: ARIA_POS_TOOLS,
     executeTool: (name, input) => executePOSTool(name, input, bid),
-    maxTokens: 2048,
+    maxTokens: useThinking ? 4096 : 2048,
     maxIterations: 5,
+    thinking: useThinking ? { enabled: true, budget_tokens: thinkingBudget } : undefined,
+    timeoutMs: useThinking ? 45_000 : 25_000,
     businessId: bid,
     agentKey: 'ask_aria',
     role: 'chat',
   })
+
+  if (useThinking) {
+    console.log('[aria/ask] extended_thinking', JSON.stringify({ budget: thinkingBudget, used_tokens: toolResult.thinking_tokens, ms: toolResult.latency_ms }), 'business', bid)
+  }
 
   if (toolResult.tool_calls.length > 0) {
     console.log('[aria/ask] tool_calls', JSON.stringify(toolResult.tool_calls.map(t => ({ name: t.name, ms: t.ms }))), 'business', bid)
