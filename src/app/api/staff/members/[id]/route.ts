@@ -24,6 +24,7 @@ async function _GET(_req: Request, { params }: { params: { id: string } }) {
     .eq('id', params.id)
     .maybeSingle()
 
+  console.log('[staff/GET] id:', params.id, 'data:', JSON.stringify(data), 'error:', JSON.stringify(error))
   if (!data || error) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   // Verify the member belongs to a business owned by this user
