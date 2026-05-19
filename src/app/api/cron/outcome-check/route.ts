@@ -37,7 +37,7 @@ export async function GET(req: Request) {
     }
 
     await supabaseAdmin.from('cron_logs').update({
-      status: errors.length ? 'partial' : 'success',
+      status: errors.length > 0 ? 'failed' : 'completed',
       finished_at: new Date().toISOString(),
       businesses_processed: (businesses ?? []).length,
       errors: {

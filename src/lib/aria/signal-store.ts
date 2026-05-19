@@ -12,5 +12,6 @@ export async function persistSignals(businessId: string, signals: Signal[]): Pro
     expires_at: new Date(now.getTime() + s.expires_in_min * 60 * 1000).toISOString(),
   }))
   // cache_key has UNIQUE constraint — upsert is safe
-  await supabaseAdmin.from('aria_signal_cache').upsert(rows, { onConflict: 'cache_key' })
+  const { error } = await supabaseAdmin.from('aria_signal_cache').upsert(rows, { onConflict: 'cache_key' })
+  if (error) console.error('[signal-store] upsert failed:', error.message, 'business:', businessId)
 }

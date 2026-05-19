@@ -176,9 +176,9 @@ export default function StaffProfilePage() {
   if (!member) return null
 
   const displayName = member.preferred_name ?? `${member.first_name} ${member.last_name}`
-  const hasPortal = member.portal_enabled && member.user_id
-  const invitePending = !member.portal_enabled && member.invite_sent_at && (member.work_email || member.personal_email)
-  const canInvite = !hasPortal && !invitePending && (member.work_email || member.personal_email)
+  const hasPortal = !!(member.portal_enabled && member.user_id)
+  const invitePending = !!(member.invite_sent_at && !member.portal_enabled && (member.work_email || member.personal_email))
+  const canInvite = !hasPortal && !invitePending && !!(member.work_email || member.personal_email)
 
   const inp = (k: keyof MemberDetail, type = 'text', placeholder = '') => (
     <input type={type} value={String(edit[k] ?? '')} onChange={e => setF(k, e.target.value)} placeholder={placeholder}

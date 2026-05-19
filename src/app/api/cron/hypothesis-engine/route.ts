@@ -24,7 +24,7 @@ export async function GET(req: Request) {
       .in('subscription_status', ['active', 'trialing'])
 
     if (!businesses || businesses.length === 0) {
-      await supabaseAdmin.from('cron_logs').update({ status: 'success', finished_at: new Date().toISOString(), businesses_processed: 0, errors: { total_hypotheses: 0 } }).eq('id', cronLogId)
+      await supabaseAdmin.from('cron_logs').update({ status: 'completed', finished_at: new Date().toISOString(), businesses_processed: 0, errors: { total_hypotheses: 0 } }).eq('id', cronLogId)
       return NextResponse.json({ ok: true, count: 0 })
     }
 
@@ -43,7 +43,7 @@ export async function GET(req: Request) {
     }
 
     await supabaseAdmin.from('cron_logs').update({
-      status: errors.length ? 'partial' : 'success',
+      status: errors.length > 0 ? 'failed' : 'completed',
       finished_at: new Date().toISOString(),
       businesses_processed: processed,
       errors: { total_hypotheses: totalHypotheses, ...(errors.length ? { items: errors } : {}) },

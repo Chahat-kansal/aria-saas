@@ -144,7 +144,7 @@ export async function GET(req: Request) {
     }
 
     await supabaseAdmin.from('cron_logs').update({
-      status: 'success',
+      status: 'completed',
       finished_at: new Date().toISOString(),
       businesses_processed: 0,
       errors: { birthday_sent: birthdaySent, review_requests_queued: reviewRequestsQueued },

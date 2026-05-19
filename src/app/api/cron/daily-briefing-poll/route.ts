@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
       .in('status', ['submitted', 'processing'])
 
     if (!pending?.length) {
-      await supabaseAdmin.from('cron_logs').update({ status: 'success', finished_at: new Date().toISOString(), businesses_processed: 0 }).eq('id', cronLogId)
+      await supabaseAdmin.from('cron_logs').update({ status: 'completed', finished_at: new Date().toISOString(), businesses_processed: 0 }).eq('id', cronLogId)
       return NextResponse.json({ ok: true, polled: 0 })
     }
 
@@ -71,7 +71,7 @@ export async function GET(req: NextRequest) {
     }
 
     await supabaseAdmin.from('cron_logs').update({
-      status: 'success', finished_at: new Date().toISOString(),
+      status: 'completed', finished_at: new Date().toISOString(),
       businesses_processed: processed,
     }).eq('id', cronLogId)
 

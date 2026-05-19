@@ -26,7 +26,7 @@ export async function GET(req: Request) {
       .limit(100)
 
     if (!convs?.length) {
-      await supabaseAdmin.from('cron_logs').update({ status: 'success', finished_at: new Date().toISOString(), businesses_processed: 0, errors: { total_memories_extracted: 0 } }).eq('id', cronLogId)
+      await supabaseAdmin.from('cron_logs').update({ status: 'completed', finished_at: new Date().toISOString(), businesses_processed: 0, errors: { total_memories_extracted: 0 } }).eq('id', cronLogId)
       return NextResponse.json({ ok: true, conversations: 0 })
     }
 
@@ -41,7 +41,7 @@ export async function GET(req: Request) {
     const toProcess = convs.filter(c => !extractedSet.has(c.id))
 
     if (!toProcess.length) {
-      await supabaseAdmin.from('cron_logs').update({ status: 'success', finished_at: new Date().toISOString(), businesses_processed: 0, errors: { total_memories_extracted: 0, note: 'all conversations already processed' } }).eq('id', cronLogId)
+      await supabaseAdmin.from('cron_logs').update({ status: 'completed', finished_at: new Date().toISOString(), businesses_processed: 0, errors: { total_memories_extracted: 0, note: 'all conversations already processed' } }).eq('id', cronLogId)
       return NextResponse.json({ ok: true, conversations: 0, note: 'all processed' })
     }
 
@@ -89,7 +89,7 @@ export async function GET(req: Request) {
     }
 
     await supabaseAdmin.from('cron_logs').update({
-      status: errors.length > 0 ? 'partial' : 'success',
+      status: errors.length > 0 ? 'failed' : 'completed',
       finished_at: new Date().toISOString(),
       businesses_processed: businessesProcessed,
       errors: { total_memories_extracted: totalExtracted, ...(errors.length > 0 ? { items: errors } : {}) },
