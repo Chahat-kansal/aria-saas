@@ -40,7 +40,7 @@ async function _POST(req: Request) {
     .eq('staff_member_id', staff_member_id)
     .eq('status', 'pending')
 
-  // Re-send via Supabase auth admin (consistent with original invite flow)
+  // Try invite — if already registered, send magic link instead so email actually goes out
   const { error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
     redirectTo: `https://www.ariaos.site/staff/accept-invite`,
     data: { business_id, staff_member_id, role: 'staff' },
@@ -48,7 +48,16 @@ async function _POST(req: Request) {
   if (inviteError) {
     const alreadyRegistered = inviteError.message?.toLowerCase().includes('already registered') || inviteError.message?.includes('already been registered')
     if (!alreadyRegistered) return NextResponse.json({ error: inviteError.message }, { status: 500 })
-    // Already registered — still log the invite record so staff can click accept link
+    // Already registered — send magic link so they actually get an email
+    const { error: linkError } = await supabaseAdmin.auth.admin.generateLink({
+      type: 'magiclink',
+      email,
+      options: {
+        redirectTo: `https://www.ariaos.site/staff/accept-invite`,
+        data: { business_id, staff_member_id, role: 'staff' },
+      },
+    })
+    if (linkError) return NextResponse.json({ error: `Could not send email: ${linkError.message}` }, { status: 500 })
   }
 
   // Insert fresh staff_invites record

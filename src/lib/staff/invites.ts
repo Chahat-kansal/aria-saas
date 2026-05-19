@@ -18,14 +18,23 @@ export async function sendStaffInvite(
     }
   )
   if (authError) {
-    if (authError.message?.toLowerCase().includes('already registered') || authError.message?.includes('already been registered')) {
-      const { data: { users } } = await supabaseAdmin.auth.admin.listUsers()
-      const existing = users.find(u => u.email?.toLowerCase() === email.toLowerCase())
-      if (existing) userId = existing.id
-      else return { ok: false, error: `User already registered but not found: ${authError.message}` }
-    } else {
-      return { ok: false, error: authError.message }
-    }
+    const alreadyRegistered = authError.message?.toLowerCase().includes('already registered') || authError.message?.includes('already been registered')
+    if (!alreadyRegistered) return { ok: false, error: authError.message }
+    // Already registered — find their user_id and send a magic link instead
+    const { data: { users } } = await supabaseAdmin.auth.admin.listUsers()
+    const existing = users.find(u => u.email?.toLowerCase() === email.toLowerCase())
+    if (!existing) return { ok: false, error: `User already registered but not found` }
+    userId = existing.id
+    // Send magic link so they actually receive an email
+    const { error: linkError } = await supabaseAdmin.auth.admin.generateLink({
+      type: 'magiclink',
+      email,
+      options: {
+        redirectTo: `https://www.ariaos.site/staff/accept-invite`,
+        data: { business_id: businessId, staff_member_id: staffMemberId, role: 'staff' },
+      },
+    })
+    if (linkError) console.error('[staff/invites] generateLink failed:', linkError.message)
   } else {
     userId = authData.user?.id
   }
