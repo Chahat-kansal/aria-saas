@@ -99,6 +99,8 @@ export async function callAnthropic<T = Record<string, unknown>>(
         success,
         error_message: errorMessage,
         response_summary: cachedReadTokens > 0 ? `cached:${cachedReadTokens}r/${cachedWriteTokens}w` : null,
+        cache_write_tokens: cachedWriteTokens,
+        cache_read_tokens: cachedReadTokens,
       })
     } catch { /* non-fatal — table may not exist yet */ }
   }

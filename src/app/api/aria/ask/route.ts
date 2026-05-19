@@ -10,6 +10,7 @@ import { callAnthropic } from '@/lib/aria/providers/anthropic'
 import { classifyIntent } from '@/lib/aria/ask/intent'
 import { buildAskAriaContext } from '@/lib/aria/ask/business-context'
 // buildSystemPrompt replaced by inline Aria OS prompt below
+import { ARTIFACT_INSTRUCTIONS } from '@/lib/aria-system-prompt'
 import { buildTroubleshootContext, buildTroubleshootAddendum } from '@/lib/aria/ask/troubleshoot'
 import { createSupportTicket } from '@/lib/aria/ask/escalate'
 import { generateExport } from '@/lib/aria/ask/files'
@@ -214,7 +215,8 @@ ALWAYS: give specific table names, column names, route paths, and actionable SQL
 
 CURRENT BUSINESS: ${ctx.business_name} (${ctx.industry})
 ${ctx.owner_name ? `Owner: ${ctx.owner_name.split(' ')[0]}` : ''}
-Currency: ${ctx.currency}`
+Currency: ${ctx.currency}
+${ARTIFACT_INSTRUCTIONS}`
 
   // 4. Add troubleshoot addendum if needed
   if (intent.type === 'troubleshoot' || intent.type === 'escalate') {

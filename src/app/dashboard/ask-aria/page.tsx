@@ -7,6 +7,7 @@ import VoiceInput from '@/components/aria/VoiceInput'
 import ChatSuggestions from '@/components/aria/ChatSuggestions'
 import ActionPreviewCard from '@/components/aria/ActionPreviewCard'
 import AuditLogCard from '@/components/aria/AuditLogCard'
+import { AriaArtifact } from '@/components/aria/AriaArtifact'
 import type { PlannedAction } from '@/lib/aria/ask/action-planner'
 import type { DocumentReadResult } from '@/lib/aria/intelligence/document-vision'
 
@@ -139,6 +140,34 @@ function ActionCard({ action }: { action: MessageAction }) {
   return null
 }
 
+type ArtifactSegment = { kind: 'artifact'; type: string; title?: string; data: Record<string, unknown> }
+type TextSegment    = { kind: 'text'; content: string }
+type Segment = TextSegment | ArtifactSegment
+
+function parseAriaResponse(text: string): Segment[] {
+  const segments: Segment[] = []
+  const regex = /<aria_artifact\s+type="([^"]+)"(?:\s+title="([^"]+)")?\s*>([\s\S]*?)<\/aria_artifact>/g
+  let lastIdx = 0
+  let match: RegExpExecArray | null
+  while ((match = regex.exec(text)) !== null) {
+    if (match.index > lastIdx) {
+      const t = text.slice(lastIdx, match.index).trim()
+      if (t) segments.push({ kind: 'text', content: t })
+    }
+    try {
+      segments.push({ kind: 'artifact', type: match[1], title: match[2], data: JSON.parse(match[3].trim()) })
+    } catch {
+      segments.push({ kind: 'text', content: match[0] })
+    }
+    lastIdx = regex.lastIndex
+  }
+  if (lastIdx < text.length) {
+    const t = text.slice(lastIdx).trim()
+    if (t) segments.push({ kind: 'text', content: t })
+  }
+  return segments
+}
+
 export default function AskAriaPage() {
   const { business, loading } = useBusinessContext()
   const [messages, setMessages] = useState<Message[]>([])
@@ -173,6 +202,7 @@ export default function AskAriaPage() {
   }, [])
 
   useEffect(() => { loadHistory() }, [loadHistory])
+
 
   const loadConversation = useCallback(async (id: string) => {
     try {
@@ -269,6 +299,11 @@ export default function AskAriaPage() {
       inputRef.current?.focus()
     }
   }, [input, sending, conversationId, loadHistory])
+
+  useEffect(() => {
+    ;(window as unknown as Record<string, unknown>).ariaSendPrompt = (prompt: string) => { send(prompt) }
+    return () => { delete (window as unknown as Record<string, unknown>).ariaSendPrompt }
+  }, [send])
 
   const uploadFile = useCallback(async (file: File) => {
     if (uploading) return
@@ -465,9 +500,15 @@ export default function AskAriaPage() {
                   style={m.role === 'user'
                     ? { background: '#2D5240', color: '#fff', borderRadius: '18px 18px 4px 18px' }
                     : { background: 'rgba(255,255,255,0.05)', color: '#e5e7eb', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '18px 18px 18px 4px' }}>
-                  {m.content || (m.streaming
+                  {m.streaming && !m.content
                     ? <span className="inline-flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-[#7FB897] animate-pulse" /><span className="opacity-60">Thinking…</span></span>
-                    : null)}
+                    : m.role === 'assistant' && m.content
+                      ? parseAriaResponse(m.content).map((seg, si) =>
+                          seg.kind === 'text'
+                            ? <span key={si} className="whitespace-pre-wrap">{seg.content}</span>
+                            : <AriaArtifact key={si} type={seg.type} title={seg.title} data={seg.data} />
+                        )
+                      : m.content}
                 </div>
                 {m.role === 'assistant' && m.action && <ActionCard action={m.action} />}
                 {m.role === 'assistant' && !m.streaming && m.content && <CopyButton text={m.content} />}
