@@ -15,6 +15,7 @@ function agentToCategory(key: AgentKey): string {
     rostering: 'staff', hypothesis_engine: 'sales',
     signal_engine_synth: 'sales', memory_extractor: 'sales',
     customer_insight: 'customers', document_vision: 'inventory',
+    marketing_ai_generate: 'promotions',
   }
   return map[key] ?? 'sales'
 }

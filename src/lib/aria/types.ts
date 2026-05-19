@@ -12,6 +12,7 @@ export type AgentKey =
   | 'intent_classifier' | 'ask_aria' | 'ask_suggestions' | 'ask_files' | 'ask_troubleshoot'
   | 'rostering' | 'hypothesis_engine'
   | 'signal_engine_synth' | 'memory_extractor' | 'customer_insight' | 'document_vision'
+  | 'marketing_ai_generate'
 
 export type AgentRole = 'agent' | 'judge' | 'data' | 'narrative' | 'classify' | 'chat' | 'export' | 'analysis'
 

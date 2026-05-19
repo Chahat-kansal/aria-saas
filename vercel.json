@@ -94,6 +94,10 @@
     {
       "path": "/api/cron/outcome-check",
       "schedule": "0 17 * * *"
+    },
+    {
+      "path": "/api/cron/marketing-automations",
+      "schedule": "0 */2 * * *"
     }
   ]
 }
