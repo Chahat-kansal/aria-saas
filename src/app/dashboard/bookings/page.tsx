@@ -1,276 +1,248 @@
-'use client';
-import { useState, useEffect, useCallback } from 'react';
-import { useBusinessContext } from '@/components/providers/BusinessProvider';
-import Link from 'next/link';
+'use client'
+import { useState, useEffect, useCallback } from 'react'
 
-interface Booking { id: string; customer_name: string | null; service: string | null; booking_date: string | null; amount: number | null; status: string | null; notes: string | null; phone: string | null; duration_minutes: number | null; }
+const C = { bg: 'var(--bg-base)', card: 'var(--bg-surface)', text: '#F0F4F0', muted: 'var(--text-secondary,#A8B5A8)', green: '#7FB897', darkGreen: '#2D5240', red: '#ef4444', amber: '#f59e0b', border: 'rgba(127,184,151,0.15)' }
+const DAY_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
+const STATUS_COLOR: Record<string, string> = { confirmed: C.green, pending: C.amber, cancelled: C.red, no_show: '#6b7280', completed: C.muted }
 
-const STATUS_STYLES: Record<string, { bg: string; color: string }> = {
-  confirmed:  { bg: 'rgba(29,158,117,0.15)',  color: '#1D9E75' },
-  in_progress:{ bg: 'rgba(59,130,246,0.15)',  color: '#60a5fa' },
-  completed:  { bg: 'rgba(255,255,255,0.06)', color: '#9ca3af' },
-  cancelled:  { bg: 'rgba(239,68,68,0.15)',   color: '#ef4444' },
-  'no-show':  { bg: 'rgba(245,158,11,0.15)',  color: '#f59e0b' },
-};
+interface Service { id: string; name: string; duration_minutes: number; price: number | null; max_party_size: number; color: string }
+interface Booking { id: string; customer_name: string; customer_phone: string | null; customer_email: string | null; booking_date: string; booking_time: string | null; party_size: number; duration_minutes: number; status: string; notes: string | null; aria_notes: string | null; booking_services: { name: string; color: string; duration_minutes: number } | null }
 
-const STATUSES = ['confirmed','in_progress','completed','cancelled','no-show'];
-const DURATIONS = [30, 60, 90, 120];
-
-function isToday(dateStr: string | null) {
-  if (!dateStr) return false;
-  return new Date(dateStr).toDateString() === new Date().toDateString();
-}
-function isUpcoming(dateStr: string | null) {
-  if (!dateStr) return false;
-  return new Date(dateStr) >= new Date();
-}
+function dateStr(d: Date) { return d.toISOString().slice(0, 10) }
+function fmtDate(s: string) { return new Date(s + 'T00:00:00').toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' }) }
+function fmtTime(t: string | null) { if (!t) return ''; const [h, m] = t.split(':'); const hour = parseInt(h); return `${hour > 12 ? hour - 12 : hour || 12}:${m}${hour >= 12 ? 'pm' : 'am'}` }
 
 export default function BookingsPage() {
-  const { business } = useBusinessContext();
-  const [bookings, setBookings] = useState<Booking[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [showForm, setShowForm] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [updatingId, setUpdatingId] = useState<string | null>(null);
-  const [form, setForm] = useState({
-    customer_name: '', service: '', booking_date: '', amount: '', notes: '', phone: '', duration_minutes: '60',
-  });
+  const [bid, setBid]             = useState('')
+  const [bookings, setBookings]   = useState<Booking[]>([])
+  const [services, setServices]   = useState<Service[]>([])
+  const [selectedDate, setSelectedDate] = useState(dateStr(new Date()))
+  const [tab, setTab]             = useState<'bookings' | 'services'>('bookings')
+  const [loading, setLoading]     = useState(true)
+  const [showAdd, setShowAdd]     = useState(false)
+  const [ariaInsight, setAriaInsight] = useState('')
+  const [checkingAria, setCheckingAria] = useState(false)
+  const [form, setForm]           = useState({ customer_name: '', customer_email: '', customer_phone: '', booking_date: dateStr(new Date()), booking_time: '12:00', party_size: 2, service_id: '', notes: '' })
+  const [svcForm, setSvcForm]     = useState({ name: '', duration_minutes: 60, price: '', max_party_size: 20, description: '', color: '#7FB897' })
+  const [saving, setSaving]       = useState(false)
 
-  const load = useCallback(async () => {
-    if (!business?.id) return;
-    setLoading(true);
-    const res = await fetch(`/api/bookings?business_id=${business.id}`).then(r => r.json()).catch(() => ({ bookings: [] }));
-    setBookings(res.bookings ?? res.data ?? []);
-    setLoading(false);
-  }, [business?.id]);
+  const load = useCallback(async (businessId: string) => {
+    const [bkRes, svcRes] = await Promise.all([
+      fetch(`/api/bookings?business_id=${businessId}`),
+      fetch('/api/bookings/services'),
+    ])
+    const bkData = await bkRes.json().catch(() => ({}))
+    const svcData = await svcRes.json().catch(() => ({}))
+    setBookings(bkData.bookings ?? [])
+    setServices(svcData.services ?? [])
+    setLoading(false)
+  }, [])
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    fetch('/api/pos/products').then(r => r.json()).then((d: Record<string,unknown>) => {
+      if (d.business_id) { setBid(d.business_id as string); load(d.business_id as string) }
+      else setLoading(false)
+    }).catch(() => setLoading(false))
+  }, [load])
 
-  async function createBooking() {
-    if (!business?.id || !form.customer_name || !form.booking_date) return;
-    setSaving(true);
-    await fetch('/api/bookings', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        business_id: business.id,
-        customer_name: form.customer_name,
-        service: form.service || null,
-        booking_date: form.booking_date,
-        amount: form.amount ? parseFloat(form.amount) : null,
-        notes: form.notes || null,
-        phone: form.phone || null,
-        duration_minutes: parseInt(form.duration_minutes),
-        status: 'confirmed',
-      }),
-    });
-    setSaving(false);
-    setShowForm(false);
-    setForm({ customer_name: '', service: '', booking_date: '', amount: '', notes: '', phone: '', duration_minutes: '60' });
-    load();
+  async function addBooking() {
+    if (!form.customer_name || !form.booking_date) return
+    setSaving(true)
+    const res = await fetch('/api/bookings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...form, business_id: bid, party_size: Number(form.party_size) }) })
+    const d = await res.json() as { booking?: Booking }
+    if (d.booking) { setBookings(prev => [d.booking!, ...prev]); setShowAdd(false) }
+    setSaving(false)
   }
 
-  async function updateStatus(id: string, status: string) {
-    if (!business?.id) return;
-    setUpdatingId(id);
-    await fetch(`/api/bookings?id=${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ business_id: business.id, status }),
-    });
-    setUpdatingId(null);
-    load();
+  async function updateStatus(id: string, status: string, extra?: Record<string, unknown>) {
+    const res = await fetch('/api/bookings', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, business_id: bid, status, ...extra }) })
+    const d = await res.json() as { booking?: Booking }
+    if (d.booking) setBookings(prev => prev.map(b => b.id === id ? { ...b, ...d.booking } : b))
   }
 
-  const todayBookings = bookings.filter(b => isToday(b.booking_date));
-  const upcoming = bookings.filter(b => !isToday(b.booking_date) && isUpcoming(b.booking_date));
-  const past = bookings.filter(b => !isUpcoming(b.booking_date));
-  const totalRevenue = bookings.filter(b => b.status === 'completed').reduce((s, b) => s + (b.amount ?? 0), 0);
-
-  const inputCls = 'w-full px-3 py-2 rounded-xl text-sm text-white outline-none bg-[rgba(255,255,255,0.06)] border border-[rgba(255,255,255,0.08)]';
-
-  if (loading) {
-    return (
-      <div className="p-6 max-w-4xl mx-auto animate-pulse space-y-4">
-        <div className="h-8 bg-[rgba(255,255,255,0.06)] rounded-xl w-48" />
-        <div className="grid grid-cols-3 gap-4"><div className="h-24 bg-[rgba(255,255,255,0.04)] rounded-xl col-span-3" /></div>
-        <div className="h-64 bg-[rgba(255,255,255,0.04)] rounded-xl" />
-      </div>
-    );
+  async function addService() {
+    if (!svcForm.name) return
+    setSaving(true)
+    const res = await fetch('/api/bookings/services', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...svcForm, price: parseFloat(svcForm.price) || null }) })
+    const d = await res.json() as { service?: Service }
+    if (d.service) { setServices(prev => [...prev, d.service!]); setSvcForm({ name: '', duration_minutes: 60, price: '', max_party_size: 20, description: '', color: '#7FB897' }) }
+    setSaving(false)
   }
+
+  async function runAria() {
+    setCheckingAria(true)
+    const res = await fetch('/api/bookings/aria-suggest', { method: 'POST' })
+    const d = await res.json() as { insight?: string }
+    setAriaInsight(d.insight ?? '')
+    setCheckingAria(false)
+  }
+
+  const today = new Date()
+  const weekDays = Array.from({ length: 7 }, (_, i) => { const d = new Date(today); d.setDate(today.getDate() - today.getDay() + 1 + i); return dateStr(d) })
+  const dayBookings = bookings.filter(b => b.booking_date === selectedDate)
+  const iStyle: React.CSSProperties = { width: '100%', background: 'rgba(255,255,255,0.04)', border: `1px solid ${C.border}`, borderRadius: 8, padding: '8px 12px', color: C.text, fontSize: 14, boxSizing: 'border-box' }
+
+  if (loading) return <div style={{ padding: 32, color: C.muted }}>Loading…</div>
 
   return (
-    <div className="p-6 max-w-4xl mx-auto">
-      <div className="mb-6 flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold text-white mb-1">Bookings</h1>
-          <p style={{ color: '#6b7280' }}>All appointments and jobs</p>
-        </div>
-        <button onClick={() => setShowForm(true)}
-          className="shrink-0 px-4 py-2 rounded-xl text-sm font-medium text-white" style={{ background: '#1D9E75' }}>
-          + New booking
-        </button>
-      </div>
-
-      {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        {[
-          { label: 'Today', value: todayBookings.length, color: todayBookings.length > 0 ? '#1D9E75' : '#fff' },
-          { label: 'Upcoming', value: upcoming.length, color: '#fff' },
-          { label: 'Total bookings', value: bookings.length, color: '#fff' },
-          { label: 'Completed revenue', value: `A$${totalRevenue.toLocaleString()}`, color: '#1D9E75' },
-        ].map(s => (
-          <div key={s.label} className="rounded-xl p-4" style={{ background: '#13131a', border: '1px solid rgba(255,255,255,0.07)' }}>
-            <p className="text-xs mb-1" style={{ color: '#6b7280' }}>{s.label}</p>
-            <p className="text-xl font-semibold" style={{ color: s.color }}>{s.value}</p>
-          </div>
-        ))}
-      </div>
-
-      {/* Today */}
-      {todayBookings.length > 0 && (
-        <div className="mb-6">
-          <h2 className="text-sm font-medium text-white mb-3">Today's schedule</h2>
-          <div className="space-y-2">
-            {todayBookings.map(b => {
-              const ss = STATUS_STYLES[b.status ?? 'confirmed'] ?? STATUS_STYLES.confirmed;
-              return (
-                <div key={b.id} className="rounded-xl p-4 flex items-center gap-4" style={{ background: 'rgba(29,158,117,0.06)', border: '1px solid rgba(29,158,117,0.15)' }}>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="font-medium text-white">{b.customer_name ?? 'No name'}</p>
-                      <span className="text-xs px-2 py-0.5 rounded-full" style={ss}>{b.status ?? 'confirmed'}</span>
-                    </div>
-                    <p className="text-xs mt-0.5" style={{ color: '#9ca3af' }}>
-                      {b.service ?? 'No service'} · {b.booking_date ? new Date(b.booking_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
-                      {b.duration_minutes ? ` · ${b.duration_minutes}min` : ''}
-                    </p>
-                  </div>
-                  {b.amount && <p className="text-sm font-medium shrink-0" style={{ color: '#1D9E75' }}>A${b.amount}</p>}
-                  <select value={b.status ?? 'confirmed'} onChange={e => updateStatus(b.id, e.target.value)}
-                    disabled={updatingId === b.id}
-                    className="text-xs rounded-lg px-2 py-1.5 outline-none disabled:opacity-40"
-                    style={{ background: '#1a1a24', border: '1px solid rgba(255,255,255,0.1)', color: '#9ca3af' }}>
-                    {STATUSES.map(s => <option key={s} value={s} style={{ background: '#1a1a2e' }}>{s.replace('-', ' ')}</option>)}
-                  </select>
-                  <Link href={`/dashboard/quote-builder?customer=${encodeURIComponent(b.customer_name ?? '')}&service=${encodeURIComponent(b.service ?? '')}`}
-                    className="text-xs px-2 py-1.5 rounded-lg shrink-0"
-                    style={{ background: 'rgba(255,255,255,0.06)', color: '#9ca3af' }}>
-                    Quote
-                  </Link>
-                </div>
-              );
-            })}
+    <div style={{ minHeight: '100vh', background: C.bg, color: C.text, fontFamily: 'Inter, sans-serif', padding: 24 }}>
+      <div style={{ maxWidth: 900, margin: '0 auto' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+          <h1 style={{ fontSize: 24, fontWeight: 700 }}>Bookings</h1>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {(['bookings','services'] as const).map(t => (
+              <button key={t} onClick={() => setTab(t)} style={{ padding: '7px 16px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600, background: tab === t ? C.darkGreen : 'transparent', color: tab === t ? C.green : C.muted }}>
+                {t === 'bookings' ? 'Bookings' : 'Services'}
+              </button>
+            ))}
+            <button onClick={() => setShowAdd(true)} style={{ padding: '7px 16px', borderRadius: 8, background: C.darkGreen, color: C.green, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>+ Add booking</button>
           </div>
         </div>
-      )}
 
-      {/* All bookings table */}
-      <div className="rounded-xl overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.07)' }}>
-        <div className="px-5 py-4" style={{ background: '#13131a', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
-          <h2 className="font-medium text-white">All bookings</h2>
-        </div>
-        {bookings.length === 0 ? (
-          <div className="px-5 py-12 text-center" style={{ background: '#0d0d14' }}>
-            <div className="text-3xl mb-3">📅</div>
-            <p className="font-semibold text-white mb-1">No bookings yet</p>
-            <p className="text-sm mb-4" style={{ color: '#6b7280' }}>Create your first booking to start tracking your schedule.</p>
-            <button onClick={() => setShowForm(true)} className="px-4 py-2 rounded-xl text-sm font-medium text-white" style={{ background: '#1D9E75' }}>+ New booking</button>
-          </div>
-        ) : (
-          <table className="w-full text-sm" style={{ background: '#0d0d14' }}>
-            <thead>
-              <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                {['Customer', 'Service', 'Date & Time', 'Amount', 'Status', 'Actions'].map(h => (
-                  <th key={h} className="px-5 py-3 text-left text-xs font-medium" style={{ color: '#6b7280' }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {[...upcoming, ...todayBookings, ...past].map(b => {
-                const ss = STATUS_STYLES[b.status ?? 'confirmed'] ?? STATUS_STYLES.confirmed;
+        {tab === 'bookings' && (
+          <>
+            <div style={{ display: 'flex', gap: 6, marginBottom: 20 }}>
+              {weekDays.map(d => {
+                const count = bookings.filter(b => b.booking_date === d).length
+                const isSelected = d === selectedDate
+                const isToday = d === dateStr(new Date())
+                const dayDate = new Date(d + 'T00:00:00')
                 return (
-                  <tr key={b.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                    <td className="px-5 py-3 text-white">{b.customer_name ?? '—'}</td>
-                    <td className="px-5 py-3" style={{ color: '#9ca3af' }}>{b.service ?? '—'}</td>
-                    <td className="px-5 py-3 text-xs" style={{ color: '#9ca3af' }}>
-                      {b.booking_date ? new Date(b.booking_date).toLocaleString('en-AU', { dateStyle: 'short', timeStyle: 'short' }) : '—'}
-                    </td>
-                    <td className="px-5 py-3 text-white">{b.amount ? `A$${b.amount}` : '—'}</td>
-                    <td className="px-5 py-3">
-                      <span className="px-2 py-0.5 rounded-full text-xs" style={ss}>{b.status ?? 'confirmed'}</span>
-                    </td>
-                    <td className="px-5 py-3">
-                      <select value={b.status ?? 'confirmed'} onChange={e => updateStatus(b.id, e.target.value)}
-                        disabled={updatingId === b.id}
-                        className="text-xs rounded-lg px-2 py-1 outline-none disabled:opacity-40"
-                        style={{ background: '#1a1a24', border: '1px solid rgba(255,255,255,0.1)', color: '#9ca3af' }}>
-                        {STATUSES.map(s => <option key={s} value={s} style={{ background: '#1a1a2e' }}>{s.replace('-', ' ')}</option>)}
-                      </select>
-                    </td>
-                  </tr>
-                );
+                  <button key={d} onClick={() => setSelectedDate(d)} style={{ flex: 1, padding: '10px 4px', borderRadius: 10, border: `1px solid ${isSelected ? C.green : C.border}`, background: isSelected ? C.darkGreen : 'transparent', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+                    <span style={{ fontSize: 11, color: isSelected ? C.green : C.muted, fontWeight: 600 }}>{DAY_NAMES[dayDate.getDay()]}</span>
+                    <span style={{ fontSize: 16, fontWeight: 700, color: isToday ? C.green : C.text }}>{dayDate.getDate()}</span>
+                    {count > 0 && <span style={{ fontSize: 10, background: C.green + '33', color: C.green, borderRadius: 10, padding: '1px 6px' }}>{count}</span>}
+                  </button>
+                )
               })}
-            </tbody>
-          </table>
+            </div>
+
+            <p style={{ fontSize: 14, color: C.muted, marginBottom: 12 }}>{fmtDate(selectedDate)} · {dayBookings.length} booking{dayBookings.length !== 1 ? 's' : ''}</p>
+
+            {dayBookings.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '40px 0', color: C.muted }}>
+                No bookings for this day.{' '}
+                <button onClick={() => setShowAdd(true)} style={{ color: C.green, background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 14 }}>Add one?</button>
+              </div>
+            ) : (
+              dayBookings.sort((a, b) => (a.booking_time || '').localeCompare(b.booking_time || '')).map(b => (
+                <div key={b.id} style={{ background: C.card, borderRadius: 14, padding: '16px 20px', marginBottom: 10, borderLeft: `4px solid ${b.booking_services?.color || STATUS_COLOR[b.status] || C.muted}` }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4, flexWrap: 'wrap' }}>
+                        <span style={{ fontWeight: 700, fontSize: 15 }}>{b.customer_name}</span>
+                        {b.booking_time && <span style={{ fontSize: 13, color: C.green, fontWeight: 600 }}>{fmtTime(b.booking_time)}</span>}
+                        <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 10, background: (STATUS_COLOR[b.status] || C.muted) + '22', color: STATUS_COLOR[b.status] || C.muted, fontWeight: 700 }}>{b.status}</span>
+                      </div>
+                      <div style={{ fontSize: 13, color: C.muted, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                        {b.booking_services?.name && <span>📋 {b.booking_services.name}</span>}
+                        <span>👥 {b.party_size} {b.party_size === 1 ? 'guest' : 'guests'}</span>
+                        {b.customer_phone && <span>📞 {b.customer_phone}</span>}
+                        {b.customer_email && <span>✉ {b.customer_email}</span>}
+                      </div>
+                      {b.notes && <p style={{ fontSize: 13, color: C.muted, marginTop: 6, fontStyle: 'italic' }}>&ldquo;{b.notes}&rdquo;</p>}
+                      {b.aria_notes && <p style={{ fontSize: 12, color: C.green, marginTop: 6 }}>✦ {b.aria_notes}</p>}
+                    </div>
+                    {b.status === 'confirmed' && (
+                      <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                        <button onClick={() => updateStatus(b.id, 'completed')} style={{ fontSize: 12, padding: '5px 12px', borderRadius: 7, background: C.darkGreen, color: C.green, border: 'none', cursor: 'pointer' }}>Done</button>
+                        <button onClick={() => updateStatus(b.id, 'no_show')} style={{ fontSize: 12, padding: '5px 12px', borderRadius: 7, background: 'transparent', color: C.muted, border: `1px solid ${C.border}`, cursor: 'pointer' }}>No-show</button>
+                        <button onClick={() => { const r = prompt('Cancellation reason (optional):'); updateStatus(b.id, 'cancelled', { cancellation_reason: r || null }) }} style={{ fontSize: 12, padding: '5px 12px', borderRadius: 7, background: 'rgba(239,68,68,0.1)', color: C.red, border: '1px solid rgba(239,68,68,0.3)', cursor: 'pointer' }}>Cancel</button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))
+            )}
+
+            <div style={{ marginTop: 24 }}>
+              <button onClick={runAria} disabled={checkingAria} style={{ fontSize: 13, color: C.green, background: 'transparent', border: `1px solid ${C.border}`, borderRadius: 8, padding: '8px 18px', cursor: 'pointer' }}>
+                {checkingAria ? 'Analysing…' : '✦ Aria booking insights'}
+              </button>
+              {ariaInsight && (
+                <div style={{ marginTop: 12, background: 'rgba(127,184,151,0.08)', border: `1px solid ${C.border}`, borderRadius: 12, padding: '14px 18px', fontSize: 14 }}>
+                  <span style={{ color: C.green, fontWeight: 600 }}>✦ Aria  </span>{ariaInsight}
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
+        {tab === 'services' && (
+          <div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 14, marginBottom: 24 }}>
+              {services.map(s => (
+                <div key={s.id} style={{ background: C.card, borderRadius: 14, padding: 18, borderLeft: `4px solid ${s.color}` }}>
+                  <p style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>{s.name}</p>
+                  <p style={{ fontSize: 13, color: C.muted }}>{s.duration_minutes} min{s.price ? ` · $${s.price}` : ''} · up to {s.max_party_size} guests</p>
+                </div>
+              ))}
+            </div>
+            <div style={{ background: C.card, borderRadius: 14, padding: 20 }}>
+              <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 16 }}>Add service</h3>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                {([
+                  { label: 'Service name', key: 'name', type: 'text' },
+                  { label: 'Price ($, optional)', key: 'price', type: 'number' },
+                  { label: 'Duration (mins)', key: 'duration_minutes', type: 'number' },
+                  { label: 'Max party size', key: 'max_party_size', type: 'number' },
+                ] as const).map(({ label, key, type }) => (
+                  <div key={key}>
+                    <label style={{ fontSize: 12, color: C.muted, display: 'block', marginBottom: 4 }}>{label}</label>
+                    <input type={type} style={iStyle} value={String(svcForm[key])} onChange={e => setSvcForm(s => ({ ...s, [key]: e.target.value }))} />
+                  </div>
+                ))}
+              </div>
+              <button onClick={addService} disabled={saving || !svcForm.name} style={{ marginTop: 14, background: C.darkGreen, color: C.green, border: 'none', borderRadius: 8, padding: '10px 20px', fontWeight: 700, cursor: 'pointer', fontSize: 14 }}>
+                {saving ? 'Saving…' : 'Add service'}
+              </button>
+            </div>
+          </div>
         )}
       </div>
 
-      {/* New booking modal */}
-      {showForm && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-[#13131a] rounded-2xl p-6 w-full max-w-md border border-[rgba(255,255,255,0.1)] max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-5">
-              <h3 className="text-white font-semibold">New booking</h3>
-              <button onClick={() => setShowForm(false)} className="text-gray-400 hover:text-white">×</button>
+      {showAdd && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
+          <div style={{ background: C.card, borderRadius: 18, padding: 28, width: 420, display: 'flex', flexDirection: 'column', gap: 14, maxHeight: '90vh', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h2 style={{ fontSize: 18, fontWeight: 700 }}>New booking</h2>
+              <button onClick={() => setShowAdd(false)} style={{ background: 'transparent', border: 'none', color: C.muted, fontSize: 22, cursor: 'pointer' }}>×</button>
             </div>
-            <div className="space-y-3">
+            {([
+              { label: 'Customer name *', key: 'customer_name', type: 'text' },
+              { label: 'Phone', key: 'customer_phone', type: 'tel' },
+              { label: 'Email', key: 'customer_email', type: 'email' },
+              { label: 'Date *', key: 'booking_date', type: 'date' },
+              { label: 'Time', key: 'booking_time', type: 'time' },
+              { label: 'Party size', key: 'party_size', type: 'number' },
+            ] as const).map(({ label, key, type }) => (
+              <div key={key}>
+                <label style={{ fontSize: 12, color: C.muted, display: 'block', marginBottom: 4 }}>{label}</label>
+                <input type={type} style={iStyle} value={String(form[key])} onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))} />
+              </div>
+            ))}
+            {services.length > 0 && (
               <div>
-                <label className="text-xs text-gray-400 mb-1 block">Customer name *</label>
-                <input value={form.customer_name} onChange={e => setForm(p => ({ ...p, customer_name: e.target.value }))} className={inputCls} placeholder="e.g. Jane Smith" />
+                <label style={{ fontSize: 12, color: C.muted, display: 'block', marginBottom: 4 }}>Service (optional)</label>
+                <select style={{ ...iStyle }} value={form.service_id} onChange={e => setForm(f => ({ ...f, service_id: e.target.value }))}>
+                  <option value="">No specific service</option>
+                  {services.map(s => <option key={s.id} value={s.id}>{s.name} ({s.duration_minutes} min{s.price ? ` · $${s.price}` : ''})</option>)}
+                </select>
               </div>
-              <div>
-                <label className="text-xs text-gray-400 mb-1 block">Service / job type</label>
-                <input value={form.service} onChange={e => setForm(p => ({ ...p, service: e.target.value }))} className={inputCls} placeholder="e.g. Haircut & colour" />
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="text-xs text-gray-400 mb-1 block">Date & time *</label>
-                  <input type="datetime-local" value={form.booking_date} onChange={e => setForm(p => ({ ...p, booking_date: e.target.value }))} className={inputCls} />
-                </div>
-                <div>
-                  <label className="text-xs text-gray-400 mb-1 block">Duration</label>
-                  <select value={form.duration_minutes} onChange={e => setForm(p => ({ ...p, duration_minutes: e.target.value }))} className={inputCls}>
-                    {DURATIONS.map(d => <option key={d} value={d} style={{ background: '#1a1a2e' }}>{d} min</option>)}
-                    <option value="custom" style={{ background: '#1a1a2e' }}>Custom</option>
-                  </select>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="text-xs text-gray-400 mb-1 block">Amount (A$)</label>
-                  <input type="number" value={form.amount} onChange={e => setForm(p => ({ ...p, amount: e.target.value }))} className={inputCls} placeholder="0.00" />
-                </div>
-                <div>
-                  <label className="text-xs text-gray-400 mb-1 block">Phone</label>
-                  <input value={form.phone} onChange={e => setForm(p => ({ ...p, phone: e.target.value }))} className={inputCls} placeholder="04xx xxx xxx" />
-                </div>
-              </div>
-              <div>
-                <label className="text-xs text-gray-400 mb-1 block">Notes</label>
-                <textarea value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} rows={2} className={inputCls + ' resize-none'} placeholder="Any notes…" />
-              </div>
+            )}
+            <div>
+              <label style={{ fontSize: 12, color: C.muted, display: 'block', marginBottom: 4 }}>Notes</label>
+              <textarea rows={2} style={{ ...iStyle, resize: 'vertical' } as React.CSSProperties} value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
             </div>
-            <div className="flex gap-2 mt-5">
-              <button onClick={() => setShowForm(false)} className="flex-1 py-2 rounded-xl text-sm" style={{ border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.4)' }}>Cancel</button>
-              <button onClick={createBooking} disabled={saving || !form.customer_name || !form.booking_date}
-                className="flex-1 py-2 rounded-xl text-sm font-medium text-white disabled:opacity-40" style={{ background: '#1D9E75' }}>
-                {saving ? 'Creating…' : 'Create booking'}
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={addBooking} disabled={saving || !form.customer_name} style={{ flex: 1, background: C.darkGreen, color: C.green, border: 'none', borderRadius: 10, padding: '12px 0', fontWeight: 700, cursor: 'pointer' }}>
+                {saving ? 'Saving…' : 'Confirm booking'}
               </button>
+              <button onClick={() => setShowAdd(false)} style={{ flex: 1, background: 'transparent', color: C.muted, border: `1px solid ${C.border}`, borderRadius: 10, padding: '12px 0', cursor: 'pointer' }}>Cancel</button>
             </div>
           </div>
         </div>
       )}
     </div>
-  );
+  )
 }

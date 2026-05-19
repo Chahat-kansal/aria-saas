@@ -2,6 +2,7 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 import { createServerSupabaseClient } from '@/lib/supabase-server';
+import { supabaseAdmin } from '@/lib/supabase-admin';
 import { NextResponse } from 'next/server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 
@@ -15,18 +16,21 @@ async function _GET(req: Request) {
   const { data: { user }, error } = await supabase.auth.getUser();
   if (error || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const { searchParams } = new URL(req.url);
-  const business_id = searchParams.get('business_id');
+  const url = new URL(req.url);
+  const business_id = url.searchParams.get('business_id');
+  const date = url.searchParams.get('date');
+  const status = url.searchParams.get('status');
   if (!business_id) return NextResponse.json({ error: 'business_id required' }, { status: 400 });
   if (!await verifyBiz(supabase, user.id, business_id)) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-
-  const { data, error: e } = await supabase
-    .from('bookings')
-    .select('*')
+  let q = supabaseAdmin.from('bookings')
+    .select('*, booking_services(name, color, duration_minutes)')
     .eq('business_id', business_id)
-    .order('booking_date', { ascending: false })
-    .limit(100);
-
+    .order('booking_date', { ascending: true })
+    .order('booking_time', { ascending: true })
+    .limit(200);
+  if (date) q = (q as typeof q).eq('booking_date', date);
+  if (status) q = (q as typeof q).eq('status', status);
+  const { data, error: e } = await q;
   if (e) return NextResponse.json({ error: e.message }, { status: 500 });
   return NextResponse.json({ bookings: data ?? [] });
 }
@@ -36,37 +40,19 @@ async function _POST(req: Request) {
   const { data: { user }, error } = await supabase.auth.getUser();
   if (error || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const body = await req.json();
-  const { business_id } = body;
-  if (!business_id) return NextResponse.json({ error: 'business_id required' }, { status: 400 });
-  if (!await verifyBiz(supabase, user.id, business_id)) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-
-  const { data, error: e } = await supabase
-    .from('bookings')
-    .insert({ ...body })
-    .select()
-    .single();
+  const body = await req.json() as Record<string, unknown>;
+  const { business_id, service_id, customer_name, customer_email, customer_phone, booking_date, booking_time, party_size, duration_minutes, notes, deposit_amount } = body;
+  if (!business_id || !booking_date || !customer_name) return NextResponse.json({ error: 'business_id, booking_date, customer_name required' }, { status: 400 });
+  if (!await verifyBiz(supabase, user.id, business_id as string)) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  const { data, error: e } = await supabaseAdmin.from('bookings').insert({
+    business_id, service_id: service_id || null, customer_name, customer_email: customer_email || null,
+    customer_phone: customer_phone || null, booking_date, booking_time: booking_time || null,
+    party_size: party_size || 1, duration_minutes: duration_minutes || 60,
+    notes: notes || null, status: 'confirmed', source: 'manual',
+    deposit_amount: deposit_amount || null, confirmed_at: new Date().toISOString(),
+  }).select().single();
 
   if (e) return NextResponse.json({ error: e.message }, { status: 500 });
-
-  // Optional: send confirmation SMS if Twilio configured and phone provided
-  const twilioSid   = process.env.TWILIO_ACCOUNT_SID;
-  const twilioToken = process.env.TWILIO_AUTH_TOKEN;
-  const twilioFrom  = process.env.TWILIO_PHONE_NUMBER;
-  if (twilioSid && twilioToken && twilioFrom && body.phone) {
-    const { data: biz } = await supabase.from('businesses').select('name').eq('id', business_id).single();
-    const msg = `Hi ${body.customer_name ?? 'there'}, your booking at ${biz?.name ?? 'us'} is confirmed for ${body.booking_date ? new Date(body.booking_date).toLocaleString('en-AU', { dateStyle: 'short', timeStyle: 'short' }) : 'the scheduled time'}. See you then!`;
-    const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${twilioSid}/Messages.json`;
-    await fetch(twilioUrl, {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${Buffer.from(`${twilioSid}:${twilioToken}`).toString('base64')}`,
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: new URLSearchParams({ From: twilioFrom, To: body.phone, Body: msg }),
-    }).catch(() => null);
-  }
-
   return NextResponse.json({ booking: data });
 }
 
@@ -75,17 +61,21 @@ async function _PATCH(req: Request) {
   const { data: { user }, error } = await supabase.auth.getUser();
   if (error || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const { searchParams } = new URL(req.url);
-  const id = searchParams.get('id');
-  if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
+  const body = await req.json() as Record<string, unknown>;
+  const { id, business_id, status, cancellation_reason, aria_notes, ...rest } = body;
+  if (!id || !business_id) return NextResponse.json({ error: 'id and business_id required' }, { status: 400 });
+  if (!await verifyBiz(supabase, user.id, business_id as string)) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-  const body = await req.json();
-  const { business_id } = body;
-  if (!await verifyBiz(supabase, user.id, business_id)) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  const update: Record<string, unknown> = { updated_at: new Date().toISOString(), ...rest };
+  if (status) {
+    update.status = status;
+    if (status === 'cancelled') { update.cancelled_at = new Date().toISOString(); update.cancellation_reason = cancellation_reason || null; }
+  }
+  if (aria_notes) update.aria_notes = aria_notes;
 
-  const { error: e } = await supabase.from('bookings').update(body).eq('id', id).eq('business_id', business_id);
+  const { data, error: e } = await supabaseAdmin.from('bookings').update(update).eq('id', id as string).eq('business_id', business_id as string).select().single();
   if (e) return NextResponse.json({ error: e.message }, { status: 500 });
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ booking: data });
 }
 
 async function _DELETE(req: Request) {

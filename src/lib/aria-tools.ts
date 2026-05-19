@@ -82,6 +82,17 @@ export const ARIA_POS_TOOLS: Tool[] = [
     },
   },
   {
+    name: 'query_bookings',
+    description: 'Query booking data — count, no-show rate, busiest days, upcoming bookings for a time period.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        period: { type: 'string', enum: ['today', 'week', 'month'], description: 'Time period' },
+      },
+      required: ['period'],
+    },
+  },
+  {
     name: 'query_online_orders',
     description: 'Query online order data — count, revenue, fulfilment type, avg order value for a time period.',
     input_schema: {
@@ -345,6 +356,22 @@ export async function executePOSTool(name: string, input: unknown, businessId: s
       return { chart_spec: inp };
     case 'suggest_promotion':
       return suggestPromotion(inp as Parameters<typeof suggestPromotion>[0]);
+    case 'query_bookings': {
+      const { period } = inp as { period: string }
+      const now = new Date()
+      const fromDate = period === 'today'
+        ? now.toISOString().slice(0, 10)
+        : period === 'week'
+        ? new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10)
+        : new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10)
+      const { data: bRows } = await supabaseAdmin.from('bookings').select('booking_date,booking_time,party_size,status').eq('business_id', businessId).gte('booking_date', fromDate)
+      const rows = bRows ?? []
+      const total = rows.length
+      const noShows = rows.filter(r => (r as Record<string,unknown>).status === 'no_show').length
+      const confirmed = rows.filter(r => (r as Record<string,unknown>).status === 'confirmed').length
+      const totalGuests = rows.reduce((s, r) => s + (Number((r as Record<string,unknown>).party_size) || 1), 0)
+      return { total_bookings: total, confirmed, no_shows: noShows, no_show_rate: total > 0 ? `${Math.round(noShows/total*100)}%` : '0%', total_guests: totalGuests, period }
+    }
     case 'query_online_orders': {
       const { period, status } = inp as { period: string; status?: string }
       const now = new Date()
