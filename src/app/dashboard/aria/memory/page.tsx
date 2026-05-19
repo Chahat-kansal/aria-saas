@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 
 interface Memory {
   id: string
@@ -25,10 +25,19 @@ const KIND_COLOURS: Record<string, { bg: string; text: string }> = {
 
 const KINDS = ['preference', 'fact', 'tried', 'decision', 'concern', 'goal'] as const
 
+const VALID_KINDS = ['preference', 'fact', 'tried', 'decision', 'concern', 'goal'] as const
+const VALID_TOPICS = ['pricing', 'staff', 'inventory', 'marketing', 'customers', 'suppliers', 'hours', 'expansion', 'compliance', 'cashflow'] as const
+
 export default function AriaMemoryPage() {
   const [memories, setMemories] = useState<Memory[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('')
+  const [showForm, setShowForm] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [formKind, setFormKind] = useState<typeof VALID_KINDS[number]>('fact')
+  const [formTopic, setFormTopic] = useState('')
+  const [formContent, setFormContent] = useState('')
+  const formRef = useRef<HTMLTextAreaElement>(null)
 
   const load = () => {
     setLoading(true)
@@ -46,6 +55,25 @@ export default function AriaMemoryPage() {
     if (res.ok) load()
   }
 
+  const handleAdd = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!formContent.trim()) return
+    setSaving(true)
+    const res = await fetch('/api/aria/memory', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: formContent.trim(), kind: formKind, topic: formTopic || null, importance: 7 }),
+    })
+    setSaving(false)
+    if (res.ok) {
+      setFormContent('')
+      setFormKind('fact')
+      setFormTopic('')
+      setShowForm(false)
+      load()
+    }
+  }
+
   const filtered = filter ? memories.filter(m => m.kind === filter) : memories
   const counts: Record<string, number> = {}
   for (const m of memories) counts[m.kind] = (counts[m.kind] ?? 0) + 1
@@ -59,6 +87,46 @@ export default function AriaMemoryPage() {
           Delete anything that's wrong — Aria won't recall it again.
         </p>
       </header>
+
+      {/* Add memory form */}
+      {showForm ? (
+        <form onSubmit={handleAdd} className="rounded-xl p-4 space-y-3" style={{ background: 'var(--bg-elevated, #1A2620)', border: '1px solid rgba(127,184,151,0.25)' }}>
+          <div className="flex gap-2">
+            <select value={formKind} onChange={e => setFormKind(e.target.value as typeof VALID_KINDS[number])}
+              className="text-xs rounded-lg px-2 py-1.5 bg-transparent capitalize"
+              style={{ border: '1px solid var(--divider, rgba(232,237,231,0.12))', color: 'var(--text-primary, #E8EDE7)' }}>
+              {VALID_KINDS.map(k => <option key={k} value={k} style={{ background: '#1A2620' }}>{k}</option>)}
+            </select>
+            <select value={formTopic} onChange={e => setFormTopic(e.target.value)}
+              className="text-xs rounded-lg px-2 py-1.5 bg-transparent"
+              style={{ border: '1px solid var(--divider, rgba(232,237,231,0.12))', color: 'var(--text-primary, #E8EDE7)' }}>
+              <option value="" style={{ background: '#1A2620' }}>no topic</option>
+              {VALID_TOPICS.map(t => <option key={t} value={t} style={{ background: '#1A2620' }}>{t}</option>)}
+            </select>
+          </div>
+          <textarea ref={formRef} value={formContent} onChange={e => setFormContent(e.target.value)}
+            rows={2} maxLength={500} autoFocus
+            placeholder="e.g. Owner prefers weekly reports over daily alerts"
+            className="w-full text-sm rounded-lg px-3 py-2 resize-none bg-transparent"
+            style={{ border: '1px solid var(--divider, rgba(232,237,231,0.12))', color: 'var(--text-primary, #E8EDE7)', outline: 'none' }} />
+          <div className="flex gap-2 justify-end">
+            <button type="button" onClick={() => setShowForm(false)}
+              className="text-xs px-3 py-1.5 rounded-lg transition-colors"
+              style={{ color: 'var(--text-secondary)', border: '1px solid var(--divider)' }}>Cancel</button>
+            <button type="submit" disabled={saving || !formContent.trim()}
+              className="text-xs px-3 py-1.5 rounded-lg font-medium transition-colors disabled:opacity-50"
+              style={{ background: '#2D5240', color: '#7FB897', border: '1px solid rgba(127,184,151,0.3)' }}>
+              {saving ? 'Saving…' : 'Save memory'}
+            </button>
+          </div>
+        </form>
+      ) : (
+        <button onClick={() => { setShowForm(true); setTimeout(() => formRef.current?.focus(), 50) }}
+          className="self-start text-xs px-3 py-1.5 rounded-lg transition-colors"
+          style={{ color: '#7FB897', border: '1px solid rgba(127,184,151,0.3)', background: 'rgba(127,184,151,0.06)' }}>
+          + Add memory
+        </button>
+      )}
 
       {/* Kind filter pills */}
       <div className="flex gap-2 flex-wrap">

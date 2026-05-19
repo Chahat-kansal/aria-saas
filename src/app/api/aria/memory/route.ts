@@ -58,5 +58,46 @@ async function _DELETE(req: Request) {
   return NextResponse.json({ ok: true })
 }
 
+async function _POST(req: Request) {
+  const supabase = createServerSupabaseClient()
+  const { data: { user }, error: authErr } = await supabase.auth.getUser()
+  if (authErr || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const bid = await getBid(supabase, user.id)
+  if (!bid) return NextResponse.json({ error: 'No active business' }, { status: 400 })
+
+  let body: Record<string, unknown>
+  try { body = await req.json() } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }
+
+  const content = typeof body.content === 'string' ? body.content.trim() : ''
+  if (content.length < 5) return NextResponse.json({ error: 'content too short' }, { status: 422 })
+
+  const VALID_KINDS = ['preference', 'fact', 'tried', 'decision', 'concern', 'goal']
+  const VALID_TOPICS = ['pricing', 'staff', 'inventory', 'marketing', 'customers', 'suppliers', 'hours', 'expansion', 'compliance', 'cashflow', null]
+
+  const kind = VALID_KINDS.includes(body.kind as string) ? (body.kind as string) : 'fact'
+  const topic = VALID_TOPICS.includes(body.topic as string | null) ? (body.topic as string | null) : null
+  const importance = Math.max(1, Math.min(10, Math.round(Number(body.importance) || 7)))
+
+  const { error } = await supabaseAdmin.from('aria_business_memory').insert({
+    business_id: bid,
+    kind,
+    content: content.slice(0, 500),
+    topic,
+    source_type: 'manual',
+    source_id: null,
+    confidence: 1.0,
+    importance,
+  })
+
+  if (error) {
+    console.error('[memory/post] insert failed:', error.message)
+    return NextResponse.json({ error: 'Failed to save' }, { status: 500 })
+  }
+
+  return NextResponse.json({ ok: true })
+}
+
 export const GET    = withErrorCapture('aria/memory', _GET)
+export const POST   = withErrorCapture('aria/memory', _POST)
 export const DELETE = withErrorCapture('aria/memory', _DELETE)

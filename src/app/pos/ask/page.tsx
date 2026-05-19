@@ -28,6 +28,7 @@ const SUGGESTED = [
 ]
 
 interface ConvMeta { id: string; title: string; last_message_at: string }
+interface DocumentReadResult { description: string; name: string; previewUrl: string | null }
 type DisplayMsg =
   | { type: 'user'; text: string }
   | { type: 'aria'; text: string; streaming: boolean }
@@ -214,10 +215,49 @@ export default function AskAriaPage() {
   const [input, setInput] = useState('')
   const [streaming, setStreaming] = useState(false)
   const [inputError, setInputError] = useState<string | null>(null)
+  const [uploading, setUploading] = useState(false)
+  const [pendingAttachment, setPendingAttachment] = useState<DocumentReadResult | null>(null)
   const threadRef = useRef<HTMLDivElement>(null)
   const ariaIdxRef = useRef(-1)
   const toolIdxRef = useRef<Record<string, number>>({})
   const urlConvLoaded = useRef(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const uploadFile = useCallback(async (file: File) => {
+    const ALLOWED = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+    if (!ALLOWED.includes(file.type)) {
+      setInputError('Only JPEG, PNG, GIF, and WEBP images are supported.')
+      return
+    }
+    if (file.size > 4 * 1024 * 1024) {
+      setInputError('Image must be under 4 MB.')
+      return
+    }
+    setUploading(true)
+    setInputError(null)
+    const reader = new FileReader()
+    reader.onload = async () => {
+      const dataUrl = reader.result as string
+      const base64 = dataUrl.split(',')[1]
+      try {
+        const res = await fetch('/api/aria/upload', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ base64, mime: file.type, name: file.name }),
+        })
+        const data = await res.json() as { description?: string; error?: string }
+        if (!res.ok || !data.description) {
+          setInputError(data.error ?? 'Failed to read image.')
+        } else {
+          setPendingAttachment({ description: data.description, name: file.name, previewUrl: dataUrl })
+        }
+      } catch {
+        setInputError('Failed to upload image.')
+      }
+      setUploading(false)
+    }
+    reader.readAsDataURL(file)
+  }, [])
 
   const fetchConvs = useCallback(() => {
     fetch('/api/aria/ask/history').then(r => r.json()).then((d: { conversations?: ConvMeta[] }) => setConversations(d.conversations ?? [])).catch(() => {})
@@ -268,14 +308,20 @@ export default function AskAriaPage() {
     setStreaming(true); setInput('')
     ariaIdxRef.current = -1; toolIdxRef.current = {}
 
-    setMessages(prev => [...prev, { type: 'user', text: content }])
-    const nextHistory = [...history, { role: 'user' as const, content }]
+    const attachment = pendingAttachment
+    setPendingAttachment(null)
+    const fullContent = attachment
+      ? `[Image: ${attachment.name}]\n${attachment.description}\n\nUser question: ${content}`
+      : content
+
+    setMessages(prev => [...prev, { type: 'user', text: content + (attachment ? ` 📎 ${attachment.name}` : '') }])
+    const nextHistory = [...history, { role: 'user' as const, content: fullContent }]
 
     try {
       const res = await fetch('/api/aria/ask', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: content, conversation_id: convId ?? null }),
+        body: JSON.stringify({ message: fullContent, conversation_id: convId ?? null }),
       })
 
       const data = await res.json() as {
@@ -307,7 +353,7 @@ export default function AskAriaPage() {
             text: `${reply}\n\n[Download ${exportData.filename}](${exportData.url}) — ${exportData.row_count} rows, expires in 1 hour.`,
             streaming: false,
           }])
-          setHistory(h => [...h, { role: 'user', content }, { role: 'assistant', content: reply }])
+          setHistory(h => [...h, { role: 'user', content: fullContent }, { role: 'assistant', content: reply }])
           setStreaming(false)
           if (!convId) fetchConvs()
           return
@@ -315,7 +361,7 @@ export default function AskAriaPage() {
       }
 
       setMessages(prev => [...prev, { type: 'aria', text: reply, streaming: false }])
-      setHistory(h => [...h, { role: 'user', content }, { role: 'assistant', content: reply }])
+      setHistory(h => [...h, { role: 'user', content: fullContent }, { role: 'assistant', content: reply }])
       if (!convId) fetchConvs()
     } catch (err) {
       setMessages(prev => [...prev, { type: 'error', text: err instanceof Error ? err.message : 'Request failed' }])
@@ -424,7 +470,26 @@ export default function AskAriaPage() {
             {inputError && (
               <div style={{ marginBottom: 8, padding: '8px 12px', borderRadius: 8, background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.2)', fontSize: 12, color: '#F87171', lineHeight: 1.4 }}>{inputError}</div>
             )}
+            {pendingAttachment && (
+              <div style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderRadius: 8, background: 'var(--bg-elevated)', border: '1px solid var(--divider)' }}>
+                {pendingAttachment.previewUrl && (
+                  <img src={pendingAttachment.previewUrl} alt="" style={{ width: 36, height: 36, objectFit: 'cover', borderRadius: 5, flexShrink: 0 }} />
+                )}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pendingAttachment.name}</div>
+                  <div style={{ fontSize: 11, color: 'var(--text-tertiary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pendingAttachment.description}</div>
+                </div>
+                <button onClick={() => setPendingAttachment(null)} style={{ fontSize: 14, color: 'var(--text-tertiary)', background: 'none', border: 'none', cursor: 'pointer', padding: '0 4px', lineHeight: 1 }}>✕</button>
+              </div>
+            )}
+            <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/gif,image/webp" style={{ display: 'none' }}
+              onChange={e => { const f = e.target.files?.[0]; if (f) uploadFile(f); e.target.value = '' }} />
             <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => fileInputRef.current?.click()} disabled={streaming || uploading}
+                title="Attach image" aria-label="Attach image"
+                style={{ width: 44, height: 44, borderRadius: 10, border: '1px solid var(--divider)', background: uploading ? 'var(--bg-elevated)' : 'var(--bg-elevated)', color: uploading ? 'var(--violet)' : 'var(--text-secondary)', fontSize: 18, cursor: streaming || uploading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'color 0.15s' }}>
+                {uploading ? <span style={{ display: 'inline-block', width: 14, height: 14, border: '2px solid var(--violet)', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} /> : '📎'}
+              </button>
               <div style={{ flex: 1, position: 'relative' }}>
                 <textarea
                   value={input} onChange={e => { setInput(e.target.value); if (inputError) setInputError(null) }}

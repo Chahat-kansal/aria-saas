@@ -41,6 +41,13 @@ export default function ConnectPage() {
           { user_id: user.id, business_id: businessId, updated_at: new Date().toISOString() },
           { onConflict: 'user_id' }
         );
+
+        // Seed baseline memories from onboarding fields (fire-and-forget, best-effort)
+        fetch('/api/aria/memory/seed-onboarding', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ business_id: businessId }),
+        }).catch(() => {});
       }
     }
     // Full page reload so the server re-reads the latest session cookie
