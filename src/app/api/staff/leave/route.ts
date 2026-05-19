@@ -24,19 +24,34 @@ async function _GET(req: Request) {
   const { data: { user }, error } = await supabase.auth.getUser();
   if (error || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+  const { supabaseAdmin } = await import('@/lib/supabase-admin');
   const { searchParams } = new URL(req.url);
   const staff_id = searchParams.get('staff_id');
-  if (!staff_id) return NextResponse.json({ error: 'staff_id required' }, { status: 400 });
+  const status = searchParams.get('status');
 
-  const ownership = await verifyStaffOwnership(supabase, user.id, staff_id);
-  if (!ownership) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  // Get business_id for this owner
+  const { data: biz } = await supabase.from('businesses').select('id')
+    .eq('user_id', user.id).eq('is_active', true).order('created_at', { ascending: true }).limit(1).maybeSingle();
+  if (!biz) return NextResponse.json({ error: 'No business' }, { status: 404 });
 
-  const { data } = await supabase.from('staff_leave')
-    .select('*')
-    .eq('staff_id', staff_id)
+  // Build query — join staff_members to get name
+  let q = supabaseAdmin.from('staff_leave')
+    .select('*, staff_members(first_name, last_name)')
+    .eq('business_id', biz.id)
     .order('start_date', { ascending: false });
 
-  return NextResponse.json({ leave: data ?? [] });
+  if (staff_id) q = q.eq('staff_id', staff_id);
+  if (status && status !== 'all') q = q.eq('status', status);
+
+  const { data } = await q;
+
+  // Flatten staff name into each row
+  const leave = (data ?? []).map((r: Record<string, unknown>) => {
+    const sm = r.staff_members as { first_name: string; last_name: string } | null;
+    return { ...r, staff_name: sm ? `${sm.first_name} ${sm.last_name}` : null, staff_members: undefined };
+  });
+
+  return NextResponse.json({ leave });
 }
 
 async function _POST(req: Request) {

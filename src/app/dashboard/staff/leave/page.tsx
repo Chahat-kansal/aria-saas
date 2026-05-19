@@ -34,7 +34,7 @@ export default function LeavePage() {
   const [filter, setFilter] = useState('pending')
   const [actioning, setActioning] = useState<string | null>(null)
   const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState({ staff_member_id: '', leave_type: 'annual', start_date: '', end_date: '', notes: '' })
+  const [form, setForm] = useState({ staff_id: '', leave_type: 'annual', start_date: '', end_date: '', notes: '' })
   const [staffList, setStaffList] = useState<Array<{ id: string; first_name: string; last_name: string }>>([])
 
   const load = useCallback(async () => {
@@ -65,13 +65,13 @@ export default function LeavePage() {
   }
 
   const submitRequest = async () => {
-    if (!form.staff_member_id || !form.start_date || !form.end_date) return
+    if (!form.staff_id || !form.start_date || !form.end_date) return
     await fetch('/api/staff/leave', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(form),
     })
-    setForm({ staff_member_id: '', leave_type: 'annual', start_date: '', end_date: '', notes: '' })
+    setForm({ staff_id: '', leave_type: 'annual', start_date: '', end_date: '', notes: '' })
     setShowForm(false)
     load()
   }
@@ -97,7 +97,7 @@ export default function LeavePage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs mb-1" style={{ color: 'var(--text-secondary, #A8B5A8)' }}>Staff member</label>
-              <select value={form.staff_member_id} onChange={e => setForm(p => ({ ...p, staff_member_id: e.target.value }))}
+              <select value={form.staff_id} onChange={e => setForm(p => ({ ...p, staff_id: e.target.value }))}
                 className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={INP}>
                 <option value="">Select staff…</option>
                 {staffList.map(s => <option key={s.id} value={s.id}>{s.first_name} {s.last_name}</option>)}
@@ -127,7 +127,7 @@ export default function LeavePage() {
               placeholder="e.g. Doctor's appointment" className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={INP} />
           </div>
           <div className="flex gap-2">
-            <button onClick={submitRequest} disabled={!form.staff_member_id || !form.start_date || !form.end_date}
+            <button onClick={submitRequest} disabled={!form.staff_id || !form.start_date || !form.end_date}
               className="px-4 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-40" style={{ background: '#2D5240' }}>
               Submit request
             </button>
