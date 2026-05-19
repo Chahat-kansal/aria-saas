@@ -36,6 +36,7 @@ export function AriaArtifact({ type, title, data }: ArtifactProps) {
         {type === 'breakdown_table'  && <BreakdownTableView data={data} />}
         {type === 'action_card'      && <ActionCardView data={data} />}
         {type === 'list_with_status' && <ListWithStatusView data={data} />}
+        {type === 'data_record'      && <DataRecordView data={data} />}
       </div>
     </div>
   )
@@ -201,6 +202,85 @@ function ListWithStatusView({ data }: { data: Record<string, unknown> }) {
           </div>
         )
       })}
+    </div>
+  )
+}
+
+function DataRecordView({ data }: { data: Record<string, unknown> }) {
+  const [show, setShow] = useState(false)
+  useEffect(() => { const t = setTimeout(() => setShow(true), 50); return () => clearTimeout(t) }, [])
+
+  const name      = data.name      as string | undefined
+  const subtitle  = data.subtitle  as string | undefined
+  const badge     = data.badge     as string | undefined
+  const badgeColor = data.badge_color as string | undefined
+  const initials  = data.initials  as string | undefined
+  const sections  = data.sections  as Array<{
+    title: string
+    rows: Array<{ label: string; value: string; highlight?: boolean }>
+  }> | undefined
+  const metrics   = data.metrics   as Array<{ label: string; value: string; sub?: string }> | undefined
+
+  const BADGE_COLORS: Record<string, { bg: string; text: string }> = {
+    green:  { bg: 'rgba(29,158,117,0.15)',  text: '#085041' },
+    amber:  { bg: 'rgba(239,159,39,0.15)',  text: '#633806' },
+    red:    { bg: 'rgba(226,75,74,0.15)',   text: '#791F1F' },
+    blue:   { bg: 'rgba(55,138,221,0.15)',  text: '#0C447C' },
+    gray:   { bg: 'rgba(136,135,128,0.15)', text: '#444441' },
+    purple: { bg: 'rgba(127,119,221,0.15)', text: '#3C3489' },
+  }
+  const bc = BADGE_COLORS[badgeColor ?? 'gray']
+
+  return (
+    <div style={{ opacity: show ? 1 : 0, transition: 'opacity 400ms ease' }}>
+      {(name || badge) && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16, paddingBottom: 14, borderBottom: '1px solid rgba(127,184,151,0.12)' }}>
+          {initials && (
+            <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'rgba(55,138,221,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 500, fontSize: 14, color: '#378ADD', flexShrink: 0 }}>
+              {initials}
+            </div>
+          )}
+          <div style={{ flex: 1 }}>
+            {name     && <div style={{ fontSize: 15, fontWeight: 500, color: '#e5e7eb', marginBottom: 2 }}>{name}</div>}
+            {subtitle && <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)' }}>{subtitle}</div>}
+          </div>
+          {badge && (
+            <span style={{ fontSize: 11, fontWeight: 500, padding: '3px 10px', borderRadius: 20, background: bc.bg, color: bc.text }}>
+              {badge}
+            </span>
+          )}
+        </div>
+      )}
+
+      {sections && sections.map((section, si) => (
+        <div key={si} style={{ marginBottom: 14 }}>
+          <div style={{ fontSize: 10, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'rgba(127,184,151,0.7)', marginBottom: 8 }}>
+            {section.title}
+          </div>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+            <tbody>
+              {section.rows.map((row, ri) => (
+                <tr key={ri} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                  <td style={{ padding: '5px 0', color: 'rgba(255,255,255,0.4)', width: '40%', verticalAlign: 'top' }}>{row.label}</td>
+                  <td style={{ padding: '5px 0', color: row.highlight ? '#7FB897' : '#e5e7eb', fontWeight: row.highlight ? 500 : 400, textAlign: 'right' }}>{row.value}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ))}
+
+      {metrics && metrics.length > 0 && (
+        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(metrics.length, 4)}, 1fr)`, gap: 8, marginTop: 14, paddingTop: 14, borderTop: '1px solid rgba(127,184,151,0.12)' }}>
+          {metrics.map((m, i) => (
+            <div key={i} style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 8, padding: '8px 10px', border: '1px solid rgba(127,184,151,0.1)' }}>
+              <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', marginBottom: 2 }}>{m.label}</div>
+              <div style={{ fontSize: 16, fontWeight: 500, color: '#e5e7eb', fontFamily: 'Fraunces, serif', fontStyle: 'italic' }}>{m.value}</div>
+              {m.sub && <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', marginTop: 1 }}>{m.sub}</div>}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

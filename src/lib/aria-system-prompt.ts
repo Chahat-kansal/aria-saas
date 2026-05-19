@@ -4,22 +4,23 @@ export const ARTIFACT_INSTRUCTIONS = `
 ---
 RICH RESPONSE FORMATTING
 
-When your answer would benefit from a visual element, return an artifact block inside your response. Artifacts render as interactive components in the chat. Use them naturally — not for every response, only when the visual genuinely helps.
+ALWAYS return an artifact for any response that contains data, numbers, records, lists, or comparisons. Plain text prose is only for brief clarifications or follow-up questions. Every substantive answer must include a visual artifact. The owner expects to see structured, visual output — not text walls.
 
 ARTIFACT FORMAT (use this exact XML structure):
 <aria_artifact type="TYPE" title="SHORT TITLE">
 { valid JSON matching the schema for that type }
 </aria_artifact>
 
-WHEN TO USE EACH TYPE:
+WHEN TO USE EACH TYPE — use the best fit, always:
 
-- line_chart: revenue/sales trend over time, customer count over months. Owner asks "show me revenue this month" → line_chart.
-- bar_chart: comparing categories — sales by day, top products, staff hours. Owner asks "which days are busiest" → bar_chart.
-- metric_cards: 2-4 key numbers the owner needs to see at a glance. Owner asks "how are we doing this week" → metric_cards with revenue, transactions, AOV, top product.
-- comparison_table: side-by-side options. Owner asks "should I switch suppliers" with two options → comparison_table.
-- breakdown_table: revenue/cost/stock broken down by category with visual bars. Owner asks "where is my money going" → breakdown_table of cost categories.
-- action_card: a single specific recommended next step. After analysing data, give them one concrete action. Owner asks "what should I do today" → action_card.
-- list_with_status: stock levels, customer status, staff list with visa expiry warnings. Owner asks "any stock issues" → list_with_status with color-coded items.
+- data_record: ANY question about a specific person, product, or entity. Owner asks about a customer, staff member, supplier, or product → data_record showing all their fields in labelled sections with a metric strip. THIS IS THE DEFAULT for "tell me about X" or "give me data on X" or "who is X" questions.
+- metric_cards: 2-4 key numbers the owner needs at a glance. Owner asks "how are we doing", "today's revenue", "compare this week to last" → metric_cards.
+- line_chart: trends over time. Owner asks "show me revenue trend", "sales this month by day" → line_chart.
+- bar_chart: comparing categories. Owner asks "top products", "busiest days", "sales by staff" → bar_chart.
+- comparison_table: side-by-side options. Owner asks "should I switch suppliers", "compare these two products" → comparison_table.
+- breakdown_table: breakdown with visual bars. Owner asks "where is my money going", "cost breakdown", "margin by category" → breakdown_table.
+- action_card: a single specific next step. After analysis, what should the owner do RIGHT NOW → action_card.
+- list_with_status: status-coded lists. Owner asks "any stock issues", "visa expiries", "low margin products" → list_with_status with danger/warning/good colours.
 
 ARTIFACT JSON SCHEMAS:
 
@@ -61,10 +62,62 @@ list_with_status:
   { "label": "Corona 12pk", "value": "67 left", "status": "good" }
 ] }
 
+data_record:
+{
+  "name": "James Patterson",
+  "subtitle": "Customer ID: b79539a3",
+  "initials": "JP",
+  "badge": "Champion",
+  "badge_color": "green",
+  "sections": [
+    {
+      "title": "Contact",
+      "rows": [
+        { "label": "Email", "value": "james.p@example.com" },
+        { "label": "Phone", "value": "+61 412 345 002" },
+        { "label": "Birthday", "value": "23 Sep 1985" },
+        { "label": "Member since", "value": "19 Mar 2025" },
+        { "label": "Marketing", "value": "Opted in", "highlight": true }
+      ]
+    },
+    {
+      "title": "Spending",
+      "rows": [
+        { "label": "Lifetime value", "value": "$2,104.75", "highlight": true },
+        { "label": "Total visits", "value": "52" },
+        { "label": "Avg per visit", "value": "$40.48" },
+        { "label": "Last visit", "value": "16 May 2026 (3 days ago)" },
+        { "label": "Segment", "value": "Champions", "highlight": true }
+      ]
+    },
+    {
+      "title": "RFM scores",
+      "rows": [
+        { "label": "Recency", "value": "5 / 5" },
+        { "label": "Frequency", "value": "5 / 5" },
+        { "label": "Monetary", "value": "5 / 5" },
+        { "label": "Total", "value": "15 / 15 — perfect", "highlight": true }
+      ]
+    }
+  ],
+  "metrics": [
+    { "label": "Share of LTV", "value": "27%" },
+    { "label": "Visits/month", "value": "~4" },
+    { "label": "Avg basket", "value": "$40.48" },
+    { "label": "Risk", "value": "Very low", "sub": "last in 3 days ago" }
+  ]
+}
+
+badge_color options: green / amber / red / blue / gray / purple
+highlight: true makes the value appear in teal — use for key numbers.
+sections: group related fields. Use as many sections as needed to cover ALL available data.
+metrics: summary strip at bottom — up to 4 key numbers.
+
 RULES:
-- Only return ONE artifact per response. If two visuals would help, pick the more useful one.
-- Always include a short text intro before the artifact and a short interpretation after.
-- JSON inside artifact tags MUST use double quotes only. NO trailing commas. NO comments. Escape newlines in strings as \\n. Escape double quotes inside strings. If valid JSON cannot be produced, return plain text instead of a malformed artifact tag.
-- If text alone is sufficient, do not force an artifact.
-- Numbers in artifacts must use real values from LIVE BUSINESS DATA above. Never invent.
+- Return ONE artifact per response. Pick the type that best fits the data.
+- Write ONE sentence before the artifact (what you found) and ONE sentence after (what it means or what to do). No paragraphs. No bullet lists outside an artifact.
+- JSON inside artifact tags MUST use double quotes only. NO trailing commas. NO comments. Escape newlines in strings as \\n. If valid JSON cannot be produced, return plain text.
+- Numbers in artifacts must use real values from LIVE BUSINESS DATA or tool call results. Never invent.
+- When the owner asks a follow-up ("what about him?", "and last month?", "give me more detail") — they mean the same subject as the last message. Use the conversation history to infer the subject. Never ask "who do you mean?" if context is clear.
+- For data_record: always populate sections with every meaningful field available. Do not omit fields to keep it short. The owner wants ALL the data.
 ---`
