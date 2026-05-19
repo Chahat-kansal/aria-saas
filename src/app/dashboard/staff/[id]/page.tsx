@@ -27,6 +27,7 @@ type MemberDetail = StaffMember & {
   staff_member_skills?: Array<{ staff_skills: { name: string; color: string } | null; certified_at: string | null }>
   staff_pay_rates?: StaffPayRate[]
   staff_documents?: Array<{ id: string; document_name: string; document_type: string; expiry_date: string | null; file_url: string | null; is_verified: boolean }>
+  invite_sent_at?: string | null
   staff_leave?: Array<{ id: string; leave_type: string; start_date: string; end_date: string; days_taken: number | null; status: string }>
 }
 
@@ -89,6 +90,18 @@ export default function StaffProfilePage() {
   }, [params.id])
 
   useEffect(() => { load() }, [load])
+
+  const resendInvite = async () => {
+    if (!member) return
+    setInviting(true); setInviteMsg('')
+    const r = await fetch('/api/staff/invite/resend', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ staff_member_id: params.id, business_id: member.business_id }),
+    })
+    const j = await r.json() as { email?: string; error?: string }
+    setInviteMsg(r.ok ? `Invite resent to ${j.email}` : (j.error ?? 'Failed'))
+    setInviting(false)
+  }
 
   const sendInvite = async () => {
     if (!member) return
@@ -164,7 +177,8 @@ export default function StaffProfilePage() {
 
   const displayName = member.preferred_name ?? `${member.first_name} ${member.last_name}`
   const hasPortal = member.portal_enabled && member.user_id
-  const canInvite = !hasPortal && (member.work_email || member.personal_email)
+  const invitePending = !member.portal_enabled && member.invite_sent_at && (member.work_email || member.personal_email)
+  const canInvite = !hasPortal && !invitePending && (member.work_email || member.personal_email)
 
   const inp = (k: keyof MemberDetail, type = 'text', placeholder = '') => (
     <input type={type} value={String(edit[k] ?? '')} onChange={e => setF(k, e.target.value)} placeholder={placeholder}
@@ -232,7 +246,18 @@ export default function StaffProfilePage() {
               {inviting ? 'Sending…' : 'Send portal invite'}
             </button>
           )}
-          {hasPortal && <span className="px-3 py-1.5 text-xs rounded-lg bg-emerald-500/20 text-emerald-400">Portal active</span>}
+          {invitePending && (
+            <>
+              <span className="px-3 py-1.5 text-xs rounded-lg" style={{ background: 'rgba(251,191,36,0.1)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.2)' }}>
+                ⏳ Invite pending
+              </span>
+              <button onClick={resendInvite} disabled={inviting} className="px-4 py-1.5 text-sm rounded-lg"
+                style={{ border: '1px solid rgba(127,184,151,0.2)', color: '#7FB897' }}>
+                {inviting ? 'Sending…' : 'Resend invite'}
+              </button>
+            </>
+          )}
+          {hasPortal && <span className="px-3 py-1.5 text-xs rounded-lg bg-emerald-500/20 text-emerald-400">✓ Portal active</span>}
           <Link href="/dashboard/staff" className="px-4 py-1.5 text-sm rounded-lg"
             style={{ border: '1px solid var(--divider, rgba(232,237,231,0.08))', color: 'var(--text-secondary, #A8B5A8)' }}>
             ← Team

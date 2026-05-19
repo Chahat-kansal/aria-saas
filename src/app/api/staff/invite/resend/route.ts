@@ -42,11 +42,13 @@ async function _POST(req: Request) {
 
   // Re-send via Supabase auth admin (consistent with original invite flow)
   const { error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
-    redirectTo: `${process.env.NEXT_PUBLIC_APP_URL ?? ''}/staff/accept-invite`,
+    redirectTo: `${process.env.NEXT_PUBLIC_APP_URL ?? 'https://www.ariaos.site'}/staff/accept-invite`,
     data: { business_id, staff_member_id, role: 'staff' },
   })
-  if (inviteError && !inviteError.message.includes('already been registered')) {
-    return NextResponse.json({ error: inviteError.message }, { status: 500 })
+  if (inviteError) {
+    const alreadyRegistered = inviteError.message?.toLowerCase().includes('already registered') || inviteError.message?.includes('already been registered')
+    if (!alreadyRegistered) return NextResponse.json({ error: inviteError.message }, { status: 500 })
+    // Already registered — still log the invite record so staff can click accept link
   }
 
   // Insert fresh staff_invites record
@@ -62,7 +64,7 @@ async function _POST(req: Request) {
   // Update invite_sent_at
   await supabaseAdmin
     .from('staff_members')
-    .update({ invite_sent_at: new Date().toISOString(), portal_enabled: true })
+    .update({ invite_sent_at: new Date().toISOString() })
     .eq('id', staff_member_id)
 
   return NextResponse.json({ ok: true, email })

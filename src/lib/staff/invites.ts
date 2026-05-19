@@ -42,7 +42,7 @@ export async function sendStaffInvite(
 
   await supabaseAdmin.from('staff_members').update({
     user_id: userId,
-    portal_enabled: true,
+    portal_enabled: false,
     invite_sent_at: new Date().toISOString(),
   }).eq('id', staffMemberId).eq('business_id', businessId)
 
