@@ -9,16 +9,26 @@ export async function sendStaffInvite(
 ): Promise<{ ok: boolean; error?: string }> {
   const supabase = createServerSupabaseClient()
 
+  let userId: string | undefined
   const { data: authData, error: authError } = await supabaseAdmin.auth.admin.inviteUserByEmail(
     email,
     {
-      redirectTo: `${process.env.NEXT_PUBLIC_APP_URL ?? ''}/staff/accept-invite`,
+      redirectTo: `${process.env.NEXT_PUBLIC_APP_URL ?? 'https://www.ariaos.site'}/staff/accept-invite`,
       data: { business_id: businessId, staff_member_id: staffMemberId, role: 'staff' },
     }
   )
-  if (authError) return { ok: false, error: authError.message }
-
-  const userId = authData.user?.id
+  if (authError) {
+    if (authError.message?.toLowerCase().includes('already registered') || authError.message?.includes('already been registered')) {
+      const { data: { users } } = await supabaseAdmin.auth.admin.listUsers()
+      const existing = users.find(u => u.email?.toLowerCase() === email.toLowerCase())
+      if (existing) userId = existing.id
+      else return { ok: false, error: `User already registered but not found: ${authError.message}` }
+    } else {
+      return { ok: false, error: authError.message }
+    }
+  } else {
+    userId = authData.user?.id
+  }
   if (!userId) return { ok: false, error: 'Auth user not created' }
 
   const { error: inviteError } = await supabaseAdmin.from('staff_invites').insert({
@@ -28,7 +38,7 @@ export async function sendStaffInvite(
     invited_by: invitedBy,
     status: 'pending',
   })
-  if (inviteError) return { ok: false, error: inviteError.message }
+  if (inviteError && !inviteError.message?.includes('42P01')) return { ok: false, error: inviteError.message }
 
   await supabaseAdmin.from('staff_members').update({
     user_id: userId,
