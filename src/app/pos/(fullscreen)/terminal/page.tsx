@@ -1242,6 +1242,14 @@ export default function TerminalPage() {
           }),
         }).catch(() => {})
       }
+      // Loyalty earn — additive, non-blocking
+      if (d.sale?.id && customer?.id && businessId) {
+        fetch('/api/loyalty/earn', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sale_id: d.sale.id, customer_id: customer.id, business_id: businessId, sale_total: roundedTotal }),
+        }).catch(() => {})
+      }
       setProducts(ps => ps.map(p => {
         const item = cart.find(i => i.product.id === p.id);
         if (!item || !p.track_stock) return p;
