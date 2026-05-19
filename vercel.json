@@ -82,6 +82,10 @@
     {
       "path": "/api/cron/customer-scoring",
       "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/cron/memory-extract",
+      "schedule": "0 16 * * *"
     }
   ]
 }

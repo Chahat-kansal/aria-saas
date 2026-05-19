@@ -262,6 +262,9 @@ Open support tickets: ${ctx.open_support_tickets}
 FRESH SIGNALS (from monitoring engine, last 30 min):
 ${ctx.fresh_signals.filter(s => ['alert','critical','watch'].includes(String((s.payload?.severity ?? 'info')))).map(s => `- ${s.signal_type} (${s.payload.severity}): ${JSON.stringify(s.payload)}`).join('\n') || 'no anomalies detected'}
 
+WHAT I KNOW ABOUT THIS BUSINESS (from prior conversations and outcomes — use to personalise responses, never contradict):
+${ctx.memories.length > 0 ? ctx.memories.map(m => `- [${m.kind}${m.topic ? '/' + m.topic : ''}] ${m.content}`).join('\n') : 'no memories yet — this is one of our first conversations'}
+
 DATA INTEGRITY RULES:
 - Only quote dollar figures, dates, counts, or stock levels that appear in LIVE BUSINESS DATA above.
 - If the owner asks for something not in the context (e.g. last month's revenue when only this month is available), say: "I don't have that data in this conversation — open the Sales Reports page and I can analyse what you find there."

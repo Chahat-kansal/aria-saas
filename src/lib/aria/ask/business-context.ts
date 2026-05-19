@@ -29,6 +29,8 @@ export interface AskAriaContext {
   recent_conversations: ConversationSummary[]
   // Fresh signals from monitoring engine
   fresh_signals: Array<{ signal_type: string; payload: Record<string, unknown>; created_at: string }>
+  // Distilled memories from prior conversations
+  memories: Array<{ id: string; kind: string; content: string; topic: string | null; importance: number }>
 }
 
 export async function buildAskAriaContext(
@@ -97,6 +99,31 @@ export async function buildAskAriaContext(
     .limit(20)
     .then(r => r, () => ({ data: null }))
 
+  // Fetch top memories by importance (non-blocking, best-effort)
+  const { data: memoryRows } = await supabaseAdmin
+    .from('aria_business_memory')
+    .select('id,kind,content,topic,importance')
+    .eq('business_id', businessId)
+    .eq('is_active', true)
+    .is('deleted_at', null)
+    .order('importance', { ascending: false })
+    .order('confidence', { ascending: false })
+    .limit(15)
+    .then(r => r, () => ({ data: null }))
+
+  // Mark as referenced — fire-and-forget
+  if (memoryRows && memoryRows.length > 0) {
+    void (async () => {
+      try {
+        const ids = memoryRows.map((m: { id: string }) => m.id)
+        await supabaseAdmin
+          .from('aria_business_memory')
+          .update({ last_referenced_at: new Date().toISOString() })
+          .in('id', ids)
+      } catch { /* non-fatal */ }
+    })()
+  }
+
   return {
     business_id: businessId,
     business_name: biz?.name ?? 'Your business',
@@ -114,5 +141,6 @@ export async function buildAskAriaContext(
     conversation_history: convHistory,
     recent_conversations: recentConvs,
     fresh_signals: (signalRows ?? []) as Array<{ signal_type: string; payload: Record<string, unknown>; created_at: string }>,
+    memories: (memoryRows ?? []) as Array<{ id: string; kind: string; content: string; topic: string | null; importance: number }>,
   }
 }
