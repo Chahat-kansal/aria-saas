@@ -46,6 +46,26 @@ export async function classifyIntent(
     ? `Recent context:\n${conversationContext}\n\nNew message: ${message}`
     : message
 
+  // Use Gemini Flash-Lite if available (10x cheaper than Haiku for classification)
+  if (process.env.GEMINI_API_KEY) {
+    const { callGemini } = await import('../providers/gemini')
+    const geminiResult = await callGemini({
+      systemPrompt: SYSTEM,
+      userPrompt,
+      maxTokens: 200,
+      agentKey: 'intent_classifier',
+      role: 'classify',
+    })
+    if (geminiResult.success && geminiResult.raw) {
+      return parseLLMJsonOr<ClassifiedIntent>(
+        geminiResult.raw,
+        { type: 'question', confidence: 'low', complexity: 'simple' },
+        'intent/classify',
+      )
+    }
+    // Fall through to Haiku if Gemini fails
+  }
+
   const result = await callAnthropic<ClassifiedIntent>(
     {
       model: 'haiku',

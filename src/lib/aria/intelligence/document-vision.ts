@@ -1,11 +1,3 @@
-import Anthropic from '@anthropic-ai/sdk'
-
-const client = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-  timeout: 30_000,
-  maxRetries: 0,
-})
-
 export interface DocumentLineItem {
   name: string
   quantity: number | null
@@ -25,26 +17,7 @@ export interface DocumentReadResult {
   suggested_action: string
 }
 
-export async function readDocument(
-  imageBase64: string,
-  mimeType: string,
-): Promise<DocumentReadResult> {
-  const safeMime = (['image/jpeg', 'image/png', 'image/webp', 'image/gif'] as const)
-    .includes(mimeType as 'image/jpeg') ? mimeType as 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif' : 'image/jpeg'
-
-  const response = await client.messages.create({
-    model: 'claude-sonnet-4-5-20250929',
-    max_tokens: 1500,
-    messages: [{
-      role: 'user',
-      content: [
-        {
-          type: 'image',
-          source: { type: 'base64', media_type: safeMime, data: imageBase64 },
-        },
-        {
-          type: 'text',
-          text: `Read this document and extract structured data. Return JSON ONLY:
+const VISION_SYSTEM = `You extract structured data from business documents (invoices, receipts, product lists). Return JSON ONLY matching this exact schema, no preamble:
 {
   "type": "invoice"|"receipt"|"product_list"|"unknown",
   "supplier": "supplier name or null",
@@ -55,13 +28,25 @@ export async function readDocument(
   "confidence": "high"|"medium"|"low",
   "suggested_action": "what the business owner should do with this data"
 }
-Prices are in AUD. GST may be included.`,
-        },
-      ],
-    }],
+Prices are in AUD. GST may be included.`
+
+export async function readDocument(
+  imageBase64: string,
+  mimeType: string,
+): Promise<DocumentReadResult> {
+  const { callGemini } = await import('../providers/gemini')
+
+  const result = await callGemini({
+    systemPrompt: VISION_SYSTEM,
+    userPrompt: 'Extract data from this business document.',
+    maxTokens: 1500,
+    agentKey: 'document_vision',
+    role: 'analysis',
+    imageBase64,
+    imageMimeType: mimeType,
   })
 
-  const text = ((response.content[0] as { type: string; text?: string }).text ?? '').replace(/```json|```/g, '').trim()
+  const text = result.raw.replace(/```json|```/g, '').trim()
   try {
     const parsed = JSON.parse(text) as DocumentReadResult
     return parsed

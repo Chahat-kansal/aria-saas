@@ -1,5 +1,4 @@
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { callAnthropic } from '../providers/anthropic'
 
 export interface ExtractedMemory {
   kind: 'preference' | 'fact' | 'tried' | 'decision' | 'concern' | 'goal'
@@ -59,18 +58,15 @@ ${transcript}
 
 Extract durable memories. Return JSON array only.`
 
-  const result = await callAnthropic<ExtractedMemory[]>(
-    {
-      model: 'haiku',
-      systemPrompt: EXTRACTOR_SYSTEM,
-      userPrompt,
-      maxTokens: 800,
-      businessId,
-      agentKey: 'generic',
-      role: 'classify',
-    },
-    [],
-  )
+  const { callOpenAI } = await import('../providers/openai')
+  const result = await callOpenAI({
+    systemPrompt: EXTRACTOR_SYSTEM,
+    userPrompt,
+    maxTokens: 800,
+    businessId,
+    agentKey: 'memory_extractor',
+    role: 'classify',
+  })
 
   try {
     const cleaned = result.raw

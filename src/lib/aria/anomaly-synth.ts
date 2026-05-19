@@ -17,19 +17,22 @@ export async function synthesizeFromSignals(businessId: string, signals: Signal[
     `{\n  "recommendations": [\n    { "title": "Short imperative title", "category": "inventory|sales|customers|staff|cashflow|compliance|pricing", "priority": "high|medium|low", "recommendation": "One paragraph for the owner. Australian English. Specific.", "reason": "Why this matters, with the number.", "expected_impact": "Quantified if possible.", "confidence": 0.0 }\n  ]\n}\n` +
     `Output JSON only. No preamble. No code blocks.`
 
-  let text = ''
-  let usage: Record<string, number> = {}
-  try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'x-api-key': process.env.ANTHROPIC_API_KEY!, 'anthropic-version': '2023-06-01', 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 2048, messages: [{ role: 'user', content: prompt }] }),
-    })
-    if (!res.ok) { console.error('[anomaly-synth] Haiku failed:', res.status); return }
-    const data = await res.json() as { content?: Array<{ type: string; text?: string }>; usage?: Record<string, number> }
-    text = data.content?.[0]?.text ?? ''
-    usage = data.usage ?? {}
-  } catch (e) { console.error('[anomaly-synth] fetch error:', e); return }
+  const { callGemini } = await import('./providers/gemini')
+  const geminiResult = await callGemini({
+    systemPrompt: 'You are a business analyst for Australian small businesses. Return JSON only. No preamble.',
+    userPrompt: prompt,
+    maxTokens: 2048,
+    businessId,
+    agentKey: 'signal_engine_synth',
+    role: 'analysis',
+  })
+
+  if (!geminiResult.success || !geminiResult.raw) {
+    console.error('[anomaly-synth] Gemini call failed, skipping synthesis for', businessId)
+    return
+  }
+
+  const text = geminiResult.raw
 
   let parsed: { recommendations?: Array<{ title: string; category: string; priority: string; recommendation: string; reason: string; expected_impact: string; confidence: number }> } = {}
   try { parsed = JSON.parse(text.replace(/^```json?\s*/i, '').replace(/```\s*$/i, '').trim()) } catch (e) { console.error('[anomaly-synth] JSON parse error:', e); return }
@@ -51,15 +54,4 @@ export async function synthesizeFromSignals(businessId: string, signals: Signal[
   }))
 
   await supabaseAdmin.from('aria_actions').insert(rows)
-
-  await supabaseAdmin.from('aria_ai_calls').insert({
-    business_id: businessId,
-    agent_key: 'signal_engine_synth',
-    provider: 'anthropic',
-    model_id: 'claude-haiku-4-5-20251001',
-    input_tokens: usage.input_tokens ?? 0,
-    output_tokens: usage.output_tokens ?? 0,
-    success: true,
-    request_summary: `Synthesized ${alerts.length} anomalies into ${rows.length} recommendations`,
-  })
 }

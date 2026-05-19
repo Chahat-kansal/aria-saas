@@ -75,6 +75,80 @@ export async function callOpenAIChat<T = Record<string, unknown>>(
   return { data, raw, cost_cents: cost, latency_ms: latency, available: true }
 }
 
+export interface OpenAICallResult {
+  raw: string
+  cost_cents: number
+  latency_ms: number
+  success: boolean
+  input_tokens: number
+  output_tokens: number
+}
+
+// Pricing per 1M tokens in USD cents (May 2026)
+const GPT4O_MINI_INPUT_CENTS_PER_M  = 15
+const GPT4O_MINI_OUTPUT_CENTS_PER_M = 60
+
+function computeMiniCost(inp: number, out: number): number {
+  return Math.round((inp / 1_000_000) * GPT4O_MINI_INPUT_CENTS_PER_M + (out / 1_000_000) * GPT4O_MINI_OUTPUT_CENTS_PER_M)
+}
+
+export async function callOpenAI(params: ChatParams & { model?: string }): Promise<OpenAICallResult> {
+  const apiKey = OPENAI_KEY
+  if (!apiKey) {
+    console.error('[openai] OPENAI_API_KEY not set')
+    return { raw: '', cost_cents: 0, latency_ms: 0, success: false, input_tokens: 0, output_tokens: 0 }
+  }
+
+  const model = params.model ?? 'gpt-4o-mini'
+  const t0 = Date.now()
+  let raw = '', success = true, errorMessage: string | null = null
+  let inputTokens = 0, outputTokens = 0
+
+  try {
+    const r = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model,
+        max_tokens: params.maxTokens ?? 1024,
+        temperature: 0.2,
+        messages: [
+          { role: 'system', content: params.systemPrompt },
+          { role: 'user',   content: params.userPrompt   },
+        ],
+      }),
+      signal: AbortSignal.timeout(params.timeoutMs ?? 30_000),
+    })
+    if (!r.ok) throw new Error(`OpenAI ${r.status}: ${(await r.text()).slice(0, 200)}`)
+    const json = await r.json() as Record<string, unknown>
+    const choices = json.choices as Array<Record<string, unknown>> | undefined
+    raw = ((choices?.[0]?.message as Record<string, unknown> | undefined)?.content as string) ?? ''
+    const usage = (json.usage ?? {}) as Record<string, number>
+    inputTokens  = usage.prompt_tokens     ?? 0
+    outputTokens = usage.completion_tokens ?? 0
+  } catch (e) {
+    success = false
+    errorMessage = (e as Error).message
+    console.error('[openai] call failed:', errorMessage)
+  }
+
+  const latency = Date.now() - t0
+  const cost = computeMiniCost(inputTokens, outputTokens)
+
+  if (params.businessId) {
+    try {
+      await supabaseAdmin.from('aria_ai_calls').insert({
+        business_id: params.businessId, agent_key: params.agentKey, provider: 'openai',
+        model_id: model, role: params.role,
+        input_tokens: inputTokens, output_tokens: outputTokens,
+        latency_ms: latency, cost_usd_cents: cost, success, error_message: errorMessage,
+      })
+    } catch { /* non-fatal */ }
+  }
+
+  return { raw, cost_cents: cost, latency_ms: latency, success, input_tokens: inputTokens, output_tokens: outputTokens }
+}
+
 export async function embedText(text: string, businessId?: string): Promise<number[] | null> {
   if (!OPENAI_KEY) return null
   try {

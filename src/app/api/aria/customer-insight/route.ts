@@ -53,26 +53,20 @@ async function _POST(req: Request) {
 
   const prompt = `${ctx}\n\nWrite ONE paragraph for the owner about this customer: who they are based on the data, what stage they are in, one specific action to take. 4-5 sentences max. No fluff. No bullet points. Australian English. Refer to the customer by first name only.`
 
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: { 'x-api-key': process.env.ANTHROPIC_API_KEY!, 'anthropic-version': '2023-06-01', 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 512, messages: [{ role: 'user', content: prompt }] }),
+  const { callGemini } = await import('@/lib/aria/providers/gemini')
+  const geminiResult = await callGemini({
+    systemPrompt: 'You are a business analyst for Australian small businesses. Write one paragraph. No JSON. Plain prose.',
+    userPrompt: prompt,
+    maxTokens: 512,
+    businessId: (customer as Record<string, unknown>).business_id as string,
+    agentKey: 'customer_insight',
+    role: 'analysis',
   })
+  const insight = geminiResult.raw
 
-  if (!res.ok) {
-    const err = await res.json() as { error?: { message?: string } }
-    return NextResponse.json({ error: err.error?.message ?? 'AI error' }, { status: 500 })
+  if (!geminiResult.success || !insight) {
+    return NextResponse.json({ error: 'AI error' }, { status: 500 })
   }
-
-  const data = await res.json() as { content?: Array<{ type: string; text?: string }>; usage?: Record<string, number> }
-  const insight = data.content?.[0]?.text ?? ''
-
-  await supabaseAdmin.from('aria_ai_calls').insert({
-    business_id: (customer as Record<string, unknown>).business_id as string,
-    agent_key: 'customer_insight', provider: 'anthropic', model_id: 'claude-haiku-4-5-20251001',
-    input_tokens: data.usage?.input_tokens ?? 0, output_tokens: data.usage?.output_tokens ?? 0,
-    success: true, request_summary: `Customer insight for ${c.name ?? customer_id}`,
-  })
 
   return NextResponse.json({ insight })
 }

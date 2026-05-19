@@ -13,6 +13,8 @@ function agentToCategory(key: AgentKey): string {
     intent_classifier: 'sales', ask_aria: 'sales', ask_suggestions: 'sales',
     ask_files: 'sales', ask_troubleshoot: 'sales',
     rostering: 'staff', hypothesis_engine: 'sales',
+    signal_engine_synth: 'sales', memory_extractor: 'sales',
+    customer_insight: 'customers', document_vision: 'inventory',
   }
   return map[key] ?? 'sales'
 }
