@@ -99,15 +99,15 @@ export default function LeavePage() {
               <label className="block text-xs mb-1" style={{ color: 'var(--text-secondary, #A8B5A8)' }}>Staff member</label>
               <select value={form.staff_id} onChange={e => setForm(p => ({ ...p, staff_id: e.target.value }))}
                 className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={INP}>
-                <option value="">Select staff…</option>
-                {staffList.map(s => <option key={s.id} value={s.id}>{s.first_name} {s.last_name}</option>)}
+                <option value="" style={{ background: '#1a2420', color: '#333' }}>Select staff…</option>
+                {staffList.map(s => <option key={s.id} value={s.id} style={{ background: '#1a2420', color: '#333' }}>{s.first_name} {s.last_name}</option>)}
               </select>
             </div>
             <div>
               <label className="block text-xs mb-1" style={{ color: 'var(--text-secondary, #A8B5A8)' }}>Leave type</label>
               <select value={form.leave_type} onChange={e => setForm(p => ({ ...p, leave_type: e.target.value }))}
                 className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={INP}>
-                {Object.entries(LEAVE_TYPE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                {Object.entries(LEAVE_TYPE_LABELS).map(([k, v]) => <option key={k} value={k} style={{ background: '#1a2420', color: '#e8ede7' }}>{v}</option>)}
               </select>
             </div>
             <div>

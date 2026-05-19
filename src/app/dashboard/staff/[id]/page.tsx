@@ -193,8 +193,8 @@ export default function StaffProfilePage() {
     <select value={String(edit[k] ?? '')} onChange={e => setF(k, e.target.value)}
       className="w-full px-3 py-1.5 rounded-lg text-sm"
       style={{ background: 'var(--bg-surface, #0E1812)', border: '1px solid rgba(127,184,151,0.3)', color: 'var(--text-primary, #E8EDE7)' }}>
-      <option value="">— select —</option>
-      {opts.map(o => <option key={o} value={o}>{o}</option>)}
+      <option value="" style={{ background: '#1a2420', color: '#e8ede7' }}>— select —</option>
+      {opts.map(o => <option key={o} value={o} style={{ background: '#1a2420', color: '#e8ede7' }}>{o}</option>)}
     </select>
   )
 

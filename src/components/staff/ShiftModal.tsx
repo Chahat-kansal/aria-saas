@@ -66,8 +66,8 @@ export default function ShiftModal({ initialShift, day, staff, areas, onSave, on
           <div>
             <label className="text-xs mb-1 block" style={{ color: 'rgba(255,255,255,0.5)' }}>Staff member</label>
             <select value={staffId} onChange={e => setStaffId(e.target.value)} className={INP} style={INP_STYLE}>
-              <option value="">Select staff…</option>
-              {staff.map(s => <option key={s.id} value={s.id}>{s.first_name} {s.last_name} — {s.position}</option>)}
+              <option value="" style={{ background: '#1a2420', color: '#fff' }}>Select staff…</option>
+              {staff.map(s => <option key={s.id} value={s.id} style={{ background: '#1a2420', color: '#fff' }}>{s.first_name} {s.last_name} — {s.position}</option>)}
             </select>
           </div>
 
@@ -92,8 +92,8 @@ export default function ShiftModal({ initialShift, day, staff, areas, onSave, on
             <div>
               <label className="text-xs mb-1 block" style={{ color: 'rgba(255,255,255,0.5)' }}>Area (optional)</label>
               <select value={areaId} onChange={e => setAreaId(e.target.value)} className={INP} style={INP_STYLE}>
-                <option value="">Any area</option>
-                {areas.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                <option value="" style={{ background: '#1a2420', color: '#fff' }}>Any area</option>
+                {areas.map(a => <option key={a.id} value={a.id} style={{ background: '#1a2420', color: '#fff' }}>{a.name}</option>)}
               </select>
             </div>
           )}

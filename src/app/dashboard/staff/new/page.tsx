@@ -77,10 +77,10 @@ export default function NewStaffMemberPage() {
             <select value={form.employment_type} onChange={e => set('employment_type', e.target.value)}
               className="w-full px-3 py-2 rounded-lg text-sm"
               style={{ background: 'var(--bg-surface, #0E1812)', border: '1px solid var(--divider, rgba(232,237,231,0.08))', color: 'var(--text-primary, #E8EDE7)' }}>
-              <option value="full_time">Full-time</option>
-              <option value="part_time">Part-time</option>
-              <option value="casual">Casual</option>
-              <option value="contractor">Contractor</option>
+              <option value="full_time" style={{ background: '#1a2420', color: '#e8ede7' }}>Full-time</option>
+              <option value="part_time" style={{ background: '#1a2420', color: '#e8ede7' }}>Part-time</option>
+              <option value="casual" style={{ background: '#1a2420', color: '#e8ede7' }}>Casual</option>
+              <option value="contractor" style={{ background: '#1a2420', color: '#e8ede7' }}>Contractor</option>
             </select>
           </div>
           <div>
@@ -120,8 +120,8 @@ export default function NewStaffMemberPage() {
             <select value={form.pay_type} onChange={e => set('pay_type', e.target.value)}
               className="w-full px-3 py-2 rounded-lg text-sm"
               style={{ background: 'var(--bg-surface, #0E1812)', border: '1px solid var(--divider, rgba(232,237,231,0.08))', color: 'var(--text-primary, #E8EDE7)' }}>
-              <option value="hourly">Hourly</option>
-              <option value="salary">Salary</option>
+              <option value="hourly" style={{ background: '#1a2420', color: '#e8ede7' }}>Hourly</option>
+              <option value="salary" style={{ background: '#1a2420', color: '#e8ede7' }}>Salary</option>
             </select>
           </div>
           <div>

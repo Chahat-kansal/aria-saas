@@ -104,9 +104,9 @@ export default function StaffMessagesPage() {
             <select value={form.recipient_id} onChange={e => setForm(f => ({ ...f, recipient_id: e.target.value }))}
               className="w-full px-3 py-2 rounded-lg text-sm"
               style={{ background: 'var(--bg-surface, #0E1812)', border: '1px solid var(--divider, rgba(232,237,231,0.08))', color: 'var(--text-primary, #E8EDE7)' }}>
-              <option value="">Select recipient…</option>
+              <option value="" style={{ background: '#1a2420', color: '#e8ede7' }}>Select recipient…</option>
               {staffList.map(s => (
-                <option key={s.id} value={s.id}>{s.first_name} {s.last_name}</option>
+                <option key={s.id} value={s.id} style={{ background: '#1a2420', color: '#e8ede7' }}>{s.first_name} {s.last_name}</option>
               ))}
             </select>
           )}

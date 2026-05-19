@@ -116,10 +116,10 @@ export default function StaffPage() {
           style={{ background: 'var(--bg-elevated, #1A2620)', border: '1px solid var(--divider, rgba(232,237,231,0.04))', color: 'var(--text-primary, #E8EDE7)' }} />
         <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="px-3 py-2 rounded-lg text-sm"
           style={{ background: 'var(--bg-elevated, #1A2620)', border: '1px solid var(--divider, rgba(232,237,231,0.04))', color: 'var(--text-primary, #E8EDE7)' }}>
-          <option value="active">Active</option>
-          <option value="inactive">Inactive</option>
-          <option value="terminated">Terminated</option>
-          <option value="all">All</option>
+          <option value="active" style={{ background: '#1a2420', color: '#e8ede7' }}>Active</option>
+          <option value="inactive" style={{ background: '#1a2420', color: '#e8ede7' }}>Inactive</option>
+          <option value="terminated" style={{ background: '#1a2420', color: '#e8ede7' }}>Terminated</option>
+          <option value="all" style={{ background: '#1a2420', color: '#e8ede7' }}>All</option>
         </select>
       </div>
 

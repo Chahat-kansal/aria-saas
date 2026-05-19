@@ -100,9 +100,9 @@ export default function AnnouncementsPage() {
             <select value={form.priority} onChange={e => setForm(f => ({ ...f, priority: e.target.value }))}
               className="px-3 py-2 rounded-lg text-sm flex-1"
               style={{ background: 'var(--bg-surface, #0E1812)', border: '1px solid var(--divider, rgba(232,237,231,0.08))', color: 'var(--text-primary, #E8EDE7)' }}>
-              <option value="normal">Normal</option>
-              <option value="high">High</option>
-              <option value="urgent">Urgent</option>
+              <option value="normal" style={{ background: '#1a2420', color: '#e8ede7' }}>Normal</option>
+              <option value="high" style={{ background: '#1a2420', color: '#e8ede7' }}>High</option>
+              <option value="urgent" style={{ background: '#1a2420', color: '#e8ede7' }}>Urgent</option>
             </select>
             <div className="flex-1">
               <label className="text-xs mb-1 block" style={{ color: 'var(--text-secondary, #A8B5A8)' }}>Expires (optional)</label>
