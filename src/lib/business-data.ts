@@ -3,7 +3,7 @@
  * Every AI feature calls these functions — never queries square_* or pos_* tables directly.
  * Returns normalized types regardless of whether the business uses Square or AriaPOS.
  */
-import { createServerSupabaseClient } from '@/lib/supabase-server';
+import { supabaseAdmin } from '@/lib/supabase-admin';
 
 export type DataSource = 'square' | 'aria_pos' | 'shopfront' | 'csv_import';
 
@@ -56,7 +56,7 @@ export interface Customer {
 }
 
 export async function getBusinessDataSource(businessId: string): Promise<DataSource> {
-  const supabase = createServerSupabaseClient();
+  const supabase = supabaseAdmin;
   const { data } = await supabase
     .from('businesses')
     .select('data_source')
@@ -69,7 +69,7 @@ export async function getBusinessItems(
   businessId: string,
   source?: DataSource
 ): Promise<Item[]> {
-  const supabase = createServerSupabaseClient();
+  const supabase = supabaseAdmin;
   const dataSource = source ?? (await getBusinessDataSource(businessId));
 
   if (dataSource === 'square') {
@@ -124,7 +124,7 @@ export async function getBusinessSales(
   since: Date,
   source?: DataSource
 ): Promise<Sale[]> {
-  const supabase = createServerSupabaseClient();
+  const supabase = supabaseAdmin;
   const dataSource = source ?? (await getBusinessDataSource(businessId));
 
   if (dataSource === 'square') {
@@ -180,7 +180,7 @@ export async function getBusinessCustomers(
   businessId: string,
   source?: DataSource
 ): Promise<Customer[]> {
-  const supabase = createServerSupabaseClient();
+  const supabase = supabaseAdmin;
   const dataSource = source ?? (await getBusinessDataSource(businessId));
 
   if (dataSource === 'square') {
@@ -247,7 +247,7 @@ export async function calculateVariance(
   businessId: string,
   dataSource: DataSource
 ): Promise<VarianceItem[]> {
-  const supabase = createServerSupabaseClient();
+  const supabase = supabaseAdmin;
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
   const [items, sales, movements] = await Promise.all([
