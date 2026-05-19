@@ -245,6 +245,9 @@ ALWAYS: give specific table names, column names, route paths, and actionable SQL
 CURRENT BUSINESS: ${ctx.business_name} (${ctx.industry})
 ${ctx.owner_name ? `Owner: ${ctx.owner_name.split(' ')[0]}` : ''}
 Currency: ${ctx.currency}
+
+FRESH SIGNALS (from monitoring engine, last 30 min):
+${ctx.fresh_signals.filter(s => ['alert','critical','watch'].includes(String((s.payload?.severity ?? 'info')))).map(s => `- ${s.signal_type} (${s.payload.severity}): ${JSON.stringify(s.payload)}`).join('\n') || 'no anomalies detected'}
 ${ARTIFACT_INSTRUCTIONS}`
 
   // 4. Add troubleshoot addendum if needed

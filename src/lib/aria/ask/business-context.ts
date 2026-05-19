@@ -27,6 +27,8 @@ export interface AskAriaContext {
   // Conversation memory
   conversation_history: Array<{ role: string; content: string }>
   recent_conversations: ConversationSummary[]
+  // Fresh signals from monitoring engine
+  fresh_signals: Array<{ signal_type: string; payload: Record<string, unknown>; created_at: string }>
 }
 
 export async function buildAskAriaContext(
@@ -85,6 +87,16 @@ export async function buildAskAriaContext(
     last_intent: r.last_intent ? String(r.last_intent) : null,
   }))
 
+  // Fetch fresh signals separately (non-blocking, best-effort)
+  const { data: signalRows } = await supabaseAdmin
+    .from('aria_signal_cache')
+    .select('signal_type,payload,created_at')
+    .eq('business_id', businessId)
+    .gt('expires_at', new Date().toISOString())
+    .order('created_at', { ascending: false })
+    .limit(20)
+    .then(r => r, () => ({ data: null }))
+
   return {
     business_id: businessId,
     business_name: biz?.name ?? 'Your business',
@@ -101,5 +113,6 @@ export async function buildAskAriaContext(
     pending_aria_actions: Number(actionsRes.count) || 0,
     conversation_history: convHistory,
     recent_conversations: recentConvs,
+    fresh_signals: (signalRows ?? []) as Array<{ signal_type: string; payload: Record<string, unknown>; created_at: string }>,
   }
 }
