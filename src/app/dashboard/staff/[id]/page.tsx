@@ -28,6 +28,8 @@ type MemberDetail = StaffMember & {
   staff_pay_rates?: StaffPayRate[]
   staff_documents?: Array<{ id: string; document_name: string; document_type: string; expiry_date: string | null; file_url: string | null; is_verified: boolean }>
   invite_sent_at?: string | null
+  portal_enabled?: boolean
+  user_id?: string | null
   staff_leave?: Array<{ id: string; leave_type: string; start_date: string; end_date: string; days_taken: number | null; status: string }>
 }
 
