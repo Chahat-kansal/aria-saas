@@ -20,11 +20,10 @@ async function _GET(_req: Request, { params }: { params: { id: string } }) {
 
   // Fetch the member directly by ID using admin client (no RLS interference)
   const { data, error } = await supabaseAdmin.from('staff_members')
-    .select('*, staff_member_skills(skill_id, certified_at, staff_skills(id, name, color)), staff_pay_rates(*), staff_documents(*), staff_leave(id, leave_type, start_date, end_date, days_taken, status)')
+    .select('*, staff_member_skills(skill_id, certified_at, staff_skills(id, name, color)), staff_pay_rates(*), staff_documents(*), staff_leave!staff_leave_staff_id_fkey(id, leave_type, start_date, end_date, days_taken, status)')
     .eq('id', params.id)
     .maybeSingle()
 
-  console.log('[staff/GET] id:', params.id, 'data:', JSON.stringify(data), 'error:', JSON.stringify(error))
   if (!data || error) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   // Verify the member belongs to a business owned by this user
