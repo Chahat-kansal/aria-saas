@@ -17,11 +17,36 @@ function statusBadge(status: string) {
 }
 
 function PortalBadge({ member }: { member: MemberRow }) {
+  const [resending, setResending] = useState(false)
+  const [msg, setMsg] = useState('')
+
+  const resend = async () => {
+    if (!member.business_id) return
+    setResending(true)
+    setMsg('')
+    const r = await fetch('/api/staff/invite/resend', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ staff_member_id: member.id, business_id: member.business_id }),
+    })
+    const j = await r.json()
+    setMsg(r.ok ? `Resent to ${j.email}` : (j.error ?? 'Failed'))
+    setResending(false)
+  }
+
   if (member.portal_enabled && member.user_id) {
     return <span className="text-xs px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400">Active</span>
   }
   if (member.invite_sent_at) {
-    return <span className="text-xs px-2 py-0.5 rounded bg-yellow-500/20 text-yellow-400">Invited</span>
+    return (
+      <div className="space-y-1">
+        <span className="text-xs px-2 py-0.5 rounded bg-yellow-500/20 text-yellow-400">Invited</span>
+        <button onClick={resend} disabled={resending} className="block text-xs hover:underline" style={{ color: '#7FB897' }}>
+          {resending ? 'Sending…' : 'Resend'}
+        </button>
+        {msg && <span className="block text-xs" style={{ color: msg.startsWith('Resent') ? '#7FB897' : '#ef4444' }}>{msg}</span>}
+      </div>
+    )
   }
   return <span className="text-xs px-2 py-0.5 rounded bg-[rgba(255,255,255,0.06)]" style={{ color: 'var(--text-secondary, #A8B5A8)' }}>Not invited</span>
 }

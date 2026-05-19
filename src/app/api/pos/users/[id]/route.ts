@@ -11,7 +11,7 @@ async function _PATCH(req: Request, { params }: { params: { id: string } }) {
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const body = await req.json().catch(() => ({}));
-  const { business_id, name, pin, role, permissions, is_active } = body;
+  const { business_id, name, pin, role, permissions, is_active, manager_pin } = body;
   if (!business_id) return NextResponse.json({ error: 'business_id required' }, { status: 400 });
 
   const { data: biz } = await supabase.from('businesses').select('id').eq('id', business_id).eq('user_id', user.id).single();
@@ -27,6 +27,7 @@ async function _PATCH(req: Request, { params }: { params: { id: string } }) {
   if (role !== undefined) updates.role = role;
   if (permissions !== undefined) updates.permissions = permissions;
   if (is_active !== undefined) updates.is_active = is_active;
+  if (manager_pin !== undefined) updates.manager_pin = manager_pin;
 
   const { data, error } = await supabase
     .from('pos_users')

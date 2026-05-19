@@ -20,7 +20,7 @@ async function _GET(req: Request) {
   const { data } = await supabase
     .from('pos_users')
     // Never return PIN
-    .select('id, business_id, name, role, permissions, is_active, last_login_at, created_at')
+    .select('id, business_id, name, role, permissions, manager_pin, is_active, last_login_at, created_at')
     .eq('business_id', business_id)
     .eq('is_active', true)
     .order('name');
