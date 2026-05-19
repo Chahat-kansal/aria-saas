@@ -109,16 +109,9 @@ export const POST = withErrorCapture('aria/business-chat', async (req: Request) 
         send({ done: true });
         console.log(JSON.stringify({ type: 'aria_ai_call', status: 'success', route: 'aria/business-chat', model: 'claude-sonnet-4-5-20250929', purpose: 'chat-stream', durationMs: Date.now() - _aiStart, ts: new Date().toISOString() }))
         await writeAriaOutcome(business_id, 'business-chat', responseText.slice(0, 500)).catch(() => null)
-        // Save conversation — schema: business_id, role, content, created_at
-        try {
-          const convSupabase = createServerSupabaseClient();
-          await convSupabase.from('aria_conversations').insert([
-            { business_id, role: 'user',      content: message,      created_at: new Date().toISOString() },
-            { business_id, role: 'assistant', content: responseText, created_at: new Date().toISOString() },
-          ]);
-        } catch (convErr) {
-          console.error('[business-chat] conversation save failed:', (convErr as Error).message);
-        }
+        // NOTE: aria_conversations uses a messages-JSONB schema managed by the ask route.
+        // Inserting flat role/content rows here created ghost rows with messages=[] and message_count=0.
+        // History for this stream endpoint is passed in-request via conversation_history param.
       } catch (error) {
         Sentry.captureException(error, { tags: { route: 'aria/business-chat' } });
         console.error('[aria/business-chat] failed', error);

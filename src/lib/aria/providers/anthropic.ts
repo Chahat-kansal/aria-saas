@@ -114,6 +114,7 @@ interface ToolLoopParams {
   model: keyof typeof MODEL_IDS
   systemPrompt: string
   userPrompt: string
+  priorMessages?: Array<{ role: 'user' | 'assistant'; content: string }>
   tools: Tool[]
   executeTool: (name: string, input: unknown) => Promise<unknown>
   maxTokens?: number
@@ -144,7 +145,10 @@ export async function callAnthropicWithTools(params: ToolLoopParams): Promise<To
   let thinkingTokensTotal = 0
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const messages: any[] = [{ role: 'user', content: params.userPrompt }]
+  const messages: any[] = [
+    ...(params.priorMessages ?? []),
+    { role: 'user', content: params.userPrompt },
+  ]
   const maxIter = params.maxIterations ?? 5
 
   try {

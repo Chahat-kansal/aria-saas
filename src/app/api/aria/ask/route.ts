@@ -149,7 +149,12 @@ async function _POST(req: Request) {
         const responseText = result.ok
           ? `Done — ${result.affected_count} item${result.affected_count !== 1 ? 's' : ''} updated.${result.rollback_available ? ' You can undo within 1 hour.' : ''}`
           : `Action failed: ${result.error}`
-        const savedConvId = await upsertConversation(bid, user.id, conversationId, message, responseText, 'action_executed').catch(() => null)
+        let savedConvId = conversationId
+        try {
+          savedConvId = await upsertConversation(bid, user.id, conversationId, message, responseText, 'action_executed')
+        } catch (e) {
+          console.error('[aria/ask] upsertConversation failed (action_executed):', (e as Error).message, 'conv_id:', conversationId)
+        }
         return NextResponse.json({
           response: responseText,
           conversation_id: savedConvId ?? conversationId,
@@ -174,7 +179,12 @@ async function _POST(req: Request) {
         }).eq('id', conversationId).eq('business_id', bid)
       }
       const previewText = `I'll ${planned.title.toLowerCase()}. Here's exactly what I'll do — confirm to proceed:`
-      const savedConvId = await upsertConversation(bid, user.id, conversationId, message, previewText, 'action_request').catch(() => null)
+      let savedConvId = conversationId
+      try {
+        savedConvId = await upsertConversation(bid, user.id, conversationId, message, previewText, 'action_request')
+      } catch (e) {
+        console.error('[aria/ask] upsertConversation failed (action_request):', (e as Error).message, 'conv_id:', conversationId)
+      }
       return NextResponse.json({
         response: previewText,
         conversation_id: savedConvId ?? conversationId,
@@ -301,12 +311,15 @@ ${ARTIFACT_INSTRUCTIONS}`
     systemPrompt += buildTroubleshootAddendum(tsCtx)
   }
 
-  // 5. Prepend conversation history for context
-  const historyText = ctx.conversation_history.length > 0
-    ? ctx.conversation_history.map(m => `${m.role}: ${m.content}`).join('\n') + '\n\n'
-    : ''
+  // 5. Build proper multi-turn history for Claude
+  const historyMessages: Array<{ role: 'user' | 'assistant'; content: string }> = []
+  for (const m of ctx.conversation_history) {
+    if (m.role === 'user' || m.role === 'assistant') {
+      historyMessages.push({ role: m.role as 'user' | 'assistant', content: String(m.content) })
+    }
+  }
 
-  const userPrompt = `${historyText}User: ${message}`
+  const userPrompt = message
 
   const model = intent.type === 'escalate' ? 'opus' : 'sonnet'
 
@@ -317,6 +330,7 @@ ${ARTIFACT_INSTRUCTIONS}`
     model,
     systemPrompt,
     userPrompt,
+    priorMessages: historyMessages,
     tools: ARIA_POS_TOOLS,
     executeTool: (name, input) => executePOSTool(name, input, bid),
     maxTokens: useThinking ? 4096 : 2048,
@@ -378,7 +392,12 @@ ${ARTIFACT_INSTRUCTIONS}`
   }
 
   // 7. Save conversation
-  const savedConvId = await upsertConversation(bid, user.id, conversationId, message, cleanResponse, intent.type).catch(() => null)
+  let savedConvId = conversationId
+  try {
+    savedConvId = await upsertConversation(bid, user.id, conversationId, message, cleanResponse, intent.type)
+  } catch (e) {
+    console.error('[aria/ask] upsertConversation failed:', (e as Error).message, 'conv_id:', conversationId)
+  }
 
   return NextResponse.json({
     response: cleanResponse,
