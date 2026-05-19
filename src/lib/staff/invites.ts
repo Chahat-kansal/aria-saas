@@ -53,7 +53,7 @@ export async function sendStaffInvite(
     user_id: userId,
     portal_enabled: false,
     invite_sent_at: new Date().toISOString(),
-  }).eq('id', staffMemberId).eq('business_id', businessId)
+  }).eq('id', staffMemberId)
 
   return { ok: true }
 }

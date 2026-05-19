@@ -235,8 +235,8 @@ export function MorningCommandCentre() {
 
   const load = useCallback(async (forceRefresh = false) => {
     if (!business?.id) {
-      setData(EMPTY_OUTPUT);
-      setLoading(false);
+      // Retry in 2s — business context may not be loaded yet
+      setTimeout(() => load(), 2000);
       return;
     }
 
@@ -247,12 +247,14 @@ export function MorningCommandCentre() {
       const result = await postBrain(business.id, 'daily', undefined, forceRefresh);
       setData({ ...EMPTY_OUTPUT, ...result, data_status: result.data_status ?? EMPTY_STATUS });
     } catch (error) {
-      console.error('Morning Command Centre: business brain failed', error);
+      console.error('[MCC] business brain failed:', error, 'business_id:', business?.id);
       setData({
         ...EMPTY_OUTPUT,
-        summary: 'Aria could not analyse business data right now.',
-        error: 'Unable to generate business intelligence.',
+        summary: 'Aria could not load business data right now. Retrying…',
+        error: String(error),
       });
+      // Retry once after 3s
+      setTimeout(() => load(true), 3000);
     } finally {
       setLoading(false);
     }
