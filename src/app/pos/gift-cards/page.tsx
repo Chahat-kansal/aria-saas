@@ -9,6 +9,7 @@ const lStyle: React.CSSProperties = { display: 'block', fontSize: 11, fontWeight
 interface GiftCard {
   id: string; code: string; initial_balance: number; balance: number;
   recipient_name: string | null; status: string; created_at: string; expires_at: string | null; is_active: boolean;
+  is_flagged?: boolean; flag_reason?: string | null; personal_message?: string | null;
 }
 
 export default function GiftCardsPage() {
@@ -25,6 +26,11 @@ export default function GiftCardsPage() {
   const [checkCode, setCheckCode] = useState('');
   const [checkResult, setCheckResult] = useState<GiftCard | null>(null);
   const [checking, setChecking] = useState(false);
+  const [reloadCard, setReloadCard] = useState<GiftCard | null>(null);
+  const [reloadAmount, setReloadAmount] = useState('');
+  const [reloading, setReloading] = useState(false);
+  const [ariaInsight, setAriaInsight] = useState('');
+  const [checkingAria, setCheckingAria] = useState(false);
 
   const load = () => {
     fetch('/api/pos/gift-cards')
@@ -32,6 +38,29 @@ export default function GiftCardsPage() {
       .then(d => { setCards(d.gift_cards ?? []); setLoading(false); })
       .catch(() => setLoading(false));
   };
+  async function reloadGiftCard() {
+    if (!reloadCard || !reloadAmount || parseFloat(reloadAmount) <= 0) return;
+    setReloading(true);
+    const res = await fetch(`/api/pos/gift-cards?id=${reloadCard.id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reload_amount: parseFloat(reloadAmount) }),
+    });
+    const d = await res.json();
+    if (d.gift_card) {
+      setCards(c => c.map(card => card.id === reloadCard.id ? { ...card, balance: d.gift_card.balance, is_active: true } : card));
+      setReloadCard(null); setReloadAmount('');
+    }
+    setReloading(false);
+  }
+
+  async function runAriaCheck() {
+    setCheckingAria(true);
+    const res = await fetch('/api/pos/gift-cards/aria-check', { method: 'POST' });
+    const d = await res.json();
+    setAriaInsight(d.insight ?? '');
+    setCheckingAria(false);
+  }
+
   useEffect(() => { load(); }, []);
 
   async function issueCard() {
@@ -195,7 +224,14 @@ export default function GiftCardsPage() {
                 </td></tr>
               ) : filtered.map((card, i) => (
                 <tr key={card.id} style={{ borderBottom: i < filtered.length - 1 ? `1px solid ${C.border}` : 'none' }}>
-                  <td style={{ padding: '10px 14px', fontFamily: "'JetBrains Mono',monospace", fontWeight: 700, fontSize: 14, color: C.text }}>{card.code}</td>
+                  <td style={{ padding: '10px 14px', fontFamily: "'JetBrains Mono',monospace", fontWeight: 700, fontSize: 14, color: C.text }}>
+                    {card.code}
+                    {card.is_flagged && (
+                      <span style={{ background: 'rgba(239,68,68,0.15)', color: '#ef4444', borderRadius: 6, padding: '2px 8px', fontSize: 11, fontWeight: 700, marginLeft: 6 }}>🚨 FLAGGED</span>
+                    )}
+                    <button onClick={() => setReloadCard(card)} style={{ fontSize: 11, color: C.green, background: 'transparent', border: 'none', cursor: 'pointer', padding: '2px 8px' }}>+ Top up</button>
+                    <a href={`/api/pos/gift-cards/receipt?id=${card.id}`} target="_blank" rel="noopener" style={{ fontSize: 11, color: C.muted, textDecoration: 'none', padding: '2px 6px' }}>Receipt ↗</a>
+                  </td>
                   <td style={{ padding: '10px 14px', fontSize: 13, color: C.muted }}>{card.recipient_name || '—'}</td>
                   <td style={{ padding: '10px 14px', fontSize: 13, color: C.muted, fontFamily: "'JetBrains Mono',monospace" }}>A${(card.initial_balance ?? 0).toFixed(2)}</td>
                   <td style={{ padding: '10px 14px', fontSize: 14, fontWeight: 700, color: C.text, fontFamily: "'JetBrains Mono',monospace" }}>A${(card.balance ?? 0).toFixed(2)}</td>
@@ -263,6 +299,37 @@ export default function GiftCardsPage() {
             </div>
           </div>
         )}
+      <div style={{ marginTop: 24, display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <button onClick={runAriaCheck} disabled={checkingAria} style={{ alignSelf: 'flex-start', fontSize: 12, color: C.green, background: 'transparent', border: `1px solid rgba(127,184,151,0.3)`, borderRadius: 8, padding: '6px 16px', cursor: 'pointer' }}>
+          {checkingAria ? 'Checking…' : '✦ Run Aria fraud check'}
+        </button>
+        {ariaInsight && (
+          <div style={{ background: 'rgba(127,184,151,0.08)', border: '1px solid rgba(127,184,151,0.2)', borderRadius: 10, padding: '12px 16px', fontSize: 13, color: C.text }}>
+            <span style={{ color: C.green, fontWeight: 600, marginRight: 8 }}>✦ Aria</span>{ariaInsight}
+          </div>
+        )}
+      </div>
+
+      {reloadCard && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
+          <div style={{ background: C.card, borderRadius: 16, padding: 28, width: 340, display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <h3 style={{ color: C.text, fontSize: 16, fontWeight: 600 }}>Top up {reloadCard.code}</h3>
+            <p style={{ color: C.muted, fontSize: 13 }}>Current balance: ${(reloadCard.balance || 0).toFixed(2)}</p>
+            <div>
+              <label style={lStyle}>Reload amount ($)</label>
+              <input style={iStyle} type="number" min="1" value={reloadAmount} onChange={e => setReloadAmount(e.target.value)} placeholder="50.00" />
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={reloadGiftCard} disabled={reloading} style={{ flex: 1, background: '#2D5240', color: '#7FB897', border: 'none', borderRadius: 8, padding: '10px 0', cursor: 'pointer', fontWeight: 600 }}>
+                {reloading ? 'Adding…' : 'Add funds'}
+              </button>
+              <button onClick={() => { setReloadCard(null); setReloadAmount(''); }} style={{ flex: 1, background: 'transparent', color: C.muted, border: `1px solid transparent`, borderRadius: 8, padding: '10px 0', cursor: 'pointer' }}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       </div>
     </div>
   );

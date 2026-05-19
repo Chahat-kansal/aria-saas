@@ -81,6 +81,7 @@ async function _POST(req: Request) {
   }).select().single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  void (async () => { try { await supabase.from('pos_gift_card_transactions').insert({ gift_card_id: data.id, business_id: biz.id, type: 'issue', amount, balance_after: amount, note: body.recipient_name ? `Issued to ${body.recipient_name}` : 'Issued' }) } catch {} })()
   return NextResponse.json({ gift_card: data })
 }
 
@@ -97,6 +98,20 @@ async function _PATCH(req: Request) {
 
   const body = await req.json()
   const updates: Record<string, unknown> = {}
+
+  if (body.reload_amount !== undefined) {
+    const reload = parseFloat(String(body.reload_amount))
+    if (isNaN(reload) || reload <= 0) return NextResponse.json({ error: 'Invalid reload amount' }, { status: 400 })
+    const { data: card } = await supabase.from('pos_gift_cards')
+      .select('balance').eq('id', id).eq('business_id', biz.id).maybeSingle()
+    if (!card) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    const newBalance = (Number(card.balance) || 0) + reload
+    const { data, error } = await supabase.from('pos_gift_cards')
+      .update({ balance: newBalance, is_active: true }).eq('id', id).eq('business_id', biz.id).select().single()
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    void (async () => { try { await supabase.from('pos_gift_card_transactions').insert({ gift_card_id: id, business_id: biz.id, type: 'reload', amount: reload, balance_after: newBalance, note: body.note || null }) } catch {} })()
+    return NextResponse.json({ gift_card: data })
+  }
 
   if (body.deduct !== undefined) {
     const { data: card } = await supabase.from('pos_gift_cards')

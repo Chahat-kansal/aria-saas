@@ -98,29 +98,36 @@ async function _POST(req: Request) {
   const actualCharge = Math.min(charge, currentBalance);
   const newBalance = Math.max(0, currentBalance - actualCharge);
 
-  // Deduct from card
+  // Velocity fraud check — flag if 3+ redemptions on same card in 10 mins
+  const tenMinsAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString()
+  const { count: recentCount } = await supabase
+    .from('pos_gift_card_transactions')
+    .select('id', { count: 'exact', head: true })
+    .eq('gift_card_id', card.id).eq('type', 'redeem').gte('created_at', tenMinsAgo)
+  if ((recentCount ?? 0) >= 2) {
+    await supabase.from('pos_gift_cards').update({
+      is_flagged: true,
+      flag_reason: `${(recentCount ?? 0) + 1} redemptions in 10 minutes`,
+    }).eq('id', card.id)
+  }
+
   const { error: updateErr } = await supabase
     .from('pos_gift_cards')
-    .update({
-      balance: newBalance,
-      is_active: newBalance > 0,
-    })
+    .update({ balance: newBalance, is_active: newBalance > 0 })
     .eq('id', card.id);
 
   if (updateErr) return NextResponse.json({ error: updateErr.message }, { status: 500 });
 
-  // Link gift card to the sale
+  void (async () => { try { await supabase.from('pos_gift_card_transactions').insert({ gift_card_id: card.id, business_id: bid, type: 'redeem', amount: actualCharge, balance_after: newBalance, sale_id: sale_id || null }) } catch {} })()
+
   await supabase.from('pos_sales').update({
-    gift_card_id: card.id,
-    gift_card_code: code,
-    gift_card_amount: actualCharge,
+    gift_card_id: card.id, gift_card_code: code, gift_card_amount: actualCharge,
   }).eq('id', sale_id).eq('business_id', bid);
 
   return NextResponse.json({
-    ok: true,
-    charged: actualCharge,
-    remaining_balance: newBalance,
+    ok: true, charged: actualCharge, remaining_balance: newBalance,
     short_paid: charge > actualCharge ? charge - actualCharge : 0,
+    flagged: (recentCount ?? 0) >= 2,
   });
 }
 
