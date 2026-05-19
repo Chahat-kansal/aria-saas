@@ -21,13 +21,13 @@ export async function GET(_req: Request, { params }: Params) {
     .order('sort_order', { nullsFirst: false })
     .order('name')
 
-  // Fetch active products with category info
-  const { data: products } = await db
+  const { data: rawProducts } = await db
     .from('pos_products')
-    .select('id, name, description, price, category_id, image_url, tax_rate, gst_exempt, builder_type')
+    .select('id, name, description, price, category_id, image_url, tax_rate, gst_exempt, builder_type, stock_quantity, track_inventory')
     .eq('business_id', business_id)
     .eq('is_active', true)
     .order('name')
+  const products = (rawProducts ?? []).filter(p => !p.track_inventory || (p.stock_quantity ?? 0) > 0)
 
   if (!products) return NextResponse.json({ categories: [], products: [] })
 
@@ -52,8 +52,28 @@ export async function GET(_req: Request, { params }: Params) {
 
   const enriched = products.map(p => ({ ...p, modifier_groups: modMap[p.id] ?? [] }))
 
+  const { data: hours } = await db
+    .from('business_hours')
+    .select('day_of_week, open_time, close_time, is_closed')
+    .eq('business_id', business_id)
+    .order('day_of_week')
+
+  const now = new Date()
+  const dayOfWeek = now.getDay()
+  const todayHours = (hours ?? []).find((h: { day_of_week: number }) => h.day_of_week === dayOfWeek) ?? null
+  let isOpen = false
+  if (todayHours && !todayHours.is_closed && todayHours.open_time && todayHours.close_time) {
+    const [oh, om] = String(todayHours.open_time).split(':').map(Number)
+    const [ch, cm] = String(todayHours.close_time).split(':').map(Number)
+    const nowMins = now.getHours() * 60 + now.getMinutes()
+    isOpen = nowMins >= oh * 60 + om && nowMins < ch * 60 + cm
+  }
+
   return NextResponse.json({
     categories: categories ?? [],
     products: enriched,
+    trading_hours: hours ?? [],
+    is_open: isOpen,
+    today_hours: todayHours,
   })
 }
