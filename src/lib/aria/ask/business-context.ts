@@ -31,6 +31,8 @@ export interface AskAriaContext {
   fresh_signals: Array<{ signal_type: string; payload: Record<string, unknown>; created_at: string }>
   // Distilled memories from prior conversations
   memories: Array<{ id: string; kind: string; content: string; topic: string | null; importance: number }>
+  // Per-category advice confidence weights from outcome learning
+  advice_weights: Record<string, number>
 }
 
 export async function buildAskAriaContext(
@@ -99,6 +101,18 @@ export async function buildAskAriaContext(
     .limit(20)
     .then(r => r, () => ({ data: null }))
 
+  // Fetch advice weights from outcome learning (non-blocking)
+  const { data: weightRows } = await supabaseAdmin
+    .from('aria_advice_weights')
+    .select('category,weight')
+    .eq('business_id', businessId)
+    .then(r => r, () => ({ data: null }))
+
+  const adviceWeights: Record<string, number> = {}
+  for (const w of (weightRows ?? []) as Array<{ category: string; weight: number }>) {
+    adviceWeights[w.category] = Number(w.weight)
+  }
+
   // Fetch top memories by importance (non-blocking, best-effort)
   const { data: memoryRows } = await supabaseAdmin
     .from('aria_business_memory')
@@ -142,5 +156,6 @@ export async function buildAskAriaContext(
     recent_conversations: recentConvs,
     fresh_signals: (signalRows ?? []) as Array<{ signal_type: string; payload: Record<string, unknown>; created_at: string }>,
     memories: (memoryRows ?? []) as Array<{ id: string; kind: string; content: string; topic: string | null; importance: number }>,
+    advice_weights: adviceWeights,
   }
 }

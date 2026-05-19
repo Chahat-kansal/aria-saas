@@ -265,6 +265,15 @@ ${ctx.fresh_signals.filter(s => ['alert','critical','watch'].includes(String((s.
 WHAT I KNOW ABOUT THIS BUSINESS (from prior conversations and outcomes — use to personalise responses, never contradict):
 ${ctx.memories.length > 0 ? ctx.memories.map(m => `- [${m.kind}${m.topic ? '/' + m.topic : ''}] ${m.content}`).join('\n') : 'no memories yet — this is one of our first conversations'}
 
+ADVICE CONFIDENCE BY CATEGORY (from outcome learning — calibrate confidence accordingly):
+${Object.keys(ctx.advice_weights).length > 0
+  ? Object.entries(ctx.advice_weights).map(([cat, w]) =>
+      w >= 1.2 ? `- ${cat}: HIGH confidence (past advice worked here)`
+      : w <= 0.7 ? `- ${cat}: LOW confidence (past advice underperformed here — be more cautious and hedge)`
+      : `- ${cat}: NORMAL confidence`
+    ).join('\n')
+  : 'no outcome data yet — use standard confidence across all categories'}
+
 DATA INTEGRITY RULES:
 - Only quote dollar figures, dates, counts, or stock levels that appear in LIVE BUSINESS DATA above.
 - If the owner asks for something not in the context (e.g. last month's revenue when only this month is available), say: "I don't have that data in this conversation — open the Sales Reports page and I can analyse what you find there."

@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
+import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 const ALLOWED_PRIORITIES = new Set(['high', 'medium', 'low']);
@@ -32,7 +33,18 @@ async function _GET(req: Request) {
     .order('created_at', { ascending: false });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ actions: data ?? [] });
+
+  // Also fetch active hypotheses to surface alongside actions
+  const { data: hypotheses } = await supabaseAdmin
+    .from('aria_hypotheses')
+    .select('id,title,description,category,predicted_impact_cents,predicted_impact_label,risk_level,confidence,evidence_summary,generated_at,expires_at')
+    .eq('business_id', businessId)
+    .eq('status', 'active')
+    .gt('expires_at', new Date().toISOString())
+    .order('confidence', { ascending: false })
+    .limit(10)
+
+  return NextResponse.json({ actions: data ?? [], hypotheses: hypotheses ?? [] });
 }
 
 async function _POST(req: Request) {

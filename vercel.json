@@ -86,6 +86,14 @@
     {
       "path": "/api/cron/memory-extract",
       "schedule": "0 16 * * *"
+    },
+    {
+      "path": "/api/cron/hypothesis-engine",
+      "schedule": "0 15 * * *"
+    },
+    {
+      "path": "/api/cron/outcome-check",
+      "schedule": "0 17 * * *"
     }
   ]
 }

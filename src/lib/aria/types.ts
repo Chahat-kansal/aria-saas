@@ -10,9 +10,9 @@ export type AgentKey =
   | 'promo' | 'pricing' | 'inventory' | 'compliance'
   | 'product_lookup' | 'hardware' | 'ops_narrative' | 'generic'
   | 'intent_classifier' | 'ask_aria' | 'ask_suggestions' | 'ask_files' | 'ask_troubleshoot'
-  | 'rostering'
+  | 'rostering' | 'hypothesis_engine'
 
-export type AgentRole = 'agent' | 'judge' | 'data' | 'narrative' | 'classify' | 'chat' | 'export'
+export type AgentRole = 'agent' | 'judge' | 'data' | 'narrative' | 'classify' | 'chat' | 'export' | 'analysis'
 
 export interface ProductContext {
   id: string
