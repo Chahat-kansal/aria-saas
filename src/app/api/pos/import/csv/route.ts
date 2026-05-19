@@ -8,6 +8,51 @@ import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
+function parseBool(v: string | undefined): boolean | null {
+  if (!v) return null;
+  const lower = v.toLowerCase().trim();
+  if (['y','yes','true','1','x','â','18+','age restricted','restricted','adult','rsa'].includes(lower)) return true;
+  if (['n','no','false','0',''].includes(lower)) return false;
+  return null;
+}
+
+function parseVolumeMl(v: string | undefined): number | null {
+  if (!v) return null;
+  const s = v.trim();
+  const multi = s.match(/\d+\s*x\s*(\d+(?:\.\d+)?)\s*(ml|l|cl)/i);
+  if (multi) {
+    const num = parseFloat(multi[1]);
+    const unit = multi[2].toLowerCase();
+    return unit === 'l' ? Math.round(num * 1000) : unit === 'cl' ? Math.round(num * 10) : Math.round(num);
+  }
+  const match = s.match(/^(\d+(?:\.\d+)?)\s*(ml|l|cl|fl\s*oz)?/i);
+  if (!match) return null;
+  const num = parseFloat(match[1]);
+  const unit = (match[2] || 'ml').replace(/\s/g,'').toLowerCase();
+  if (unit === 'l') return Math.round(num * 1000);
+  if (unit === 'cl') return Math.round(num * 10);
+  if (unit.includes('oz')) return Math.round(num * 29.5735);
+  return Math.round(num);
+}
+
+function parseAlcohol(v: string | undefined): number | null {
+  if (!v) return null;
+  const match = v.replace(/[%ABVabv\s]/g,'').match(/^(\d+(?:\.\d+)?)$/);
+  if (!match) return null;
+  const num = parseFloat(match[1]);
+  return num > 0 && num <= 100 ? num : null;
+}
+
+function parseAllergens(v: string | undefined): string[] {
+  if (!v) return [];
+  return v.split(/[,;|]/).map(s => s.trim()).filter(Boolean);
+}
+
+function parseTags(v: string | undefined): string[] {
+  if (!v) return [];
+  return v.split(/[,;|]/).map(s => s.trim()).filter(Boolean);
+}
+
 async function getBusinessId(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
   const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle();
   if (active?.business_id) return active.business_id as string;
@@ -98,31 +143,74 @@ async function _POST(req: Request) {
     for (const row of rows) {
       try {
         const name      = row[mapping.name]?.trim();
-        const priceRaw  = row[mapping.price]?.trim().replace(/[^0-9.]/g, '');
         if (!name) { skipped++; continue; }
 
-        const price        = parseFloat(priceRaw) || 0;
-        const sku          = mapping.sku          ? row[mapping.sku]?.trim()          || null : null;
-        const barcode      = mapping.barcode      ? row[mapping.barcode]?.trim()      || null : null;
-        const category     = mapping.category     ? row[mapping.category]?.trim()     || null : null;
-        const costRaw      = mapping.cost_price   ? row[mapping.cost_price]?.trim().replace(/[^0-9.]/g, '') : null;
-        const cost_price   = costRaw              ? parseFloat(costRaw) || null : null;
-        const stockRaw     = mapping.stock_qty    ? row[mapping.stock_qty]?.trim()    : null;
-        const stock_qty    = stockRaw             ? parseInt(stockRaw) || 0 : 0;
-        const description  = mapping.description  ? row[mapping.description]?.trim()  || null : null;
+        const priceRaw  = row[mapping.price]?.trim().replace(/[^0-9.]/g, '');
+        const price     = parseFloat(priceRaw || '0') || 0;
+
+        const sku              = mapping.sku             ? row[mapping.sku]?.trim()              || null : null;
+        const barcode          = mapping.barcode         ? row[mapping.barcode]?.trim()          || null : null;
+        const category         = mapping.category        ? row[mapping.category]?.trim()         || null : null;
+        const brand            = mapping.brand           ? row[mapping.brand]?.trim()            || null : null;
+        const description      = mapping.description     ? row[mapping.description]?.trim()      || null : null;
+        const supplier_name    = mapping.supplier_name   ? row[mapping.supplier_name]?.trim()    || null : null;
+        const supplier_sku     = mapping.supplier_sku    ? row[mapping.supplier_sku]?.trim()     || null : null;
+        const notes            = mapping.notes           ? row[mapping.notes]?.trim()            || null : null;
+        const colour           = mapping.colour          ? row[mapping.colour]?.trim()           || null : null;
+        const size             = mapping.size            ? row[mapping.size]?.trim()             || null : null;
+        const country_of_origin= mapping.country_of_origin ? row[mapping.country_of_origin]?.trim() || null : null;
+        const container_type   = mapping.container_type  ? row[mapping.container_type]?.trim()   || null : null;
+        const bin_location     = mapping.bin_location    ? row[mapping.bin_location]?.trim()     || null : null;
+
+        const costRaw       = mapping.cost_price     ? row[mapping.cost_price]?.trim().replace(/[^0-9.]/g,'')    : null;
+        const cost_price    = costRaw                ? parseFloat(costRaw) || null : null;
+        const stockRaw      = mapping.stock_quantity ? row[mapping.stock_quantity]?.trim() : null;
+        const stock_quantity= stockRaw               ? parseInt(stockRaw) || 0 : 0;
+        const rrpRaw        = mapping.rrp            ? row[mapping.rrp]?.trim().replace(/[^0-9.]/g,'') : null;
+        const rrp           = rrpRaw                 ? parseFloat(rrpRaw) || null : null;
+        const reorderRaw    = mapping.reorder_point  ? row[mapping.reorder_point]?.trim()  : null;
+        const reorder_point = reorderRaw             ? parseInt(reorderRaw) || null : null;
+        const reorderQtyRaw = mapping.reorder_qty    ? row[mapping.reorder_qty]?.trim()    : null;
+        const reorder_qty   = reorderQtyRaw          ? parseInt(reorderQtyRaw) || null : null;
+        const caseQRaw      = mapping.case_quantity  ? row[mapping.case_quantity]?.trim()  : null;
+        const case_quantity = caseQRaw               ? parseInt(caseQRaw) || null : null;
+        const ipcRaw        = mapping.items_per_case ? row[mapping.items_per_case]?.trim() : null;
+        const items_per_case= ipcRaw                 ? parseInt(ipcRaw) || null : null;
+        const vintageRaw    = mapping.vintage        ? row[mapping.vintage]?.trim()        : null;
+        const vintage       = vintageRaw             ? parseInt(vintageRaw) || null : null;
+        const shelfRaw      = mapping.shelf_life_days? row[mapping.shelf_life_days]?.trim(): null;
+        const shelf_life_days= shelfRaw              ? parseInt(shelfRaw) || null : null;
+        const weightRaw     = mapping.weight         ? row[mapping.weight]?.trim().replace(/[^0-9.]/g,'') : null;
+        const weight        = weightRaw              ? parseFloat(weightRaw) || null : null;
+        const weight_unit   = mapping.weight_unit    ? row[mapping.weight_unit]?.trim() || 'kg' : 'kg';
+
+        const alcohol_percentage = mapping.alcohol_percentage ? parseAlcohol(row[mapping.alcohol_percentage]) : null;
+        const standard_drinks    = mapping.standard_drinks    ? (parseFloat(row[mapping.standard_drinks]?.replace(/[^0-9.]/g,'') || '') || null) : null;
+        const volumeMl           = mapping.volume             ? parseVolumeMl(row[mapping.volume]) : null;
+        const volume             = volumeMl;
+        const volume_unit        = volumeMl != null ? 'ml' : null;
+        const is_age_restricted  = mapping.is_age_restricted  ? (parseBool(row[mapping.is_age_restricted]) ?? false) : false;
+        const gst_exempt         = mapping.gst_exempt         ? (parseBool(row[mapping.gst_exempt]) ?? false) : false;
+        const allergens          = mapping.allergens           ? parseAllergens(row[mapping.allergens]) : [];
+        const tags               = mapping.tags               ? parseTags(row[mapping.tags]) : [];
 
         // Duplicate detection
         const existingId = (barcode && byBarcode.get(barcode)) || (sku && bySku.get(sku));
 
         const payload: Record<string, unknown> = {
-          business_id: bid, name, price, stock_qty,
-          source: 'csv_import', track_inventory: stock_qty > 0,
+          business_id: bid, name, price, stock_quantity,
+          source: 'csv_import', track_inventory: stock_quantity > 0,
+          is_age_restricted, gst_exempt, allergens, tags,
         };
-        if (sku)         payload.sku         = sku;
-        if (barcode)     payload.barcode     = barcode;
-        if (category)    payload.category    = category;
-        if (cost_price)  payload.cost_price  = cost_price;
-        if (description) payload.description = description;
+        const optionals: Record<string, unknown> = {
+          sku, barcode, category, brand, description, supplier_name, supplier_sku,
+          notes, colour, size, country_of_origin, container_type, bin_location,
+          cost_price, rrp, reorder_point, reorder_qty, case_quantity, items_per_case,
+          vintage, shelf_life_days, weight, weight_unit: weight ? weight_unit : undefined,
+          volume, volume_unit: volume ? volume_unit : undefined,
+          alcohol_percentage, standard_drinks,
+        };
+        for (const [k, v] of Object.entries(optionals)) { if (v != null) payload[k] = v; }
 
         if (existingId) {
           // Update existing
@@ -149,31 +237,58 @@ async function _POST(req: Request) {
   const sampleRows = rows.slice(0, 5);
   const sampleText = [headers.join(' | '), ...sampleRows.map(r => headers.map(h => r[h] ?? '').join(' | '))].join('\n');
 
-  const aiPrompt = `You are a data mapping assistant for a POS system. Map CSV columns to product fields.
+  const aiPrompt = `You are a data mapping expert for an Australian retail POS system. Map these CSV column headers to product fields.
 
-CSV columns and sample data:
+CSV headers and sample data:
 ${sampleText}
 
 Available product fields:
 - name (required): product name
-- price (required): selling price (number)
+- price (required): selling price (number, dollars)
 - sku: stock keeping unit / item code
-- barcode: EAN/UPC barcode
-- category: product category
-- cost_price: purchase cost / wholesale price
-- stock_qty: quantity on hand / current stock
-- description: product description
+- barcode: EAN/UPC/GTIN barcode number
+- category: product category or department
+- brand: brand, winery, brewery, or producer name
+- description: product description or notes
+- cost_price: purchase cost / wholesale / buy price (dollars)
+- stock_quantity: quantity on hand / current stock (number)
+- supplier_name: supplier or vendor name
+- supplier_sku: supplier's own product code
+- reorder_point: minimum stock level to trigger reorder
+- reorder_qty: quantity to order when restocking
+- case_quantity: number of units per case
+- items_per_case: items per case
+- bin_location: shelf, bin, or storage location code
+- rrp: recommended retail price
+- unit: unit of measure (each, kg, L, ml, 6pk, etc)
+- weight: product weight (numeric)
+- weight_unit: weight unit (g, kg, lb, oz)
+- volume: product volume in ml (numeric — extract from "750ml", "1.125L", "375 mL")
+- volume_unit: ml or L
+- size: size or variant label
+- colour: colour or color description
+- vintage: vintage year for wine (4-digit year)
+- country_of_origin: country the product is made in
+- alcohol_percentage: alcohol content as % (extract from "13.5%", "13.5 ABV", "13.5% Vol")
+- standard_drinks: standard drink count (Australia)
+- container_type: bottle, can, keg, bag-in-box, tetra, cask, etc
+- allergens: allergen list (comma-separated)
+- shelf_life_days: shelf life in days (numeric)
+- is_age_restricted: 18+ restricted — columns named "18+", "RSA", "Age Restricted", or Y/N values
+- gst_exempt: GST exempt (Y/N)
+- tags: product tags or labels (comma-separated)
+- notes: internal notes
 
-Return ONLY a valid JSON object mapping CSV column names to field names. Use null for columns you cannot confidently map. Example:
-{"Product Name": "name", "Retail Price": "price", "Item Code": "sku", "UPC": "barcode", "Dept": "category", "Cost": "cost_price", "On Hand": "stock_qty", "Notes": null}
+IMPORTANT: "18+", "Age Restricted", "RSA", "Restricted", "Adult Only" → is_age_restricted.
+Columns like "750ml" as a column NAME → volume.
 
-Map every column. Use null for unrecognised columns. Do not add markdown or explanation.`;
+Return ONLY a valid JSON object. Use null for unrecognised columns. No markdown, no explanation.`;
 
   let mapping: Record<string, string | null> = {};
   try {
     const aiResponse = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 512,
+      max_tokens: 768,
       messages: [{ role: 'user', content: aiPrompt }],
     });
     const text = (aiResponse.content[0] as { type: string; text: string }).text.trim();
@@ -181,17 +296,32 @@ Map every column. Use null for unrecognised columns. Do not add markdown or expl
     const aiMapping = parseLLMJsonOr<Record<string, unknown>>(text, {}, 'pos/import/csv');
     if (aiMapping && Object.keys(aiMapping).length > 0) mapping = aiMapping as typeof mapping;
   } catch {
-    // Fallback: simple heuristic mapping
+    // Fallback heuristics
     for (const h of headers) {
-      const lower = h.toLowerCase().replace(/[^a-z0-9]/g, '');
-      if (['name','productname','itemname','description2','title'].some(k => lower.includes(k) || lower === k)) mapping[h] = 'name';
-      else if (['price','retailprice','saleprice','sellingprice','unit_price'].some(k => lower.includes(k))) mapping[h] = 'price';
-      else if (['sku','itemcode','productcode','code','id','ref'].some(k => lower === k)) mapping[h] = 'sku';
-      else if (['barcode','ean','upc','gtin'].some(k => lower.includes(k))) mapping[h] = 'barcode';
-      else if (['category','dept','department','type','class'].some(k => lower.includes(k))) mapping[h] = 'category';
-      else if (['cost','costprice','purchaseprice','wholesale'].some(k => lower.includes(k))) mapping[h] = 'cost_price';
-      else if (['stock','qty','quantity','onhand','instock','inventory'].some(k => lower.includes(k))) mapping[h] = 'stock_qty';
-      else if (['description','notes','detail','memo'].some(k => lower.includes(k))) mapping[h] = 'description';
+      const l = h.toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (['name','productname','itemname','description2','title'].some(k => l.includes(k) || l === k)) mapping[h] = 'name';
+      else if (['price','retailprice','saleprice','sellingprice','unitprice'].some(k => l.includes(k))) mapping[h] = 'price';
+      else if (['sku','itemcode','productcode','code','id','ref'].some(k => l === k)) mapping[h] = 'sku';
+      else if (['barcode','ean','upc','gtin'].some(k => l.includes(k))) mapping[h] = 'barcode';
+      else if (['brand','winery','brewery','producer','maker'].some(k => l.includes(k))) mapping[h] = 'brand';
+      else if (['category','dept','department','class','group'].some(k => l.includes(k))) mapping[h] = 'category';
+      else if (['cost','costprice','buyprice','wholesale'].some(k => l.includes(k))) mapping[h] = 'cost_price';
+      else if (['stock','qty','quantity','onhand','instock','inventory'].some(k => l.includes(k))) mapping[h] = 'stock_quantity';
+      else if (['description','detail','memo'].some(k => l.includes(k))) mapping[h] = 'description';
+      else if (['notes','internal'].some(k => l.includes(k))) mapping[h] = 'notes';
+      else if (['abv','alc','alcohol','strength'].some(k => l.includes(k))) mapping[h] = 'alcohol_percentage';
+      else if (['standarddrink','stddrink'].some(k => l.includes(k))) mapping[h] = 'standard_drinks';
+      else if (['volume','size','ml','litre'].some(k => l.includes(k))) mapping[h] = 'volume';
+      else if (['vintage','year'].some(k => l.includes(k))) mapping[h] = 'vintage';
+      else if (['country','origin'].some(k => l.includes(k))) mapping[h] = 'country_of_origin';
+      else if (['container','packtype','packaging'].some(k => l.includes(k))) mapping[h] = 'container_type';
+      else if (['allergen','contains','allergy'].some(k => l.includes(k))) mapping[h] = 'allergens';
+      else if (['18','agerestrict','restricted','adult','rsa'].some(k => l.includes(k))) mapping[h] = 'is_age_restricted';
+      else if (['gst','taxexempt'].some(k => l.includes(k))) mapping[h] = 'gst_exempt';
+      else if (['rrp','recommendedretail','msrp'].some(k => l.includes(k))) mapping[h] = 'rrp';
+      else if (['tags','labels','keywords'].some(k => l.includes(k))) mapping[h] = 'tags';
+      else if (['supplier','vendor'].some(k => l.includes(k))) mapping[h] = 'supplier_name';
+      else if (['colour','color'].some(k => l.includes(k))) mapping[h] = 'colour';
       else mapping[h] = null;
     }
   }
@@ -203,14 +333,20 @@ Map every column. Use null for unrecognised columns. Do not add markdown or expl
   }
 
   const preview = sampleRows.map(row => ({
-    name:        row[fieldToCol['name']]        ?? '',
-    price:       row[fieldToCol['price']]       ?? '',
-    sku:         row[fieldToCol['sku']]         ?? '',
-    barcode:     row[fieldToCol['barcode']]     ?? '',
-    category:    row[fieldToCol['category']]    ?? '',
-    cost_price:  row[fieldToCol['cost_price']]  ?? '',
-    stock_qty:   row[fieldToCol['stock_qty']]   ?? '',
-    description: row[fieldToCol['description']] ?? '',
+    name:               row[fieldToCol['name']]               ?? '',
+    price:              row[fieldToCol['price']]              ?? '',
+    sku:                row[fieldToCol['sku']]                ?? '',
+    barcode:            row[fieldToCol['barcode']]            ?? '',
+    category:           row[fieldToCol['category']]          ?? '',
+    brand:              row[fieldToCol['brand']]              ?? '',
+    cost_price:         row[fieldToCol['cost_price']]         ?? '',
+    stock_quantity:     row[fieldToCol['stock_quantity']]     ?? '',
+    alcohol_percentage: row[fieldToCol['alcohol_percentage']] ?? '',
+    volume:             row[fieldToCol['volume']]             ?? '',
+    is_age_restricted:  row[fieldToCol['is_age_restricted']]  ?? '',
+    container_type:     row[fieldToCol['container_type']]     ?? '',
+    allergens:          row[fieldToCol['allergens']]          ?? '',
+    description:        row[fieldToCol['description']]        ?? '',
     _raw: row,
   }));
 
