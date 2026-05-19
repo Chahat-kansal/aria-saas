@@ -1,11 +1,5 @@
-import { createClient } from '@supabase/supabase-js'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
-
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  { auth: { autoRefreshToken: false, persistSession: false } }
-)
+import { supabaseAdmin } from '@/lib/supabase-admin'
 
 export async function sendStaffInvite(
   businessId: string,
@@ -27,7 +21,7 @@ export async function sendStaffInvite(
   const userId = authData.user?.id
   if (!userId) return { ok: false, error: 'Auth user not created' }
 
-  const { error: inviteError } = await supabase.from('staff_invites').insert({
+  const { error: inviteError } = await supabaseAdmin.from('staff_invites').insert({
     business_id: businessId,
     staff_member_id: staffMemberId,
     email,
@@ -36,7 +30,7 @@ export async function sendStaffInvite(
   })
   if (inviteError) return { ok: false, error: inviteError.message }
 
-  await supabase.from('staff_members').update({
+  await supabaseAdmin.from('staff_members').update({
     user_id: userId,
     portal_enabled: true,
     invite_sent_at: new Date().toISOString(),
