@@ -39,7 +39,7 @@ export async function buildAskAriaContext(
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1) // first of current month
 
   const [bizRes, salesTodayRes, salesWeekRes, salesMonthRes, lowStockRes, staffRes, ticketsRes, actionsRes, convHistRes, recentConvsRes] = await Promise.all([
-    supabaseAdmin.from('businesses').select('name,industry,owner_name,currency').eq('id', businessId).maybeSingle(),
+    supabaseAdmin.from('businesses').select('name,industry,owner_name').eq('id', businessId).maybeSingle(),
     supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', businessId).gte('created_at', todayStart.toISOString()),
     supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', businessId).gte('created_at', weekStart.toISOString()),
     supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', businessId).gte('created_at', monthStart.toISOString()),
@@ -90,7 +90,7 @@ export async function buildAskAriaContext(
     business_name: biz?.name ?? 'Your business',
     industry: biz?.industry ?? 'retail',
     owner_name: biz?.owner_name ?? null,
-    currency: biz?.currency ?? 'AUD',
+    currency: 'AUD',
     revenue_today_cents: todayCents,
     revenue_week_cents: weekCents,
     revenue_month_cents: monthCents,
