@@ -50,11 +50,10 @@ async function _POST(req: Request) {
     if (!alreadyRegistered) return NextResponse.json({ error: inviteError.message }, { status: 500 })
     // Already registered — send magic link so they actually get an email
     const { error: linkError } = await supabaseAdmin.auth.admin.generateLink({
-      type: 'invite',
+      type: 'magiclink',
       email,
       options: {
         redirectTo: `https://www.ariaos.site/staff/accept-invite`,
-        data: { business_id, staff_member_id, role: 'staff' },
       },
     })
     if (linkError) return NextResponse.json({ error: `Could not send email: ${linkError.message}` }, { status: 500 })

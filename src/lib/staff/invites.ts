@@ -27,15 +27,15 @@ export async function sendStaffInvite(
     userId = existing.id
     // Send magic link so they actually receive an email
     // generateLink does NOT send email — use signInWithOtp to actually send
-    const { error: otpError } = await supabaseAdmin.auth.admin.generateLink({
-      type: 'invite',
+    // Existing user — send magic link (invite type is blocked for registered users)
+    const { error: mlError } = await supabaseAdmin.auth.admin.generateLink({
+      type: 'magiclink',
       email,
       options: {
         redirectTo: `https://www.ariaos.site/staff/accept-invite`,
-        data: { business_id: businessId, staff_member_id: staffMemberId, role: 'staff' },
       },
     })
-    if (otpError) console.error('[staff/invites] generateLink invite failed:', otpError.message)
+    if (mlError) console.error('[staff/invites] magiclink failed:', mlError.message)
   } else {
     userId = authData.user?.id
   }
