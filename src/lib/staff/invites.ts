@@ -13,7 +13,7 @@ export async function sendStaffInvite(
   const { data: authData, error: authError } = await supabaseAdmin.auth.admin.inviteUserByEmail(
     email,
     {
-      redirectTo: `${process.env.NEXT_PUBLIC_APP_URL ?? 'https://www.ariaos.site'}/staff/accept-invite`,
+      redirectTo: `https://www.ariaos.site/staff/accept-invite`,
       data: { business_id: businessId, staff_member_id: staffMemberId, role: 'staff' },
     }
   )

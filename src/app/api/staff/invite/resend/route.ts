@@ -42,7 +42,7 @@ async function _POST(req: Request) {
 
   // Re-send via Supabase auth admin (consistent with original invite flow)
   const { error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
-    redirectTo: `${process.env.NEXT_PUBLIC_APP_URL ?? 'https://www.ariaos.site'}/staff/accept-invite`,
+    redirectTo: `https://www.ariaos.site/staff/accept-invite`,
     data: { business_id, staff_member_id, role: 'staff' },
   })
   if (inviteError) {
