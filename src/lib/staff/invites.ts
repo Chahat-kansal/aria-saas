@@ -1,6 +1,35 @@
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 
+async function sendInviteEmail(email: string, actionLink: string): Promise<void> {
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      from: 'AriaOS <support@ariaos.site>',
+      to: [email],
+      subject: "You're invited to join the AriaOS Staff Portal",
+      html: `
+        <div style="font-family:Inter,sans-serif;max-width:480px;margin:0 auto;padding:32px 24px;">
+          <h2 style="color:#2D5240;margin-bottom:8px;">You've been invited to AriaOS</h2>
+          <p style="color:#444;margin-bottom:24px;">Your employer has added you to their AriaOS staff portal. Click below to set up your account and access your shifts, leave requests, and more.</p>
+          <a href="${actionLink}" style="display:inline-block;background:#2D5240;color:#7FB897;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:600;font-size:15px;">
+            Accept Invite &amp; Set Up Account
+          </a>
+          <p style="color:#999;font-size:12px;margin-top:24px;">This link expires in 24 hours. If you didn't expect this, ignore this email.</p>
+        </div>
+      `,
+    }),
+  })
+  if (!res.ok) {
+    const err = await res.text()
+    console.error('[staff/invites] Resend send failed:', err)
+  }
+}
+
 export async function sendStaffInvite(
   businessId: string,
   staffMemberId: string,
@@ -25,17 +54,17 @@ export async function sendStaffInvite(
     const existing = users.find(u => u.email?.toLowerCase() === email.toLowerCase())
     if (!existing) return { ok: false, error: `User already registered but not found` }
     userId = existing.id
-    // Send magic link so they actually receive an email
-    // generateLink does NOT send email — use signInWithOtp to actually send
-    // Existing user — send magic link (invite type is blocked for registered users)
-    const { error: mlError } = await supabaseAdmin.auth.admin.generateLink({
+    // Generate the magic link URL then send via Resend directly
+    const { data: linkData, error: mlError } = await supabaseAdmin.auth.admin.generateLink({
       type: 'magiclink',
       email,
-      options: {
-        redirectTo: `https://www.ariaos.site/staff/accept-invite`,
-      },
+      options: { redirectTo: `https://www.ariaos.site/staff/accept-invite` },
     })
-    if (mlError) console.error('[staff/invites] magiclink failed:', mlError.message)
+    if (mlError) {
+      console.error('[staff/invites] magiclink failed:', mlError.message)
+    } else if (linkData?.properties?.action_link) {
+      await sendInviteEmail(email, linkData.properties.action_link)
+    }
   } else {
     userId = authData.user?.id
   }

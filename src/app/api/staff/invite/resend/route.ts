@@ -48,15 +48,42 @@ async function _POST(req: Request) {
   if (inviteError) {
     const alreadyRegistered = inviteError.message?.toLowerCase().includes('already registered') || inviteError.message?.includes('already been registered')
     if (!alreadyRegistered) return NextResponse.json({ error: inviteError.message }, { status: 500 })
-    // Already registered — send magic link so they actually get an email
-    const { error: linkError } = await supabaseAdmin.auth.admin.generateLink({
+    // Already registered — generate magic link then send via Resend directly
+    const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
       type: 'magiclink',
       email,
-      options: {
-        redirectTo: `https://www.ariaos.site/staff/accept-invite`,
-      },
+      options: { redirectTo: `https://www.ariaos.site/staff/accept-invite` },
     })
     if (linkError) return NextResponse.json({ error: `Could not send email: ${linkError.message}` }, { status: 500 })
+    if (linkData?.properties?.action_link) {
+      const resendRes = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          from: 'AriaOS <support@ariaos.site>',
+          to: [email],
+          subject: "Your AriaOS Staff Portal invitation",
+          html: `
+            <div style="font-family:Inter,sans-serif;max-width:480px;margin:0 auto;padding:32px 24px;">
+              <h2 style="color:#2D5240;margin-bottom:8px;">Your staff portal invite</h2>
+              <p style="color:#444;margin-bottom:24px;">Click below to access your AriaOS staff portal — view shifts, submit leave, and manage your availability.</p>
+              <a href="${linkData.properties.action_link}" style="display:inline-block;background:#2D5240;color:#7FB897;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:600;font-size:15px;">
+                Open Staff Portal
+              </a>
+              <p style="color:#999;font-size:12px;margin-top:24px;">This link expires in 24 hours.</p>
+            </div>
+          `,
+        }),
+      })
+      if (!resendRes.ok) {
+        const err = await resendRes.text()
+        console.error('[resend-invite] Resend API failed:', err)
+        return NextResponse.json({ error: 'Email send failed' }, { status: 500 })
+      }
+    }
   }
 
   // Insert fresh staff_invites record
