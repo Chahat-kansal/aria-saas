@@ -1,6 +1,6 @@
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
-export const maxDuration = 60
+export const maxDuration = 300
 
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
@@ -17,6 +17,8 @@ export async function GET(req: NextRequest) {
   }
 
   const cronLogId = crypto.randomUUID()
+  const cronStart = Date.now()
+  const DEADLINE_MS = 270_000
   await supabaseAdmin.from('cron_logs').insert({ id: cronLogId, job_name: 'daily-briefing-poll', status: 'running', started_at: new Date().toISOString() })
 
   try {
@@ -34,6 +36,10 @@ export async function GET(req: NextRequest) {
     let processed = 0
 
     for (const batch of pending) {
+      if (Date.now() - cronStart > DEADLINE_MS) {
+        console.log('[briefing-poll] deadline reached, stopping early')
+        break
+      }
       const results = await pollBatchResults(batch.batch_id) as BatchResult[] | null
 
       if (!results) {

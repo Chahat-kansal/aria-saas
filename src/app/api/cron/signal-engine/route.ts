@@ -1,6 +1,6 @@
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
-export const maxDuration = 60
+export const maxDuration = 300
 
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
@@ -12,6 +12,8 @@ export async function GET(req: Request) {
   }
 
   const cronLogId = crypto.randomUUID()
+  const cronStart = Date.now()
+  const DEADLINE_MS = 270_000  // 270s — 30s before Vercel's 300s limit
   await supabaseAdmin.from('cron_logs').insert({ id: cronLogId, job_name: 'signal-engine', status: 'running', started_at: new Date().toISOString() })
 
   try {
@@ -31,6 +33,11 @@ export async function GET(req: Request) {
 
     const BATCH = 5
     for (let i = 0; i < businesses.length; i += BATCH) {
+      // Stop gracefully if approaching deadline
+      if (Date.now() - cronStart > DEADLINE_MS) {
+        console.log('[signal-engine] deadline reached, stopping early at batch', i)
+        break
+      }
       const slice = businesses.slice(i, i + BATCH)
       const results = await Promise.allSettled(slice.map(b => runSignalsForBusiness(b.id)))
       for (let j = 0; j < results.length; j++) {

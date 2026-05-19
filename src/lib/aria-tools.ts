@@ -1,5 +1,5 @@
 import type { Tool } from '@anthropic-ai/sdk/resources/messages';
-import { createServerSupabaseClient } from '@/lib/supabase-server';
+import { supabaseAdmin } from '@/lib/supabase-admin';
 
 export const ARIA_POS_TOOLS: Tool[] = [
   {
@@ -119,7 +119,7 @@ async function querySales(
   },
   businessId: string
 ): Promise<unknown> {
-  const supabase = createServerSupabaseClient();
+  const supabase = supabaseAdmin;
   const { data: sales } = await supabase
     .from('pos_sales')
     .select('id, total_amount, payment_method, served_by, created_at, status')
@@ -188,7 +188,7 @@ async function queryInventory(
   input: { low_stock_only?: boolean; dead_stock_only?: boolean; limit?: number },
   businessId: string
 ): Promise<unknown> {
-  const supabase = createServerSupabaseClient();
+  const supabase = supabaseAdmin;
   const query = supabase
     .from('pos_products')
     .select('id, name, sku, stock_quantity, reorder_point, cost_price, retail_price, category')
@@ -227,7 +227,7 @@ async function queryCustomers(
   input: { segment?: string; sort_by?: string; limit?: number; search?: string },
   businessId: string
 ): Promise<unknown> {
-  const supabase = createServerSupabaseClient();
+  const supabase = supabaseAdmin;
   let query = supabase
     .from('pos_customers')
     .select('id, name, email, phone, total_spend, total_spent, last_visit_at, last_visit, visit_count, segment, rfm_score_total, days_since_visit, created_at')
@@ -261,7 +261,7 @@ async function comparePeriods(
   },
   businessId: string
 ): Promise<unknown> {
-  const supabase = createServerSupabaseClient();
+  const supabase = supabaseAdmin;
 
   async function fetchPeriodSales(from: string, to: string) {
     const { data } = await supabase

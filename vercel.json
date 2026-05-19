@@ -4,7 +4,7 @@
       "maxDuration": 30
     },
     "src/app/api/cron/**/*.ts": {
-      "maxDuration": 60
+      "maxDuration": 300
     },
     "src/app/api/aria/ask/route.ts": {
       "maxDuration": 60
