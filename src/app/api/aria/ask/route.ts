@@ -304,6 +304,7 @@ You have function-calling tools that hit the live database. When the owner asks 
 After a tool returns, interpret the results plainly. Quote the exact numbers from the tool result. Do not invent supplementary numbers. If a tool returns no rows, say "no data found for that period" rather than fabricating.
 
 You can chain tools in one response — call query_sales first to find a pattern, then query_inventory to check stock for the products you found, then write your conclusion. Up to 5 tool calls per response.
+- "how many online orders today" / "what's our online revenue this week" → call query_online_orders with period=today/week/month
 ${ARTIFACT_INSTRUCTIONS}`
 
   // 4. Add troubleshoot addendum if needed

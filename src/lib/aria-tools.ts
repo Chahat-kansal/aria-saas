@@ -82,6 +82,18 @@ export const ARIA_POS_TOOLS: Tool[] = [
     },
   },
   {
+    name: 'query_online_orders',
+    description: 'Query online order data — count, revenue, fulfilment type, avg order value for a time period.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        period: { type: 'string', enum: ['today', 'week', 'month'], description: 'Time period' },
+        status: { type: 'string', description: 'Filter by status (pending/completed/all)' },
+      },
+      required: ['period'],
+    },
+  },
+  {
     name: 'suggest_promotion',
     description: 'Generate a promotion rule JSON for a given business goal.',
     input_schema: {
@@ -333,6 +345,24 @@ export async function executePOSTool(name: string, input: unknown, businessId: s
       return { chart_spec: inp };
     case 'suggest_promotion':
       return suggestPromotion(inp as Parameters<typeof suggestPromotion>[0]);
+    case 'query_online_orders': {
+      const { period, status } = inp as { period: string; status?: string }
+      const now = new Date()
+      const from = period === 'today'
+        ? new Date(new Date().setHours(0,0,0,0)).toISOString()
+        : period === 'week'
+        ? new Date(Date.now() - 7 * 86400000).toISOString()
+        : new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
+      let q = supabaseAdmin.from('pos_online_orders').select('total, fulfillment_type, status').eq('business_id', businessId).gte('created_at', from)
+      if (status && status !== 'all') q = (q as typeof q).eq('status', status)
+      const { data } = await q
+      const rows = data ?? []
+      const total_revenue = rows.reduce((s, r) => s + (Number((r as Record<string,unknown>).total) || 0), 0)
+      const avg = rows.length > 0 ? total_revenue / rows.length : 0
+      const pickup  = rows.filter(r => (r as Record<string,unknown>).fulfillment_type === 'pickup').length
+      const delivery = rows.filter(r => (r as Record<string,unknown>).fulfillment_type === 'delivery').length
+      return { count: rows.length, total_revenue: total_revenue.toFixed(2), avg_order_value: avg.toFixed(2), pickup_count: pickup, delivery_count: delivery, period }
+    }
     default:
       throw new Error(`Unknown tool: ${name}`);
   }

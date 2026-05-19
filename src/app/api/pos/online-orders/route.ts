@@ -1,5 +1,7 @@
 export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { supabaseAdmin } from '@/lib/supabase-admin'
 import { NextResponse } from 'next/server'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 
@@ -35,4 +37,24 @@ async function _GET(req: Request) {
   return NextResponse.json({ orders: data ?? [] })
 }
 
-export const GET = withErrorCapture('pos/online-orders', _GET)
+async function _PATCH(req: Request) {
+  const supabase = createServerSupabaseClient()
+  const { data: { user }, error: authError } = await supabase.auth.getUser()
+  if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const bid = await getBid(supabase, user.id)
+  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 404 })
+  const body = await req.json() as Record<string, unknown>
+  const { id, status, rejection_reason, estimated_ready_at } = body
+  if (!id || !status) return NextResponse.json({ error: 'id and status required' }, { status: 400 })
+  const update: Record<string, unknown> = { status, updated_at: new Date().toISOString() }
+  if (status === 'accepted') update.accepted_at = new Date().toISOString()
+  if (status === 'rejected') { update.rejected_at = new Date().toISOString(); update.rejection_reason = rejection_reason || 'Unable to fulfil' }
+  if (status === 'ready') update.estimated_ready_at = new Date().toISOString()
+  if (estimated_ready_at) update.estimated_ready_at = estimated_ready_at
+  const { data, error } = await supabaseAdmin.from('pos_online_orders').update(update).eq('id', id as string).eq('business_id', bid).select().single()
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ order: data })
+}
+
+export const GET   = withErrorCapture('pos/online-orders', _GET)
+export const PATCH = withErrorCapture('pos/online-orders', _PATCH)

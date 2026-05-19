@@ -44,7 +44,7 @@ export async function POST(req: Request, { params }: Params) {
   }
 
   const body = await req.json()
-  const { customer_name, customer_phone, customer_email, items, pickup_time, notes, table_id, source = 'web' } = body
+  const { customer_name, customer_phone, customer_email, items, pickup_time, notes, table_id, source = 'web', special_instructions, fulfillment_type = 'pickup', delivery_address } = body
 
   if (!customer_name || !items?.length) {
     return NextResponse.json({ error: 'customer_name and items are required' }, { status: 400 })
@@ -76,6 +76,10 @@ export async function POST(req: Request, { params }: Params) {
     notes: notes ?? null,
     subtotal: total,
     total,
+    fulfillment_type: fulfillment_type ?? 'pickup',
+    delivery_address: fulfillment_type === 'delivery' ? delivery_address : null,
+    items: items ?? [],
+    special_instructions: special_instructions || null,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   }).select('id, order_number, status').single()
@@ -141,6 +145,14 @@ export async function POST(req: Request, { params }: Params) {
       notes: `Online order ${order_number}`,
       created_at: now,
     }).then(() => null, () => null)
+  }
+
+  // Fire Aria upsell async — don't await
+  if (onlineOrder?.id) {
+    void fetch(`${process.env.NEXT_PUBLIC_APP_URL ?? 'https://www.ariaos.site'}/api/pos/online-orders/aria-upsell`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ order_id: onlineOrder.id, business_id, items: items ?? [] }),
+    }).catch(() => {})
   }
 
   const pickupEst = outlet.pickup_ready_estimate_minutes ?? 10
