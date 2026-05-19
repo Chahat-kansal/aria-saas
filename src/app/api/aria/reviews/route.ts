@@ -1,5 +1,6 @@
 export const dynamic = 'force-dynamic'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { supabaseAdmin } from '@/lib/supabase-admin'
 import { NextResponse } from 'next/server'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 
@@ -94,7 +95,36 @@ async function _PATCH(req: Request) {
 
   const { error } = await supabase.from('google_reviews').update(update).eq('id', id)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ ok: true })
+
+  // Attempt to post reply to Google My Business if GMB token is available
+  let gmb_published = false
+  if (has_reply && reply_text) {
+    try {
+      const { data: fullRev } = await supabaseAdmin.from('google_reviews').select('review_id,business_id').eq('id', id).maybeSingle()
+      const { data: conn } = await supabaseAdmin.from('social_connections')
+        .select('access_token').eq('business_id', fullRev?.business_id).eq('platform', 'google_business').eq('is_active', true).maybeSingle()
+
+      if (conn?.access_token && fullRev?.review_id) {
+        const gmbRes = await fetch(
+          `https://mybusiness.googleapis.com/v4/accounts/-/locations/-/reviews/${fullRev.review_id}/reply`,
+          {
+            method: 'PUT',
+            headers: { 'Authorization': `Bearer ${conn.access_token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ comment: reply_text }),
+          },
+        )
+        if (gmbRes.ok) {
+          await supabaseAdmin.from('google_reviews').update({
+            reply_published_at: new Date().toISOString(),
+            reply_source: 'manual',
+          }).eq('id', id)
+          gmb_published = true
+        }
+      }
+    } catch { /* non-fatal — save to DB regardless */ }
+  }
+
+  return NextResponse.json({ ok: true, gmb_published })
 }
 
 export const PATCH = withErrorCapture('aria/reviews', _PATCH)
