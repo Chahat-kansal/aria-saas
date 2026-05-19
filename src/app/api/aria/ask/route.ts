@@ -290,6 +290,7 @@ DATA INTEGRITY RULES:
 - Never invent revenue, transactions, customers, or dates.
 - Today is ${new Date().toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney' })}. Never default to January or any other month.
 - When comparing periods, only compare periods present in the context. Do not extrapolate or guess.
+- CRITICAL: When the user uses pronouns ("he", "she", "they", "it", "that") or refers to "the customer", "the product", "that item" — resolve them from the most recent conversation turns. If the previous response mentioned James Patterson, "he" = James Patterson. Never ask for clarification when the referent is clear from recent history.
 
 TOOLS AVAILABLE (use them — do not guess):
 You have function-calling tools that hit the live database. When the owner asks something not in LIVE BUSINESS DATA above, call a tool instead of saying "I don't have that data". Examples:
@@ -353,6 +354,12 @@ ${ARTIFACT_INSTRUCTIONS}`
   const rawResponse = toolResult.raw
   const action = extractAction(rawResponse)
   const cleanResponse = stripAction(rawResponse)
+  const toolSummary = toolResult.tool_calls.length > 0
+    ? '\n\n[Context from data lookup: ' + toolResult.tool_calls.map(t =>
+        `${t.name}(${JSON.stringify(t.input).slice(0, 80)}) → ${JSON.stringify(t.result).slice(0, 200)}`
+      ).join('; ') + ']'
+    : ''
+  const historyContent = cleanResponse + toolSummary
 
   // 6. Handle server-side actions
   let actionResult: Record<string, unknown> = {}
@@ -394,7 +401,7 @@ ${ARTIFACT_INSTRUCTIONS}`
   // 7. Save conversation
   let savedConvId = conversationId
   try {
-    savedConvId = await upsertConversation(bid, user.id, conversationId, message, cleanResponse, intent.type)
+    savedConvId = await upsertConversation(bid, user.id, conversationId, message, historyContent, intent.type)
   } catch (e) {
     console.error('[aria/ask] upsertConversation failed:', (e as Error).message, 'conv_id:', conversationId)
   }

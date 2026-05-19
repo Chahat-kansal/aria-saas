@@ -80,7 +80,7 @@ export async function buildAskAriaContext(
   const convHistory: Array<{ role: string; content: string }> = (() => {
     const msgs = convHistRes.data?.messages
     if (!Array.isArray(msgs)) return []
-    return (msgs as Array<{ role: string; content: string }>).slice(-10)
+    return (msgs as Array<{ role: string; content: string }>).slice(-20)
   })()
 
   const recentConvs: ConversationSummary[] = (recentConvsRes.data ?? []).map((r: Record<string,unknown>) => ({

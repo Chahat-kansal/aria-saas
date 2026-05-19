@@ -227,17 +227,21 @@ export default function AskAriaPage() {
     try {
       const res = await fetch(`/api/aria/ask/history?id=${id}&messages=true`)
       if (!res.ok) return
-      const data = await res.json() as { conversation?: { messages?: Array<{ role: string; content: string; ts?: string }> } }
-      const conv = data.conversation
-      if (!conv?.messages) return
-      const loaded: Message[] = conv.messages.map((m: { role: string; content: string; ts?: string }) => ({
+      const data = await res.json() as { conversation: { id: string; title: string; messages: Array<{ role: string; content: string }> } | null }
+      if (!data.conversation) return
+      const msgs = (data.conversation.messages ?? []).map((m, i) => ({
+        id: `hist-${i}`,
         role: m.role as 'user' | 'assistant',
-        content: m.content,
-        timestamp: new Date(m.ts ?? Date.now()),
+        content: m.role === 'assistant'
+          ? m.content.replace(/\n\n\[Context from data lookup:[\s\S]*?\]$/g, '').trim()
+          : m.content,
+        ts: new Date().toISOString(),
+        timestamp: new Date(),
       }))
-      setMessages(loaded)
-      setConversationId(id)
+      setMessages(msgs)
+      setConversationId(data.conversation.id)
       setShowHistory(false)
+      setTimeout(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, 100)
     } catch { /* non-fatal */ }
   }, [])
 
