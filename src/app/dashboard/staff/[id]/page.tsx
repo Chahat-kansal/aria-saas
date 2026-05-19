@@ -7,6 +7,7 @@ import type { StaffMember, StaffPayRate } from '@/types/staff'
 type Tab = 'overview' | 'visa' | 'pay' | 'bank' | 'skills' | 'documents' | 'leave'
 
 type MemberDetail = StaffMember & {
+  business_id?: string
   // Visa / right to work
   visa_type?: string | null
   visa_subclass?: string | null

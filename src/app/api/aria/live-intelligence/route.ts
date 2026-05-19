@@ -33,19 +33,56 @@ async function _POST(req: NextRequest) {
   })
 }
 
-async function _GET(req: NextRequest) {
+async function _GET(_req: NextRequest) {
   const supabase = createServerSupabaseClient()
   const { data: { user }, error: authError } = await supabase.auth.getUser()
   if (authError || !user) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
   const bid = await getBid(supabase, user.id)
-  if (!bid) return NextResponse.json({ narrative: null, reason: 'No business' })
+  if (!bid) return NextResponse.json({ live_summary: null, data_status: { freshness: 'empty' } })
 
-  const result = await ariaInvoke('ops_narrative', bid, { includeWeather: true })
+  const { supabaseAdmin } = await import('@/lib/supabase-admin')
+
+  // Get today's sales
+  const todayStart = new Date(); todayStart.setHours(0,0,0,0)
+  const { data: todaySales } = await supabaseAdmin
+    .from('pos_sales').select('total_amount, created_at')
+    .eq('business_id', bid).neq('status', 'voided')
+    .gte('created_at', todayStart.toISOString())
+
+  const todayRevenue = (todaySales ?? []).reduce((s, r) => s + (Number(r.total_amount) || 0), 0)
+  const lastSale = todaySales?.length ? todaySales[todaySales.length - 1].created_at : null
+
+  // Get fresh signals from cache
+  const { data: signals } = await supabaseAdmin
+    .from('aria_signal_cache')
+    .select('signal_type, payload')
+    .eq('business_id', bid)
+    .gt('expires_at', new Date().toISOString())
+    .order('created_at', { ascending: false })
+    .limit(5)
+
+  // Get latest aria action as narrative
+  const { data: latestAction } = await supabaseAdmin
+    .from('aria_actions')
+    .select('title, recommendation')
+    .eq('business_id', bid).eq('status', 'pending')
+    .order('created_at', { ascending: false })
+    .limit(1).maybeSingle()
+
+  const freshness = todaySales?.length ? 'live' : 'stale'
+
   return NextResponse.json({
-    narrative: result.recommendation?.description ?? null,
-    title: result.recommendation?.title ?? null,
-    insight: result.recommendation?.description ?? null,
-    reason: result.reason,
+    live_summary: {
+      today_revenue_cents: Math.round(todayRevenue * 100),
+      sale_count: todaySales?.length ?? 0,
+    },
+    data_status: {
+      freshness,
+      last_sale_at: lastSale,
+    },
+    narrative: (latestAction as Record<string,unknown> | null)?.recommendation ?? null,
+    title: (latestAction as Record<string,unknown> | null)?.title ?? null,
+    signals: signals ?? [],
   })
 }
 
