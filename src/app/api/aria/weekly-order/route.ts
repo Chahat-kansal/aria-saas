@@ -31,7 +31,8 @@ async function _POST(req: Request) {
   ] = await Promise.all([
     supabaseAdmin.from('pos_products')
       .select('id,name,barcode,sku,stock_quantity,cost_price,track_inventory,supplier_id,category_id,pos_categories(name)')
-      .eq('business_id', business_id).eq('is_active', true).eq('track_inventory', true),
+      .eq('business_id', business_id).eq('is_active', true)
+      .or('track_stock.eq.true,track_inventory.eq.true'),
     supabaseAdmin.from('pos_sale_items')
       .select('product_id,product_name,quantity,created_at')
       .eq('business_id', business_id)
@@ -64,14 +65,17 @@ async function _POST(req: Request) {
 
     const weeklyDemand = dailyVelocity * 7 * combinedUplift;
     const targetStock  = weeklyDemand * 2; // 2-week buffer
-    const suggestedQty = Math.max(0, Math.ceil(targetStock - stock));
+    // For zero-velocity low stock: suggest a minimum replenishment of 6 units
+    const suggestedQty = dailyVelocity === 0 && stock <= 5
+      ? Math.max(6, Math.ceil(6 - stock))
+      : Math.max(0, Math.ceil(targetStock - stock));
 
     if (suggestedQty <= 0 && daysOfStock > 14 && dailyVelocity === 0) continue;
 
     let reason = '';
     if (stock <= 0) { reason = 'Out of stock — reorder needed'; }
     else if (dailyVelocity === 0 && stock <= 5) { reason = `Low stock (${stock} units) — no recent sales data`; }
-    else if (dailyVelocity === 0) continue;
+    else if (dailyVelocity === 0 && stock > 14) continue;  // skip only if ample stock
     else if (daysOfStock < 3)  reason = `URGENT: ${Math.ceil(daysOfStock)} days stock remaining`;
     else if (daysOfStock < 7) reason = `Low: ${Math.ceil(daysOfStock)} days stock remaining`;
     else if (hotWeekend && ['Beer & Cider','Soft Drinks','Water','RTD','Beverages'].some(c => categoryName.includes(c)))

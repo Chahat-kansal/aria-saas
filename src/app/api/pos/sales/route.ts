@@ -167,11 +167,16 @@ async function _POST(req: Request) {
 
   const { error: itemsError } = await supabase.from('pos_sale_items').insert(
     items.map((i: any) => ({
-      sale_id: sale.id,
-      product_id: i.product_id,
-      quantity: i.quantity,
-      unit_price: i.unit_price,
-      discount_amount: i.discount_amount ?? 0,
+      sale_id:      sale.id,
+      business_id:  bid,
+      product_id:   i.product_id ?? null,
+      product_name: i.product_name ?? i.name ?? 'Unknown',
+      product_sku:  i.sku ?? null,
+      quantity:     i.quantity,
+      unit_price:   i.unit_price,
+      line_total:   Math.round((i.unit_price * i.quantity - (i.discount_amount ?? 0)) * 100) / 100,
+      discount_percent: i.discount_percent ?? 0,
+      cost_price:   i.cost_price ?? 0,
     }))
   );
 
