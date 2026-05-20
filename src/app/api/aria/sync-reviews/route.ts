@@ -5,6 +5,40 @@ import { NextResponse } from 'next/server'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 const PLACES_KEY = process.env.GOOGLE_PLACES_API_KEY
+const SERPER_KEY = process.env.SERPER_API_KEY
+
+// Fetch additional reviews via Serper.dev when Places API doesn't return all reviews
+async function fetchReviewsViaSerper(
+  businessName: string,
+  knownKeys: Set<string>,
+): Promise<Array<{ author_name: string; rating: number; text: string; time: number }>> {
+  if (!SERPER_KEY) return []
+  try {
+    const res = await fetch('https://google.serper.dev/search', {
+      method: 'POST',
+      headers: { 'X-API-KEY': SERPER_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ q: `"${businessName}" google reviews site:google.com`, num: 10, gl: 'au' }),
+      signal: AbortSignal.timeout(10_000),
+    })
+    if (!res.ok) return []
+    const data = await res.json() as {
+      reviews?: Array<{ name?: string; rating?: number; snippet?: string; date?: string }>
+    }
+    const reviews: Array<{ author_name: string; rating: number; text: string; time: number }> = []
+    for (const r of data.reviews ?? []) {
+      if (!r.snippet) continue
+      const approxTime = r.date ? Math.floor(new Date(r.date).getTime() / 1000) : Math.floor(Date.now() / 1000)
+      const key = `${r.name ?? 'anon'}_${approxTime}`
+      if (knownKeys.has(key)) continue
+      reviews.push({ author_name: r.name ?? 'Google Reviewer', rating: r.rating ?? 5, text: r.snippet, time: approxTime })
+    }
+    console.log(`[sync-reviews/serper] found ${reviews.length} additional reviews`)
+    return reviews
+  } catch (e) {
+    console.error('[sync-reviews/serper] failed:', e)
+    return []
+  }
+}
 
 async function _POST(req: Request) {
   const authHeader = req.headers.get('authorization') ?? ''
@@ -74,7 +108,19 @@ async function _POST(req: Request) {
   }
 
   const rawReviews: GoogleReview[] = [...allReviewsMap.values()]
-  console.log(`[sync-reviews] fetched ${rawReviews.length} unique reviews via multi-sort`)
+  const totalOnGoogle = place.user_ratings_total ?? 0
+  const placesCount = rawReviews.length
+  console.log(`[sync-reviews] fetched ${placesCount} unique reviews via multi-sort (${totalOnGoogle} total on Google)`)
+
+  // If Places API returned fewer reviews than Google reports, use Serper to get more
+  if (SERPER_KEY && totalOnGoogle > placesCount && place.name) {
+    const knownKeys = new Set(rawReviews.map(r => `${r.author_name ?? 'anon'}_${r.time}`))
+    const serperReviews = await fetchReviewsViaSerper(place.name, knownKeys)
+    for (const r of serperReviews) {
+      rawReviews.push({ author_name: r.author_name, rating: r.rating, text: r.text, time: r.time })
+    }
+    console.log(`[sync-reviews] total after Serper: ${rawReviews.length}`)
+  }
 
   // Update business rating stats
   await supabase.from('businesses').update({
