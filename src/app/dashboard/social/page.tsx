@@ -50,6 +50,13 @@ export default function SocialPage() {
   const [voiceText, setVoiceText] = useState('');
   const [voiceGenerating, setVoiceGenerating] = useState(false);
   const [voiceUrls, setVoiceUrls] = useState<Record<string, string>>({});
+  const [activeTab, setActiveTab] = useState<'posts' | 'library' | 'calendar'>('posts');
+  const [mediaLibrary, setMediaLibrary] = useState<Array<{ id: string; url: string; filename: string; aria_description: string | null; tags: string[]; used_in_posts: number; uploaded_at: string }>>([]);
+  const [uploadingMedia, setUploadingMedia] = useState(false);
+  const [generatingCalendar, setGeneratingCalendar] = useState(false);
+  const [calendarMonth, setCalendarMonth] = useState(() => new Date().toISOString().slice(0, 7));
+  const [postsPerWeek, setPostsPerWeek] = useState(3);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const urlSuccess = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('connected') : null;
   const urlError   = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('error') : null;
@@ -87,6 +94,56 @@ export default function SocialPage() {
     if (prefsRes.preferences) setPrefs(p => ({ ...p, ...prefsRes.preferences }));
     if (bizRes?.industry) setIndustry(bizRes.industry);
     setLoadingPosts(false);
+  }
+
+  async function loadMedia() {
+    if (!bid) return;
+    const r = await fetch(`/api/social/media?business_id=${bid}`);
+    const d = await r.json();
+    setMediaLibrary(d.media ?? []);
+  }
+
+  useEffect(() => { if (bid && activeTab === 'library') loadMedia(); }, [bid, activeTab]);
+
+  async function uploadMedia(files: FileList | null) {
+    if (!files || !bid) return;
+    setUploadingMedia(true);
+    for (const file of Array.from(files)) {
+      const form = new FormData();
+      form.append('file', file);
+      form.append('business_id', bid);
+      await fetch('/api/social/media', { method: 'POST', body: form });
+    }
+    await loadMedia();
+    setUploadingMedia(false);
+  }
+
+  async function deleteMedia(id: string) {
+    if (!confirm('Remove this photo from your library?')) return;
+    await fetch(`/api/social/media?id=${id}`, { method: 'DELETE' });
+    setMediaLibrary(prev => prev.filter(m => m.id !== id));
+  }
+
+  async function generateCalendar() {
+    if (!bid) return;
+    setGeneratingCalendar(true);
+    const r = await fetch('/api/social/calendar', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ business_id: bid, month: calendarMonth, platforms: ['instagram', 'facebook', 'google_business'], posts_per_week: postsPerWeek }),
+    });
+    const d = await r.json();
+    if (d.posts?.length) {
+      const cleanedPosts = d.posts.map((p: any) => ({
+        ...p,
+        image_url: p.image_url?.includes('fbcdn.net') ? null : p.image_url
+      }));
+      setPosts(prev => [...cleanedPosts, ...prev.filter(p => p.content_calendar_month !== calendarMonth)]);
+      setActiveTab('posts');
+      alert(`✅ Generated ${d.posts.length} posts for ${calendarMonth}! ${d.has_media ? `Used ${d.media_count} of your photos.` : 'Upload your own photos for better results.'}`);
+    } else {
+      alert(d.error || 'Could not generate calendar. Try again.');
+    }
+    setGeneratingCalendar(false);
   }
 
   async function generate() {
@@ -216,6 +273,122 @@ export default function SocialPage() {
 
       {urlError && <div style={{ background: 'rgba(239,68,68,0.08)', border: `1px solid rgba(239,68,68,0.25)`, borderRadius: 12, padding: '12px 16px', marginBottom: 20, fontSize: 13, color: C.red }}>⚠️ {urlError.replace(/\+/g, ' ')}</div>}
       {urlSuccess && <div style={{ background: 'rgba(34,197,94,0.06)', border: `1px solid rgba(34,197,94,0.2)`, borderRadius: 12, padding: '12px 16px', marginBottom: 20, fontSize: 13, color: C.green }}>✓ {urlSuccess} connected successfully</div>}
+
+      {/* Main tabs */}
+      <div style={{ display: 'flex', gap: 4, marginBottom: 24, borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: 0 }}>
+        {([['posts', '📝 Posts'], ['library', '🖼️ Photo Library'], ['calendar', '📅 Monthly Calendar']] as const).map(([t, label]) => (
+          <button key={t} onClick={() => setActiveTab(t as any)}
+            style={{ padding: '10px 18px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: activeTab === t ? 700 : 400, color: activeTab === t ? '#8B5CF6' : C.muted, borderBottom: `2px solid ${activeTab === t ? '#8B5CF6' : 'transparent'}`, marginBottom: -1 }}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* PHOTO LIBRARY TAB */}
+      {activeTab === 'library' && (
+        <div>
+          <div style={{ marginBottom: 20, padding: '16px 20px', background: 'rgba(139,92,246,0.06)', borderRadius: 14, border: '1px solid rgba(139,92,246,0.15)' }}>
+            <p style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>📸 Your Business Photo Library</p>
+            <p style={{ fontSize: 13, color: C.muted, marginBottom: 12 }}>Upload your own photos — Aria will use them when generating posts and the monthly calendar. Your photos = authentic content that customers trust.</p>
+            <input ref={fileInputRef} type="file" multiple accept="image/*,video/*" style={{ display: 'none' }} onChange={e => uploadMedia(e.target.files)} />
+            <button onClick={() => fileInputRef.current?.click()} disabled={uploadingMedia}
+              style={{ padding: '10px 20px', background: '#8B5CF6', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, cursor: 'pointer', fontSize: 14 }}>
+              {uploadingMedia ? '⏳ Uploading & analysing…' : '+ Upload photos / videos'}
+            </button>
+            <span style={{ fontSize: 12, color: C.dim, marginLeft: 12 }}>JPG, PNG, MP4 — up to 20MB each</span>
+          </div>
+
+          {mediaLibrary.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '60px 0', color: C.muted }}>
+              <div style={{ fontSize: 48, marginBottom: 12 }}>📷</div>
+              <p style={{ fontSize: 16, fontWeight: 600, marginBottom: 6 }}>No photos yet</p>
+              <p style={{ fontSize: 13 }}>Upload your food, drinks, and space photos. Aria will describe them and use them in your posts.</p>
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12 }}>
+              {mediaLibrary.map(m => (
+                <div key={m.id} style={{ background: C.card, borderRadius: 12, overflow: 'hidden', border: '1px solid rgba(255,255,255,0.06)' }}>
+                  <div style={{ aspectRatio: '1', position: 'relative', overflow: 'hidden' }}>
+                    <img src={m.url} alt={m.filename} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    <div style={{ position: 'absolute', top: 6, right: 6, display: 'flex', gap: 4 }}>
+                      <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 6, background: 'rgba(0,0,0,0.7)', color: '#fff' }}>
+                        Used {m.used_in_posts}×
+                      </span>
+                    </div>
+                  </div>
+                  <div style={{ padding: '10px 12px' }}>
+                    <p style={{ fontSize: 11, color: C.muted, marginBottom: 6, lineHeight: 1.4 }}>{m.aria_description || m.filename}</p>
+                    {m.tags?.length > 0 && (
+                      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 6 }}>
+                        {m.tags.map(t => <span key={t} style={{ fontSize: 10, padding: '1px 6px', borderRadius: 99, background: 'rgba(139,92,246,0.15)', color: '#8B5CF6' }}>{t}</span>)}
+                      </div>
+                    )}
+                    <button onClick={() => deleteMedia(m.id)} style={{ fontSize: 11, color: C.red, background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}>Remove</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* MONTHLY CALENDAR TAB */}
+      {activeTab === 'calendar' && (
+        <div>
+          <div style={{ marginBottom: 20, padding: '20px 24px', background: 'rgba(139,92,246,0.06)', borderRadius: 14, border: '1px solid rgba(139,92,246,0.15)' }}>
+            <p style={{ fontWeight: 700, fontSize: 16, marginBottom: 4 }}>✨ Generate a full month of posts</p>
+            <p style={{ fontSize: 13, color: C.muted, marginBottom: 16 }}>
+              Aria plans your entire month using your sales data, upcoming events, and {mediaLibrary.length > 0 ? `your ${mediaLibrary.length} uploaded photos` : 'your business info'}. Each post is ready to approve and schedule.
+            </p>
+
+            {mediaLibrary.length === 0 && (
+              <div style={{ marginBottom: 16, padding: '10px 14px', background: 'rgba(245,158,11,0.08)', borderRadius: 10, border: '1px solid rgba(245,158,11,0.2)', fontSize: 13, color: '#F59E0B' }}>
+                💡 <strong>Tip:</strong> Upload your own photos in the Photo Library tab first — Aria will use them in your posts for authentic, branded content.
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+              <div>
+                <label style={{ fontSize: 12, color: C.muted, display: 'block', marginBottom: 4 }}>Month</label>
+                <input type="month" value={calendarMonth} onChange={e => setCalendarMonth(e.target.value)}
+                  style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.05)', color: C.text, fontSize: 14 }} />
+              </div>
+              <div>
+                <label style={{ fontSize: 12, color: C.muted, display: 'block', marginBottom: 4 }}>Posts per week</label>
+                <select value={postsPerWeek} onChange={e => setPostsPerWeek(Number(e.target.value))}
+                  style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.1)', background: '#1a1a2e', color: C.text, fontSize: 14 }}>
+                  <option value={2}>2x/week</option>
+                  <option value={3}>3x/week</option>
+                  <option value={4}>4x/week</option>
+                  <option value={5}>5x/week (daily)</option>
+                </select>
+              </div>
+              <button onClick={generateCalendar} disabled={generatingCalendar}
+                style={{ padding: '10px 24px', background: generatingCalendar ? 'rgba(139,92,246,0.5)' : '#8B5CF6', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, cursor: 'pointer', fontSize: 14 }}>
+                {generatingCalendar ? '✨ Planning your month…' : '✨ Generate month of posts'}
+              </button>
+            </div>
+
+            <div style={{ marginTop: 16, display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10 }}>
+              {[
+                { icon: '📸', title: 'Uses your photos', desc: mediaLibrary.length > 0 ? `${mediaLibrary.length} photos in library` : 'Upload photos for best results' },
+                { icon: '📊', title: 'Based on your sales', desc: 'Posts about your top products' },
+                { icon: '🗓️', title: 'Timed for events', desc: 'Holidays & local events factored in' },
+              ].map(({ icon, title, desc }) => (
+                <div key={title} style={{ padding: '12px 14px', background: 'rgba(255,255,255,0.03)', borderRadius: 10 }}>
+                  <p style={{ fontSize: 16, marginBottom: 4 }}>{icon}</p>
+                  <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 2 }}>{title}</p>
+                  <p style={{ fontSize: 12, color: C.muted }}>{desc}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* POSTS TAB */}
+      {activeTab === 'posts' && (
+      <div>
 
       {/* Creative Tools Status Bar */}
       {providers && (
@@ -573,6 +746,8 @@ export default function SocialPage() {
           </div>
         )}
       </section>
+    </div>
+      )}
     </div>
   );
 }
