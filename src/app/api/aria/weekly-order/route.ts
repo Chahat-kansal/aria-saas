@@ -2,6 +2,7 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 import { createServerSupabaseClient } from '@/lib/supabase-server';
+import { supabaseAdmin } from '@/lib/supabase-admin';
 import { getWeatherForecast, getUpcomingHolidays, getWeatherUplift } from '@/lib/external-apis';
 import { trackUsage } from '@/lib/track-usage';
 import { NextResponse } from 'next/server';
@@ -28,14 +29,14 @@ async function _POST(req: Request) {
     { data: suppliers },
     weather,
   ] = await Promise.all([
-    supabase.from('pos_products')
+    supabaseAdmin.from('pos_products')
       .select('id,name,barcode,sku,stock_quantity,cost_price,track_inventory,supplier_id,category_id,pos_categories(name)')
       .eq('business_id', business_id).eq('is_active', true).eq('track_inventory', true),
-    supabase.from('pos_sale_items')
+    supabaseAdmin.from('pos_sale_items')
       .select('product_id,product_name,quantity,created_at')
       .eq('business_id', business_id)
       .gte('created_at', new Date(Date.now() - 30 * 86400000).toISOString()),
-    supabase.from('pos_suppliers').select('id,name,email').eq('business_id', business_id).order('name'),
+    supabaseAdmin.from('pos_suppliers').select('id,name,email').eq('business_id', business_id).order('name'),
     getWeatherForecast(biz.city || 'Melbourne').catch(() => []),
   ]);
 

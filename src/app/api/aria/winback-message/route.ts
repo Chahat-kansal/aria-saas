@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 20;
 
 import { createServerSupabaseClient } from '@/lib/supabase-server';
+import { supabaseAdmin } from '@/lib/supabase-admin';
 import Anthropic from '@anthropic-ai/sdk';
 import { NextResponse } from 'next/server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
@@ -26,14 +27,13 @@ async function _POST(req: Request) {
 
   // Get top 3 products for context
   const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString();
-  const { data: topSales } = await supabase
-    .from('pos_sale_items')
-    .select('product_name, quantity')
-    .gte('created_at', thirtyDaysAgo)
-    .in('sale_id',
-      (await supabase.from('pos_sales').select('id').eq('business_id', business_id).gte('created_at', thirtyDaysAgo)).data?.map((s: any) => s.id) ?? []
-    )
-    .limit(50);
+  const { data: recentSales } = await supabaseAdmin
+    .from('pos_sales').select('id')
+    .eq('business_id', business_id).gte('created_at', thirtyDaysAgo).neq('status', 'voided').limit(100)
+  const saleIds = (recentSales ?? []).map(s => s.id)
+  const { data: topSales } = saleIds.length > 0
+    ? await supabaseAdmin.from('pos_sale_items').select('product_name, quantity').in('sale_id', saleIds).limit(50)
+    : { data: [] }
 
   const productCounts: Record<string, number> = {};
   for (const si of topSales ?? []) {

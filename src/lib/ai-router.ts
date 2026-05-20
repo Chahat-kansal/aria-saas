@@ -66,16 +66,16 @@ const SYSTEM_PROMPTS: Record<AiTask, string> = {
 }
 
 // ── Provider routing ───────────────────────────────────────────────────
-const TASK_PROVIDERS: Record<AiTask, 'claude' | 'gemini' | 'openai'> = {
+const TASK_PROVIDERS: Record<AiTask, 'claude' | 'gemini' | 'openai' | 'haiku'> = {
   // Claude Sonnet — complex reasoning, user-facing chat
   chat:         'claude',
   profit_leaks: 'claude',
   churn:        'claude',
   quote:        'claude',
   compliance:   'claude',
-  // Gemini Flash — content generation, free tier 1500 req/day
-  briefing:     'gemini',
-  social_post:  'gemini',
+  // Haiku — fast content generation (Gemini removed — no GOOGLE_AI_API_KEY in prod)
+  briefing:     'haiku',
+  social_post:  'haiku',
   review_reply: 'gemini',
   competitor:   'gemini',
   receipt_scan: 'gemini',
@@ -131,7 +131,7 @@ async function callHaiku(task: AiTask, userPrompt: string, maxTokens: number): P
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
   const msg = await anthropic.messages.create({
     model: 'claude-haiku-4-5-20251001',
-    max_tokens: Math.min(maxTokens, 400),
+    max_tokens: maxTokens,
     system: SYSTEM_PROMPTS[task],
     messages: [{ role: 'user', content: userPrompt }],
   })

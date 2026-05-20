@@ -298,11 +298,24 @@ async function _POST(req: NextRequest) {
   let recommendations: unknown[] = [];
   try {
     const { ariaBriefing } = await import('@/lib/ai-router')
-    const raw = await ariaBriefing({
+    let raw = await ariaBriefing({
       businessName: business.name as string,
       industry: business.industry as string,
       context,
     })
+
+    if (!raw || raw.trim().length < 20) {
+      const Anthropic = (await import('@anthropic-ai/sdk')).default
+      const _client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+      const _resp = await _client.messages.create({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 1200,
+        system: `You are Aria, a business intelligence briefing engine for Australian small businesses. Return ONLY a valid JSON array with NO other text. Each item must have: id (slug string), priority ("high"|"medium"|"low"), category ("customers"|"revenue"|"stock"|"reviews"|"marketing"|"compliance"), title (max 8 words), description (max 25 words with real numbers from the data), action_label (max 4 words), action_type ("winback"|"review_reply"|"promotion"|"reorder"|"campaign"|"navigate"|"dismiss"), action_payload ({}), metric (key number as string e.g. "A$2,340"), metric_label (e.g. "this week"), trend ("up"|"down"|"flat"|null).`,
+        messages: [{ role: 'user', content: `Generate daily briefing for ${business.name as string} (${business.industry as string ?? 'retail'}, Australia).\n\nKey business data:\n${JSON.stringify(context).slice(0, 4000)}\n\nReturn a JSON array of 3-5 actionable briefing items based on this real data. No markdown. No explanation. JSON only.` }],
+      })
+      raw = _resp.content[0].type === 'text' ? _resp.content[0].text : ''
+    }
+
     recommendations = parseLLMJsonOr<unknown[]>(raw, [], 'daily-briefing', 'array')
   } catch { /* return empty on total failure */ }
 

@@ -2,6 +2,7 @@ import * as Sentry from '@sentry/nextjs';
 import Anthropic from '@anthropic-ai/sdk';
 import { parseLLMJsonOr } from '@/lib/ai-json';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
+import { supabaseAdmin } from '@/lib/supabase-admin';
 import { getBusinessItems, getBusinessSales } from '@/lib/business-data';
 import { NextResponse } from 'next/server';
 import { ARIA_VOICE } from '@/lib/aria-voice-guide';
@@ -36,7 +37,7 @@ async function _POST(req: Request) {
 
   // Cache check
   if (!force_refresh) {
-    const { data: cached } = await supabase.from('reorder_forecasts')
+    const { data: cached } = await supabaseAdmin.from('reorder_forecasts')
       .select('forecast, generated_at').eq('business_id', business_id).eq('date', today).maybeSingle();
     if (cached && cached.generated_at > fourHoursAgo) {
       return NextResponse.json({ ...cached.forecast, cached: true });
@@ -181,7 +182,7 @@ Return: {"summary":"2-3 sentences with specific items/quantities","urgent_items"
     generated_at: new Date().toISOString(),
   };
 
-  await supabase.from('reorder_forecasts').upsert({
+  await supabaseAdmin.from('reorder_forecasts').upsert({
     business_id, date: today, forecast, generated_at: forecast.generated_at,
   }, { onConflict: 'business_id,date' });
 

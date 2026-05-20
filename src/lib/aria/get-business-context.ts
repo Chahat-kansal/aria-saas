@@ -1,8 +1,10 @@
 import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getWeatherContext } from './get-weather-context'
 
 export async function getBusinessContext(businessId: string): Promise<string> {
   const supabase = createServerSupabaseClient()
+  const db = supabaseAdmin
   const now = new Date()
 
   const d7  = new Date(now.getTime() - 7  * 86400000).toISOString()
@@ -22,33 +24,33 @@ export async function getBusinessContext(businessId: string): Promise<string> {
     saleItems7,
     customers, reviews, outcomes, lowStock,
   ] = await Promise.allSettled([
-    supabase.from('businesses').select('*').eq('id', businessId).single(),
-    supabase.from('pos_sales').select('total_amount, created_at')
+    db.from('businesses').select('*').eq('id', businessId).single(),
+    db.from('pos_sales').select('total_amount, created_at')
       .eq('business_id', businessId).gte('created_at', d7).neq('status', 'voided'),
-    supabase.from('pos_sales').select('total_amount')
+    db.from('pos_sales').select('total_amount')
       .eq('business_id', businessId).gte('created_at', d30).neq('status', 'voided'),
-    supabase.from('pos_sales').select('total_amount')
+    db.from('pos_sales').select('total_amount')
       .eq('business_id', businessId).gte('created_at', d90).neq('status', 'voided'),
-    supabase.from('pos_sales').select('total_amount')
+    db.from('pos_sales').select('total_amount')
       .eq('business_id', businessId)
       .gte('created_at', ly7start).lte('created_at', ly7end).neq('status', 'voided'),
-    supabase.from('pos_sales').select('total_amount')
+    db.from('pos_sales').select('total_amount')
       .eq('business_id', businessId)
       .gte('created_at', ly30start).lte('created_at', ly30end).neq('status', 'voided'),
     // SKU aggregation from sale_items
-    supabase.from('pos_sale_items').select('product_name, quantity, unit_price')
+    db.from('pos_sale_items').select('product_name, quantity, unit_price')
       .in('sale_id',
-        (await supabase.from('pos_sales').select('id')
+        (await db.from('pos_sales').select('id')
           .eq('business_id', businessId).gte('created_at', d7).neq('status', 'voided')
         ).data?.map((s: any) => s.id) ?? []
       ),
-    supabase.from('customers').select('id, name, total_spent, last_visit, visit_count')
+    db.from('customers').select('id, name, total_spent, last_visit, visit_count')
       .eq('business_id', businessId).order('total_spent', { ascending: false }).limit(50),
-    supabase.from('reviews').select('rating, text, created_at')
+    db.from('reviews').select('rating, text, created_at')
       .eq('business_id', businessId).order('created_at', { ascending: false }).limit(10),
-    supabase.from('aria_outcomes').select('recommendation_type, recommendation_detail, recommended_at')
+    db.from('aria_outcomes').select('recommendation_type, recommendation_detail, recommended_at')
       .eq('business_id', businessId).order('recommended_at', { ascending: false }).limit(5),
-    supabase.from('pos_products').select('name, stock_quantity, reorder_point')
+    db.from('pos_products').select('name, stock_quantity, reorder_point')
       .eq('business_id', businessId).eq('is_active', true)
       .filter('stock_quantity', 'lte', 10).limit(10),
   ])

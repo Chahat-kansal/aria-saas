@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 
 import * as Sentry from '@sentry/nextjs';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
+import { supabaseAdmin } from '@/lib/supabase-admin';
 import { parseLLMJsonOr } from '@/lib/ai-json';
 import Anthropic from '@anthropic-ai/sdk';
 import { NextResponse } from 'next/server';
@@ -34,7 +35,7 @@ async function _POST(req: Request) {
     .maybeSingle();
   if (!biz) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-  const { data: item } = await supabase
+  const { data: item } = await supabaseAdmin
     .from('missed_demand')
     .select('*')
     .eq('id', missed_demand_id)
@@ -44,7 +45,7 @@ async function _POST(req: Request) {
 
   // Look up global product for context
   const { data: globalProduct } = item.product_barcode
-    ? await supabase.from('global_products').select('name, brand, category, suggested_price_cents').eq('barcode', item.product_barcode as string).maybeSingle()
+    ? await supabaseAdmin.from('global_products').select('name, brand, category, suggested_price_cents').eq('barcode', item.product_barcode as string).maybeSingle()
     : { data: null };
 
   const bizData = biz as { id: string; name: string; industry: string | null; city: string | null };

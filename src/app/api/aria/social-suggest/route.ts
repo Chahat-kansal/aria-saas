@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic';
 import * as Sentry from '@sentry/nextjs';
 import { parseLLMJsonOr } from '@/lib/ai-json';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
+import { supabaseAdmin } from '@/lib/supabase-admin';
 import { createClient } from '@supabase/supabase-js';
 import { getWeatherForecast, getUpcomingHolidays } from '@/lib/external-apis';
 import { trackUsage } from '@/lib/track-usage';
@@ -79,9 +80,9 @@ async function _POST(req: Request) {
     { data: promotions },
   ] = await Promise.all([
     supabase.from('businesses').select('id,name,industry,city').eq('id', business_id).eq('user_id', user.id).maybeSingle(),
-    supabase.from('pos_sale_items').select('product_name,quantity').eq('business_id', business_id).gte('created_at', new Date(Date.now() - 7 * 86400000).toISOString()),
-    supabase.from('social_preferences').select('*').eq('business_id', business_id).maybeSingle(),
-    supabase.from('pos_promotions').select('name,discount_type,discount_value').eq('business_id', business_id).eq('is_active', true),
+    supabaseAdmin.from('pos_sale_items').select('product_name,quantity').eq('business_id', business_id).gte('created_at', new Date(Date.now() - 7 * 86400000).toISOString()),
+    supabaseAdmin.from('social_preferences').select('*').eq('business_id', business_id).maybeSingle(),
+    supabaseAdmin.from('pos_promotions').select('name,discount_type,discount_value').eq('business_id', business_id).eq('is_active', true),
   ]);
 
   if (!biz) return NextResponse.json({ error: 'Business not found' }, { status: 404 });
