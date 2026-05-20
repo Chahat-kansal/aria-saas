@@ -34,9 +34,11 @@ async function _POST(req: Request) {
   const bid = await getBid(supabase, user.id)
   if (!bid) return NextResponse.json({ error: 'No business' }, { status: 404 })
   const body = await req.json()
+  const tname = String(body.template_name ?? body.name ?? 'Default')
   const payload: Record<string, unknown> = {
     business_id: bid,
-    template_name: String(body.template_name ?? 'Default'),
+    name: tname,           // required NOT NULL in original schema
+    template_name: tname,  // used by canvas editor
     width_mm: [58, 76, 80, 112].includes(Number(body.width_mm)) ? Number(body.width_mm) : 80,
     header_text: body.header_text ?? null,
     footer_text: body.footer_text ?? null,
@@ -45,6 +47,10 @@ async function _POST(req: Request) {
     show_qr_code: body.show_qr_code ?? false,
     show_loyalty_balance: body.show_loyalty_balance ?? false,
     paper_cut_mode: ['full', 'partial', 'none'].includes(body.paper_cut_mode) ? body.paper_cut_mode : 'partial',
+    type: body.type ?? 'standard',
+    for_type: body.for_type ?? 'sale',
+    is_default: body.is_default ?? false,
+    elements: body.elements ?? [],
   }
   if (body.outlet_id) payload.outlet_id = body.outlet_id
   const { data, error } = await supabase.from('pos_receipt_templates').insert(payload).select().single()

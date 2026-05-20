@@ -84,6 +84,7 @@ async function _POST(req: Request, { params }: Params) {
         }
       )
       const containerData = await containerRes.json()
+      console.log('[social/publish] IG container response:', JSON.stringify(containerData).slice(0, 300))
       if (!containerData.id) {
         throw new Error(JSON.stringify(containerData.error ?? containerData))
       }
@@ -129,6 +130,9 @@ async function _POST(req: Request, { params }: Params) {
           }
         )
         postData = await photoRes.json()
+        if (!postData.id && !postData.post_id) {
+          console.error('[social/publish] Facebook photo error:', JSON.stringify(postData))
+        }
       } else {
         const postRes = await fetch(
           `https://graph.facebook.com/v25.0/${pageId}/feed`,

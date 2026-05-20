@@ -2,7 +2,7 @@
 import { inp, lbl, field, Toggle } from '../shared'
 
 interface Props {
-  data: { name: string; sku: string; description: string; is_active: boolean; show_online: boolean; is_age_restricted: boolean }
+  data: { name: string; sku: string; description: string; is_active: boolean; show_online: boolean; is_age_restricted: boolean; is_weight_based?: boolean; price_per_kg?: number }
   onChange: (data: Props['data']) => void
 }
 

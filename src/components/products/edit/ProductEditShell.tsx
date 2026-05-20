@@ -185,7 +185,7 @@ export default function ProductEditShell(props: Props) {
       <div style={{ flex: 1, overflowY: 'auto', padding: '28px 28px 80px' }}>
         {activeTab === 'general' && (
           <>
-            <GeneralTab data={general} onChange={setGeneral} />
+            <GeneralTab data={general} onChange={(d) => setGeneral(d as typeof general)} />
             <div style={{ marginTop: 28 }}>
               <IndustryProductForm form={industryDraft} setForm={setIndustryDraft} />
             </div>
