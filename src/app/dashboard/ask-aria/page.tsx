@@ -230,17 +230,38 @@ export default function AskAriaPage() {
     try {
       const res = await fetch(`/api/aria/ask/history?id=${id}&messages=true`)
       if (!res.ok) return
-      const data = await res.json() as { conversation: { id: string; title: string; messages: Array<{ role: string; content: string }> } | null }
+      const data = await res.json() as { conversation: { id: string; title: string; messages: Array<{ role: string; content: string; downloads?: Array<{ filename: string; download_url: string; rows: number; format: string }> }> } | null }
       if (!data.conversation) return
-      const msgs = (data.conversation.messages ?? []).map((m, i) => ({
-        id: `hist-${i}`,
-        role: m.role as 'user' | 'assistant',
-        content: m.role === 'assistant'
-          ? m.content.replace(/\n\n\[Context from data lookup:[\s\S]*?\]$/g, '').trim()
-          : m.content,
-        ts: new Date().toISOString(),
-        timestamp: new Date(),
-      }))
+      const msgs = (data.conversation.messages ?? []).map((m, i) => {
+        // Use stored downloads if available, otherwise extract from markdown
+        let downloads: Array<{ filename: string; download_url: string; rows: number; format: string }> = m.downloads ?? []
+        if (downloads.length === 0 && m.role === 'assistant') {
+          // Fallback: extract supabase image URLs from markdown
+          const imgMatches = m.content.matchAll(/!\[[^\]]*\]\((https?:\/\/[^)]+supabase[^)]+\.(?:png|jpg|jpeg|webp))\)/g)
+          for (const match of imgMatches) {
+            const url = match[1]
+            const filename = url.split('/').pop()?.split('?')[0] ?? 'image.png'
+            const ext = filename.split('.').pop() ?? 'png'
+            downloads.push({ filename, download_url: url, rows: 0, format: ext })
+          }
+        }
+        const cleanContent = m.role === 'assistant'
+          ? m.content
+            .replace(/\n\n\[Context from data lookup:[\s\S]*?\]$/g, '')
+            .replace(/!\[[^\]]*\]\(https?:\/\/[^)]*supabase[^)]+\)/g, '')
+            .replace(/\[([^\]]+)\]\(https?:\/\/[^)]*supabase[^)]+\)/g, '')
+            .replace(/https?:\/\/[^\s]*supabase[^\s]*/g, '')
+            .replace(/\n\s*\n\s*\n/g, '\n\n').trim()
+          : m.content
+        return {
+          id: `hist-${i}`,
+          role: m.role as 'user' | 'assistant',
+          content: cleanContent,
+          downloads: downloads.length > 0 ? downloads : undefined,
+          ts: new Date().toISOString(),
+          timestamp: new Date(),
+        }
+      })
       setMessages(msgs)
       setConversationId(data.conversation.id)
       setShowHistory(false)

@@ -25,6 +25,7 @@ interface CallParams {
   agentKey: AgentKey
   role: AgentRole
   timeoutMs?: number
+  toolChoice?: { type: 'tool'; name: string } | { type: 'auto' }
 }
 
 async function withBackoff<T>(fn: () => Promise<T>, maxAttempts = 3): Promise<T> {
@@ -124,6 +125,7 @@ interface ToolLoopParams {
   agentKey: AgentKey
   role: AgentRole
   timeoutMs?: number
+  toolChoice?: { type: 'tool'; name: string } | { type: 'auto' }
 }
 
 export interface ToolLoopResult {
@@ -164,6 +166,7 @@ export async function callAnthropicWithTools(params: ToolLoopParams): Promise<To
         }],
         tools: params.tools,
         messages,
+        ...(params.toolChoice ? { tool_choice: params.toolChoice } : {}),
       }
       if (params.thinking?.enabled) {
         const budget = Math.max(1024, params.thinking.budget_tokens ?? 2000)

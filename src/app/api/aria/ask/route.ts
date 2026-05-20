@@ -45,11 +45,12 @@ async function upsertConversation(
   userMsg: string,
   assistantMsg: string,
   intentType: string,
+  downloads?: Array<{ filename: string; download_url: string; rows: number; format: string }>,
 ): Promise<string> {
   console.log('[upsertConversation] called for biz:', businessId, 'user:', userId, 'existing:', conversationId)
   const pair = [
     { role: 'user', content: userMsg, ts: new Date().toISOString() },
-    { role: 'assistant', content: assistantMsg, ts: new Date().toISOString() },
+    { role: 'assistant', content: assistantMsg, ts: new Date().toISOString(), downloads: downloads ?? [] },
   ]
 
   if (conversationId) {
@@ -463,6 +464,11 @@ ${ARTIFACT_INSTRUCTIONS}`
     { type: 'web_search_20250305', name: 'web_search', max_uses: 5 } as any,
   ]
 
+  // Force tool_choice for image generation requests — prevents hallucinated responses
+  const imageToolChoice = isImageRequest
+    ? { type: 'tool' as const, name: 'generate_image' }
+    : undefined
+
   const toolResult = await callAnthropicWithTools({
     model,
     systemPrompt,
@@ -477,6 +483,7 @@ ${ARTIFACT_INSTRUCTIONS}`
     businessId: bid,
     agentKey: 'ask_aria',
     role: 'chat',
+    toolChoice: imageToolChoice,
   })
 
   if (useThinking) {
@@ -568,6 +575,13 @@ ${ARTIFACT_INSTRUCTIONS}`
         format: String(r.format ?? 'xlsx'),
       })
     }
+  }
+
+  // Persist downloads in conversation so they survive page reload
+  if (savedConvId && downloads.length > 0) {
+    try {
+      await upsertConversation(bid, user.id, savedConvId, message, historyContent, intent.type, downloads)
+    } catch { /* non-fatal */ }
   }
 
   return NextResponse.json({
