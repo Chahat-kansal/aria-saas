@@ -258,8 +258,8 @@ EXPORT TOOLS (create downloadable files):
 • generate_report: create Excel (.xlsx) or CSV file. ALWAYS use this when user says "in excel", "export", "download", "as a file", "create a report"
 
 WEB TOOLS (external information):
-• web_search: search the live internet (current prices, news, regulations, competitor info, ATO updates) — use whenever info is NOT in our database
-• fetch_url: read full content of a specific URL
+• web_search: PREFERRED for: live retail prices (Dan Murphy's, Coles, Woolworths, BWS), news, ATO updates, competitor info, regulations. Use this first.
+• fetch_url: only when web_search returns a SPECIFIC URL you need full content from. Big retailers (Dan Murphy's, Coles, Amazon) often block fetch_url — use web_search first which uses Google's indexed cache.
 
 ACTION TOOLS (do things on behalf of user — confirm first):
 • send_email_now: send email via Resend

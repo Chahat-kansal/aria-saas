@@ -435,14 +435,14 @@ export default function AskAriaPage() {
 
   if (loading) {
     return (
-      <div className="flex h-full items-center justify-center" style={{ background: '#0d0d14' }}>
+      <div className="flex h-full min-h-[calc(100vh-60px)] items-center justify-center" style={{ background: '#0d0d14' }}>
         <div className="w-6 h-6 rounded-full border-2 border-[#7FB897] border-t-transparent animate-spin" />
       </div>
     )
   }
 
   return (
-    <div className="flex h-full" style={{ background: '#0d0d14' }}>
+    <div className="flex" style={{ background: '#0d0d14', height: 'calc(100vh - 60px)' }}>
       {/* History sidebar */}
       {showHistory && (
         <div className="w-64 flex-shrink-0 flex flex-col border-r" style={{ borderColor: 'rgba(255,255,255,0.06)', background: '#13131a' }}>
