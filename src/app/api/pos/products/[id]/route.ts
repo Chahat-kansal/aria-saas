@@ -25,7 +25,7 @@ async function _GET(_req: NextRequest, { params }: Params) {
 
   const { data: product } = await supabase
     .from('pos_products')
-    .select('id,name,sku,barcode,description,price,cost_price,tax_rate,stock_quantity,low_stock_threshold,track_stock,is_active,image_url,category_id,supplier_id,case_quantity,is_age_restricted,container_type,brand_id,family_id,loyalty_earn_rate,show_online')
+    .select('id,name,sku,barcode,description,price,cost_price,tax_rate,stock_quantity,low_stock_threshold,track_stock,is_active,image_url,category_id,supplier_id,case_quantity,is_age_restricted,container_type,brand_id,family_id,loyalty_earn_rate,show_online,is_weight_based,price_per_kg')
     .eq('id', id).eq('business_id', bid).maybeSingle()
 
   if (!product) return NextResponse.json({ error: 'not_found' }, { status: 404 })
@@ -266,6 +266,7 @@ async function _PATCH(req: NextRequest, { params }: Params) {
     'costing_method','purchase_uom','purchase_uom_qty','sell_uom','source',
     'loyalty_earn_rate','loyalty_points_override','reorder_point','reorder_qty',
     'featured','sort_order','serial_tracked','quality_hold','stocktake_frozen',
+    'is_weight_based','price_per_kg',
   ]
   const LEGACY_UUID_COLS = new Set(['category_id', 'supplier_id', 'brand_id', 'family_id'])
   const updatePayload: Record<string, unknown> = { updated_at: new Date().toISOString() }

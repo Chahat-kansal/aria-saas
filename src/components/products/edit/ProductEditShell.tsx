@@ -54,6 +54,8 @@ export default function ProductEditShell(props: Props) {
     is_active: product.is_active ?? true,
     show_online: product.show_online ?? false,
     is_age_restricted: product.is_age_restricted ?? false,
+    is_weight_based: (product as any).is_weight_based ?? false,
+    price_per_kg: (product as any).price_per_kg ?? 0,
   })
   const [classifications, setClassifications] = useState({
     category_id: product.category_id ?? null,

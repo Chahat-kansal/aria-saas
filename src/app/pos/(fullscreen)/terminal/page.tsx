@@ -59,6 +59,8 @@ interface Product {
   pos_categories?: { name: string; color: string } | null;
   builder_type?: string | null;  // Sprint C — 'sandwich' | null
   image_url?: string | null;
+  is_weight_based?: boolean;
+  price_per_kg?: number | null;
 }
 interface GlobalProductHit {
   name: string; brand?: string; category?: string;
@@ -245,6 +247,9 @@ export default function TerminalPage() {
   const [ariaOpen,       setAriaOpen]       = useState(false);
   const [chatInput,      setChatInput]      = useState('');
   const [chatMessages,   setChatMessages]   = useState<AriaChatMsg[]>([]);
+  // Weight-based pricing modal
+  const [weightModal, setWeightModal] = useState<{ product: Product } | null>(null);
+  const [weightInput, setWeightInput] = useState('');
   const [chatLoading,    setChatLoading]    = useState(false);
 
   /* ── Missed sale ──────────────────────────────────────────────── */
@@ -920,6 +925,12 @@ export default function TerminalPage() {
       }
     } catch { /* fall through */ }
     setVariantLoading(false);
+    // Weight-based product — show weight entry modal instead of adding directly
+    if (p.is_weight_based && p.price_per_kg) {
+      setWeightInput('');
+      setWeightModal({ product: p });
+      return;
+    }
     addToCartDirect(p, 1, undefined, undefined, [], fromEl);
     // Non-blocking expiry check after adding to cart
     getProductBatches(p.id).then(batches => {
@@ -3320,6 +3331,88 @@ export default function TerminalPage() {
           onSaved={() => { setShowSplitModal(false); setCart([]); }}
           onClose={() => setShowSplitModal(false)}
         />
+      )}
+
+      {/* ── Weight entry modal ─────────────────────────────────────── */}
+      {weightModal && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 60, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, background: 'rgba(8,6,16,0.88)' }}>
+          <div style={{ background: 'var(--bg-elevated)', border: '1px solid #2A2540', borderRadius: 20, padding: '28px 28px 24px', width: '100%', maxWidth: 360, boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>
+                ⚖️ Enter weight
+              </div>
+              <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                {weightModal.product.name} — ${weightModal.product.price_per_kg?.toFixed(2)}/kg
+              </div>
+            </div>
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--bg-base)', border: '1px solid #2A2540', borderRadius: 12, padding: '12px 16px' }}>
+                <input
+                  autoFocus
+                  type="number"
+                  min="0"
+                  step="0.001"
+                  placeholder="0.000"
+                  value={weightInput}
+                  onChange={e => setWeightInput(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') {
+                      const kg = parseFloat(weightInput)
+                      if (!kg || kg <= 0) return
+                      const pricePerKg = weightModal.product.price_per_kg ?? 0
+                      const totalPrice = Math.round(kg * pricePerKg * 100) / 100
+                      const label = `${weightModal.product.name} · ${kg.toFixed(3)}kg`
+                      addToCartDirect({ ...weightModal.product, price: totalPrice }, 1, undefined, label)
+                      setWeightModal(null)
+                      setWeightInput('')
+                    }
+                    if (e.key === 'Escape') { setWeightModal(null); setWeightInput('') }
+                  }}
+                  style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', fontSize: 24, fontWeight: 700, color: 'var(--text-primary)', fontFamily: "'JetBrains Mono',monospace" }}
+                />
+                <span style={{ fontSize: 16, color: 'var(--text-secondary)', fontWeight: 600 }}>kg</span>
+              </div>
+              {weightInput && parseFloat(weightInput) > 0 && weightModal.product.price_per_kg && (
+                <div style={{ marginTop: 10, fontSize: 15, fontWeight: 700, color: 'var(--success)', textAlign: 'center' }}>
+                  = ${(parseFloat(weightInput) * weightModal.product.price_per_kg).toFixed(2)}
+                </div>
+              )}
+            </div>
+            {/* Numpad for quick entry */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 16 }}>
+              {['1','2','3','4','5','6','7','8','9','.','0','⌫'].map(k => (
+                <button key={k} onClick={() => {
+                  if (k === '⌫') { setWeightInput(w => w.slice(0, -1)) }
+                  else if (k === '.' && weightInput.includes('.')) return
+                  else setWeightInput(w => w + k)
+                }}
+                style={{ padding: '14px 0', borderRadius: 10, border: '1px solid #2A2540', background: k === '⌫' ? 'rgba(239,68,68,0.08)' : 'var(--bg-base)', color: k === '⌫' ? '#EF4444' : 'var(--text-primary)', fontSize: 18, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+                  {k}
+                </button>
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => { setWeightModal(null); setWeightInput('') }}
+                style={{ flex: 1, padding: '11px 0', borderRadius: 10, border: '1px solid #2A2540', background: 'transparent', color: 'var(--text-secondary)', fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+                Cancel
+              </button>
+              <button onClick={() => {
+                const kg = parseFloat(weightInput)
+                if (!kg || kg <= 0) return
+                const pricePerKg = weightModal.product.price_per_kg ?? 0
+                const totalPrice = Math.round(kg * pricePerKg * 100) / 100
+                const label = `${weightModal.product.name} · ${kg.toFixed(3)}kg`
+                addToCartDirect({ ...weightModal.product, price: totalPrice }, 1, undefined, label)
+                setWeightModal(null)
+                setWeightInput('')
+              }}
+              disabled={!weightInput || parseFloat(weightInput) <= 0}
+              style={{ flex: 2, padding: '11px 0', borderRadius: 10, border: 'none', background: 'var(--gradient-aria)', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', opacity: (!weightInput || parseFloat(weightInput) <= 0) ? 0.4 : 1 }}>
+                Add to cart
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Refund modal */}

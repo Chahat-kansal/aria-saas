@@ -27,6 +27,8 @@ export interface ProductFormData {
   track_stock: boolean
   image_url: string
   is_age_restricted: boolean
+  is_weight_based: boolean
+  price_per_kg: number
 }
 
 const EMPTY: ProductFormData = {
@@ -38,6 +40,7 @@ const EMPTY: ProductFormData = {
   stock_quantity: 0, low_stock_threshold: 5, case_quantity: 1,
   is_active: true, track_stock: true,
   image_url: '', is_age_restricted: false,
+  is_weight_based: false, price_per_kg: 0,
 }
 
 interface Props {
@@ -116,6 +119,8 @@ export function ProductForm({ initial, mode, suppliers = [], categories = [] }: 
         track_stock: data.track_stock,
         image_url: data.image_url || null,
         is_age_restricted: data.is_age_restricted,
+        is_weight_based: data.is_weight_based,
+        price_per_kg: data.is_weight_based ? data.price_per_kg : null,
       }
 
       const url = mode === 'create' ? '/api/pos/products' : `/api/pos/products/${data.id}`
@@ -229,6 +234,29 @@ export function ProductForm({ initial, mode, suppliers = [], categories = [] }: 
             <input type="checkbox" checked={data.track_stock} onChange={e => set('track_stock', e.target.checked)} />
             Track inventory levels for this product
           </label>
+          {/* Weight-based pricing toggle */}
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
+            <input type="checkbox" checked={data.is_weight_based} onChange={e => {
+              set('is_weight_based', e.target.checked)
+              if (e.target.checked && data.price_per_kg === 0 && data.price > 0) {
+                set('price_per_kg', data.price)
+              }
+            }} />
+            Sell by weight (price per kg — e.g. bakery, deli, produce)
+          </label>
+          {data.is_weight_based && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <Field label="Price per kg ($)">
+                <input type="number" min="0" step="0.01" value={data.price_per_kg}
+                  onChange={e => { const v = parseFloat(e.target.value) || 0; set('price_per_kg', v); set('price', v) }}
+                  style={iS} placeholder="e.g. 12.00" />
+              </Field>
+              <div style={{ paddingTop: 20, fontSize: 12, color: 'var(--text-tertiary)', lineHeight: 1.5 }}>
+                Cashier will enter weight at checkout.<br />
+                Price = weight × $/kg
+              </div>
+            </div>
+          )}
           {data.track_stock && (
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 12 }}>
               <Field label="Stock on hand">
