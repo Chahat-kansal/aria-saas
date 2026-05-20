@@ -496,10 +496,17 @@ export default function SocialPage() {
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <p style={{ fontSize: 11, color: C.dim, marginBottom: 4 }}>Suggested image:</p>
                       <p style={{ fontSize: 12, color: C.muted, lineHeight: 1.5 }}>{post.image_prompt?.slice(0, 120)}</p>
-                      <button onClick={() => { setImageGridId(post.id); loadImages(post.id, post.image_prompt); }}
-                        style={{ marginTop: 6, fontSize: 11, padding: '3px 10px', borderRadius: 6, border: `1px solid ${C.border}`, background: 'transparent', color: C.muted, cursor: 'pointer', fontFamily: 'inherit' }}>
-                        Change image
-                      </button>
+                      <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+                        <button onClick={() => generateImage(post.id, post.image_prompt, (post as any).image_search_query)}
+                          disabled={!!imgGenerating[post.id]}
+                          style={{ fontSize: 11, padding: '3px 10px', borderRadius: 6, border: `1px solid ${C.border}`, background: 'transparent', color: C.muted, cursor: 'pointer', fontFamily: 'inherit', opacity: imgGenerating[post.id] ? 0.6 : 1 }}>
+                          {imgGenerating[post.id] ? '⏳ Generating…' : '🔄 New image'}
+                        </button>
+                        <button onClick={() => { setImageGridId(imageGridId === post.id ? null : post.id); if (imageGridId !== post.id) loadImages(post.id, post.image_prompt); }}
+                          style={{ fontSize: 11, padding: '3px 10px', borderRadius: 6, border: `1px solid ${C.border}`, background: 'transparent', color: C.muted, cursor: 'pointer', fontFamily: 'inherit' }}>
+                          🖼 Pick from search
+                        </button>
+                      </div>
                     </div>
                   </div>
 
@@ -509,9 +516,9 @@ export default function SocialPage() {
                       {loadingImages ? <p style={{ fontSize: 12, color: C.dim, textAlign: 'center' }}>Loading images…</p> : (
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 6 }}>
                           {images.map(img => (
-                            <div key={img.id} onClick={() => { approve(post.id, img.url); setImageGridId(null); }}
+                            <div key={img.id} onClick={async () => { setImageGridId(null); const r = await fetch('/api/social/approve', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ post_id: post.id, business_id: bid, image_url: img.url, image_credit: img.photographer }) }); const d = await r.json(); if (d.post) setPosts(prev => prev.map(p => p.id === post.id ? { ...p, image_url: img.url, image_credit: img.photographer } : p)); }}
                               style={{ cursor: 'pointer', borderRadius: 8, overflow: 'hidden', aspectRatio: '1', position: 'relative' }}>
-                              <img src={img.small} alt={img.photographer} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                              <img src={img.thumb || img.small} alt={img.photographer} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { (e.target as HTMLImageElement).src = img.url }} />
                               <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'rgba(0,0,0,0.6)', padding: '2px 4px' }}>
                                 <p style={{ fontSize: 9, color: '#fff' }}>📷 {img.photographer}</p>
                               </div>
@@ -539,7 +546,7 @@ export default function SocialPage() {
                   {!editingId && post.hashtags.length > 0 && (
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 12 }}>
                       {post.hashtags.map(h => (
-                        <span key={h} style={{ fontSize: 11, padding: '2px 8px', borderRadius: 99, background: 'rgba(139,92,246,0.1)', color: C.violet }}>#{h}</span>
+                        <span key={h} style={{ fontSize: 11, padding: '2px 8px', borderRadius: 99, background: 'rgba(139,92,246,0.1)', color: C.violet }}>#{h.replace(/^#+/, '')}</span>
                       ))}
                     </div>
                   )}
