@@ -787,76 +787,96 @@ async function generateImage(input: Record<string, unknown>, businessId: string)
   }
 
   // Try strategies in order — gpt-image-1 first (current), fall back to dall-e-3 if needed
-  // Your account has gpt-image-1 (NOT dall-e-3 which doesn't exist on this org)
-  // gpt-image-1 API format is different from dall-e-3
+  // Use Google Imagen via Gemini API ($0.02-0.03/image, cheaper than gpt-image-1)
+  // Falls back to gpt-image-1 if Gemini key not set or Imagen fails
+  const GEMINI_KEY = process.env.GEMINI_API_KEY;
+  const OPENAI_KEY = process.env.OPENAI_API_KEY;
+
+  // Try Imagen 3 first (cheapest, $0.03), then gpt-image-1 fallback
   const strategies = [
-    {
-      name: 'gpt-image-1',
-      body: { model: 'gpt-image-1', prompt, n: 1, size: '1024x1024', quality: 'medium', output_format: 'png' },
-      decode: 'b64_json' as const,
-    },
-    {
-      name: 'gpt-image-1-no-output-format',
-      body: { model: 'gpt-image-1', prompt, n: 1, size: '1024x1024' },
-      decode: 'b64_json' as const,
-    },
-    {
-      name: 'gpt-image-1-mini',
-      body: { model: 'gpt-image-1-mini', prompt, n: 1, size: '1024x1024' },
-      decode: 'b64_json' as const,
-    },
+    { name: 'imagen-3-gemini', provider: 'gemini' },
+    { name: 'gpt-image-1', provider: 'openai' },
+    { name: 'gpt-image-1-mini', provider: 'openai-mini' },
   ];
 
   let lastError = '';
   for (const strategy of strategies) {
     try {
       console.log('[aria-tool/generate_image] trying strategy:', strategy.name);
-      const res = await fetch('https://api.openai.com/v1/images/generations', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify(strategy.body),
-      });
-      if (!res.ok) {
-        const err = await res.text();
-        console.error('[aria-tool/generate_image] strategy', strategy.name, 'failed:', res.status, err.slice(0, 300));
-        lastError = `${strategy.name}: ${res.status} ${err.slice(0, 150)}`;
-        continue; // try next strategy
-      }
 
-      const d = await res.json() as { data?: Array<{ b64_json?: string; url?: string; revised_prompt?: string }> };
-      const item = d.data?.[0];
-      if (!item) { lastError = 'No image data'; continue; }
+      if (strategy.provider === 'gemini' && GEMINI_KEY) {
+        // Google Imagen 3 via Gemini API
+        const res = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${GEMINI_KEY}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              instances: [{ prompt }],
+              parameters: { sampleCount: 1, aspectRatio: '1:1', safetyFilterLevel: 'block_few' },
+            }),
+            signal: AbortSignal.timeout(55_000),
+          }
+        );
+        if (!res.ok) {
+          const err = await res.text();
+          console.error('[aria-tool/generate_image] Imagen failed:', res.status, err.slice(0, 300));
+          lastError = `imagen: ${res.status} ${err.slice(0, 150)}`;
+          continue;
+        }
+        const d = await res.json() as { predictions?: Array<{ bytesBase64Encoded?: string; mimeType?: string }> };
+        const b64 = d.predictions?.[0]?.bytesBase64Encoded;
+        if (!b64) { lastError = 'Imagen: no image in response'; continue; }
+        const buf = Buffer.from(b64, 'base64');
+        const filename = `image_${Date.now()}.png`;
+        const path = `aria-images/${businessId}/${filename}`;
+        const { error: upErr } = await supabaseAdmin.storage.from('reports').upload(path, buf, { contentType: 'image/png' });
+        if (upErr) return { error: 'Storage upload failed: ' + upErr.message };
+        const { data: signed } = await supabaseAdmin.storage.from('reports').createSignedUrl(path, 86400);
+        console.log('[aria-tool/generate_image] success with', strategy.name);
+        return { ok: true, filename, download_url: signed?.signedUrl, format: 'png', strategy: strategy.name };
 
-      let buf: Buffer;
-      if (strategy.decode === 'b64_json' && item.b64_json) {
-        buf = Buffer.from(item.b64_json, 'base64');
-      } else if ((strategy.decode as string) === 'url' && item.url) {
-        const imgRes = await fetch(item.url);
-        if (!imgRes.ok) { lastError = 'URL fetch failed'; continue; }
-        buf = Buffer.from(await imgRes.arrayBuffer());
-      } else {
-        lastError = 'no usable data field returned';
-        continue;
+      } else if ((strategy.provider === 'openai' || strategy.provider === 'openai-mini') && OPENAI_KEY) {
+        const model = strategy.provider === 'openai-mini' ? 'gpt-image-1-mini' : 'gpt-image-1';
+        const res = await fetch('https://api.openai.com/v1/images/generations', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${OPENAI_KEY}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ model, prompt, n: 1, size: '1024x1024' }),
+          signal: AbortSignal.timeout(55_000),
+        });
+        if (!res.ok) {
+          const err = await res.text();
+          console.error('[aria-tool/generate_image] OpenAI', model, 'failed:', res.status, err.slice(0, 300));
+          lastError = `${model}: ${res.status} ${err.slice(0, 150)}`;
+          continue;
+        }
+        const d = await res.json() as { data?: Array<{ b64_json?: string; url?: string }> };
+        const item = d.data?.[0];
+        const b64 = item?.b64_json;
+        const url = item?.url;
+        let buf: Buffer;
+        if (b64) {
+          buf = Buffer.from(b64, 'base64');
+        } else if (url) {
+          const imgRes = await fetch(url);
+          if (!imgRes.ok) { lastError = 'URL fetch failed'; continue; }
+          buf = Buffer.from(await imgRes.arrayBuffer());
+        } else { lastError = 'no image data'; continue; }
+        const filename = `image_${Date.now()}.png`;
+        const path = `aria-images/${businessId}/${filename}`;
+        const { error: upErr } = await supabaseAdmin.storage.from('reports').upload(path, buf, { contentType: 'image/png' });
+        if (upErr) return { error: 'Storage upload failed: ' + upErr.message };
+        const { data: signed } = await supabaseAdmin.storage.from('reports').createSignedUrl(path, 86400);
+        console.log('[aria-tool/generate_image] success with', strategy.name);
+        return { ok: true, filename, download_url: signed?.signedUrl, format: 'png', strategy: strategy.name };
       }
-
-      // Upload to reports bucket
-      const filename = `image_${Date.now()}.png`;
-      const path = `aria-images/${businessId}/${filename}`;
-      const { error: upErr } = await supabaseAdmin.storage.from('reports').upload(path, buf, { contentType: 'image/png' });
-      if (upErr) {
-        console.error('[aria-tool/generate_image] storage upload failed:', upErr.message);
-        return { error: 'Storage upload failed: ' + upErr.message };
-      }
-      const { data: signed } = await supabaseAdmin.storage.from('reports').createSignedUrl(path, 86400);
-      console.log('[aria-tool/generate_image] success with', strategy.name);
-      return { ok: true, filename, download_url: signed?.signedUrl, format: 'png', revised_prompt: item.revised_prompt, strategy: strategy.name };
     } catch (e) {
       lastError = String(e);
-      console.error('[aria-tool/generate_image] strategy', strategy.name, 'exception:', lastError);
+      console.error('[aria-tool/generate_image] exception in', strategy.name, ':', lastError);
     }
   }
 
-  return { error: 'All image generation strategies failed. Last error: ' + lastError };
+  return { error: 'Image generation failed. Last error: ' + lastError + '. Keys set: gemini=' + !!GEMINI_KEY + ' openai=' + !!OPENAI_KEY };
 }
 
 async function runCalculation(input: Record<string, unknown>): Promise<unknown> {
