@@ -64,8 +64,8 @@ async function _POST(req: Request) {
 
     if (!jobId) {
       return NextResponse.json(
-        { error: 'No video provider configured. Add RUNWAY_API_KEY or REPLICATE_API_KEY to your environment.' },
-        { status: 503 }
+        { error: 'video_generation_failed', message: 'Video generation unavailable. Check that your Runway API key is valid.' },
+        { status: 200 }
       )
     }
 

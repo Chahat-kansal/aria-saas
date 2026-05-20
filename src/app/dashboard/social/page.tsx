@@ -81,7 +81,7 @@ export default function SocialPage() {
     ]);
     const cleanedPosts = (postsRes.posts ?? []).map((p: any) => ({
       ...p,
-      image_url: p.image_url?.includes('fbcdn.net') || p.image_url?.includes('instagram.com') ? null : p.image_url
+      image_url: p.image_url?.includes('fbcdn.net') || p.image_url?.includes('cdninstagram.com') ? null : p.image_url
     }))
     setPosts(cleanedPosts);
     if (prefsRes.preferences) setPrefs(p => ({ ...p, ...prefsRes.preferences }));
