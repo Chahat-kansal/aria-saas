@@ -464,6 +464,42 @@ ${ARTIFACT_INSTRUCTIONS}`
     { type: 'web_search_20250305', name: 'web_search', max_uses: 5 } as any,
   ]
 
+  // ── IMAGE FAST-PATH ──────────────────────────────────────────────────────
+  // Skip the entire Anthropic tool loop for image requests.
+  // The loop (2 API calls + image gen) takes 20-50s and regularly hits the 60s limit.
+  // Instead: extract prompt from message, call generateImage directly, return immediately.
+  if (isImageRequest) {
+    console.log('[aria/ask] image fast-path triggered for:', message.slice(0, 80))
+    const { generateImageDirect } = await import('@/lib/aria/image-direct')
+    const imgResult = await generateImageDirect(message, bid)
+    const responseText = imgResult.ok
+      ? `Here's your poster! It was generated based on your request.`
+      : `Sorry, I couldn't generate the image. ${imgResult.error ?? 'Please try again.'}`
+    let savedConvId = conversationId
+    try {
+      savedConvId = await upsertConversation(bid, user.id, conversationId, message, responseText, 'generate_image')
+    } catch (e) { console.error('[aria/ask] upsertConversation failed (image):', (e as Error).message) }
+    const downloads = imgResult.ok && imgResult.download_url ? [{
+      filename: imgResult.filename ?? 'poster.png',
+      download_url: imgResult.download_url,
+      rows: 0,
+      format: 'png',
+    }] : []
+    if (savedConvId && downloads.length > 0) {
+      try {
+        const { data: conv } = await supabaseAdmin.from('aria_conversations').select('messages').eq('id', savedConvId).single()
+        const msgs = Array.isArray((conv as any)?.messages) ? (conv as any).messages : []
+        const lastMsg = msgs[msgs.length - 1]
+        if (lastMsg?.role === 'assistant') {
+          lastMsg.downloads = downloads
+          await supabaseAdmin.from('aria_conversations').update({ messages: msgs }).eq('id', savedConvId)
+        }
+      } catch { /* non-fatal */ }
+    }
+    return NextResponse.json({ response: responseText, conversation_id: savedConvId, intent: 'generate_image', downloads })
+  }
+  // ─────────────────────────────────────────────────────────────────────────
+
   // Force tool_choice for image generation requests — prevents hallucinated responses
   const imageToolChoice = isImageRequest
     ? { type: 'tool' as const, name: 'generate_image' }
