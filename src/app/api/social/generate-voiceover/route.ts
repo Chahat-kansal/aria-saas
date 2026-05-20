@@ -42,7 +42,7 @@ async function _POST(req: Request) {
 
     if (!res.ok) {
       const msg = await res.text().catch(() => res.statusText)
-      return NextResponse.json({ error: `ElevenLabs error: ${msg}` }, { status: 502 })
+      return NextResponse.json({ error: `ElevenLabs error: ${msg}` }, { status: 200 })
     }
 
     const audioBuffer = Buffer.from(await res.arrayBuffer())
