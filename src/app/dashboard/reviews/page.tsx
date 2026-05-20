@@ -178,19 +178,36 @@ export default function ReviewsPage() {
       const bd = await bizRes.json()
       const business_id = bd.business_id
       if (!business_id) { alert('No business found'); setConnectingId(null); return }
-      // Save Place ID to business
-      await fetch(`/api/businesses/${business_id}`, {
+
+      // Save Place ID to business via the correct settings route
+      const saveRes = await fetch('/api/settings/business', {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ google_place_id: placeId })
       })
-      // Trigger initial sync
-      await fetch('/api/reviews/sync', {
+      if (!saveRes.ok) {
+        const err = await saveRes.json().catch(() => ({}))
+        alert('Could not save Place ID: ' + (err.error ?? 'unknown error'))
+        setConnectingId(null)
+        return
+      }
+
+      // Trigger initial sync using correct route
+      const syncRes = await fetch('/api/aria/sync-reviews', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ business_id, place_id: placeId })
       })
+      const syncData = await syncRes.json().catch(() => ({}))
+      if (syncData.error) {
+        // Saved but sync failed — still close modal, user can retry sync
+        console.warn('Initial sync failed:', syncData.error)
+      }
+
       setShowConnectModal(false)
       window.location.reload()
-    } catch { alert('Could not connect — try again'); setConnectingId(null) }
+    } catch (e) {
+      alert('Could not connect — try again: ' + String(e))
+      setConnectingId(null)
+    }
   }
 
   function copyDraft(id: string) {
