@@ -110,24 +110,7 @@ export default function ReviewsPage() {
     setDrafts(d => ({ ...d, [reviewId]: text }))
   }
 
-  if (!loading && stats && !stats.google_place_id) {
-    return (
-      <div style={{ minHeight: '100%', background: 'var(--bg-base)', color: 'var(--text-primary)', fontFamily:"'Manrope',sans-serif", padding: '28px 32px', maxWidth: 700 }}>
-        <h1 style={{ fontSize: 22, fontWeight: 700, margin: '0 0 8px' }}>Reviews & Reputation</h1>
-        <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--divider)', borderRadius: 16, padding: '32px 36px', marginTop: 24 }}>
-          <div style={{ fontSize: 36, marginBottom: 16 }}>⭐</div>
-          <h2 style={{ fontSize: 18, fontWeight: 700, margin: '0 0 12px' }}>Connect Google Reviews</h2>
-          <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '0 0 20px', lineHeight: 1.6 }}>Aria monitors your Google reviews and drafts personalised replies automatically.</p>
-          <ol style={{ paddingLeft: 20, fontSize: 13, color: 'var(--text-secondary)', lineHeight: 2, margin: '0 0 20px' }}>
-            <li>Find your Place ID at <a href="https://developers.google.com/maps/documentation/javascript/examples/places-placeid-finder" target="_blank" rel="noopener" style={{ color: 'var(--violet)' }}>Google Place ID Finder</a></li>
-            <li>Go to <a href="/dashboard/settings" style={{ color: 'var(--violet)' }}>Settings → Business Profile → Google Reviews</a></li>
-            <li>Paste your Place ID and click Sync Reviews</li>
-          </ol>
-        </div>
-      </div>
-    )
-  }
-
+  const showGoogleConnectBanner = !loading && stats && !stats.google_place_id
   const avgRating   = stats?.average_rating ?? null
   const totalReviews = stats?.total_reviews ?? stats?.local_count ?? 0
   const lastSynced  = stats?.last_synced ? timeAgo(stats.last_synced) : null
@@ -153,6 +136,19 @@ export default function ReviewsPage() {
           </button>
         </div>
       </div>
+
+      {/* Google connect banner — dismissible, not blocking */}
+      {showGoogleConnectBanner && (
+        <div style={{ marginBottom: 16, padding: '12px 16px', borderRadius: 10, background: 'rgba(66,133,244,0.08)', border: '1px solid rgba(66,133,244,0.25)', fontSize: 13, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+          <div>
+            <p style={{ fontWeight: 600, color: '#4285F4', marginBottom: 2 }}>📍 Want to auto-sync your Google reviews?</p>
+            <p style={{ fontSize: 12 }}>Add your Google Place ID in Settings to monitor reviews automatically. Until then, use Aria to draft replies for any reviews you collect manually.</p>
+          </div>
+          <a href="/dashboard/settings" style={{ padding: '6px 14px', borderRadius: 8, background: '#4285F4', color: '#fff', fontSize: 12, fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>
+            Connect Google →
+          </a>
+        </div>
+      )}
 
       {/* Negative alert banner */}
       {analytics && analytics.negative_unreplied > 0 && (
