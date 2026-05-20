@@ -484,18 +484,38 @@ export default function AskAriaPage() {
               + New conversation
             </button>
             {history.map(c => (
-              <button
+              <div
                 key={c.id}
-                onClick={() => loadConversation(c.id)}
-                className="w-full text-left px-4 py-3 border-b transition-colors hover:bg-white/5"
+                className="group relative border-b"
                 style={{ borderColor: 'rgba(255,255,255,0.04)', background: conversationId === c.id ? 'rgba(127,184,151,0.08)' : 'transparent' }}
               >
-                <p className="text-xs font-medium text-white truncate">{c.title ?? 'Untitled'}</p>
-                <p className="text-[10px] mt-0.5" style={{ color: 'rgba(255,255,255,0.3)' }}>
-                  {new Date(c.last_message_at).toLocaleDateString()} · {c.message_count} msgs
-                  {c.has_escalated && <span className="ml-1 text-red-400">↗</span>}
-                </p>
-              </button>
+                <button
+                  onClick={() => loadConversation(c.id)}
+                  className="w-full text-left px-4 py-3 pr-8 transition-colors hover:bg-white/5"
+                >
+                  <p className="text-xs font-medium text-white truncate">{c.title ?? 'Untitled'}</p>
+                  <p className="text-[10px] mt-0.5" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                    {new Date(c.last_message_at).toLocaleDateString()} · {c.message_count} msgs
+                    {c.has_escalated && <span className="ml-1 text-red-400">↗</span>}
+                  </p>
+                </button>
+                <button
+                  onClick={async (e) => {
+                    e.stopPropagation()
+                    if (!confirm('Delete this chat?')) return
+                    await fetch('/api/aria/ask/delete', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: c.id }) })
+                    if (conversationId === c.id) { setMessages([]); setConversationId(null) }
+                    loadHistory()
+                  }}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded"
+                  style={{ color: 'rgba(255,255,255,0.3)' }}
+                  title="Delete chat"
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                </button>
+              </div>
             ))}
           </div>
         </div>

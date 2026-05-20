@@ -42,20 +42,39 @@ async function _POST(req: Request) {
     await supabase.from('businesses').update({ google_place_id: googlePlaceId }).eq('id', business_id)
   }
 
-  // Call Google Places API
-  const url = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${encodeURIComponent(googlePlaceId)}&fields=name,rating,user_ratings_total,reviews&key=${PLACES_KEY}`
-  const response = await fetch(url)
-  const data = await response.json() as { status: string; error_message?: string; result?: { name?: string; rating?: number; user_ratings_total?: number; reviews?: GoogleReview[] } }
+  // Call Google Places API 3x with different sort orders to get more reviews
+  // (Google caps at 5 per call but different sorts return different reviews)
+  const sortOrders = ['most_relevant', 'newest', 'highest_rating', 'lowest_rating']
+  let place: { name?: string; rating?: number; user_ratings_total?: number; reviews?: GoogleReview[] } | null = null
+  const allReviewsMap = new Map<string, GoogleReview>()
+  let lastStatus = ''
 
-  if (data.status !== 'OK') {
+  for (const sortOrder of sortOrders) {
+    const url = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${encodeURIComponent(googlePlaceId)}&fields=name,rating,user_ratings_total,reviews&reviews_sort=${sortOrder}&key=${PLACES_KEY}`
+    try {
+      const response = await fetch(url)
+      const data = await response.json() as { status: string; error_message?: string; result?: { name?: string; rating?: number; user_ratings_total?: number; reviews?: GoogleReview[] } }
+      lastStatus = data.status
+      if (data.status === 'OK' && data.result) {
+        place = place ?? data.result // use first successful result for metadata
+        for (const r of data.result.reviews ?? []) {
+          // Deduplicate by author + time
+          const key = `${r.author_name}_${r.time}`
+          if (!allReviewsMap.has(key)) allReviewsMap.set(key, r)
+        }
+      }
+    } catch { /* continue */ }
+  }
+
+  if (!place) {
     return NextResponse.json({
-      error: `Google API error: ${data.status}`,
-      message: data.error_message ?? 'Check your Place ID and API key',
+      error: `Google API error: ${lastStatus}`,
+      message: 'Check your Place ID and API key',
     }, { status: 400 })
   }
 
-  const place = data.result!
-  const rawReviews: GoogleReview[] = place.reviews ?? []
+  const rawReviews: GoogleReview[] = [...allReviewsMap.values()]
+  console.log(`[sync-reviews] fetched ${rawReviews.length} unique reviews via multi-sort`)
 
   // Update business rating stats
   await supabase.from('businesses').update({
