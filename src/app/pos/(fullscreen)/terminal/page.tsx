@@ -2465,7 +2465,7 @@ export default function TerminalPage() {
                       <div className="absolute top-full mt-1 right-0 rounded-xl shadow-xl z-30 overflow-hidden w-48" style={{ background: 'var(--bg-elevated)', border: '1px solid #2A2540' }}>
                         {customerResults.map(c => (
                           <button key={c.id}
-                            onClick={() => { setCustomer(c); setCustomerSearch(''); setCustomerResults([]); }}
+                            onMouseDown={e => { e.preventDefault(); setCustomer(c); setCustomerSearch(''); setCustomerResults([]); }}
                             className="w-full flex items-center gap-2 px-3 py-2 text-left" style={{ borderBottom: '1px solid #1C1928' }}>
                             <div className="flex-1 min-w-0">
                               <p className="text-xs font-medium truncate" style={{ color: 'var(--text-primary)' }}>{c.name}</p>
