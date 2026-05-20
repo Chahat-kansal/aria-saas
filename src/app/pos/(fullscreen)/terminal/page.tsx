@@ -15,6 +15,7 @@ import type { FlyToCartHandle } from '@/components/pos/FlyToCart';
 import Receipt from '@/components/pos/Receipt';
 import type { ReceiptTemplate } from '@/components/pos/Receipt';
 import { printReceiptWithTemplate } from '@/lib/pos-print';
+import { printReceipt as printESCPOS } from '@/lib/pos/escpos';
 import { AriaChatMessage } from '@/components/pos/AriaChatMessage';
 import type { AriaResponse } from '@/components/pos/AriaChatMessage';
 
@@ -1857,14 +1858,47 @@ export default function TerminalPage() {
                 watermark={trainingMode ? 'TRAINING' : undefined}
               />
             )}
-            <button
-              onClick={async () => {
-                const used = await printReceiptWithTemplate(showReceipt, businessName ?? '');
-                if (!used) setShowReceiptModal(true);
-              }}
-              style={{ height: 40, padding: '0 24px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.05)', color: 'rgba(220,240,255,0.7)', fontFamily: 'inherit', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 7 }}>
-              🖨️ Print receipt
-            </button>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                onClick={async () => {
+                  const used = await printReceiptWithTemplate(showReceipt, businessName ?? '');
+                  if (!used) setShowReceiptModal(true);
+                }}
+                title="Print via browser / receipt template"
+                style={{ height: 40, padding: '0 20px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.05)', color: 'rgba(220,240,255,0.7)', fontFamily: 'inherit', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 7 }}>
+                🖨️ Print
+              </button>
+              <button
+                onClick={async () => {
+                  if (!showReceipt) return;
+                  const items = (showReceipt.cartSnapshot ?? []).map((i: any) => ({
+                    name: i.label ?? i.product?.name ?? 'Item',
+                    qty: i.qty,
+                    price: i.unitPrice * i.qty * (1 - (i.discount_percent ?? 0) / 100),
+                  }));
+                  const total = showReceipt.total_amount ?? 0;
+                  const tax = total - total / 1.1;
+                  const r = await printESCPOS({
+                    businessName: businessName ?? 'Aria POS',
+                    receiptNumber: showReceipt.sale_number ?? showReceipt.id?.slice(-6) ?? '000',
+                    date: showReceipt.created_at ? new Date(showReceipt.created_at).toLocaleString('en-AU') : new Date().toLocaleString('en-AU'),
+                    cashier: showReceipt.served_by ?? undefined,
+                    items,
+                    subtotal: total - tax,
+                    tax,
+                    total,
+                    paymentMethod: showReceipt.payment_method ?? 'card',
+                    amountTendered: showReceipt.cash_tendered ?? undefined,
+                    change: showReceipt.change_given ?? undefined,
+                    loyaltyPoints: showReceipt.loyaltyEarned ?? undefined,
+                  });
+                  if (!r.ok) alert('Thermal print failed: ' + r.error);
+                }}
+                title="Print to USB thermal printer (Chrome/Edge)"
+                style={{ height: 40, width: 40, borderRadius: 10, border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.05)', color: 'rgba(220,240,255,0.7)', fontFamily: 'inherit', fontSize: 16, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                ⚡
+              </button>
+            </div>
             {/* New Sale button */}
             <button onClick={() => { setShowReceipt(null); setTerminalView('pos'); setShowReceiptModal(false); if (window.innerWidth < 768) setMobileTab('products'); }}
               style={{ height: 52, padding: '0 40px', borderRadius: 14, border: 'none', background: 'linear-gradient(135deg,#00E5FF,#00BFCC,#7B2FFF)', color: '#000', fontFamily: 'inherit', fontSize: 14, fontWeight: 900, cursor: 'pointer', boxShadow: '0 5px 0 rgba(0,150,200,0.5), 0 10px 30px rgba(0,229,255,0.3)', transition: 'all 220ms', display: 'flex', alignItems: 'center', gap: 8, animation: 'fade-up 0.4s 0.3s cubic-bezier(0.16,1,0.3,1) both' }}

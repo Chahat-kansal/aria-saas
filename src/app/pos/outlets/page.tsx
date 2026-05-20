@@ -1,113 +1,199 @@
-'use client';
-import { useState, useEffect } from 'react';
+'use client'
+import { useState, useEffect, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 
-interface Outlet { id: string; name: string; address: string | null; phone: string | null; email: string | null; is_active: boolean; }
-const EMPTY = { name: '', address: '', phone: '', email: '', is_active: true };
+interface Register { id: string; name: string; is_active: boolean }
+interface Outlet {
+  id: string; name: string; address: string | null; phone: string | null
+  is_active: boolean; is_default: boolean; timezone: string | null
+  pos_registers?: Register[]
+}
+
+const C = {
+  bg: 'var(--bg-base)', card: 'var(--bg-surface)', text: 'var(--text-primary)',
+  muted: 'var(--text-secondary)', dim: 'var(--text-tertiary)',
+  violet: '#8B5CF6', green: '#22C55E', red: '#EF4444',
+  border: 'rgba(255,255,255,0.07)',
+}
+const iS: React.CSSProperties = {
+  background: 'var(--bg-base)', border: `1px solid ${C.border}`, borderRadius: 8,
+  padding: '9px 12px', fontSize: 13, color: C.text, outline: 'none',
+  fontFamily: 'inherit', width: '100%', boxSizing: 'border-box',
+}
+const TIMEZONES = ['Australia/Sydney','Australia/Melbourne','Australia/Brisbane','Australia/Perth','Australia/Adelaide','Australia/Darwin','Australia/Hobart']
 
 export default function OutletsPage() {
-  const [outlets, setOutlets] = useState<Outlet[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [modal, setModal] = useState<{ open: boolean; mode: 'add' | 'edit'; outlet?: Outlet }>({ open: false, mode: 'add' });
-  const [form, setForm] = useState({ ...EMPTY });
-  const [saving, setSaving] = useState(false);
+  const router = useRouter()
+  const [outlets, setOutlets] = useState<Outlet[]>([])
+  const [loading, setLoading] = useState(true)
+  const [showAdd, setShowAdd] = useState(false)
+  const [form, setForm] = useState({ name:'', address:'', phone:'', timezone:'Australia/Melbourne', is_default:false })
+  const [saving, setSaving] = useState(false)
+  const [expanded, setExpanded] = useState<string|null>(null)
+  const [newReg, setNewReg] = useState('')
+  const [addingReg, setAddingReg] = useState<string|null>(null)
 
-  useEffect(() => {
-    fetch('/api/pos/outlets').then(r => r.json()).then(d => { setOutlets(d.outlets ?? []); setLoading(false); });
-  }, []);
+  const load = useCallback(async () => {
+    setLoading(true)
+    const res = await fetch('/api/pos/outlets')
+    const d = await res.json() as { outlets?: Outlet[] }
+    setOutlets(d.outlets ?? [])
+    setLoading(false)
+  }, [])
 
-  function openAdd() { setForm({ ...EMPTY }); setModal({ open: true, mode: 'add' }); }
-  function openEdit(o: Outlet) {
-    setForm({ name: o.name, address: o.address ?? '', phone: o.phone ?? '', email: o.email ?? '', is_active: o.is_active });
-    setModal({ open: true, mode: 'edit', outlet: o });
+  useEffect(() => { load() }, [load])
+
+  async function addOutlet() {
+    if (!form.name.trim()) return
+    setSaving(true)
+    const res = await fetch('/api/pos/outlets', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(form) })
+    if (res.ok) { setShowAdd(false); setForm({name:'',address:'',phone:'',timezone:'Australia/Melbourne',is_default:false}); load() }
+    else { const d = await res.json() as {error?:string}; alert(d.error ?? 'Failed') }
+    setSaving(false)
   }
 
-  async function save() {
-    if (!form.name.trim()) return;
-    setSaving(true);
-    const payload = { name: form.name, address: form.address || null, phone: form.phone || null, email: form.email || null, is_active: form.is_active };
-    if (modal.mode === 'add') {
-      const res = await fetch('/api/pos/outlets', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-      const d = await res.json();
-      if (d.outlet) setOutlets(os => [...os, d.outlet]);
-    } else if (modal.outlet) {
-      await fetch(`/api/pos/outlets?id=${modal.outlet.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-      setOutlets(os => os.map(o => o.id === modal.outlet!.id ? { ...o, ...payload } : o));
-    }
-    setSaving(false); setModal({ open: false, mode: 'add' });
+  async function toggleOutlet(id: string, is_active: boolean) {
+    await fetch(`/api/pos/outlets/${id}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify({is_active:!is_active}) })
+    setOutlets(o => o.map(x => x.id===id ? {...x,is_active:!is_active} : x))
   }
 
-  async function del(id: string) {
-    await fetch(`/api/pos/outlets?id=${id}`, { method: 'DELETE' });
-    setOutlets(os => os.filter(o => o.id !== id));
-    setModal({ open: false, mode: 'add' });
+  async function setDefault(id: string) {
+    await fetch(`/api/pos/outlets/${id}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify({is_default:true}) })
+    setOutlets(o => o.map(x => ({...x,is_default:x.id===id})))
+  }
+
+  async function deleteOutlet(id: string, name: string) {
+    if (!confirm(`Delete outlet "${name}"? This cannot be undone.`)) return
+    await fetch(`/api/pos/outlets/${id}`, {method:'DELETE'})
+    setOutlets(o => o.filter(x => x.id!==id))
+  }
+
+  async function addRegister(outletId: string) {
+    if (!newReg.trim()) return
+    setAddingReg(outletId)
+    await fetch('/api/pos/registers', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({outlet_id:outletId,name:newReg}) })
+    setNewReg(''); setAddingReg(null); load()
+  }
+
+  async function toggleRegister(id: string, is_active: boolean) {
+    await fetch(`/api/pos/registers/${id}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify({is_active:!is_active}) })
+    setOutlets(o => o.map(outlet => ({...outlet, pos_registers: outlet.pos_registers?.map(r => r.id===id ? {...r,is_active:!is_active} : r)})))
   }
 
   return (
-    <div className="p-6">
-      <div className="flex items-center justify-between mb-6">
+    <div style={{minHeight:'100%',background:C.bg,color:C.text,fontFamily:"'Manrope',sans-serif",padding:'24px 28px',maxWidth:900,margin:'0 auto'}}>
+      <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:8}}>
         <div>
-          <h1 className="text-xl font-semibold text-[#1a1a16]">Registers &amp; Outlets</h1>
-          <p className="text-xs text-[rgba(26,26,22,.45)] mt-0.5">{outlets.length} outlets</p>
+          <h1 style={{fontSize:22,fontWeight:800,marginBottom:4}}>Outlets & Registers</h1>
+          <p style={{fontSize:13,color:C.muted}}>Manage multiple store locations. Each outlet can have multiple registers. Staff select their outlet at POS login.</p>
         </div>
-        <button onClick={openAdd} className="px-4 py-2 rounded-lg text-sm font-medium text-white" style={{ background: 'linear-gradient(135deg,#2563eb,#1d4ed8)' }}>
-          + Add Outlet
+        <button onClick={() => router.push('/pos/select')} style={{padding:'9px 18px',borderRadius:9,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,cursor:'pointer',fontFamily:'inherit',whiteSpace:'nowrap',marginTop:4}}>
+          ← Switch outlet
         </button>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {loading ? [...Array(2)].map((_, i) => <div key={i} className="h-28 rounded-2xl bg-[rgba(0,0,0,.05)] animate-pulse" />) :
-        !outlets.length ? (
-          <div className="col-span-3 text-center py-20 text-sm text-[rgba(26,26,22,.4)]">No outlets yet</div>
-        ) : outlets.map(o => (
-          <div key={o.id} className="bg-white rounded-2xl border border-[rgba(0,0,0,.08)] p-4 shadow-sm">
-            <div className="flex items-start justify-between mb-3">
-              <div className="w-8 h-8 rounded-lg bg-[rgba(37,99,235,.1)] flex items-center justify-center">
-                <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 text-[#2563eb]"><path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd"/></svg>
-              </div>
-              <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${o.is_active ? 'bg-violet-50 text-violet-700 border border-violet-200' : 'bg-[rgba(0,0,0,.05)] text-[rgba(26,26,22,.4)] border border-[rgba(0,0,0,.08)]'}`}>
-                {o.is_active ? 'Active' : 'Inactive'}
-              </span>
-            </div>
-            <p className="text-[13px] font-semibold text-[#1a1a16]">{o.name}</p>
-            {o.address && <p className="text-[11px] text-[rgba(26,26,22,.45)] mt-0.5">{o.address}</p>}
-            {o.phone && <p className="text-[11px] text-[rgba(26,26,22,.45)]">{o.phone}</p>}
-            <button onClick={() => openEdit(o)} className="mt-3 text-xs text-[#2563eb] hover:underline font-medium">Edit</button>
-          </div>
-        ))}
+      <div style={{background:'rgba(139,92,246,0.07)',border:'1px solid rgba(139,92,246,0.18)',borderRadius:10,padding:'10px 16px',marginBottom:24,fontSize:12,color:C.muted}}>
+        💡 Each device remembers its outlet. Staff pick their outlet once at login via <strong style={{color:C.text}}>/pos/select</strong>.
       </div>
 
-      {modal.open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,.45)' }}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
-            <div className="px-6 py-5 border-b border-[rgba(0,0,0,.08)] flex items-center justify-between">
-              <h2 className="text-base font-semibold text-[#1a1a16]">{modal.mode === 'add' ? 'New Outlet' : 'Edit Outlet'}</h2>
-              <button onClick={() => setModal({ open: false, mode: 'add' })} className="text-[rgba(26,26,22,.4)] text-xl leading-none">&times;</button>
-            </div>
-            <div className="px-6 py-5 space-y-3">
-              {([['name', 'Outlet Name *'], ['address', 'Address'], ['phone', 'Phone'], ['email', 'Email']] as [keyof typeof form, string][]).map(([k, label]) => (
-                <div key={String(k)}>
-                  <label className="block text-xs font-medium text-[rgba(26,26,22,.6)] mb-1.5">{label}</label>
-                  <input value={form[k] as string} onChange={e => setForm(f => ({ ...f, [k]: e.target.value }))}
-                    className="w-full bg-[#fafaf8] border border-[rgba(0,0,0,.1)] rounded-lg px-3 py-2.5 text-sm text-[#1a1a16] focus:outline-none focus:border-[#2563eb]" />
+      {loading ? <div style={{color:C.muted,textAlign:'center',padding:'60px 0'}}>Loading…</div> : (
+        <>
+          <div style={{display:'flex',flexDirection:'column',gap:14,marginBottom:20}}>
+            {outlets.map(outlet => (
+              <div key={outlet.id} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:14,overflow:'hidden'}}>
+                <div style={{display:'flex',alignItems:'center',gap:16,padding:'16px 20px'}}>
+                  <div style={{flex:1}}>
+                    <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:4}}>
+                      <span style={{fontSize:15,fontWeight:700}}>🏪 {outlet.name}</span>
+                      {outlet.is_default && <span style={{fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:99,background:'rgba(34,197,94,0.12)',color:C.green}}>DEFAULT</span>}
+                      <span style={{fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:99,background:outlet.is_active?'rgba(34,197,94,0.08)':'rgba(239,68,68,0.08)',color:outlet.is_active?C.green:C.red}}>
+                        {outlet.is_active?'Active':'Inactive'}
+                      </span>
+                    </div>
+                    {outlet.address && <div style={{fontSize:12,color:C.muted}}>{outlet.address}</div>}
+                    <div style={{fontSize:11,color:C.dim,marginTop:4}}>
+                      {outlet.pos_registers?.filter(r=>r.is_active).length??0} register(s) · {outlet.timezone??'AEST'}
+                    </div>
+                  </div>
+                  <div style={{display:'flex',gap:8,flexShrink:0}}>
+                    <button onClick={() => setExpanded(expanded===outlet.id?null:outlet.id)} style={{padding:'7px 14px',borderRadius:8,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:12,cursor:'pointer',fontFamily:'inherit'}}>
+                      {expanded===outlet.id?'Hide':'Registers'}
+                    </button>
+                    {!outlet.is_default && <button onClick={() => setDefault(outlet.id)} style={{padding:'7px 14px',borderRadius:8,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:12,cursor:'pointer',fontFamily:'inherit'}}>Set default</button>}
+                    <button onClick={() => toggleOutlet(outlet.id,outlet.is_active)} style={{padding:'7px 14px',borderRadius:8,border:`1px solid ${C.border}`,background:'transparent',color:outlet.is_active?C.red:C.green,fontSize:12,cursor:'pointer',fontFamily:'inherit'}}>
+                      {outlet.is_active?'Deactivate':'Activate'}
+                    </button>
+                    {!outlet.is_default && <button onClick={() => deleteOutlet(outlet.id,outlet.name)} style={{padding:'7px 10px',borderRadius:8,border:'1px solid rgba(239,68,68,0.2)',background:'transparent',color:C.red,fontSize:12,cursor:'pointer',fontFamily:'inherit'}}>🗑</button>}
+                  </div>
                 </div>
-              ))}
-              <label className="flex items-center gap-2">
-                <input type="checkbox" checked={form.is_active} onChange={e => setForm(f => ({ ...f, is_active: e.target.checked }))} className="rounded accent-[#2563eb]" />
-                <span className="text-xs font-medium text-[rgba(26,26,22,.7)]">Active</span>
+
+                {expanded===outlet.id && (
+                  <div style={{borderTop:`1px solid ${C.border}`,padding:'14px 20px'}}>
+                    <div style={{fontSize:11,fontWeight:700,color:C.dim,textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:10}}>Registers (tills)</div>
+                    <div style={{display:'flex',flexDirection:'column',gap:6,marginBottom:12}}>
+                      {(outlet.pos_registers??[]).map(reg => (
+                        <div key={reg.id} style={{display:'flex',alignItems:'center',gap:12,padding:'8px 12px',background:'rgba(255,255,255,0.03)',borderRadius:8}}>
+                          <span style={{fontSize:13,fontWeight:600,flex:1}}>🖥 {reg.name}</span>
+                          <span style={{fontSize:11,color:reg.is_active?C.green:C.dim}}>{reg.is_active?'Active':'Inactive'}</span>
+                          <button onClick={() => toggleRegister(reg.id,reg.is_active)} style={{padding:'4px 10px',borderRadius:6,border:`1px solid ${C.border}`,background:'transparent',color:reg.is_active?C.red:C.green,fontSize:11,cursor:'pointer',fontFamily:'inherit'}}>
+                            {reg.is_active?'Disable':'Enable'}
+                          </button>
+                        </div>
+                      ))}
+                      {(outlet.pos_registers??[]).length===0 && <div style={{fontSize:12,color:C.dim}}>No registers yet.</div>}
+                    </div>
+                    <div style={{display:'flex',gap:8}}>
+                      <input value={newReg} onChange={e=>setNewReg(e.target.value)} placeholder="Register name (e.g. Register 2, Drive-Through)" onKeyDown={e=>{if(e.key==='Enter')addRegister(outlet.id)}} style={{...iS,flex:1}} />
+                      <button onClick={()=>addRegister(outlet.id)} disabled={addingReg===outlet.id||!newReg.trim()} style={{padding:'9px 18px',borderRadius:8,border:'none',background:C.violet,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',fontFamily:'inherit',whiteSpace:'nowrap',opacity:!newReg.trim()?0.5:1}}>
+                        {addingReg===outlet.id?'Adding…':'+ Register'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+            {outlets.length===0 && <div style={{textAlign:'center',padding:'40px 0',color:C.muted}}>No outlets set up. Add your first outlet below.</div>}
+          </div>
+
+          {showAdd ? (
+            <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:20}}>
+              <div style={{fontSize:15,fontWeight:700,marginBottom:16}}>New outlet</div>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:12}}>
+                {[
+                  {label:'Location name *',key:'name',placeholder:'e.g. CBD Store, Westfield'},
+                  {label:'Address',key:'address',placeholder:'123 Collins St, Melbourne'},
+                  {label:'Phone',key:'phone',placeholder:'+61 3 XXXX XXXX'},
+                ].map(f => (
+                  <div key={f.key}>
+                    <label style={{display:'block',fontSize:11,fontWeight:700,color:C.dim,marginBottom:5,textTransform:'uppercase',letterSpacing:'0.06em'}}>{f.label}</label>
+                    <input value={(form as any)[f.key]} onChange={e=>setForm(p=>({...p,[f.key]:e.target.value}))} placeholder={f.placeholder} style={iS} />
+                  </div>
+                ))}
+                <div>
+                  <label style={{display:'block',fontSize:11,fontWeight:700,color:C.dim,marginBottom:5,textTransform:'uppercase',letterSpacing:'0.06em'}}>Timezone</label>
+                  <select value={form.timezone} onChange={e=>setForm(p=>({...p,timezone:e.target.value}))} style={iS}>
+                    {TIMEZONES.map(tz=><option key={tz} value={tz}>{tz}</option>)}
+                  </select>
+                </div>
+              </div>
+              <label style={{display:'flex',alignItems:'center',gap:8,fontSize:13,color:C.muted,cursor:'pointer',marginBottom:16}}>
+                <input type="checkbox" checked={form.is_default} onChange={e=>setForm(p=>({...p,is_default:e.target.checked}))} />
+                Set as default outlet
               </label>
-            </div>
-            <div className="px-6 py-4 border-t border-[rgba(0,0,0,.08)] flex items-center justify-between">
-              <div>{modal.mode === 'edit' && <button onClick={() => modal.outlet && del(modal.outlet.id)} className="text-xs text-red-500 hover:text-red-600">Delete</button>}</div>
-              <div className="flex gap-2">
-                <button onClick={() => setModal({ open: false, mode: 'add' })} className="px-4 py-2 rounded-lg text-sm font-medium text-[rgba(26,26,22,.6)] border border-[rgba(0,0,0,.1)] hover:bg-[rgba(0,0,0,.04)]">Cancel</button>
-                <button onClick={save} disabled={saving || !form.name.trim()} className="px-4 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-50" style={{ background: 'linear-gradient(135deg,#2563eb,#1d4ed8)' }}>
-                  {saving ? 'Saving…' : modal.mode === 'add' ? 'Create' : 'Save'}
+              <div style={{display:'flex',gap:10}}>
+                <button onClick={()=>{setShowAdd(false)}} style={{padding:'9px 20px',borderRadius:9,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,cursor:'pointer',fontFamily:'inherit'}}>Cancel</button>
+                <button onClick={addOutlet} disabled={saving||!form.name.trim()} style={{padding:'9px 24px',borderRadius:9,border:'none',background:C.violet,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',fontFamily:'inherit',opacity:!form.name.trim()?0.5:1}}>
+                  {saving?'Creating…':'Create outlet'}
                 </button>
               </div>
             </div>
-          </div>
-        </div>
+          ) : (
+            <button onClick={()=>setShowAdd(true)} style={{width:'100%',padding:'14px 0',borderRadius:12,border:'2px dashed rgba(139,92,246,0.3)',background:'rgba(139,92,246,0.04)',color:C.violet,fontSize:14,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>
+              + Add outlet / location
+            </button>
+          )}
+        </>
       )}
     </div>
-  );
+  )
 }

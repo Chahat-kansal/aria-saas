@@ -4,6 +4,41 @@ import Link from 'next/link'
 
 interface Integration { id: string; name: string; description: string; icon: string; status: string; account?: string | null; setup_url: string | null }
 
+function XeroSyncButton() {
+  const [syncing, setSyncing] = useState(false)
+  const [result, setResult] = useState<string | null>(null)
+  const [date, setDate] = useState(() => new Date(Date.now() - 86400000).toISOString().split('T')[0])
+
+  async function sync() {
+    setSyncing(true)
+    setResult(null)
+    try {
+      const res = await fetch('/api/pos/xero-sync', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date }),
+      })
+      const d = await res.json() as { ok?: boolean; message?: string; error?: string; hint?: string; synced?: number }
+      setResult(d.ok ? `✅ ${d.message}` : `❌ ${d.error}${d.hint ? '\n💡 ' + d.hint : ''}`)
+    } catch (e) { setResult('❌ Network error') }
+    setSyncing(false)
+  }
+
+  return (
+    <div style={{ marginTop: 12, padding: 14, borderRadius: 10, background: 'rgba(34,197,94,0.05)', border: '1px solid rgba(34,197,94,0.15)' }}>
+      <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 8 }}>Push sales to Xero</div>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <input type="date" value={date} onChange={e => setDate(e.target.value)}
+          style={{ flex: 1, padding: '7px 10px', borderRadius: 7, border: '1px solid var(--divider)', background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: 12, fontFamily: 'inherit' }} />
+        <button onClick={sync} disabled={syncing}
+          style={{ padding: '7px 14px', borderRadius: 7, border: 'none', background: '#22C55E', color: '#fff', fontSize: 12, fontWeight: 700, cursor: syncing ? 'wait' : 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
+          {syncing ? 'Syncing…' : 'Sync day'}
+        </button>
+      </div>
+      {result && <pre style={{ marginTop: 8, fontSize: 11, color: 'var(--text-secondary)', whiteSpace: 'pre-wrap', lineHeight: 1.4 }}>{result}</pre>}
+    </div>
+  )
+}
+
 const STATUS_STYLE: Record<string, { label: string; color: string; bg: string }> = {
   configured:     { label: 'Configured', color: '#22c55e', bg: 'rgba(34,197,94,0.12)' },
   connected:      { label: 'Connected',  color: '#22c55e', bg: 'rgba(34,197,94,0.12)' },
@@ -43,6 +78,7 @@ export default function IntegrationsPage() {
                     {intg.status.includes('not') ? 'Connect' : 'Manage'}
                   </Link>
                 )}
+                {intg.id === 'xero' && intg.status === 'connected' && <XeroSyncButton />}
               </div>
             )
           })}

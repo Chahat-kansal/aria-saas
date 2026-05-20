@@ -174,6 +174,7 @@ export const NAV_STRUCTURE: NavSection[] = [
     items: [
       { label: 'General', href: '/pos/settings', icon: Settings },
       { label: 'Business Type', href: '/pos/settings/business-type', icon: Store },
+      { label: 'Outlets & Registers', href: '/pos/outlets', icon: Building },
       { label: 'Sale Keys', href: '/pos/sale-keys', icon: Key, industries: ['cafe', 'restaurant', 'bakery'] },
       { label: 'Receipt Designer', href: '/pos/settings/receipts', icon: ScrollText },
       { label: 'Hardware Devices', href: '/pos/settings/hardware', icon: Printer },
