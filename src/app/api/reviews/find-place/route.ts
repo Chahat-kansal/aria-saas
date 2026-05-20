@@ -53,9 +53,12 @@ export async function POST(req: Request) {
 
   // Most useful errors
   if (data.status === 'REQUEST_DENIED') {
-    console.error('[find-place] REQUEST_DENIED:', data.error_message)
+    console.error('[find-place] REQUEST_DENIED full response:', JSON.stringify(data))
     return NextResponse.json({
-      error: `Google rejected the request: ${data.error_message ?? 'API key may not have Places API enabled. Enable "Places API" in Google Cloud Console for this key.'}`
+      error: `Google rejected: ${data.error_message ?? 'No detail provided'}`,
+      debug_keyTail: key.slice(-6),
+      debug_status: data.status,
+      debug_full: data,
     }, { status: 500 })
   }
 
