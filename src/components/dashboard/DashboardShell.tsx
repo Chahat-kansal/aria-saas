@@ -86,7 +86,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           </button>
         </div>
         <AriaAwarenessBar />
-        <main className="flex-1 overflow-y-auto">{children}</main>
+        <main className="flex-1 overflow-y-auto relative">{children}</main>
         <AriaCommandBar />
       </div>
     </div>
