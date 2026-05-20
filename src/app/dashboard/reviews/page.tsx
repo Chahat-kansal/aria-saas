@@ -48,6 +48,8 @@ export default function ReviewsPage() {
   const [connectSearching, setConnectSearching] = useState(false)
   const [connectMatches, setConnectMatches] = useState<Array<{ place_id: string; name: string; address: string; rating: number | null; total_reviews: number; status: string }>>([])
   const [connectingId, setConnectingId] = useState<string | null>(null)
+  const [connectSearched, setConnectSearched] = useState(false)
+  const [connectError, setConnectError] = useState<string | null>(null)
   const [tab,        setTab]        = useState<FilterTab>('all')
   const [syncing,    setSyncing]    = useState(false)
   const [syncMsg,    setSyncMsg]    = useState('')
@@ -107,19 +109,25 @@ export default function ReviewsPage() {
   async function findGooglePlace() {
     if (!connectQuery.trim()) return
     setConnectSearching(true)
+    setConnectSearched(true)
+    setConnectError(null)
+    setConnectMatches([])
     try {
       const bizRes = await fetch('/api/pos/products')
       const bd = await bizRes.json()
       const business_id = bd.business_id
-      if (!business_id) { alert('No business found'); setConnectSearching(false); return }
+      if (!business_id) { setConnectError('No business found in your account'); setConnectSearching(false); return }
       const r = await fetch('/api/reviews/find-place', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ business_id, query: connectQuery })
       })
       const d = await r.json()
-      if (d.error) { alert(d.error); setConnectMatches([]) }
-      else setConnectMatches(d.matches ?? [])
-    } catch { alert('Search failed') }
+      if (d.error) setConnectError(d.error)
+      else if (!d.matches || d.matches.length === 0) setConnectError(d.message || `No business found matching "${connectQuery}". Try adding more details like street or suburb.`)
+      else setConnectMatches(d.matches)
+    } catch (e) {
+      setConnectError('Search failed. Check your internet connection.')
+    }
     setConnectSearching(false)
   }
 
@@ -190,7 +198,7 @@ export default function ReviewsPage() {
             <p style={{ fontWeight: 600, color: '#4285F4', marginBottom: 2 }}>📍 Want to auto-sync your Google reviews?</p>
             <p style={{ fontSize: 12 }}>Add your Google Place ID in Settings to monitor reviews automatically. Until then, use Aria to draft replies for any reviews you collect manually.</p>
           </div>
-          <button onClick={() => { setShowConnectModal(true); setConnectQuery(''); setConnectMatches([]) }} style={{ padding: '6px 14px', borderRadius: 8, background: '#4285F4', color: '#fff', fontSize: 12, fontWeight: 600, border: 'none', cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'inherit' }}>
+          <button onClick={() => { setShowConnectModal(true); setConnectQuery(''); setConnectMatches([]); setConnectSearched(false); setConnectError(null) }} style={{ padding: '6px 14px', borderRadius: 8, background: '#4285F4', color: '#fff', fontSize: 12, fontWeight: 600, border: 'none', cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'inherit' }}>
             Connect in 10 seconds →
           </button>
         </div>
@@ -438,9 +446,19 @@ export default function ReviewsPage() {
               </div>
             )}
 
-            {connectMatches.length === 0 && !connectSearching && connectQuery && (
+            {connectError && (
+              <div style={{ padding: '14px 16px', borderRadius: 10, background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', marginBottom: 12 }}>
+                <p style={{ fontSize: 13, fontWeight: 600, color: '#EF4444', marginBottom: 6 }}>⚠️ {connectError}</p>
+                <p style={{ fontSize: 11, color: 'var(--text-tertiary)', lineHeight: 1.5 }}>
+                  Tips: Include the suburb (e.g. "Sip Café Fitzroy"), exact street, or postcode.
+                  If your business isn't on Google Maps yet, <a href="https://www.google.com/business/" target="_blank" rel="noopener" style={{ color: '#4285F4' }}>claim it for free here</a> first.
+                </p>
+              </div>
+            )}
+
+            {connectMatches.length === 0 && !connectSearching && !connectSearched && (
               <p style={{ fontSize: 12, color: 'var(--text-tertiary)', textAlign: 'center', padding: '20px 0' }}>
-                Click Search to find your business.
+                Type your business name and click Search.
               </p>
             )}
 
