@@ -22,7 +22,10 @@ export default function MenuClient({ businessId }: { businessId: string }) {
   const [modal,    setModal]    = useState<Product | null>(null)
   const [selMods,  setSelMods]  = useState<Modifier[]>([])
   const [ordering, setOrdering] = useState(false)
-  const [orderDone,setOrderDone]= useState<{ order_number: string; estimated_ready_minutes: number } | null>(null)
+  const [orderDone, setOrderDone] = useState<{ order_number: string; estimated_ready_minutes: number; total: number } | null>(null)
+  const [showCheckout, setShowCheckout] = useState(false)
+  const [checkoutForm, setCheckoutForm] = useState({ name: '', phone: '', email: '', fulfillment_type: 'pickup', special_instructions: '', payment_method: 'pay_on_pickup' })
+  const [checkoutError, setCheckoutError] = useState('')
   const [form,     setForm]     = useState({ customer_name: '', customer_phone: '', notes: '' })
   const [pickupTime,setPickupTime] = useState('')
   const [errMsg,   setErrMsg]   = useState('')
@@ -79,13 +82,19 @@ export default function MenuClient({ businessId }: { businessId: string }) {
   const cartCount = cart.reduce((s, i) => s + i.qty, 0)
 
   async function placeOrder() {
-    if (!form.customer_name.trim()) { setErrMsg('Please enter your name'); return }
-    setOrdering(true); setErrMsg('')
+    if (!checkoutForm.name.trim() || !checkoutForm.phone.trim()) {
+      setCheckoutError('Please enter your name and phone number'); return
+    }
+    setOrdering(true); setCheckoutError('')
     const res = await fetch(`/api/public/place-order/${business_id}`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        customer_name: form.customer_name,
-        customer_phone: form.customer_phone || null,
+        customer_name: checkoutForm.name,
+        customer_phone: checkoutForm.phone,
+        customer_email: checkoutForm.email || null,
+        fulfillment_type: checkoutForm.fulfillment_type,
+        special_instructions: checkoutForm.special_instructions || null,
+        payment_method: checkoutForm.payment_method,
         notes: form.notes || null,
         pickup_time: pickupTime || null,
         source: 'web',
@@ -97,23 +106,30 @@ export default function MenuClient({ businessId }: { businessId: string }) {
       }),
     }).then(r => r.json()).catch(() => ({ error: 'Network error' }))
 
-    if (res.error) { setErrMsg(res.error); setOrdering(false); return }
-    setOrderDone({ order_number: res.order_number, estimated_ready_minutes: res.estimated_ready_minutes })
-    setCart([]); setShowCart(false); setOrdering(false)
+    if (res.error) { setCheckoutError(res.error); setOrdering(false); return }
+    setOrderDone({ order_number: res.order_number, estimated_ready_minutes: res.estimated_ready_minutes, total: cartTotal })
+    setCart([]); setShowCart(false); setShowCheckout(false); setOrdering(false)
   }
 
   const filtered = catTab ? products.filter(p => p.category_id === catTab) : products
 
   if (orderDone) return (
-    <div style={{ minHeight: '100dvh', background: '#0f1a26', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24, fontFamily: "'Manrope',sans-serif", color: '#e8f4f8' }}>
-      <div style={{ fontSize: 52, marginBottom: 16 }}>✅</div>
-      <h1 style={{ fontSize: 24, fontWeight: 800, margin: '0 0 8px', textAlign: 'center' }}>Order placed!</h1>
-      <p style={{ fontSize: 20, fontWeight: 700, color: '#7FB897', margin: '0 0 12px' }}>{orderDone.order_number}</p>
-      <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.6)', textAlign: 'center', marginBottom: 24 }}>
-        Ready in approximately <strong style={{ color: '#e8f4f8' }}>{orderDone.estimated_ready_minutes} minutes</strong>
-      </p>
-      <button onClick={() => { setOrderDone(null); load() }} style={{ padding: '12px 28px', borderRadius: 10, border: 'none', background: '#7FB897', color: '#0f1a26', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
-        Order again
+    <div style={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#f8f9fa', padding: 24, textAlign: 'center', fontFamily: "'Manrope',system-ui,sans-serif" }}>
+      <div style={{ width: 64, height: 64, borderRadius: '50%', background: '#dcfce7', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 32, margin: '0 auto 20px' }}>✓</div>
+      <h1 style={{ fontSize: 24, fontWeight: 800, color: '#0f1a26', margin: '0 0 8px' }}>Order placed!</h1>
+      <p style={{ color: '#6b7280', fontSize: 15, margin: '0 0 20px' }}>We've received your order and will have it ready soon.</p>
+      <div style={{ background: '#fff', borderRadius: 16, padding: 24, marginBottom: 20, boxShadow: '0 2px 12px rgba(0,0,0,0.08)', maxWidth: 320, width: '100%' }}>
+        <p style={{ fontSize: 13, color: '#6b7280', margin: '0 0 4px' }}>Order number</p>
+        <p style={{ fontSize: 28, fontWeight: 800, color: '#0f1a26', margin: '0 0 16px', letterSpacing: 2 }}>{orderDone.order_number}</p>
+        <p style={{ fontSize: 13, color: '#6b7280', margin: '0 0 4px' }}>Total</p>
+        <p style={{ fontSize: 20, fontWeight: 700, color: '#2D5240', margin: '0 0 16px' }}>{formatAUD(orderDone.total)}</p>
+        <p style={{ fontSize: 13, color: '#6b7280', margin: '0 0 4px' }}>Ready in approximately</p>
+        <p style={{ fontSize: 18, fontWeight: 700, color: '#0f1a26', margin: 0 }}>{orderDone.estimated_ready_minutes} minutes</p>
+      </div>
+      {checkoutForm.email && <p style={{ fontSize: 13, color: '#6b7280', marginBottom: 20 }}>Confirmation sent to {checkoutForm.email}</p>}
+      <button onClick={() => { setOrderDone(null); setCheckoutForm({ name: '', phone: '', email: '', fulfillment_type: 'pickup', special_instructions: '', payment_method: 'pay_on_pickup' }); load() }}
+        style={{ padding: '14px 32px', borderRadius: 12, border: 'none', background: '#2D5240', color: '#7FB897', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+        Back to menu
       </button>
     </div>
   )
@@ -226,6 +242,87 @@ export default function MenuClient({ businessId }: { businessId: string }) {
         </div>
       )}
 
+      {/* Checkout modal */}
+      {showCheckout && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 200, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+          <div style={{ background: '#fff', borderRadius: '20px 20px 0 0', width: '100%', maxWidth: 480, maxHeight: '90vh', overflowY: 'auto', padding: 24, fontFamily: "'Manrope',system-ui,sans-serif" }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <h2 style={{ fontSize: 18, fontWeight: 800, margin: 0 }}>Checkout</h2>
+              <button onClick={() => setShowCheckout(false)} style={{ background: 'none', border: 'none', fontSize: 24, cursor: 'pointer', color: '#6b7280' }}>×</button>
+            </div>
+
+            {/* Order type */}
+            <div style={{ marginBottom: 16 }}>
+              <p style={{ fontSize: 13, fontWeight: 700, color: '#374151', marginBottom: 8 }}>Order type</p>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                {(['pickup', 'delivery'] as const).map(type => (
+                  <button key={type} onClick={() => setCheckoutForm(f => ({ ...f, fulfillment_type: type }))}
+                    style={{ padding: 12, borderRadius: 10, border: `2px solid ${checkoutForm.fulfillment_type === type ? '#2D5240' : '#e5e7eb'}`, background: checkoutForm.fulfillment_type === type ? '#f0fdf4' : '#fff', cursor: 'pointer', fontSize: 14, fontWeight: 600, color: checkoutForm.fulfillment_type === type ? '#2D5240' : '#6b7280' }}>
+                    {type === 'pickup' ? '🏃 Pickup' : '🛵 Delivery'}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Customer details */}
+            <div style={{ marginBottom: 16 }}>
+              <p style={{ fontSize: 13, fontWeight: 700, color: '#374151', marginBottom: 8 }}>Your details</p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {([
+                  { key: 'name', label: 'Full name *', type: 'text', placeholder: 'Jane Smith' },
+                  { key: 'phone', label: 'Mobile *', type: 'tel', placeholder: '0400 000 000' },
+                  { key: 'email', label: 'Email (for receipt)', type: 'email', placeholder: 'jane@email.com' },
+                ] as const).map(({ key, label, type, placeholder }) => (
+                  <div key={key}>
+                    <label style={{ fontSize: 12, color: '#6b7280', display: 'block', marginBottom: 4 }}>{label}</label>
+                    <input type={type} value={checkoutForm[key]} onChange={e => setCheckoutForm(f => ({ ...f, [key]: e.target.value }))} placeholder={placeholder}
+                      style={{ width: '100%', padding: '10px 14px', borderRadius: 10, border: '1px solid #e5e7eb', fontSize: 14, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }} />
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Special instructions */}
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ fontSize: 12, color: '#6b7280', display: 'block', marginBottom: 4 }}>Special instructions</label>
+              <textarea value={checkoutForm.special_instructions} onChange={e => setCheckoutForm(f => ({ ...f, special_instructions: e.target.value }))} placeholder="Allergies, preferences…"
+                style={{ width: '100%', padding: '10px 14px', borderRadius: 10, border: '1px solid #e5e7eb', fontSize: 14, outline: 'none', resize: 'vertical', minHeight: 60, boxSizing: 'border-box', fontFamily: 'inherit' }} />
+            </div>
+
+            {/* Payment method */}
+            <div style={{ marginBottom: 20 }}>
+              <p style={{ fontSize: 13, fontWeight: 700, color: '#374151', marginBottom: 8 }}>Payment</p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {[
+                  { value: 'pay_on_pickup', label: '💵 Pay on pickup / delivery' },
+                  { value: 'pay_online', label: '💳 Pay now online (card)' },
+                ].map(({ value, label }) => (
+                  <button key={value} onClick={() => setCheckoutForm(f => ({ ...f, payment_method: value }))}
+                    style={{ padding: '12px 16px', borderRadius: 10, border: `2px solid ${checkoutForm.payment_method === value ? '#2D5240' : '#e5e7eb'}`, background: checkoutForm.payment_method === value ? '#f0fdf4' : '#fff', cursor: 'pointer', fontSize: 14, fontWeight: 500, color: checkoutForm.payment_method === value ? '#2D5240' : '#374151', textAlign: 'left' }}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Order summary */}
+            <div style={{ background: '#f9fafb', borderRadius: 12, padding: '14px 16px', marginBottom: 16 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, fontWeight: 700 }}>
+                <span>Total ({cart.reduce((s, i) => s + i.qty, 0)} items)</span>
+                <span>{formatAUD(cartTotal)}</span>
+              </div>
+            </div>
+
+            {checkoutError && <p style={{ color: '#ef4444', fontSize: 13, marginBottom: 12 }}>{checkoutError}</p>}
+
+            <button onClick={placeOrder} disabled={ordering}
+              style={{ width: '100%', padding: 16, borderRadius: 14, border: 'none', background: '#2D5240', color: '#7FB897', fontSize: 16, fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit', opacity: ordering ? 0.7 : 1 }}>
+              {ordering ? 'Placing order…' : `Place order — ${formatAUD(cartTotal)}`}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Cart drawer */}
       {showCart && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 200, display: 'flex', alignItems: 'flex-end' }}>
@@ -263,9 +360,9 @@ export default function MenuClient({ businessId }: { businessId: string }) {
 
             {errMsg && <p style={{ color: '#ef4444', fontSize: 13, marginBottom: 10 }}>{errMsg}</p>}
 
-            <button onClick={placeOrder} disabled={ordering || !form.customer_name.trim()}
-              style={{ width: '100%', padding: '14px 0', borderRadius: 12, border: 'none', background: ordering || !form.customer_name.trim() ? '#9ca3af' : '#7FB897', color: '#0f1a26', fontSize: 15, fontWeight: 700, cursor: ordering || !form.customer_name.trim() ? 'not-allowed' : 'pointer', fontFamily: 'inherit' }}>
-              {ordering ? 'Placing order…' : `Place order — ${formatAUD(cartTotal)}`}
+            <button onClick={() => { setShowCart(false); setShowCheckout(true) }} disabled={cart.length === 0}
+              style={{ width: '100%', padding: '14px 0', borderRadius: 12, border: 'none', background: '#2D5240', color: '#7FB897', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+              Proceed to checkout — {formatAUD(cartTotal)}
             </button>
           </div>
         </div>

@@ -156,6 +156,26 @@ export async function POST(req: Request, { params }: Params) {
   }
 
   const pickupEst = outlet.pickup_ready_estimate_minutes ?? 10
+
+  // Send confirmation email if customer provided email
+  if (customer_email && onlineOrder) {
+    const resendKey = process.env.RESEND_API_KEY
+    if (resendKey) {
+      const fmtAUD = (cents: number) => `A$${cents.toFixed(2)}`
+      const itemsList = (items as Array<{ product_name: string; quantity: number; unit_price: number }>)
+        .map(i => `${i.quantity}× ${i.product_name} — ${fmtAUD(i.unit_price * i.quantity)}`).join('\n')
+      void fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${resendKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          from: `${biz?.name ?? 'AriaOS'} <support@ariaos.site>`,
+          to: [customer_email],
+          subject: `Order confirmed — ${order_number}`,
+          html: `<div style="font-family:Inter,sans-serif;max-width:480px;margin:0 auto;padding:32px 24px"><h2 style="color:#2D5240">Order confirmed! 🎉</h2><p style="color:#6b7280">Hi ${(customer_name as string).split(' ')[0]}, your order is on its way.</p><div style="background:#f9fafb;border-radius:12px;padding:16px;margin:16px 0"><p style="font-size:13px;color:#6b7280;margin:0 0 4px">Order number</p><p style="font-size:24px;font-weight:800;margin:0 0 12px;letter-spacing:2px">${order_number}</p><p style="font-size:13px;color:#6b7280;margin:0 0 4px">Total</p><p style="font-size:20px;font-weight:700;color:#2D5240;margin:0 0 12px">${fmtAUD(total)}</p><p style="font-size:13px;color:#6b7280;margin:0 0 4px">Ready in approximately</p><p style="font-size:18px;font-weight:700;margin:0">${pickupEst} minutes</p></div><pre style="font-size:13px;color:#374151;white-space:pre-wrap;background:#f3f4f6;padding:12px;border-radius:8px">${itemsList}</pre></div>`,
+        }),
+      }).catch(() => {})
+    }
+  }
   return NextResponse.json({
     ok: true,
     order_id: onlineOrder.id,
