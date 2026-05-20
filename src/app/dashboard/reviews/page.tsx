@@ -43,6 +43,11 @@ export default function ReviewsPage() {
   const [reputation, setReputation] = useState<Reputation | null>(null)
   const [templates,  setTemplates]  = useState<Template[]>([])
   const [loading,    setLoading]    = useState(true)
+  const [showConnectModal, setShowConnectModal] = useState(false)
+  const [connectQuery, setConnectQuery] = useState('')
+  const [connectSearching, setConnectSearching] = useState(false)
+  const [connectMatches, setConnectMatches] = useState<Array<{ place_id: string; name: string; address: string; rating: number | null; total_reviews: number; status: string }>>([])
+  const [connectingId, setConnectingId] = useState<string | null>(null)
   const [tab,        setTab]        = useState<FilterTab>('all')
   const [syncing,    setSyncing]    = useState(false)
   const [syncMsg,    setSyncMsg]    = useState('')
@@ -99,6 +104,47 @@ export default function ReviewsPage() {
     await fetch('/api/aria/review-request', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ review_id: reviewId }) }).catch(() => {})
   }
 
+  async function findGooglePlace() {
+    if (!connectQuery.trim()) return
+    setConnectSearching(true)
+    try {
+      const bizRes = await fetch('/api/pos/products')
+      const bd = await bizRes.json()
+      const business_id = bd.business_id
+      if (!business_id) { alert('No business found'); setConnectSearching(false); return }
+      const r = await fetch('/api/reviews/find-place', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ business_id, query: connectQuery })
+      })
+      const d = await r.json()
+      if (d.error) { alert(d.error); setConnectMatches([]) }
+      else setConnectMatches(d.matches ?? [])
+    } catch { alert('Search failed') }
+    setConnectSearching(false)
+  }
+
+  async function connectGooglePlace(placeId: string) {
+    setConnectingId(placeId)
+    try {
+      const bizRes = await fetch('/api/pos/products')
+      const bd = await bizRes.json()
+      const business_id = bd.business_id
+      if (!business_id) { alert('No business found'); setConnectingId(null); return }
+      // Save Place ID to business
+      await fetch(`/api/businesses/${business_id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ google_place_id: placeId })
+      })
+      // Trigger initial sync
+      await fetch('/api/reviews/sync', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ business_id, place_id: placeId })
+      })
+      setShowConnectModal(false)
+      window.location.reload()
+    } catch { alert('Could not connect — try again'); setConnectingId(null) }
+  }
+
   function copyDraft(id: string) {
     const text = drafts[id]
     if (!text) return
@@ -144,9 +190,9 @@ export default function ReviewsPage() {
             <p style={{ fontWeight: 600, color: '#4285F4', marginBottom: 2 }}>📍 Want to auto-sync your Google reviews?</p>
             <p style={{ fontSize: 12 }}>Add your Google Place ID in Settings to monitor reviews automatically. Until then, use Aria to draft replies for any reviews you collect manually.</p>
           </div>
-          <a href="/dashboard/settings" style={{ padding: '6px 14px', borderRadius: 8, background: '#4285F4', color: '#fff', fontSize: 12, fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>
-            Connect Google →
-          </a>
+          <button onClick={() => { setShowConnectModal(true); setConnectQuery(''); setConnectMatches([]) }} style={{ padding: '6px 14px', borderRadius: 8, background: '#4285F4', color: '#fff', fontSize: 12, fontWeight: 600, border: 'none', cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'inherit' }}>
+            Connect in 10 seconds →
+          </button>
         </div>
       )}
 
@@ -342,6 +388,69 @@ export default function ReviewsPage() {
         </div>
       )}
       <p style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 24 }}>Reviews auto-synced daily at 6 AM. Aria drafts replies automatically — review before publishing to Google.</p>
+
+      {/* Google Connect Modal */}
+      {showConnectModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 }} onClick={() => setShowConnectModal(false)}>
+          <div onClick={e => e.stopPropagation()} style={{ background: 'var(--bg-surface)', borderRadius: 16, padding: 28, maxWidth: 540, width: '100%', maxHeight: '85vh', overflow: 'auto', border: '1px solid var(--divider)' }}>
+            <div style={{ marginBottom: 20 }}>
+              <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 6 }}>Connect Google Reviews</h2>
+              <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Type your business name and city — Aria will find it on Google Maps and connect automatically.</p>
+            </div>
+
+            <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+              <input
+                autoFocus
+                value={connectQuery}
+                onChange={e => setConnectQuery(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') findGooglePlace() }}
+                placeholder="e.g. Sip Café Melbourne"
+                style={{ flex: 1, padding: '10px 14px', borderRadius: 10, border: '1px solid var(--divider)', background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 14, outline: 'none' }}
+              />
+              <button
+                onClick={findGooglePlace}
+                disabled={connectSearching || !connectQuery.trim()}
+                style={{ padding: '10px 18px', borderRadius: 10, background: '#4285F4', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: connectSearching || !connectQuery.trim() ? 'not-allowed' : 'pointer', opacity: connectSearching || !connectQuery.trim() ? 0.5 : 1, fontFamily: 'inherit' }}>
+                {connectSearching ? 'Searching…' : '🔍 Search'}
+              </button>
+            </div>
+
+            {connectMatches.length > 0 && (
+              <div>
+                <p style={{ fontSize: 12, color: 'var(--text-tertiary)', marginBottom: 10, fontWeight: 600 }}>Select your business:</p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {connectMatches.map(m => (
+                    <button key={m.place_id} onClick={() => connectGooglePlace(m.place_id)} disabled={!!connectingId}
+                      style={{ textAlign: 'left', padding: '12px 16px', borderRadius: 10, background: 'var(--bg-elevated)', border: '1px solid var(--divider)', cursor: connectingId ? 'wait' : 'pointer', color: 'var(--text-primary)', fontFamily: 'inherit', opacity: connectingId && connectingId !== m.place_id ? 0.4 : 1 }}>
+                      <p style={{ fontWeight: 700, fontSize: 14, marginBottom: 2 }}>
+                        {m.name}
+                        {connectingId === m.place_id && <span style={{ fontSize: 11, color: '#4285F4', marginLeft: 8 }}>Connecting…</span>}
+                      </p>
+                      <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 4 }}>{m.address}</p>
+                      {m.rating !== null && (
+                        <p style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
+                          ⭐ {m.rating} · {m.total_reviews} reviews{m.status !== 'OPERATIONAL' && <span style={{ color: '#f59e0b', marginLeft: 8 }}>· {m.status}</span>}
+                        </p>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {connectMatches.length === 0 && !connectSearching && connectQuery && (
+              <p style={{ fontSize: 12, color: 'var(--text-tertiary)', textAlign: 'center', padding: '20px 0' }}>
+                Click Search to find your business.
+              </p>
+            )}
+
+            <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--divider)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <p style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>Need help? <a href="https://www.google.com/business/" target="_blank" rel="noopener" style={{ color: '#4285F4' }}>Claim your business on Google →</a></p>
+              <button onClick={() => setShowConnectModal(false)} style={{ padding: '8px 14px', borderRadius: 8, background: 'transparent', color: 'var(--text-secondary)', border: '1px solid var(--divider)', cursor: 'pointer', fontSize: 12, fontFamily: 'inherit' }}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
