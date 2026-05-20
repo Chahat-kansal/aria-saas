@@ -63,7 +63,7 @@ export async function generateRosterDraft(
   }
   const topHours = Object.entries(salesByKey)
     .map(([k, v]) => ({ key: k, avg: v.reduce((a, b) => a + b, 0) / v.length }))
-    .sort((a, b) => b.avg - a.avg).slice(0, 15)
+    .sort((a, b) => b.avg - a.avg).slice(0, 8)
     .map(({ key, avg }) => {
       const [dow, hr] = key.split('-').map(Number)
       const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
@@ -91,10 +91,10 @@ Generate practical roster for 5-6 days. Return JSON: {"shifts": [...], "reasonin
 
   const result = await callAnthropic<{ shifts: ShiftEntry[]; reasoning: string }>(
     {
-      model: 'sonnet',
+      model: 'haiku',
       systemPrompt: ROSTERING_SYSTEM,
       userPrompt,
-      maxTokens: 3000,
+      maxTokens: 1500,
       businessId,
       agentKey: 'rostering',
       role: 'agent',

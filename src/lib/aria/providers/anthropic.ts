@@ -6,7 +6,7 @@ import type { AgentKey, AgentRole } from '../types'
 
 const client = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
-  timeout: 25_000,
+  timeout: 55_000,
   maxRetries: 0,
 })
 
