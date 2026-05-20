@@ -82,8 +82,8 @@ export default function MarketingPage() {
         setFormMsg(d.suggestion.message)
         if (d.suggestion.best_send_time) setFormSchedule(d.suggestion.best_send_time.slice(0, 16))
         setStep(2)
-      } else if (d.error) {
-        alert('Aria could not generate a campaign: ' + d.error)
+      } else {
+        alert(d.error || 'Aria could not generate a campaign. Make sure customers have marketing consent enabled in their profiles.')
       }
     } finally { setAriaLoading(false) }
   }

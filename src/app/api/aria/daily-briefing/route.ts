@@ -146,11 +146,8 @@ async function _POST(req: NextRequest) {
       .eq('right_to_work_verified', false),
   ]);
 
-  // Data guard — skip Claude if no sales data at all
-  const rev7     = sales7.reduce((s, x) => s + x.totalCents, 0);
-  if (rev7 === 0 && sales7.length === 0) {
-    return NextResponse.json({ recommendations: [], skipped: true, reason: 'no_data' });
-  }
+  // Continue even with no sales — Aria can still give setup recommendations
+  const rev7 = sales7.reduce((s, x) => s + x.totalCents, 0);
 
   // Revenue calculations (rev7 already computed above)
   const revPrev7 = salesPrev7.reduce((s, x) => s + x.totalCents, 0);

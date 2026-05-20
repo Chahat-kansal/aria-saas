@@ -104,10 +104,10 @@ async function _POST(req: Request) {
     .sort((a, b) => b[1] - a[1]).slice(0, 5)
     .map(([name, qty]) => `${name} (${qty} sold this week)`);
 
-  // If no recent sales, use product catalogue for content inspiration
+  // If no recent sales, fall back to brand awareness content
   const productContext = topProducts.length > 0
-    ? `Top selling products this week: ${topProducts.join(', ')}`
-    : `Products available: ${(topItems ?? []).slice(0, 5).map((p: any) => p.product_name).filter(Boolean).join(', ') || 'Various products available in store'}`
+    ? `Top products sold this week: ${topProducts.join(', ')}`
+    : `Business type: ${biz.industry ?? 'retail'}. No sales recorded yet — generate general brand awareness content.`
 
   const strategyContext = INDUSTRY_STRATEGIES[biz.industry] || INDUSTRY_STRATEGIES.retail;
   const promoContext = (promotions || []).length > 0

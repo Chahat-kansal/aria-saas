@@ -25,8 +25,8 @@ async function _GET(req: Request) {
     .eq('business_id', business_id)
     .gte('created_at', ninetyDaysAgo);
 
-  if (!sales || sales.length < 30) {
-    return NextResponse.json({ days: [], insufficient_data: true, message: 'Need at least 30 sales for slow day analysis.' });
+  if (!sales || sales.length < 10) {
+    return NextResponse.json({ days: [], insufficient_data: true, message: 'Need at least 10 sales to analyse slow days. Keep using the POS and this will populate automatically.' });
   }
 
   // Group by day of week

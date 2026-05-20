@@ -135,6 +135,11 @@ export default function TimesheetsPage() {
 
       {loading ? (
         <div className="text-center py-8 text-sm" style={{ color: 'var(--text-secondary, #A8B5A8)' }}>Loading…</div>
+      ) : timesheets.length === 0 ? (
+        <div className="text-center py-12 text-sm" style={{ color: 'var(--text-secondary, #A8B5A8)' }}>
+          <p className="mb-1 font-medium">No timesheets for this week</p>
+          <p>Timesheets are created automatically when staff clock in via the Staff Portal or POS.</p>
+        </div>
       ) : (
         <TimesheetTable
           timesheets={timesheets}

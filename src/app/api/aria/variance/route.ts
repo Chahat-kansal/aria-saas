@@ -33,7 +33,7 @@ async function _POST(req: Request) {
   const variances = await calculateVariance(business_id, dataSource);
 
   if (variances.length === 0) {
-    return NextResponse.json({ items: [], total_loss_cents: 0, ai_insights: [], message: 'No stock variance detected — inventory records match sales data.' });
+    return NextResponse.json({ items: [], total_loss_cents: 0, ai_insights: [{ type: 'info', message: 'No variance detected. All recorded sales match expected stock levels.' }] });
   }
 
   const totalLoss = variances.filter(v => v.variance < 0).reduce((s, v) => s + v.variance_value_cents, 0);

@@ -57,7 +57,7 @@ async function _POST(req: Request) {
 
   const upcomingHolidays = getUpcomingHolidays(60, 'VIC');
 
-  const limitedData = sales90.length === 0;
+  const limitedData = sales90.length < 5;
 
   const itemsWithReorder = allItems.filter(i => i.reorderPoint > 0);
   if (itemsWithReorder.length === 0) {
@@ -146,6 +146,7 @@ async function _POST(req: Request) {
           holiday_uplift: i.holiday_uplift > 1 ? `×${i.holiday_uplift}` : null,
         })),
         upcoming_holidays: upcomingHolidays.map(h => `${h.name} in ${h.days_away} days`),
+        data_note: limitedData ? 'Limited sales data available — base recommendations on stock levels and product catalogue only.' : null,
       };
 
       const _bizCtx = await getBusinessContext(business_id)

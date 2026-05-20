@@ -96,7 +96,9 @@ export default function SocialPage() {
     if (d.posts?.length) {
       setPosts(prev => [...d.posts, ...prev.filter(p => p.status !== 'draft')]);
     } else {
-      alert(d.error || 'Aria could not generate social posts right now. Try again in a moment.');
+      alert(d.reason === 'no_products'
+        ? 'Aria needs product or sales data to generate posts. Try making a few sales in the POS first.'
+        : d.error || 'Could not generate posts right now. Try again in a moment.')
     }
     setGenerating(false);
   }
