@@ -56,4 +56,14 @@ async function _PATCH(req: Request, { params }: { params: { id: string } }) {
   return NextResponse.json({ timesheet: data })
 }
 
+async function _DELETE(_req: Request, { params }: { params: { id: string } }) {
+  const supabase = createServerSupabaseClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const { supabaseAdmin } = await import('@/lib/supabase-admin')
+  await supabaseAdmin.from('pos_timesheets').delete().eq('id', params.id)
+  return NextResponse.json({ ok: true })
+}
+
 export const PATCH = withErrorCapture('staff/timesheets/[id]', _PATCH)
+export const DELETE = withErrorCapture('staff/timesheets/[id]', _DELETE)

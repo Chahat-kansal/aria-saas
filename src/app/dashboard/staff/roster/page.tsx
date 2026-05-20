@@ -38,6 +38,12 @@ export default function RosterPage() {
   const [aiReasoning, setAiReasoning] = useState<string | null>(null)
   const [modal, setModal] = useState<{ day: string; shift?: ShiftEntry } | null>(null)
   const [toast, setToast] = useState<string | null>(null)
+  const [availability, setAvailability] = useState<Array<{ staff_member_id: string; day_of_week: number; available: boolean; start_time: string | null; end_time: string | null; staff_name: string | null }>>([])
+  const [templates, setTemplates] = useState<Array<{ id: string; name: string; shifts: ShiftEntry[] }>>([])
+  const [showAvailability, setShowAvailability] = useState(false)
+  const [showTemplates, setShowTemplates] = useState(false)
+  const [templateName, setTemplateName] = useState('')
+  const [conflicts, setConflicts] = useState<string[]>([])
 
   const weekDays = Array.from({ length: 7 }, (_, i) => {
     const d = new Date(weekStart + 'T12:00:00Z'); d.setDate(d.getDate() + i)
@@ -66,6 +72,11 @@ export default function RosterPage() {
       setAreas(areasData.areas ?? [])
     } catch { /* keep empty state */ }
     setLoading(false)
+    // Load availability and templates in parallel (non-blocking)
+    Promise.all([
+      fetch('/api/staff/availability').then(r => r.json()).then(d => setAvailability(d.availability ?? [])),
+      fetch('/api/staff/roster/templates').then(r => r.json()).then(d => setTemplates(d.templates ?? [])),
+    ]).catch(() => {})
   }, [weekStart])
 
   useEffect(() => { loadWeek() }, [loadWeek])
@@ -98,11 +109,35 @@ export default function RosterPage() {
   const handleCellClick = (staffId: string, day: string) => setModal({ day, shift: undefined })
   const handleShiftEdit = (shift: ShiftEntry) => setModal({ day: shift.start_time.slice(0, 10), shift })
 
+  const detectConflicts = useCallback((shiftList: ShiftEntry[]) => {
+    const issues: string[] = []
+    shiftList.forEach(a => {
+      shiftList.forEach(b => {
+        if (a.id === b.id || a.staff_member_id !== b.staff_member_id) return
+        const aStart = new Date(a.start_time).getTime(), aEnd = new Date(a.end_time).getTime()
+        const bStart = new Date(b.start_time).getTime(), bEnd = new Date(b.end_time).getTime()
+        if (aStart < bEnd && aEnd > bStart) {
+          issues.push(`⚠ ${a.staff_name} is double-booked on ${new Date(a.start_time).toLocaleDateString('en-AU', { weekday: 'short' })}`)
+        }
+      })
+    })
+    shiftList.forEach(s => {
+      const shiftDay = new Date(s.start_time).getDay()
+      const avail = availability.find(a => a.staff_member_id === s.staff_member_id && a.day_of_week === shiftDay)
+      if (avail && !avail.available) {
+        issues.push(`⚠ ${s.staff_name} is unavailable on ${new Date(s.start_time).toLocaleDateString('en-AU', { weekday: 'long' })}`)
+      }
+    })
+    setConflicts([...new Set(issues)])
+  }, [availability])
+
   const handleShiftSave = (newShift: Omit<ShiftEntry, 'cost_cents' | 'hours'>) => {
     const withDefaults: ShiftEntry = { ...newShift, hours: 0, cost_cents: 0 }
     setShifts(prev => {
       const existing = prev.findIndex(s => s.id === newShift.id)
-      return existing >= 0 ? prev.map((s, i) => i === existing ? withDefaults : s) : [...prev, withDefaults]
+      const updated = existing >= 0 ? prev.map((s, i) => i === existing ? withDefaults : s) : [...prev, withDefaults]
+      detectConflicts(updated)
+      return updated
     })
     setIsDirty(true)
     setModal(null)
@@ -127,6 +162,28 @@ export default function RosterPage() {
       showToast('Roster saved as draft')
     } catch { showToast('Save failed — try again') }
     setIsSaving(false)
+  }
+
+  const saveTemplate = async () => {
+    if (!templateName.trim() || shifts.length === 0) return
+    await fetch('/api/staff/roster/templates', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: templateName, shifts, week_start: weekStart, total_hours: summary.total_hours, total_cost_cents: summary.total_cost_cents }),
+    })
+    setTemplateName('')
+    fetch('/api/staff/roster/templates').then(r => r.json()).then(d => setTemplates(d.templates ?? []))
+    showToast(`Template "${templateName}" saved`)
+  }
+
+  const loadTemplate = (template: typeof templates[0]) => {
+    const mapped = (template.shifts ?? []).map((s: ShiftEntry, i: number) => {
+      const dayOffset = new Date(s.start_time).getDay()
+      const idx = dayOffset === 0 ? 6 : dayOffset - 1
+      const targetDate = weekDays[idx] ?? weekDays[0]
+      return { ...s, id: `tpl-${i}-${Date.now()}`, start_time: `${targetDate}T${s.start_time.slice(11, 16)}:00`, end_time: `${targetDate}T${s.end_time.slice(11, 16)}:00` }
+    })
+    setShifts(mapped); setIsDirty(true); detectConflicts(mapped)
+    setShowTemplates(false); showToast(`Loaded template: ${template.name}`)
   }
 
   const handlePublish = async () => {
@@ -230,6 +287,78 @@ export default function RosterPage() {
       <div className="px-6 py-3 flex-shrink-0" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
         <WageSummary summary={summary} weekDays={weekDays} />
       </div>
+
+      {/* Extra toolbar buttons */}
+      <div className="px-6 py-2 flex-shrink-0 flex gap-2 flex-wrap" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+        <button onClick={() => setShowTemplates(v => !v)} className="text-xs px-3 py-1.5 rounded-lg" style={{ background: showTemplates ? 'rgba(127,184,151,0.15)' : 'rgba(255,255,255,0.05)', color: showTemplates ? '#7FB897' : 'rgba(255,255,255,0.5)', border: '1px solid rgba(255,255,255,0.1)' }}>Templates</button>
+        <button onClick={() => setShowAvailability(v => !v)} className="text-xs px-3 py-1.5 rounded-lg" style={{ background: showAvailability ? 'rgba(127,184,151,0.15)' : 'rgba(255,255,255,0.05)', color: showAvailability ? '#7FB897' : 'rgba(255,255,255,0.5)', border: '1px solid rgba(255,255,255,0.1)' }}>Availability</button>
+      </div>
+
+      {/* Conflict warnings */}
+      {conflicts.length > 0 && (
+        <div className="px-6 py-2 flex-shrink-0" style={{ background: 'rgba(239,68,68,0.08)', borderBottom: '1px solid rgba(239,68,68,0.2)' }}>
+          {conflicts.map((c, i) => <p key={i} className="text-xs" style={{ color: '#ef4444', margin: '2px 0' }}>{c}</p>)}
+        </div>
+      )}
+
+      {/* Templates panel */}
+      {showTemplates && (
+        <div className="px-6 py-3 flex-shrink-0" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)', background: 'rgba(127,184,151,0.03)' }}>
+          <p className="text-xs font-semibold mb-2" style={{ color: '#7FB897' }}>Roster templates</p>
+          {templates.length > 0 && (
+            <div className="flex gap-2 flex-wrap mb-2">
+              {templates.map(t => (
+                <button key={t.id} onClick={() => loadTemplate(t)} className="text-xs px-3 py-1.5 rounded-lg" style={{ background: 'rgba(127,184,151,0.1)', color: '#7FB897', border: '1px solid rgba(127,184,151,0.3)', cursor: 'pointer' }}>
+                  {t.name} ({(t.shifts ?? []).length} shifts)
+                </button>
+              ))}
+            </div>
+          )}
+          {templates.length === 0 && <p className="text-xs mb-2" style={{ color: 'rgba(255,255,255,0.4)' }}>No templates yet. Build a roster then save it.</p>}
+          <div className="flex gap-2">
+            <input value={templateName} onChange={e => setTemplateName(e.target.value)} placeholder="Template name…" className="text-xs px-2 py-1.5 rounded-lg flex-1" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', outline: 'none' }} />
+            <button onClick={saveTemplate} disabled={!templateName.trim() || shifts.length === 0} className="text-xs px-3 py-1.5 rounded-lg" style={{ background: '#2D5240', color: '#7FB897', border: 'none', cursor: 'pointer' }}>Save roster as template</button>
+          </div>
+        </div>
+      )}
+
+      {/* Availability panel */}
+      {showAvailability && (
+        <div className="px-6 py-3 flex-shrink-0" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)', background: 'rgba(127,184,151,0.03)', overflowX: 'auto' }}>
+          <p className="text-xs font-semibold mb-2" style={{ color: '#7FB897' }}>Staff availability</p>
+          {availability.length === 0 ? (
+            <p className="text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>No availability set. Staff can update their availability in the Staff Portal.</p>
+          ) : (
+            <table style={{ fontSize: 11, borderCollapse: 'collapse', minWidth: 400 }}>
+              <thead>
+                <tr>
+                  <th style={{ textAlign: 'left', padding: '3px 8px', color: 'rgba(255,255,255,0.4)' }}>Staff</th>
+                  {['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(d => <th key={d} style={{ padding: '3px 8px', color: 'rgba(255,255,255,0.4)' }}>{d}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {[...new Set(availability.map(a => a.staff_member_id))].map(staffId => {
+                  const staffAvail = availability.filter(a => a.staff_member_id === staffId)
+                  const name = staffAvail[0]?.staff_name ?? 'Staff'
+                  return (
+                    <tr key={staffId}>
+                      <td style={{ padding: '3px 8px', color: '#e5e7eb', fontWeight: 500 }}>{name}</td>
+                      {[1,2,3,4,5,6,0].map(day => {
+                        const a = staffAvail.find(av => av.day_of_week === day)
+                        return (
+                          <td key={day} style={{ padding: '3px 8px', textAlign: 'center' }}>
+                            {!a || a.available ? <span style={{ color: '#7FB897' }}>✓</span> : <span style={{ color: '#ef4444' }}>✕</span>}
+                          </td>
+                        )
+                      })}
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
 
       {/* Grid */}
       <div className="flex-1 overflow-auto px-6 py-4">

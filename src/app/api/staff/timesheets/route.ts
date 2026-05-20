@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getWeekTimesheets, computeHours } from '@/lib/staff/timesheets'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
@@ -55,19 +56,29 @@ async function _POST(req: Request) {
   }
 
   const breakMins = Number(body.break_minutes) || 0
-  const hours = body.clock_out ? computeHours(body.clock_in, body.clock_out, breakMins) : 0
-  const totalPayCents = Math.round(hours * payRateCents)
+  const breakType = (body as any).break_type === 'paid' ? 'paid' : 'unpaid'
+  const paidBreakMins = breakType === 'paid' ? 0 : breakMins
+  const hours = body.clock_out ? computeHours(body.clock_in, body.clock_out, paidBreakMins) : 0
+  const regularHours = Math.min(hours, 8)
+  const overtimeHours = Math.max(0, hours - 8)
+  const regularPay = Math.round(regularHours * payRateCents)
+  const overtimePay = Math.round(overtimeHours * payRateCents * 1.5)
+  const totalPayCents = regularPay + overtimePay
 
-  const { data, error } = await supabase.from('pos_timesheets').insert({
+  const { data, error } = await supabaseAdmin.from('pos_timesheets').insert({
     business_id: bid,
     staff_member_id: body.staff_member_id ?? null,
     staff_name: staffName,
     clock_in: body.clock_in,
     clock_out: body.clock_out ?? null,
     break_minutes: breakMins,
+    break_type: breakType,
+    hours_worked: +hours.toFixed(2),
     pay_rate_cents: payRateCents,
     total_pay_cents: totalPayCents,
-    notes: body.notes ?? null,
+    is_overtime: overtimeHours > 0,
+    overtime_cents: overtimePay,
+    notes: (body as any).notes ?? null,
     status: body.clock_out ? 'pending' : 'active',
     updated_at: new Date().toISOString(),
   }).select('*').single()
@@ -76,5 +87,16 @@ async function _POST(req: Request) {
   return NextResponse.json({ timesheet: data }, { status: 201 })
 }
 
+async function _DELETE(req: Request) {
+  const supabase = createServerSupabaseClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const id = new URL(req.url).searchParams.get('id')
+  if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
+  await supabaseAdmin.from('pos_timesheets').delete().eq('id', id)
+  return NextResponse.json({ ok: true })
+}
+
 export const GET = withErrorCapture('staff/timesheets', _GET)
 export const POST = withErrorCapture('staff/timesheets', _POST)
+export const DELETE = withErrorCapture('staff/timesheets', _DELETE)
