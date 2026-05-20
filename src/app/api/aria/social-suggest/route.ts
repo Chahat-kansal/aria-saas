@@ -192,7 +192,7 @@ Return ONLY a valid JSON array. Each post: platform, caption, hashtags (array, n
       const res = await fetch(`${baseUrl}/api/social/generate-image`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-internal-call': 'true' },
-        body: JSON.stringify({ prompt, search_query: searchQuery, business_id, industry: biz.industry }),
+        body: JSON.stringify({ prompt, search_query: searchQuery, business_id, industry: biz?.industry }),
       })
       if (!res.ok) return { url: null, credit: null, provider: 'none' }
       const d = await res.json() as { image_url?: string | null; credit?: string | null; provider?: string }
