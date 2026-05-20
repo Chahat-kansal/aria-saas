@@ -13,66 +13,47 @@ export async function GET() {
     env_status: {
       ANTHROPIC_API_KEY: !!process.env.ANTHROPIC_API_KEY,
       OPENAI_API_KEY: !!process.env.OPENAI_API_KEY,
-      OPENAI_API_KEY_LENGTH: process.env.OPENAI_API_KEY?.length ?? 0,
       OPENAI_API_KEY_PREFIX: process.env.OPENAI_API_KEY?.slice(0, 7) ?? null,
       GEMINI_API_KEY: !!process.env.GEMINI_API_KEY,
+      GEMINI_API_KEY_PREFIX: process.env.GEMINI_API_KEY?.slice(0, 6) ?? null,
       RESEND_API_KEY: !!process.env.RESEND_API_KEY,
       TWILIO_ACCOUNT_SID: !!process.env.TWILIO_ACCOUNT_SID,
-      TWILIO_AUTH_TOKEN: !!process.env.TWILIO_AUTH_TOKEN,
       TWILIO_PHONE_NUMBER: !!process.env.TWILIO_PHONE_NUMBER,
+      SERPER_API_KEY: !!process.env.SERPER_API_KEY,
       GOOGLE_PLACES_API_KEY: !!process.env.GOOGLE_PLACES_API_KEY,
       SUPABASE_SERVICE_ROLE_KEY: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
     },
   }
 
-  // ACTUALLY TEST OPENAI - hit a cheap endpoint to verify the key works
+  // Test OpenAI with correct model (gpt-image-1, not dall-e-3)
   if (process.env.OPENAI_API_KEY) {
     try {
-      // List models is free + tells us what models the key has access to
-      const modelsRes = await fetch('https://api.openai.com/v1/models', {
-        headers: { 'Authorization': `Bearer ${process.env.OPENAI_API_KEY}` },
-        signal: AbortSignal.timeout(10_000),
-      })
-      const modelsText = await modelsRes.text()
-      if (modelsRes.ok) {
-        const data = JSON.parse(modelsText) as { data: Array<{ id: string }> }
-        const imageModels = data.data
-          .map(m => m.id)
-          .filter(id => id.includes('dall-e') || id.includes('gpt-image'))
-        tests.openai_models_test = {
-          status: modelsRes.status,
-          ok: true,
-          image_capable_models: imageModels,
-          total_models: data.data.length,
-        }
-      } else {
-        tests.openai_models_test = {
-          status: modelsRes.status,
-          ok: false,
-          error: modelsText.slice(0, 500),
-        }
-      }
-    } catch (e) {
-      tests.openai_models_test = { error: 'Exception: ' + String(e) }
-    }
-
-    // Try a TINY actual image generation
-    try {
-      const imgRes = await fetch('https://api.openai.com/v1/images/generations', {
+      const res = await fetch('https://api.openai.com/v1/images/generations', {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: 'dall-e-3', prompt: 'a red circle', n: 1, size: '1024x1024' }),
+        body: JSON.stringify({ model: 'gpt-image-1', prompt: 'a red circle', n: 1, size: '1024x1024' }),
         signal: AbortSignal.timeout(30_000),
       })
-      const imgText = await imgRes.text()
-      tests.openai_image_test = {
-        status: imgRes.status,
-        ok: imgRes.ok,
-        response: imgRes.ok ? 'success - image generated' : imgText.slice(0, 500),
-      }
-    } catch (e) {
-      tests.openai_image_test = { error: 'Exception: ' + String(e) }
-    }
+      const txt = await res.text()
+      tests.openai_gpt_image_1_test = { status: res.status, ok: res.ok, response: res.ok ? 'success' : txt.slice(0, 300) }
+    } catch (e) { tests.openai_gpt_image_1_test = { error: String(e) } }
+  }
+
+  // Test Imagen 3 via Gemini
+  if (process.env.GEMINI_API_KEY) {
+    try {
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${process.env.GEMINI_API_KEY}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ instances: [{ prompt: 'a red circle' }], parameters: { sampleCount: 1 } }),
+          signal: AbortSignal.timeout(30_000),
+        }
+      )
+      const txt = await res.text()
+      tests.imagen_3_test = { status: res.status, ok: res.ok, response: res.ok ? 'success — Imagen 3 working' : txt.slice(0, 500) }
+    } catch (e) { tests.imagen_3_test = { error: String(e) } }
   }
 
   return NextResponse.json(tests, { headers: { 'Cache-Control': 'no-store' } })

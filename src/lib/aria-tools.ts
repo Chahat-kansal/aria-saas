@@ -787,16 +787,16 @@ async function generateImage(input: Record<string, unknown>, businessId: string)
   }
 
   // Try strategies in order — gpt-image-1 first (current), fall back to dall-e-3 if needed
-  // Use Google Imagen via Gemini API ($0.02-0.03/image, cheaper than gpt-image-1)
-  // Falls back to gpt-image-1 if Gemini key not set or Imagen fails
+  // Image generation strategies - ordered by reliability
+  // gpt-image-1 first (confirmed working on this OpenAI account)
+  // Imagen 3 second (cheaper but may have quota issues)
   const GEMINI_KEY = process.env.GEMINI_API_KEY;
   const OPENAI_KEY = process.env.OPENAI_API_KEY;
 
-  // Try Imagen 3 first (cheapest, $0.03), then gpt-image-1 fallback
   const strategies = [
-    { name: 'imagen-3-gemini', provider: 'gemini' },
     { name: 'gpt-image-1', provider: 'openai' },
     { name: 'gpt-image-1-mini', provider: 'openai-mini' },
+    { name: 'imagen-3-gemini', provider: 'gemini' },
   ];
 
   let lastError = '';
