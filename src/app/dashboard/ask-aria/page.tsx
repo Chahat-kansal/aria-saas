@@ -435,15 +435,14 @@ export default function AskAriaPage() {
 
   if (loading) {
     return (
-      <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0d0d14', zIndex: 1 }}>
+      <div style={{ display: 'flex', height: '100dvh', maxHeight: '100dvh', alignItems: 'center', justifyContent: 'center', background: '#0d0d14', overflow: 'hidden' }}>
         <div className="w-6 h-6 rounded-full border-2 border-[#7FB897] border-t-transparent animate-spin" />
       </div>
     )
   }
 
   return (
-    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', background: '#0d0d14', zIndex: 1 }}
-         className="md:pl-[220px]">
+    <div style={{ display: 'flex', height: '100dvh', maxHeight: '100dvh', background: '#0d0d14', overflow: 'hidden', marginTop: '-1px' }}>
       {/* History sidebar — full overlay on mobile, panel on desktop */}
       {showHistory && (
         <>
@@ -556,10 +555,16 @@ export default function AskAriaPage() {
                     ? <span className="inline-flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-[#7FB897] animate-pulse" /><span className="opacity-60">Thinking…</span></span>
                     : m.role === 'assistant' && m.content
                       ? parseAriaResponse(
-                          // If there are downloads, strip markdown links from text - they're shown as cards
-                          m.downloads && m.downloads.length > 0
-                            ? m.content.replace(/\[([^\]]+)\]\(https?:\/\/[^)]+\)/g, '').replace(/https?:\/\/[^\s]+/g, '').replace(/\n\s*\n\s*\n/g, '\n\n').trim()
-                            : m.content
+                          // Always strip raw supabase storage URLs and markdown links pointing to them
+                          // They show as download cards instead
+                          m.content
+                            .replace(/\[([^\]]+)\]\(https?:\/\/[^)]*supabase[^)]+\)/g, '')
+                            .replace(/https?:\/\/[^\s]*supabase[^\s]*/g, '')
+                            .replace(/\[([^\]]+)\]\(https?:\/\/[^)]+\)/g, (_, txt) =>
+                              // Keep non-storage links as clickable text
+                              txt.includes('Download') || txt.includes('download') ? '' : txt
+                            )
+                            .replace(/\n\s*\n\s*\n/g, '\n\n').trim()
                         ).map((seg, si) =>
                           seg.kind === 'text'
                             ? <span key={si} className="whitespace-pre-wrap">{seg.content}</span>
