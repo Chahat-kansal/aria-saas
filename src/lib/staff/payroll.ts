@@ -16,6 +16,7 @@ export interface PayrollLineItem {
   allowances_cents: number
   timesheet_ids: string[]
   ytd_gross_cents: number
+  penalty_extra_cents?: number
   bank_bsb: string | null
   bank_account: string | null
   bank_account_name: string | null
@@ -70,6 +71,69 @@ function withholdingForPeriod(grossCents: number, payFrequency: string, taxFreeT
     case 'monthly': return calcMonthlyTax(gross, taxFreeThreshold) * 100
     default: return calcWeeklyTax(gross, taxFreeThreshold) * 100
   }
+}
+
+
+// ─── Fair Work Penalty Rates (Australian retail/hospitality) ──────────────
+// Source: Fair Work Commission General Retail Industry Award 2020
+export function getPenaltyMultiplier(date: string, startHour: number): number {
+  const d = new Date(date + 'T12:00:00')
+  const dow = d.getDay() // 0=Sun, 6=Sat
+  const isPublicHoliday = checkPublicHoliday(date)
+
+  if (isPublicHoliday) return 2.25  // 225% public holiday
+  if (dow === 0) return 2.0          // 200% Sunday
+  if (dow === 6) return 1.25         // 125% Saturday
+  if (startHour >= 18 || startHour < 6) return 1.15  // 115% evening/early
+  return 1.0                         // ordinary time
+}
+
+// Australian public holidays (national + vic approximation)
+function checkPublicHoliday(date: string): boolean {
+  const d = new Date(date + 'T12:00:00')
+  const month = d.getMonth() + 1
+  const day = d.getDate()
+  const dow = d.getDay()
+
+  // Fixed national holidays
+  if (month === 1 && day === 1) return true   // New Year's Day
+  if (month === 1 && day === 26) return true  // Australia Day
+  if (month === 4 && day === 25) return true  // Anzac Day
+  if (month === 12 && day === 25) return true // Christmas Day
+  if (month === 12 && day === 26) return true // Boxing Day
+
+  // Easter (approximate — Good Friday/Easter Monday)
+  // Melbourne Cup first Tuesday in November
+  if (month === 11 && dow === 2 && day <= 7) return true
+
+  return false
+}
+
+export function applyPenaltyRates(
+  lines: PayrollLineItem[],
+  timesheets: Array<{ clock_in: string; clock_out: string | null; staff_member_id: string | null; total_pay_cents: number }>
+): PayrollLineItem[] {
+  return lines.map(line => {
+    const staffShifts = timesheets.filter(t => t.staff_member_id === line.staff_member_id)
+    let penaltyExtra = 0
+
+    for (const shift of staffShifts) {
+      const date = shift.clock_in.slice(0, 10)
+      const startHour = new Date(shift.clock_in).getHours()
+      const multiplier = getPenaltyMultiplier(date, startHour)
+      if (multiplier > 1.0) {
+        // Extra pay on top of base
+        penaltyExtra += Math.round(Number(shift.total_pay_cents) * (multiplier - 1.0))
+      }
+    }
+
+    const newGross = line.gross_pay_cents + penaltyExtra
+    const newSuper = Math.round(newGross * line.superannuation_rate / 100)
+    const newTax = withholdingForPeriod(newGross, line.pay_frequency, line.tax_free_threshold)
+    const newNet = Math.max(0, newGross - newTax)
+
+    return { ...line, gross_pay_cents: newGross, super_cents: newSuper, tax_withheld_cents: newTax, net_pay_cents: newNet, penalty_extra_cents: penaltyExtra }
+  })
 }
 
 // ─── Build Payroll Run ─────────────────────────────────────────────────────

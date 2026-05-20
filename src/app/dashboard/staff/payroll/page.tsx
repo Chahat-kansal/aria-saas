@@ -255,6 +255,43 @@ export default function PayrollPage() {
                           </tfoot>
                         </table>
 
+                        {/* Fair Work penalty summary */}
+                        {(run.line_items ?? []).some(l => (l as any).penalty_extra_cents > 0) && (
+                          <div style={{ marginTop: 12, padding: '10px 14px', background: 'rgba(245,158,11,0.06)', borderRadius: 8, border: `1px solid rgba(245,158,11,0.2)` }}>
+                            <p style={{ fontSize: 12, color: C.amber, fontWeight: 600, marginBottom: 4 }}>⚡ Fair Work penalty rates applied</p>
+                            {(run.line_items ?? []).filter(l => (l as any).penalty_extra_cents > 0).map((l, i) => (
+                              <p key={i} style={{ fontSize: 11, color: C.muted }}>
+                                {l.staff_name}: +{$((l as any).penalty_extra_cents)} weekend/evening penalty
+                              </p>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* STP & compliance checklist — shown after approval */}
+                        {run.status === 'approved' && (
+                          <div style={{ marginTop: 16, padding: '14px 16px', background: 'rgba(45,82,64,0.06)', borderRadius: 10, border: `1px solid rgba(127,184,151,0.2)` }}>
+                            <p style={{ fontSize: 13, fontWeight: 700, color: C.green, marginBottom: 10 }}>✅ Payroll approved — your next steps</p>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                              {[
+                                { done: !!run.aba_generated_at, label: 'Pay staff', detail: 'Download ABA file → upload to your internet banking for bulk payment', link: null },
+                                { done: false, label: 'Report to ATO (STP)', detail: 'Lodge via your accounting software (Xero/MYOB) or ATO Business Portal', link: 'https://www.ato.gov.au/businesses-and-organisations/hiring-and-paying-your-workers/single-touch-payroll' },
+                                { done: false, label: 'Superannuation', detail: `Pay $${(run.total_super_cents/100).toFixed(2)} to staff super funds via ATO Clearing House (free, <20 staff)`, link: 'https://www.ato.gov.au/businesses-and-organisations/super-for-employers/setting-up-super-for-your-business/small-business-superannuation-clearing-house' },
+                                { done: false, label: 'PAYG tax (quarterly)', detail: `Remit $${(run.total_tax_cents/100).toFixed(2)} withheld tax to ATO via your next BAS`, link: 'https://www.ato.gov.au/businesses-and-organisations/preparing-lodging-and-paying/activity-statements/bas-guide' },
+                              ].map(({ done, label, detail, link }) => (
+                                <div key={label} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                                  <span style={{ fontSize: 13, marginTop: 1, flexShrink: 0 }}>{done ? '✅' : '☐'}</span>
+                                  <div>
+                                    <p style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{label}
+                                      {link && <a href={link} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: C.green, marginLeft: 8, textDecoration: 'none' }}>ATO guide ↗</a>}
+                                    </p>
+                                    <p style={{ fontSize: 11, color: C.muted, marginTop: 1 }}>{detail}</p>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
                         <p style={{ fontSize: 11, color: C.muted, marginTop: 12 }}>
                           Tax calculated using 2024-25 ATO Schedule 1 withholding tables including 2% Medicare levy. Super at {(run.line_items?.[0]?.superannuation_rate ?? 11.5)}% per Fair Work.
                         </p>

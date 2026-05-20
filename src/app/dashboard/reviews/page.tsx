@@ -309,13 +309,18 @@ export default function ReviewsPage() {
                       <textarea value={drafts[review.id]} onChange={e => setDrafts(d => ({ ...d, [review.id]: e.target.value }))} rows={3}
                         style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 8, background: 'var(--bg-elevated)', border: '1px solid var(--divider)', color: 'var(--text-primary)', fontSize: 12, fontFamily: 'inherit', resize: 'vertical', outline: 'none', lineHeight: 1.5 }} />
                       <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                        <button onClick={() => copyDraft(review.id)}
-                          style={{ padding: '7px 14px', borderRadius: 8, border: '1px solid var(--divider)', background: 'var(--bg-elevated)', color: 'var(--text-secondary)', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
-                          {copied === review.id ? '✓ Copied!' : 'Copy Reply'}
+
+                        <button onClick={async () => { await navigator.clipboard.writeText(drafts[review.id] ?? '').catch(()=>{}); setCopied(review.id); setTimeout(()=>setCopied(null),2000); }}
+                          style={{ padding: '7px 14px', borderRadius: 8, border: 'none', background: '#7FB897', color: '#2D5240', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                          {copied === review.id ? '✓ Copied!' : '📋 Copy reply'}
                         </button>
+                        <a href={`https://search.google.com/local/writereview?placeid=${stats?.google_place_id ?? ''}`} target="_blank" rel="noreferrer"
+                          style={{ padding: '7px 14px', borderRadius: 8, border: '1px solid rgba(66,133,244,0.3)', background: 'rgba(66,133,244,0.08)', color: '#4285F4', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', textDecoration: 'none', display: 'inline-block' }}>
+                          Open Google ↗
+                        </a>
                         <button onClick={() => publishReply(review.id)} disabled={acting === review.id}
-                          style={{ padding: '7px 14px', borderRadius: 8, border: 'none', background: 'var(--violet)', color: '#fff', fontSize: 12, fontWeight: 700, cursor: acting === review.id ? 'not-allowed' : 'pointer', fontFamily: 'inherit', opacity: acting === review.id ? 0.6 : 1 }}>
-                          {acting === review.id ? '…' : 'Publish Reply'}
+                          style={{ padding: '7px 14px', borderRadius: 8, border: '1px solid var(--divider)', background: 'transparent', color: 'var(--text-secondary)', fontSize: 12, fontWeight: 600, cursor: acting === review.id ? 'not-allowed' : 'pointer', fontFamily: 'inherit' }}>
+                          {acting === review.id ? '…' : '✓ Mark replied'}
                         </button>
                       </div>
                     </>
