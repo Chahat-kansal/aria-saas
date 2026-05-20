@@ -435,23 +435,21 @@ export default function AskAriaPage() {
 
   if (loading) {
     return (
-      <div style={{ display: 'flex', height: '100dvh', maxHeight: '100dvh', alignItems: 'center', justifyContent: 'center', background: '#0d0d14', overflow: 'hidden' }}>
+      <div style={{ display: 'flex', height: '100dvh', alignItems: 'center', justifyContent: 'center', background: '#0d0d14' }}>
         <div className="w-6 h-6 rounded-full border-2 border-[#7FB897] border-t-transparent animate-spin" />
       </div>
     )
   }
 
   return (
-    <div style={{ display: 'flex', height: '100dvh', maxHeight: '100dvh', background: '#0d0d14', overflow: 'hidden', marginTop: '-1px' }}>
-      {/* History sidebar — full overlay on mobile, panel on desktop */}
+    <div style={{ display: 'flex', height: '100dvh', background: '#0d0d14', overflow: 'hidden' }}>
+      {/* Mobile backdrop */}
       {showHistory && (
-        <>
-          {/* Mobile overlay backdrop */}
-          <div
-            className="fixed inset-0 bg-black/60 z-10 md:hidden"
-            onClick={() => setShowHistory(false)}
-          />
-          <div className="w-64 flex-shrink-0 flex flex-col border-r md:relative fixed left-0 top-0 bottom-0 z-20" style={{ borderColor: 'rgba(255,255,255,0.06)', background: '#13131a' }}>
+        <div className="fixed inset-0 bg-black/60 z-10 md:hidden" onClick={() => setShowHistory(false)} />
+      )}
+      {/* History sidebar */}
+      {showHistory && (
+        <div className="w-64 flex-shrink-0 flex flex-col border-r" style={{ borderColor: 'rgba(255,255,255,0.06)', background: '#13131a', position: 'relative', zIndex: 20 }}>
           <div className="px-4 py-3 border-b flex items-center justify-between" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
             <p className="text-xs font-medium" style={{ color: 'rgba(255,255,255,0.6)' }}>Recent chats</p>
             <button onClick={() => setShowHistory(false)} className="text-xs" style={{ color: 'rgba(255,255,255,0.3)' }}>✕</button>
@@ -480,7 +478,6 @@ export default function AskAriaPage() {
             ))}
           </div>
         </div>
-        </>
       )}
 
       {/* Main chat */}

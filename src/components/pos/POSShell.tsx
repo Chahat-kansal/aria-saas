@@ -335,6 +335,7 @@ export default function POSShell({ children, businessId, businessName }: {
   const [justReconnected, setJustReconnected] = useState(false);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [sidebarHint, setSidebarHint] = useState(false);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   // One-time sidebar hint on first load
   useEffect(() => {
@@ -424,7 +425,6 @@ export default function POSShell({ children, businessId, businessName }: {
     initials: makeInitials(posUser.name ?? 'U'),
   };
 
-  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   return (
     <div className="pos-shell" style={{ display: 'flex', height: '100dvh', overflow: 'hidden', background: 'var(--bg-base)' }}>
