@@ -1,5 +1,7 @@
 import type { Tool } from '@anthropic-ai/sdk/resources/messages';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import * as XLSX from 'xlsx';
+import { randomUUID } from 'crypto';
 
 export const ARIA_POS_TOOLS: Tool[] = [
   {
@@ -110,13 +112,88 @@ export const ARIA_POS_TOOLS: Tool[] = [
     input_schema: {
       type: 'object',
       properties: {
-        goal: {
-          type: 'string',
-          enum: ['clear-stock', 'boost-margin', 'attract-new', 'retain-loyal'],
-        },
+        goal: { type: 'string', enum: ['clear-stock', 'boost-margin', 'attract-new', 'retain-loyal'] },
         constraints: { type: 'string' },
       },
       required: ['goal'],
+    },
+  },
+  {
+    name: 'query_business_data',
+    description: 'Query the business database for any entity. Returns up-to-date rows. Use when user asks for "top X products", "best selling", lists, counts, or specific filtered data. Available entities: sales, products, customers, staff, suppliers, reviews, inventory, actions. Returns max 200 rows.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        entity: { type: 'string', enum: ['sales', 'products', 'customers', 'staff', 'suppliers', 'reviews', 'inventory', 'actions'] },
+        filters: { type: 'object', description: 'Filter criteria like {since: "2025-01-01", category: "drinks"}' },
+        order_by: { type: 'string', description: 'Field to sort by' },
+        order_direction: { type: 'string', enum: ['asc', 'desc'] },
+        limit: { type: 'number', description: 'Max 200' },
+      },
+      required: ['entity'],
+    },
+  },
+  {
+    name: 'generate_report',
+    description: 'Create a downloadable Excel (.xlsx) or CSV file. Use when user asks for "in excel", "as a report", "export", "create a file", "download". Returns a download_url the user can click.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        title: { type: 'string', description: 'Report title and filename' },
+        entity: { type: 'string', enum: ['sales', 'products', 'customers', 'staff', 'suppliers', 'reviews', 'inventory'] },
+        columns: { type: 'array', items: { type: 'string' }, description: 'Specific columns to include (optional)' },
+        filters: { type: 'object' },
+        order_by: { type: 'string' },
+        limit: { type: 'number' },
+        format: { type: 'string', enum: ['xlsx', 'csv'] },
+      },
+      required: ['title', 'entity'],
+    },
+  },
+  {
+    name: 'fetch_url',
+    description: 'Fetch and read the content of a specific URL. Use when user gives you a link, or to read full articles from supplier/competitor sites. Returns plain text.',
+    input_schema: {
+      type: 'object',
+      properties: { url: { type: 'string' } },
+      required: ['url'],
+    },
+  },
+  {
+    name: 'send_email_now',
+    description: 'Send an email via Resend. Use ONLY when user explicitly says "send an email" or "email X". Always confirm recipient first.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        to: { type: 'string' },
+        subject: { type: 'string' },
+        body: { type: 'string', description: 'HTML body' },
+      },
+      required: ['to', 'subject', 'body'],
+    },
+  },
+  {
+    name: 'send_sms_now',
+    description: 'Send an SMS via Twilio. Use ONLY when user explicitly asks. Australian numbers (0412... or +61412...).',
+    input_schema: {
+      type: 'object',
+      properties: {
+        to: { type: 'string' },
+        message: { type: 'string' },
+      },
+      required: ['to', 'message'],
+    },
+  },
+  {
+    name: 'update_product_price',
+    description: 'Change the selling price of a product. Use only when user explicitly asks to change price.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        product_id: { type: 'string' },
+        new_price: { type: 'number', description: 'New price in dollars' },
+      },
+      required: ['product_id', 'new_price'],
     },
   },
 ];
@@ -340,6 +417,173 @@ function suggestPromotion(input: { goal: string; constraints?: string }): unknow
   };
 }
 
+// ─── New autonomous tools ─────────────────────────────────────────────────
+
+const ENTITY_TABLES: Record<string, { table: string; defaultColumns: string[]; defaultOrder: string }> = {
+  sales:     { table: 'pos_sales', defaultColumns: ['id','total_amount','payment_method','created_at','status','customer_id'], defaultOrder: 'created_at' },
+  products:  { table: 'pos_products', defaultColumns: ['id','name','sku','selling_price','cost_price','stock_quantity','category'], defaultOrder: 'name' },
+  customers: { table: 'pos_customers', defaultColumns: ['id','name','phone','email','total_spent','visit_count','last_visit'], defaultOrder: 'total_spent' },
+  staff:     { table: 'staff_members', defaultColumns: ['id','first_name','last_name','position','employment_type','pay_rate_cents','status'], defaultOrder: 'first_name' },
+  suppliers: { table: 'pos_suppliers', defaultColumns: ['id','name','contact_name','email','phone','address'], defaultOrder: 'name' },
+  reviews:   { table: 'google_reviews', defaultColumns: ['id','reviewer_name','rating','comment','review_date','has_reply'], defaultOrder: 'review_date' },
+  inventory: { table: 'stock_movements', defaultColumns: ['id','product_id','movement_type','quantity_change','reason','scanned_at'], defaultOrder: 'scanned_at' },
+  actions:   { table: 'aria_actions', defaultColumns: ['id','title','category','priority','status','created_at'], defaultOrder: 'created_at' },
+};
+
+async function queryBusinessData(input: Record<string, unknown>, businessId: string): Promise<unknown> {
+  const entity = String(input.entity ?? '');
+  const cfg = ENTITY_TABLES[entity];
+  if (!cfg) return { error: `Unknown entity: ${entity}` };
+
+  const filters = (input.filters ?? {}) as Record<string, unknown>;
+  const orderBy = String(input.order_by ?? cfg.defaultOrder);
+  const ascending = input.order_direction === 'asc';
+  const limit = Math.min(Number(input.limit ?? 20), 200);
+
+  let query = supabaseAdmin.from(cfg.table).select(cfg.defaultColumns.join(',')).eq('business_id', businessId);
+
+  for (const [key, value] of Object.entries(filters)) {
+    if (value == null) continue;
+    if (key === 'since' && typeof value === 'string') query = query.gte('created_at', value);
+    else if (key === 'until' && typeof value === 'string') query = query.lte('created_at', value);
+    else if (key === 'min_amount' && typeof value === 'number') query = query.gte('total_amount', value);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    else query = query.eq(key, value as any);
+  }
+
+  if (entity === 'sales') query = query.neq('status', 'voided');
+
+  query = query.order(orderBy, { ascending }).limit(limit);
+
+  const { data, error } = await query;
+  if (error) return { error: error.message, rows: [] };
+  return { entity, count: (data ?? []).length, rows: data ?? [] };
+}
+
+async function generateReport(input: Record<string, unknown>, businessId: string): Promise<unknown> {
+  const title = String(input.title ?? 'Aria Report');
+  const entity = String(input.entity ?? 'products');
+  const format = input.format === 'csv' ? 'csv' : 'xlsx';
+  const cols = Array.isArray(input.columns) ? input.columns.map(String) : [];
+  const limit = Math.min(Number(input.limit ?? 1000), 10000);
+
+  const data = await queryBusinessData({ ...input, limit, entity }, businessId) as { rows?: unknown[]; error?: string };
+  if (data.error) return { error: data.error };
+  const rows = data.rows ?? [];
+  if (rows.length === 0) return { error: 'No data found to export' };
+
+  const filtered = cols.length > 0
+    ? rows.map(r => {
+        const row = r as Record<string, unknown>;
+        const out: Record<string, unknown> = {};
+        for (const c of cols) out[c] = row[c];
+        return out;
+      })
+    : rows;
+
+  const ts = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-');
+  const safeName = title.replace(/[^a-zA-Z0-9-]/g, '_').slice(0, 50);
+  const filename = `${safeName}_${ts}.${format}`;
+
+  let buf: Buffer;
+  let mime: string;
+  if (format === 'csv') {
+    const ws = XLSX.utils.json_to_sheet(filtered);
+    buf = Buffer.from(XLSX.utils.sheet_to_csv(ws), 'utf-8');
+    mime = 'text/csv';
+  } else {
+    const ws = XLSX.utils.json_to_sheet(filtered);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, title.slice(0, 31));
+    buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
+    mime = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+  }
+
+  const path = `aria-reports/${businessId}/${randomUUID()}_${filename}`;
+  const { error: uploadErr } = await supabaseAdmin.storage.from('reports').upload(path, buf, { contentType: mime, upsert: false });
+
+  if (uploadErr) {
+    return { error: 'Upload failed: ' + uploadErr.message, inline_data: filtered.slice(0, 20) };
+  }
+
+  const { data: signed } = await supabaseAdmin.storage.from('reports').createSignedUrl(path, 3600);
+  return { ok: true, filename, rows: filtered.length, download_url: signed?.signedUrl, format, preview: filtered.slice(0, 5) };
+}
+
+async function fetchUrl(input: Record<string, unknown>): Promise<unknown> {
+  const url = String(input.url ?? '');
+  if (!url) return { error: 'url required' };
+  try {
+    const res = await fetch(url, { headers: { 'User-Agent': 'Aria/1.0' }, signal: AbortSignal.timeout(15_000) });
+    if (!res.ok) return { error: `HTTP ${res.status}` };
+    const text = await res.text();
+    const stripped = text
+      .replace(/<script[\s\S]*?<\/script>/gi, '')
+      .replace(/<style[\s\S]*?<\/style>/gi, '')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 10000);
+    return { ok: true, url, content: stripped };
+  } catch (e) {
+    return { error: String(e) };
+  }
+}
+
+async function sendEmailNow(input: Record<string, unknown>): Promise<unknown> {
+  const to = String(input.to ?? '');
+  const subject = String(input.subject ?? '');
+  const body = String(input.body ?? '');
+  if (!to || !subject || !body) return { error: 'to, subject, body required' };
+  if (!process.env.RESEND_API_KEY) return { error: 'RESEND_API_KEY not set' };
+
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ from: 'Aria <aria@ariaos.site>', to, subject, html: body }),
+  });
+  if (!res.ok) return { error: 'Send failed: ' + (await res.text().catch(() => '')).slice(0, 200) };
+  const d = await res.json();
+  return { ok: true, id: (d as Record<string, unknown>).id, to, subject };
+}
+
+async function sendSmsNow(input: Record<string, unknown>): Promise<unknown> {
+  const to = String(input.to ?? '');
+  const message = String(input.message ?? '');
+  if (!to || !message) return { error: 'to, message required' };
+  const sid = process.env.TWILIO_ACCOUNT_SID;
+  const token = process.env.TWILIO_AUTH_TOKEN;
+  const from = process.env.TWILIO_PHONE_NUMBER;
+  if (!sid || !token || !from) return { error: 'Twilio not configured' };
+
+  const phone = to.replace(/\s/g, '').replace(/^0/, '+61');
+  const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
+    method: 'POST',
+    headers: { 'Authorization': 'Basic ' + Buffer.from(`${sid}:${token}`).toString('base64'), 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ To: phone, From: from, Body: message }).toString(),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    return { error: (err as Record<string, unknown>).message ?? 'SMS failed' };
+  }
+  return { ok: true, to: phone, message };
+}
+
+async function updateProductPrice(input: Record<string, unknown>, businessId: string): Promise<unknown> {
+  const productId = String(input.product_id ?? '');
+  const newPrice = Number(input.new_price ?? 0);
+  if (!productId || newPrice <= 0) return { error: 'product_id and positive new_price required' };
+
+  const { data: existing } = await supabaseAdmin.from('pos_products')
+    .select('id, name, selling_price').eq('id', productId).eq('business_id', businessId).maybeSingle();
+  if (!existing) return { error: 'Product not found' };
+
+  const { error } = await supabaseAdmin.from('pos_products')
+    .update({ selling_price: newPrice }).eq('id', productId).eq('business_id', businessId);
+  if (error) return { error: error.message };
+  return { ok: true, product: existing.name, old_price: existing.selling_price, new_price: newPrice };
+}
+
 export async function executePOSTool(name: string, input: unknown, businessId: string): Promise<unknown> {
   const inp = input as Record<string, unknown>;
 
@@ -356,6 +600,18 @@ export async function executePOSTool(name: string, input: unknown, businessId: s
       return { chart_spec: inp };
     case 'suggest_promotion':
       return suggestPromotion(inp as Parameters<typeof suggestPromotion>[0]);
+    case 'query_business_data':
+      return queryBusinessData(inp, businessId);
+    case 'generate_report':
+      return generateReport(inp, businessId);
+    case 'fetch_url':
+      return fetchUrl(inp);
+    case 'send_email_now':
+      return sendEmailNow(inp);
+    case 'send_sms_now':
+      return sendSmsNow(inp);
+    case 'update_product_price':
+      return updateProductPrice(inp, businessId);
     case 'query_bookings': {
       const { period } = inp as { period: string }
       const now = new Date()

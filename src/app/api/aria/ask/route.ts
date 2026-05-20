@@ -199,7 +199,36 @@ async function _POST(req: Request) {
   const ctx = await buildAskAriaContext(bid, conversationId ?? undefined)
 
   // 3. Build system prompt
-  let systemPrompt = `You are Aria, the AI business co-pilot built into Aria OS — an all-in-one operating system for Australian small businesses. You have deep knowledge of the business's own data, Aria OS's features, and Australian business regulations.
+  let systemPrompt = `You are Aria, the autonomous AI business co-pilot for Aria OS — for Australian small businesses.
+
+YOU CAN TAKE REAL ACTION using these tools. Don't just describe what could be done — DO IT.
+
+DATA TOOLS (read live business data):
+• query_business_data: get rows from any entity (sales/products/customers/staff/suppliers/reviews/inventory/actions). Use when asked "show me top X", "list", "how many", filtered queries
+• query_sales, query_inventory, query_customers, compare_periods: more specific analytics queries
+• query_bookings, query_online_orders: bookings & orders data
+
+EXPORT TOOLS (create downloadable files):
+• generate_report: create Excel (.xlsx) or CSV file. ALWAYS use this when user says "in excel", "export", "download", "as a file", "create a report"
+
+WEB TOOLS (external information):
+• web_search: search the live internet (current prices, news, regulations, competitor info, ATO updates) — use whenever info is NOT in our database
+• fetch_url: read full content of a specific URL
+
+ACTION TOOLS (do things on behalf of user — confirm first):
+• send_email_now: send email via Resend
+• send_sms_now: send SMS via Twilio  
+• update_product_price: change a product's selling price
+• suggest_promotion: generate promotion rule
+
+CRITICAL RULES:
+1. When data is requested → call query_business_data IMMEDIATELY, don't ask permission
+2. When user says "excel/export/download/report/file" → call generate_report and give them the download link
+3. When user asks about external/current info → call web_search
+4. For actions that change things (send msg, update price) → confirm recipient/details first, then execute
+5. Chain tools: query data → analyse → generate report; or web_search → fetch_url for details
+6. You CANNOT code — that's the only thing you can't do
+7. Be DIRECT. No "I'd recommend you check..." — you have the tools, you check.
 
 ARIA OS FEATURES YOU KNOW AND CAN TROUBLESHOOT:
 
@@ -328,17 +357,24 @@ ${ARTIFACT_INSTRUCTIONS}`
   const useThinking = intent.complexity === 'complex' || intent.type === 'troubleshoot' || intent.type === 'escalate'
   const thinkingBudget = intent.type === 'escalate' ? 4000 : 2000
 
+  // Add Anthropic's native web_search tool to give Aria internet access
+  const allTools = [
+    ...ARIA_POS_TOOLS,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    { type: 'web_search_20250305', name: 'web_search', max_uses: 5 } as any,
+  ]
+
   const toolResult = await callAnthropicWithTools({
     model,
     systemPrompt,
     userPrompt,
     priorMessages: historyMessages,
-    tools: ARIA_POS_TOOLS,
+    tools: allTools,
     executeTool: (name, input) => executePOSTool(name, input, bid),
-    maxTokens: useThinking ? 4096 : 2048,
-    maxIterations: 5,
+    maxTokens: useThinking ? 4096 : 3500,
+    maxIterations: 8,
     thinking: useThinking ? { enabled: true, budget_tokens: thinkingBudget } : undefined,
-    timeoutMs: useThinking ? 45_000 : 25_000,
+    timeoutMs: 55_000,
     businessId: bid,
     agentKey: 'ask_aria',
     role: 'chat',
@@ -407,12 +443,30 @@ ${ARTIFACT_INSTRUCTIONS}`
     console.error('[aria/ask] upsertConversation failed:', (e as Error).message, 'conv_id:', conversationId)
   }
 
+  // Extract any download URLs from generate_report tool results
+  const downloads: Array<{ filename: string; download_url: string; rows: number; format: string }> = []
+  for (const tc of toolResult.tool_calls) {
+    if (tc.name === 'generate_report') {
+      const r = tc.result as Record<string, unknown> | null
+      if (r?.ok && typeof r.download_url === 'string') {
+        downloads.push({
+          filename: String(r.filename ?? 'report.xlsx'),
+          download_url: r.download_url,
+          rows: Number(r.rows ?? 0),
+          format: String(r.format ?? 'xlsx'),
+        })
+      }
+    }
+  }
+
   return NextResponse.json({
     response: cleanResponse,
     conversation_id: savedConvId ?? conversationId,
     intent: intent.type,
     action: Object.keys(actionResult).length > 0 ? actionResult : null,
     cost_usd_cents: toolResult.cost_cents,
+    downloads: downloads.length > 0 ? downloads : null,
+    tool_calls: toolResult.tool_calls.map(t => ({ name: t.name, ms: t.ms })),
   })
 }
 

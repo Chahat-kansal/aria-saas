@@ -28,6 +28,8 @@ interface Message {
   action?: MessageAction
   intent?: string
   timestamp: Date
+  downloads?: Array<{ filename: string; download_url: string; rows: number; format: string }>
+  tool_calls?: Array<{ name: string; ms: number }>
 }
 
 interface ConvSummary {
@@ -270,6 +272,8 @@ export default function AskAriaPage() {
         response?: string; conversation_id?: string; intent?: string
         action?: { action?: string; planned?: PlannedAction; type?: string; [k: string]: unknown }
         cost_usd_cents?: number
+        downloads?: Array<{ filename: string; download_url: string; rows: number; format: string }>
+        tool_calls?: Array<{ name: string; ms: number }>
       }
 
       if (data.conversation_id) setConversationId(data.conversation_id)
@@ -301,6 +305,8 @@ export default function AskAriaPage() {
             streaming: false,
             action: msgAction,
             intent: data.intent,
+            downloads: data.downloads ?? undefined,
+            tool_calls: data.tool_calls ?? undefined,
           }
         }
         return updated
@@ -534,6 +540,27 @@ export default function AskAriaPage() {
                       : m.content}
                 </div>
                 {m.role === 'assistant' && m.action && <ActionCard action={m.action} />}
+                {m.role === 'assistant' && m.downloads && m.downloads.length > 0 && (
+                  <div className="mt-2 space-y-1.5">
+                    {m.downloads.map((dl, di) => (
+                      <a key={di} href={dl.download_url} download={dl.filename}
+                        className="flex items-center gap-3 px-4 py-3 rounded-xl border transition-all hover:scale-[1.01]"
+                        style={{ background: 'rgba(127,184,151,0.08)', borderColor: 'rgba(127,184,151,0.3)', color: '#7FB897', textDecoration: 'none' }}>
+                        <span className="text-xl">{dl.format === 'csv' ? '📄' : '📊'}</span>
+                        <div className="flex-1">
+                          <p className="text-sm font-semibold">{dl.filename}</p>
+                          <p className="text-xs opacity-70">{dl.rows} rows · click to download</p>
+                        </div>
+                        <span className="text-xs px-2 py-1 rounded" style={{ background: 'rgba(127,184,151,0.15)' }}>↓</span>
+                      </a>
+                    ))}
+                  </div>
+                )}
+                {m.role === 'assistant' && m.tool_calls && m.tool_calls.length > 0 && !m.streaming && (
+                  <p className="text-[10px] mt-1 px-1 opacity-40">
+                    🔧 {m.tool_calls.map(t => t.name).join(', ')}
+                  </p>
+                )}
                 {m.role === 'assistant' && !m.streaming && m.content && <CopyButton text={m.content} />}
                 <p className="text-[9px] mt-1 px-1" style={{ color: 'rgba(255,255,255,0.2)' }}>
                   {m.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
