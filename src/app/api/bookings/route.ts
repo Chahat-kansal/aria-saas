@@ -23,7 +23,7 @@ async function _GET(req: Request) {
   if (!business_id) return NextResponse.json({ error: 'business_id required' }, { status: 400 });
   if (!await verifyBiz(supabase, user.id, business_id)) return NextResponse.json({ error: 'Not found' }, { status: 404 });
   let q = supabaseAdmin.from('bookings')
-    .select('*, booking_services(name, color, duration_minutes)')
+    .select('*')
     .eq('business_id', business_id)
     .order('booking_date', { ascending: true })
     .order('booking_time', { ascending: true })
