@@ -203,12 +203,10 @@ export async function collectBusinessData(
     business.data_source === 'aria_pos'
   );
 
+  // Only sales + products are truly required — inventory/supplier/customer are optional enrichment
   const missingRequiredData = [
     !hasSalesData ? 'sales data' : null,
     !hasProductData ? 'product catalogue' : null,
-    !hasInventoryData ? 'inventory or stock levels' : null,
-    !hasSupplierData ? 'supplier cost history' : null,
-    !hasCustomerData ? 'customer activity' : null,
   ].filter((item): item is string => Boolean(item));
 
   const lastSyncAt = latestTimestamp([

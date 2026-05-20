@@ -66,7 +66,7 @@ export async function callAnthropic<T = Record<string, unknown>>(
         }],
         messages: [{ role: 'user', content: params.userPrompt }],
       }, {
-        signal: AbortSignal.timeout(params.timeoutMs ?? 25_000),
+        signal: AbortSignal.timeout(params.timeoutMs ?? 55_000),
       })
     )
     raw = (response.content[0] as { type: string; text?: string }).text ?? ''
