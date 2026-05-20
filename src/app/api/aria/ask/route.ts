@@ -122,6 +122,18 @@ async function _POST(req: Request) {
   if (!message && attachments.length === 0) return NextResponse.json({ error: 'message or file required' }, { status: 400 })
   if (!message) message = 'Please analyse the attached file(s).'
 
+  // Cost guard — check daily spend before allowing chat
+  const { checkSpendAllowed, trackSpend } = await import('@/lib/aria/cost-guard')
+  const spendCheck = await checkSpendAllowed(bid, 'chat', 2) // ~$0.02 estimated
+  if (!spendCheck.allowed) {
+    return NextResponse.json({
+      response: `⚠️ ${spendCheck.reason}\n\nUpgrade your plan or wait for daily reset.`,
+      blocked_by_cost_guard: true,
+      current_spend: spendCheck.current_spend_cents,
+      daily_limit: spendCheck.daily_limit_cents,
+    })
+  }
+
   // Rate limit: max requests per minute
   const rateLimit = parseInt(process.env.ARIA_RATE_LIMIT_PER_MIN ?? '20')
   const oneMinuteAgo = new Date(Date.now() - 60 * 1000).toISOString()
@@ -498,6 +510,17 @@ ${ARTIFACT_INSTRUCTIONS}`
   } catch (e) {
     console.error('[aria/ask] upsertConversation failed:', (e as Error).message, 'conv_id:', conversationId)
   }
+
+  // Track actual spend in DB for cost guard
+  try {
+    await trackSpend(bid, toolResult.cost_cents, 'chat')
+    // Also track per-tool usage
+    for (const tc of toolResult.tool_calls) {
+      if (tc.name === 'generate_image') await trackSpend(bid, 4, 'image') // ~$0.04 for DALL-E 3
+      if (tc.name === 'web_search') await trackSpend(bid, 1, 'web_search')
+      if (tc.name === 'send_sms_now') await trackSpend(bid, 7, 'sms') // ~$0.07 Twilio AU
+    }
+  } catch (e) { console.error('[ask/track-spend] failed', e) }
 
   // Extract download URLs from any tool that produced one (reports, images, PDFs)
   const downloads: Array<{ filename: string; download_url: string; rows: number; format: string }> = []
