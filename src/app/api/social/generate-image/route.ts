@@ -57,6 +57,24 @@ function enhanceQuery(query: string, industry?: string): string {
   return terms.slice(0, 100)
 }
 
+async function tryPexels(query: string, industry?: string): Promise<{ url: string; credit: string } | null> {
+  const key = process.env.PEXELS_API_KEY
+  if (!key) return null
+  try {
+    const enhanced = enhanceQuery(query, industry)
+    const res = await fetch(
+      `https://api.pexels.com/v1/search?query=${encodeURIComponent(enhanced)}&per_page=5&orientation=square`,
+      { headers: { Authorization: key } }
+    )
+    if (!res.ok) return null
+    const d = await res.json() as { photos?: Array<{ src?: { large?: string; medium?: string }; photographer?: string }> }
+    // Skip first result (often too generic), take second or third
+    const photo = d.photos?.[1] ?? d.photos?.[0]
+    if (!photo?.src?.large && !photo?.src?.medium) return null
+    return { url: photo.src.large ?? photo.src.medium!, credit: `${photo.photographer ?? 'Pexels'} on Pexels` }
+  } catch { return null }
+}
+
 async function tryUnsplashAPI(query: string, industry?: string): Promise<{ url: string; credit: string } | null> {
   const key = process.env.UNSPLASH_ACCESS_KEY
   if (!key) return null
@@ -160,13 +178,19 @@ async function _POST(req: Request) {
     let credit: string | null = null
     let provider = 'none'
 
-    // 1. Stability AI — best quality AI-generated (if key set)
-    if (prompt) {
+    // 1. Pexels — free, beautiful, professional photography (primary source)
+    if (!imageUrl) {
+      const result = await tryPexels(query, industry)
+      if (result) { imageUrl = result.url; credit = result.credit; provider = 'pexels' }
+    }
+
+    // 2. Stability AI — AI-generated (if key set)
+    if (!imageUrl && prompt) {
       const url = await tryStabilityAI(prompt)
       if (url) { imageUrl = url; credit = null; provider = 'stability_ai' }
     }
 
-    // 2. Unsplash API with curated collections — beautiful photography
+    // 3. Unsplash API with curated collections
     if (!imageUrl) {
       const result = await tryUnsplashAPI(query, industry)
       if (result) { imageUrl = result.url; credit = result.credit; provider = 'unsplash' }
