@@ -82,11 +82,27 @@ export default function ReviewsPage() {
 
   async function syncNow() {
     setSyncing(true); setSyncMsg('')
-    const res = await fetch('/api/aria/sync-reviews', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) }).then(r => r.json()).catch(() => ({ error: 'Network error' }))
-    if (res.error === 'not_configured') setSyncMsg('⚠️ Google Places API key not configured')
-    else if (res.error === 'no_place_id') setSyncMsg('⚠️ Add Google Place ID in Settings')
-    else if (res.ok) { setSyncMsg(`✅ ${res.reviews_synced} synced`); load(tab) }
-    else setSyncMsg(`❌ ${res.error ?? 'Sync failed'}`)
+    try {
+      // Get business_id first
+      const bizRes = await fetch('/api/pos/products')
+      const bd = await bizRes.json()
+      const business_id = bd.business_id
+      if (!business_id) {
+        setSyncMsg('⚠️ No business selected')
+        setSyncing(false)
+        return
+      }
+      const res = await fetch('/api/aria/sync-reviews', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ business_id })
+      }).then(r => r.json()).catch(() => ({ error: 'Network error' }))
+      if (res.error === 'not_configured') setSyncMsg('⚠️ Google Places API key not configured')
+      else if (res.error === 'no_place_id') setSyncMsg('⚠️ Click "Connect in 10 seconds" to set up Google reviews')
+      else if (res.ok) { setSyncMsg(`✅ ${res.reviews_synced ?? 0} synced`); load(tab) }
+      else setSyncMsg(`❌ ${res.error ?? 'Sync failed'}`)
+    } catch {
+      setSyncMsg('❌ Network error')
+    }
     setSyncing(false)
   }
 
