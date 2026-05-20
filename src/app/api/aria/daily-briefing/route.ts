@@ -67,7 +67,8 @@ async function _POST(req: NextRequest) {
       .eq('date', today)
       .maybeSingle();
 
-    if (cached && cached.generated_at > sixHoursAgo && !cached.dismissed_at) {
+    const hasRecs = Array.isArray(cached?.recommendations) && cached.recommendations.length > 0
+    if (cached && hasRecs && cached.generated_at > sixHoursAgo && !cached.dismissed_at) {
       const remindAt = cached.remind_at ? new Date(cached.remind_at) : null;
       if (!remindAt || remindAt <= new Date()) {
         return NextResponse.json({

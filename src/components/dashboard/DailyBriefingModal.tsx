@@ -119,7 +119,7 @@ export function DailyBriefingModal() {
       const res = await fetch('/api/aria/daily-briefing', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ business_id: business.id }),
+        body: JSON.stringify({ business_id: business.id, force_refresh: true }),
       });
 
       if (res.status === 401 || res.status === 429) {
