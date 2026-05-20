@@ -162,6 +162,18 @@ export default function ReviewsPage() {
         </div>
       )}
 
+      {/* Review request automation banner */}
+      <div style={{ marginBottom: 16, padding: '12px 16px', background: 'rgba(127,184,151,0.06)', borderRadius: 10, border: '1px solid rgba(127,184,151,0.15)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <p style={{ fontSize: 13, fontWeight: 600, color: '#7FB897' }}>Review request automation</p>
+          <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>Click "Request review" on any customer to send an SMS with your Google review link. Responses tracked automatically.</p>
+        </div>
+        <div style={{ fontSize: 11, color: 'var(--text-secondary)', textAlign: 'right' }}>
+          <p>Powered by Twilio</p>
+          <p style={{ color: '#7FB897', marginTop: 2 }}>✓ Spam Act compliant</p>
+        </div>
+      </div>
+
       {/* Analytics + reputation strip */}
       {analytics && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr) auto', gap: 10, marginBottom: 20 }}>

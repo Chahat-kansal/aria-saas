@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
 
-interface Campaign { id: string; name: string; type: string; channel: string; status: string; sent_count: number; recipients_count: number; scheduled_at: string | null; completed_at: string | null; aria_generated: boolean; target_segment: string | null; message: string; created_at: string }
+interface Campaign { id: string; name: string; type: string; channel: string; status: string; sent_count: number; recipients_count: number; scheduled_at: string | null; completed_at: string | null; aria_generated: boolean; target_segment: string | null; message: string; created_at: string; unsubscribe_count?: number; revenue_attributed_cents?: number }
 interface Template { id: string; name: string; type: string; channel: string; sms_body: string; is_global: boolean }
 interface AriaSuggestion { name: string; type: string; channel: string; target_type: string; target_segment: string | null; message: string; best_send_time: string; rationale: string; predicted_response_rate: number; predicted_revenue_cents: number }
 // SegCount retained for type safety in case segCounts is still used elsewhere
@@ -368,26 +368,68 @@ export default function MarketingPage() {
       {/* ANALYTICS */}
       {tab === 'analytics' && (
         <div>
+          {/* Summary stats */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10, marginBottom: 20 }}>
+            {[
+              { label: 'Total sent', value: campaigns.reduce((s,c) => s+(c.sent_count??0), 0).toLocaleString() },
+              { label: 'Total recipients', value: campaigns.reduce((s,c) => s+(c.recipients_count??0), 0).toLocaleString() },
+              { label: 'Campaigns run', value: campaigns.filter(c=>c.status==='completed').length },
+              { label: 'Unsubscribes', value: campaigns.reduce((s,c) => s+((c.unsubscribe_count)??0), 0) },
+            ].map(({ label, value }) => (
+              <div key={label} style={{ background: 'var(--bg-elevated)', borderRadius: 12, padding: '14px 16px' }}>
+                <p style={{ fontSize: 22, fontWeight: 700, fontFamily: 'Fraunces, serif', fontStyle: 'italic', color: '#7FB897' }}>{value}</p>
+                <p style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 4 }}>{label}</p>
+              </div>
+            ))}
+          </div>
+
           {loading && <p style={{ color: 'var(--text-secondary)', fontSize: 13 }}>Loading…</p>}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {campaigns.filter(c => c.status === 'completed' || c.status === 'sending').map(c => {
-              const dr = c.recipients_count ? Math.round((c.sent_count / c.recipients_count) * 100) : 0
+              const deliveryRate = c.recipients_count ? Math.round((c.sent_count / c.recipients_count) * 100) : 0
+              const unsubRate = c.sent_count ? Math.round((c.unsubscribe_count ?? 0) / c.sent_count * 100) : 0
+              const revenue = (c.revenue_attributed_cents ?? 0) / 100
               return (
-                <div key={c.id} style={{ background: 'var(--bg-elevated)', borderRadius: 10, padding: '12px 16px', border: '1px solid rgba(255,255,255,0.07)', display: 'grid', gridTemplateColumns: '1fr auto auto auto auto', alignItems: 'center', gap: 16 }}>
-                  <div>
-                    <p style={{ fontSize: 14, fontWeight: 500 }}>{c.name}</p>
-                    <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>{c.target_segment ? SEG_LABELS[c.target_segment] ?? c.target_segment : 'All'} · {c.completed_at ? new Date(c.completed_at).toLocaleDateString('en-AU') : '—'}</p>
+                <div key={c.id} style={{ background: 'var(--bg-elevated)', borderRadius: 12, padding: '16px 18px', border: '1px solid rgba(255,255,255,0.07)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+                    <div>
+                      <p style={{ fontSize: 14, fontWeight: 600 }}>{c.name}</p>
+                      <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>
+                        {c.target_segment ? SEG_LABELS[c.target_segment] ?? c.target_segment : 'All customers'} · {c.completed_at ? new Date(c.completed_at).toLocaleDateString('en-AU') : '—'}
+                        {c.aria_generated && <span style={{ marginLeft: 6, color: '#7FB897', fontSize: 11 }}>✦ Aria</span>}
+                      </p>
+                    </div>
+                    <div>{pill(c.status, STATUS_COLOR[c.status] ?? '#888')}</div>
                   </div>
-                  <div style={{ textAlign: 'center' }}><p style={{ fontSize: 18, fontWeight: 600 }}>{c.sent_count ?? 0}</p><p style={{ fontSize: 10, color: 'var(--text-secondary)' }}>sent</p></div>
-                  <div style={{ textAlign: 'center' }}><p style={{ fontSize: 18, fontWeight: 600 }}>{dr}%</p><p style={{ fontSize: 10, color: 'var(--text-secondary)' }}>delivery</p></div>
-                  <div style={{ textAlign: 'center' }}><p style={{ fontSize: 18, fontWeight: 600 }}>{c.recipients_count ?? 0}</p><p style={{ fontSize: 10, color: 'var(--text-secondary)' }}>recipients</p></div>
-                  <div>{pill(c.status, STATUS_COLOR[c.status] ?? '#888')}</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 8 }}>
+                    {[
+                      { label: 'Sent', value: c.sent_count ?? 0, color: 'var(--text-primary)' },
+                      { label: 'Delivery', value: `${deliveryRate}%`, color: deliveryRate >= 90 ? '#7FB897' : deliveryRate >= 70 ? '#f59e0b' : '#ef4444' },
+                      { label: 'Recipients', value: c.recipients_count ?? 0, color: 'var(--text-primary)' },
+                      { label: 'Opt-outs', value: c.unsubscribe_count ?? 0, color: unsubRate > 2 ? '#ef4444' : 'var(--text-primary)' },
+                      { label: 'Revenue', value: revenue > 0 ? `$${revenue.toFixed(0)}` : '—', color: revenue > 0 ? '#7FB897' : 'var(--text-secondary)' },
+                    ].map(({ label, value, color }) => (
+                      <div key={label} style={{ textAlign: 'center' }}>
+                        <p style={{ fontSize: 16, fontWeight: 700, color }}>{value}</p>
+                        <p style={{ fontSize: 10, color: 'var(--text-secondary)', marginTop: 2 }}>{label}</p>
+                      </div>
+                    ))}
+                  </div>
+                  {c.message && <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 10, padding: '8px 12px', background: 'rgba(255,255,255,0.03)', borderRadius: 8, fontStyle: 'italic' }}>"{c.message.slice(0,120)}{c.message.length>120?'…':''}"</p>}
                 </div>
               )
             })}
             {!loading && campaigns.filter(c => ['completed','sending'].includes(c.status)).length === 0 && (
-              <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>No completed campaigns yet.</p>
+              <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-secondary)', fontSize: 14 }}>
+                <p>No completed campaigns yet.</p>
+                <p style={{ marginTop: 8, fontSize: 12 }}>Send your first campaign to see analytics here.</p>
+              </div>
             )}
+          </div>
+
+          {/* Opt-out compliance note */}
+          <div style={{ marginTop: 20, padding: '12px 16px', background: 'rgba(127,184,151,0.06)', borderRadius: 10, fontSize: 12, color: 'var(--text-secondary)', border: '1px solid rgba(127,184,151,0.15)' }}>
+            <strong style={{ color: '#7FB897' }}>Opt-out handling:</strong> All campaigns include "Reply STOP to unsubscribe". Opt-outs are automatically recorded and those customers are excluded from future campaigns. Australian Spam Act compliant.
           </div>
         </div>
       )}
