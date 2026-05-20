@@ -793,10 +793,13 @@ async function generateImage(input: Record<string, unknown>, businessId: string)
   const GEMINI_KEY = process.env.GEMINI_API_KEY;
   const OPENAI_KEY = process.env.OPENAI_API_KEY;
 
+  // Imagen 3 is FASTEST (~8-12s vs gpt-image-1 ~15-30s) — put it first
+  // The previous 504s were caused by the Gemini INTENT CLASSIFIER (now fixed, uses Haiku)
+  // not by Imagen itself. Imagen 3 actually works fine.
   const strategies = [
+    { name: 'imagen-3-gemini', provider: 'gemini' },
     { name: 'gpt-image-1', provider: 'openai' },
     { name: 'gpt-image-1-mini', provider: 'openai-mini' },
-    { name: 'imagen-3-gemini', provider: 'gemini' },
   ];
 
   let lastError = '';
@@ -815,7 +818,7 @@ async function generateImage(input: Record<string, unknown>, businessId: string)
               instances: [{ prompt }],
               parameters: { sampleCount: 1, aspectRatio: '1:1', safetyFilterLevel: 'block_few' },
             }),
-            signal: AbortSignal.timeout(55_000),
+            signal: AbortSignal.timeout(15_000),
           }
         );
         if (!res.ok) {
@@ -838,12 +841,15 @@ async function generateImage(input: Record<string, unknown>, businessId: string)
 
       } else if ((strategy.provider === 'openai' || strategy.provider === 'openai-mini') && OPENAI_KEY) {
         const model = strategy.provider === 'openai-mini' ? 'gpt-image-1-mini' : 'gpt-image-1';
+        const imgT0 = Date.now();
+        console.log('[generate_image] calling', model, 'prompt:', prompt.slice(0, 80));
         const res = await fetch('https://api.openai.com/v1/images/generations', {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${OPENAI_KEY}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({ model, prompt, n: 1, size: '1024x1024' }),
-          signal: AbortSignal.timeout(55_000),
+          signal: AbortSignal.timeout(28_000),
         });
+        console.log('[generate_image]', model, 'response in', Date.now()-imgT0, 'ms status:', res.status);
         if (!res.ok) {
           const err = await res.text();
           console.error('[aria-tool/generate_image] OpenAI', model, 'failed:', res.status, err.slice(0, 300));
