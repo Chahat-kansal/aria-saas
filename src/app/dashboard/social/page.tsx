@@ -165,6 +165,7 @@ export default function SocialPage() {
     });
     const d = await res.json();
     if (d.job_id) setVideoJobs(p => ({ ...p, [postId]: d.job_id }));
+    else if (d.error) alert(d.message || 'Video generation failed. Check your Runway API key.');
   }
 
   async function pollVideoStatus(postId: string, jobId: string) {
@@ -191,6 +192,7 @@ export default function SocialPage() {
     });
     const d = await res.json();
     if (d.audio_url) setVoiceUrls(p => ({ ...p, [postId]: d.audio_url }));
+    else if (d.error) alert(d.error.includes('not_configured') ? 'ElevenLabs API key not configured.' : (d.error || 'Voiceover generation failed.'));
     setVoiceGenerating(false);
     setVoiceOpen(null);
     setVoiceText('');

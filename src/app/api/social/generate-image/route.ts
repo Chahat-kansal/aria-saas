@@ -116,8 +116,32 @@ async function _POST(req: Request) {
       if (result) { imageUrl = result.url; credit = result.credit; provider = 'unsplash' }
     }
 
+    // Pixabay fallback — free, no upload needed
+    if (!imageUrl) {
+      const pixabayKey = process.env.PIXABAY_API_KEY
+      const q = search_query || prompt?.split(' ').slice(0, 3).join(' ') || 'business'
+      if (pixabayKey) {
+        try {
+          const pRes = await fetch(
+            `https://pixabay.com/api/?key=${pixabayKey}&q=${encodeURIComponent(q)}&image_type=photo&orientation=horizontal&per_page=3&safesearch=true`
+          )
+          const pData = await pRes.json() as { hits?: Array<{ webformatURL?: string }> }
+          const hit = pData.hits?.[0]
+          if (hit?.webformatURL) { imageUrl = hit.webformatURL; credit = 'Pixabay'; provider = 'pixabay' }
+        } catch { /* fall through */ }
+      }
+    }
+
+    // Free Unsplash source — no key, always works
+    if (!imageUrl) {
+      const q = encodeURIComponent(search_query || prompt?.split(' ').slice(0, 3).join(' ') || 'cafe food')
+      imageUrl = `https://source.unsplash.com/featured/800x800/?${q}`
+      credit = 'Unsplash'; provider = 'unsplash_free'
+    }
+
     if (post_id && imageUrl) {
-      await serviceClient().from('social_posts')
+      const { supabaseAdmin } = await import('@/lib/supabase-admin')
+      await supabaseAdmin.from('social_posts')
         .update({ image_url: imageUrl, image_credit: credit })
         .eq('id', post_id)
     }
