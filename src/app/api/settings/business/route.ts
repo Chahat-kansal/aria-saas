@@ -44,6 +44,7 @@ async function _PATCH(req: Request) {
   if (body.city       !== undefined) payload.city        = body.city
   if (body.address    !== undefined) payload.address     = body.address
   if (body.phone      !== undefined) payload.phone       = body.phone
+  if (body.industry   !== undefined) payload.industry    = body.industry
   if (body.google_place_id !== undefined) payload.google_place_id = body.google_place_id || null
 
   if (Object.keys(payload).length === 0) return NextResponse.json({ ok: true })

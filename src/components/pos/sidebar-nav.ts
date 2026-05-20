@@ -8,7 +8,7 @@ import {
   BarChart3, Sparkles, Layers, UserCheck, TrendingUp, BookOpen, Zap,
   Globe, TrendingDown,
   Bot, RotateCcw, DollarSign as DollarIcon, Calendar, Activity,
-  Settings, Key, Receipt, Shield, Building, Barcode, Database,
+  Settings, Key, Receipt, Shield, Building, Barcode, Database, Store,
   Banknote, Wrench,
   Clock, Smartphone, Timer, Scissors,
   ShoppingBag, CalendarClock, Plug,
@@ -23,6 +23,8 @@ export interface NavItem {
   badge?: string | number
   isHero?: boolean
   external?: boolean
+  /** Industries this item is relevant for. If undefined, item shows for ALL industries. */
+  industries?: Industry[]
 }
 
 export interface NavSection {
@@ -31,7 +33,28 @@ export interface NavSection {
   icon?: LucideIcon
   items: NavItem[]
   defaultOpen?: boolean
+  /** Industries this section is relevant for. If undefined, section shows for ALL industries. */
+  industries?: Industry[]
 }
+
+/**
+ * Supported business industries. Used to filter the POS nav so only
+ * relevant features appear for each business type.
+ */
+export type Industry =
+  | 'cafe'           // cafés, coffee shops
+  | 'restaurant'     // full-service dining
+  | 'bakery'         // bakeries, pastry shops
+  | 'liquor'         // bottle shops, liquor retail
+  | 'convenience'    // convenience stores, mini-marts
+  | 'grocery'        // supermarkets, grocery
+  | 'clothing'       // apparel, footwear, fashion
+  | 'gift'           // gift, homewares, florists
+  | 'pharmacy'       // chemists, pharmacies
+  | 'electronics'    // phone shops, computer stores
+  | 'beauty'         // salons, beauty, hair
+  | 'other'          // generic retail
+
 
 export const NAV_STRUCTURE: NavSection[] = [
   {
@@ -42,11 +65,11 @@ export const NAV_STRUCTURE: NavSection[] = [
     items: [
       { label: 'Terminal', href: '/pos/terminal', icon: ShoppingCart },
       { label: 'Customer Display', href: '/pos/display', icon: Monitor, external: true },
-      { label: 'Laybys', href: '/pos/laybys', icon: ClipboardList },
-      { label: 'Split Groups', href: '/pos/split-groups', icon: Scissors },
+      { label: 'Laybys', href: '/pos/laybys', icon: ClipboardList, industries: ['liquor', 'clothing', 'gift', 'electronics', 'other'] },
+      { label: 'Split Groups', href: '/pos/split-groups', icon: Scissors, industries: ['cafe', 'restaurant', 'bakery'] },
       { label: 'Returns', href: '/pos/returns', icon: RotateCcw },
       { label: 'Promotions', href: '/pos/promotions', icon: Tag },
-      { label: 'Kitchen (Expo)', href: '/pos/kds/expo', icon: UtensilsCrossed },
+      { label: 'Kitchen (Expo)', href: '/pos/kds/expo', icon: UtensilsCrossed, industries: ['cafe', 'restaurant', 'bakery'] },
     ],
   },
   {
@@ -70,8 +93,8 @@ export const NAV_STRUCTURE: NavSection[] = [
     defaultOpen: true,
     items: [
       { label: 'Products', href: '/pos/products', icon: Package },
-      { label: 'Recipes & Costing', href: '/pos/recipes', icon: BookOpen },
-      { label: 'Waste Log', href: '/pos/waste', icon: TrendingDown },
+      { label: 'Recipes & Costing', href: '/pos/recipes', icon: BookOpen, industries: ['cafe', 'restaurant', 'bakery'] },
+      { label: 'Waste Log', href: '/pos/waste', icon: TrendingDown, industries: ['cafe', 'restaurant', 'bakery', 'grocery', 'convenience', 'pharmacy'] },
       { label: 'Classifications', href: '/pos/categories', icon: FolderOpen },
       { label: 'Suppliers', href: '/pos/suppliers', icon: Truck },
       { label: 'Purchase Orders', href: '/pos/orders', icon: ShoppingBag },
@@ -107,7 +130,7 @@ export const NAV_STRUCTURE: NavSection[] = [
       { label: 'Promotions', href: '/pos/promotions', icon: Tag },
       { label: 'New Promotion', href: '/pos/promotions/new', icon: Tag },
       { label: 'Promo Attribution', href: '/pos/promotions/attribution', icon: TrendingUp },
-      { label: 'Shelf Tickets', href: '/pos/shelf-tickets', icon: Ticket },
+      { label: 'Shelf Tickets', href: '/pos/shelf-tickets', icon: Ticket, industries: ['liquor', 'convenience', 'grocery', 'clothing', 'gift', 'pharmacy', 'electronics', 'other'] },
       { label: 'Loyalty', href: '/pos/loyalty', icon: Heart },
     ],
   },
@@ -149,14 +172,15 @@ export const NAV_STRUCTURE: NavSection[] = [
     defaultOpen: false,
     items: [
       { label: 'General', href: '/pos/settings', icon: Settings },
-      { label: 'Sale Keys', href: '/pos/sale-keys', icon: Key },
+      { label: 'Business Type', href: '/pos/settings/business-type', icon: Store },
+      { label: 'Sale Keys', href: '/pos/sale-keys', icon: Key, industries: ['cafe', 'restaurant', 'bakery'] },
       { label: 'Receipt Templates', href: '/pos/settings/receipt-templates', icon: ScrollText },
       { label: 'Hardware Devices', href: '/pos/settings/hardware', icon: Printer },
-      { label: 'Modifiers', href: '/pos/settings/modifiers', icon: Settings },
-      { label: 'Kitchen Stations', href: '/pos/settings/kds-stations', icon: ChefHat },
+      { label: 'Modifiers', href: '/pos/settings/modifiers', icon: Settings, industries: ['cafe', 'restaurant', 'bakery'] },
+      { label: 'Kitchen Stations', href: '/pos/settings/kds-stations', icon: ChefHat, industries: ['cafe', 'restaurant', 'bakery'] },
       { label: 'Staff & Users', href: '/pos/settings/users', icon: Users },
       { label: 'Roles & Permissions', href: '/pos/settings/roles', icon: Shield },
-      { label: 'Surcharging', href: '/pos/settings/surcharging', icon: CreditCard },
+      { label: 'Surcharging', href: '/pos/settings/surcharging', icon: CreditCard, industries: ['cafe', 'restaurant', 'bakery'] },
       { label: 'Registers & Outlets', href: '/pos/settings/registers', icon: Building },
       { label: 'Barcodes', href: '/pos/barcodes', icon: Barcode },
       { label: 'Price Sets', href: '/pos/price-sets', icon: Tag },
@@ -176,8 +200,8 @@ export const NAV_STRUCTURE: NavSection[] = [
     icon: Wrench,
     defaultOpen: false,
     items: [
-      { label: 'Future Prices', href: '/pos/future-prices', icon: Clock },
-      { label: 'Mobile Scanner', href: '/pos/mobile', icon: Smartphone },
+      { label: 'Future Prices', href: '/pos/future-prices', icon: Clock, industries: ['liquor', 'grocery', 'convenience', 'pharmacy'] },
+      { label: 'Mobile Scanner', href: '/pos/mobile', icon: Smartphone, industries: ['liquor', 'convenience', 'grocery', 'clothing', 'gift', 'pharmacy', 'electronics', 'other'] },
       { label: 'Timesheets', href: '/pos/timesheets', icon: Timer },
       { label: 'Void & Refund', href: '/pos/void', icon: Scissors },
     ],
@@ -207,4 +231,49 @@ export function findActiveItem(pathname: string): NavItem | null {
     }
   }
   return null
+}
+
+/**
+ * Filter NAV_STRUCTURE to only include sections/items relevant to a given industry.
+ * If industry is null/undefined, returns the full nav (backward compatible).
+ *
+ * Rules:
+ *   - Section with no `industries` field shows for everyone.
+ *   - Section with `industries` field only shows if industry is in the list.
+ *   - Same logic applies per-item inside each section.
+ *   - A section becomes hidden if all its items are filtered out for this industry.
+ */
+export function filterNavByIndustry(
+  industry: Industry | string | null | undefined,
+): NavSection[] {
+  if (!industry) return NAV_STRUCTURE
+  const ind = industry as Industry
+  return NAV_STRUCTURE
+    .filter(section => !section.industries || section.industries.includes(ind))
+    .map(section => ({
+      ...section,
+      items: section.items.filter(item => !item.industries || item.industries.includes(ind)),
+    }))
+    .filter(section => section.items.length > 0)
+}
+
+/**
+ * Map raw business.industry values from the DB to the Industry type.
+ * Handles legacy/freeform values like 'cafe_or_coffee_shop' → 'cafe'.
+ */
+export function normalizeIndustry(raw: string | null | undefined): Industry {
+  if (!raw) return 'other'
+  const s = raw.toLowerCase().trim()
+  if (s.includes('cafe') || s.includes('coffee')) return 'cafe'
+  if (s.includes('restaurant') || s.includes('dining')) return 'restaurant'
+  if (s.includes('bakery') || s.includes('pastry')) return 'bakery'
+  if (s.includes('liquor') || s.includes('bottle') || s.includes('alcohol')) return 'liquor'
+  if (s.includes('convenience') || s.includes('mini')) return 'convenience'
+  if (s.includes('grocery') || s.includes('supermarket')) return 'grocery'
+  if (s.includes('clothing') || s.includes('apparel') || s.includes('fashion') || s.includes('footwear')) return 'clothing'
+  if (s.includes('gift') || s.includes('homeware') || s.includes('florist')) return 'gift'
+  if (s.includes('pharmacy') || s.includes('chemist')) return 'pharmacy'
+  if (s.includes('electronic') || s.includes('phone') || s.includes('computer')) return 'electronics'
+  if (s.includes('beauty') || s.includes('salon') || s.includes('hair')) return 'beauty'
+  return 'other'
 }

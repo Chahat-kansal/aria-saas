@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { motion, AnimatePresence, LayoutGroup } from 'framer-motion'
@@ -9,7 +9,8 @@ import {
 } from 'lucide-react'
 import { AriaMark } from '@/components/ui/AriaMark'
 import { PulseDot } from '@/components/ui/PulseDot'
-import { NAV_STRUCTURE, findActiveSection, findActiveItem } from './sidebar-nav'
+import { NAV_STRUCTURE, findActiveSection, findActiveItem, filterNavByIndustry, normalizeIndustry, type NavSection } from './sidebar-nav'
+import { useBusiness } from '@/components/providers/BusinessProvider'
 import { springs } from '@/lib/motion'
 import { supabase } from '@/lib/supabase'
 
@@ -50,6 +51,14 @@ export default function POSSidebar({
   const pathname  = usePathname() ?? ''
   const router    = useRouter()
   const isTerminal = pathname === '/pos/terminal'
+  const business = useBusiness()
+
+  // Filter nav by business industry — only show relevant sections/items
+  // Memoized to avoid recomputing on every render
+  const visibleNav = useMemo(
+    () => filterNavByIndustry(normalizeIndustry(business?.industry)),
+    [business?.industry]
+  )
 
   const [collapsed,    setCollapsed]    = useState(false)
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({})
@@ -272,7 +281,7 @@ export default function POSSidebar({
 
         {/* ── NAV SECTIONS ─────────────────────────────────────── */}
         <nav style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: collapsed ? '0 4px' : '0 6px' }}>
-          {NAV_STRUCTURE.map(section => {
+          {visibleNav.map(section => {
             const isOpen = openSections[section.id] ?? (section.defaultOpen ?? true)
             const SectionIcon = section.icon
 
@@ -617,6 +626,7 @@ export default function POSSidebar({
       <AnimatePresence>
         {showCmdK && (
           <CommandPalette
+            nav={visibleNav}
             onClose={() => setShowCmdK(false)}
             onNavigate={(href) => { router.push(href); setShowCmdK(false) }}
           />
@@ -628,9 +638,11 @@ export default function POSSidebar({
 
 // ── CommandPalette ───────────────────────────────────────────────────
 function CommandPalette({
+  nav,
   onClose,
   onNavigate,
 }: {
+  nav: NavSection[]
   onClose: () => void
   onNavigate: (href: string) => void
 }) {
@@ -640,7 +652,7 @@ function CommandPalette({
 
   useEffect(() => { inputRef.current?.focus() }, [])
 
-  const allItems = NAV_STRUCTURE.flatMap(s =>
+  const allItems = nav.flatMap(s =>
     s.items.filter(i => !i.external).map(item => ({ ...item, sectionLabel: s.label }))
   )
 
