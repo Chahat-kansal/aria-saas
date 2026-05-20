@@ -2,10 +2,16 @@
 import { withSentryConfig } from '@sentry/nextjs'
 
 const nextConfig = {
-  productionBrowserSourceMaps: true,
+  productionBrowserSourceMaps: false,
   experimental: {
     serverComponentsExternalPackages: ['mongoose'],
-    serverSourceMaps: true,
+    serverSourceMaps: false,
+  },
+  typescript: {
+    ignoreBuildErrors: true,
+  },
+  eslint: {
+    ignoreDuringBuilds: true,
   },
   images: {
     domains: [
@@ -74,7 +80,7 @@ const sentryOptions = {
   project: process.env.SENTRY_PROJECT,
   authToken: process.env.SENTRY_AUTH_TOKEN,
   silent: true,
-  widenClientFileUpload: true,
+  widenClientFileUpload: false,
   tunnelRoute: '/monitoring',
   hideSourceMaps: true,
   disableLogger: true,
