@@ -41,6 +41,7 @@ const ALL_ITEMS: Record<string, NavItemDef> = {
   'social':                     { href: '/dashboard/social',                   label: 'Social Media',      icon: SocialIcon,         badge: 'AI',  section: 'Marketing'    },
   'orders':                     { href: '/dashboard/orders',                   label: 'Weekly Orders',     icon: OrdersIcon,         badge: 'AI',  section: 'Operations'   },
   'delivery':                   { href: '/dashboard/delivery',                 label: 'Delivery platforms', icon: DeliveryIcon,       section: 'Operations'   },
+  'pos-online':                 { href: '/dashboard/pos/online',               label: 'Online ordering',    icon: DeliveryIcon,       badge: 'AI',  section: 'Operations'   },
   'dashboard':                  { href: '/dashboard',                          label: 'Dashboard',         icon: GridIcon,           section: 'Overview'     },
   'custom-features':            { href: '/dashboard/custom-features',          label: 'Custom features',   icon: SparklesIcon,       badge: 'New', section: 'Overview' },
   'staff':                      { href: '/dashboard/staff',                    label: 'Team',              icon: TeamIcon,           section: 'Overview'     },
