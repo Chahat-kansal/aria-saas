@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { useBusinessContext } from '@/components/providers/BusinessProvider'
 import {
   Coffee, UtensilsCrossed, Cookie, Wine, ShoppingBag, ShoppingCart,
   Shirt, Gift, Pill, Smartphone, Scissors, Store, Check,
@@ -115,6 +116,7 @@ const C = {
 
 export default function BusinessTypePage() {
   const router = useRouter()
+  const { refreshBusiness } = useBusinessContext()
   const [currentIndustry, setCurrentIndustry] = useState<string | null>(null)
   const [selected, setSelected] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -147,7 +149,8 @@ export default function BusinessTypePage() {
       setCurrentIndustry(selected)
       setSaved(true)
       setTimeout(() => setSaved(false), 2500)
-      // Refresh so sidebar picks up new industry
+      // Reload BusinessProvider so sidebar picks up new industry immediately
+      await refreshBusiness()
       router.refresh()
     } catch {
       alert('Could not save business type — please try again.')

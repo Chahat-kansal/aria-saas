@@ -169,7 +169,7 @@ export const NAV_STRUCTURE: NavSection[] = [
     id: 'setup',
     label: 'Setup',
     icon: Settings,
-    defaultOpen: false,
+    defaultOpen: true,
     items: [
       { label: 'General', href: '/pos/settings', icon: Settings },
       { label: 'Business Type', href: '/pos/settings/business-type', icon: Store },
