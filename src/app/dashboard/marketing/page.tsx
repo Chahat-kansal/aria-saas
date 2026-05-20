@@ -73,7 +73,7 @@ export default function MarketingPage() {
     setAriaLoading(true)
     try {
       const r = await fetch('/api/marketing/aria-generate', { method: 'POST' })
-      const d = await r.json() as { suggestion?: AriaSuggestion }
+      const d = await r.json() as { suggestion?: AriaSuggestion; error?: string }
       if (d.suggestion) {
         setAriaSuggestion(d.suggestion)
         setFormName(d.suggestion.name)
@@ -82,6 +82,8 @@ export default function MarketingPage() {
         setFormMsg(d.suggestion.message)
         if (d.suggestion.best_send_time) setFormSchedule(d.suggestion.best_send_time.slice(0, 16))
         setStep(2)
+      } else if (d.error) {
+        alert('Aria could not generate a campaign: ' + d.error)
       }
     } finally { setAriaLoading(false) }
   }

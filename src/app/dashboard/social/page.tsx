@@ -93,7 +93,11 @@ export default function SocialPage() {
       body: JSON.stringify({ business_id: bid, platforms: ['instagram', 'facebook', 'google_business'], count: 3 }),
     });
     const d = await res.json();
-    if (d.posts) setPosts(prev => [...d.posts, ...prev.filter(p => p.status !== 'draft')]);
+    if (d.posts?.length) {
+      setPosts(prev => [...d.posts, ...prev.filter(p => p.status !== 'draft')]);
+    } else {
+      alert(d.error || 'Aria could not generate social posts right now. Try again in a moment.');
+    }
     setGenerating(false);
   }
 

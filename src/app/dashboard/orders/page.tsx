@@ -47,6 +47,8 @@ export default function OrdersPage() {
       setActiveDraft(d.draft);
       setEditItems(d.draft.items ?? []);
       setDrafts(prev => [d.draft, ...prev.filter(dr => dr.id !== d.draft.id)]);
+    } else {
+      alert(d.reasoning || 'No reorder needed this week — all products are well stocked.');
     }
     setGenerating(false);
   }

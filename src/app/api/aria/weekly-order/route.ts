@@ -66,12 +66,14 @@ async function _POST(req: Request) {
     const targetStock  = weeklyDemand * 2; // 2-week buffer
     const suggestedQty = Math.max(0, Math.ceil(targetStock - stock));
 
-    if (suggestedQty <= 0 && daysOfStock > 14) continue;
-    if (dailyVelocity === 0 && stock > 5) continue;
+    if (suggestedQty <= 0 && daysOfStock > 14 && dailyVelocity === 0) continue;
 
     let reason = '';
-    if (daysOfStock < 3)       reason = `URGENT: ${Math.ceil(daysOfStock)} days stock remaining`;
-    else if (daysOfStock < 7)  reason = `Low: ${Math.ceil(daysOfStock)} days stock remaining`;
+    if (stock <= 0) { reason = 'Out of stock — reorder needed'; }
+    else if (dailyVelocity === 0 && stock <= 5) { reason = `Low stock (${stock} units) — no recent sales data`; }
+    else if (dailyVelocity === 0) continue;
+    else if (daysOfStock < 3)  reason = `URGENT: ${Math.ceil(daysOfStock)} days stock remaining`;
+    else if (daysOfStock < 7) reason = `Low: ${Math.ceil(daysOfStock)} days stock remaining`;
     else if (hotWeekend && ['Beer & Cider','Soft Drinks','Water','RTD','Beverages'].some(c => categoryName.includes(c)))
       reason = `Hot weekend forecast — stock up`;
     else if (holidays.length > 0 && holidays[0].days_away <= 7)
@@ -115,14 +117,39 @@ async function _POST(req: Request) {
   const urgentItems = orderItems.filter(i => i.days_of_stock < 3);
 
   if (!orderItems.length) {
-    return NextResponse.json({
-      draft: null,
-      items: [],
-      total_cost_cents: 0,
-      reasoning: 'All tracked products have sufficient stock — no reorder needed this week.',
-      urgent_count: 0,
-      suppliers: suppliers || [],
-    })
+    // Fall back to low-stock products even without velocity
+    const lowStock = (products || [])
+      .filter(p => (p.stock_quantity ?? 0) <= 10)
+      .slice(0, 20)
+      .map(p => ({
+        product_id: p.id,
+        product_name: p.name,
+        barcode: p.barcode,
+        sku: p.sku,
+        category: (p as any).pos_categories?.name || '',
+        current_stock: p.stock_quantity ?? 0,
+        days_of_stock: 0,
+        daily_velocity: 0,
+        suggested_qty: 10,
+        manual_qty: null,
+        unit_cost_cents: Math.round((p.cost_price || 0) * 100),
+        total_cost_cents: Math.round((p.cost_price || 0) * 100) * 10,
+        is_estimated_cost: !p.cost_price,
+        reason: `Low stock (${p.stock_quantity ?? 0} units) — no recent sales data`,
+        weather_uplift: null,
+        supplier_id: p.supplier_id,
+      }))
+    if (!lowStock.length) {
+      return NextResponse.json({
+        draft: null,
+        items: [],
+        total_cost_cents: 0,
+        reasoning: 'All products appear well-stocked. No reorder needed this week.',
+        urgent_count: 0,
+        suppliers: suppliers || [],
+      })
+    }
+    orderItems.push(...lowStock)
   }
 
   const weekStarting = week_starting || (() => {

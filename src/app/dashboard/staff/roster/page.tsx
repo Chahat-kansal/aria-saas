@@ -161,7 +161,7 @@ export default function RosterPage() {
         setIsDirty(true)
         showToast(`Aria drafted ${data.shifts.length} shifts — review and edit before publishing`)
       } else {
-        showToast('Aria couldn\'t generate a roster — insufficient staff or sales data')
+        alert(data.reasoning || 'Aria could not generate a roster — make sure staff members are added first.')
       }
     } catch { showToast('AI draft failed') }
     setIsGenerating(false)
