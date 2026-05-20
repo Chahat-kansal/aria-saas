@@ -120,13 +120,33 @@ export const ARIA_POS_TOOLS: Tool[] = [
   },
   {
     name: 'query_business_data',
-    description: 'Query the business database for any entity. Returns up-to-date rows. Use when user asks for "top X products", "best selling", lists, counts, or specific filtered data. Available entities: sales, products, customers, staff, suppliers, reviews, inventory, actions. Returns max 200 rows.',
+    description: `Query the business database for any entity. Returns up-to-date rows.
+
+Available entities and their REAL column names:
+- products: id, name, sku, barcode, price (selling price in AUD), cost_price, stock_quantity, current_stock, category, brand, is_active, description
+- sales: id, total_amount, payment_method, created_at, status, customer_id, customer_name, sale_number, subtotal, tax_total, discount_total
+- customers: id, name, phone, email, total_spent, total_spend, visit_count, last_visit, loyalty_points, segment
+- staff: id, first_name, last_name, position, department, employment_type, pay_rate_cents (cents), status
+- suppliers: id, name, contact_name, email, phone, address, notes
+- reviews: id, reviewer_name, rating, comment, review_date, has_reply, sentiment
+- inventory: id, item_id, movement_type, quantity_added, new_stock, notes, scanned_at
+- actions: id, title, category, priority, status, recommendation, expected_impact
+
+IMPORTANT FILTERS supported:
+- {since: "2025-01-01"} / {until: "2025-12-31"} — date range
+- {name_starts_with: "z"} — name starts with single letter/string
+- {name_starts_with_any: ["x", "z"]} — name starts with ANY of these (use for "products starting with X and Z")
+- {name_contains: "coffee"} — name contains substring
+- {category: "drinks"} / {status: "active"} — exact match on any column
+
+NEVER give up on column errors — system will auto-fall-back. Just try the query.
+Returns max 200 rows. For larger exports use generate_report.`,
     input_schema: {
       type: 'object',
       properties: {
         entity: { type: 'string', enum: ['sales', 'products', 'customers', 'staff', 'suppliers', 'reviews', 'inventory', 'actions'] },
-        filters: { type: 'object', description: 'Filter criteria like {since: "2025-01-01", category: "drinks"}' },
-        order_by: { type: 'string', description: 'Field to sort by' },
+        filters: { type: 'object', description: 'Filter criteria. See description for available filter keys.' },
+        order_by: { type: 'string', description: 'Column to sort by (use real column names)' },
         order_direction: { type: 'string', enum: ['asc', 'desc'] },
         limit: { type: 'number', description: 'Max 200' },
       },
@@ -135,16 +155,24 @@ export const ARIA_POS_TOOLS: Tool[] = [
   },
   {
     name: 'generate_report',
-    description: 'Create a downloadable Excel (.xlsx) or CSV file. Use when user asks for "in excel", "as a report", "export", "create a file", "download". Returns a download_url the user can click.',
+    description: `Create a downloadable Excel (.xlsx) or CSV file. Use whenever the user wants "in excel", "as a report", "export", "create a file", "csv", "download".
+
+Use the SAME entity names and filters as query_business_data. For products use column "price" (not selling_price).
+Columns parameter selects which columns appear in the export.
+
+Example: "csv of products starting with X and Z with selling price":
+{title: "Products X-Z", entity: "products", columns: ["name", "sku", "price"], filters: {name_starts_with_any: ["x", "z"]}}
+
+NEVER refuse on schema errors — system has self-healing fallback.`,
     input_schema: {
       type: 'object',
       properties: {
         title: { type: 'string', description: 'Report title and filename' },
         entity: { type: 'string', enum: ['sales', 'products', 'customers', 'staff', 'suppliers', 'reviews', 'inventory'] },
-        columns: { type: 'array', items: { type: 'string' }, description: 'Specific columns to include (optional)' },
-        filters: { type: 'object' },
+        columns: { type: 'array', items: { type: 'string' }, description: 'Real column names (e.g. ["name", "price", "cost_price"])' },
+        filters: { type: 'object', description: 'Same filters as query_business_data — supports name_starts_with_any: ["x","z"]' },
         order_by: { type: 'string' },
-        limit: { type: 'number' },
+        limit: { type: 'number', description: 'Max 10000' },
         format: { type: 'string', enum: ['xlsx', 'csv'] },
       },
       required: ['title', 'entity'],
@@ -466,24 +494,68 @@ function suggestPromotion(input: { goal: string; constraints?: string }): unknow
 
 // ─── New autonomous tools ─────────────────────────────────────────────────
 
-const ENTITY_TABLES: Record<string, { table: string; defaultColumns: string[]; defaultOrder: string }> = {
-  sales:     { table: 'pos_sales', defaultColumns: ['id','total_amount','payment_method','created_at','status','customer_id'], defaultOrder: 'created_at' },
-  products:  { table: 'pos_products', defaultColumns: ['id','name','sku','selling_price','cost_price','stock_quantity','category'], defaultOrder: 'name' },
-  customers: { table: 'pos_customers', defaultColumns: ['id','name','phone','email','total_spent','visit_count','last_visit'], defaultOrder: 'total_spent' },
-  staff:     { table: 'staff_members', defaultColumns: ['id','first_name','last_name','position','employment_type','pay_rate_cents','status'], defaultOrder: 'first_name' },
-  suppliers: { table: 'pos_suppliers', defaultColumns: ['id','name','contact_name','email','phone','address'], defaultOrder: 'name' },
-  reviews:   { table: 'google_reviews', defaultColumns: ['id','reviewer_name','rating','comment','review_date','has_reply'], defaultOrder: 'review_date' },
-  inventory: { table: 'stock_movements', defaultColumns: ['id','product_id','movement_type','quantity_change','reason','scanned_at'], defaultOrder: 'scanned_at' },
-  actions:   { table: 'aria_actions', defaultColumns: ['id','title','category','priority','status','created_at'], defaultOrder: 'created_at' },
+// Schema-aware entity mapping with REAL column names from the database
+const ENTITY_TABLES: Record<string, { table: string; defaultColumns: string[]; defaultOrder: string; columnAliases?: Record<string, string> }> = {
+  sales:     {
+    table: 'pos_sales',
+    defaultColumns: ['id','total_amount','payment_method','created_at','status','customer_id','customer_name','sale_number','subtotal','tax_total','discount_total'],
+    defaultOrder: 'created_at',
+  },
+  products:  {
+    table: 'pos_products',
+    defaultColumns: ['id','name','sku','barcode','price','cost_price','stock_quantity','current_stock','category','brand','is_active','description'],
+    defaultOrder: 'name',
+    columnAliases: { selling_price: 'price', sell_price: 'price', retail_price: 'price', stock: 'stock_quantity', inventory: 'stock_quantity' },
+  },
+  customers: {
+    table: 'pos_customers',
+    defaultColumns: ['id','name','phone','email','total_spent','total_spend','visit_count','last_visit','loyalty_points','segment'],
+    defaultOrder: 'total_spent',
+  },
+  staff:     {
+    table: 'staff_members',
+    defaultColumns: ['id','first_name','last_name','position','department','employment_type','pay_rate_cents','status','start_date'],
+    defaultOrder: 'first_name',
+  },
+  suppliers: {
+    table: 'pos_suppliers',
+    defaultColumns: ['id','name','contact_name','email','phone','address','notes'],
+    defaultOrder: 'name',
+  },
+  reviews:   {
+    table: 'google_reviews',
+    defaultColumns: ['id','reviewer_name','rating','comment','review_date','has_reply','sentiment','reply_text'],
+    defaultOrder: 'review_date',
+  },
+  inventory: {
+    table: 'stock_movements',
+    defaultColumns: ['id','item_id','movement_type','quantity_added','new_stock','notes','scanned_at'],
+    defaultOrder: 'scanned_at',
+    columnAliases: { product_id: 'item_id', quantity_change: 'quantity_added', reason: 'notes' },
+  },
+  actions:   {
+    table: 'aria_actions',
+    defaultColumns: ['id','title','category','priority','status','recommendation','expected_impact','created_at'],
+    defaultOrder: 'created_at',
+  },
 };
+
+// Map user-friendly column names to actual DB column names
+function resolveColumn(entity: string, col: string): string {
+  const cfg = ENTITY_TABLES[entity];
+  if (!cfg) return col;
+  return cfg.columnAliases?.[col] ?? col;
+}
 
 async function queryBusinessData(input: Record<string, unknown>, businessId: string): Promise<unknown> {
   const entity = String(input.entity ?? '');
   const cfg = ENTITY_TABLES[entity];
-  if (!cfg) return { error: `Unknown entity: ${entity}` };
+  if (!cfg) return { error: `Unknown entity: ${entity}. Available: ${Object.keys(ENTITY_TABLES).join(', ')}` };
 
   const filters = (input.filters ?? {}) as Record<string, unknown>;
-  const orderBy = String(input.order_by ?? cfg.defaultOrder);
+  // Resolve column aliases (e.g. selling_price → price)
+  const rawOrderBy = String(input.order_by ?? cfg.defaultOrder);
+  const orderBy = resolveColumn(entity, rawOrderBy);
   const ascending = input.order_direction === 'asc';
   const limit = Math.min(Number(input.limit ?? 20), 200);
 
@@ -491,19 +563,50 @@ async function queryBusinessData(input: Record<string, unknown>, businessId: str
 
   for (const [key, value] of Object.entries(filters)) {
     if (value == null) continue;
-    if (key === 'since' && typeof value === 'string') query = query.gte('created_at', value);
-    else if (key === 'until' && typeof value === 'string') query = query.lte('created_at', value);
-    else if (key === 'min_amount' && typeof value === 'number') query = query.gte('total_amount', value);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    else query = query.eq(key, value as any);
+    const resolved = resolveColumn(entity, key);
+    if (key === 'since' && typeof value === 'string') {
+      const col = entity === 'inventory' ? 'scanned_at' : 'created_at';
+      query = query.gte(col, value);
+    } else if (key === 'until' && typeof value === 'string') {
+      const col = entity === 'inventory' ? 'scanned_at' : 'created_at';
+      query = query.lte(col, value);
+    } else if (key === 'min_amount' && typeof value === 'number') {
+      query = query.gte('total_amount', value);
+    } else if (key === 'name_starts_with' && typeof value === 'string') {
+      query = query.ilike('name', `${value}%`);
+    } else if (key === 'name_starts_with_any' && Array.isArray(value)) {
+      // Handle array of prefixes (e.g. ['x','z'])
+      const orFilter = (value as unknown[]).map(v => `name.ilike.${String(v)}%`).join(',');
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      query = (query as any).or(orFilter);
+    } else if (key === 'name_contains' && typeof value === 'string') {
+      query = query.ilike('name', `%${value}%`);
+    } else {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      query = query.eq(resolved, value as any);
+    }
   }
 
   if (entity === 'sales') query = query.neq('status', 'voided');
+  if (entity === 'products' && !filters.is_active && !filters.status) query = query.neq('is_active', false);
 
   query = query.order(orderBy, { ascending }).limit(limit);
 
   const { data, error } = await query;
-  if (error) return { error: error.message, rows: [] };
+  if (error) {
+    // Self-healing: if column not found, retry with a relaxed query
+    if (error.message.includes('column') && error.message.includes('does not exist')) {
+      const { data: fallback, error: fbErr } = await supabaseAdmin
+        .from(cfg.table)
+        .select(cfg.defaultColumns.join(','))
+        .eq('business_id', businessId)
+        .order(cfg.defaultOrder, { ascending })
+        .limit(limit);
+      if (fbErr) return { error: fbErr.message, rows: [] };
+      return { entity, count: (fallback ?? []).length, rows: fallback ?? [], note: 'Filter was ignored due to schema mismatch — returning default sort' };
+    }
+    return { error: error.message, rows: [] };
+  }
   return { entity, count: (data ?? []).length, rows: data ?? [] };
 }
 
