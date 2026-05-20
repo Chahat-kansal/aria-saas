@@ -539,7 +539,7 @@ export default function AskAriaPage() {
 
           {messages.map((m, i) => (
             <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'} group`}>
-              <div className="max-w-2xl w-full">
+              <div className="max-w-3xl w-full">
                 <div className="px-4 py-3 rounded-2xl text-sm whitespace-pre-wrap leading-relaxed"
                   style={m.role === 'user'
                     ? { background: '#2D5240', color: '#fff', borderRadius: '18px 18px 4px 18px' }
@@ -547,7 +547,12 @@ export default function AskAriaPage() {
                   {m.streaming && !m.content
                     ? <span className="inline-flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-[#7FB897] animate-pulse" /><span className="opacity-60">Thinking…</span></span>
                     : m.role === 'assistant' && m.content
-                      ? parseAriaResponse(m.content).map((seg, si) =>
+                      ? parseAriaResponse(
+                          // If there are downloads, strip markdown links from text - they're shown as cards
+                          m.downloads && m.downloads.length > 0
+                            ? m.content.replace(/\[([^\]]+)\]\(https?:\/\/[^)]+\)/g, '').replace(/https?:\/\/[^\s]+/g, '').replace(/\n\s*\n\s*\n/g, '\n\n').trim()
+                            : m.content
+                        ).map((seg, si) =>
                           seg.kind === 'text'
                             ? <span key={si} className="whitespace-pre-wrap">{seg.content}</span>
                             : <AriaArtifact key={si} type={seg.type} title={seg.title} data={seg.data} />

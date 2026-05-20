@@ -46,6 +46,7 @@ async function upsertConversation(
   assistantMsg: string,
   intentType: string,
 ): Promise<string> {
+  console.log('[upsertConversation] called for biz:', businessId, 'user:', userId, 'existing:', conversationId)
   const pair = [
     { role: 'user', content: userMsg, ts: new Date().toISOString() },
     { role: 'assistant', content: assistantMsg, ts: new Date().toISOString() },
@@ -61,18 +62,23 @@ async function upsertConversation(
 
     if (existing) {
       const msgs = Array.isArray(existing.messages) ? existing.messages : []
-      await supabaseAdmin.from('aria_conversations').update({
+      const { error: updateErr } = await supabaseAdmin.from('aria_conversations').update({
         messages: [...msgs, ...pair],
         message_count: (Number(existing.message_count) || 0) + 2,
         last_message_at: new Date().toISOString(),
         last_intent: intentType,
       }).eq('id', conversationId)
+      if (updateErr) {
+        console.error('[upsertConversation] UPDATE FAILED:', updateErr.message)
+        throw new Error('Failed to update conversation: ' + updateErr.message)
+      }
+      console.log('[upsertConversation] UPDATED:', conversationId)
       return conversationId
     }
   }
 
   const title = userMsg.slice(0, 60)
-  const { data: created } = await supabaseAdmin.from('aria_conversations').insert({
+  const { data: created, error: insertErr } = await supabaseAdmin.from('aria_conversations').insert({
     business_id: businessId,
     user_id: userId,
     title,
@@ -82,6 +88,11 @@ async function upsertConversation(
     last_message_at: new Date().toISOString(),
   }).select('id').single()
 
+  if (insertErr) {
+    console.error('[upsertConversation] INSERT FAILED:', insertErr.message, 'code:', insertErr.code, 'details:', insertErr.details)
+    throw new Error('Failed to save conversation: ' + insertErr.message)
+  }
+  console.log('[upsertConversation] INSERTED:', created?.id)
   return (created as { id: string }).id
 }
 
