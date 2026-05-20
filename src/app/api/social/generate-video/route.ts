@@ -1,5 +1,6 @@
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
+export const maxDuration = 60
 
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { NextResponse } from 'next/server'
@@ -9,26 +10,26 @@ async function startRunway(prompt: string, imageUrl?: string): Promise<string | 
   const key = process.env.RUNWAY_API_KEY
   if (!key) return null
   try {
-    const body: Record<string, unknown> = {
-      taskType: 'gen3a_turbo',
-      internal: { frameRate: 24, seed: Math.floor(Math.random() * 9999), exploreMode: false, watermark: false },
-      options: {
-        name: 'Aria Reel',
-        seconds: 5,
-        textPrompt: prompt.slice(0, 512),
-        resolution: '720p',
-        ...(imageUrl ? { initImage: imageUrl } : {}),
-      },
-    }
-    const res = await fetch('https://api.runwayml.com/v1/tasks', {
+    const endpoint = imageUrl ? 'image_to_video' : 'text_to_video'
+    const body: Record<string, unknown> = imageUrl
+      ? { model: 'gen4_turbo', promptImage: imageUrl, promptText: prompt.slice(0, 512), duration: 5, ratio: '1280:720' }
+      : { model: 'gen4_turbo', promptText: prompt.slice(0, 512), duration: 5, ratio: '1280:720' }
+    const res = await fetch(`https://api.dev.runwayml.com/v1/${endpoint}`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', 'X-Runway-Version': '2024-11-06' },
       body: JSON.stringify(body),
     })
-    if (!res.ok) return null
+    if (!res.ok) {
+      const err = await res.text().catch(() => '')
+      console.error('[runway] API error:', res.status, err.slice(0, 200))
+      return null
+    }
     const d = await res.json()
     return d.id ? `runway:${d.id}` : null
-  } catch { return null }
+  } catch (e) {
+    console.error('[runway] exception:', e)
+    return null
+  }
 }
 
 async function startReplicate(prompt: string): Promise<string | null> {

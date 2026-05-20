@@ -11,7 +11,7 @@ async function checkRunway(id: string): Promise<VideoResult> {
   const key = process.env.RUNWAY_API_KEY
   if (!key) return { status: 'error', error: 'RUNWAY_API_KEY not configured' }
   try {
-    const res = await fetch(`https://api.runwayml.com/v1/tasks/${id}`, {
+    const res = await fetch(`https://api.dev.runwayml.com/v1/tasks/${id}`, {
       headers: { Authorization: `Bearer ${key}`, 'X-Runway-Version': '2024-11-06' },
     })
     const d = await res.json()

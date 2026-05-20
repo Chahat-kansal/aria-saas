@@ -79,7 +79,11 @@ export default function SocialPage() {
       fetch(`/api/social/preferences?business_id=${businessId}`).then(r => r.json()).catch(() => ({ preferences: null })),
       fetch('/api/businesses/current').then(r => r.json()).catch(() => null),
     ]);
-    setPosts(postsRes.posts ?? []);
+    const cleanedPosts = (postsRes.posts ?? []).map((p: any) => ({
+      ...p,
+      image_url: p.image_url?.includes('fbcdn.net') || p.image_url?.includes('instagram.com') ? null : p.image_url
+    }))
+    setPosts(cleanedPosts);
     if (prefsRes.preferences) setPrefs(p => ({ ...p, ...prefsRes.preferences }));
     if (bizRes?.industry) setIndustry(bizRes.industry);
     setLoadingPosts(false);
