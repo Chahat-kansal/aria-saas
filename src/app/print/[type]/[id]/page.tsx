@@ -93,7 +93,7 @@ export default function PrintPage() {
         <p style={{ fontSize: 16, fontWeight: 600, color: '#1a1a1a', margin: '0 0 4px' }}>
           {source === '' ? 'Aria is designing your document…' : 'Loading template…'}
         </p>
-        <p style={{ fontSize: 13, color: '#888', margin: 0 }}>Using Claude Sonnet to generate a beautiful {type.replace(/_/g, ' ')}</p>
+        <p style={{ fontSize: 13, color: '#888', margin: 0 }}>{source === '' ? 'Generating once — saved for future use' : 'Loading saved template…'}</p>
       </div>
     </div>
   )
@@ -125,8 +125,9 @@ export default function PrintPage() {
           {source === 'template' && <span style={{ fontSize: 11, marginLeft: 8, opacity: 0.7 }}>📄 From template</span>}
         </span>
         <a href={`/print/${type}/${id}?regenerate=true`}
+          title="Uses AI to redesign this document (~$0.07 Anthropic credit). Result is saved so you only pay once."
           style={{ padding: '6px 14px', borderRadius: 8, background: 'rgba(255,255,255,0.1)', color: '#A8B5A8', border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer', fontSize: 13, textDecoration: 'none' }}>
-          ✦ Regenerate
+          ✦ Redesign with AI
         </a>
         <button onClick={() => iframeRef.current?.contentWindow?.print()}
           style={{ padding: '6px 20px', borderRadius: 8, background: '#7FB897', color: '#2D5240', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>
