@@ -297,27 +297,49 @@ async function _POST(req: NextRequest) {
 
   let recommendations: unknown[] = [];
   try {
-    const { ariaBriefing } = await import('@/lib/ai-router')
-    let raw = await ariaBriefing({
-      businessName: business.name as string,
-      industry: business.industry as string,
-      context,
+    const Anthropic = (await import('@anthropic-ai/sdk')).default
+    const _anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+
+    const dataStr = typeof context === 'string' ? context : JSON.stringify(context)
+    const todayDate = new Date().toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Australia/Sydney' })
+
+    const _resp = await _anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 1500,
+      system: `You are Aria, a business intelligence engine for Australian small businesses. Output ONLY a valid JSON array. No markdown. No explanation. No text before or after the array.
+
+Each item in the array must have these exact fields:
+- id: string slug (e.g. "revenue-up-this-week")
+- priority: "high" | "medium" | "low"
+- category: "customers" | "revenue" | "stock" | "reviews" | "marketing" | "compliance"
+- title: string (max 8 words, specific)
+- description: string (max 25 words, must include real numbers from the data)
+- action_label: string (max 4 words)
+- action_type: "winback" | "review_reply" | "promotion" | "reorder" | "campaign" | "navigate" | "dismiss"
+- action_payload: {}
+- metric: string (key number e.g. "A$2,340" or "12 customers")
+- metric_label: string (e.g. "this week" or "at risk")
+- trend: "up" | "down" | "flat" | null
+
+Return 3-5 items. Use real numbers from the data. Do not invent data.`,
+      messages: [{
+        role: 'user',
+        content: `Today: ${todayDate}
+Business: ${business.name as string} (${business.industry as string ?? 'retail'}, Australia)
+
+Business data:
+${dataStr.slice(0, 5000)}
+
+Generate 3-5 actionable briefing items from this real data. JSON array only.`
+      }]
     })
 
-    if (!raw || raw.trim().length < 20) {
-      const Anthropic = (await import('@anthropic-ai/sdk')).default
-      const _client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-      const _resp = await _client.messages.create({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 1200,
-        system: `You are Aria, a business intelligence briefing engine for Australian small businesses. Return ONLY a valid JSON array with NO other text. Each item must have: id (slug string), priority ("high"|"medium"|"low"), category ("customers"|"revenue"|"stock"|"reviews"|"marketing"|"compliance"), title (max 8 words), description (max 25 words with real numbers from the data), action_label (max 4 words), action_type ("winback"|"review_reply"|"promotion"|"reorder"|"campaign"|"navigate"|"dismiss"), action_payload ({}), metric (key number as string e.g. "A$2,340"), metric_label (e.g. "this week"), trend ("up"|"down"|"flat"|null).`,
-        messages: [{ role: 'user', content: `Generate daily briefing for ${business.name as string} (${business.industry as string ?? 'retail'}, Australia).\n\nKey business data:\n${JSON.stringify(context).slice(0, 4000)}\n\nReturn a JSON array of 3-5 actionable briefing items based on this real data. No markdown. No explanation. JSON only.` }],
-      })
-      raw = _resp.content[0].type === 'text' ? _resp.content[0].text : ''
-    }
-
-    recommendations = parseLLMJsonOr<unknown[]>(raw, [], 'daily-briefing', 'array')
-  } catch { /* return empty on total failure */ }
+    const raw = _resp.content[0].type === 'text' ? _resp.content[0].text.trim() : ''
+    const cleaned = raw.replace(/^```(?:json)?\s*/m, '').replace(/\s*```\s*$/m, '').trim()
+    recommendations = parseLLMJsonOr<unknown[]>(cleaned, [], 'daily-briefing', 'array')
+  } catch (e) {
+    console.error('[daily-briefing] AI call failed:', (e as Error).message)
+  }
 
   // Build plain-text content from recommendations for display in content column
   const briefingContent = Array.isArray(recommendations) && recommendations.length > 0

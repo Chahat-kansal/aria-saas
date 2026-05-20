@@ -21,13 +21,17 @@ async function _POST(req: Request) {
   if (!review) return NextResponse.json({ error: 'Review not found' }, { status: 404 });
 
   try {
-    const { ariaChat } = await import('@/lib/ai-router')
-    const draft = await ariaChat(
-      'review_reply',
-      `Write a reply to this ${review.rating ?? '?'}-star review for ${biz.name} (${biz.industry}): "${review.text ?? review.review_text ?? review.content ?? 'No text provided'}"`,
-      300
-    )
-    return NextResponse.json({ draft: draft.trim() });
+    const prompt = `Write a reply to this ${review.rating ?? '?'}-star review for ${biz.name} (${biz.industry}): "${review.text ?? review.review_text ?? review.content ?? 'No text provided'}"`
+    const _Anthropic2 = (await import('@anthropic-ai/sdk')).default
+    const _client2 = new _Anthropic2({ apiKey: process.env.ANTHROPIC_API_KEY })
+    const _msg2 = await _client2.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 250,
+      system: 'You are helping an Australian small business owner reply to customer reviews. Write professional, warm, authentic replies. Return ONLY the reply text — no quotes, no explanation.',
+      messages: [{ role: 'user', content: prompt }],
+    })
+    const reply = _msg2.content[0].type === 'text' ? _msg2.content[0].text.trim() : ''
+    return NextResponse.json({ draft: reply });
   } catch {
     return NextResponse.json({ draft: `Thank you so much for your feedback! We really appreciate you taking the time to share your experience with ${biz.name}. We hope to see you again soon!` });
   }

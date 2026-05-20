@@ -73,12 +73,12 @@ const TASK_PROVIDERS: Record<AiTask, 'claude' | 'gemini' | 'openai' | 'haiku'> =
   churn:        'claude',
   quote:        'claude',
   compliance:   'claude',
-  // Haiku — fast content generation (Gemini removed — no GOOGLE_AI_API_KEY in prod)
-  briefing:     'haiku',
-  social_post:  'haiku',
-  review_reply: 'gemini',
-  competitor:   'gemini',
-  receipt_scan: 'gemini',
+  // Claude — content generation (Gemini removed — no GOOGLE_AI_API_KEY in prod)
+  briefing:     'claude',
+  social_post:  'claude',
+  review_reply: 'claude',
+  competitor:   'claude',
+  receipt_scan: 'claude',
   // GPT-4o mini — structured JSON, calculations, scoring
   reorder:      'openai',
   pricing:      'openai',

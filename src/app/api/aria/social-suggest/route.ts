@@ -116,7 +116,6 @@ async function _POST(req: Request) {
   const requestedPlatforms: string[] = platforms || ['instagram', 'facebook'];
   const count = Math.min(req_count || 3, 5);
 
-  const { ariaChat } = await import('@/lib/ai-router')
   const userPrompt = `Generate ${count} social media post suggestions for this business.
 
 BUSINESS: ${biz.name}
@@ -139,7 +138,18 @@ PLATFORMS: ${requestedPlatforms.join(', ')}
 
 Return ONLY a valid JSON array.`
 
-  const text = await ariaChat('social_post', userPrompt, 800);
+  const _Anthropic = (await import('@anthropic-ai/sdk')).default
+  const _client = new _Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+  const _msg = await _client.messages.create({
+    model: 'claude-haiku-4-5-20251001',
+    max_tokens: 1200,
+    system: `You are Aria, a social media content specialist for Australian small businesses. Generate authentic, engaging posts that sound like a real business owner wrote them — not a marketing robot. Return ONLY a valid JSON array. Each post must have: platform, caption, hashtags (array max 8), best_time, why (1 sentence), image_prompt, image_search_query (2-4 words), topic, industry_tip, reel_concept, reel_script. No prose before or after the JSON array.`,
+    messages: [{ role: 'user', content: userPrompt }],
+  })
+  const text = _msg.content[0].type === 'text' ? _msg.content[0].text.trim() : '';
+  if (!text) {
+    return NextResponse.json({ posts: [], count: 0, status: 'error' }, { status: 200 });
+  }
   let suggestions: any[] = [];
   try {
     suggestions = parseLLMJsonOr<any[]>(text, [], 'social-suggest', 'array');
