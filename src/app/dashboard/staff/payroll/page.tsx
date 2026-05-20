@@ -211,7 +211,11 @@ export default function PayrollPage() {
                             style={{ padding: '7px 16px', borderRadius: 8, background: hasBanking ? 'rgba(96,165,250,0.1)' : 'transparent', color: hasBanking ? C.blue : C.muted, border: `1px solid ${hasBanking ? C.blue + '44' : C.border}`, cursor: hasBanking ? 'pointer' : 'not-allowed', fontSize: 12 }}>
                             ↓ Download ABA file {run.aba_generated_at ? '(generated)' : ''}
                           </button>
-                          {!hasBanking && <p style={{ fontSize: 11, color: C.muted, alignSelf: 'center' }}>Add bank details in "Staff bank details" tab to enable ABA</p>}
+                          {!hasBanking && <p style={{ fontSize: 11, color: C.muted, alignSelf: 'center' }}>Add bank details in &quot;Staff bank details&quot; tab to enable ABA</p>}
+                          <a href={`/staff/payslip/${run.id}`} target="_blank"
+                            style={{ padding: '7px 16px', borderRadius: 8, background: 'rgba(127,184,151,0.1)', color: C.green, border: `1px solid ${C.green}44`, fontSize: 12, textDecoration: 'none', fontWeight: 600 }}>
+                            🖨 View &amp; print payslips
+                          </a>
                         </div>
 
                         {/* Line items table */}
