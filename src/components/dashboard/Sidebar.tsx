@@ -47,7 +47,7 @@ const ALL_ITEMS: Record<string, NavItemDef> = {
   'staff':                      { href: '/dashboard/staff',                    label: 'Team',              icon: TeamIcon,           section: 'Overview'     },
   'pos':                        { href: '/pos',                                label: 'AriaPOS',           icon: RegisterIcon,       badge: 'New', section: 'Modules' },
   'winback':                    { href: '/dashboard/winback',                  label: 'Customer winback',  icon: UsersIcon,          section: 'Revenue'      },
-  'slow-day':                   { href: '/dashboard/churn',                    label: 'Slow day filler',   icon: DollarIcon,         badge: '⚡', section: 'Revenue' },
+  'slow-day':                   { href: '/dashboard/churn#slow-day',             label: 'Slow day filler',   icon: DollarIcon,         badge: '⚡', section: 'Revenue' },
   'reviews':                    { href: '/dashboard/reviews',                  label: 'Reviews',           icon: StarIcon,           section: 'Reputation'   },
   'profit-leaks':               { href: '/dashboard/profit-leaks',             label: 'Profit leaks',      icon: AlertIcon,          section: 'Intelligence' },
   'competitors':                { href: '/dashboard/competitors',              label: 'Competitor watch',  icon: SearchIcon,         section: 'Reputation'   },

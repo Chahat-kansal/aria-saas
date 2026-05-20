@@ -59,10 +59,11 @@ async function _POST(req: Request) {
 
   const limitedData = sales90.length < 5;
 
+  // Use items with reorder points if available, otherwise all low-stock items
   const itemsWithReorder = allItems.filter(i => i.reorderPoint > 0);
-  if (itemsWithReorder.length === 0) {
-    return NextResponse.json({ items: [], upcoming_holidays: [], ai_summary: null, generated_at: new Date().toISOString(), cached: false });
-  }
+  const itemsToForecast = itemsWithReorder.length > 0
+    ? itemsWithReorder
+    : allItems.filter(i => i.currentStock <= 5).slice(0, 50); // cap at 50 when no reorder points set
 
   // Sales last 30 days for velocity
   const sales30 = sales90.filter(s => s.soldAt >= thirtyDaysAgo);
@@ -83,12 +84,23 @@ async function _POST(req: Request) {
     urgency: 'critical' | 'high' | 'medium' | 'low'; unit: string;
   };
 
-  const forecastItems: ForecastItem[] = itemsWithReorder
+  const forecastItems: ForecastItem[] = itemsToForecast
     .map((item): ForecastItem | null => {
       const sold30 = unitsSold[item.id] ?? unitsSold[item.externalId] ?? 0;
       const velocityPerDay = sold30 / 30;
 
-        if (velocityPerDay === 0) return null; // no sales data — skip
+        // Zero velocity: use stock level to determine urgency (no recent sales data)
+        if (velocityPerDay === 0) {
+          if (item.currentStock > 3) return null; // enough stock, skip
+          const urgency: 'critical' | 'high' | 'medium' | 'low' = item.currentStock === 0 ? 'critical' : item.currentStock <= 1 ? 'high' : 'medium';
+          return {
+            item_id: item.id, item_name: item.name, current_stock: item.currentStock,
+            velocity_per_day: 0, days_remaining: 999, adjusted_days_remaining: 999,
+            holiday_uplift: 1, suggested_order: Math.max(6, item.reorderPoint || 6),
+            recommended_order_date: new Date().toISOString().split('T')[0],
+            urgency, unit: item.unit,
+          };
+        }
 
       const holidayUplift = getHolidayUplift(14, item.name, 'VIC');
       const weatherUpliftForItem = getWeatherUplift(weatherForecast, item.name);

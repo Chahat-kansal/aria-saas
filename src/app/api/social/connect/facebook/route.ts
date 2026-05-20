@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 
-async function _GET() {
+async function _GET(req: Request) {
   const appId  = process.env.FACEBOOK_APP_ID;
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? '';
 
