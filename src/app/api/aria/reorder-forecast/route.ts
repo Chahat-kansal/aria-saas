@@ -57,14 +57,7 @@ async function _POST(req: Request) {
 
   const upcomingHolidays = getUpcomingHolidays(60, 'VIC');
 
-  // Guard: no sales data yet
-  if (sales90.length === 0) {
-    return NextResponse.json({
-      items: [], upcoming_holidays: upcomingHolidays.map(({ name, date, days_away }) => ({ name, date, days_away })),
-      ai_summary: null, generated_at: new Date().toISOString(), cached: false,
-      no_data: true, no_data_message: 'No sales data yet — add some sales first and Aria will start building your reorder forecast.',
-    });
-  }
+  const limitedData = sales90.length === 0;
 
   const itemsWithReorder = allItems.filter(i => i.reorderPoint > 0);
   if (itemsWithReorder.length === 0) {

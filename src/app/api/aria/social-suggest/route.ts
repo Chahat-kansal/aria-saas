@@ -104,9 +104,10 @@ async function _POST(req: Request) {
     .sort((a, b) => b[1] - a[1]).slice(0, 5)
     .map(([name, qty]) => `${name} (${qty} sold this week)`);
 
-  if (topProducts.length === 0) {
-    return NextResponse.json({ posts: [], count: 0, status: 'skipped', reason: 'no_products' });
-  }
+  // If no recent sales, use product catalogue for content inspiration
+  const productContext = topProducts.length > 0
+    ? `Top selling products this week: ${topProducts.join(', ')}`
+    : `Products available: ${(topItems ?? []).slice(0, 5).map((p: any) => p.product_name).filter(Boolean).join(', ') || 'Various products available in store'}`
 
   const strategyContext = INDUSTRY_STRATEGIES[biz.industry] || INDUSTRY_STRATEGIES.retail;
   const promoContext = (promotions || []).length > 0
@@ -127,7 +128,7 @@ BRAND VOICE: ${prefs?.brand_voice || 'friendly'}
 TOPICS TO AVOID: ${prefs?.topics_to_avoid || 'None specified'}
 
 SALES DATA THIS WEEK:
-Top sellers: ${topProducts.join(', ')}
+${productContext}
 ${promoContext}
 
 EXTERNAL CONTEXT:
