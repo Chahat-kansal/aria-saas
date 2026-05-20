@@ -787,21 +787,23 @@ async function generateImage(input: Record<string, unknown>, businessId: string)
   }
 
   // Try strategies in order — gpt-image-1 first (current), fall back to dall-e-3 if needed
+  // Your account has gpt-image-1 (NOT dall-e-3 which doesn't exist on this org)
+  // gpt-image-1 API format is different from dall-e-3
   const strategies = [
     {
       name: 'gpt-image-1',
-      body: { model: 'gpt-image-1', prompt, n: 1, size, quality: 'auto' },
+      body: { model: 'gpt-image-1', prompt, n: 1, size: '1024x1024', quality: 'medium', output_format: 'png' },
       decode: 'b64_json' as const,
     },
     {
-      name: 'dall-e-3-minimal',
-      body: { model: 'dall-e-3', prompt, n: 1, size, response_format: 'b64_json' },
+      name: 'gpt-image-1-no-output-format',
+      body: { model: 'gpt-image-1', prompt, n: 1, size: '1024x1024' },
       decode: 'b64_json' as const,
     },
     {
-      name: 'dall-e-3-url',
-      body: { model: 'dall-e-3', prompt, n: 1, size },
-      decode: 'url' as const,
+      name: 'gpt-image-1-mini',
+      body: { model: 'gpt-image-1-mini', prompt, n: 1, size: '1024x1024' },
+      decode: 'b64_json' as const,
     },
   ];
 
@@ -828,7 +830,7 @@ async function generateImage(input: Record<string, unknown>, businessId: string)
       let buf: Buffer;
       if (strategy.decode === 'b64_json' && item.b64_json) {
         buf = Buffer.from(item.b64_json, 'base64');
-      } else if (strategy.decode === 'url' && item.url) {
+      } else if ((strategy.decode as string) === 'url' && item.url) {
         const imgRes = await fetch(item.url);
         if (!imgRes.ok) { lastError = 'URL fetch failed'; continue; }
         buf = Buffer.from(await imgRes.arrayBuffer());

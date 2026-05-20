@@ -435,14 +435,15 @@ export default function AskAriaPage() {
 
   if (loading) {
     return (
-      <div className="absolute inset-0 flex items-center justify-center" style={{ background: '#0d0d14' }}>
+      <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0d0d14', zIndex: 1 }}>
         <div className="w-6 h-6 rounded-full border-2 border-[#7FB897] border-t-transparent animate-spin" />
       </div>
     )
   }
 
   return (
-    <div className="absolute inset-0 flex" style={{ background: '#0d0d14' }}>
+    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', background: '#0d0d14', zIndex: 1 }}
+         className="md:pl-[220px]">
       {/* History sidebar — full overlay on mobile, panel on desktop */}
       {showHistory && (
         <>

@@ -421,10 +421,26 @@ ${ARTIFACT_INSTRUCTIONS}`
   }
 
   // 5. Build proper multi-turn history for Claude
+  // Strip prior "broken" assistant messages for image/generation requests
+  // so Claude doesn't use its own hallucinated refusals as evidence
+  const isImageRequest = /poster|image|graphic|visual|banner|flyer|photo|picture|generate.*image|create.*image/i.test(message)
   const historyMessages: Array<{ role: 'user' | 'assistant'; content: string }> = []
   for (const m of ctx.conversation_history) {
     if (m.role === 'user' || m.role === 'assistant') {
-      historyMessages.push({ role: m.role as 'user' | 'assistant', content: String(m.content) })
+      const msgContent = String(m.content)
+      // Skip prior assistant messages that claimed image gen was broken (hallucination artifacts)
+      if (isImageRequest && m.role === 'assistant' && (
+        msgContent.includes("isn't configured") ||
+        msgContent.includes("not configured") ||
+        msgContent.includes("configuration issue") ||
+        msgContent.includes("needs to be set up") ||
+        msgContent.includes("admin needs to") ||
+        msgContent.includes("DALL-E") ||
+        msgContent.includes("OpenAI integration")
+      )) {
+        continue // drop this stale refusal from history
+      }
+      historyMessages.push({ role: m.role as 'user' | 'assistant', content: msgContent })
     }
   }
 
