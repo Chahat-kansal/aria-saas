@@ -1,5 +1,5 @@
 import { resolveHourlyRateCents } from './pay-rates'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { supabaseAdmin } from '@/lib/supabase-admin'
 
 export interface ShiftEntry {
   id: string
@@ -92,8 +92,7 @@ export async function hydrateShiftCosts(
 }
 
 export async function getActiveStaff(businessId: string) {
-  const supabase = createServerSupabaseClient()
-  const { data } = await supabase.from('staff_members')
+  const { data } = await supabaseAdmin.from('staff_members')
     .select('id,first_name,last_name,preferred_name,position,employment_type,status,color,pay_rate_cents,staff_member_skills(skill_id,staff_skills(name,color))')
     .eq('business_id', businessId).eq('status', 'active').order('first_name')
   return data ?? []

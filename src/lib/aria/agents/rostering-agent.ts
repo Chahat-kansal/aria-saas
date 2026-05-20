@@ -1,6 +1,7 @@
 import { callAnthropic } from '@/lib/aria/providers/anthropic'
 import { parseLLMJsonOr } from '@/lib/ai-json'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { supabaseAdmin } from '@/lib/supabase-admin'
 import type { ShiftEntry } from '@/lib/staff/roster'
 
 const ROSTERING_SYSTEM = `You are Aria's rostering specialist for an Australian SMB.
@@ -34,15 +35,16 @@ export async function generateRosterDraft(
   const supabase = createServerSupabaseClient()
 
   const [staffQ, rulesQ, salesQ] = await Promise.all([
-    supabase.from('staff_members')
+    supabaseAdmin.from('staff_members')
       .select('id,first_name,last_name,position,employment_type,color,pay_rate_cents')
       .eq('business_id', businessId).eq('status', 'active').limit(30),
-    supabase.from('pos_staffing_rules')
+    supabaseAdmin.from('pos_staffing_rules')
       .select('day_of_week,hour_of_day,min_staff,required_role')
       .eq('business_id', businessId).order('day_of_week').order('hour_of_day'),
-    supabase.from('pos_sales')
-      .select('total_price,created_at')
+    supabaseAdmin.from('pos_sales')
+      .select('total_amount,created_at')
       .eq('business_id', businessId)
+      .neq('status', 'voided')
       .gte('created_at', new Date(Date.now() - 56 * 86400_000).toISOString())
       .limit(5000),
   ])
@@ -57,7 +59,7 @@ export async function generateRosterDraft(
     const d = new Date(String(s.created_at))
     const key = `${d.getDay()}-${d.getHours()}`
     if (!salesByKey[key]) salesByKey[key] = []
-    salesByKey[key].push(Number(s.total_price) || 0)
+    salesByKey[key].push(Number(s.total_amount) || 0)
   }
   const topHours = Object.entries(salesByKey)
     .map(([k, v]) => ({ key: k, avg: v.reduce((a, b) => a + b, 0) / v.length }))
