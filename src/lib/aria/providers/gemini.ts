@@ -42,7 +42,8 @@ export async function callGemini(params: GeminiCallParams): Promise<GeminiCallRe
     return { raw: '', cost_cents: 0, latency_ms: 0, success: false, input_tokens: 0, output_tokens: 0 }
   }
 
-  const model = params.model ?? 'gemini-2.5-flash-lite'
+  // gemini-2.5-flash-lite was failing — use gemini-2.0-flash which is stable
+  const model = params.model ?? 'gemini-2.0-flash'
   const t0 = Date.now()
   let raw = '', success = true, errorMessage: string | null = null
   let inputTokens = 0, outputTokens = 0
@@ -75,7 +76,7 @@ export async function callGemini(params: GeminiCallParams): Promise<GeminiCallRe
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
-        signal: AbortSignal.timeout(30_000),
+        signal: AbortSignal.timeout(15_000),
       },
     )
 
