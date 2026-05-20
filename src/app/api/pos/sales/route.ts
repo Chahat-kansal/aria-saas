@@ -389,6 +389,14 @@ async function _POST(req: Request) {
     data: { sale_id: sale.id, total_cents: Math.round((total_amount ?? 0) * 100), method: payment_method },
   }).catch(() => {});
 
+  // Auto-request Google review SMS (fire-and-forget, respects business settings + cooldown)
+  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.ariaos.site'
+  fetch(`${baseUrl}/api/reviews/auto-request`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sale_id: sale.id, business_id: bid }),
+  }).catch(() => {});
+
   return NextResponse.json({ sale });
 }
 

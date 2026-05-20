@@ -48,6 +48,8 @@ export default function ReviewsPage() {
   const [connectSearching, setConnectSearching] = useState(false)
   const [connectMatches, setConnectMatches] = useState<Array<{ place_id: string; name: string; address: string; rating: number | null; total_reviews: number; status: string }>>([])
   const [connectingId, setConnectingId] = useState<string | null>(null)
+  const [autoRequestEnabled, setAutoRequestEnabled] = useState(false)
+  const [autoRequestSaving, setAutoRequestSaving] = useState(false)
   const [connectSearched, setConnectSearched] = useState(false)
   const [connectError, setConnectError] = useState<string | null>(null)
   const [tab,        setTab]        = useState<FilterTab>('all')
@@ -78,7 +80,29 @@ export default function ReviewsPage() {
     fetch('/api/marketing/templates').then(r => r.json()).then((d: { templates?: Template[] }) => {
       if (d.templates) setTemplates(d.templates.filter(t => t.is_global))
     }).catch(() => {})
+
+    // Load auto-request setting
+    fetch('/api/settings/business').then(r => r.json()).then(d => {
+      if (d.business?.review_auto_request_enabled !== undefined) {
+        setAutoRequestEnabled(!!d.business.review_auto_request_enabled)
+      }
+    }).catch(() => {})
   }, [])
+
+  async function toggleAutoRequest() {
+    setAutoRequestSaving(true)
+    const newValue = !autoRequestEnabled
+    setAutoRequestEnabled(newValue)
+    try {
+      await fetch('/api/settings/business', {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ review_auto_request_enabled: newValue })
+      })
+    } catch {
+      setAutoRequestEnabled(!newValue) // revert on error
+    }
+    setAutoRequestSaving(false)
+  }
 
   async function syncNow() {
     setSyncing(true); setSyncMsg('')
@@ -228,16 +252,33 @@ export default function ReviewsPage() {
         </div>
       )}
 
-      {/* Review request automation banner */}
-      <div style={{ marginBottom: 16, padding: '12px 16px', background: 'rgba(127,184,151,0.06)', borderRadius: 10, border: '1px solid rgba(127,184,151,0.15)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <p style={{ fontSize: 13, fontWeight: 600, color: '#7FB897' }}>Review request automation</p>
-          <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>Click "Request review" on any customer to send an SMS with your Google review link. Responses tracked automatically.</p>
+      {/* Auto-request automation toggle */}
+      <div style={{ marginBottom: 16, padding: '14px 18px', background: autoRequestEnabled ? 'rgba(127,184,151,0.08)' : 'rgba(127,184,151,0.04)', borderRadius: 10, border: `1px solid ${autoRequestEnabled ? 'rgba(127,184,151,0.3)' : 'rgba(127,184,151,0.15)'}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+        <div style={{ flex: 1, minWidth: 240 }}>
+          <p style={{ fontSize: 14, fontWeight: 700, color: '#7FB897', display: 'flex', alignItems: 'center', gap: 8 }}>
+            {autoRequestEnabled ? '🤖 Autopilot ON' : '⚙️ Review request automation'}
+          </p>
+          <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4, lineHeight: 1.5 }}>
+            {autoRequestEnabled
+              ? 'Aria automatically sends Google review SMS to customers after every $15+ sale (60-day cooldown per customer). Set & forget.'
+              : 'Enable to auto-send review requests after positive sales. Customers must have SMS consent. 60-day cooldown to prevent spam.'}
+          </p>
         </div>
-        <div style={{ fontSize: 11, color: 'var(--text-secondary)', textAlign: 'right' }}>
-          <p>Powered by Twilio</p>
-          <p style={{ color: '#7FB897', marginTop: 2 }}>✓ Spam Act compliant</p>
-        </div>
+        <button
+          onClick={toggleAutoRequest}
+          disabled={autoRequestSaving}
+          style={{
+            position: 'relative', width: 52, height: 28, borderRadius: 99,
+            background: autoRequestEnabled ? '#7FB897' : 'rgba(255,255,255,0.1)',
+            border: 'none', cursor: 'pointer', transition: 'background 0.2s',
+            flexShrink: 0,
+          }}>
+          <span style={{
+            position: 'absolute', top: 2, left: autoRequestEnabled ? 26 : 2,
+            width: 24, height: 24, borderRadius: '50%', background: '#fff',
+            transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
+          }} />
+        </button>
       </div>
 
       {/* Analytics + reputation strip */}
