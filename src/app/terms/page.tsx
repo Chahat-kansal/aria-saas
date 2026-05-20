@@ -1,72 +1,83 @@
-import Link from 'next/link';
-import type { Metadata } from 'next';
+import { Metadata } from 'next'
 
 export const metadata: Metadata = {
-  title: 'Terms of Service',
-  description: 'Terms of Service for Aria POS — AI for Australian Retail.',
-};
-
-const S: React.CSSProperties = { background: '#0A0E1E', border: '1px solid #1A2240', borderRadius: 16, padding: '28px 32px', marginBottom: 16 };
-const H: React.CSSProperties = { fontSize: 17, fontWeight: 700, color: 'rgba(220,240,255,0.93)', marginBottom: 16 };
-const P: React.CSSProperties = { fontSize: 14, color: 'rgba(130,160,200,0.75)', lineHeight: 1.75, marginBottom: 10 };
+  title: 'Terms of Service — Aria OS',
+  description: 'Terms of Service for Aria OS',
+}
 
 export default function TermsPage() {
   return (
-    <div style={{ minHeight: '100vh', background: '#030510', fontFamily: "'Manrope', system-ui, sans-serif" }}>
-      <div style={{ maxWidth: 768, margin: '0 auto', padding: '48px 24px 80px' }}>
-        <Link href="/" style={{ display: 'inline-block', fontSize: 13, color: 'rgba(130,160,200,0.6)', textDecoration: 'none', marginBottom: 40 }}>← Back to Aria</Link>
-        <h1 style={{ fontSize: 32, fontWeight: 800, color: '#F0EBFF', marginBottom: 8 }}>Terms of Service</h1>
-        <p style={{ fontSize: 13, color: 'rgba(130,160,200,0.5)', marginBottom: 48 }}>Last updated 8 May 2026</p>
-
-        <div style={S}>
-          <h2 style={H}>1. Service</h2>
-          <p style={P}>Aria POS is a cloud-based point-of-sale and AI agent platform for Australian retail businesses, operated by Aria POS Pty Ltd (ABN pending), Melbourne, Australia.</p>
-        </div>
-
-        <div style={S}>
-          <h2 style={H}>2. Pricing</h2>
-          <p style={P}><strong>Starter</strong> — $59/outlet/month: POS + Reorder Agent</p>
-          <p style={P}><strong>Growth</strong> — $129/outlet/month: 5 agents + Voice + Concierge</p>
-          <p style={P}><strong>Autonomous</strong> — $249/outlet/month: All 12 agents + CCTV vision</p>
-          <p style={P}>All prices are in AUD and exclude GST. GST is added at checkout for Australian businesses.</p>
-        </div>
-
-        <div style={S}>
-          <h2 style={H}>3. Cancellation</h2>
-          <p style={P}>You may cancel at any time from Settings → Subscription. Cancellation takes effect at the end of your current billing period. No partial refunds.</p>
-        </div>
-
-        <div style={S}>
-          <h2 style={H}>4. Refund Policy</h2>
-          <p style={P}>Refunds are available within 7 days of initial subscription for new customers if the service does not function as described. Contact support with details. Agent subscription fees are non-refundable after the 14-day free trial.</p>
-        </div>
-
-        <div style={S}>
-          <h2 style={H}>5. AI Agent Autonomy</h2>
-          <p style={P}>Aria&apos;s autonomous agents (Reorder, Pricing, Smart Schedule, etc.) take actions on your behalf based on your configuration and AI analysis. <strong>You, the business owner, are responsible for reviewing and approving autonomous decisions</strong> before they result in external commitments (e.g., purchase orders).</p>
-          <p style={P}>Aria provides a decision log and approval queue. For high-impact decisions (orders over your configured threshold), human approval is required by default. You may change approval thresholds in Settings → AI Agents.</p>
-          <p style={P}>Aria is not liable for business decisions made by autonomous agents that you have approved or configured to auto-approve.</p>
-        </div>
-
-        <div style={S}>
-          <h2 style={H}>6. SLA</h2>
-          <p style={P}>Aria targets 99.5% uptime for the POS terminal and reporting modules. Planned maintenance is announced 48 hours in advance. Compensation for downtime exceeding SLA is limited to a credit of one day&apos;s subscription per hour of excess downtime, capped at 30 days.</p>
-        </div>
-
-        <div style={S}>
-          <h2 style={H}>7. Acceptable Use</h2>
-          <p style={P}>You must not use Aria to process illegal transactions, circumvent RSA requirements, or export data for competitor analysis tools. Breach may result in immediate suspension.</p>
-        </div>
-
-        <div style={S}>
-          <h2 style={H}>8. Governing Law</h2>
-          <p style={P}>These terms are governed by the laws of Victoria, Australia. Disputes are subject to the jurisdiction of Victorian courts.</p>
-        </div>
-
-        <p style={{ fontSize: 12, color: 'rgba(130,160,200,0.35)', textAlign: 'center', marginTop: 40 }}>
-          Questions? <a href="mailto:hello@ariaos.site" style={{ color: 'rgba(130,160,200,0.5)', textDecoration: 'none' }}>hello@ariaos.site</a>
-        </p>
+    <div style={{ maxWidth: 760, margin: '0 auto', padding: '60px 24px 120px', fontFamily: 'Inter, system-ui, sans-serif', color: '#1a1a2e', lineHeight: 1.7 }}>
+      <div style={{ marginBottom: 48 }}>
+        <a href="/" style={{ fontSize: 14, color: '#2D5240', textDecoration: 'none', fontWeight: 600 }}>← Aria OS</a>
       </div>
+      <h1 style={{ fontSize: 36, fontWeight: 800, marginBottom: 8, letterSpacing: '-0.5px' }}>Terms of Service</h1>
+      <p style={{ color: '#666', marginBottom: 48 }}>Last updated: 20 May 2026</p>
+
+      <p style={{ marginBottom: 32 }}>By using Aria OS, you agree to these terms. Please read them carefully.</p>
+
+      {[
+        { title: '1. Service', items: [
+          'Aria OS provides AI-powered business management software for Australian small businesses.',
+          'We reserve the right to modify or discontinue the service with 30 days notice.',
+          'You must be at least 18 years old and have authority to enter into agreements for your business.',
+        ]},
+        { title: '2. Account', items: [
+          'You are responsible for maintaining the security of your account credentials.',
+          'You are responsible for all activity that occurs under your account.',
+          'Notify us immediately at support@ariaos.site of any unauthorised access.',
+        ]},
+        { title: '3. Acceptable Use', items: [
+          'Use Aria OS only for lawful business purposes.',
+          'Do not attempt to access other users\' data or reverse-engineer the platform.',
+          'Do not use the AI features to generate misleading, harmful, or illegal content.',
+          'Comply with Meta\'s Platform Policy when using social media posting features.',
+        ]},
+        { title: '4. AI-Generated Content', items: [
+          'AI-generated insights, recommendations, and content are provided for informational purposes only.',
+          'Aria OS does not guarantee the accuracy of AI-generated content.',
+          'You are solely responsible for reviewing and approving any AI-generated content before publishing.',
+          'AI-generated financial or business advice does not substitute professional advice.',
+        ]},
+        { title: '5. Payment and Billing', items: [
+          'Subscription fees are billed monthly or annually in advance in Australian dollars.',
+          'Payments are processed by Stripe. Aria OS does not store payment card information.',
+          'Subscriptions auto-renew unless cancelled before the renewal date.',
+          'Refunds are provided at our discretion for billing errors.',
+        ]},
+        { title: '6. Data Ownership', items: [
+          'You retain ownership of all data you enter into Aria OS.',
+          'You grant us a licence to process your data solely to provide the service.',
+          'You can export your data at any time from the Settings page.',
+          'Upon account termination, we will delete your data within 30 days.',
+        ]},
+        { title: '7. Limitation of Liability', items: [
+          'Aria OS is provided "as is" without warranties of any kind.',
+          'We are not liable for any loss of business, revenue, or data arising from use of the platform.',
+          'Our total liability to you shall not exceed the amount paid in the last 3 months.',
+          'Nothing in these terms excludes liability that cannot be excluded under Australian Consumer Law.',
+        ]},
+        { title: '8. Termination', items: [
+          'You may cancel your account at any time from the Settings page.',
+          'We may terminate or suspend your account for breach of these terms with reasonable notice.',
+          'Upon termination, your right to use the service ends immediately.',
+        ]},
+        { title: '9. Governing Law', items: [
+          'These terms are governed by the laws of Victoria, Australia.',
+          'Any disputes shall be resolved in the courts of Victoria, Australia.',
+        ]},
+        { title: '10. Contact', items: [
+          'Questions about these terms: support@ariaos.site',
+          'Aria OS, Melbourne, Victoria, Australia.',
+        ]},
+      ].map(s => (
+        <section key={s.title} style={{ marginBottom: 40 }}>
+          <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 12 }}>{s.title}</h2>
+          <ul style={{ paddingLeft: 20, margin: 0 }}>
+            {s.items.map((item, i) => <li key={i} style={{ marginBottom: 8, color: '#333' }}>{item}</li>)}
+          </ul>
+        </section>
+      ))}
     </div>
-  );
+  )
 }
