@@ -685,7 +685,10 @@ async function sendEmailNow(input: Record<string, unknown>): Promise<unknown> {
   const subject = String(input.subject ?? '');
   const body = String(input.body ?? '');
   if (!to || !subject || !body) return { error: 'to, subject, body required' };
-  if (!process.env.RESEND_API_KEY) return { error: 'RESEND_API_KEY not set' };
+  if (!process.env.RESEND_API_KEY) {
+    console.error('[aria-tool/send_email_now] RESEND_API_KEY missing');
+    return { error: 'Email sending requires RESEND_API_KEY in env vars' };
+  }
 
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
@@ -704,7 +707,10 @@ async function sendSmsNow(input: Record<string, unknown>): Promise<unknown> {
   const sid = process.env.TWILIO_ACCOUNT_SID;
   const token = process.env.TWILIO_AUTH_TOKEN;
   const from = process.env.TWILIO_PHONE_NUMBER;
-  if (!sid || !token || !from) return { error: 'Twilio not configured' };
+  if (!sid || !token || !from) {
+    console.error('[aria-tool/send_sms_now] Twilio env missing — sid:', !!sid, 'token:', !!token, 'from:', !!from);
+    return { error: 'SMS requires TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER in env vars' };
+  }
 
   const phone = to.replace(/\s/g, '').replace(/^0/, '+61');
   const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
@@ -739,7 +745,10 @@ async function generateImage(input: Record<string, unknown>, businessId: string)
   const size = String(input.size ?? '1024x1024');
   const style = (input.style === 'natural' ? 'natural' : 'vivid') as 'natural' | 'vivid';
   if (!prompt) return { error: 'prompt required' };
-  if (!process.env.OPENAI_API_KEY) return { error: 'OPENAI_API_KEY not configured' };
+  if (!process.env.OPENAI_API_KEY) {
+    console.error('[aria-tool/generate_image] OPENAI_API_KEY not set in env');
+    return { error: 'Image generation requires OPENAI_API_KEY in Vercel environment variables (admin setup needed)' };
+  }
 
   try {
     const res = await fetch('https://api.openai.com/v1/images/generations', {
@@ -749,7 +758,8 @@ async function generateImage(input: Record<string, unknown>, businessId: string)
     });
     if (!res.ok) {
       const err = await res.text();
-      return { error: 'Image generation failed: ' + err.slice(0, 200) };
+      console.error('[aria-tool/generate_image] OpenAI API error:', res.status, err.slice(0, 500));
+      return { error: 'OpenAI returned ' + res.status + ': ' + err.slice(0, 200) };
     }
     const d = await res.json() as { data?: Array<{ b64_json?: string; revised_prompt?: string }> };
     const b64 = d.data?.[0]?.b64_json;
@@ -760,8 +770,10 @@ async function generateImage(input: Record<string, unknown>, businessId: string)
     const filename = `image_${Date.now()}.png`;
     const path = `aria-images/${businessId}/${filename}`;
     const { error: upErr } = await supabaseAdmin.storage.from('reports').upload(path, buf, { contentType: 'image/png' });
-    if (upErr) return { error: 'Upload failed: ' + upErr.message };
-
+    if (upErr) {
+      console.error('[aria-tool/generate_image] storage upload failed:', upErr.message, 'path:', path);
+      return { error: 'Storage upload failed: ' + upErr.message };
+    }
     const { data: signed } = await supabaseAdmin.storage.from('reports').createSignedUrl(path, 86400);
     return { ok: true, filename, download_url: signed?.signedUrl, format: 'png', revised_prompt: d.data?.[0]?.revised_prompt };
   } catch (e) {
