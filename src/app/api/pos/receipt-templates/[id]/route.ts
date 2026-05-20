@@ -11,6 +11,19 @@ async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, u
   return data?.id ?? null
 }
 
+async function _GET(_req: Request, { params }: { params: { id: string } }) {
+  const supabase = createServerSupabaseClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const bid = await getBid(supabase, user.id)
+  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 404 })
+  const { data, error } = await supabase.from('pos_receipt_templates')
+    .select('*').eq('id', params.id).eq('business_id', bid).single()
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (!data) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  return NextResponse.json({ template: data })
+}
+
 async function _PATCH(req: Request, { params }: { params: { id: string } }) {
   const supabase = createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -29,6 +42,11 @@ async function _PATCH(req: Request, { params }: { params: { id: string } }) {
   if (body.show_loyalty_balance !== undefined) update.show_loyalty_balance = Boolean(body.show_loyalty_balance)
   if (body.paper_cut_mode   !== undefined && ['full', 'partial', 'none'].includes(body.paper_cut_mode)) update.paper_cut_mode = body.paper_cut_mode
   if (body.outlet_id        !== undefined) update.outlet_id        = body.outlet_id
+  if (body.elements         !== undefined) update.elements         = body.elements
+  if (body.is_default       !== undefined) update.is_default       = Boolean(body.is_default)
+  if (body.type             !== undefined) update.type             = body.type
+  if (body.for_type         !== undefined) update.for_type         = body.for_type
+  if (body.name             !== undefined) update.template_name    = String(body.name)
   if (Object.keys(update).length === 0) return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 })
   const { data, error } = await supabase.from('pos_receipt_templates').update(update).eq('id', params.id).eq('business_id', bid).select().single()
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
@@ -49,3 +67,4 @@ async function _DELETE(_req: Request, { params }: { params: { id: string } }) {
 
 export const PATCH = withErrorCapture('pos/receipt-templates/[id]', _PATCH)
 export const DELETE = withErrorCapture('pos/receipt-templates/[id]', _DELETE)
+export const GET = withErrorCapture('pos/receipt-templates/[id]', _GET)
