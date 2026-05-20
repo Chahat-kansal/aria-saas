@@ -743,42 +743,81 @@ async function updateProductPrice(input: Record<string, unknown>, businessId: st
 async function generateImage(input: Record<string, unknown>, businessId: string): Promise<unknown> {
   const prompt = String(input.prompt ?? '');
   const size = String(input.size ?? '1024x1024');
-  const style = (input.style === 'natural' ? 'natural' : 'vivid') as 'natural' | 'vivid';
   if (!prompt) return { error: 'prompt required' };
   if (!process.env.OPENAI_API_KEY) {
     console.error('[aria-tool/generate_image] OPENAI_API_KEY not set in env');
     return { error: 'Image generation requires OPENAI_API_KEY in Vercel environment variables (admin setup needed)' };
   }
 
-  try {
-    const res = await fetch('https://api.openai.com/v1/images/generations', {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: 'dall-e-3', prompt, n: 1, size, style, quality: 'standard', response_format: 'b64_json' }),
-    });
-    if (!res.ok) {
-      const err = await res.text();
-      console.error('[aria-tool/generate_image] OpenAI API error:', res.status, err.slice(0, 500));
-      return { error: 'OpenAI returned ' + res.status + ': ' + err.slice(0, 200) };
-    }
-    const d = await res.json() as { data?: Array<{ b64_json?: string; revised_prompt?: string }> };
-    const b64 = d.data?.[0]?.b64_json;
-    if (!b64) return { error: 'No image returned' };
+  // Try strategies in order — gpt-image-1 first (current), fall back to dall-e-3 if needed
+  const strategies = [
+    {
+      name: 'gpt-image-1',
+      body: { model: 'gpt-image-1', prompt, n: 1, size, quality: 'auto' },
+      decode: 'b64_json' as const,
+    },
+    {
+      name: 'dall-e-3-minimal',
+      body: { model: 'dall-e-3', prompt, n: 1, size, response_format: 'b64_json' },
+      decode: 'b64_json' as const,
+    },
+    {
+      name: 'dall-e-3-url',
+      body: { model: 'dall-e-3', prompt, n: 1, size },
+      decode: 'url' as const,
+    },
+  ];
 
-    // Upload to reports bucket
-    const buf = Buffer.from(b64, 'base64');
-    const filename = `image_${Date.now()}.png`;
-    const path = `aria-images/${businessId}/${filename}`;
-    const { error: upErr } = await supabaseAdmin.storage.from('reports').upload(path, buf, { contentType: 'image/png' });
-    if (upErr) {
-      console.error('[aria-tool/generate_image] storage upload failed:', upErr.message, 'path:', path);
-      return { error: 'Storage upload failed: ' + upErr.message };
+  let lastError = '';
+  for (const strategy of strategies) {
+    try {
+      console.log('[aria-tool/generate_image] trying strategy:', strategy.name);
+      const res = await fetch('https://api.openai.com/v1/images/generations', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(strategy.body),
+      });
+      if (!res.ok) {
+        const err = await res.text();
+        console.error('[aria-tool/generate_image] strategy', strategy.name, 'failed:', res.status, err.slice(0, 300));
+        lastError = `${strategy.name}: ${res.status} ${err.slice(0, 150)}`;
+        continue; // try next strategy
+      }
+
+      const d = await res.json() as { data?: Array<{ b64_json?: string; url?: string; revised_prompt?: string }> };
+      const item = d.data?.[0];
+      if (!item) { lastError = 'No image data'; continue; }
+
+      let buf: Buffer;
+      if (strategy.decode === 'b64_json' && item.b64_json) {
+        buf = Buffer.from(item.b64_json, 'base64');
+      } else if (strategy.decode === 'url' && item.url) {
+        const imgRes = await fetch(item.url);
+        if (!imgRes.ok) { lastError = 'URL fetch failed'; continue; }
+        buf = Buffer.from(await imgRes.arrayBuffer());
+      } else {
+        lastError = 'no usable data field returned';
+        continue;
+      }
+
+      // Upload to reports bucket
+      const filename = `image_${Date.now()}.png`;
+      const path = `aria-images/${businessId}/${filename}`;
+      const { error: upErr } = await supabaseAdmin.storage.from('reports').upload(path, buf, { contentType: 'image/png' });
+      if (upErr) {
+        console.error('[aria-tool/generate_image] storage upload failed:', upErr.message);
+        return { error: 'Storage upload failed: ' + upErr.message };
+      }
+      const { data: signed } = await supabaseAdmin.storage.from('reports').createSignedUrl(path, 86400);
+      console.log('[aria-tool/generate_image] success with', strategy.name);
+      return { ok: true, filename, download_url: signed?.signedUrl, format: 'png', revised_prompt: item.revised_prompt, strategy: strategy.name };
+    } catch (e) {
+      lastError = String(e);
+      console.error('[aria-tool/generate_image] strategy', strategy.name, 'exception:', lastError);
     }
-    const { data: signed } = await supabaseAdmin.storage.from('reports').createSignedUrl(path, 86400);
-    return { ok: true, filename, download_url: signed?.signedUrl, format: 'png', revised_prompt: d.data?.[0]?.revised_prompt };
-  } catch (e) {
-    return { error: String(e) };
   }
+
+  return { error: 'All image generation strategies failed. Last error: ' + lastError };
 }
 
 async function runCalculation(input: Record<string, unknown>): Promise<unknown> {
