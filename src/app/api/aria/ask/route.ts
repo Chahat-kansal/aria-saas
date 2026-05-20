@@ -470,12 +470,13 @@ ${ARTIFACT_INSTRUCTIONS}`
   const rawResponse = toolResult.raw
   const action = extractAction(rawResponse)
   const cleanResponse = stripAction(rawResponse)
-  const toolSummary = toolResult.tool_calls.length > 0
-    ? '\n\n[Context from data lookup: ' + toolResult.tool_calls.map(t =>
-        `${t.name}(${JSON.stringify(t.input).slice(0, 80)}) → ${JSON.stringify(t.result).slice(0, 200)}`
-      ).join('; ') + ']'
-    : ''
-  const historyContent = cleanResponse + toolSummary
+  // Tool call context is logged separately, NOT appended to user-visible message
+  if (toolResult.tool_calls.length > 0) {
+    console.log('[aria/ask] tool_calls completed:', toolResult.tool_calls.map(t =>
+      `${t.name}(${JSON.stringify(t.input).slice(0, 80)})`
+    ).join('; '))
+  }
+  const historyContent = cleanResponse
 
   // 6. Handle server-side actions
   let actionResult: Record<string, unknown> = {}
