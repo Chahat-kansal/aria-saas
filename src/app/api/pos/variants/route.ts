@@ -22,21 +22,29 @@ async function _GET(req: Request) {
   const product_id = searchParams.get('product_id');
   if (!product_id) return NextResponse.json({ error: 'product_id required' }, { status: 400 });
 
-  const [variantsRes, modifiersRes] = await Promise.all([
+  const [variantsRes, modifiersRes, groupsRes] = await Promise.all([
     supabase
       .from('pos_product_variants')
       .select('*')
       .eq('product_id', product_id)
-      .eq('business_id', bid),
+      .eq('business_id', bid)
+      .eq('is_active', true)
+      .order('sort_order'),
     supabase
       .from('pos_product_modifiers')
       .select('*, pos_modifiers(*)')
       .eq('product_id', product_id)
       .eq('business_id', bid),
+    supabase
+      .from('pos_product_variant_groups')
+      .select('*')
+      .eq('product_id', product_id)
+      .eq('business_id', bid)
+      .order('sort_order'),
   ]);
 
   return NextResponse.json({
-    variants: variantsRes.data ?? [],
+    variants: groupsRes.data?.length ? groupsRes.data : (variantsRes.data ?? []),
     modifiers: modifiersRes.data ?? [],
   });
 }

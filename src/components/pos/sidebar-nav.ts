@@ -102,6 +102,7 @@ export const NAV_STRUCTURE: NavSection[] = [
       { label: 'Stocktake', href: '/pos/stocktake', icon: ClipboardList },
       { label: 'New Stocktake', href: '/pos/inventory/stocktake/new', icon: RefreshCw },
       { label: 'Dead Stock', href: '/pos/inventory/dead-stock', icon: TrendingDown },
+      { label: 'Expiry Tracking', href: '/pos/expiry', icon: CalendarOff, industries: ['bakery', 'pharmacy', 'convenience', 'grocery', 'cafe', 'restaurant'] },
       { label: 'Transfers', href: '/pos/transfers', icon: ArrowLeftRight },
       { label: 'Import Products', href: '/pos/import', icon: Import },
     ],
