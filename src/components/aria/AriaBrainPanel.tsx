@@ -30,7 +30,6 @@ export default function AriaBrainPanel({ businessId }: { businessId?: string }) 
   const [acting, setActing]   = useState<string | null>(null)
 
   const load = useCallback(async () => {
-    if (!businessId) return
     setLoading(true)
     try {
       const res = await fetch('/api/aria/pending-insights')
@@ -38,7 +37,7 @@ export default function AriaBrainPanel({ businessId }: { businessId?: string }) 
       setInsights(d.insights ?? [])
     } catch { /* best-effort */ }
     setLoading(false)
-  }, [businessId])
+  }, [])
 
   useEffect(() => {
     // Load on mount AND when opened to keep badge count accurate
