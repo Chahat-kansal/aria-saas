@@ -424,25 +424,66 @@ export default function POSShell({ children, businessId, businessName }: {
     initials: makeInitials(posUser.name ?? 'U'),
   };
 
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+
   return (
     <div className="pos-shell" style={{ display: 'flex', height: '100dvh', overflow: 'hidden', background: 'var(--bg-base)' }}>
-      <POSSidebar
-        businessName={businessName}
-        posUser={userForSidebar}
-        currentUser={userForSidebar}
-        ariaOpen={ariaOpen}
-        onAriaToggle={() => {
-          setAriaOpen(v => !v);
-          window.dispatchEvent(new CustomEvent('pos-aria-toggle'));
-        }}
-        onUserSwitch={() => {
-          localStorage.removeItem(POS_USER_KEY);
-          // Clear dashboard restriction cookie when employee logs out
-          document.cookie = 'pos_emp=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
-          setPosUser(null);
-        }}
-      />
+      {/* Mobile sidebar overlay */}
+      {mobileSidebarOpen && (
+        <div
+          onClick={() => setMobileSidebarOpen(false)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 200 }}
+        />
+      )}
+
+      {/* Sidebar — hidden on mobile unless open */}
+      <div style={{
+        position: 'relative', zIndex: 201, flexShrink: 0,
+        // Mobile: slide in/out; Desktop: always visible
+        transform: typeof window !== 'undefined' && window.innerWidth < 768 && !mobileSidebarOpen ? 'translateX(-100%)' : 'translateX(0)',
+        transition: 'transform 0.25s ease',
+      }}
+      className="pos-sidebar-wrapper"
+      >
+        <POSSidebar
+          businessName={businessName}
+          posUser={userForSidebar}
+          currentUser={userForSidebar}
+          ariaOpen={ariaOpen}
+          onAriaToggle={() => {
+            setAriaOpen(v => !v);
+            window.dispatchEvent(new CustomEvent('pos-aria-toggle'));
+          }}
+          onUserSwitch={() => {
+            localStorage.removeItem(POS_USER_KEY);
+            document.cookie = 'pos_emp=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+            setPosUser(null);
+          }}
+          onClose={() => setMobileSidebarOpen(false)}
+        />
+      </div>
+
       <main style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', minWidth: 0, height: '100dvh' }}>
+        {/* Mobile top bar with hamburger */}
+        <div className="md:hidden" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: 'var(--bg-card)', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+          <button
+            onClick={() => setMobileSidebarOpen(v => !v)}
+            style={{ padding: 8, borderRadius: 8, background: 'var(--bg-surface)', border: '1px solid var(--border)', color: 'var(--text-primary)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          >
+            <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+            </svg>
+          </button>
+          <span style={{ fontFamily: 'var(--font-ui)', fontWeight: 700, fontSize: 15, color: 'var(--text-primary)', letterSpacing: '-0.3px' }}>
+            aria<span style={{ color: 'var(--green)' }}>POS</span>
+          </span>
+          <button
+            onClick={() => { setAriaOpen(v => !v); window.dispatchEvent(new CustomEvent('pos-aria-toggle')); }}
+            style={{ padding: 8, borderRadius: 8, background: 'var(--green)', border: 'none', color: '#fff', cursor: 'pointer', fontSize: 11, fontWeight: 700, fontFamily: 'var(--font-ui)' }}
+          >
+            Aria
+          </button>
+        </div>
         {/* Offline indicator */}
         {!online && (
           <div style={{ background: 'rgba(248,113,113,0.15)', borderBottom: '1px solid rgba(248,113,113,0.3)', padding: '8px 18px', fontSize: 13, color: '#F87171', fontFamily: 'var(--font-ui)', fontWeight: 600, flexShrink: 0 }}>

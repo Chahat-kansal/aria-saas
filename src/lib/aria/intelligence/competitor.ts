@@ -1,4 +1,4 @@
-import { searchWeb } from '@/lib/aria/signals/web'
+import Anthropic from '@anthropic-ai/sdk'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 
@@ -42,8 +42,23 @@ export async function checkCompetitorPrices(
     ? `site:${competitorUrl} prices ${productList} AUD`
     : `"${competitorName}" prices ${productList} AUD Australia`
 
-  const grounding = await searchWeb(query, businessId)
-  const answer = grounding?.answer ?? ''
+  // Use Anthropic web_search (already in the stack, no extra API key)
+  let answer = ''
+  try {
+    const anthropic = new Anthropic()
+    const resp = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 500,
+      tools: [{ type: 'web_search_20250305' as const, name: 'web_search' }],
+      messages: [{ role: 'user', content: query }],
+    } as Parameters<typeof anthropic.messages.create>[0], {
+      headers: { 'anthropic-beta': 'web-search-2025-03-05' }
+    } as never) as { content: Array<{type: string; text?: string}> }
+    answer = resp.content
+      .filter((b) => b.type === 'text')
+      .map((b) => b.text ?? '')
+      .join('')
+  } catch { answer = '' }
 
   const productsFound = productsToWatch.slice(0, 10).map(productName => {
     const yourPrice = yourPriceMap.get(productName.toLowerCase()) ?? null
@@ -68,7 +83,7 @@ export async function checkCompetitorPrices(
     competitor_name: competitorName,
     products_found: productsFound,
     checked_at: new Date().toISOString(),
-    source_quality: grounding ? 'medium' : 'low',
+    source_quality: answer ? 'medium' : 'low',
   }
 
   await supabaseAdmin.from('aria_competitor_watches').update({

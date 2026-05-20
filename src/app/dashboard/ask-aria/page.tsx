@@ -443,9 +443,15 @@ export default function AskAriaPage() {
 
   return (
     <div className="absolute inset-0 flex" style={{ background: '#0d0d14' }}>
-      {/* History sidebar */}
+      {/* History sidebar — full overlay on mobile, panel on desktop */}
       {showHistory && (
-        <div className="w-64 flex-shrink-0 flex flex-col border-r" style={{ borderColor: 'rgba(255,255,255,0.06)', background: '#13131a' }}>
+        <>
+          {/* Mobile overlay backdrop */}
+          <div
+            className="fixed inset-0 bg-black/60 z-10 md:hidden"
+            onClick={() => setShowHistory(false)}
+          />
+          <div className="w-64 flex-shrink-0 flex flex-col border-r md:relative fixed left-0 top-0 bottom-0 z-20" style={{ borderColor: 'rgba(255,255,255,0.06)', background: '#13131a' }}>
           <div className="px-4 py-3 border-b flex items-center justify-between" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
             <p className="text-xs font-medium" style={{ color: 'rgba(255,255,255,0.6)' }}>Recent chats</p>
             <button onClick={() => setShowHistory(false)} className="text-xs" style={{ color: 'rgba(255,255,255,0.3)' }}>✕</button>
@@ -474,6 +480,7 @@ export default function AskAriaPage() {
             ))}
           </div>
         </div>
+        </>
       )}
 
       {/* Main chat */}
@@ -539,7 +546,7 @@ export default function AskAriaPage() {
 
           {messages.map((m, i) => (
             <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'} group`}>
-              <div className="max-w-3xl w-full">
+              <div className="w-full md:max-w-3xl">
                 <div className="px-4 py-3 rounded-2xl text-sm whitespace-pre-wrap leading-relaxed"
                   style={m.role === 'user'
                     ? { background: '#2D5240', color: '#fff', borderRadius: '18px 18px 4px 18px' }
@@ -661,7 +668,7 @@ export default function AskAriaPage() {
               ))}
             </div>
           )}
-          <div className="flex gap-2 max-w-3xl mx-auto items-end">
+          <div className="flex gap-2 w-full md:max-w-3xl md:mx-auto items-end">
             <VoiceInput onTranscript={t => { setInput(p => p ? `${p} ${t}` : t) }} disabled={sending} />
             <button
               type="button"

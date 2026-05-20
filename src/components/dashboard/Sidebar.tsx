@@ -51,6 +51,7 @@ const ALL_ITEMS: Record<string, NavItemDef> = {
   'reviews':                    { href: '/dashboard/reviews',                  label: 'Reviews',           icon: StarIcon,           section: 'Reputation'   },
   'profit-leaks':               { href: '/dashboard/profit-leaks',             label: 'Profit leaks',      icon: AlertIcon,          section: 'Intelligence' },
   'competitors':                { href: '/dashboard/competitors',              label: 'Competitor watch',  icon: SearchIcon,         section: 'Reputation'   },
+  'suppliers':                  { href: '/dashboard/suppliers',                label: 'Supplier prices',   icon: SearchIcon,         section: 'Inventory'    },
   'churn':                      { href: '/dashboard/churn',                    label: 'Churn prevention',  icon: TrendingDownIcon,   section: 'Intelligence' },
   'bookings':                   { href: '/dashboard/bookings',                 label: 'Bookings + sales',  icon: CalendarIcon,       section: 'Revenue'      },
   'quote-builder':              { href: '/dashboard/quote-builder',            label: 'Quote builder',     icon: FileTextIcon,       section: 'Pro tools'    },

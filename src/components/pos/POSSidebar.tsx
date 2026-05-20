@@ -23,6 +23,7 @@ interface Props {
   onAriaToggle?: () => void
   ariaOpen?: boolean
   onUserSwitch?: () => void
+  onClose?: () => void
   onNavigate?: () => void
 }
 
