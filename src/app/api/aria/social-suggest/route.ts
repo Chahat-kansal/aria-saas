@@ -246,27 +246,20 @@ Return ONLY a valid JSON array.`
     return { url: null, credit: null, provider: 'none' };
   }
 
-  // Generate images in parallel across all suggestions
-  const imageResults = await Promise.all(
-    suggestions.map((s: any, i: number) =>
-      generatePostImage(s.image_prompt || '', s.image_search_query || '', `${business_id}/${Date.now()}_${i}`)
-    )
-  );
-
+  // Save posts immediately without waiting for images
   const saved: any[] = [];
   for (let i = 0; i < suggestions.length; i++) {
     const s = suggestions[i];
-    const img = imageResults[i];
-    const { data: post } = await supabase.from('social_posts').insert({
+    const { data: post } = await supabaseAdmin.from('social_posts').insert({
       business_id,
       platform: s.platform,
-      status: 'scheduled',
-      approval_status: 'approved',
+      status: 'draft',
+      approval_status: 'pending',
       caption: s.caption,
       hashtags: [...(s.hashtags || []), ...(prefs?.auto_hashtags || [])],
       image_prompt: s.image_prompt,
-      image_url: img.url,
-      image_credit: img.credit,
+      image_url: null,
+      image_credit: null,
       reel_concept: s.reel_concept ?? null,
       reel_script: s.reel_script ?? null,
       aria_reasoning: s.why,
@@ -275,6 +268,17 @@ Return ONLY a valid JSON array.`
     }).select().single();
     if (post) saved.push({ ...post, topic: s.topic });
   }
+
+  // Generate images async after returning — fire and forget
+  void Promise.all(
+    saved.map(async (post, i) => {
+      const s = suggestions[i];
+      const img = await generatePostImage(s.image_prompt || '', s.image_search_query || '', `${business_id}/${Date.now()}_${i}`).catch(() => ({ url: null, credit: null, provider: 'none' }));
+      if (img.url) {
+        await supabaseAdmin.from('social_posts').update({ image_url: img.url, image_credit: img.credit }).eq('id', post.id);
+      }
+    })
+  );
 
   return NextResponse.json({ posts: saved, count: saved.length });
   } catch (err: unknown) {
