@@ -41,8 +41,9 @@ export default function AriaBrainPanel({ businessId }: { businessId?: string }) 
   }, [businessId])
 
   useEffect(() => {
-    if (open) load()
-  }, [open, load])
+    // Load on mount AND when opened to keep badge count accurate
+    load()
+  }, [load])
 
   async function approve(id: string) {
     setActing(id)

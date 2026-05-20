@@ -18,13 +18,17 @@ async function _GET() {
   const bid = await getBid(supabase, user.id)
   if (!bid) return NextResponse.json({ insights: [] })
 
-  const { data: rows } = await supabase
+  // Use admin client to bypass RLS — we've already verified ownership via getBid
+  const { supabaseAdmin } = await import('@/lib/supabase-admin')
+  const { data: rows, error: queryError } = await supabaseAdmin
     .from('aria_actions')
     .select('id, category, priority, title, recommendation, expected_impact, status, source, payload, created_at')
     .eq('business_id', bid)
     .eq('status', 'pending')
     .order('created_at', { ascending: false })
     .limit(20)
+
+  if (queryError) console.error('[pending-insights] query error:', queryError.message)
 
   // Sort: high → medium → low; remap column names to what the panel expects
   const order: Record<string, number> = { high: 0, medium: 1, low: 2 }

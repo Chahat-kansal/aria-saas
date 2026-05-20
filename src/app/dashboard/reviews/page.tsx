@@ -167,7 +167,7 @@ export default function ReviewsPage() {
   const GRADE_COLOR: Record<string, string> = { A:'#7FB897', B:'#7FB897', C:'#EF9F27', D:'#EF4444', F:'#EF4444' }
 
   return (
-    <div style={{ minHeight: '100%', background: 'var(--bg-base)', color: 'var(--text-primary)', fontFamily:"'Manrope',sans-serif", padding: '28px 32px', maxWidth: 960 }}>
+    <div style={{ minHeight: '100%', background: 'var(--bg-base)', color: 'var(--text-primary)', fontFamily:"'Manrope',sans-serif", padding: '28px 32px', width: '100%' }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
         <div>
