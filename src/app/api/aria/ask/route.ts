@@ -93,11 +93,34 @@ async function _POST(req: Request) {
   const bid = await getBid(supabase, user.id)
   if (!bid) return NextResponse.json({ error: 'No business found' }, { status: 404 })
 
-  const body = await req.json() as { message?: string; conversation_id?: string }
-  const message = (body.message ?? '').trim()
-  if (!message) return NextResponse.json({ error: 'message required' }, { status: 400 })
+  // Accept both JSON and multipart/form-data (for file attachments)
+  const contentType = req.headers.get('content-type') ?? ''
+  let message = ''
+  let conversationId: string | null = null
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let attachments: any[] = []
 
-  const conversationId = body.conversation_id ?? null
+  if (contentType.includes('multipart/form-data')) {
+    const formData = await req.formData()
+    message = String(formData.get('message') ?? '').trim()
+    conversationId = formData.get('conversation_id') ? String(formData.get('conversation_id')) : null
+
+    const files = formData.getAll('files') as File[]
+    if (files.length > 0) {
+      const { parseAttachment } = await import('@/lib/aria/attachments')
+      for (const file of files.slice(0, 5)) {
+        const parsed = await parseAttachment(file)
+        if (!('error' in parsed)) attachments.push(parsed)
+      }
+    }
+  } else {
+    const body = await req.json() as { message?: string; conversation_id?: string }
+    message = (body.message ?? '').trim()
+    conversationId = body.conversation_id ?? null
+  }
+
+  if (!message && attachments.length === 0) return NextResponse.json({ error: 'message or file required' }, { status: 400 })
+  if (!message) message = 'Please analyse the attached file(s).'
 
   // Rate limit: max requests per minute
   const rateLimit = parseInt(process.env.ARIA_RATE_LIMIT_PER_MIN ?? '20')
@@ -217,9 +240,19 @@ WEB TOOLS (external information):
 
 ACTION TOOLS (do things on behalf of user — confirm first):
 • send_email_now: send email via Resend
-• send_sms_now: send SMS via Twilio  
+• send_sms_now: send SMS via Twilio
 • update_product_price: change a product's selling price
 • suggest_promotion: generate promotion rule
+
+CREATION TOOLS (make things):
+• generate_image: create images from text using DALL-E 3 (posters, social graphics, mockups)
+• generate_pdf: create formal documents from structured content
+• run_calculation: do precise math (compound interest, GST, percentages, statistics)
+
+VISION & FILE UNDERSTANDING:
+• You can see images attached to messages (invoices, receipts, photos, screenshots, product images)
+• You can read PDFs, Excel/CSV files, text files that users attach
+• When user attaches a file, analyse it and answer their question about it
 
 CRITICAL RULES:
 1. When data is requested → call query_business_data IMMEDIATELY, don't ask permission
@@ -350,7 +383,12 @@ ${ARTIFACT_INSTRUCTIONS}`
     }
   }
 
-  const userPrompt = message
+  // Build multimodal user prompt — text + images + extracted document text
+  let userPrompt: string | unknown[] = message
+  if (attachments.length > 0) {
+    const { attachmentsToContentBlocks } = await import('@/lib/aria/attachments')
+    userPrompt = attachmentsToContentBlocks(message, attachments)
+  }
 
   const model = intent.type === 'escalate' ? 'opus' : 'sonnet'
 
@@ -443,19 +481,19 @@ ${ARTIFACT_INSTRUCTIONS}`
     console.error('[aria/ask] upsertConversation failed:', (e as Error).message, 'conv_id:', conversationId)
   }
 
-  // Extract any download URLs from generate_report tool results
+  // Extract download URLs from any tool that produced one (reports, images, PDFs)
   const downloads: Array<{ filename: string; download_url: string; rows: number; format: string }> = []
+  const downloadProducers = ['generate_report', 'generate_image', 'generate_pdf']
   for (const tc of toolResult.tool_calls) {
-    if (tc.name === 'generate_report') {
-      const r = tc.result as Record<string, unknown> | null
-      if (r?.ok && typeof r.download_url === 'string') {
-        downloads.push({
-          filename: String(r.filename ?? 'report.xlsx'),
-          download_url: r.download_url,
-          rows: Number(r.rows ?? 0),
-          format: String(r.format ?? 'xlsx'),
-        })
-      }
+    if (!downloadProducers.includes(tc.name)) continue
+    const r = tc.result as Record<string, unknown> | null
+    if (r?.ok && typeof r.download_url === 'string') {
+      downloads.push({
+        filename: String(r.filename ?? 'file'),
+        download_url: r.download_url,
+        rows: Number(r.rows ?? 0),
+        format: String(r.format ?? 'xlsx'),
+      })
     }
   }
 

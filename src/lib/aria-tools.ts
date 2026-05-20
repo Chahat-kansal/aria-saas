@@ -196,6 +196,53 @@ export const ARIA_POS_TOOLS: Tool[] = [
       required: ['product_id', 'new_price'],
     },
   },
+  {
+    name: 'generate_image',
+    description: 'Generate an image from a text description using DALL-E 3. Use for: posters, social media graphics, "Now Open" signs, menu illustrations, product mockups, marketing visuals. Returns a download URL. Costs ~$0.04 per image — use only when user explicitly asks for an image.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        prompt: { type: 'string', description: 'Detailed description of the image to generate. Be specific about style, mood, colours, composition.' },
+        size: { type: 'string', enum: ['1024x1024', '1792x1024', '1024x1792'], description: 'Image dimensions. Square for social, landscape for headers, portrait for posters.' },
+        style: { type: 'string', enum: ['vivid', 'natural'], description: 'vivid = hyper-realistic dramatic, natural = more subtle realistic. Default vivid.' },
+      },
+      required: ['prompt'],
+    },
+  },
+  {
+    name: 'run_calculation',
+    description: 'Run a precise mathematical calculation using mathjs. Use for: compound interest, percentages, GST calculations, profit margins, currency conversion, statistical analysis. Returns exact numerical answer.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        expression: { type: 'string', description: 'Math expression. Examples: "50000 * (1.052)^7", "1250 * 0.10", "(85 - 32) / 32 * 100" for percentage change, "mean([12, 18, 24, 30])" for stats' },
+        explanation: { type: 'string', description: 'Brief description of what is being calculated' },
+      },
+      required: ['expression'],
+    },
+  },
+  {
+    name: 'generate_pdf',
+    description: 'Create a downloadable PDF document from structured content (reports, invoices, contracts, agreements). Returns download URL. Use when user asks for "as PDF", "PDF report", or formal documents.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        title: { type: 'string' },
+        sections: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              heading: { type: 'string' },
+              content: { type: 'string', description: 'Markdown-formatted content' },
+            },
+          },
+          description: 'Array of sections, each with a heading and markdown content',
+        },
+      },
+      required: ['title', 'sections'],
+    },
+  },
 ];
 
 function getWeekKey(dateStr: string): string {
@@ -584,6 +631,102 @@ async function updateProductPrice(input: Record<string, unknown>, businessId: st
   return { ok: true, product: existing.name, old_price: existing.selling_price, new_price: newPrice };
 }
 
+async function generateImage(input: Record<string, unknown>, businessId: string): Promise<unknown> {
+  const prompt = String(input.prompt ?? '');
+  const size = String(input.size ?? '1024x1024');
+  const style = (input.style === 'natural' ? 'natural' : 'vivid') as 'natural' | 'vivid';
+  if (!prompt) return { error: 'prompt required' };
+  if (!process.env.OPENAI_API_KEY) return { error: 'OPENAI_API_KEY not configured' };
+
+  try {
+    const res = await fetch('https://api.openai.com/v1/images/generations', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: 'dall-e-3', prompt, n: 1, size, style, quality: 'standard', response_format: 'b64_json' }),
+    });
+    if (!res.ok) {
+      const err = await res.text();
+      return { error: 'Image generation failed: ' + err.slice(0, 200) };
+    }
+    const d = await res.json() as { data?: Array<{ b64_json?: string; revised_prompt?: string }> };
+    const b64 = d.data?.[0]?.b64_json;
+    if (!b64) return { error: 'No image returned' };
+
+    // Upload to reports bucket
+    const buf = Buffer.from(b64, 'base64');
+    const filename = `image_${Date.now()}.png`;
+    const path = `aria-images/${businessId}/${filename}`;
+    const { error: upErr } = await supabaseAdmin.storage.from('reports').upload(path, buf, { contentType: 'image/png' });
+    if (upErr) return { error: 'Upload failed: ' + upErr.message };
+
+    const { data: signed } = await supabaseAdmin.storage.from('reports').createSignedUrl(path, 86400);
+    return { ok: true, filename, download_url: signed?.signedUrl, format: 'png', revised_prompt: d.data?.[0]?.revised_prompt };
+  } catch (e) {
+    return { error: String(e) };
+  }
+}
+
+async function runCalculation(input: Record<string, unknown>): Promise<unknown> {
+  const expression = String(input.expression ?? '');
+  const explanation = String(input.explanation ?? '');
+  if (!expression) return { error: 'expression required' };
+
+  try {
+    const math = await import('mathjs');
+    const result = math.evaluate(expression);
+    return {
+      ok: true,
+      expression,
+      result: typeof result === 'number' ? result : String(result),
+      formatted: typeof result === 'number' ? result.toLocaleString('en-AU', { maximumFractionDigits: 4 }) : String(result),
+      explanation,
+    };
+  } catch (e) {
+    return { error: 'Calculation failed: ' + String(e) };
+  }
+}
+
+async function generatePdf(input: Record<string, unknown>, businessId: string): Promise<unknown> {
+  const title = String(input.title ?? 'Aria Report');
+  const sections = Array.isArray(input.sections) ? input.sections : [];
+  if (sections.length === 0) return { error: 'No sections provided' };
+
+  try {
+    // Generate as styled HTML that users can print-to-PDF in browser
+    // Native pdf library has font/asset issues in Vercel — HTML is more reliable
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${title}</title>
+<style>
+  @page { margin: 2cm; }
+  body { font-family: -apple-system, Inter, Arial, sans-serif; max-width: 720px; margin: 40px auto; padding: 0 20px; color: #1a1a1a; line-height: 1.6; }
+  h1 { color: #2D5240; border-bottom: 2px solid #7FB897; padding-bottom: 8px; margin-bottom: 24px; }
+  h2 { color: #2D5240; margin-top: 32px; font-size: 18px; }
+  .section-content { white-space: pre-wrap; }
+  footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid #eee; color: #888; font-size: 11px; }
+  .print-hint { position: fixed; top: 12px; right: 12px; padding: 10px 16px; background: #2D5240; color: #7FB897; border-radius: 8px; font-size: 12px; }
+  @media print { .print-hint { display: none; } }
+</style></head><body>
+<div class="print-hint">Press Cmd/Ctrl+P → Save as PDF</div>
+<h1>${title}</h1>
+${sections.map(s => {
+  const sec = s as Record<string, unknown>;
+  return `<h2>${String(sec.heading ?? '')}</h2><div class="section-content">${String(sec.content ?? '').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>`;
+}).join('')}
+<footer>Generated by Aria · ${new Date().toLocaleDateString('en-AU', { dateStyle: 'long' })}</footer>
+</body></html>`;
+
+    const buf = Buffer.from(html, 'utf-8');
+    const filename = `${title.replace(/[^a-z0-9]/gi, '_').slice(0, 50)}.html`;
+    const path = `aria-reports/${businessId}/${randomUUID()}_${filename}`;
+    const { error: upErr } = await supabaseAdmin.storage.from('reports').upload(path, buf, { contentType: 'text/html' });
+    if (upErr) return { error: 'Upload failed: ' + upErr.message };
+
+    const { data: signed } = await supabaseAdmin.storage.from('reports').createSignedUrl(path, 3600);
+    return { ok: true, filename, download_url: signed?.signedUrl, format: 'html', note: 'Open the file and press Cmd/Ctrl+P to save as PDF' };
+  } catch (e) {
+    return { error: String(e) };
+  }
+}
+
 export async function executePOSTool(name: string, input: unknown, businessId: string): Promise<unknown> {
   const inp = input as Record<string, unknown>;
 
@@ -612,6 +755,12 @@ export async function executePOSTool(name: string, input: unknown, businessId: s
       return sendSmsNow(inp);
     case 'update_product_price':
       return updateProductPrice(inp, businessId);
+    case 'generate_image':
+      return generateImage(inp, businessId);
+    case 'run_calculation':
+      return runCalculation(inp);
+    case 'generate_pdf':
+      return generatePdf(inp, businessId);
     case 'query_bookings': {
       const { period } = inp as { period: string }
       const now = new Date()

@@ -113,7 +113,7 @@ import type { Tool } from '@anthropic-ai/sdk/resources/messages'
 interface ToolLoopParams {
   model: keyof typeof MODEL_IDS
   systemPrompt: string
-  userPrompt: string
+  userPrompt: string | unknown[]
   priorMessages?: Array<{ role: 'user' | 'assistant'; content: string }>
   tools: Tool[]
   executeTool: (name: string, input: unknown) => Promise<unknown>

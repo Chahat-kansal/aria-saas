@@ -193,6 +193,7 @@ export default function AskAriaPage() {
   const { business, loading } = useBusinessContext()
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
+  const [attachedFiles, setAttachedFiles] = useState<File[]>([])
   const [sending, setSending] = useState(false)
   const [conversationId, setConversationId] = useState<string | null>(null)
   const [history, setHistory] = useState<ConvSummary[]>([])
@@ -249,19 +250,33 @@ export default function AskAriaPage() {
 
   const send = useCallback(async (text?: string) => {
     const msg = (text ?? input).trim()
-    if (!msg || sending) return
+    if ((!msg && attachedFiles.length === 0) || sending) return
 
     setInput('')
-    const userMsg: Message = { role: 'user', content: msg, timestamp: new Date() }
+    const filesToSend = [...attachedFiles]
+    setAttachedFiles([])
+    const userContent = filesToSend.length > 0
+      ? `${msg}${msg ? '\n\n' : ''}📎 ${filesToSend.map(f => f.name).join(', ')}`
+      : msg
+    const userMsg: Message = { role: 'user', content: userContent, timestamp: new Date() }
     setMessages(prev => [...prev.slice(-20), userMsg, { role: 'assistant', content: '', streaming: true, timestamp: new Date() }])
     setSending(true)
 
     try {
-      const res = await fetch('/api/aria/ask', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: msg, conversation_id: conversationId }),
-      })
+      let res: Response
+      if (filesToSend.length > 0) {
+        const fd = new FormData()
+        fd.append('message', msg || 'Please analyse the attached file(s).')
+        if (conversationId) fd.append('conversation_id', conversationId)
+        for (const f of filesToSend) fd.append('files', f)
+        res = await fetch('/api/aria/ask', { method: 'POST', body: fd })
+      } else {
+        res = await fetch('/api/aria/ask', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: msg, conversation_id: conversationId }),
+        })
+      }
 
       if (!res.ok) {
         const errData = await res.json().catch(() => ({})) as { error?: string }
@@ -541,18 +556,30 @@ export default function AskAriaPage() {
                 </div>
                 {m.role === 'assistant' && m.action && <ActionCard action={m.action} />}
                 {m.role === 'assistant' && m.downloads && m.downloads.length > 0 && (
-                  <div className="mt-2 space-y-1.5">
+                  <div className="mt-2 space-y-2">
                     {m.downloads.map((dl, di) => (
-                      <a key={di} href={dl.download_url} download={dl.filename}
-                        className="flex items-center gap-3 px-4 py-3 rounded-xl border transition-all hover:scale-[1.01]"
-                        style={{ background: 'rgba(127,184,151,0.08)', borderColor: 'rgba(127,184,151,0.3)', color: '#7FB897', textDecoration: 'none' }}>
-                        <span className="text-xl">{dl.format === 'csv' ? '📄' : '📊'}</span>
-                        <div className="flex-1">
-                          <p className="text-sm font-semibold">{dl.filename}</p>
-                          <p className="text-xs opacity-70">{dl.rows} rows · click to download</p>
+                      dl.format === 'png' || dl.format === 'jpg' || dl.format === 'jpeg' ? (
+                        // Image preview
+                        <div key={di} className="rounded-xl overflow-hidden border" style={{ borderColor: 'rgba(127,184,151,0.3)' }}>
+                          <img src={dl.download_url} alt={dl.filename} className="w-full max-w-md" />
+                          <a href={dl.download_url} download={dl.filename} className="block px-3 py-2 text-xs flex justify-between items-center"
+                            style={{ background: 'rgba(127,184,151,0.08)', color: '#7FB897', textDecoration: 'none' }}>
+                            <span>🖼 {dl.filename}</span>
+                            <span className="px-2 py-1 rounded text-[10px]" style={{ background: 'rgba(127,184,151,0.15)' }}>↓ Download</span>
+                          </a>
                         </div>
-                        <span className="text-xs px-2 py-1 rounded" style={{ background: 'rgba(127,184,151,0.15)' }}>↓</span>
-                      </a>
+                      ) : (
+                        <a key={di} href={dl.download_url} download={dl.filename} target="_blank" rel="noopener"
+                          className="flex items-center gap-3 px-4 py-3 rounded-xl border transition-all hover:scale-[1.01]"
+                          style={{ background: 'rgba(127,184,151,0.08)', borderColor: 'rgba(127,184,151,0.3)', color: '#7FB897', textDecoration: 'none' }}>
+                          <span className="text-xl">{dl.format === 'csv' ? '📄' : dl.format === 'html' || dl.format === 'pdf' ? '📑' : '📊'}</span>
+                          <div className="flex-1">
+                            <p className="text-sm font-semibold">{dl.filename}</p>
+                            <p className="text-xs opacity-70">{dl.rows > 0 ? `${dl.rows} rows · ` : ''}click to {dl.format === 'html' ? 'open' : 'download'}</p>
+                          </div>
+                          <span className="text-xs px-2 py-1 rounded" style={{ background: 'rgba(127,184,151,0.15)' }}>↓</span>
+                        </a>
+                      )
                     ))}
                   </div>
                 )}
@@ -609,26 +636,44 @@ export default function AskAriaPage() {
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/jpeg,image/png,image/webp"
+            multiple
+            accept="image/jpeg,image/png,image/webp,image/gif,application/pdf,.xlsx,.xls,.csv,.txt,.md,.json"
             className="hidden"
-            onChange={e => { const f = e.target.files?.[0]; if (f) uploadFile(f) }}
+            onChange={e => {
+              const files = Array.from(e.target.files ?? []).slice(0, 5)
+              if (files.length > 0) setAttachedFiles(prev => [...prev, ...files].slice(0, 5))
+              if (e.target) e.target.value = ''
+            }}
           />
+          {attachedFiles.length > 0 && (
+            <div className="max-w-3xl mx-auto mb-2 flex flex-wrap gap-2">
+              {attachedFiles.map((f, i) => (
+                <div key={i} className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs" style={{ background: 'rgba(127,184,151,0.1)', border: '1px solid rgba(127,184,151,0.25)', color: '#7FB897' }}>
+                  <span>{f.type.startsWith('image/') ? '🖼' : f.type === 'application/pdf' ? '📄' : f.name.match(/\.(xlsx|xls|csv)$/i) ? '📊' : '📎'}</span>
+                  <span className="truncate max-w-[200px]">{f.name}</span>
+                  <button onClick={() => setAttachedFiles(prev => prev.filter((_, idx) => idx !== i))} className="opacity-60 hover:opacity-100">✕</button>
+                </div>
+              ))}
+            </div>
+          )}
           <div className="flex gap-2 max-w-3xl mx-auto items-end">
             <VoiceInput onTranscript={t => { setInput(p => p ? `${p} ${t}` : t) }} disabled={sending} />
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              disabled={uploading || sending}
-              title="Upload invoice or receipt"
-              className="flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center transition-all disabled:opacity-40"
-              style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.5)' }}
+              disabled={sending}
+              title="Attach files (images, PDFs, spreadsheets) — Aria will analyse them"
+              className="flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center transition-all disabled:opacity-40 relative"
+              style={{ background: attachedFiles.length > 0 ? 'rgba(127,184,151,0.15)' : 'rgba(255,255,255,0.06)', border: `1px solid ${attachedFiles.length > 0 ? 'rgba(127,184,151,0.4)' : 'rgba(255,255,255,0.1)'}`, color: attachedFiles.length > 0 ? '#7FB897' : 'rgba(255,255,255,0.5)' }}
             >
-              {uploading
-                ? <div className="w-4 h-4 rounded-full border-2 border-[#7FB897] border-t-transparent animate-spin" />
-                : <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-4 h-4">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
-                  </svg>
-              }
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-4 h-4">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+              </svg>
+              {attachedFiles.length > 0 && (
+                <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full text-[9px] font-bold flex items-center justify-center" style={{ background: '#7FB897', color: '#13131a' }}>
+                  {attachedFiles.length}
+                </span>
+              )}
             </button>
             <textarea
               ref={inputRef}
@@ -642,7 +687,7 @@ export default function AskAriaPage() {
             />
             <button
               onClick={() => send()}
-              disabled={sending || !input.trim()}
+              disabled={sending || (!input.trim() && attachedFiles.length === 0)}
               className="px-5 py-3 rounded-xl text-sm font-medium transition-opacity disabled:opacity-40 flex-shrink-0"
               style={{ background: '#2D5240', color: '#fff' }}
             >
