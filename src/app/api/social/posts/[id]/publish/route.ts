@@ -77,7 +77,7 @@ async function _POST(req: Request, { params }: Params) {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            image_url: (post.image_urls as string[])?.[0] ?? null,
+            image_url: (post.image_url as string | null) ?? null,
             caption: fullCaption,
             access_token: connection.access_token,
           }),
@@ -112,7 +112,7 @@ async function _POST(req: Request, { params }: Params) {
       const pageId = connection.platform_page_id
       if (!pageId) throw new Error('No Facebook Page linked to this connection')
 
-      const imageUrl = (post.image_urls as string[])?.[0]
+      const imageUrl = post.image_url as string | null
       let postData: Record<string, unknown>
 
       if (imageUrl) {

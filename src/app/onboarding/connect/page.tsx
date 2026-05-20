@@ -94,7 +94,10 @@ export default function ConnectPage() {
               </div>
             </div>
             <div className="flex items-center gap-3 mt-4">
-              <button className="flex items-center gap-2 border border-[rgba(0,0,0,0.15)] rounded-full px-4 py-2 text-xs font-medium hover:border-[#1a1a16] transition-colors">
+              <button
+                onClick={() => { localStorage.setItem('social_return_to', 'onboarding'); window.location.href = '/api/social/connect/google'; }}
+                className="flex items-center gap-2 border border-[rgba(0,0,0,0.15)] rounded-full px-4 py-2 text-xs font-medium hover:border-[#1a1a16] transition-colors"
+              >
                 <GoogleIcon size={14} /> Connect Google
               </button>
               <button className="text-xs text-[rgba(26,26,22,0.35)] hover:text-[rgba(26,26,22,0.6)] transition-colors">Skip for now</button>
@@ -111,7 +114,10 @@ export default function ConnectPage() {
               <p className="text-[12px] text-[rgba(26,26,22,0.45)]">Track leads from social, run campaigns, and pull in booking enquiries automatically.</p>
             </div>
             <div className="flex items-center gap-3 mt-4">
-              <button className="flex items-center gap-2 border border-[rgba(0,0,0,0.15)] rounded-full px-4 py-2 text-xs font-medium hover:border-[#1a1a16] transition-colors">
+              <button
+                onClick={() => { localStorage.setItem('social_return_to', 'onboarding'); window.location.href = '/api/social/connect/facebook?return_to=onboarding'; }}
+                className="flex items-center gap-2 border border-[rgba(0,0,0,0.15)] rounded-full px-4 py-2 text-xs font-medium hover:border-[#1a1a16] transition-colors"
+              >
                 <MetaIcon size={14} /> Connect Meta
               </button>
               <button className="text-xs text-[rgba(26,26,22,0.35)] hover:text-[rgba(26,26,22,0.6)] transition-colors">Skip for now</button>

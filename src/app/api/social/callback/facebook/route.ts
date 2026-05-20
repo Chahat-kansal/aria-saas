@@ -89,7 +89,11 @@ async function _GET(req: Request) {
       }, { onConflict: 'business_id,platform' });
     }
 
-    return NextResponse.redirect(`${appUrl}/dashboard/social?connected=facebook`);
+    const state = searchParams.get('state') ?? 'dashboard';
+    const destination = state === 'onboarding'
+      ? `${appUrl}/onboarding/connect?connected=facebook`
+      : `${appUrl}/dashboard/social?connected=facebook`;
+    return NextResponse.redirect(destination);
   } catch (err: any) {
     return NextResponse.redirect(`${appUrl}/dashboard/social?error=${encodeURIComponent(err.message)}`);
   }

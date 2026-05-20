@@ -16,6 +16,10 @@ async function _GET() {
   url.searchParams.set('redirect_uri', `${appUrl}/api/social/callback/facebook`);
   url.searchParams.set('scope', scope);
   url.searchParams.set('response_type', 'code');
+  // Pass return destination through OAuth state param
+  const { searchParams } = new URL(req.url);
+  const returnTo = searchParams.get('return_to') ?? 'dashboard';
+  url.searchParams.set('state', returnTo);
 
   return NextResponse.redirect(url.toString());
 }
