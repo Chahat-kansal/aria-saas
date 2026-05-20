@@ -144,7 +144,17 @@ Return ONLY a valid JSON array.`
   const _msg = await _client.messages.create({
     model: 'claude-haiku-4-5-20251001',
     max_tokens: 1200,
-    system: `You are Aria, a social media content specialist for Australian small businesses. Generate authentic, engaging posts that sound like a real business owner wrote them — not a marketing robot. Return ONLY a valid JSON array. Each post must have: platform, caption, hashtags (array max 8), best_time, why (1 sentence), image_prompt, image_search_query (2-4 words), topic, industry_tip, reel_concept, reel_script. No prose before or after the JSON array.`,
+    system: `You are Aria, a social media content specialist for Australian small businesses. Generate authentic, engaging posts that sound like a real business owner wrote them — not a marketing robot. Return ONLY a valid JSON array. Each post must have: platform, caption, hashtags (array max 8), best_time, why (1 sentence), image_prompt, image_search_query, topic, industry_tip, reel_concept, reel_script.
+
+CRITICAL for image_search_query: Use 2-4 specific, visual words that will find BEAUTIFUL professional photography. Examples:
+- For cafe/coffee: "latte art closeup", "flat white barista", "coffee pour beautiful", "cappuccino cafe morning"
+- For food: "avocado toast plating", "smoothie bowl colourful", "cake slice beautiful"
+- For bakery: "croissant flaky fresh", "sourdough artisan bread", "pastry beautiful display"
+- For bar/drinks: "cocktail garnished bar", "beer tap pour", "wine glass elegant"
+- NEVER use generic words like "business", "store", "product", "people", "customer"
+- ALWAYS be specific to the exact food/drink item being promoted
+
+No prose before or after the JSON array.`,
     messages: [{ role: 'user', content: userPrompt }],
   })
   const text = _msg.content[0].type === 'text' ? _msg.content[0].text.trim() : '';
@@ -163,87 +173,19 @@ Return ONLY a valid JSON array.`
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
 
-  async function generatePostImage(prompt: string, searchQuery: string, prefix: string): Promise<{ url: string | null; credit: string | null; provider: string }> {
-    // 1. Stability AI
-    const stabilityKey = process.env.STABILITY_AI_KEY;
-    if (stabilityKey && prompt) {
-      try {
-        const res = await fetch(
-          'https://api.stability.ai/v1/generation/stable-diffusion-xl-1024-v1-0/text-to-image',
-          {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${stabilityKey}`, 'Content-Type': 'application/json', Accept: 'application/json' },
-            body: JSON.stringify({ text_prompts: [{ text: prompt, weight: 1 }], cfg_scale: 7, height: 1024, width: 1024, steps: 30, samples: 1 }),
-          }
-        );
-        if (res.ok) {
-          const d = await res.json();
-          const buf = d.artifacts?.[0]?.base64 ? Buffer.from(d.artifacts[0].base64, 'base64') : null;
-          if (buf) {
-            const path = `social/${prefix}_sdxl.png`;
-            const { error } = await sbService.storage.from('media').upload(path, buf, { contentType: 'image/png', upsert: true });
-            if (!error) {
-              const url = sbService.storage.from('media').getPublicUrl(path).data.publicUrl;
-              return { url, credit: null, provider: 'stability_ai' };
-            }
-          }
-        }
-      } catch { /* fall through */ }
-    }
-
-    // 2. DALL-E 3
-    const openaiKey = process.env.OPENAI_API_KEY;
-    if (openaiKey && prompt) {
-      try {
-        const res = await fetch('https://api.openai.com/v1/images/generations', {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${openaiKey}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ model: 'dall-e-3', prompt: prompt.slice(0, 1000), n: 1, size: '1024x1024', quality: 'standard' }),
-        });
-        if (res.ok) {
-          const d = await res.json();
-          const imgUrl = d.data?.[0]?.url;
-          if (imgUrl) {
-            const imgRes = await fetch(imgUrl);
-            if (imgRes.ok) {
-              const buf = Buffer.from(await imgRes.arrayBuffer());
-              const path = `social/${prefix}_dalle3.png`;
-              const { error } = await sbService.storage.from('media').upload(path, buf, { contentType: 'image/png', upsert: true });
-              if (!error) {
-                const url = sbService.storage.from('media').getPublicUrl(path).data.publicUrl;
-                return { url, credit: null, provider: 'dalle3' };
-              }
-            }
-          }
-        }
-      } catch { /* fall through */ }
-    }
-
-    // 3. Unsplash fallback
-    const unsplashKey = process.env.UNSPLASH_ACCESS_KEY;
-    if (unsplashKey) {
-      const q = searchQuery || prompt?.split(' ').slice(0, 3).join(' ') || '';
-      try {
-        const res = await fetch(
-          `https://api.unsplash.com/search/photos?query=${encodeURIComponent(q)}&per_page=1&orientation=square`,
-          { headers: { Authorization: `Client-ID ${unsplashKey}` } }
-        );
-        const d = await res.json();
-        const photo = d.results?.[0];
-        if (photo) return { url: photo.urls?.regular ?? photo.urls?.small, credit: photo.user?.name ?? 'Unsplash', provider: 'unsplash' };
-      } catch { /* fall through */ }
-    }
-
-    // 4. Pixabay fallback (cached in Supabase Storage — no rate limit concern)
+  // Use the smart generate-image API which has industry-aware, quality-focused image search
+  async function generatePostImage(prompt: string, searchQuery: string, _prefix: string): Promise<{ url: string | null; credit: string | null; provider: string }> {
     try {
-      const q = searchQuery || prompt?.split(' ').slice(0, 4).join(' ') || '';
-      if (q) {
-        const pixabayUrl = await getRelevantImage(q, { category: 'food', orientation: 'horizontal' });
-        if (pixabayUrl) return { url: pixabayUrl, credit: null, provider: 'pixabay' };
-      }
-    } catch { /* fall through */ }
-
-    return { url: null, credit: null, provider: 'none' };
+      const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.ariaos.site'
+      const res = await fetch(`${baseUrl}/api/social/generate-image`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-internal-call': 'true' },
+        body: JSON.stringify({ prompt, search_query: searchQuery, business_id, industry: biz.industry }),
+      })
+      if (!res.ok) return { url: null, credit: null, provider: 'none' }
+      const d = await res.json() as { image_url?: string | null; credit?: string | null; provider?: string }
+      return { url: d.image_url ?? null, credit: d.credit ?? null, provider: d.provider ?? 'none' }
+    } catch { return { url: null, credit: null, provider: 'none' } }
   }
 
   // Save posts immediately without waiting for images

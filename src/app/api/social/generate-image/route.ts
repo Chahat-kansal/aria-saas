@@ -1,144 +1,198 @@
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
+export const maxDuration = 30
 
 import { createServerSupabaseClient } from '@/lib/supabase-server'
-import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 
-function serviceClient() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
+// Industry-aware search term enhancement for beautiful, relevant images
+const INDUSTRY_IMAGE_STYLE: Record<string, string> = {
+  cafe: 'coffee latte art cafe beautiful',
+  restaurant: 'restaurant food plating beautiful',
+  bakery: 'bakery pastry beautiful fresh',
+  bar: 'cocktail bar drinks beautiful',
+  retail: 'retail shop product beautiful',
+  liquor: 'wine spirits bottles premium',
+  convenience: 'store products fresh',
 }
 
-async function uploadBuffer(buf: Buffer, path: string, mime: string): Promise<string | null> {
+// Curated Unsplash collection IDs for beautiful food/cafe photography
+const UNSPLASH_COLLECTIONS: Record<string, string> = {
+  cafe: '1126606',        // Coffee & Cafes — stunning latte art, barista shots
+  coffee: '1126606',
+  latte: '1126606',
+  food: '3330448',        // Food Photography — beautiful plating
+  restaurant: '3330448',
+  pastry: '9265870',      // Bakery & Pastry
+  cake: '9265870',
+  cocktail: '6993209',    // Drinks & Cocktails
+  drink: '6993209',
+  beer: '6993209',
+  wine: '6993209',
+  smoothie: '3330448',
+  breakfast: '3330448',
+  brunch: '3330448',
+  default: '1126606',
+}
+
+function getCollectionId(query: string): string {
+  const q = query.toLowerCase()
+  for (const [keyword, id] of Object.entries(UNSPLASH_COLLECTIONS)) {
+    if (q.includes(keyword)) return id
+  }
+  return UNSPLASH_COLLECTIONS.default
+}
+
+function enhanceQuery(query: string, industry?: string): string {
+  // Remove generic words that produce bad results
+  const cleaned = query
+    .replace(/\b(australian|australia|local|our|the|this|a|an)\b/gi, '')
+    .replace(/\s+/g, ' ').trim()
+  
+  const style = industry ? (INDUSTRY_IMAGE_STYLE[industry] ?? '') : ''
+  
+  // Build a focused, beautiful-image-oriented query
+  const terms = [cleaned, style].filter(Boolean).join(' ')
+  return terms.slice(0, 100)
+}
+
+async function tryUnsplashAPI(query: string, industry?: string): Promise<{ url: string; credit: string } | null> {
+  const key = process.env.UNSPLASH_ACCESS_KEY
+  if (!key) return null
   try {
-    const sb = serviceClient()
-    const { error } = await sb.storage.from('media').upload(path, buf, { contentType: mime, upsert: true })
-    if (error) return null
-    return sb.storage.from('media').getPublicUrl(path).data.publicUrl
+    const enhanced = enhanceQuery(query, industry)
+    const collectionId = getCollectionId(query)
+    // Search within curated collections for better quality
+    const res = await fetch(
+      `https://api.unsplash.com/search/photos?query=${encodeURIComponent(enhanced)}&collections=${collectionId}&per_page=5&orientation=square&order_by=relevant`,
+      { headers: { Authorization: `Client-ID ${key}` } }
+    )
+    if (!res.ok) return null
+    const d = await res.json() as { results?: Array<{ urls?: { regular?: string; small?: string }; user?: { name?: string } }> }
+    // Pick second result (first is often too generic)
+    const photo = d.results?.[1] ?? d.results?.[0]
+    if (!photo?.urls?.regular) return null
+    return { url: photo.urls.regular, credit: photo.user?.name ?? 'Unsplash' }
   } catch { return null }
 }
 
-async function tryStabilityAI(prompt: string): Promise<Buffer | null> {
+async function tryPixabay(query: string, industry?: string): Promise<{ url: string; credit: string } | null> {
+  const key = process.env.PIXABAY_API_KEY
+  if (!key) return null
+  try {
+    const enhanced = enhanceQuery(query, industry)
+    const res = await fetch(
+      `https://pixabay.com/api/?key=${key}&q=${encodeURIComponent(enhanced)}&image_type=photo&orientation=horizontal&per_page=5&safesearch=true&min_width=800&editors_choice=true`
+    )
+    const d = await res.json() as { hits?: Array<{ webformatURL?: string; largeImageURL?: string }> }
+    // editors_choice=true filters to only high-quality curated images
+    const hit = d.hits?.[0]
+    if (!hit?.largeImageURL && !hit?.webformatURL) return null
+    return { url: hit.largeImageURL ?? hit.webformatURL!, credit: 'Pixabay' }
+  } catch { return null }
+}
+
+async function tryPixabayFallback(query: string, industry?: string): Promise<{ url: string; credit: string } | null> {
+  // Second attempt without editors_choice restriction
+  const key = process.env.PIXABAY_API_KEY
+  if (!key) return null
+  try {
+    const enhanced = enhanceQuery(query, industry)
+    const res = await fetch(
+      `https://pixabay.com/api/?key=${key}&q=${encodeURIComponent(enhanced)}&image_type=photo&orientation=horizontal&per_page=5&safesearch=true&min_width=1200`
+    )
+    const d = await res.json() as { hits?: Array<{ webformatURL?: string; largeImageURL?: string }> }
+    const hit = d.hits?.[1] ?? d.hits?.[0] // skip first which can be generic
+    if (!hit?.largeImageURL && !hit?.webformatURL) return null
+    return { url: hit.largeImageURL ?? hit.webformatURL!, credit: 'Pixabay' }
+  } catch { return null }
+}
+
+async function tryStabilityAI(prompt: string): Promise<string | null> {
   const key = process.env.STABILITY_AI_KEY
   if (!key) return null
   try {
+    const enhancedPrompt = `${prompt}, professional food photography, beautiful composition, warm lighting, bokeh background, Instagram worthy, high quality, 4K`
     const res = await fetch(
       'https://api.stability.ai/v1/generation/stable-diffusion-xl-1024-v1-0/text-to-image',
       {
         method: 'POST',
         headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify({
-          text_prompts: [{ text: prompt, weight: 1 }],
-          cfg_scale: 7, height: 1024, width: 1024, steps: 30, samples: 1,
+          text_prompts: [
+            { text: enhancedPrompt, weight: 1 },
+            { text: 'blurry, ugly, low quality, watermark, text, logo, generic, stock photo', weight: -1 },
+          ],
+          cfg_scale: 8, height: 1024, width: 1024, steps: 35, samples: 1,
         }),
       }
     )
     if (!res.ok) return null
-    const d = await res.json()
+    const d = await res.json() as { artifacts?: Array<{ base64?: string }> }
     const b64 = d.artifacts?.[0]?.base64
-    return b64 ? Buffer.from(b64, 'base64') : null
-  } catch { return null }
-}
-
-async function tryDallE3(prompt: string): Promise<Buffer | null> {
-  const key = process.env.OPENAI_API_KEY
-  if (!key) return null
-  try {
-    const res = await fetch('https://api.openai.com/v1/images/generations', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: 'dall-e-3', prompt: prompt.slice(0, 1000), n: 1, size: '1024x1024', quality: 'standard' }),
-    })
-    if (!res.ok) return null
-    const d = await res.json()
-    const url = d.data?.[0]?.url
-    if (!url) return null
-    const imgRes = await fetch(url)
-    if (!imgRes.ok) return null
-    return Buffer.from(await imgRes.arrayBuffer())
-  } catch { return null }
-}
-
-async function tryUnsplash(query: string): Promise<{ url: string; credit: string } | null> {
-  const key = process.env.UNSPLASH_ACCESS_KEY
-  if (!key || !query) return null
-  try {
-    const res = await fetch(
-      `https://api.unsplash.com/search/photos?query=${encodeURIComponent(query)}&per_page=1&orientation=square`,
-      { headers: { Authorization: `Client-ID ${key}` } }
-    )
-    const d = await res.json()
-    const photo = d.results?.[0]
-    if (!photo) return null
-    return { url: photo.urls?.regular ?? photo.urls?.small, credit: photo.user?.name ?? 'Unsplash' }
+    if (!b64) return null
+    // Upload to Supabase storage
+    const { supabaseAdmin } = await import('@/lib/supabase-admin')
+    const buf = Buffer.from(b64, 'base64')
+    const path = `social/generated/${Date.now()}_sdxl.png`
+    const { error } = await supabaseAdmin.storage.from('media').upload(path, buf, { contentType: 'image/png', upsert: true })
+    if (error) return null
+    return supabaseAdmin.storage.from('media').getPublicUrl(path).data.publicUrl
   } catch { return null }
 }
 
 async function _POST(req: Request) {
   try {
     const supabase = createServerSupabaseClient()
+    // Allow internal server-to-server calls (from social-suggest async job)
+    const isInternal = (req as Request).headers.get('x-internal-call') === 'true'
     const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (!isInternal && (authError || !user)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    const { prompt, search_query, post_id, business_id } = await req.json() as {
-      prompt?: string; search_query?: string; post_id?: string; business_id?: string
+    const { prompt, search_query, post_id, business_id, industry } = await req.json() as {
+      prompt?: string; search_query?: string; post_id?: string; business_id?: string; industry?: string
     }
     if (!prompt && !search_query) return NextResponse.json({ error: 'prompt or search_query required' }, { status: 400 })
 
+    const query = search_query || prompt?.split(' ').slice(0, 5).join(' ') || 'cafe coffee'
     let imageUrl: string | null = null
     let credit: string | null = null
     let provider = 'none'
-    const prefix = `social/${business_id ?? user.id}/${Date.now()}`
 
+    // 1. Stability AI — best quality AI-generated (if key set)
     if (prompt) {
-      const buf = await tryStabilityAI(prompt)
-      if (buf) {
-        const url = await uploadBuffer(buf, `${prefix}_sdxl.png`, 'image/png')
-        if (url) { imageUrl = url; provider = 'stability_ai' }
-      }
+      const url = await tryStabilityAI(prompt)
+      if (url) { imageUrl = url; credit = null; provider = 'stability_ai' }
     }
 
-    if (!imageUrl && prompt) {
-      const buf = await tryDallE3(prompt)
-      if (buf) {
-        const url = await uploadBuffer(buf, `${prefix}_dalle3.png`, 'image/png')
-        if (url) { imageUrl = url; provider = 'dalle3' }
-      }
-    }
-
+    // 2. Unsplash API with curated collections — beautiful photography
     if (!imageUrl) {
-      const q = search_query || prompt?.split(' ').slice(0, 4).join(' ') || ''
-      const result = await tryUnsplash(q)
+      const result = await tryUnsplashAPI(query, industry)
       if (result) { imageUrl = result.url; credit = result.credit; provider = 'unsplash' }
     }
 
-    // Pixabay fallback — free, no upload needed
+    // 3. Pixabay editors choice — curated high quality only
     if (!imageUrl) {
-      const pixabayKey = process.env.PIXABAY_API_KEY
-      const q = search_query || prompt?.split(' ').slice(0, 3).join(' ') || 'business'
-      if (pixabayKey) {
-        try {
-          const pRes = await fetch(
-            `https://pixabay.com/api/?key=${pixabayKey}&q=${encodeURIComponent(q)}&image_type=photo&orientation=horizontal&per_page=3&safesearch=true`
-          )
-          const pData = await pRes.json() as { hits?: Array<{ webformatURL?: string }> }
-          const hit = pData.hits?.[0]
-          if (hit?.webformatURL) { imageUrl = hit.webformatURL; credit = 'Pixabay'; provider = 'pixabay' }
-        } catch { /* fall through */ }
-      }
+      const result = await tryPixabay(query, industry)
+      if (result) { imageUrl = result.url; credit = result.credit; provider = 'pixabay' }
     }
 
-    // Free Unsplash source — no key, always works
+    // 4. Pixabay without editors_choice restriction
     if (!imageUrl) {
-      const q = encodeURIComponent(search_query || prompt?.split(' ').slice(0, 3).join(' ') || 'cafe food')
-      imageUrl = `https://source.unsplash.com/featured/800x800/?${q}`
-      credit = 'Unsplash'; provider = 'unsplash_free'
+      const result = await tryPixabayFallback(query, industry)
+      if (result) { imageUrl = result.url; credit = result.credit; provider = 'pixabay_fallback' }
     }
 
+    // 5. Unsplash free source with collection hint — always works
+    if (!imageUrl) {
+      const collectionId = getCollectionId(query)
+      const q = encodeURIComponent(enhanceQuery(query, industry))
+      imageUrl = `https://source.unsplash.com/collection/${collectionId}/800x800/?${q}`
+      credit = 'Unsplash'; provider = 'unsplash_collection'
+    }
+
+    // Update post with image URL
     if (post_id && imageUrl) {
       const { supabaseAdmin } = await import('@/lib/supabase-admin')
       await supabaseAdmin.from('social_posts')
