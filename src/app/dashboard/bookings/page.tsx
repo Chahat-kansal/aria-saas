@@ -36,7 +36,12 @@ export default function BookingsPage() {
     ])
     const bk = await bkRes.json().catch(()=>({}))
     const sv = await svcRes.json().catch(()=>({}))
-    setBookings(bk.bookings ?? [])
+    // Normalize booking_date to YYYY-MM-DD (DB stores as timestamptz '2026-05-23 00:00:00+00')
+    const normalized = (bk.bookings ?? []).map((b: Booking) => ({
+      ...b,
+      booking_date: b.booking_date ? b.booking_date.slice(0, 10) : b.booking_date
+    }))
+    setBookings(normalized)
     setServices(sv.services ?? [])
     setLoading(false)
   }, [])
@@ -54,7 +59,7 @@ export default function BookingsPage() {
     const res = await fetch('/api/bookings', { method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ ...form, business_id: bid, party_size: Number(form.party_size), service_id: form.service_id || null }) })
     const d = await res.json()
-    if (d.booking) { setBookings(p=>[d.booking,...p]); setShowAdd(false); setForm({ customer_name:'', customer_email:'', customer_phone:'', booking_date: dateStr(new Date()), booking_time:'12:00', party_size:2, service_id:'', notes:'' }) }
+    if (d.booking) { const nb = {...d.booking, booking_date: d.booking.booking_date?.slice(0,10)}; setBookings(p=>[nb,...p]); setShowAdd(false); setForm({ customer_name:'', customer_email:'', customer_phone:'', booking_date: dateStr(new Date()), booking_time:'12:00', party_size:2, service_id:'', notes:'' }) }
     setSaving(false)
   }
 

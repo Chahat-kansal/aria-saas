@@ -32,7 +32,12 @@ async function _GET(req: Request) {
   if (status) q = (q as typeof q).eq('status', status);
   const { data, error: e } = await q;
   if (e) return NextResponse.json({ error: e.message }, { status: 500 });
-  return NextResponse.json({ bookings: data ?? [] });
+  // Normalize booking_date to YYYY-MM-DD
+  const normalized = (data ?? []).map(b => ({
+    ...b,
+    booking_date: b.booking_date ? String(b.booking_date).slice(0, 10) : b.booking_date
+  }));
+  return NextResponse.json({ bookings: normalized });
 }
 
 async function _POST(req: Request) {
@@ -53,7 +58,8 @@ async function _POST(req: Request) {
   }).select().single();
 
   if (e) return NextResponse.json({ error: e.message }, { status: 500 });
-  return NextResponse.json({ booking: data });
+  const cleaned = data ? { ...data, booking_date: data.booking_date ? String(data.booking_date).slice(0, 10) : data.booking_date } : data;
+  return NextResponse.json({ booking: cleaned });
 }
 
 async function _PATCH(req: Request) {
@@ -75,7 +81,8 @@ async function _PATCH(req: Request) {
 
   const { data, error: e } = await supabaseAdmin.from('bookings').update(update).eq('id', id as string).eq('business_id', business_id as string).select().single();
   if (e) return NextResponse.json({ error: e.message }, { status: 500 });
-  return NextResponse.json({ booking: data });
+  const cleaned = data ? { ...data, booking_date: data.booking_date ? String(data.booking_date).slice(0, 10) : data.booking_date } : data;
+  return NextResponse.json({ booking: cleaned });
 }
 
 async function _DELETE(req: Request) {
