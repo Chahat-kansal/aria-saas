@@ -1,3 +1,4 @@
+import React from 'react';
 'use client';
 
 /* ─── Shared type definitions ────────────────────────────────── */
@@ -60,6 +61,7 @@ export interface ReceiptSale {
   businessName?: string;
   served_by?: string;
   loyaltyEarned?: number;
+  business_id?: string;
 }
 
 export interface ReceiptSettings {
@@ -96,6 +98,24 @@ function TemplateReceipt({ template, sale, businessName, settings, onClose, wate
   onClose?: () => void;
   watermark?: string;
 }) {
+  const [emailMode, setEmailMode] = React.useState(false);
+  const [emailVal, setEmailVal] = React.useState((sale as any).customerSnapshot?.email || (sale as any).customer_email || '');
+  const [emailSending, setEmailSending] = React.useState(false);
+  const [emailDone, setEmailDone] = React.useState(false);
+
+  async function handleEmailReceipt() {
+    if (!emailVal || !sale.id) return;
+    setEmailSending(true);
+    try {
+      await fetch('/api/pos/email-receipt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sale_id: sale.id, email: emailVal, business_id: sale.business_id }),
+      });
+      setEmailDone(true);
+      setTimeout(() => { setEmailMode(false); setEmailDone(false); }, 2000);
+    } catch { /* silent */ } finally { setEmailSending(false); }
+  }
   const CW = template.canvas_width || 302;
 
   // Variable substitution map — real sale data
@@ -312,6 +332,9 @@ function TemplateReceipt({ template, sale, businessName, settings, onClose, wate
               <button onClick={handlePrint} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 14px', borderRadius: 8, background: '#7C3AED', color: '#fff', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
                 🖨️ Print
               </button>
+              <button onClick={() => setEmailMode(e => !e)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 14px', borderRadius: 8, background: '#2D5240', color: '#fff', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+                ✉️ Email
+              </button>
               {onClose && (
                 <button onClick={onClose} style={{ padding: '6px 14px', borderRadius: 8, background: '#f5f5f5', color: '#555', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
                   Close
@@ -319,6 +342,20 @@ function TemplateReceipt({ template, sale, businessName, settings, onClose, wate
               )}
             </div>
           </div>
+          {emailMode && (
+            <div className="no-print" style={{ padding: '10px 16px', borderBottom: '1px solid #f0f0f0', background: '#f9fafb', display: 'flex', gap: 8, alignItems: 'center' }}>
+              <input
+                type="email"
+                placeholder="Customer email"
+                value={emailVal}
+                onChange={e => setEmailVal(e.target.value)}
+                style={{ flex: 1, padding: '6px 10px', borderRadius: 7, border: '1px solid #ddd', fontSize: 12, fontFamily: 'inherit', outline: 'none' }}
+              />
+              <button onClick={handleEmailReceipt} disabled={emailSending || !emailVal} style={{ padding: '6px 14px', borderRadius: 7, background: emailDone ? '#7FB897' : '#2D5240', color: '#fff', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', minWidth: 64 }}>
+                {emailDone ? '✓ Sent' : emailSending ? '...' : 'Send'}
+              </button>
+            </div>
+          )}
           <div style={{ overflowY: 'auto', flex: 1 }}>
             <div className="receipt-print-root" style={{ background: '#fff', overflow: 'hidden' }}>
               <div style={{ position: 'relative', width: CW, minHeight: template.canvas_height || 800, background: template.background_color || '#ffffff', margin: '0 auto' }}>
@@ -347,6 +384,24 @@ function SettingsReceipt({ sale, settings, businessName, ariaMessage, onClose, w
   onClose?: () => void;
   watermark?: string;
 }) {
+  const [emailMode, setEmailMode] = React.useState(false);
+  const [emailVal, setEmailVal] = React.useState((sale as any).customerSnapshot?.email || (sale as any).customer_email || '');
+  const [emailSending, setEmailSending] = React.useState(false);
+  const [emailDone, setEmailDone] = React.useState(false);
+
+  async function handleEmailReceipt() {
+    if (!emailVal || !sale.id) return;
+    setEmailSending(true);
+    try {
+      await fetch('/api/pos/email-receipt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sale_id: sale.id, email: emailVal, business_id: sale.business_id }),
+      });
+      setEmailDone(true);
+      setTimeout(() => { setEmailMode(false); setEmailDone(false); }, 2000);
+    } catch { /* silent */ } finally { setEmailSending(false); }
+  }
   const bName       = businessName ?? sale.businessName ?? 'AriaPOS';
   const total       = sale.total_amount ?? 0;
   const date        = new Date(sale.created_at || Date.now());
@@ -384,6 +439,9 @@ function SettingsReceipt({ sale, settings, businessName, ariaMessage, onClose, w
               <button onClick={handlePrint} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 14px', borderRadius: 8, background: '#7C3AED', color: '#fff', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
                 🖨️ Print
               </button>
+              <button onClick={() => setEmailMode(e => !e)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 14px', borderRadius: 8, background: '#2D5240', color: '#fff', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+                ✉️ Email
+              </button>
               {onClose && (
                 <button onClick={onClose} style={{ padding: '6px 14px', borderRadius: 8, background: '#f5f5f5', color: '#555', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
                   Close
@@ -391,6 +449,20 @@ function SettingsReceipt({ sale, settings, businessName, ariaMessage, onClose, w
               )}
             </div>
           </div>
+          {emailMode && (
+            <div className="no-print" style={{ padding: '10px 16px', borderBottom: '1px solid #f0f0f0', background: '#f9fafb', display: 'flex', gap: 8, alignItems: 'center' }}>
+              <input
+                type="email"
+                placeholder="Customer email"
+                value={emailVal}
+                onChange={e => setEmailVal(e.target.value)}
+                style={{ flex: 1, padding: '6px 10px', borderRadius: 7, border: '1px solid #ddd', fontSize: 12, fontFamily: 'inherit', outline: 'none' }}
+              />
+              <button onClick={handleEmailReceipt} disabled={emailSending || !emailVal} style={{ padding: '6px 14px', borderRadius: 7, background: emailDone ? '#7FB897' : '#2D5240', color: '#fff', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', minWidth: 64 }}>
+                {emailDone ? '✓ Sent' : emailSending ? '...' : 'Send'}
+              </button>
+            </div>
+          )}
 
           <div style={{ overflowY: 'auto', flex: 1, position: 'relative' }}>
             {watermark && (
