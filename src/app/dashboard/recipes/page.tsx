@@ -225,6 +225,14 @@ export default function RecipesPage() {
                     <div className="text-right">
                       <p className="text-sm font-semibold text-white">A${centsToDollars(r.sell_price_cents)}</p>
                       <p className="text-xs" style={{ color: '#6b7280' }}>Serves {r.serves}</p>
+                      {r.cost_cents != null && r.cost_cents > 0 && (
+                        <p className="text-xs mt-0.5" style={{ color: r.sell_price_cents && r.sell_price_cents > r.cost_cents ? '#22C55E' : '#EF4444' }}>
+                          cost A${centsToDollars(r.serves > 0 ? Math.round(r.cost_cents / r.serves) : r.cost_cents)}/serve
+                          {r.sell_price_cents && r.sell_price_cents > 0 && (
+                            <span style={{ marginLeft: 4 }}>{Math.round((1 - r.cost_cents / r.sell_price_cents) * 100)}% margin</span>
+                          )}
+                        </p>
+                      )}
                     </div>
                     <button onClick={() => openEdit(r)} className="text-xs px-2 py-1 rounded-lg" style={{ background: 'rgba(255,255,255,0.06)', color: '#9ca3af' }}>Edit</button>
                     <button onClick={() => deleteRecipe(r.id)} className="text-xs px-2 py-1 rounded-lg" style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444' }}>Delete</button>

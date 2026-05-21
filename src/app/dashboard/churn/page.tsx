@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useBusinessContext } from '@/components/providers/BusinessProvider';
 
-interface ChurnCustomer { id: string; name: string; last_visit: string | null; total_spend: number | null; visit_count: number | null; churn_risk: string | null; }
+interface ChurnCustomer { id: string; name: string; last_visit: string | null; total_spend: number | null; visit_count: number | null; churn_risk: string | null; rfm_recency_score: number | null; rfm_frequency_score: number | null; segment: string | null; }
 interface Promotion { promotion_name: string; offer_text: string; sms_message: string; recommended_time_to_send: string; rationale: string; }
 
 const DOW = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
@@ -195,6 +195,32 @@ export default function ChurnPage() {
           )}
         </div>
       </div>
+
+
+      {/* RFM Customer Map */}
+      {customers.some(c => c.rfm_recency_score != null) && (
+        <div className="rounded-xl p-5 mb-6" style={{ background: '#13131a', border: '1px solid rgba(255,255,255,0.07)' }}>
+          <h2 className="font-medium text-white text-sm mb-3">Customer Health Map</h2>
+          <div style={{ position: 'relative', height: 160, background: 'rgba(255,255,255,0.02)', borderRadius: 8, border: '1px solid rgba(255,255,255,0.05)', marginBottom: 12 }}>
+            {customers.filter(c => c.rfm_recency_score != null && c.rfm_frequency_score != null).map(c => {
+              const x = ((c.rfm_recency_score ?? 1) / 5) * 88 + 6
+              const y = (1 - (c.rfm_frequency_score ?? 1) / 5) * 88 + 6
+              const score = (c.rfm_recency_score ?? 0) + (c.rfm_frequency_score ?? 0)
+              const dotColor = score >= 8 ? '#22C55E' : score >= 5 ? '#F59E0B' : '#EF4444'
+              return (<div key={c.id} title={c.name} style={{ position: 'absolute', left: x+'%', top: y+'%', width: 7, height: 7, borderRadius: '50%', background: dotColor, transform: 'translate(-50%,-50%)', opacity: 0.85 }} />)
+            })}
+            <span style={{ position: 'absolute', bottom: 4, right: 6, fontSize: 9, color: '#374151' }}>recency →</span>
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            {[{key:'champion',label:'Champions',color:'#22C55E'},{key:'at_risk',label:'At Risk',color:'#F59E0B'},{key:'lost',label:'Lost',color:'#EF4444'}].map(s => (
+              <div key={s.key} style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 8, padding: '8px 12px' }}>
+                <p className="text-xs font-semibold mb-0.5" style={{ color: s.color }}>{s.label}</p>
+                <p className="text-xl font-bold text-white">{customers.filter(c => c.segment === s.key).length}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Customer table */}
       <div className="rounded-xl overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.07)' }}>

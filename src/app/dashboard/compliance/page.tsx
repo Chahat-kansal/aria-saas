@@ -10,6 +10,7 @@ interface CheckItem {
   due_date?: string | null
   status: 'pending' | 'done' | 'overdue' | 'na'
   evidence_note?: string | null
+  evidence_url?: string | null
   priority: 'high' | 'medium' | 'low'
 }
 
@@ -21,7 +22,7 @@ const STATUS_CONFIG: Record<string, { bg: string; color: string; label: string }
   pending: { bg: 'rgba(245,158,11,0.1)', color: '#F59E0B', label: 'Pending' },
   done:    { bg: 'rgba(34,197,94,0.1)',  color: '#22C55E', label: 'Done' },
   overdue: { bg: 'rgba(239,68,68,0.1)',  color: '#EF4444', label: 'Overdue' },
-  na:      { bg: 'rgba(107,114,128,0.1)',color: '#6B7280', label: 'N/A' },
+  na:      { bg: 'rgba(107,114,128,0.1)', color: '#6B7280', label: 'N/A' },
 }
 const PRIORITY_CONFIG: Record<string, { dot: string }> = {
   high:   { dot: '#EF4444' },
@@ -34,12 +35,19 @@ function daysUntil(dateStr: string | null | undefined): number | null {
   return Math.ceil((new Date(dateStr).getTime() - Date.now()) / 86400000)
 }
 
+const C = {
+  bg: 'var(--bg-base)', card: 'var(--bg-surface)', text: 'var(--text-primary)',
+  muted: 'var(--text-secondary)', dim: 'var(--text-tertiary)',
+  border: 'rgba(255,255,255,0.07)', green: '#22C55E', red: '#EF4444', amber: '#F59E0B',
+}
+
 export default function CompliancePage() {
   const { business } = useBusinessContext()
   const [items, setItems] = useState<CheckItem[]>([])
   const [loading, setLoading] = useState(true)
   const [expanded, setExpanded] = useState<string | null>(null)
   const [editNote, setEditNote] = useState<Record<string, string>>({})
+  const [editUrl, setEditUrl] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState<string | null>(null)
   const [filter, setFilter] = useState<'all' | 'pending' | 'overdue' | 'done'>('all')
 
@@ -50,7 +58,6 @@ export default function CompliancePage() {
       const res = await fetch('/api/compliance?business_id=' + business.id)
       const d = await res.json()
       const loaded: CheckItem[] = d.items ?? d.data ?? []
-      // Mark overdue
       const now = new Date()
       const processed = loaded.map(item => {
         if (item.status === 'pending' && item.due_date && new Date(item.due_date) < now) {
@@ -60,8 +67,13 @@ export default function CompliancePage() {
       })
       setItems(processed)
       const notes: Record<string, string> = {}
-      processed.forEach(i => { if (i.evidence_note) notes[i.id] = i.evidence_note })
+      const urls: Record<string, string> = {}
+      processed.forEach(i => {
+        if (i.evidence_note) notes[i.id] = i.evidence_note
+        if (i.evidence_url) urls[i.id] = i.evidence_url
+      })
       setEditNote(notes)
+      setEditUrl(urls)
     } catch { /* ignore */ }
     setLoading(false)
   }, [business?.id])
@@ -81,15 +93,22 @@ export default function CompliancePage() {
     setSaving(null)
   }
 
-  async function saveNote(id: string) {
+  async function saveEvidence(id: string) {
     setSaving(id)
     try {
       await fetch('/api/compliance', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, evidence_note: editNote[id], business_id: business?.id }),
+        body: JSON.stringify({
+          id,
+          evidence_note: editNote[id] ?? null,
+          evidence_url: editUrl[id] ?? null,
+          business_id: business?.id,
+        }),
       })
-      setItems(prev => prev.map(i => i.id === id ? { ...i, evidence_note: editNote[id] } : i))
+      setItems(prev => prev.map(i => i.id === id
+        ? { ...i, evidence_note: editNote[id], evidence_url: editUrl[id] }
+        : i))
     } catch { /* ignore */ }
     setSaving(null)
   }
@@ -106,12 +125,6 @@ export default function CompliancePage() {
     acc[cat].push(item)
     return acc
   }, {})
-
-  const C = {
-    bg: 'var(--bg-base)', card: 'var(--bg-surface)', text: 'var(--text-primary)',
-    muted: 'var(--text-secondary)', dim: 'var(--text-tertiary)',
-    border: 'rgba(255,255,255,0.07)', green: '#22C55E', red: '#EF4444', amber: '#F59E0B',
-  }
 
   return (
     <div style={{ minHeight: '100%', background: C.bg, color: C.text, fontFamily: "'Inter',sans-serif", padding: '24px 28px' }}>
@@ -170,19 +183,24 @@ export default function CompliancePage() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {catItems.map(item => {
                 const isExpanded = expanded === item.id
-                const statusCfg = STATUS_CONFIG[item.status] ?? STATUS_CONFIG.pending
                 const days = daysUntil(item.due_date)
+                const hasEvidence = !!(item.evidence_note || item.evidence_url)
                 return (
                   <div key={item.id} style={{ background: C.card, border: '1px solid ' + (item.status === 'overdue' ? 'rgba(239,68,68,0.25)' : C.border), borderRadius: 12, overflow: 'hidden' }}>
                     <div onClick={() => setExpanded(isExpanded ? null : item.id)}
                       style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', cursor: 'pointer' }}>
                       <div style={{ width: 8, height: 8, borderRadius: '50%', background: PRIORITY_CONFIG[item.priority]?.dot ?? C.muted, flexShrink: 0 }} />
                       <div style={{ flex: 1 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                           <p style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{item.title}</p>
                           {days !== null && days <= 30 && item.status !== 'done' && (
                             <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 99, background: days < 0 ? 'rgba(239,68,68,0.15)' : days < 7 ? 'rgba(245,158,11,0.15)' : 'rgba(255,255,255,0.06)', color: days < 0 ? C.red : days < 7 ? C.amber : C.muted }}>
                               {days < 0 ? Math.abs(days) + 'd overdue' : days === 0 ? 'Due today' : days + 'd left'}
+                            </span>
+                          )}
+                          {hasEvidence && (
+                            <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 99, background: 'rgba(34,197,94,0.1)', color: C.green }}>
+                              📎 Evidence
                             </span>
                           )}
                         </div>
@@ -201,19 +219,40 @@ export default function CompliancePage() {
                       </div>
                     </div>
                     {isExpanded && (
-                      <div style={{ padding: '0 16px 14px', borderTop: '1px solid ' + C.border }}>
-                        <p style={{ fontSize: 12, color: C.muted, lineHeight: 1.6, marginTop: 10, marginBottom: 10 }}>{item.description}</p>
-                        <p style={{ fontSize: 11, color: C.dim, marginBottom: 6, fontWeight: 600 }}>Evidence / Notes</p>
+                      <div style={{ padding: '0 16px 16px', borderTop: '1px solid ' + C.border }}>
+                        <p style={{ fontSize: 12, color: C.muted, lineHeight: 1.6, marginTop: 10, marginBottom: 12 }}>{item.description}</p>
+
+                        {/* Evidence notes */}
+                        <p style={{ fontSize: 11, color: C.dim, marginBottom: 6, fontWeight: 600 }}>Evidence notes</p>
                         <textarea
                           value={editNote[item.id] ?? ''}
                           onChange={e => setEditNote(prev => ({ ...prev, [item.id]: e.target.value }))}
-                          rows={3}
-                          placeholder="Add evidence notes, certificate numbers, renewal dates..."
-                          style={{ width: '100%', padding: '8px 10px', background: 'rgba(255,255,255,0.04)', border: '1px solid ' + C.border, borderRadius: 8, color: C.text, fontSize: 12, fontFamily: 'inherit', resize: 'vertical', outline: 'none', boxSizing: 'border-box', marginBottom: 8 }}
+                          rows={2}
+                          placeholder="Certificate number, renewal date, officer name..."
+                          style={{ width: '100%', padding: '8px 10px', background: 'rgba(255,255,255,0.04)', border: '1px solid ' + C.border, borderRadius: 8, color: C.text, fontSize: 12, fontFamily: 'inherit', resize: 'vertical', outline: 'none', boxSizing: 'border-box', marginBottom: 10 }}
                         />
-                        <button onClick={() => saveNote(item.id)} disabled={saving === item.id}
+
+                        {/* Evidence URL */}
+                        <p style={{ fontSize: 11, color: C.dim, marginBottom: 6, fontWeight: 600 }}>Evidence document URL</p>
+                        <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                          <input
+                            type="url"
+                            value={editUrl[item.id] ?? ''}
+                            onChange={e => setEditUrl(prev => ({ ...prev, [item.id]: e.target.value }))}
+                            placeholder="https://drive.google.com/... or Dropbox link"
+                            style={{ flex: 1, padding: '8px 10px', background: 'rgba(255,255,255,0.04)', border: '1px solid ' + C.border, borderRadius: 8, color: C.text, fontSize: 12, fontFamily: 'inherit', outline: 'none' }}
+                          />
+                          {item.evidence_url && (
+                            <a href={item.evidence_url} target="_blank" rel="noopener noreferrer"
+                              style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid rgba(34,197,94,0.3)', background: 'rgba(34,197,94,0.08)', color: C.green, fontSize: 11, fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center' }}>
+                              View ↗
+                            </a>
+                          )}
+                        </div>
+
+                        <button onClick={() => saveEvidence(item.id)} disabled={saving === item.id}
                           style={{ padding: '6px 14px', borderRadius: 8, border: 'none', background: '#8B5CF6', color: '#fff', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', opacity: saving === item.id ? 0.6 : 1 }}>
-                          {saving === item.id ? 'Saving...' : 'Save notes'}
+                          {saving === item.id ? 'Saving...' : 'Save evidence'}
                         </button>
                       </div>
                     )}
