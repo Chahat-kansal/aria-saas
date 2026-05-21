@@ -4,7 +4,7 @@ import Link from 'next/link';
 
 interface Product { id: string; name: string; price: number; barcode?: string | null; sku?: string | null; pos_categories?: { name: string } | null; }
 
-const C = { bg:'var(--bg-base)', card:'var(--bg-surface)', border:'transparent', text:'var(--text-primary)', muted:'var(--text-secondary)', dim:'var(--text-tertiary)', violet:'#8B5CF6', green:'#22C55E' };
+const C = { bg:'var(--bg-base)', card:'var(--bg-surface)', border:'transparent', text:'var(--text-primary)', muted:'var(--text-secondary)', dim:'var(--text-tertiary)', violet:'#006AFF', green:'#00B140' };
 
 export default function EverydayTicketsPage() {
   const [products, setProducts]   = useState<Product[]>([]);
@@ -127,7 +127,7 @@ export default function EverydayTicketsPage() {
 
           {/* Product list */}
           <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, overflow: 'hidden' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', borderBottom: `1px solid ${C.border}`, background: 'rgba(255,255,255,0.03)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', borderBottom: `1px solid ${C.border}`, background: '#FAFAFA' }}>
               <input type="checkbox" checked={selected.size === filtered.length && filtered.length > 0} onChange={toggleAll}
                 style={{ width: 14, height: 14, accentColor: C.violet }} />
               <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: C.dim }}>Select all ({filtered.length})</span>
