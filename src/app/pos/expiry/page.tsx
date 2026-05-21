@@ -25,7 +25,7 @@ interface Alert {
 const C = {
   bg: 'var(--bg-base)', card: 'var(--bg-surface)', text: 'var(--text-primary)',
   muted: 'var(--text-secondary)', dim: 'var(--text-tertiary)',
-  red: '#EF4444', orange: '#F97316', green: '#22C55E', violet: '#8B5CF6',
+  red: '#EF4444', orange: '#F97316', green: '#00B140', violet: '#006AFF',
   border: 'rgba(255,255,255,0.07)',
 }
 
