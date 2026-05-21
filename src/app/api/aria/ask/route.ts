@@ -242,6 +242,41 @@ async function _POST(req: Request) {
     }
   }
 
+  // ── IMAGE EARLY FAST-PATH ── check before loading context (saves 5-10s)
+  const msgForImageCheck = message.toLowerCase()
+  const isImageEarly = /poster|banner|flyer|graphic|generate.*image|create.*image|make.*image|design.*image|visual.*for/i.test(message)
+  if (isImageEarly) {
+    console.log('[aria/ask] image early fast-path for:', message.slice(0, 60))
+    const { generateImageDirect } = await import('@/lib/aria/image-direct')
+    const imgResult = await generateImageDirect(message, bid)
+    const responseText = imgResult.ok
+      ? `Here's your poster! Generated successfully.`
+      : `Sorry, I couldn't generate the image. ${imgResult.error ?? 'Please try again.'}`
+    let savedConvId = conversationId
+    try {
+      savedConvId = await upsertConversation(bid, user.id, conversationId, message, responseText, 'generate_image')
+    } catch { /* non-fatal */ }
+    const downloads = imgResult.ok && imgResult.download_url ? [{
+      filename: imgResult.filename ?? 'poster.png',
+      download_url: imgResult.download_url,
+      rows: 0,
+      format: 'png',
+    }] : []
+    if (savedConvId && downloads.length > 0) {
+      try {
+        const { data: conv } = await supabaseAdmin.from('aria_conversations').select('messages').eq('id', savedConvId).single()
+        const msgs = Array.isArray((conv as any)?.messages) ? (conv as any).messages : []
+        const lastMsg = msgs[msgs.length - 1]
+        if (lastMsg?.role === 'assistant') {
+          lastMsg.downloads = downloads
+          await supabaseAdmin.from('aria_conversations').update({ messages: msgs }).eq('id', savedConvId)
+        }
+      } catch { /* non-fatal */ }
+    }
+    return NextResponse.json({ response: responseText, conversation_id: savedConvId, intent: 'generate_image', downloads })
+  }
+  void msgForImageCheck
+
   // 2. Build context
   const ctx = await buildAskAriaContext(bid, conversationId ?? undefined)
 
