@@ -536,13 +536,12 @@ body {
 }
 .totals-grand-sub {
   font-size: 11px; color: var(--text-tertiary); margin-top: 4px;
-  font-family: var(--font-display, 'Fraunces', Georgia, serif); font-style: italic;
+  font-family: var(--font-ui, 'Inter', system-ui, sans-serif); font-style: normal;
 }
 .totals-grand-value {
-  font-family: var(--font-display, 'Fraunces', Georgia, serif);
-  font-style: italic; font-weight: 600; font-size: 30px;
-  background: linear-gradient(135deg, #E0F2E5, var(--terminal-sage-bright, #8FCAA5) 40%, var(--terminal-sage, #7FB897));
-  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  font-family: var(--font-ui, 'Inter', 'Manrope', system-ui, sans-serif);
+  font-style: normal; font-weight: 800; font-size: 30px; letter-spacing: -0.02em;
+  color: var(--terminal-sage-bright, #8FCAA5);
   background-clip: text; letter-spacing: -0.025em; line-height: 1;
   position: relative; z-index: 1;
 }
