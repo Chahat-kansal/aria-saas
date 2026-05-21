@@ -8,7 +8,7 @@ interface ScheduleData { outlet_id: string; outlet_name: string; week_start: str
 interface Decision { id: string; reasoning: string; projected_impact_cents: number; confidence_score: number; created_at: string; status: string; decision_data: ScheduleData; }
 
 const HOURS = Array.from({ length: 13 }, (_, i) => i + 9);
-const STAFF_COLORS = ['#8B5CF6', '#EC4899', '#3B82F6', '#14B8A6', '#F59E0B', '#EF4444', '#10B981', '#6366F1'];
+const STAFF_COLORS = ['#006AFF', '#EC4899', '#3B82F6', '#14B8A6', '#F59E0B', '#EF4444', '#10B981', '#6366F1'];
 
 function staffColor(staffId: string): string {
   const hash = staffId.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
@@ -147,7 +147,7 @@ export default function ScheduleAgentPage() {
       {pendingDec && !selected?.published && (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(52,211,153,0.08)', border: '1px solid rgba(52,211,153,0.25)', borderRadius: 12, padding: '12px 18px', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
           <div>
-            <span style={{ fontSize: 13, fontWeight: 700, color: '#34D399' }}>✨ Aria generated this roster</span>
+            <span style={{ fontSize: 13, fontWeight: 700, color: '#00B140' }}>✨ Aria generated this roster</span>
             <span style={{ fontSize: 12, color: 'var(--text-secondary)', marginLeft: 10 }}>
               {pendingDec.decision_data.total_hours ?? 0}h · A${((pendingDec.decision_data.total_cost_cents ?? 0) / 100).toFixed(0)} labour · {((pendingDec.confidence_score ?? 0) * 100).toFixed(0)}% confidence
             </span>
@@ -158,7 +158,7 @@ export default function ScheduleAgentPage() {
             )}
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={() => setConfirmPublish(true)} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: '#34D399', color: '#000', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+            <button onClick={() => setConfirmPublish(true)} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: '#00B140', color: '#000', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
               ✓ Publish & Email Staff
             </button>
             <button onClick={async () => {
@@ -204,7 +204,7 @@ export default function ScheduleAgentPage() {
                     return (
                       <div key={d} style={{ padding: '3px 4px', minHeight: 32, borderLeft: '1px solid var(--divider)', background: staff.length === 0 ? 'rgba(248,113,113,0.04)' : 'transparent' }}>
                         {staff.map(name => {
-                          const color = gridData.nameColorMap.get(name) ?? '#7C3AED';
+                          const color = gridData.nameColorMap.get(name) ?? '#006AFF';
                           return (
                             <span key={name} style={{ display: 'block', background: color + '22', color, borderRadius: 3, padding: '1px 5px', fontSize: 10, fontWeight: 600, marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                               {name.split(' ')[0]}
@@ -222,7 +222,7 @@ export default function ScheduleAgentPage() {
           {staffNames.length > 0 && (
             <div style={{ display: 'flex', gap: 8, marginTop: 14, flexWrap: 'wrap' }}>
               {staffNames.map(name => {
-                const color = gridData.nameColorMap.get(name) ?? '#7C3AED';
+                const color = gridData.nameColorMap.get(name) ?? '#006AFF';
                 return (
                   <span key={name} style={{ background: color + '22', color, borderRadius: 6, padding: '4px 10px', fontSize: 11, fontWeight: 600 }}>
                     {name}
@@ -246,7 +246,7 @@ export default function ScheduleAgentPage() {
       )}
 
       {toast && (
-        <div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 100, background: toast.ok ? '#34D399' : '#F87171', color: '#000', padding: '12px 20px', borderRadius: 12, fontSize: 13, fontWeight: 600, boxShadow: '0 4px 20px rgba(0,0,0,0.3)', maxWidth: 300 }}>
+        <div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 100, background: toast.ok ? '#00B140' : '#F87171', color: '#000', padding: '12px 20px', borderRadius: 12, fontSize: 13, fontWeight: 600, boxShadow: '0 4px 20px rgba(0,0,0,0.3)', maxWidth: 300 }}>
           {toast.message}
         </div>
       )}
@@ -267,7 +267,7 @@ export default function ScheduleAgentPage() {
               <button onClick={() => setConfirmPublish(false)} style={{ flex: 1, padding: '10px', borderRadius: 9, border: '1px solid var(--border-default)', background: 'transparent', color: 'var(--text-primary)', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
                 Cancel
               </button>
-              <button onClick={() => publish(pendingDec.id)} disabled={publishing} style={{ flex: 2, padding: '10px', borderRadius: 9, border: 'none', background: '#34D399', color: '#000', fontSize: 13, fontWeight: 700, cursor: publishing ? 'not-allowed' : 'pointer', fontFamily: 'inherit' }}>
+              <button onClick={() => publish(pendingDec.id)} disabled={publishing} style={{ flex: 2, padding: '10px', borderRadius: 9, border: 'none', background: '#00B140', color: '#000', fontSize: 13, fontWeight: 700, cursor: publishing ? 'not-allowed' : 'pointer', fontFamily: 'inherit' }}>
                 {publishing ? 'Sending…' : '✓ Publish & Email'}
               </button>
             </div>
