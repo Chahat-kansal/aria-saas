@@ -58,6 +58,23 @@ export async function generateRosterDraft(
     if (!salesByDay[dow]) salesByDay[dow] = []
     salesByDay[dow].push(Number(s.total_amount) || 0)
   }
+  // Hourly sales pattern
+  const salesByHour: Record<number, number[]> = {}
+  for (const s of sales) {
+    const hour = new Date(String(s.created_at)).getHours()
+    if (!salesByHour[hour]) salesByHour[hour] = []
+    salesByHour[hour].push(Number(s.total_amount) || 0)
+  }
+  const topHours = Object.entries(salesByHour)
+    .map(([h, vals]) => {
+      const avg = vals.reduce((a: number, b: number) => a + b, 0) / vals.length
+      return { hour: Number(h), avg, count: vals.length }
+    })
+    .sort((a, b) => b.avg - a.avg)
+    .slice(0, 6)
+    .map(h => h.hour + ':00 avg A$' + h.avg.toFixed(0) + '/sale (' + h.count + ' txns)')
+    .join(', ')
+
   const topDays = Object.entries(salesByDay)
     .map(([dow, vals]) => {
       const avg = vals.reduce((a, b) => a + b, 0) / vals.length
@@ -81,6 +98,9 @@ ${rules.map(r => `Day ${r.day_of_week} at ${r.hour_of_day}:00 — min ${r.min_st
 
 SALES PATTERN:
 ${topDays || 'No sales data — use standard Mon-Sat patterns.'}
+
+PEAK HOURS (schedule extra staff):
+${topHours || '10:00-14:00 and 17:00-20:00 standard peaks'}
 
 Generate a practical 5-6 day roster. Return JSON: {"shifts": [...], "reasoning": "2-3 sentences"}`
 
