@@ -15,7 +15,7 @@ interface Product {
   pos_categories?: { name: string; color: string } | null;
 }
 
-const C = { bg:'var(--bg-base)', card:'var(--bg-surface)', border:'transparent', text:'var(--text-primary)', muted:'var(--text-secondary)', dim:'var(--text-tertiary)', violet:'#8B5CF6', green:'#22C55E', red:'#EF4444' };
+const C = { bg:'var(--bg-base)', card:'var(--bg-surface)', border:'transparent', text:'var(--text-primary)', muted:'var(--text-secondary)', dim:'var(--text-tertiary)', violet:'#006AFF', green:'#00B140', red:'#EF4444' };
 
 const EMPTY_FORM = {
   name: '', sku: '', barcode: '', description: '',
@@ -201,7 +201,7 @@ export default function ProductsPage() {
     setCsvModal(false); setCsvRows([]); setImporting(false);
   }
 
-  const iCls = { background: 'rgba(10,9,16,0.8)', border: `1px solid ${C.border}`, borderRadius: 8, padding: '9px 12px', fontSize: 13, color: C.text, outline: 'none', fontFamily: "'Manrope',sans-serif", width: '100%', boxSizing: 'border-box' as const };
+  const iCls = { background: '#FFFFFF', border: `1px solid ${C.border}`, borderRadius: 8, padding: '9px 12px', fontSize: 13, color: C.text, outline: 'none', fontFamily: "'Manrope',sans-serif", width: '100%', boxSizing: 'border-box' as const };
   const lCls = { display: 'block', fontSize: 11, fontWeight: 700, color: C.muted, marginBottom: 6, textTransform: 'uppercase' as const, letterSpacing: '0.05em' };
   const fld = (k: keyof typeof form) => ({ value: form[k] as string, onChange: (e: React.ChangeEvent<HTMLInputElement|HTMLTextAreaElement|HTMLSelectElement>) => setForm(f => ({ ...f, [k]: e.target.value })) });
 
@@ -226,7 +226,7 @@ export default function ProductsPage() {
               Export CSV
             </button>
             {credits && (
-              <span style={{ fontSize: 11, padding: '4px 10px', borderRadius: 20, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.4)', whiteSpace: 'nowrap' }}>
+              <span style={{ fontSize: 11, padding: '4px 10px', borderRadius: 20, background: '#FAFAFA', border: '1px solid rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.4)', whiteSpace: 'nowrap' }}>
                 🖼 {credits.free_remaining > 0
                   ? `${credits.free_remaining} free image${credits.free_remaining !== 1 ? 's' : ''}`
                   : credits.paid_credits > 0
@@ -242,7 +242,7 @@ export default function ProductsPage() {
                   ? `✨ Aria is fetching images for ${data.queued} products. Refresh in 30 seconds to see them.`
                   : 'All products already have images.')
               }}
-              style={{ padding: '8px 14px', borderRadius: 9, border: '1px solid rgba(127,184,151,0.3)', background: 'rgba(127,184,151,0.08)', color: '#7FB897', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+              style={{ padding: '8px 14px', borderRadius: 9, border: '1px solid rgba(127,184,151,0.3)', background: 'rgba(127,184,151,0.08)', color: '#006AFF', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
               ✨ Find images
             </button>
             <button onClick={() => router.push('/pos/products/new')}
@@ -291,7 +291,7 @@ export default function ProductsPage() {
         <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, overflow: 'hidden' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
-              <tr style={{ background: 'rgba(255,255,255,0.03)', borderBottom: `1px solid ${C.border}` }}>
+              <tr style={{ background: '#FAFAFA', borderBottom: `1px solid ${C.border}` }}>
                 <th style={{ width: 40, padding: '10px 14px' }}>
                   <input type="checkbox" checked={allSelected} onChange={toggleAll} style={{ accentColor: C.violet, width: 14, height: 14 }} />
                 </th>
@@ -505,7 +505,7 @@ export default function ProductsPage() {
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
-                  <tr style={{ background: 'rgba(255,255,255,0.03)', borderBottom: `1px solid ${C.border}` }}>
+                  <tr style={{ background: '#FAFAFA', borderBottom: `1px solid ${C.border}` }}>
                     {['Name','SKU','Barcode','Price','Cost','Stock','Active'].map(h => (
                       <th key={h} style={{ textAlign: 'left', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: C.dim, padding: '8px 12px' }}>{h}</th>
                     ))}
