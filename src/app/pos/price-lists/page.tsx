@@ -43,7 +43,7 @@ export default function PriceListsPage() {
     <div className="p-6 max-w-6xl mx-auto">
       <div className="mb-6 flex items-start justify-between gap-4">
         <div><h1 className="text-xl font-semibold text-[#1a1a16]">Price Lists</h1><p className="text-xs text-[rgba(26,26,22,.45)] mt-0.5">Custom pricing for customer groups and promotions</p></div>
-        <button onClick={() => setShowAdd(true)} className="px-4 py-2 rounded-xl text-sm font-semibold text-white" style={{ background: '#8B5CF6' }}>+ New Price List</button>
+        <button onClick={() => setShowAdd(true)} className="px-4 py-2 rounded-xl text-sm font-semibold text-white" style={{ background: '#006AFF' }}>+ New Price List</button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -100,7 +100,7 @@ export default function PriceListsPage() {
                           <td className="px-4 py-3 font-medium text-[#1a1a16]">{item.pos_products?.name ?? 'Unknown'}</td>
                           <td className="px-4 py-3 text-[rgba(26,26,22,.5)]">A${std.toFixed(2)}</td>
                           <td className="px-4 py-3 font-semibold text-[#1a1a16]">A${override.toFixed(2)}</td>
-                          <td className="px-4 py-3 text-sm" style={{ color: saving > 0 ? '#8B5CF6' : saving < 0 ? '#ef4444' : '#9ca3af' }}>{saving > 0 ? `-A$${saving.toFixed(2)}` : saving < 0 ? `+A$${Math.abs(saving).toFixed(2)}` : '—'}</td>
+                          <td className="px-4 py-3 text-sm" style={{ color: saving > 0 ? '#006AFF' : saving < 0 ? '#ef4444' : '#9ca3af' }}>{saving > 0 ? `-A$${saving.toFixed(2)}` : saving < 0 ? `+A$${Math.abs(saving).toFixed(2)}` : '—'}</td>
                         </tr>
                       );
                     })}
@@ -127,7 +127,7 @@ export default function PriceListsPage() {
             </div>
             <div className="flex gap-2 mt-5">
               <button onClick={() => setShowAdd(false)} className="flex-1 py-2.5 rounded-xl text-sm border border-[rgba(0,0,0,.12)] text-[rgba(26,26,22,.5)]">Cancel</button>
-              <button onClick={createList} disabled={saving || !form.name} className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-40" style={{ background: '#8B5CF6' }}>{saving ? 'Creating…' : 'Create'}</button>
+              <button onClick={createList} disabled={saving || !form.name} className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-40" style={{ background: '#006AFF' }}>{saving ? 'Creating…' : 'Create'}</button>
             </div>
           </div>
         </div>
