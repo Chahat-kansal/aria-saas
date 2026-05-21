@@ -104,11 +104,21 @@ async function _POST(req: Request) {
     const days_of_stock = stock / velocity;
 
     const reorderPt = item.reorderPoint ?? 0;
-    const needsReorder = stock <= reorderPt || stock === 0;
-    if (!needsReorder && days_of_stock > 30) continue;
+    // Reorder settings gates
+    const settings = body.settings as { min_daily_sales?: number; min_stock_threshold?: number; order_weeks_cover?: number } | undefined;
+    const minDailySales = settings?.min_daily_sales ?? 0;
+    const minStockThreshold = settings?.min_stock_threshold ?? Infinity;
+    const orderWeeksCover = settings?.order_weeks_cover ?? 4;
+
+    // Velocity gate: skip if product barely sells
+    if (minDailySales > 0 && velocity < minDailySales) continue;
+
+    const needsReorder = stock <= (reorderPt || minStockThreshold) || stock === 0;
+    if (!needsReorder && days_of_stock > (orderWeeksCover * 7)) continue;
 
     const adjusted_velocity = velocity * maxUplift;
-    const suggested_quantity = Math.max(0, Math.ceil((adjusted_velocity * 30) - stock));
+    const weeksOfStock = orderWeeksCover ?? 4;
+    const suggested_quantity = Math.max(0, Math.ceil((adjusted_velocity * weeksOfStock * 7) - stock));
     if (suggested_quantity === 0) continue;
 
     const urgency =
