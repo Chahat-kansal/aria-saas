@@ -1,3 +1,4 @@
+// force-recompile:1779337019
 'use client';
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { ModifierModal } from '@/components/pos/ModifierModal';
