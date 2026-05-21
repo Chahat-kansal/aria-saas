@@ -53,7 +53,7 @@
     },
     {
       "path": "/api/cron/daily-briefing-poll",
-      "schedule": "*/15 * * * *"
+      "schedule": "0 3 * * *"
     },
     {
       "path": "/api/cron/publish-scheduled",
@@ -89,7 +89,7 @@
     },
     {
       "path": "/api/cron/signal-engine",
-      "schedule": "*/30 * * * *"
+      "schedule": "0 3 * * *"
     },
     {
       "path": "/api/cron/customer-scoring",
@@ -114,6 +114,10 @@
     {
       "path": "/api/cron/parcel-sync",
       "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/cron/leave-accrual",
+      "schedule": "0 1 * * *"
     }
   ]
 }
