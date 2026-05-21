@@ -8,6 +8,9 @@ import LiquorProductFields from './LiquorProductFields'
 import CafeProductFields from './CafeProductFields'
 import BakeryProductFields from './BakeryProductFields'
 import RestaurantProductFields from './RestaurantProductFields'
+import ClothingProductFields from './ClothingProductFields'
+import PharmacyProductFields from './PharmacyProductFields'
+import ConvenienceProductFields from './ConvenienceProductFields'
 
 interface Category { id: string; name: string }
 
@@ -50,7 +53,7 @@ export default function IndustryProductForm({ form, setForm }: Props) {
     <div>
       <div className="flex items-center justify-between mb-3">
         <span className="text-xs px-2 py-1 rounded-full bg-[rgba(127,184,151,.15)] text-[#2D5240]">
-          {INDUSTRY_LABELS[industry]} product
+          {INDUSTRY_LABELS[industry] ?? industry} product
         </span>
         <button
           type="button"
@@ -62,11 +65,14 @@ export default function IndustryProductForm({ form, setForm }: Props) {
         </button>
       </div>
       <CommonFields form={form} setForm={setForm} categories={categories} />
-      {industry === 'retail'     && <RetailProductFields     form={form} setForm={setForm} />}
-      {industry === 'liquor'     && <LiquorProductFields     form={form} setForm={setForm} />}
-      {industry === 'cafe'       && <CafeProductFields       form={form} setForm={setForm} />}
-      {industry === 'bakery'     && <BakeryProductFields     form={form} setForm={setForm} />}
-      {industry === 'restaurant' && <RestaurantProductFields form={form} setForm={setForm} />}
+      {industry === 'retail'       && <RetailProductFields      form={form} setForm={setForm} />}
+      {industry === 'liquor'       && <LiquorProductFields      form={form} setForm={setForm} />}
+      {industry === 'cafe'         && <CafeProductFields        form={form} setForm={setForm} />}
+      {industry === 'bakery'       && <BakeryProductFields      form={form} setForm={setForm} />}
+      {industry === 'restaurant'   && <RestaurantProductFields  form={form} setForm={setForm} />}
+      {industry === 'fashion'      && <ClothingProductFields    form={form} setForm={setForm} />}
+      {industry === 'pharmacy'     && <PharmacyProductFields    form={form} setForm={setForm} />}
+      {industry === 'convenience'  && <ConvenienceProductFields form={form} setForm={setForm} />}
     </div>
   )
 }
