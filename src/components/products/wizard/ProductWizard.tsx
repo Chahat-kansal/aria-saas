@@ -1,5 +1,5 @@
 'use client'
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import IndustryProductForm from '@/components/products/industry/IndustryProductForm'
 import type { ProductDraft } from '@/components/products/industry/CommonFields'
@@ -88,6 +88,49 @@ export default function ProductWizard({ step, id, businessId, draft, suppliers, 
   const sku = String(ipDraft.sku ?? '')
   const barcode = String(ipDraft.barcode ?? '')
   const description = String(ipDraft.description ?? '')
+
+  // Barcode lookup — autofill from global_products / Open Food Facts
+  const [barcodeLookupResult, setBarcodeLookupResult] = useState<Record<string, unknown> | null>(null)
+  const [barcodeLookupStatus, setBarcodeLookupStatus] = useState<'idle'|'loading'|'found'|'not_found'>('idle')
+  const barcodeRef = useRef<string>('')
+
+  useEffect(() => {
+    const bc = String(ipDraft.barcode ?? '').trim()
+    if (bc.length < 6) { setBarcodeLookupStatus('idle'); return }
+    if (bc === barcodeRef.current) return
+    barcodeRef.current = bc
+    const timer = setTimeout(async () => {
+      setBarcodeLookupStatus('loading')
+      try {
+        const r = await fetch(`/api/products/barcode-lookup?barcode=${encodeURIComponent(bc)}`)
+        const d = await r.json()
+        if (d.found && d.product) {
+          setBarcodeLookupResult(d.product)
+          setBarcodeLookupStatus('found')
+        } else {
+          setBarcodeLookupStatus('not_found')
+        }
+      } catch { setBarcodeLookupStatus('idle') }
+    }, 600)
+    return () => clearTimeout(timer)
+  }, [ipDraft.barcode])
+
+  const applyBarcodeLookup = useCallback(() => {
+    if (!barcodeLookupResult) return
+    const p = barcodeLookupResult as any
+    setIpDraft(f => ({
+      ...f,
+      name: p.name ?? f.name,
+      brand: p.brand ?? f.brand,
+      description: p.description ?? f.description,
+      size: p.size ?? f.size,
+      image_url: p.image_url ?? f.image_url,
+    }))
+    if (p.suggested_price_cents) setPrice(String(p.suggested_price_cents / 100))
+    if (p.category) setCategoryId(p.category)
+    setBarcodeLookupStatus('idle')
+    setBarcodeLookupResult(null)
+  }, [barcodeLookupResult])
 
   // Step 2 state
   const [categoryId, setCategoryId] = useState(draft.category_id ?? '')
