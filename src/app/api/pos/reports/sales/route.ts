@@ -32,6 +32,7 @@ async function _GET(req: Request) {
     .select('id, sale_number, total_amount, tax_amount, discount_amount, payment_method, status, created_at, customer_id, served_by')
     .eq('business_id', bid)
     .not('sale_number', 'is', null)
+    .neq('status', 'voided')
     .gte('created_at', `${from}T00:00:00`)
     .lte('created_at', `${to}T23:59:59`)
     .order('created_at', { ascending: false })
