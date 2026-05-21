@@ -139,7 +139,7 @@ export default function ChurnPage() {
                   <div key={d.day} className="flex items-center gap-3">
                     <span className="text-xs w-20 shrink-0" style={{ color: isSlowest ? '#ef4444' : '#9ca3af' }}>{d.day.slice(0, 3)}</span>
                     <div className="flex-1 h-5 rounded-lg overflow-hidden" style={{ background: 'rgba(255,255,255,0.05)' }}>
-                      <div className="h-full rounded-lg transition-all" style={{ width: `${barPct}%`, background: isSlowest ? '#ef4444' : '#1D9E75' }} />
+                      <div className="h-full rounded-lg transition-all" style={{ width: barPct + '%', background: isSlowest ? '#ef4444' : '#1D9E75' }} />
                     </div>
                     <span className="text-xs w-16 text-right shrink-0" style={{ color: isSlowest ? '#ef4444' : '#9ca3af' }}>
                       A${(d.avg / 100).toFixed(0)}

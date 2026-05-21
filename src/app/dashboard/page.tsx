@@ -55,6 +55,7 @@ async function RetailCafeDashboard({ business }: { business: any }) {
   const supabase = createServerSupabaseClient();
   const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
   const today = new Date().toISOString().slice(0, 10);
+  const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
 
   const [
     { data: activity },
@@ -63,6 +64,7 @@ async function RetailCafeDashboard({ business }: { business: any }) {
     { data: churnCustomers },
     { data: bookings },
     { data: posToday },
+    { data: posYesterday },
     { data: lowStock },
   ] = await Promise.all([
     supabase.from('activity_log').select('*').eq('business_id', business.id).order('created_at', { ascending: false }).limit(10),
@@ -71,11 +73,14 @@ async function RetailCafeDashboard({ business }: { business: any }) {
     supabase.from('customers').select('*').eq('business_id', business.id).in('churn_risk', ['medium', 'high']).limit(5),
     supabase.from('bookings').select('value').eq('business_id', business.id).gte('date', startOfMonth),
     supabase.from('pos_sales').select('total_amount').eq('business_id', business.id).gte('created_at', `${today}T00:00:00`).eq('status', 'completed'),
+    supabase.from('pos_sales').select('total_amount').eq('business_id', business.id).gte('created_at', `${yesterday}T00:00:00`).lt('created_at', `${today}T00:00:00`).eq('status', 'completed'),
     supabase.from('pos_products').select('id, name, stock_quantity, low_stock_threshold').eq('business_id', business.id).eq('track_stock', true).lte('stock_quantity', 5),
   ]);
 
   const revenueThisMonth = (bookings ?? []).reduce((s: number, b: any) => s + (b.value || 0), 0);
   const posSalesToday = (posToday ?? []).reduce((s: number, s2: any) => s + (s2.total_amount || 0), 0);
+  const posSalesYesterday = (posYesterday ?? []).reduce((s: number, s2: any) => s + (s2.total_amount || 0), 0);
+  const posDeltaPct = posSalesYesterday > 0 ? Math.round(((posSalesToday - posSalesYesterday) / posSalesYesterday) * 100) : null;
   const totalLeakSavings = (leaks ?? []).reduce((s: number, l: any) => s + (l.monthly_loss || 0), 0);
   const now = new Date();
   const greeting = now.getHours() < 12 ? 'Good morning' : now.getHours() < 17 ? 'Good afternoon' : 'Good evening';
@@ -90,7 +95,7 @@ async function RetailCafeDashboard({ business }: { business: any }) {
         {/* Stats */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <StatCard label="Revenue this month"    value={`$${revenueThisMonth.toLocaleString()}`} change="from connected records"        gradient="linear-gradient(135deg,rgba(29,158,117,0.2),rgba(29,158,117,0.05))"  border="rgba(29,158,117,0.3)" />
-          <StatCard label="POS sales today"       value={`$${posSalesToday.toFixed(2)}`}          change={`${(posToday ?? []).length} transactions`} gradient="linear-gradient(135deg,rgba(37,99,235,0.2),rgba(37,99,235,0.05))"   border="rgba(37,99,235,0.3)" />
+          <StatCard label="POS sales today"       value={`$${posSalesToday.toFixed(2)}`}          change={posDeltaPct !== null ? `${posDeltaPct > 0 ? '+' : ''}${posDeltaPct}% vs yesterday` : `${(posToday ?? []).length} transactions`} gradient="linear-gradient(135deg,rgba(37,99,235,0.2),rgba(37,99,235,0.05))"   border="rgba(37,99,235,0.3)" />
           <StatCard label="Google rating"         value={business.google_rating ? `${business.google_rating}★` : '—'} change={`${business.google_review_count || 0} reviews`} gradient="linear-gradient(135deg,rgba(245,158,11,0.2),rgba(245,158,11,0.05))" border="rgba(245,158,11,0.3)" />
           <StatCard label="Recoverable leaks"     value={`$${totalLeakSavings.toLocaleString()}/mo`} change="from profit leak fixes"  gradient="linear-gradient(135deg,rgba(239,68,68,0.15),rgba(239,68,68,0.03))"  border="rgba(239,68,68,0.2)" />
         </div>

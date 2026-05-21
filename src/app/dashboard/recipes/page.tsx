@@ -414,7 +414,7 @@ function TrainingTab({ businessId, recipes }: { businessId: string; recipes: Rec
                       disabled={saving}
                       onChange={e => updateStatus(s.id, r.id, e.target.value)}
                       className="text-xs rounded-lg px-2 py-1 outline-none border-0"
-                      style={{ background: `${statusColor[status]}22`, color: statusColor[status] }}>
+                      style={{ background: statusColor[status] + '22', color: statusColor[status] }}>
                       <option value="not_started">Not started</option>
                       <option value="in_progress">In progress</option>
                       <option value="completed">Completed</option>
