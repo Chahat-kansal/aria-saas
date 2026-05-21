@@ -2817,9 +2817,12 @@ export default function TerminalPage() {
                         ) : (
                           <>
                             <button className="charge-btn"
-                              onClick={() => registerIsOpen && setTerminalView('checkout')}
-                              disabled={!registerIsOpen || processing}
-                              style={{ opacity: !registerIsOpen ? 0.4 : 1 }}>
+                              onClick={() => {
+                                if (roundedTotal <= 0) { alert('Please set prices for all items before charging.'); return; }
+                                if (registerIsOpen) setTerminalView('checkout');
+                              }}
+                              disabled={!registerIsOpen || processing || roundedTotal <= 0}
+                              style={{ opacity: (!registerIsOpen || roundedTotal <= 0) ? 0.4 : 1 }}>
                               <span>Charge A${roundedTotal.toFixed(2)}</span>
                               <span className="arrow">→</span>
                             </button>
