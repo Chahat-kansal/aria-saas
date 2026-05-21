@@ -40,7 +40,7 @@ export function FastGridLayout({ products, onProductClick, showStock = true }: L
 
   return (
     <>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, padding: 10 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 10, padding: 10 }}>
         {capped.map(p => {
           const status = getStockStatus(p)
           const isOut = status === 'out'

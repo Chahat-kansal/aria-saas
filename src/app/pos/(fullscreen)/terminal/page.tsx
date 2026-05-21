@@ -2119,7 +2119,7 @@ export default function TerminalPage() {
 
         {/* ── LEFT: Product browser ──────────────────────────────── */}
         <div className={`pos-products-panel relative flex flex-col overflow-hidden ${mobileTab !== 'products' ? 'hidden md:flex' : 'flex'}`}
-          style={{ flex: '1 1 60%', minWidth: 0, borderRight: '1px solid var(--terminal-sage-rim,rgba(127,184,151,0.18))', background: 'var(--terminal-glass-2,rgba(20,33,26,0.72))', backdropFilter: 'blur(40px) saturate(1.4)', WebkitBackdropFilter: 'blur(40px) saturate(1.4)' }}>
+          style={{ flex: '1 1 0', minWidth: 0, borderRight: '1px solid var(--terminal-sage-rim,rgba(127,184,151,0.18))', background: 'var(--terminal-glass-2,rgba(20,33,26,0.72))', backdropFilter: 'blur(40px) saturate(1.4)', WebkitBackdropFilter: 'blur(40px) saturate(1.4)' }}>
 
           {/* EOD Markdown banner */}
           {eodMarkdown && cart.length > 0 && (
@@ -2533,7 +2533,7 @@ export default function TerminalPage() {
 
         {/* ── CENTRE: Cart ──────────────────────────────────────── */}
         <div className={`pos-cart-panel flex flex-col overflow-hidden ${mobileTab !== 'cart' ? 'hidden md:flex' : 'flex'}`}
-          style={{ flex: '0 0 40%', minWidth: 380, maxWidth: 560, background: 'var(--terminal-glass-1,rgba(28,44,36,0.55))', backdropFilter: 'blur(40px) saturate(1.4)', WebkitBackdropFilter: 'blur(40px) saturate(1.4)', borderLeft: '1px solid var(--terminal-sage-rim,rgba(127,184,151,0.18))', minHeight: 0 }}>
+          style={{ flex: '0 0 360px', width: 360, background: 'var(--terminal-glass-1,rgba(28,44,36,0.55))', backdropFilter: 'blur(40px) saturate(1.4)', WebkitBackdropFilter: 'blur(40px) saturate(1.4)', borderLeft: '1px solid var(--terminal-sage-rim,rgba(127,184,151,0.18))', minHeight: 0 }}>
 
           {showReceipt && terminalView !== 'confirm' ? (
             /* ── RECEIPT VIEW (non-confirm, e.g. reprint) ─────── */
