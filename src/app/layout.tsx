@@ -54,6 +54,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" data-theme="dark" suppressHydrationWarning>
       <body className={`${sora.variable} ${mono.variable} ${fraunces.variable} ${inter.variable} font-sans antialiased`}>
+        {/* Anti-flash: restore theme before paint */}
+        <script dangerouslySetInnerHTML={{ __html: `(function(){try{var t=localStorage.getItem('pos_theme');if(t==='light')document.documentElement.setAttribute('data-theme','light');}catch(e){}})()` }} />
         <PostHogProvider>
           <ThemeProvider>
             <Providers>{children}</Providers>
@@ -63,3 +65,4 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     </html>
   );
 }
+
