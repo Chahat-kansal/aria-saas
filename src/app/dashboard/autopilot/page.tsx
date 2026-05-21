@@ -97,7 +97,7 @@ export default function AutopilotPage(){
       <div style={{display:"flex",gap:0,borderBottom:('1px solid ' + C.border),padding:"0 28px"}}>
         {(["pending","history"] as const).map(t=>(
           <button key={t} onClick={()=>setTab(t)}
-            style={{padding:"12px 16px",border:"none",borderBottom:('2px solid ' + tab===t?C.violet:"transparent"),background:"transparent",color:tab===t?C.text:C.muted,fontSize:13,fontWeight:tab===t?600:400,cursor:"pointer",fontFamily:"inherit",textTransform:"capitalize"}}>
+            style={{padding:"12px 16px",border:"none",borderBottom: tab===t ? '2px solid ' + C.violet : '2px solid transparent',background:"transparent",color:tab===t?C.text:C.muted,fontSize:13,fontWeight:tab===t?600:400,cursor:"pointer",fontFamily:"inherit",textTransform:"capitalize"}}>
             {t==="pending"?('Pending actions (' + stats.pending + ')'):"History"}
           </button>
         ))}

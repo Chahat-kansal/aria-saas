@@ -125,20 +125,20 @@ export default function CashFlowPage() {
         <div style={{display:'flex', gap:8, flexWrap:'wrap'}}>
           {(['base','optimistic','pessimistic'] as const).map(s => (
             <button key={s} onClick={()=>setScenario(s)}
-              style={{padding:'6px 12px', borderRadius:8, border:('1px solid ' + scenario===s?(s==='optimistic'?C.green:s==='pessimistic'?C.red:C.violet):C.border), background:scenario===s?(s==='optimistic'?C.green:s==='pessimistic'?C.red:C.violet + '20'):'transparent', color:scenario===s?(s==='optimistic'?C.green:s==='pessimistic'?C.red:C.violet):C.muted, fontSize:11, fontWeight:600, cursor:'pointer', fontFamily:'inherit', textTransform:'capitalize'}}>
+              style={{padding:'6px 12px', borderRadius:8, border: scenario===s ? '1px solid ' + (s==='optimistic'?C.green:s==='pessimistic'?C.red:C.violet) : '1px solid ' + C.border, background: scenario===s ? (s==='optimistic'?C.green:s==='pessimistic'?C.red:C.violet) + '20' : 'transparent', color: scenario===s ? (s==='optimistic'?C.green:s==='pessimistic'?C.red:C.violet) : C.muted, fontSize:11, fontWeight:600, cursor:'pointer', fontFamily:'inherit', textTransform:'capitalize'}}>
               {s}
             </button>
           ))}
           <div style={{width:1, background:C.border, margin:'0 4px'}} />
           {(['chart','table'] as const).map(v => (
             <button key={v} onClick={()=>setView(v)}
-              style={{padding:'6px 12px', borderRadius:8, border:('1px solid ' + view===v?C.violet:C.border), background:view===v?'rgba(139,92,246,0.1)':'transparent', color:view===v?C.violet:C.muted, fontSize:11, fontWeight:600, cursor:'pointer', fontFamily:'inherit', textTransform:'capitalize'}}>
+              style={{padding:'6px 12px', borderRadius:8, border: view===v ? '1px solid ' + C.violet : '1px solid ' + C.border, background: view===v ? 'rgba(139,92,246,0.1)' : 'transparent', color: view===v ? C.violet : C.muted, fontSize:11, fontWeight:600, cursor:'pointer', fontFamily:'inherit', textTransform:'capitalize'}}>
               {v}
             </button>
           ))}
           {([14,30,60] as const).map(h => (
             <button key={h} onClick={()=>setHorizon(h)}
-              style={{padding:'6px 12px', borderRadius:8, border:'1px solid ${horizon===h?C.amber:C.border}', background:horizon===h?'rgba(245,158,11,0.1)':'transparent', color:horizon===h?C.amber:C.muted, fontSize:11, fontWeight:600, cursor:'pointer', fontFamily:'inherit'}}>
+              style={{padding:'6px 12px', borderRadius:8, border: horizon===h ? '1px solid ' + C.amber : '1px solid ' + C.border, background: horizon===h ? 'rgba(245,158,11,0.1)' : 'transparent', color: horizon===h ? C.amber : C.muted, fontSize:11, fontWeight:600, cursor:'pointer', fontFamily:'inherit'}}>
               {h}d
             </button>
           ))}
