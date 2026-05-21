@@ -201,6 +201,7 @@ async function _POST(req: Request) {
   // Create sale items
   const saleItems = items.map((i: any) => ({
     sale_id: sale.id,
+    business_id: business.id,
     product_id: i.product_id,
     product_name: i.product_name,
     product_sku: i.product_sku ?? null,
@@ -224,6 +225,19 @@ async function _POST(req: Request) {
     await supabase.from('pos_sales').delete().eq('id', sale.id);
     return NextResponse.json({ error: itemsErr.message }, { status: 500 });
   }
+
+  // Record payment breakdown in pos_sale_payments
+  try {
+    const paymentRows: object[] = [];
+    const pm = payment_method ?? 'cash';
+    if (pm === 'split') {
+      if ((split_cash ?? 0) > 0) paymentRows.push({ sale_id: sale.id, business_id: business.id, payment_method: 'cash', amount: split_cash ?? 0 });
+      if ((split_card ?? 0) > 0) paymentRows.push({ sale_id: sale.id, business_id: business.id, payment_method: 'card', amount: split_card ?? 0 });
+    } else {
+      paymentRows.push({ sale_id: sale.id, business_id: business.id, payment_method: pm, amount: total_amount ?? 0 });
+    }
+    if (paymentRows.length) await supabase.from('pos_sale_payments').insert(paymentRows);
+  } catch { /* non-fatal */ }
 
   // Decrement stock + log stock movements
   const stockOps: Promise<any>[] = [];
@@ -379,3 +393,4 @@ async function _POST(req: Request) {
 }
 
 export const POST = withErrorCapture('pos/sale', _POST)
+
