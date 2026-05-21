@@ -20,35 +20,41 @@ export function usePOSTheme() {
   return useContext(ThemeContext)
 }
 
-export function POSThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setThemeState] = useState<POSTheme>('dark')
-  const [mounted, setMounted] = useState(false)
+// Read theme synchronously — runs before first render, no flash
+function getInitialTheme(): POSTheme {
+  if (typeof window === 'undefined') return 'dark'
+  try {
+    const saved = localStorage.getItem('pos_theme')
+    if (saved === 'light' || saved === 'dark') return saved
+  } catch { /* ignore */ }
+  // Also check html[data-theme] set by anti-flash script
+  try {
+    const dom = document.documentElement.getAttribute('data-theme')
+    if (dom === 'light' || dom === 'dark') return dom
+  } catch { /* ignore */ }
+  return 'dark'
+}
 
+export function POSThemeProvider({ children }: { children: React.ReactNode }) {
+  // Read synchronously so first render matches saved preference
+  const [theme, setThemeState] = useState<POSTheme>(getInitialTheme)
+
+  // Sync both attributes whenever theme changes
   useEffect(() => {
-    setMounted(true)
-    try {
-      const saved = localStorage.getItem('pos_theme') as POSTheme
-      if (saved === 'light' || saved === 'dark') {
-        setThemeState(saved)
-        // Sync html[data-theme] so CSS vars apply immediately
-        document.documentElement.setAttribute('data-theme', saved)
-      }
-    } catch { /* ignore */ }
-  }, [])
+    document.documentElement.setAttribute('data-theme', theme)
+    document.documentElement.setAttribute('data-pos-theme-root', theme)
+    try { localStorage.setItem('pos_theme', theme) } catch { /* ignore */ }
+  }, [theme])
 
   const setTheme = (t: POSTheme) => {
     setThemeState(t)
-    // Always set BOTH attributes so both systems stay in sync
+    // Set immediately (don't wait for useEffect) so sidebar toggle is instant
     document.documentElement.setAttribute('data-theme', t)
     try { localStorage.setItem('pos_theme', t) } catch { /* ignore */ }
   }
 
   const toggleTheme = () => setTheme(theme === 'dark' ? 'light' : 'dark')
   const colors = getTheme(theme)
-
-  if (!mounted) {
-    return <div style={{ background: '#030510', minHeight: '100vh' }}>{children}</div>
-  }
 
   return (
     <ThemeContext.Provider value={{ theme, colors, toggleTheme, setTheme }}>
