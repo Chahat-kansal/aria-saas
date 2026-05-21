@@ -52,6 +52,9 @@ html[data-theme="light"] {
 
 html[data-theme="dark"], html:not([data-theme]) {
   --bg-base: #0E1411;
+  --border-default: #2A2540;
+  --border-subtle: #1C1928;
+  --border-strong: #3D3560;
   --bg-canvas: #0A100C;
   --bg-surface: #131A16;
   --bg-elevated: #1A2620;
