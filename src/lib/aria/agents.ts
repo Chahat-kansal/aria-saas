@@ -115,7 +115,7 @@ export async function runAgent(
     maxTokens: 600,
     businessId: ctx.business_id,
     agentKey,
-    role: 'agent',
+    role: 'other',
   }, { ...FALLBACK_REC, agent: agentKey })
 
   const rec: Recommendation = { ...result.data, agent: agentKey }
