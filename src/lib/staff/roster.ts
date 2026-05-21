@@ -77,6 +77,37 @@ export function summariseRoster(shifts: ShiftEntry[]): RosterSummary {
   }
 }
 
+// AU Fair Work penalty multipliers — General Retail + Hospitality Award 2020
+const AU_PUBLIC_HOLIDAYS = new Set([
+  '2025-12-25','2025-12-26','2026-01-01','2026-01-26','2026-03-09',
+  '2026-04-03','2026-04-04','2026-04-05','2026-04-06','2026-04-25',
+  '2026-06-01','2026-11-03','2026-12-25','2026-12-26',
+])
+const PENALTY_MULTIPLIERS: Record<string, number> = {
+  weekday: 1.0,
+  saturday: 1.25,
+  sunday: 1.50,
+  public_holiday: 2.25,
+  overtime_1: 1.50, // first 2h overtime
+  overtime_2: 2.00, // beyond 10h
+}
+function getPenaltyMultiplier(startIso: string): number {
+  const date = startIso.slice(0, 10)
+  if (AU_PUBLIC_HOLIDAYS.has(date)) return PENALTY_MULTIPLIERS.public_holiday
+  const dow = new Date(startIso).getDay()
+  if (dow === 0) return PENALTY_MULTIPLIERS.sunday
+  if (dow === 6) return PENALTY_MULTIPLIERS.saturday
+  return PENALTY_MULTIPLIERS.weekday
+}
+function applyOvertimePenalty(hours: number, baseRateCents: number, multiplier: number): number {
+  // Overtime only applies on weekdays (AU Fair Work)
+  if (multiplier !== 1.0 || hours <= 8) return Math.round(hours * baseRateCents * multiplier)
+  const regularPay = 8 * baseRateCents
+  const ot1Hours = Math.min(hours - 8, 2)
+  const ot2Hours = Math.max(hours - 10, 0)
+  return Math.round(regularPay + ot1Hours * baseRateCents * PENALTY_MULTIPLIERS.overtime_1 + ot2Hours * baseRateCents * PENALTY_MULTIPLIERS.overtime_2)
+}
+
 export async function hydrateShiftCosts(
   shifts: Omit<ShiftEntry, 'cost_cents'>[],
   businessId: string,
@@ -85,8 +116,10 @@ export async function hydrateShiftCosts(
   for (const s of shifts) {
     const hours = computeShiftHours(s.start_time, s.end_time, s.break_minutes)
     const startDate = new Date(s.start_time)
-    const rateCents = await resolveHourlyRateCents(businessId, s.staff_member_id, startDate, s.start_time.slice(11, 16))
-    result.push({ ...s, hours, cost_cents: Math.round(hours * rateCents) })
+    const baseRateCents = await resolveHourlyRateCents(businessId, s.staff_member_id, startDate, s.start_time.slice(11, 16))
+    const multiplier = getPenaltyMultiplier(s.start_time)
+    const cost_cents = applyOvertimePenalty(hours, baseRateCents, multiplier)
+    result.push({ ...s, hours, cost_cents })
   }
   return result
 }
