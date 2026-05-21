@@ -1,6 +1,6 @@
 'use client'
 import React, { createContext, useContext, useState, useEffect } from 'react'
-import { POSTheme, getTheme, ThemeColors, DARK_THEME } from '@/lib/pos-theme'
+import { POSTheme, getTheme, ThemeColors, DARK_THEME, LIGHT_THEME } from '@/lib/pos-theme'
 
 interface ThemeContextValue {
   theme: POSTheme
@@ -28,12 +28,18 @@ export function POSThemeProvider({ children }: { children: React.ReactNode }) {
     setMounted(true)
     try {
       const saved = localStorage.getItem('pos_theme') as POSTheme
-      if (saved === 'light' || saved === 'dark') setThemeState(saved)
+      if (saved === 'light' || saved === 'dark') {
+        setThemeState(saved)
+        // Sync html[data-theme] so CSS vars apply immediately
+        document.documentElement.setAttribute('data-theme', saved)
+      }
     } catch { /* ignore */ }
   }, [])
 
   const setTheme = (t: POSTheme) => {
     setThemeState(t)
+    // Always set BOTH attributes so both systems stay in sync
+    document.documentElement.setAttribute('data-theme', t)
     try { localStorage.setItem('pos_theme', t) } catch { /* ignore */ }
   }
 
