@@ -810,7 +810,14 @@ html[data-theme="light"] .pos-sidebar-wrapper input::placeholder {
   --violet-soft: rgba(0,106,255,0.20);
   --violet-dim: rgba(0,106,255,0.15);
 }
-.pos-sidebar-wrapper aside {
+/* Sidebar aside: dark = forest green, light = Square dark #1A1A1A */
+html[data-theme="light"] .pos-sidebar-wrapper aside,
+[data-pos-theme="light"] .pos-sidebar-wrapper aside {
   background: #1A1A1A !important;
   box-shadow: inset -1px 0 0 rgba(255,255,255,0.06) !important;
+}
+html[data-theme="dark"] .pos-sidebar-wrapper aside,
+html:not([data-theme]) .pos-sidebar-wrapper aside {
+  background: var(--bg-base) !important;
+  box-shadow: inset -1px 0 0 rgba(127,184,151,0.08) !important;
 }
