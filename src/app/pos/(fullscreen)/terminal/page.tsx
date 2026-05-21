@@ -2035,8 +2035,7 @@ export default function TerminalPage() {
       {/* Low stock alert bar */}
       {lowStockItems.length > 0 && !lowStockDismissed && (
         <div className="low-stock-banner flex-shrink-0 flex items-center gap-3"
-          style={{ background: 'rgba(180,100,0,0.55)', borderBottom: '2px solid rgba(251,191,36,0.5)', padding: '8px 16px', minHeight: '36px' }}>
-          {/* Use <div> not <span> — .pos-shell overrides span color via typography rules */}
+          style={{ background: 'rgba(180,100,0,0.55)', borderBottom: '1px solid rgba(251,191,36,0.4)', padding: '6px 16px' }}>
           <div style={{ flex: 1, fontSize: 12, fontWeight: 700, color: '#FBBF24', fontFamily: 'var(--font-ui, sans-serif)' }}>
             ⚠ {lowStockItems.length} product{lowStockItems.length > 1 ? 's' : ''} running low:{' '}
             {lowStockItems.slice(0, 3).map(p => p.name).join(', ')}{lowStockItems.length > 3 ? ' …' : ''}
@@ -2118,7 +2117,7 @@ export default function TerminalPage() {
       <div className="pos-terminal-layout-root flex-1 min-h-0 flex overflow-hidden" style={{ position: 'relative', zIndex: 1 }}>
 
         {/* ── LEFT: Product browser ──────────────────────────────── */}
-        <div className={`pos-products-panel relative flex flex-col overflow-hidden ${mobileTab !== 'products' ? 'hidden md:flex' : 'flex'}`}
+        <div className={`pos-products-panel relative flex flex-col overflow-hidden ${mobileTab !== 'products' ? 'hidden sm:flex' : 'flex'}`}
           style={{ flex: '1 1 0', minWidth: 0, borderRight: '1px solid var(--terminal-sage-rim,rgba(127,184,151,0.18))', background: 'var(--terminal-glass-2,rgba(20,33,26,0.72))', backdropFilter: 'blur(40px) saturate(1.4)', WebkitBackdropFilter: 'blur(40px) saturate(1.4)' }}>
 
           {/* EOD Markdown banner */}
@@ -2532,7 +2531,7 @@ export default function TerminalPage() {
         </div>
 
         {/* ── CENTRE: Cart ──────────────────────────────────────── */}
-        <div className={`pos-cart-panel flex flex-col overflow-hidden ${mobileTab !== 'cart' ? 'hidden md:flex' : 'flex'}`}
+        <div className={`pos-cart-panel flex flex-col overflow-hidden ${mobileTab !== 'cart' ? 'hidden sm:flex' : 'flex'}`}
           style={{ flex: '0 0 360px', width: 360, background: 'var(--terminal-glass-1,rgba(28,44,36,0.55))', backdropFilter: 'blur(40px) saturate(1.4)', WebkitBackdropFilter: 'blur(40px) saturate(1.4)', borderLeft: '1px solid var(--terminal-sage-rim,rgba(127,184,151,0.18))', minHeight: 0 }}>
 
           {showReceipt && terminalView !== 'confirm' ? (
@@ -2913,7 +2912,7 @@ export default function TerminalPage() {
       {/* Backdrop — desktop only when ariaOpen */}
       {ariaOpen && (
         <div
-          className="hidden md:block"
+          className="hidden sm:block"
           onClick={() => setAriaOpen(false)}
           style={{ position: 'fixed', inset: 0, zIndex: 98, background: 'rgba(0,0,0,0.2)', backdropFilter: 'blur(2px)' }}
         />
@@ -2921,7 +2920,7 @@ export default function TerminalPage() {
 
       {/* Panel — mobile: shows as mobileTab, desktop: floating */}
       <div
-        className={`flex flex-col overflow-hidden ${mobileTab !== 'aria' ? 'hidden md:flex' : 'flex'}`}
+        className={`flex flex-col overflow-hidden ${mobileTab !== 'aria' ? 'hidden sm:flex' : 'flex'}`}
         style={{
           position: 'fixed',
           top: 0, right: 0, bottom: 0,
@@ -3117,7 +3116,7 @@ export default function TerminalPage() {
       {/* ── FLOATING ASK ARIA BUTTON — removed in v4 (replaced by inline cart card) */}
 
       {/* Mobile bottom tab bar */}
-      <div className="md:hidden flex-shrink-0 h-16 grid grid-cols-3" style={{ background: 'var(--bg-base)', borderTop: '1px solid #1C1928' }}>
+      <div className="sm:hidden flex-shrink-0 h-16 grid grid-cols-3" style={{ background: 'var(--bg-base)', borderTop: '1px solid #1C1928' }}>
         {([
           { tab: 'products' as const, label: 'Products', icon: '🛍️' },
           { tab: 'cart' as const, label: `Cart${cart.length > 0 ? ` (${cart.reduce((s,i)=>s+i.qty,0)})` : ''}`, icon: '🛒' },
