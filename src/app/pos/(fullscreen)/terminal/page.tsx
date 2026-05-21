@@ -2282,12 +2282,21 @@ export default function TerminalPage() {
               🔍
             </button>
             {/* Quick discount button — opens discount modal or sets 10% on selected item */}
+            {/* Quick discount — cycles 0→5→10→15→20→0% on cart total */}
             <button
-              onClick={() => setShowDiscountModal(true)}
+              onClick={() => {
+                const steps = [0, 5, 10, 15, 20];
+                const cur = steps.indexOf(Math.round(manualDiscountAmt / Math.max(subtotal, 0.01) * 100));
+                const next = steps[(cur + 1) % steps.length];
+                setManualDiscountAmt(subtotal * next / 100);
+              }}
               className="flex items-center justify-center text-xs rounded-lg transition-colors whitespace-nowrap"
-              style={{ padding: '5px 8px', flexShrink: 0, border: '1px solid var(--border-strong, #2A2540)', color: 'var(--text-tertiary)' }}
-              title="Apply discount">
-              % Disc
+              style={{ padding: '5px 8px', flexShrink: 0,
+                ...(manualDiscountAmt > 0
+                  ? { background: 'var(--violet-dim)', border: '1px solid var(--border-violet)', color: 'var(--violet)' }
+                  : { border: '1px solid var(--border-strong, #2A2540)', color: 'var(--text-tertiary)' }) }}
+              title={manualDiscountAmt > 0 ? `Discount: ${(manualDiscountAmt / Math.max(subtotal, 0.01) * 100).toFixed(0)}% — click to change` : 'Apply quick discount'}>
+              {manualDiscountAmt > 0 ? `${(manualDiscountAmt / Math.max(subtotal, 0.01) * 100).toFixed(0)}% off` : '% Disc'}
             </button>
             {/* Compact customer search — right in action bar */}
             <div className="relative" style={{ flexShrink: 0 }}>
