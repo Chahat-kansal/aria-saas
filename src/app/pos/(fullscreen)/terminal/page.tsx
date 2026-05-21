@@ -1684,7 +1684,7 @@ export default function TerminalPage() {
                 const m = cMeta[cn] ?? cMeta.other;
                 const initials = item.product.name.split(' ').map((w: string) => w[0]).join('').slice(0,2).toUpperCase();
                 return (
-                  <div key={cartKey(item)} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 8, background: 'rgba(0,229,255,0.03)' }}>
+                  <div key={cartKey(item)} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 8, background: 'var(--bg-elevated)' }}>
                     <div style={{ width: 28, height: 28, borderRadius: 7, background: `linear-gradient(135deg,${m.a}33,${m.b}66)`, border: `1px solid ${m.a}44`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 800, color: m.a, fontFamily: "'JetBrains Mono',monospace", flexShrink: 0 }}>{initials}</div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.label ?? item.product.name}</div>
@@ -1698,7 +1698,7 @@ export default function TerminalPage() {
             <div style={{ padding: '12px 18px', borderTop: '1px solid var(--violet-dim)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                 <span style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>Loyalty earned</span>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'var(--violet-dim)', border: '1px solid rgba(0,229,255,0.2)', borderRadius: 20, padding: '3px 10px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'var(--violet-dim)', border: '1px solid var(--border-default)', borderRadius: 20, padding: '3px 10px' }}>
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--violet)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
                   <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, fontWeight: 800, color: 'var(--violet)' }}>{loyaltyPoints}</span>
                   <span style={{ fontSize: 9, color: 'var(--text-tertiary)', fontWeight: 600 }}>PTS</span>
@@ -1729,7 +1729,7 @@ export default function TerminalPage() {
                 { id: 'direct_deposit' as const, label: 'Direct Dep.',icon: '🏦', color: '#F59E0B' },
               ]).map(m => (
                 <button key={m.id} onClick={() => setPayMethod(m.id)}
-                  style={{ flex: 1, height: 60, borderRadius: 12, border: `1.5px solid ${payMethod === m.id ? m.color + '55' : 'var(--violet-dim)'}`, background: payMethod === m.id ? `${m.color}12` : 'rgba(0,229,255,0.02)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, cursor: 'pointer', transition: 'all 200ms', transform: payMethod === m.id ? 'translateY(-2px)' : 'none', boxShadow: payMethod === m.id ? `0 6px 20px ${m.color}33` : 'none' }}>
+                  style={{ flex: 1, height: 60, borderRadius: 12, border: `1.5px solid ${payMethod === m.id ? m.color + '55' : 'var(--violet-dim)'}`, background: payMethod === m.id ? `${m.color}12` : 'var(--bg-surface)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, cursor: 'pointer', transition: 'all 200ms', transform: payMethod === m.id ? 'translateY(-2px)' : 'none', boxShadow: payMethod === m.id ? `0 6px 20px ${m.color}33` : 'none' }}>
                   <span style={{ fontSize: 18 }}>{m.icon}</span>
                   <span style={{ fontSize: 10, fontWeight: 700, color: payMethod === m.id ? m.color : 'var(--text-tertiary)', fontFamily: 'inherit' }}>{m.label}</span>
                 </button>
@@ -1741,16 +1741,16 @@ export default function TerminalPage() {
               {payMethod === 'card' && (
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 20 }}>
                   {/* 3D EFTPOS terminal */}
-                  <div style={{ width: 220, background: 'linear-gradient(160deg,rgba(17,22,40,0.97),rgba(6,9,22,0.99))', border: '1px solid rgba(0,106,255,0.10)', borderRadius: 24, padding: 20, boxShadow: '0 22px 64px rgba(0,0,0,0.65), 0 0 50px rgba(0,229,255,0.1), inset 0 1px 0 rgba(0,229,255,0.06)', transform: 'perspective(600px) rotateX(6deg)' }}>
+                  <div style={{ width: 220, background: 'linear-gradient(160deg,rgba(17,22,40,0.97),rgba(6,9,22,0.99))', border: '1px solid rgba(0,106,255,0.10)', borderRadius: 24, padding: 20, boxShadow: '0 22px 64px rgba(0,0,0,0.65), 0 0 50px rgba(0,106,255,0.08), inset 0 1px 0 rgba(0,106,255,0.06)', transform: 'perspective(600px) rotateX(6deg)' }}>
                     {/* Screen */}
-                    <div style={{ background: '#050A14', borderRadius: 14, padding: '20px 16px', border: '1px solid rgba(0,229,255,0.1)', marginBottom: 14, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, position: 'relative', overflow: 'hidden' }}>
-                      <div style={{ position: 'absolute', inset: 0, background: 'repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,229,255,0.012) 2px,rgba(0,229,255,0.012) 4px)', borderRadius: 14, pointerEvents: 'none' }} />
+                    <div style={{ background: '#050A14', borderRadius: 14, padding: '20px 16px', border: '1px solid rgba(0,106,255,0.08)', marginBottom: 14, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, position: 'relative', overflow: 'hidden' }}>
+                      <div style={{ position: 'absolute', inset: 0, background: 'repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,106,255,0.008) 2px,rgba(0,106,255,0.008) 4px)', borderRadius: 14, pointerEvents: 'none' }} />
                       {/* NFC rings */}
                       <div style={{ position: 'relative', width: 80, height: 80, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         {[0, 1, 2].map(i => (
                           <div key={i} style={{ position: 'absolute', width: 48 + i * 20, height: 48 + i * 20, borderRadius: '50%', border: `1.5px solid rgba(0,229,255,${0.6 - i * 0.18})`, animation: `nfc-pulse 2s ease-in-out infinite`, animationDelay: `${i * 0.4}s` }} />
                         ))}
-                        <div style={{ width: 38, height: 38, borderRadius: '50%', border: '2px solid rgba(0,229,255,0.7)', background: 'rgba(0,229,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', zIndex: 1 }}>
+                        <div style={{ width: 38, height: 38, borderRadius: '50%', border: '2px solid rgba(0,106,255,0.7)', background: 'rgba(0,106,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', zIndex: 1 }}>
                           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--violet)" strokeWidth="1.5" strokeLinecap="round"><path d="M6 8.32a7.43 7.43 0 0 0 0 7.36"/><path d="M9.46 6.21a11.76 11.76 0 0 0 0 11.58"/><path d="M12.91 4.1a15.91 15.91 0 0 1 0 15.8"/></svg>
                         </div>
                       </div>
@@ -1758,14 +1758,14 @@ export default function TerminalPage() {
                       <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--violet)', letterSpacing: '0.08em' }}>TAP TO PAY</div>
                       {/* Indicator dots */}
                       <div style={{ display: 'flex', gap: 5 }}>
-                        {[0, 1, 2].map(i => <div key={i} style={{ width: 6, height: 6, borderRadius: '50%', background: i === 1 ? 'var(--violet)' : 'rgba(0,229,255,0.2)', boxShadow: i === 1 ? '0 0 6px #00E5FF' : 'none' }} />)}
+                        {[0, 1, 2].map(i => <div key={i} style={{ width: 6, height: 6, borderRadius: '50%', background: i === 1 ? 'var(--violet)' : 'rgba(0,106,255,0.15)', boxShadow: i === 1 ? '0 0 6px #006AFF' : 'none' }} />)}
                       </div>
                     </div>
                   </div>
                   <div style={{ fontSize: 12, color: 'var(--text-tertiary)', textAlign: 'center' }}>Tap, insert or swipe card</div>
                   {/* Confirm Payment */}
                   <button onClick={() => { processSale(); }} disabled={processing}
-                    style={{ height: 52, padding: '0 36px', borderRadius: 14, border: 'none', background: 'linear-gradient(135deg,#00E5FF,#00BFCC,#7B2FFF)', color: '#000', fontFamily: 'inherit', fontSize: 14, fontWeight: 900, cursor: processing ? 'not-allowed' : 'pointer', boxShadow: '0 5px 0 rgba(0,150,200,0.5), 0 10px 30px rgba(0,229,255,0.3)', transition: 'all 200ms', opacity: processing ? 0.6 : 1, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    style={{ height: 52, padding: '0 36px', borderRadius: 14, border: 'none', background: '#006AFF', color: '#FFFFFF', fontFamily: 'inherit', fontSize: 14, fontWeight: 900, cursor: processing ? 'not-allowed' : 'pointer', boxShadow: '0 2px 8px rgba(0,106,255,0.35)', transition: 'all 200ms', opacity: processing ? 0.6 : 1, display: 'flex', alignItems: 'center', gap: 8 }}>
                     {processing ? 'Processing…' : trainingMode ? `Complete (Training) · A$${roundedTotal.toFixed(2)}` : `Confirm Payment · A$${roundedTotal.toFixed(2)}`}
                   </button>
                 </div>
@@ -1775,7 +1775,7 @@ export default function TerminalPage() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10, width: 280 }}>
                   <div style={{ display: 'flex', gap: 6 }}>
                     {[...new Set([roundedTotal, Math.ceil(roundedTotal/5)*5, Math.ceil(roundedTotal/10)*10, 50, 100].filter(a=>a>=roundedTotal))].slice(0,4).map(a => (
-                      <button key={a} onClick={() => setCashTendered(a.toFixed(2))} style={{ flex: 1, height: 32, borderRadius: 8, border: '1px solid rgba(0,229,255,0.12)', background: 'rgba(0,229,255,0.04)', color: 'var(--text-primary)', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: "'JetBrains Mono',monospace" }}>A${a.toFixed(0)}</button>
+                      <button key={a} onClick={() => setCashTendered(a.toFixed(2))} style={{ flex: 1, height: 32, borderRadius: 8, border: '1px solid var(--border-default)', background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: "'JetBrains Mono',monospace" }}>A${a.toFixed(0)}</button>
                     ))}
                   </div>
                   <div style={{ background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(0,106,255,0.10)', borderRadius: 12, padding: '10px 14px', textAlign: 'right' }}>
@@ -1807,7 +1807,7 @@ export default function TerminalPage() {
                     <span style={{ fontFamily: "'JetBrains Mono',monospace", color: 'var(--text-tertiary)' }}>A$</span>
                     <input type="number" value={splitCash} onChange={e => setSplitCash(e.target.value)} placeholder="0.00" autoFocus style={{ flex: 1, background: 'none', border: 'none', outline: 'none', fontFamily: "'JetBrains Mono',monospace", fontSize: 24, fontWeight: 800, color: 'var(--text-primary)' }} />
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', background: 'rgba(0,229,255,0.04)', border: '1px solid rgba(0,229,255,0.1)', borderRadius: 10 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', background: 'rgba(0,229,255,0.04)', border: '1px solid rgba(0,106,255,0.08)', borderRadius: 10 }}>
                     <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Card remainder</span>
                     <span style={{ fontFamily: "'JetBrains Mono',monospace", fontWeight: 700, color: 'var(--text-primary)' }}>A${splitCardAmt.toFixed(2)}</span>
                   </div>
@@ -1920,7 +1920,7 @@ export default function TerminalPage() {
               </div>
             </div>
             {/* Receipt card */}
-            <div style={{ background: 'rgba(10,14,30,0.85)', border: '1px solid rgba(0,229,255,0.12)', borderRadius: 20, padding: '20px 28px', minWidth: 320, maxWidth: 380, backdropFilter: 'blur(24px)', animation: 'fade-up 0.4s 0.2s cubic-bezier(0.16,1,0.3,1) both', boxShadow: '0 20px 60px rgba(0,0,0,0.5), 0 0 30px rgba(0,229,255,0.06)' }}>
+            <div style={{ background: 'rgba(10,14,30,0.85)', border: '1px solid rgba(0,229,255,0.12)', borderRadius: 20, padding: '20px 28px', minWidth: 320, maxWidth: 380, backdropFilter: 'blur(24px)', animation: 'fade-up 0.4s 0.2s cubic-bezier(0.16,1,0.3,1) both', boxShadow: '0 20px 60px rgba(0,0,0,0.5), 0 0 30px rgba(0,106,255,0.06)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
                 <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{(showReceipt.cartSnapshot ?? []).reduce((s: number, i: CartItem) => s + i.qty, 0)} items</span>
                 <span style={{ fontSize: 12, fontFamily: "'JetBrains Mono',monospace", color: 'var(--text-secondary)' }}>A${showReceipt.total_amount?.toFixed(2) ?? roundedTotal.toFixed(2)}</span>
@@ -1933,7 +1933,7 @@ export default function TerminalPage() {
               <div style={{ height: 1, background: 'var(--violet-dim)', margin: '10px 0' }} />
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>Points earned</span>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'var(--violet-dim)', border: '1px solid rgba(0,229,255,0.2)', borderRadius: 20, padding: '3px 10px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'var(--violet-dim)', border: '1px solid var(--border-default)', borderRadius: 20, padding: '3px 10px' }}>
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--violet)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
                   <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, fontWeight: 800, color: 'var(--violet)' }}>{loyaltyPoints}</span>
                   <span style={{ fontSize: 9, color: 'var(--text-tertiary)', fontWeight: 600 }}>PTS</span>
@@ -1993,7 +1993,7 @@ export default function TerminalPage() {
             </div>
             {/* New Sale button */}
             <button onClick={() => { setShowReceipt(null); setTerminalView('pos'); setShowReceiptModal(false); if (window.innerWidth < 768) setMobileTab('products'); }}
-              style={{ height: 52, padding: '0 40px', borderRadius: 14, border: 'none', background: 'linear-gradient(135deg,#00E5FF,#00BFCC,#7B2FFF)', color: '#000', fontFamily: 'inherit', fontSize: 14, fontWeight: 900, cursor: 'pointer', boxShadow: '0 5px 0 rgba(0,150,200,0.5), 0 10px 30px rgba(0,229,255,0.3)', transition: 'all 220ms', display: 'flex', alignItems: 'center', gap: 8, animation: 'fade-up 0.4s 0.3s cubic-bezier(0.16,1,0.3,1) both' }}
+              style={{ height: 52, padding: '0 40px', borderRadius: 14, border: 'none', background: '#006AFF', color: '#FFFFFF', fontFamily: 'inherit', fontSize: 14, fontWeight: 900, cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,106,255,0.35)', transition: 'all 220ms', display: 'flex', alignItems: 'center', gap: 8, animation: 'fade-up 0.4s 0.3s cubic-bezier(0.16,1,0.3,1) both' }}
               onMouseEnter={e => { const el = e.currentTarget; el.style.transform = 'translateY(-3px)'; el.style.boxShadow = '0 8px 0 rgba(0,150,200,0.5), 0 16px 40px rgba(0,229,255,0.4)'; }}
               onMouseLeave={e => { const el = e.currentTarget; el.style.transform = ''; el.style.boxShadow = '0 5px 0 rgba(0,150,200,0.5), 0 10px 30px rgba(0,229,255,0.3)'; }}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -2205,7 +2205,7 @@ export default function TerminalPage() {
           )}
 
           {/* Search + menu button row */}
-          <div className="px-3 py-1.5 flex gap-2" style={{ borderBottom: '1px solid rgba(0,229,255,0.06)' }}>
+          <div className="px-3 py-1.5 flex gap-2" style={{ borderBottom: '1px solid rgba(0,106,255,0.06)' }}>
             <button onClick={() => setShowQuickPanel(v => !v)}
               className="flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-xl text-base"
               style={{ border: '1px solid var(--border-default)', background: 'var(--bg-surface)', color: 'var(--text-secondary)' }}>
