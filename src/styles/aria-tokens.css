@@ -16,7 +16,7 @@
   --glass-blur: blur(20px) saturate(1.4);
   --glass-blur-strong: blur(40px) saturate(1.5);
 
-  /* Terminal v3 — aurora canvas (always dark regardless of theme) */
+  /* Terminal v3  aurora canvas (always dark regardless of theme) */
   --terminal-bg-canvas:   #0B1410;
   --terminal-bg-aurora:   #0F1B16;
   --terminal-bg-surface:  #131F19;
@@ -34,7 +34,7 @@
   --terminal-panel-shadow: inset 0 1px 0 rgba(127,184,151,0.06), 0 24px 48px rgba(0,0,0,0.3);
 }
 
-/* ── Terminal light theme — Square palette ──────────────────────── */
+/*  Terminal light theme  Square palette  */
 html[data-theme="light"] {
   --terminal-bg-canvas:     #F6F6F4;
   --terminal-bg-aurora:     #F0F0EE;
@@ -106,21 +106,20 @@ html[data-theme="dark"], html:not([data-theme]) {
 
   --bg-aurora:
     radial-gradient(ellipse 60% 40% at 12% 8%,
-      rgba(127, 184, 151, 0.18), transparent 60%),
+      rgba(127, 184, 151, 0.18), rgba(0,0,0,0) 60%),
     radial-gradient(ellipse 50% 35% at 92% 18%,
-      rgba(58, 90, 64, 0.12), transparent 65%),
+      rgba(58, 90, 64, 0.12), rgba(0,0,0,0) 65%),
     radial-gradient(ellipse 70% 50% at 78% 92%,
-      rgba(101, 177, 121, 0.10), transparent 65%);
+      rgba(101, 177, 121, 0.10), rgba(0,0,0,0) 65%);
 
   --gradient-aria: linear-gradient(135deg, #7FB897 0%, #5A9577 50%, #2D5240 100%);
   --gradient-aria-soft: linear-gradient(135deg,
     rgba(127, 184, 151, 0.14) 0%, rgba(45, 82, 64, 0.08) 100%);
-  --gradient-shimmer: linear-gradient(90deg,
-    transparent 0%, rgba(127, 184, 151, 0.18) 50%, transparent 100%);
+  --gradient-shimmer: linear-gradient(90deg, rgba(0,0,0,0) 0%, rgba(127, 184, 151, 0.18) 50%, rgba(0,0,0,0) 100%);
 }
 
 html[data-theme="light"] {
-  /* Square-inspired light theme — exact Square POS design system colors */
+  /* Square-inspired light theme  exact Square POS design system colors */
   --bg-base:     #F6F6F4;
   --bg-canvas:   #F0F0EE;
   --bg-surface:  #FFFFFF;
@@ -173,7 +172,7 @@ html[data-theme="light"] {
   --bg-aurora: none;
   --gradient-aria: linear-gradient(135deg, #006AFF 0%, #0055CC 100%);
   --gradient-aria-soft: linear-gradient(135deg, rgba(0,106,255,0.08) 0%, rgba(0,85,204,0.04) 100%);
-  --gradient-shimmer: linear-gradient(90deg, transparent 0%, rgba(0,106,255,0.08) 50%, transparent 100%);
+  --gradient-shimmer: linear-gradient(90deg, rgba(0,0,0,0) 0%, rgba(0,106,255,0.08) 50%, rgba(0,0,0,0) 100%);
 }
 
 body {
@@ -248,7 +247,7 @@ body {
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes pos-processing { to { transform: rotate(360deg); } }
 
-/* ── Beer-can celebration ─────────────────────────────────── */
+/*  Beer-can celebration  */
 @keyframes hand-grip-left {
   0%   { transform: translateX(-90px) rotate(20deg); opacity: 0; }
   50%  { opacity: 1; }
@@ -274,7 +273,7 @@ body {
   100% { transform: translateY(-90px) scale(0.6); opacity: 0; }
 }
 
-/* ── Wine-bottle celebration ─────────────────────────────── */
+/*  Wine-bottle celebration  */
 @keyframes cork-pop-anim {
   0%   { transform: translateY(0) rotate(0deg); opacity: 1; }
   30%  { transform: translateY(-24px) rotate(12deg); }
@@ -288,7 +287,7 @@ body {
   100% { transform: rotate(-72deg) translateY(-22px); }
 }
 
-/* ── Snacks celebration ──────────────────────────────────── */
+/*  Snacks celebration  */
 @keyframes packet-drop {
   0%   { transform: translateY(-70px) rotate(-6deg); opacity: 0; }
   55%  { transform: translateY(4px) rotate(2deg) scaleY(1.08); opacity: 1; }
@@ -302,14 +301,14 @@ body {
   100% { transform: translateY(50px) rotate(200deg); opacity: 0; }
 }
 
-/* ── Coffee celebration ──────────────────────────────────── */
+/*  Coffee celebration  */
 @keyframes steam-rise {
   0%   { transform: translateY(0) scaleX(1); opacity: 0.75; }
   50%  { transform: translateY(-32px) scaleX(1.5); opacity: 0.45; }
   100% { transform: translateY(-64px) scaleX(0.7); opacity: 0; }
 }
 
-/* ── Shared celebration effects ──────────────────────────── */
+/*  Shared celebration effects  */
 @keyframes sage-particle {
   0%   { transform: translate(0, 0) scale(1) rotate(0deg); opacity: 0.9; }
   100% { transform: translate(var(--dx, 40px), var(--dy, -80px)) scale(0.2) rotate(120deg); opacity: 0; }
@@ -338,7 +337,7 @@ body {
   }
 }
 
-/* ── Terminal v4: Live Pulse Rail ─────────────────────────── */
+/*  Terminal v4: Live Pulse Rail  */
 .aria-pulse-rail {
   position: relative; z-index: 2;
   display: grid;
@@ -390,7 +389,7 @@ body {
 .aria-pulse-stat-arrow.down  { color: #D4A95E; }
 .aria-pulse-divider { width: 1px; height: 18px; background: var(--terminal-sage-rim, rgba(127,184,151,0.18)); }
 
-/* ── Terminal v4: Aria Inline Intelligence Card ───────────── */
+/*  Terminal v4: Aria Inline Intelligence Card  */
 .aria-insight {
   margin: 6px 16px; padding: 10px 12px 8px;
   background: linear-gradient(135deg, rgba(143,202,165,0.10), rgba(58,90,64,0.04));
@@ -437,7 +436,7 @@ body {
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.18), 0 2px 6px var(--terminal-sage-glow, rgba(127,184,151,0.35));
 }
 
-/* ── Terminal v4: Cart panel layout ──────────────────────── */
+/*  Terminal v4: Cart panel layout  */
 .cart-items {
   flex: 1 1 0;
   min-height: 0;
@@ -450,7 +449,7 @@ body {
 .cart-items::-webkit-scrollbar { width: 4px; }
 .cart-items::-webkit-scrollbar-thumb { background: rgba(127,184,151,0.10); border-radius: 2px; }
 
-/* ── Terminal v4: Cart line thumbnails ────────────────────── */
+/*  Terminal v4: Cart line thumbnails  */
 .cart-thumb {
   width: 36px; height: 46px;
   display: flex; align-items: flex-end; justify-content: center;
@@ -461,7 +460,7 @@ body {
   filter: drop-shadow(-1px 1px 2px rgba(0,0,0,0.4));
 }
 
-/* ── Terminal v4: Cart line rows ──────────────────────────── */
+/*  Terminal v4: Cart line rows  */
 .cart-line {
   display: flex; align-items: center; gap: 8px; padding: 7px 8px;
   background: rgba(15,25,20,0.4);
@@ -507,7 +506,7 @@ body {
   min-width: 56px; text-align: right;
 }
 
-/* ── Terminal v4: Cart pay panel ─────────────────────────── */
+/*  Terminal v4: Cart pay panel  */
 .cart-totals {
   padding: 6px 16px 0;
   border-top: 1px solid var(--terminal-sage-rim, rgba(127,184,151,0.08));
@@ -531,7 +530,7 @@ body {
   content: ''; position: absolute;
   bottom: -20px; left: 50%; transform: translateX(-50%);
   width: 280px; height: 80px; border-radius: 50%;
-  background: radial-gradient(ellipse, var(--terminal-sage-glow, rgba(127,184,151,0.35)), transparent 70%);
+  background: radial-gradient(ellipse, var(--terminal-sage-glow, rgba(127,184,151,0.35)), rgba(0,0,0,0) 70%);
   filter: blur(20px); pointer-events: none;
 }
 .totals-grand-label-block {
@@ -577,7 +576,7 @@ body {
 }
 .charge-btn::before {
   content: ''; position: absolute; inset: 0;
-  background: linear-gradient(120deg, transparent 30%, rgba(255,255,255,0.20) 50%, transparent 70%);
+  background: linear-gradient(120deg, rgba(0,0,0,0) 30%, rgba(255,255,255,0.20) 50%, rgba(0,0,0,0) 70%);
   transform: translateX(-100%); transition: transform 700ms;
 }
 .charge-btn:hover::before { transform: translateX(100%); }
@@ -608,7 +607,7 @@ body {
 }
 .quick-action:disabled { opacity: 0.4; cursor: not-allowed; }
 
-/* ── Ask Aria FAB — bottom-right floating action button ──────── */
+/*  Ask Aria FAB  bottom-right floating action button  */
 .ask-aria-fab {
   position: fixed; bottom: 24px; right: 24px;
   width: 52px; height: 52px; border-radius: 50%;
