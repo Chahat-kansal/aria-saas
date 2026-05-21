@@ -78,7 +78,7 @@ export default function SaleDetailDrawer({ saleId, onClose, onVoided }: Props) {
     <div className="fixed inset-0 z-50 flex justify-end" onClick={onClose}>
       <div
         className="w-full max-w-lg h-full overflow-y-auto flex flex-col"
-        style={{ background: 'var(--bg-elevated, #1A2620)', borderLeft: '1px solid var(--divider, rgba(232,237,231,0.06))' }}
+        style={{ background: 'var(--bg-elevated, #1A2620)', borderLeft: '1px solid var(--divider, rgba(232,237,231,0.06))', isolation: 'isolate', colorScheme: 'dark' }}
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid var(--divider, rgba(232,237,231,0.06))' }}>
