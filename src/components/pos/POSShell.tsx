@@ -488,7 +488,7 @@ export default function POSShell({ children, businessId, businessName }: {
             }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(251,191,36,0.6)', fontSize: 16, lineHeight: 1, padding: 0 }}>×</button>
           </div>
         )}
-        <POSErrorBoundary>{children}</POSErrorBoundary>
+        <POSErrorBoundary><div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>{children}</div></POSErrorBoundary>
         {sidebarHint && (
           <div style={{ position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', zIndex: 200, background: 'var(--bg-elevated)', color: 'var(--text-secondary)', padding: '10px 18px', borderRadius: 10, fontSize: 12, boxShadow: 'var(--shadow-lg)', whiteSpace: 'nowrap', fontFamily: 'var(--font-ui)', animation: 'fade-up 400ms ease forwards' }}>
             Press <kbd style={{ background: 'var(--bg-base)', padding: '1px 5px', borderRadius: 4, fontSize: 10, color: 'var(--text-primary)' }}>⌘K</kbd> to search · Click <strong>◀</strong> to collapse the sidebar
