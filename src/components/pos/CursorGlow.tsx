@@ -8,14 +8,13 @@ export default function CursorGlow() {
     const el = ref.current;
     if (!el) return;
 
-    // Hide entirely in light mode — glow only makes sense on dark backgrounds
     const checkTheme = () => {
       const theme = document.documentElement.getAttribute('data-theme');
       el.style.display = theme === 'light' ? 'none' : 'block';
     };
     checkTheme();
-    const observer = new MutationObserver(checkTheme);
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    const themeObserver = new MutationObserver(checkTheme);
+    themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 
     let raf = 0;
     let cx = 0, cy = 0;
@@ -23,7 +22,7 @@ export default function CursorGlow() {
       cx = e.clientX; cy = e.clientY;
       if (raf) return;
       raf = requestAnimationFrame(() => {
-        el.style.transform = \`translate(\${cx - 160}px,\${cy - 160}px)\`;
+        el.style.transform = 'translate(' + (cx - 160) + 'px,' + (cy - 160) + 'px)';
         el.style.opacity = '1';
         raf = 0;
       });
@@ -34,7 +33,7 @@ export default function CursorGlow() {
     return () => {
       window.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseleave', onLeave);
-      observer.disconnect();
+      themeObserver.disconnect();
       if (raf) cancelAnimationFrame(raf);
     };
   }, []);
