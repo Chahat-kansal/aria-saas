@@ -62,6 +62,7 @@ interface Product {
   image_url?: string | null;
   is_weight_based?: boolean;
   price_per_kg?: number | null;
+  serial_tracked?: boolean;
 }
 interface GlobalProductHit {
   name: string; brand?: string; category?: string;
@@ -209,6 +210,11 @@ export default function TerminalPage() {
 
   /* ── Payment ──────────────────────────────────────────────────── */
   const [payMethod,      setPayMethod]      = useState<PayMethod>('card');
+  // Surcharge rules — loaded once on mount, applied to total based on payment method
+  const [surchargeRules, setSurchargeRules] = useState<Array<{ id:string; payment_type:string|null; amount_type:string|null; amount:number; is_active:boolean; day_of_week:number[]|null }>>([]);
+  // Serial number prompt
+  const [serialPrompt,   setSerialPrompt]   = useState<{ product: Product; label?: string } | null>(null);
+  const [serialInput,    setSerialInput]    = useState('');
   const [cashTendered,   setCashTendered]   = useState('');
   const [splitCash,      setSplitCash]      = useState('');
   const [processing,     setProcessing]     = useState(false);
@@ -561,6 +567,17 @@ export default function TerminalPage() {
     };
   }, [loadRegister]);
 
+  /* ── Load surcharge rules — additive ──────────────────────────── */
+  useEffect(() => {
+    if (!businessId) return;
+    fetch('/api/pos/surcharge-rules')
+      .then(r => r.json())
+      .then((d: { rules?: Array<{ id:string; payment_type:string|null; amount_type:string|null; amount:number; is_active:boolean; day_of_week:number[]|null }> }) => {
+        setSurchargeRules((d.rules ?? []).filter(r => r.is_active));
+      })
+      .catch(() => null);
+  }, [businessId]);
+
   /* ── Layout init from business_type + localStorage — additive ── */
   useEffect(() => {
     setLayout(getCurrentLayout(businessType, terminalLayoutOverride));
@@ -800,7 +817,22 @@ export default function TerminalPage() {
   // Sprint E: engine computes authoritative tax on finalize. Display uses flat 1.1 estimate.
   const taxAmount  = subtotal - subtotal / 1.1;
   const netAmount  = subtotal / 1.1;
-  const total      = subtotal;
+  // Surcharge: apply first matching active rule for current payment method
+  const surchargeAmt = useMemo(() => {
+    if (!surchargeRules.length || !cart.length) return 0;
+    const todayDow = new Date().getDay(); // 0=Sun, 6=Sat
+    const rule = surchargeRules.find(r => {
+      const methodMatch = !r.payment_type || r.payment_type === 'all' || r.payment_type === payMethod;
+      const dayMatch = !r.day_of_week || r.day_of_week.length === 0 || r.day_of_week.includes(todayDow);
+      return methodMatch && dayMatch;
+    });
+    if (!rule) return 0;
+    return rule.amount_type === 'percent'
+      ? Math.round(subtotal * (rule.amount / 100) * 100) / 100
+      : rule.amount;
+  }, [surchargeRules, payMethod, subtotal, cart.length]);
+
+  const total      = subtotal + surchargeAmt;
   const tendered   = parseFloat(cashTendered) || 0;
 
   // POS user permission gates (set at cashier login, stored in localStorage)
@@ -926,6 +958,12 @@ export default function TerminalPage() {
       }
     } catch { /* fall through */ }
     setVariantLoading(false);
+    // Serial tracked — prompt for serial/IMEI before adding
+    if (p.serial_tracked) {
+      setSerialInput('');
+      setSerialPrompt({ product: p });
+      return;
+    }
     // Weight-based product — show weight entry modal instead of adding directly
     if (p.is_weight_based && p.price_per_kg) {
       setWeightInput('');
@@ -1618,6 +1656,12 @@ export default function TerminalPage() {
                   <span style={{ fontSize: 9, color: 'var(--text-tertiary)', fontWeight: 600 }}>PTS</span>
                 </div>
               </div>
+              {surchargeAmt > 0 && (
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline', padding:'4px 0', borderTop:'1px solid rgba(255,255,255,0.06)', marginTop:2 }}>
+                  <span style={{ fontSize:12, color:'var(--text-secondary)' }}>Surcharge ({surchargeRules.find(r => r.is_active)?.amount_type === 'percent' ? `${surchargeRules.find(r => r.is_active)?.amount}%` : 'flat'})</span>
+                  <span style={{ fontSize:13, fontWeight:600, color:'var(--text-secondary)', fontFamily:"'JetBrains Mono',monospace" }}>+A${surchargeAmt.toFixed(2)}</span>
+                </div>
+              )}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
                 <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>Total</span>
                 <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 24, fontWeight: 900, color: trainingMode ? '#F59E0B' : 'var(--text-primary)', letterSpacing: '-0.04em' }}>A${roundedTotal.toFixed(2)}{trainingMode ? ' (TRAINING)' : ''}</span>
@@ -3445,6 +3489,49 @@ export default function TerminalPage() {
                 Add to cart
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Serial number / IMEI prompt ──────────────────────────────── */}
+      {serialPrompt && (
+        <div style={{ position:'fixed', inset:0, zIndex:60, display:'flex', alignItems:'center', justifyContent:'center', padding:16, background:'rgba(8,6,16,0.88)' }}>
+          <div style={{ background:'var(--bg-elevated)', border:'1px solid #2A2540', borderRadius:20, padding:'28px 28px 24px', width:'100%', maxWidth:360, boxShadow:'0 24px 48px rgba(0,0,0,0.6)' }}>
+            <div style={{ marginBottom:20 }}>
+              <div style={{ fontSize:18, fontWeight:700, color:'var(--text-primary)', marginBottom:4 }}>🔢 Serial / IMEI</div>
+              <div style={{ fontSize:13, color:'var(--text-secondary)' }}>{serialPrompt.product.name}</div>
+            </div>
+            <input
+              autoFocus
+              type="text"
+              placeholder="Scan barcode or type serial number"
+              value={serialInput}
+              onChange={e => setSerialInput(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter' && serialInput.trim()) {
+                  addToCartDirect({ ...serialPrompt.product }, 1, undefined, `${serialPrompt.product.name} · S/N: ${serialInput.trim()}`);
+                  setSerialPrompt(null); setSerialInput('');
+                }
+                if (e.key === 'Escape') { setSerialPrompt(null); setSerialInput(''); }
+              }}
+              style={{ width:'100%', padding:'12px 16px', borderRadius:10, border:'1px solid #2A2540', background:'var(--bg-base)', color:'var(--text-primary)', fontSize:15, fontFamily:'inherit', outline:'none', boxSizing:'border-box', marginBottom:16 }}
+            />
+            <div style={{ display:'flex', gap:10 }}>
+              <button onClick={() => { setSerialPrompt(null); setSerialInput(''); }}
+                style={{ flex:1, padding:'11px 0', borderRadius:10, border:'1px solid #2A2540', background:'transparent', color:'var(--text-secondary)', fontSize:14, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>
+                Cancel
+              </button>
+              <button onClick={() => {
+                addToCartDirect({ ...serialPrompt.product }, 1, undefined, serialInput.trim() ? `${serialPrompt.product.name} · S/N: ${serialInput.trim()}` : undefined);
+                setSerialPrompt(null); setSerialInput('');
+              }}
+              style={{ flex:2, padding:'11px 0', borderRadius:10, border:'none', background:'var(--gradient-aria)', color:'#fff', fontSize:14, fontWeight:700, cursor:'pointer', fontFamily:'inherit' }}>
+                {serialInput.trim() ? 'Add with serial' : 'Add without serial'}
+              </button>
+            </div>
+            <p style={{ fontSize:11, color:'var(--text-tertiary)', textAlign:'center', marginTop:10 }}>
+              Serial number is stored with the sale for warranty/returns tracking
+            </p>
           </div>
         </div>
       )}

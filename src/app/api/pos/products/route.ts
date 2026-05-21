@@ -39,7 +39,7 @@ async function _GET(req: Request) {
   if (singleId) {
     const { data: product, error } = await supabase
       .from('pos_products')
-      .select('id,name,sku,barcode,description,price,cost_price,tax_rate,tax_code_id,additional_tax_code_ids,stock_quantity,low_stock_threshold,track_stock,is_active,show_online,image_url,category_id,supplier_id,brand_id,family_id,loyalty_earn_rate,case_quantity,is_age_restricted,is_weight_based,price_per_kg,pos_categories(name,color)')
+      .select('id,name,sku,barcode,description,price,cost_price,tax_rate,tax_code_id,additional_tax_code_ids,stock_quantity,low_stock_threshold,track_stock,is_active,show_online,image_url,category_id,supplier_id,brand_id,family_id,loyalty_earn_rate,case_quantity,is_age_restricted,is_weight_based,price_per_kg,serial_tracked,pos_categories(name,color)')
       .eq('id', singleId)
       .eq('business_id', bid)
       .maybeSingle();
