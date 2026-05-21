@@ -3,12 +3,12 @@
 export type OrderType = 'takeaway' | 'dine_in' | 'delivery' | 'pickup' | 'drive_thru' | 'phone' | 'catering'
 
 const ORDER_TYPES: { id: OrderType; label: string; icon: string }[] = [
-  { id: 'takeaway',   label: 'Takeaway',   icon: '\u{1F964}' },
-  { id: 'dine_in',   label: 'Dine-in',    icon: '\u{1FA51}' },
-  { id: 'pickup',    label: 'Pickup',     icon: '\u{1F4E6}' },
-  { id: 'delivery',  label: 'Delivery',   icon: '\u{1F6F5}' },
-  { id: 'drive_thru',label: 'Drive-thru', icon: '\u{1F697}' },
-  { id: 'phone',     label: 'Phone',      icon: '\u{1F4DE}' },
+  { id: 'takeaway',   label: 'Takeaway',   icon: '🥤' },
+  { id: 'dine_in',   label: 'Dine-in',    icon: '🩑' },
+  { id: 'pickup',    label: 'Pickup',     icon: '📦' },
+  { id: 'delivery',  label: 'Delivery',   icon: '🛵' },
+  { id: 'drive_thru',label: 'Drive-thru', icon: '🚗' },
+  { id: 'phone',     label: 'Phone',      icon: '📞' },
 ]
 
 interface Props {
