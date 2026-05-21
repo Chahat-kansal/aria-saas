@@ -30,14 +30,44 @@ async function _POST(req: Request) {
     const { item_id, new_stock, quantity_added } = upd;
     if (!item_id || new_stock == null || quantity_added == null) continue;
 
+    const updatePayload: Record<string, unknown> = { [stockCol]: new_stock };
+    // Save cost price from invoice if provided
+    if (upd.cost_price_aud != null && dataSource === 'aria_pos') {
+      updatePayload.cost_price = upd.cost_price_aud;
+      updatePayload.cost = upd.cost_price_aud;
+    }
     const { error } = await supabase.from(table)
-      .update({ [stockCol]: new_stock })
+      .update(updatePayload)
       .eq('id', item_id)
       .eq('business_id', business_id);
 
     if (!error) {
       updated++;
       movements.push({ business_id, item_id, quantity_added, new_stock, movement_type: 'receipt_scan' });
+    }
+  }
+
+  // Auto-create new products from unmatched lines
+  const newProducts = (updates as any[]).filter((u: any) => u.create_new && u.description);
+  const createdIds: string[] = [];
+  for (const np of newProducts) {
+    const sku = `RECV-${Date.now()}-${Math.random().toString(36).slice(2,6).toUpperCase()}`;
+    const { data: created } = await supabase.from('pos_products').insert({
+      business_id,
+      name: np.description,
+      sku,
+      stock_quantity: np.quantity ?? 0,
+      cost_price: np.cost_price_aud ?? null,
+      cost: np.cost_price_aud ?? null,
+      price: 0,
+      status: 'draft',
+      is_active: false,
+      source: 'receipt_scan',
+      notes: `Auto-created from receipt scan. Supplier: ${np.supplier_name ?? 'unknown'}`,
+    }).select('id').single();
+    if (created?.id) {
+      createdIds.push(created.id);
+      movements.push({ business_id, item_id: created.id, quantity_added: np.quantity ?? 0, new_stock: np.quantity ?? 0, movement_type: 'receipt_scan' });
     }
   }
 
@@ -53,7 +83,8 @@ async function _POST(req: Request) {
     metadata: { updated_count: updated },
   }).then(() => null, () => null);
 
-  return NextResponse.json({ ok: true, updated });
+  const created = newProducts.length;
+  return NextResponse.json({ ok: true, updated, created });
 }
 
 export const POST = withErrorCapture('aria/receipt-scan/confirm', _POST)
