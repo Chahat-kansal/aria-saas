@@ -63,9 +63,9 @@ html:has(.landing-v3) { scroll-behavior: auto; }
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(ellipse 70% 50% at 12% 8%, rgba(127, 184, 151, 0.20), transparent 60%),
-    radial-gradient(ellipse 60% 45% at 92% 22%, rgba(58, 90, 64, 0.16), transparent 65%),
-    radial-gradient(ellipse 80% 60% at 78% 95%, rgba(101, 177, 121, 0.14), transparent 70%);
+    radial-gradient(ellipse 70% 50% at 12% 8%, rgba(127, 184, 151, 0.20), rgba(0,0,0,0) 60%),
+    radial-gradient(ellipse 60% 45% at 92% 22%, rgba(58, 90, 64, 0.16), rgba(0,0,0,0) 65%),
+    radial-gradient(ellipse 80% 60% at 78% 95%, rgba(101, 177, 121, 0.14), rgba(0,0,0,0) 70%);
   opacity: calc(0.25 + var(--hero-progress, 0) * 0.75);
   transition: opacity 80ms linear;
 }
@@ -386,7 +386,7 @@ html:has(.landing-v3) { scroll-behavior: auto; }
   align-items: center;
   padding: 24px 32px;
   pointer-events: none;
-  background: linear-gradient(to bottom, rgba(14, 20, 17, 0.5), transparent);
+  background: linear-gradient(to bottom, rgba(14, 20, 17, 0.5), rgba(0,0,0,0));
 }
 .landing-v3 .overlay-top > * { pointer-events: auto; }
 
@@ -502,7 +502,7 @@ html:has(.landing-v3) { scroll-behavior: auto; }
 
 /* ── Scene 02: Problem ── */
 .landing-v3 .scene-problem { background: var(--bg-deeper); }
-.landing-v3 .scene-problem::before { background: radial-gradient(ellipse 50% 70% at 90% 50%, rgba(58, 90, 64, 0.12), transparent 60%); }
+.landing-v3 .scene-problem::before { background: radial-gradient(ellipse 50% 70% at 90% 50%, rgba(58, 90, 64, 0.12), rgba(0,0,0,0) 60%); }
 .landing-v3 .scene-problem .scene-inner { display: grid; grid-template-columns: 1fr 1fr; gap: 80px; align-items: center; }
 .landing-v3 .problem-stack { display: flex; flex-direction: column; gap: 16px; }
 .landing-v3 .problem-card { background: var(--bg-glass); backdrop-filter: blur(28px) saturate(1.4); -webkit-backdrop-filter: blur(28px) saturate(1.4); border-radius: 12px; padding: 18px 20px; display: flex; align-items: center; gap: 14px; box-shadow: inset 0 1px 0 rgba(127, 184, 151, 0.06), 0 8px 24px rgba(0, 0, 0, 0.3); }
@@ -511,10 +511,10 @@ html:has(.landing-v3) { scroll-behavior: auto; }
 
 /* ── Scene 03: Brain ── */
 .landing-v3 .scene-brain { background: var(--bg-canvas); }
-.landing-v3 .scene-brain::before { background: radial-gradient(circle at 50% 50%, rgba(127, 184, 151, 0.18), transparent 60%); }
+.landing-v3 .scene-brain::before { background: radial-gradient(circle at 50% 50%, rgba(127, 184, 151, 0.18), rgba(0,0,0,0) 60%); }
 .landing-v3 .scene-brain .scene-inner { text-align: center; display: flex; flex-direction: column; align-items: center; }
 .landing-v3 .brain-system { position: relative; width: 480px; height: 480px; margin: 32px auto 0; max-width: 90vw; }
-.landing-v3 .brain-core { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 120px; height: 120px; border-radius: 50%; background: radial-gradient(circle, var(--sage) 0%, var(--sage-dark) 60%, transparent 100%); box-shadow: 0 0 60px rgba(127, 184, 151, 0.5), 0 0 120px rgba(127, 184, 151, 0.25); animation: l-pulseCore 3.6s ease-in-out infinite; }
+.landing-v3 .brain-core { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 120px; height: 120px; border-radius: 50%; background: radial-gradient(circle, var(--sage) 0%, var(--sage-dark) 60%, rgba(0,0,0,0) 100%); box-shadow: 0 0 60px rgba(127, 184, 151, 0.5), 0 0 120px rgba(127, 184, 151, 0.25); animation: l-pulseCore 3.6s ease-in-out infinite; }
 @keyframes l-pulseCore { 0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.95; } 50% { transform: translate(-50%, -50%) scale(1.06); opacity: 1; } }
 .landing-v3 .orbit-ring { position: absolute; inset: 0; animation: l-spinOrbit 50s linear infinite; }
 @keyframes l-spinOrbit { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
@@ -529,8 +529,8 @@ html:has(.landing-v3) { scroll-behavior: auto; }
 
 /* ── Split scenes (04, 05, 07) ── */
 .landing-v3 .scene-split { background: var(--bg-canvas); }
-.landing-v3 .scene-split::before { background: radial-gradient(ellipse 50% 60% at 15% 30%, rgba(127, 184, 151, 0.10), transparent 60%); }
-.landing-v3 .scene-split.reverse::before { background: radial-gradient(ellipse 50% 60% at 85% 30%, rgba(127, 184, 151, 0.10), transparent 60%); }
+.landing-v3 .scene-split::before { background: radial-gradient(ellipse 50% 60% at 15% 30%, rgba(127, 184, 151, 0.10), rgba(0,0,0,0) 60%); }
+.landing-v3 .scene-split.reverse::before { background: radial-gradient(ellipse 50% 60% at 85% 30%, rgba(127, 184, 151, 0.10), rgba(0,0,0,0) 60%); }
 .landing-v3 .scene-split .scene-inner { display: grid; grid-template-columns: 1fr 1fr; gap: 80px; align-items: center; }
 .landing-v3 .scene-split.reverse .text-side { order: 1; }
 .landing-v3 .scene-split.reverse .mockup-side { order: 2; }
@@ -568,7 +568,7 @@ html:has(.landing-v3) { scroll-behavior: auto; }
 
 /* ── Scene 06: Ask ── */
 .landing-v3 .scene-ask { background: var(--bg-canvas); }
-.landing-v3 .scene-ask::before { background: radial-gradient(ellipse 50% 50% at 50% 30%, rgba(127, 184, 151, 0.12), transparent 60%); }
+.landing-v3 .scene-ask::before { background: radial-gradient(ellipse 50% 50% at 50% 30%, rgba(127, 184, 151, 0.12), rgba(0,0,0,0) 60%); }
 .landing-v3 .scene-ask .scene-inner { text-align: center; display: flex; flex-direction: column; align-items: center; }
 .landing-v3 .conversation { display: flex; flex-direction: column; gap: 16px; max-width: 560px; width: 100%; margin: 32px auto 24px; }
 .landing-v3 .bubble { padding: 14px 18px; border-radius: 16px; font-size: 15px; line-height: 1.5; max-width: 85%; text-align: left; }
@@ -582,7 +582,7 @@ html:has(.landing-v3) { scroll-behavior: auto; }
 
 /* ── Scene 08: Australia ── */
 .landing-v3 .scene-australia { background: var(--bg-deeper); }
-.landing-v3 .scene-australia::before { background: radial-gradient(ellipse 50% 60% at 60% 50%, rgba(212, 169, 94, 0.06), transparent 60%); }
+.landing-v3 .scene-australia::before { background: radial-gradient(ellipse 50% 60% at 60% 50%, rgba(212, 169, 94, 0.06), rgba(0,0,0,0) 60%); }
 .landing-v3 .scene-australia .scene-inner { display: grid; grid-template-columns: 1fr 1.1fr; gap: 80px; align-items: center; }
 .landing-v3 .au-list { list-style: none; display: flex; flex-direction: column; gap: 12px; margin-top: 20px; }
 .landing-v3 .au-list li { display: flex; align-items: center; gap: 12px; font-size: 15px; color: var(--text-secondary); }
@@ -592,7 +592,7 @@ html:has(.landing-v3) { scroll-behavior: auto; }
 
 /* ── Scene 09: Testimonial ── */
 .landing-v3 .scene-testimonial { background: var(--bg-canvas); }
-.landing-v3 .scene-testimonial::before { background: radial-gradient(circle at 50% 50%, rgba(127, 184, 151, 0.08), transparent 70%); }
+.landing-v3 .scene-testimonial::before { background: radial-gradient(circle at 50% 50%, rgba(127, 184, 151, 0.08), rgba(0,0,0,0) 70%); }
 .landing-v3 .scene-testimonial .scene-inner { text-align: center; max-width: 760px; margin: 0 auto; }
 .landing-v3 .quote { font-family: var(--font-display); font-style: italic; font-weight: 300; font-size: clamp(24px, 3.5vw, 36px); line-height: 1.35; color: var(--text-primary); letter-spacing: -0.015em; margin-bottom: 28px; position: relative; }
 .landing-v3 .quote::before { content: '\201C'; font-family: var(--font-display); color: var(--sage); opacity: 0.5; font-size: 1.5em; line-height: 0; vertical-align: -0.4em; margin-right: 4px; }
@@ -603,7 +603,7 @@ html:has(.landing-v3) { scroll-behavior: auto; }
 
 /* ── Scene 10: Pricing tiers ── */
 .landing-v3 .scene-pricing { background: var(--bg-canvas); }
-.landing-v3 .scene-pricing::before { background: radial-gradient(ellipse 60% 50% at 50% 20%, rgba(127, 184, 151, 0.16), transparent 70%); }
+.landing-v3 .scene-pricing::before { background: radial-gradient(ellipse 60% 50% at 50% 20%, rgba(127, 184, 151, 0.16), rgba(0,0,0,0) 70%); }
 .landing-v3 .scene-pricing .scene-inner { text-align: center; }
 .landing-v3 .pricing-banner { display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; border-radius: 999px; background: rgba(212, 169, 94, 0.08); border: 1px solid rgba(212, 169, 94, 0.18); color: var(--warning, #D4A95E); font-size: 12px; margin-bottom: 32px; letter-spacing: 0.02em; }
 .landing-v3 .pricing-banner::before { content: '✦'; }
@@ -626,7 +626,7 @@ html:has(.landing-v3) { scroll-behavior: auto; }
 
 /* ── Scene 11: Outro ── */
 .landing-v3 .scene-outro { background: var(--bg-base); }
-.landing-v3 .scene-outro::before { background: radial-gradient(ellipse 80% 50% at 50% 30%, rgba(127, 184, 151, 0.20), transparent 60%); animation: l-auroraPulse 8s ease-in-out infinite; }
+.landing-v3 .scene-outro::before { background: radial-gradient(ellipse 80% 50% at 50% 30%, rgba(127, 184, 151, 0.20), rgba(0,0,0,0) 60%); animation: l-auroraPulse 8s ease-in-out infinite; }
 @keyframes l-auroraPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
 .landing-v3 .scene-outro .scene-inner { text-align: center; display: flex; flex-direction: column; align-items: center; }
 .landing-v3 .outro-h1 { font-family: var(--font-display); font-weight: 400; font-size: clamp(56px, 9vw, 110px); line-height: 1; letter-spacing: -0.035em; color: var(--text-primary); margin-bottom: 28px; }
