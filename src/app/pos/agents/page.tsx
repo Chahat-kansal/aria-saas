@@ -22,9 +22,9 @@ const AGENT_DEFS = [
   { type: 'schedule', label: 'Smart Schedule', icon: '📅', desc: 'Builds staff rosters matched to demand forecasts', href: '/pos/agents/schedule' },
 ];
 
-const agentColor: Record<string, string> = { reorder: '#34D399', pricing: '#FBBF24', schedule: '#60A5FA' };
+const agentColor: Record<string, string> = { reorder: '#00B140', pricing: '#FBBF24', schedule: '#60A5FA' };
 const agentColorDim: Record<string, string> = { reorder: 'rgba(52,211,153,0.12)', pricing: 'rgba(251,191,36,0.12)', schedule: 'rgba(96,165,250,0.12)' };
-const sBtn = (c = '#8B5CF6', dim = 'rgba(139,92,246,0.12)'): React.CSSProperties => ({ padding: '6px 14px', borderRadius: 7, border: `1px solid ${c}40`, background: dim, color: c, fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' });
+const sBtn = (c = '#006AFF', dim = 'rgba(0,106,255,0.08)'): React.CSSProperties => ({ padding: '6px 14px', borderRadius: 7, border: `1px solid ${c}40`, background: dim, color: c, fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' });
 
 export default function AgentsDashboardPage() {
   const [summaries, setSummaries] = useState<AgentSummary[]>([]);
@@ -134,8 +134,8 @@ export default function AgentsDashboardPage() {
       {/* Agent cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(280px,1fr))', gap: 14, marginBottom: 32 }}>
         {(loading ? AGENT_DEFS : summaries).map(a => {
-          const color = agentColor[a.type] ?? '#8B5CF6';
-          const dim = agentColorDim[a.type] ?? 'rgba(139,92,246,0.12)';
+          const color = agentColor[a.type] ?? '#006AFF';
+          const dim = agentColorDim[a.type] ?? 'rgba(0,106,255,0.08)';
           const pending = (a as AgentSummary).pending ?? 0;
           return (
             <div key={a.type} style={{ background: 'var(--bg-surface)', borderRadius: 14, padding: '18px 20px', border: `1px solid ${color}30`, boxShadow: 'var(--shadow-card)' }}>
@@ -168,7 +168,7 @@ export default function AgentsDashboardPage() {
                   {runningAgent === a.type ? '⏳ Running…' : '⚡ Run now'}
                 </button>
                 {runResult[a.type] && (
-                  <span style={{ fontSize: 11, color: runResult[a.type].ok ? '#34D399' : '#F87171', marginLeft: 4 }}>
+                  <span style={{ fontSize: 11, color: runResult[a.type].ok ? '#00B140' : '#F87171', marginLeft: 4 }}>
                     {runResult[a.type].ok ? '✓' : '✗'} {runResult[a.type].msg}
                   </span>
                 )}
@@ -188,7 +188,7 @@ export default function AgentsDashboardPage() {
               <thead>
                 <tr>
                   {['AGENT','DECISION','IMPACT','CONFIDENCE','CREATED',''].map(h => (
-                    <th key={h} style={{ padding: '10px 14px', background: '#29b6f6', color: '#fff', fontSize: 11, fontWeight: 700, textAlign: 'left', whiteSpace: 'nowrap' }}>{h}</th>
+                    <th key={h} style={{ padding: '10px 14px', background: '#006AFF', color: '#fff', fontSize: 11, fontWeight: 700, textAlign: 'left', whiteSpace: 'nowrap' }}>{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -196,18 +196,18 @@ export default function AgentsDashboardPage() {
                 {allDecisions.map((d, i) => (
                   <tr key={d.id} style={{ background: i % 2 === 0 ? 'var(--bg-surface)' : 'var(--bg-elevated)' }}>
                     <td style={{ padding: '10px 14px' }}>
-                      <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 99, background: `${agentColor[d.agent_type] ?? '#8B5CF6'}22`, color: agentColor[d.agent_type] ?? '#8B5CF6', fontWeight: 700 }}>{d.agent_type}</span>
+                      <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 99, background: `${agentColor[d.agent_type] ?? '#006AFF'}22`, color: agentColor[d.agent_type] ?? '#006AFF', fontWeight: 700 }}>{d.agent_type}</span>
                     </td>
                     <td style={{ padding: '10px 14px', fontSize: 12, color: 'var(--text-primary)', maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {(d.decision_data?.supplier_name as string) ?? (d.decision_data?.product_name as string) ?? (d.decision_data?.outlet_name as string) ?? 'Decision'}
                     </td>
-                    <td style={{ padding: '10px 14px', fontSize: 12, fontWeight: 700, color: d.projected_impact_cents >= 0 ? '#34D399' : '#FBBF24', fontFamily: "'JetBrains Mono',monospace" }}>
+                    <td style={{ padding: '10px 14px', fontSize: 12, fontWeight: 700, color: d.projected_impact_cents >= 0 ? '#00B140' : '#FBBF24', fontFamily: "'JetBrains Mono',monospace" }}>
                       {impactFmt(d.projected_impact_cents)}
                     </td>
                     <td style={{ padding: '10px 14px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         <div style={{ width: 60, height: 5, borderRadius: 99, background: 'var(--bg-overlay)', overflow: 'hidden', flexShrink: 0 }}>
-                          <div style={{ height: '100%', width: `${(d.confidence_score ?? 0) * 100}%`, background: (d.confidence_score ?? 0) >= 0.8 ? '#34D399' : (d.confidence_score ?? 0) >= 0.5 ? '#FBBF24' : '#F87171', borderRadius: 99 }} />
+                          <div style={{ height: '100%', width: `${(d.confidence_score ?? 0) * 100}%`, background: (d.confidence_score ?? 0) >= 0.8 ? '#00B140' : (d.confidence_score ?? 0) >= 0.5 ? '#FBBF24' : '#F87171', borderRadius: 99 }} />
                         </div>
                         <span style={{ fontSize: 11, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>{((d.confidence_score ?? 0) * 100).toFixed(0)}%</span>
                       </div>
@@ -216,7 +216,7 @@ export default function AgentsDashboardPage() {
                     <td style={{ padding: '10px 14px', fontSize: 11, color: 'var(--text-tertiary)' }}>{relTime(d.created_at)}</td>
                     <td style={{ padding: '10px 14px' }}>
                       <div style={{ display: 'flex', gap: 6 }}>
-                        <button onClick={() => doDecision(d.id, 'approve', d.agent_type)} style={sBtn('#34D399', 'rgba(52,211,153,0.12)')}>✓ Approve</button>
+                        <button onClick={() => doDecision(d.id, 'approve', d.agent_type)} style={sBtn('#00B140', 'rgba(52,211,153,0.12)')}>✓ Approve</button>
                         <button onClick={() => doDecision(d.id, 'reject', d.agent_type)} style={sBtn('#F87171', 'rgba(248,113,113,0.12)')}>✗</button>
                         <button onClick={() => doDecision(d.id, 'snooze', d.agent_type)} style={sBtn('#94A3B8', 'rgba(148,163,184,0.10)')}>⏱</button>
                       </div>
