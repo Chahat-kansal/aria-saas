@@ -446,10 +446,12 @@ body {
 
 /*  Terminal v4: Cart panel layout  */
 .cart-items {
-  flex: 0 0 auto;
-  overflow-y: visible;
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
   padding: 0 12px 6px;
   display: flex; flex-direction: column; gap: 6px;
+  -webkit-overflow-scrolling: touch;
 }
 .cart-items::-webkit-scrollbar { width: 4px; }
 .cart-items::-webkit-scrollbar-thumb { background: rgba(127,184,151,0.10); border-radius: 2px; }
@@ -516,10 +518,6 @@ body {
   padding: 6px 16px 0;
   border-top: 1px solid var(--terminal-sage-rim, rgba(127,184,151,0.08));
   display: flex; flex-direction: column; gap: 4px; flex-shrink: 0;
-  position: sticky; bottom: 0;
-  background: var(--terminal-glass-1, rgba(28,44,36,0.97));
-  backdrop-filter: blur(20px);
-  z-index: 2;
 }
 .totals-row {
   display: flex; justify-content: space-between;
@@ -568,13 +566,7 @@ body {
   opacity: 0.95; margin-left: 2px;
 }
 
-.cart-action {
-  padding: 8px 14px 10px; flex-shrink: 0;
-  position: sticky; bottom: 0;
-  background: var(--terminal-glass-1, rgba(28,44,36,0.97));
-  backdrop-filter: blur(20px);
-  z-index: 2;
-}
+.cart-action { padding: 8px 14px 10px; flex-shrink: 0; }
 .charge-btn {
   width: 100%; padding: 13px 18px; border-radius: 8px; border: none;
   background: #006AFF;
@@ -655,9 +647,3 @@ html[data-theme="light"] .charge-btn { background: #006AFF; color: #FFFFFF; }
 html[data-theme="light"] .charge-btn:hover { background: #0055CC; }
 html[data-theme="light"] .cart-totals { border-top-color: #EBEBEB; }
 html[data-theme="light"] .cart-items::-webkit-scrollbar-thumb { background: #D9D9D9; }
-html[data-theme="light"] .cart-totals {
-  background: rgba(246,246,244,0.97);
-}
-html[data-theme="light"] .cart-action {
-  background: rgba(246,246,244,0.97);
-}
