@@ -42,6 +42,9 @@ const ALL_ITEMS: Record<string, NavItemDef> = {
   'orders':                     { href: '/dashboard/orders',                   label: 'Weekly Orders',     icon: OrdersIcon,         badge: 'AI',  section: 'Operations'   },
   'delivery':                   { href: '/dashboard/delivery',                 label: 'Delivery platforms', icon: DeliveryIcon,       section: 'Operations'   },
   'parcel-tracking':            { href: '/dashboard/parcel-tracking',           label: 'Parcel tracking',    icon: TruckOutlineIcon,               section: 'Operations'   },
+  'cash-up':                    { href: '/dashboard/cash-up',                  label: 'Daily cash-up',      icon: GridIcon,           section: 'Operations'   },
+  'stocktake':                  { href: '/dashboard/stocktake',                label: 'Stocktake',          icon: GridIcon,           section: 'Operations'   },
+  'customer-tabs':              { href: '/dashboard/customer-tabs',            label: 'Customer tabs',      icon: UsersIcon,          section: 'Overview'     },
   'pos-online':                 { href: '/dashboard/pos/online',               label: 'Online ordering',    icon: DeliveryIcon,       badge: 'AI',  section: 'Operations'   },
   'dashboard':                  { href: '/dashboard',                          label: 'Dashboard',         icon: GridIcon,           section: 'Overview'     },
   'custom-features':            { href: '/dashboard/custom-features',          label: 'Custom features',   icon: SparklesIcon,       badge: 'New', section: 'Overview' },
@@ -288,7 +291,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
             </div>
             <div className="w-full h-1 rounded-full bg-[rgba(255,255,255,0.06)] overflow-hidden">
               <div className="h-full rounded-full transition-all duration-700"
-                style={{ width: `${health.score}%`, background: HEALTH_COLOR[health.grade] ?? '#9ca3af' }} />
+                style={{ width: '' + health.score + '%', background: HEALTH_COLOR[health.grade] ?? '#9ca3af' }} />
             </div>
           </div>
         )}
