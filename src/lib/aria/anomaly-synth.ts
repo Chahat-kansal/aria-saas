@@ -17,24 +17,22 @@ export async function synthesizeFromSignals(businessId: string, signals: Signal[
     `{\n  "recommendations": [\n    { "title": "Short imperative title", "category": "inventory|sales|customers|staff|cashflow|compliance|pricing", "priority": "high|medium|low", "recommendation": "One paragraph for the owner. Australian English. Specific.", "reason": "Why this matters, with the number.", "expected_impact": "Quantified if possible.", "confidence": 0.0 }\n  ]\n}\n` +
     `Output JSON only. No preamble. No code blocks.`
 
-  // Use Claude Haiku for reliability — Gemini was consistently failing
-  let text = ''
-  try {
-    const Anthropic = (await import('@anthropic-ai/sdk')).default
-    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-    const msg = await anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 2048,
-      messages: [{ role: 'user', content: prompt }],
-      system: 'You are a business analyst for Australian small businesses. Return JSON only. No preamble.',
-    })
-    const block = msg.content.find((b: any) => b.type === 'text') as any
-    text = block?.text ?? ''
-    if (!text) { console.error('[anomaly-synth] Claude returned no text'); return }
-  } catch (e) {
-    console.error('[anomaly-synth] Claude call failed:', (e as Error).message)
+  const { callGemini } = await import('./providers/gemini')
+  const geminiResult = await callGemini({
+    systemPrompt: 'You are a business analyst for Australian small businesses. Return JSON only. No preamble.',
+    userPrompt: prompt,
+    maxTokens: 2048,
+    businessId,
+    agentKey: 'signal_engine_synth',
+    role: 'analysis',
+  })
+
+  if (!geminiResult.success || !geminiResult.raw) {
+    console.error('[anomaly-synth] Gemini call failed, skipping synthesis for', businessId)
     return
   }
+
+  const text = geminiResult.raw
 
   let parsed: { recommendations?: Array<{ title: string; category: string; priority: string; recommendation: string; reason: string; expected_impact: string; confidence: number }> } = {}
   try { parsed = JSON.parse(text.replace(/^```json?\s*/i, '').replace(/```\s*$/i, '').trim()) } catch (e) { console.error('[anomaly-synth] JSON parse error:', e); return }
