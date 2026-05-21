@@ -231,8 +231,8 @@ async function _POST(req: Request) {
     const paymentRows: object[] = [];
     const pm = payment_method ?? 'cash';
     if (pm === 'split') {
-      if ((split_cash ?? 0) > 0) paymentRows.push({ sale_id: sale.id, business_id: business.id, payment_method: 'cash', amount: split_cash ?? 0 });
-      if ((split_card ?? 0) > 0) paymentRows.push({ sale_id: sale.id, business_id: business.id, payment_method: 'card', amount: split_card ?? 0 });
+      if ((split_cash ?? 0) > 0) paymentRows.push({ sale_id: sale.id, method: 'cash', amount_cents: Math.round((split_cash ?? 0) * 100) });
+      if ((split_card ?? 0) > 0) paymentRows.push({ sale_id: sale.id, method: 'card', amount_cents: Math.round((split_card ?? 0) * 100) });
     } else {
       paymentRows.push({ sale_id: sale.id, method: pm, amount_cents: Math.round((total_amount ?? 0) * 100) });
     }
