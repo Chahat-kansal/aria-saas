@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 
-const C = { bg:'var(--bg-base)', card:'var(--bg-surface)', border:'transparent', text:'var(--text-primary)', muted:'var(--text-secondary)', violet:'#8B5CF6' };
+const C = { bg:'var(--bg-base)', card:'var(--bg-surface)', border:'transparent', text:'var(--text-primary)', muted:'var(--text-secondary)', violet:'#006AFF' };
 
 export default function PriceTicketsPage() {
   return (
