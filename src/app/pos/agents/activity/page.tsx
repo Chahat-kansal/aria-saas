@@ -16,9 +16,9 @@ interface ActivityRow {
 
 const AGENT_TYPES = ['all', 'reorder', 'pricing', 'schedule'];
 const STATUS_COLORS: Record<string, string> = {
-  approved: '#34D399', rejected: '#F87171', snoozed: '#FBBF24', auto_executed: '#60A5FA',
+  approved: '#00B140', rejected: '#F87171', snoozed: '#FBBF24', auto_executed: '#60A5FA',
 };
-const agentColor: Record<string, string> = { reorder: '#34D399', pricing: '#FBBF24', schedule: '#60A5FA' };
+const agentColor: Record<string, string> = { reorder: '#00B140', pricing: '#FBBF24', schedule: '#60A5FA' };
 
 const relTime = (d: string) => {
   const diff = Date.now() - new Date(d).getTime();
@@ -104,7 +104,7 @@ export default function AgentActivityPage() {
           <thead>
             <tr>
               {['TIMESTAMP', 'AGENT', 'DECISION', 'CONFIDENCE', 'IMPACT', 'STATUS', 'APPROVED BY', 'OUTCOME'].map(h => (
-                <th key={h} style={{ padding: '10px 14px', background: '#29b6f6', color: '#fff', fontSize: 11, fontWeight: 700, textAlign: 'left', whiteSpace: 'nowrap' }}>{h}</th>
+                <th key={h} style={{ padding: '10px 14px', background: '#006AFF', color: '#fff', fontSize: 11, fontWeight: 700, textAlign: 'left', whiteSpace: 'nowrap' }}>{h}</th>
               ))}
             </tr>
           </thead>
@@ -123,7 +123,7 @@ export default function AgentActivityPage() {
               </td></tr>
             ) : paged.map((r, i) => {
               const statusColor = STATUS_COLORS[r.status] ?? '#94A3B8';
-              const color = agentColor[r.agent_type] ?? '#8B5CF6';
+              const color = agentColor[r.agent_type] ?? '#006AFF';
               return (
                 <tr key={r.id} style={{ background: i % 2 === 0 ? 'var(--bg-surface)' : 'var(--bg-elevated)' }}>
                   <td style={{ padding: '10px 14px', fontSize: 11, color: 'var(--text-tertiary)', whiteSpace: 'nowrap' }}>
@@ -138,12 +138,12 @@ export default function AgentActivityPage() {
                   <td style={{ padding: '10px 14px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       <div style={{ width: 48, height: 4, borderRadius: 99, background: 'var(--bg-overlay)', overflow: 'hidden', flexShrink: 0 }}>
-                        <div style={{ height: '100%', width: `${(r.confidence_score ?? 0) * 100}%`, background: (r.confidence_score ?? 0) >= 0.8 ? '#34D399' : (r.confidence_score ?? 0) >= 0.5 ? '#FBBF24' : '#F87171', borderRadius: 99 }} />
+                        <div style={{ height: '100%', width: `${(r.confidence_score ?? 0) * 100}%`, background: (r.confidence_score ?? 0) >= 0.8 ? '#00B140' : (r.confidence_score ?? 0) >= 0.5 ? '#FBBF24' : '#F87171', borderRadius: 99 }} />
                       </div>
                       <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>{((r.confidence_score ?? 0) * 100).toFixed(0)}%</span>
                     </div>
                   </td>
-                  <td style={{ padding: '10px 14px', fontSize: 12, fontWeight: 700, fontFamily: "'JetBrains Mono',monospace", color: r.projected_impact_cents >= 0 ? '#34D399' : '#FBBF24' }}>
+                  <td style={{ padding: '10px 14px', fontSize: 12, fontWeight: 700, fontFamily: "'JetBrains Mono',monospace", color: r.projected_impact_cents >= 0 ? '#00B140' : '#FBBF24' }}>
                     {impactFmt(r.projected_impact_cents ?? 0)}
                   </td>
                   <td style={{ padding: '10px 14px' }}>
