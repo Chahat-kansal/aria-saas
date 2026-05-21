@@ -1,8 +1,10 @@
 'use client';
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { useBusinessContext } from '@/components/providers/BusinessProvider';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+
+const RECEIPT_SESSION_KEY = 'aria_receipt_scan_v1';
 
 interface ExtractedLine {
   description: string;
@@ -45,6 +47,34 @@ export default function ReceiptScanPage() {
   const [error, setError] = useState('');
   const [dragOver, setDragOver] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Restore scan results from sessionStorage on mount
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem(RECEIPT_SESSION_KEY);
+      if (saved) {
+        const d = JSON.parse(saved);
+        if (d.scanResult?.line_count > 0 && d.state === 'review') {
+          setScanResult(d.scanResult);
+          setCheckedRows(d.checkedRows ?? {});
+          setNewStocks(d.newStocks ?? {});
+          setAddAsNew(d.addAsNew ?? {});
+          setState('review');
+        }
+      }
+    } catch { /* ignore */ }
+  }, []);
+
+  // Save scan state whenever results change
+  useEffect(() => {
+    try {
+      if (state === 'review' && scanResult) {
+        sessionStorage.setItem(RECEIPT_SESSION_KEY, JSON.stringify({ state, scanResult, checkedRows, newStocks, addAsNew, savedAt: Date.now() }));
+      } else if (state === 'upload' || state === 'confirmed') {
+        sessionStorage.removeItem(RECEIPT_SESSION_KEY);
+      }
+    } catch { /* ignore */ }
+  }, [state, scanResult, checkedRows, newStocks, addAsNew]);
 
   const processFile = useCallback(async (file: File) => {
     if (!business?.id) return;
@@ -155,6 +185,7 @@ export default function ReceiptScanPage() {
   }
 
   function reset() {
+    try { sessionStorage.removeItem(RECEIPT_SESSION_KEY); } catch { /* ignore */ }
     setState('upload');
     setScanResult(null);
     setPreview(null);
