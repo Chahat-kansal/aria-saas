@@ -2521,7 +2521,7 @@ export default function TerminalPage() {
         </div>
 
         {/* ── CENTRE: Cart ──────────────────────────────────────── */}
-        <div className={`pos-cart-panel flex flex-col overflow-hidden ${mobileTab !== 'cart' ? 'hidden sm:flex' : 'flex'}`}
+        <div className={`pos-cart-panel flex flex-col overflow-y-auto ${mobileTab !== 'cart' ? 'hidden sm:flex' : 'flex'}`}
           style={{ flex: '0 0 360px', width: 360, height: '100%', background: 'var(--terminal-glass-1,rgba(28,44,36,0.55))', backdropFilter: 'blur(40px) saturate(1.4)', WebkitBackdropFilter: 'blur(40px) saturate(1.4)', borderLeft: '1px solid var(--terminal-sage-rim,rgba(127,184,151,0.18))', minHeight: 0 }}>
 
           {showReceipt && terminalView !== 'confirm' ? (
