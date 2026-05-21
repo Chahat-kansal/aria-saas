@@ -31,7 +31,7 @@ export async function GET(_req: Request, { params }: { params: { sale_id: string
       .select('product_name, quantity, unit_price, discount_percent, line_total, modifiers')
       .eq('sale_id', sale_id),
     sb.from('pos_sale_payments')
-      .select('payment_method, amount, reference')
+      .select('method, amount_cents, reference')
       .eq('sale_id', sale_id),
     sb.from('businesses')
       .select('name, abn, phone, email, address')
@@ -51,7 +51,7 @@ export async function GET(_req: Request, { params }: { params: { sale_id: string
       customer: sale.pos_customers,
     },
     items: itemsRes.data ?? [],
-    payments: paymentsRes.data ?? [],
+    payments: (paymentsRes.data ?? []).map((p: any) => ({ payment_method: p.method, amount: (p.amount_cents ?? 0) / 100, reference: p.reference })),
     business: bizRes.data,
   })
 }
