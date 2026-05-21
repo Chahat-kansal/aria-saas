@@ -18,7 +18,7 @@ const today = new Date()
 const todayStart = new Date(today); todayStart.setHours(0, 0, 0, 0)
 const todayEnd = new Date(today); todayEnd.setHours(23, 59, 59, 999)
 
-const STATUS_COLOR: Record<string, string> = { completed: '#7FB897', voided: '#FF6B6B', refunded: '#FFB347', parked: '#A8B5A8' }
+const STATUS_COLOR: Record<string, string> = { completed: '#006AFF', voided: '#FF6B6B', refunded: '#FFB347', parked: '#6B6B6B' }
 
 function downloadCSV(sales: Sale[]) {
   const rows = [
@@ -79,7 +79,7 @@ export default function SalesHistoryPage() {
           <h1 className="text-xl font-semibold">Sales History</h1>
           <p className="text-xs mt-0.5" style={{ color: 'var(--text-secondary, #A8B5A8)' }}>{total} records · click any row to view details</p>
         </div>
-        <button onClick={() => downloadCSV(sales)} className="px-3 py-1.5 rounded-xl text-xs font-medium" style={{ border: '1px solid rgba(127,184,151,0.2)', color: '#7FB897' }}>
+        <button onClick={() => downloadCSV(sales)} className="px-3 py-1.5 rounded-xl text-xs font-medium" style={{ border: '1px solid rgba(127,184,151,0.2)', color: '#006AFF' }}>
           Export CSV
         </button>
       </div>
@@ -112,13 +112,13 @@ export default function SalesHistoryPage() {
                   onMouseEnter={e => (e.currentTarget.style.background = 'rgba(127,184,151,0.04)')}
                   onMouseLeave={e => (e.currentTarget.style.background = '')}
                 >
-                  <td className="px-4 py-3 font-mono text-xs font-semibold" style={{ color: '#7FB897' }}>{s.sale_number}</td>
+                  <td className="px-4 py-3 font-mono text-xs font-semibold" style={{ color: '#006AFF' }}>{s.sale_number}</td>
                   <td className="px-4 py-3 text-xs" style={{ color: 'var(--text-secondary, #A8B5A8)' }}>{new Date(s.created_at).toLocaleTimeString()}</td>
                   <td className="px-4 py-3 text-xs">{s.customer_name ?? '—'}</td>
                   <td className="px-4 py-3 text-xs capitalize">{s.payment_method ?? '—'}</td>
                   <td className="px-4 py-3 font-medium">${(Number(s.total_amount) || 0).toFixed(2)}</td>
                   <td className="px-4 py-3">
-                    <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: `${STATUS_COLOR[s.status] ?? '#A8B5A8'}22`, color: STATUS_COLOR[s.status] ?? '#A8B5A8' }}>
+                    <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: `${STATUS_COLOR[s.status] ?? '#6B6B6B'}22`, color: STATUS_COLOR[s.status] ?? '#6B6B6B' }}>
                       {s.status}
                     </span>
                   </td>
