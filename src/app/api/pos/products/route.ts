@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
+export const maxDuration = 30;
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { autoFetchProductImage } from '@/lib/pos/auto-fetch-image'
 
@@ -55,11 +56,12 @@ async function _GET(req: Request) {
 
   const { data: biz } = await supabase.from('businesses').select('name,industry,terminal_layout').eq('id', bid).maybeSingle();
   const [{ data: products }, { data: categories }, { data: saleKeys }] = await Promise.all([
-    supabase
+supabase
       .from('pos_products')
       .select('id,name,sku,barcode,description,price,cost_price,tax_rate,tax_code_id,additional_tax_code_ids,stock_quantity,low_stock_threshold,track_stock,is_active,show_online,image_url,builder_type,category_id,supplier_id,pos_categories(name,color)')
       .eq('business_id', bid)
-      .order('name'),
+      .order('name')
+      .limit(500),
     supabase
       .from('pos_categories')
       .select('*')
