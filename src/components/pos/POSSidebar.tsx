@@ -159,6 +159,16 @@ export default function POSSidebar({
   }, [])
 
   // ── Helpers ──────────────────────────────────────────────────────
+  // Theme toggle
+  const [theme, setTheme] = useState<'dark'|'light'>(() => {
+    if (typeof window === 'undefined') return 'dark';
+    return (localStorage.getItem('pos_theme') as 'dark'|'light') ?? 'dark';
+  });
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('pos_theme', theme);
+  }, [theme]);
+
   const toggleRail = () => {
     const next = !collapsed
     setCollapsed(next)
@@ -601,6 +611,21 @@ export default function POSSidebar({
                   <User size={14} /> Settings
                 </Link>
                 <button
+                  onClick={() => { setTheme(t => t === 'dark' ? 'light' : 'dark'); setUserMenuOpen(false); }}
+                  style={{
+                    width: '100%', display: 'flex', alignItems: 'center', gap: 8,
+                    padding: '8px 12px', background: 'transparent', border: 'none',
+                    color: 'var(--text-primary)', cursor: 'pointer',
+                    fontSize: 13, textAlign: 'left', fontFamily: 'inherit',
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-hover)' }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
+                >
+                  <span style={{ fontSize: 14 }}>{theme === 'dark' ? '☀️' : '🌙'}</span>
+                  {theme === 'dark' ? 'Light mode' : 'Dark mode'}
+                </button>
+                <div style={{ height: 1, background: 'var(--divider)' }} />
+                <button
                   onClick={handleSignOut}
                   disabled={signingOut}
                   style={{
@@ -760,3 +785,4 @@ function CommandPalette({
     </motion.div>
   )
 }
+
