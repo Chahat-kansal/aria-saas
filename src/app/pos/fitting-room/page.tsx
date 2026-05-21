@@ -7,7 +7,7 @@ interface Session { id: string; room_number: string; customer_name: string|null;
 const C = {
   bg:'var(--bg-base)', card:'var(--bg-surface)', text:'var(--text-primary)',
   muted:'var(--text-secondary)', dim:'var(--text-tertiary)',
-  violet:'#8B5CF6', green:'#22C55E', red:'#EF4444', amber:'#F59E0B',
+  violet:'#006AFF', green:'#00B140', red:'#EF4444', amber:'#F59E0B',
   border:'rgba(255,255,255,0.07)',
 }
 const iS: React.CSSProperties = { background:'var(--bg-base)', border:`1px solid ${C.border}`, borderRadius:8, padding:'8px 12px', fontSize:13, color:C.text, outline:'none', fontFamily:'inherit', width:'100%', boxSizing:'border-box' }
