@@ -2042,32 +2042,32 @@ export default function TerminalPage() {
         <span style={{ fontSize: 11, color: 'var(--text-tertiary)', fontWeight: 400 }}>{businessName}</span>
         <div style={{ flex: 1 }} />
         {/* Register quick actions — right side of top bar */}
-        <div className="flex gap-1.5 items-center flex-wrap justify-end" style={{ maxWidth: '55%' }}>
+        <div className="flex gap-1 items-center overflow-x-auto" style={{ flexShrink: 0, flexWrap: 'nowrap', maxWidth: '60%', scrollbarWidth: 'none' }}>
           {!registerLoading && parkedSales.length > 0 && (
-            <button onClick={() => setShowParked(true)} className="px-2 py-0.5 rounded text-xs" style={{ color: 'var(--text-secondary)', border: '1px solid #2A2540', background: 'rgba(255,255,255,0.03)' }}>
+            <button onClick={() => setShowParked(true)} className="px-3 py-1 rounded-md text-xs whitespace-nowrap flex-shrink-0" style={{ color: 'var(--text-secondary)', border: '1px solid var(--border-default)', background: 'var(--bg-surface)' }}>
               Parked ({parkedSales.length})
             </button>
           )}
           {/* Online orders bell — Sprint J, cafe-only */}
           {businessType === 'cafe' && pendingOnlineOrders.length > 0 && (
             <button onClick={() => setShowOnlineBell(v => !v)}
-              className="px-2 py-0.5 rounded text-xs"
+              className="px-3 py-1 rounded-md text-xs whitespace-nowrap flex-shrink-0"
               style={{ color: '#F59E0B', border: '1px solid rgba(245,158,11,0.4)', background: 'rgba(245,158,11,0.08)', position: 'relative' }}>
               🔔 {pendingOnlineOrders.length} online
             </button>
           )}
           {!registerLoading && cart.length > 0 && (
-            <button onClick={() => { setShowSplitModal(true); setSplitSaleId(null) }} className="px-2 py-0.5 rounded text-xs" style={{ color: '#8B5CF6', border: '1px solid rgba(139,92,246,0.4)', background: 'rgba(139,92,246,0.08)' }}>
+            <button onClick={() => { setShowSplitModal(true); setSplitSaleId(null) }} className="px-3 py-1 rounded-md text-xs whitespace-nowrap flex-shrink-0" style={{ color: 'var(--violet)', border: '1px solid var(--border-violet)', background: 'var(--violet-dim)' }}>
               ✂ Split Bill
             </button>
           )}
           {!registerLoading && (
-            <button onClick={() => { if (!canVoid) { alert('Manager permission required to process refunds.'); return; } setShowRefundModal(true); }} className="px-2 py-0.5 rounded text-xs" style={{ color: canVoid ? 'var(--text-secondary)' : '#6B7280', border: '1px solid #2A2540', background: 'rgba(255,255,255,0.03)' }}>
+            <button onClick={() => { if (!canVoid) { alert('Manager permission required to process refunds.'); return; } setShowRefundModal(true); }} className="px-3 py-1 rounded-md text-xs whitespace-nowrap flex-shrink-0" style={{ color: canVoid ? 'var(--text-secondary)' : '#6B7280', border: '1px solid var(--border-default)', background: 'var(--bg-surface)' }}>
               ⟳ Refund
             </button>
           )}
           {!registerLoading && registerIsOpen && (
-            <button onClick={() => setShowCashierModal(true)} className="px-2 py-0.5 rounded text-xs" style={{ color: 'var(--text-secondary)', border: '1px solid #2A2540', background: 'rgba(255,255,255,0.03)', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <button onClick={() => setShowCashierModal(true)} className="px-3 py-1 rounded-md text-xs whitespace-nowrap flex-shrink-0" style={{ color: 'var(--text-secondary)', border: '1px solid var(--border-default)', background: 'var(--bg-surface)', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {registerSession?.opened_by
                 ? `👤 ${registerSession.opened_by.includes('-') && !registerSession.opened_by.includes('@')
                     ? 'Owner'
@@ -2079,19 +2079,19 @@ export default function TerminalPage() {
           )}
           {businessType === 'cafe' && (
             <button onClick={() => setShowKdsTracker(v => !v)}
-              className="px-2 py-0.5 rounded text-xs"
+              className="px-3 py-1 rounded-md text-xs whitespace-nowrap flex-shrink-0"
               style={{ color: kdsReadyOrders.length > 0 ? '#7FB897' : 'var(--text-secondary)', border: kdsReadyOrders.length > 0 ? '1px solid rgba(127,184,151,0.4)' : '1px solid #2A2540', background: kdsReadyOrders.length > 0 ? 'rgba(127,184,151,0.1)' : 'rgba(255,255,255,0.03)' }}>
               🍳{kdsReadyOrders.length > 0 ? ` ${kdsReadyOrders.length} ready` : ' Kitchen'}
             </button>
           )}
           {!registerLoading && (
-            <button onClick={toggleTrainingMode} className="px-2 py-0.5 rounded text-xs" style={{ color: trainingMode ? '#F59E0B' : 'var(--text-secondary)', border: `1px solid ${trainingMode ? 'rgba(245,158,11,0.4)' : '#2A2540'}`, background: trainingMode ? 'rgba(245,158,11,0.08)' : 'rgba(255,255,255,0.03)' }}>
+            <button onClick={toggleTrainingMode} className="px-3 py-1 rounded-md text-xs whitespace-nowrap flex-shrink-0" style={{ color: trainingMode ? '#F59E0B' : 'var(--text-secondary)', border: `1px solid ${trainingMode ? 'rgba(245,158,11,0.4)' : '#2A2540'}`, background: trainingMode ? 'rgba(245,158,11,0.08)' : 'rgba(255,255,255,0.03)' }}>
               {trainingMode ? '🎓 Training ON' : '🎓'}
             </button>
           )}
           {!registerLoading && (registerIsOpen
-            ? <button onClick={() => setShowCloseModal(true)} className="px-2 py-0.5 rounded text-xs" style={{ color: '#EF4444', border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.06)' }}>Close reg.</button>
-            : <button onClick={() => setShowRegisterModal(true)} className="px-2 py-0.5 rounded text-xs" style={{ color: '#22C55E', border: '1px solid rgba(34,197,94,0.3)', background: 'rgba(34,197,94,0.06)' }}>Open reg.</button>
+            ? <button onClick={() => setShowCloseModal(true)} className="px-3 py-1 rounded-md text-xs whitespace-nowrap flex-shrink-0" style={{ color: '#EF4444', border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.06)' }}>Close reg.</button>
+            : <button onClick={() => setShowRegisterModal(true)} className="px-3 py-1 rounded-md text-xs whitespace-nowrap flex-shrink-0" style={{ color: '#22C55E', border: '1px solid rgba(34,197,94,0.3)', background: 'rgba(34,197,94,0.06)' }}>Open reg.</button>
           )}
         </div>
       </div>
@@ -3978,5 +3978,6 @@ function SearchIcon({ className }: { className?: string }) {
 function BagOutlineIcon({ className }: { className?: string }) {
   return <svg className={className} fill="none" viewBox="0 0 24 24" stroke="rgba(74,69,101,0.4)" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"/></svg>;
 }
+
 
 
