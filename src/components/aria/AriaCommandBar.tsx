@@ -169,11 +169,11 @@ export function AriaCommandBar() {
   return (
     <div
       className="fixed inset-0 z-[999] flex items-start justify-center pt-[15vh]"
-      style={{ backdropFilter: 'blur(8px)', background: 'rgba(0,0,0,0.7)' }}
+      style={{ backdropFilter: 'blur(8px)', background: 'rgba(0,0,0,0.75)' }}
       onClick={e => { if (e.target === e.currentTarget) setOpen(false); }}
     >
       <div className="w-full max-w-xl mx-4 rounded-2xl overflow-hidden shadow-2xl"
-        style={{ background: '#13131a', border: '1px solid rgba(255,255,255,0.1)' }}>
+        style={{ background: '#13131a', border: '1px solid rgba(255,255,255,0.1)', colorScheme: 'dark', isolation: 'isolate' }}>
 
         {/* Input */}
         <div className="flex items-center gap-3 px-5 py-4 border-b border-[rgba(255,255,255,0.07)]">
