@@ -54,7 +54,7 @@ export default function StocktakePage() {
     if (!business?.id) return
     setLoading(true)
     try {
-      const res = await fetch('/api/pos/stocktakes?business_id=' + business.id)
+      const res = await fetch('/api/pos/stock-takes')
       const d = await res.json()
       setStocktakes(d.stocktakes ?? [])
     } catch { /* ignore */ }

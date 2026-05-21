@@ -195,6 +195,106 @@ function SalesLeaderboard({ businessId }: { businessId: string }) {
   )
 }
 
+interface Timesheet { id: string; staff_name: string; clock_in: string; clock_out: string | null; total_minutes: number | null; total_pay_cents?: number }
+
+function ClockWidget({ businessId }: { businessId: string }) {
+  const [timesheets, setTimesheets] = React.useState<Timesheet[]>([])
+  const [staffId, setStaffId] = React.useState('')
+  const [staffName, setStaffName] = React.useState('')
+  const [msg, setMsg] = React.useState('')
+  const [clockingIn, setClockingIn] = React.useState(false)
+  const [loading, setLoading] = React.useState(false)
+
+  async function load() {
+    setLoading(true)
+    const today = new Date().toISOString().split('T')[0]
+    const res = await fetch('/api/pos/timesheets?from=' + today + 'T00:00:00&to=' + today + 'T23:59:59')
+    const d = await res.json()
+    setTimesheets(d.sessions ?? [])
+    setLoading(false)
+  }
+
+  React.useEffect(() => { if (businessId) load() }, [businessId])
+
+  async function clockIn() {
+    if (!staffId.trim()) { setMsg('Enter a staff ID'); return }
+    setClockingIn(true); setMsg('')
+    const res = await fetch('/api/pos/timesheets', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ staff_id: staffId.trim(), staff_name: staffName.trim() || staffId.trim() }),
+    })
+    const d = await res.json()
+    if (d.error) setMsg('Error: ' + d.error)
+    else { setMsg('Clocked in!'); setStaffId(''); setStaffName(''); load() }
+    setClockingIn(false)
+  }
+
+  async function clockOut(sessionId: string) {
+    await fetch('/api/pos/timesheets', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_id: sessionId }),
+    })
+    load()
+  }
+
+  const active = timesheets.filter(t => !t.clock_out)
+  const done = timesheets.filter(t => t.clock_out)
+  const todayMins = done.reduce((s, t) => s + (t.total_minutes ?? 0), 0)
+  const todayPay = done.reduce((s, t) => s + (t.total_pay_cents ?? 0), 0)
+
+  return (
+    <div style={{ background: 'var(--bg-elevated, #1A2620)', border: '1px solid rgba(232,237,231,0.04)', borderRadius: 12, padding: '20px', marginTop: 20 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+        <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary, #E8EDE7)', margin: 0 }}>Clock In / Out</h2>
+        <div style={{ display: 'flex', gap: 12, fontSize: 11, color: 'var(--text-secondary, #A8B5A8)' }}>
+          <span style={{ color: active.length > 0 ? '#1D9E75' : undefined }}>{active.length} active</span>
+          <span>{(todayMins / 60).toFixed(1)}h today</span>
+          <span>A${(todayPay / 100).toFixed(2)} wages</span>
+        </div>
+      </div>
+      {active.map(t => {
+        const mins = Math.floor((Date.now() - new Date(t.clock_in).getTime()) / 60000)
+        return (
+          <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', background: 'rgba(29,158,117,0.08)', border: '1px solid rgba(29,158,117,0.2)', borderRadius: 8, marginBottom: 6 }}>
+            <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#1D9E75', display: 'inline-block', flexShrink: 0 }} />
+            <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: 'var(--text-primary, #E8EDE7)' }}>{t.staff_name}</span>
+            <span style={{ fontSize: 11, color: 'var(--text-secondary, #A8B5A8)' }}>{(mins / 60).toFixed(1)}h</span>
+            <button onClick={() => clockOut(t.id)}
+              style={{ padding: '3px 10px', borderRadius: 6, border: 'none', background: 'rgba(239,68,68,0.15)', color: '#EF4444', fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+              Clock out
+            </button>
+          </div>
+        )
+      })}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
+        <input type="text" placeholder="Staff ID" value={staffId} onChange={e => setStaffId(e.target.value)}
+          style={{ flex: 1, padding: '7px 10px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(232,237,231,0.08)', borderRadius: 7, color: 'var(--text-primary, #E8EDE7)', fontSize: 12, fontFamily: 'inherit', outline: 'none' }} />
+        <input type="text" placeholder="Name (optional)" value={staffName} onChange={e => setStaffName(e.target.value)}
+          style={{ flex: 1, padding: '7px 10px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(232,237,231,0.08)', borderRadius: 7, color: 'var(--text-primary, #E8EDE7)', fontSize: 12, fontFamily: 'inherit', outline: 'none' }} />
+        <button onClick={clockIn} disabled={clockingIn}
+          style={{ padding: '7px 14px', borderRadius: 7, border: 'none', background: '#1D9E75', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', opacity: clockingIn ? 0.6 : 1 }}>
+          Clock in
+        </button>
+      </div>
+      {msg && <p style={{ fontSize: 11, color: msg.startsWith('Error') ? '#EF4444' : '#1D9E75', margin: '2px 0' }}>{msg}</p>}
+      {done.length > 0 && (
+        <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+          <p style={{ fontSize: 10, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 5 }}>Completed today</p>
+          {done.slice(0, 5).map(t => (
+            <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--text-secondary, #A8B5A8)', marginBottom: 2 }}>
+              <span>{t.staff_name}</span>
+              <span>{((t.total_minutes ?? 0) / 60).toFixed(1)}h · A${((t.total_pay_cents ?? 0) / 100).toFixed(2)}</span>
+            </div>
+          ))}
+          <a href="/dashboard/staff/timesheets" style={{ fontSize: 11, color: '#7FB897', marginTop: 5, display: 'block' }}>View all timesheets →</a>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function StaffPage() {
   const [members, setMembers] = useState<MemberRow[]>([])
   const [loading, setLoading] = useState(true)
@@ -326,6 +426,25 @@ export default function StaffPage() {
         </div>
       )}
       <SalesLeaderboard businessId={business?.id ?? ''} />
+
+      <div style={{ marginTop: 20, padding: '14px 18px', background: 'rgba(59,130,246,0.06)', border: '1px solid rgba(59,130,246,0.2)', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+        <div>
+          <p style={{ fontSize: 13, fontWeight: 600, color: '#3B82F6', marginBottom: 2 }}>Payroll, TFN &amp; bank details</p>
+          <p style={{ fontSize: 12, color: 'var(--text-secondary, #A8B5A8)' }}>Aria tracks hours and wages. For compliance, payroll transfers are handled by your accounting software.</p>
+        </div>
+        <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+          <a href="https://www.xero.com/au/accounting-software/payroll/" target="_blank" rel="noopener noreferrer"
+            style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid rgba(59,130,246,0.3)', color: '#3B82F6', fontSize: 12, fontWeight: 600, textDecoration: 'none' }}>
+            Connect Xero
+          </a>
+          <a href="https://www.myob.com/au" target="_blank" rel="noopener noreferrer"
+            style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid rgba(59,130,246,0.3)', color: '#3B82F6', fontSize: 12, fontWeight: 600, textDecoration: 'none' }}>
+            Connect MYOB
+          </a>
+        </div>
+      </div>
+
+      {members[0]?.business_id && <ClockWidget businessId={members[0].business_id} />}
     </div>
   )
 }
