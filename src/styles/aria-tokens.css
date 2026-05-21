@@ -37,6 +37,10 @@
 /*  Terminal light theme  Square palette  */
 html[data-theme="light"] {
   --terminal-bg-canvas:     #F6F6F4;
+  --terminal-sage:          #006AFF;
+  --terminal-amber:         #1A1A1A;
+  --terminal-amber-glow:    rgba(0,0,0,0);
+  --terminal-amber-soft:    rgba(0,0,0,0);
   --terminal-bg-aurora:     #F0F0EE;
   --terminal-bg-surface:    #FFFFFF;
   --terminal-bg-elevated:   #FFFFFF;
