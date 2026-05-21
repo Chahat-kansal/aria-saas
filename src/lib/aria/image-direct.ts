@@ -18,18 +18,36 @@ export async function generateImageDirect(
   message: string,
   businessId: string,
 ): Promise<ImageDirectResult> {
-  // Extract a clean prompt from the user's message
-  // Remove common filler phrases so the image API gets a clean prompt
-  const prompt = message
+  // Fetch real business details to ground the prompt
+  const { data: biz } = await supabaseAdmin
+    .from('businesses')
+    .select('name, city, phone, address, industry')
+    .eq('id', businessId)
+    .single()
+
+  const bizName = (biz as any)?.name ?? ''
+  const bizCity = (biz as any)?.city ?? ''
+  const bizPhone = (biz as any)?.phone ?? ''
+  const bizIndustry = (biz as any)?.industry ?? 'cafe'
+
+  // Build a grounded prompt that always includes the real business name
+  // Strip filler from user message
+  const userIntent = message
     .replace(/^(generate|create|make|design|build)\s+(a\s+)?/i, '')
-    .replace(/\b(for my business|for us|please|can you|could you)\b/gi, '')
+    .replace(/\b(for my business|for us|please|can you|could you|use my business info|and include our name|include.*business info)\b/gi, '')
     .replace(/\s+/g, ' ')
     .trim()
+
+  // Always ground with real business name — prevents hallucination of fake business names
+  const locationPart = bizCity ? `Located in ${bizCity}.` : ''
+  const prompt = bizName
+    ? `Professional marketing poster for "${bizName}" (a ${bizIndustry}). ${userIntent}. Business name "${bizName}" must appear prominently. ${locationPart} Clean, modern design.`
+    : userIntent
 
   const GEMINI_KEY = process.env.GEMINI_API_KEY
   const OPENAI_KEY = process.env.OPENAI_API_KEY
 
-  console.log('[image-direct] generating:', prompt.slice(0, 100), 'gemini:', !!GEMINI_KEY, 'openai:', !!OPENAI_KEY)
+  console.log('[image-direct] generating for business:', bizName, 'prompt:', prompt.slice(0, 120))
 
   // Strategy 1: Imagen 3 via Gemini (fastest, ~8-12s)
   if (GEMINI_KEY) {
@@ -100,13 +118,13 @@ export async function generateImageDirect(
 
   // Strategy 3: SVG poster fallback — always works, no external API needed
   console.log('[image-direct] falling back to SVG poster generation')
-  const svgResult = await generateSVGPoster(message, businessId)
+  const svgResult = await generateSVGPoster(message, businessId, { name: bizName, city: bizCity, phone: bizPhone, industry: bizIndustry })
   if (svgResult) return svgResult
 
   return { ok: false, error: 'All image generation strategies failed. Keys set: gemini=' + !!GEMINI_KEY + ' openai=' + !!OPENAI_KEY }
 }
 
-async function generateSVGPoster(message: string, businessId: string): Promise<ImageDirectResult | null> {
+async function generateSVGPoster(message: string, businessId: string, bizData?: { name: string; city: string; phone: string; industry: string }): Promise<ImageDirectResult | null> {
   try {
     // Extract key info from the message
     const timeMatch = message.match(/(\d{1,2}(?::\d{2})?(?:am|pm)?\s*[-–]\s*\d{1,2}(?::\d{2})?(?:am|pm)?)/i)
@@ -114,26 +132,22 @@ async function generateSVGPoster(message: string, businessId: string): Promise<I
     const isOpen = /open|opening|hours/i.test(message)
     const isAnnouncement = /announce|new|launch|introducing/i.test(message)
 
-    // Get business info
-    const { data: biz } = await supabaseAdmin
-      .from('businesses')
-      .select('name, city, phone')
-      .eq('id', businessId)
-      .single()
-
-    const bizName = (biz as any)?.name ?? 'Our Business'
-    const city = (biz as any)?.city ?? ''
-    const phone = (biz as any)?.phone ?? ''
+    // Use pre-fetched business info
+    const bizName = bizData?.name ?? 'Our Business'
+    const city = bizData?.city ?? ''
+    const phone = bizData?.phone ?? ''
 
     const headline = isOpen
       ? (time ? `Open ${time}` : 'Now Open')
       : isAnnouncement ? 'Big Announcement' : 'Special Notice'
 
-    // Build the user's actual message into a clean tagline
+    // Build the tagline from user intent — strip meta-instructions
     const tagline = message
       .replace(/^(generate|create|make|design)\s+(a\s+)?(poster|flyer|banner|image|graphic)\s+(that\s+)?(says?\s+)?/i, '')
-      .replace(/and include.*$/i, '')
+      .replace(/and include.*business info.*/i, '')
+      .replace(/use my business info.*/i, '')
       .replace(/for (my|our) business/i, '')
+      .replace(/include our name/i, '')
       .trim()
       .slice(0, 80)
 
