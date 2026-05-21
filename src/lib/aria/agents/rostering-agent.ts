@@ -71,7 +71,7 @@ export async function generateRosterDraft(
   })
 
   const userPrompt = `Week: ${weekStart} (${weekDays.join(', ')})
-Outlet: ${outletId ?? 'main'}
+Outlet ID: ${outletId ?? 'default'} (use this exact value for outlet_id in all shifts)
 
 STAFF:
 ${staff.map(s => `- ${s.first_name} ${s.last_name} | ${s.position} | ${s.employment_type} | color:${s.color ?? '#6366f1'} | id:${s.id}`).join('\n')}
@@ -113,7 +113,7 @@ Generate a practical 5-6 day roster. Return JSON: {"shifts": [...], "reasoning":
       staff_member_id: String(sh.staff_member_id ?? ''),
       staff_name: String(sh.staff_name ?? ''),
       staff_color: String(sh.staff_color ?? '#6366f1'),
-      outlet_id: sh.outlet_id ? String(sh.outlet_id) : null,
+      outlet_id: sh.outlet_id && sh.outlet_id !== 'main' && sh.outlet_id !== 'default' ? String(sh.outlet_id) : (outletId ?? null),
       area_id: null,
       area_name: null,
       role: sh.role ? String(sh.role) : null,

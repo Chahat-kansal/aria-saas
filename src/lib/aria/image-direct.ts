@@ -103,21 +103,22 @@ export async function generateImageDirect(
 
 async function uploadImage(buf: Buffer, businessId: string, strategy: string): Promise<ImageDirectResult | null> {
   try {
-    const filename = `image_${Date.now()}.png`
-    const path = `aria-images/${businessId}/${filename}`
+    const filename = `poster_${Date.now()}.png`
+    // Upload to reusable-images (public bucket) so the URL is permanent and works in <img> tags
+    const path = `aria-generated/${businessId}/${filename}`
     const { error: upErr } = await supabaseAdmin.storage
-      .from('reports')
-      .upload(path, buf, { contentType: 'image/png' })
+      .from('reusable-images')
+      .upload(path, buf, { contentType: 'image/png', upsert: true })
     if (upErr) {
-      console.error('[image-direct] upload failed:', upErr.message)
+      console.error('[image-direct] upload failed:', upErr.message, 'path:', path)
       return null
     }
-    const { data: signed } = await supabaseAdmin.storage
-      .from('reports')
-      .createSignedUrl(path, 86400)
-    if (!signed?.signedUrl) return null
-    console.log('[image-direct] uploaded successfully via', strategy)
-    return { ok: true, filename, download_url: signed.signedUrl, strategy }
+    const { data: pub } = supabaseAdmin.storage
+      .from('reusable-images')
+      .getPublicUrl(path)
+    if (!pub?.publicUrl) return null
+    console.log('[image-direct] uploaded successfully via', strategy, 'url:', pub.publicUrl.slice(0, 80))
+    return { ok: true, filename, download_url: pub.publicUrl, strategy }
   } catch (e) {
     console.error('[image-direct] upload exception:', String(e))
     return null
