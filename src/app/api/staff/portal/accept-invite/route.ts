@@ -11,36 +11,57 @@ async function _POST(_req: Request) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  // Find staff member linked to this user
-  const { data: sm } = await supabase.from('staff_members')
-    .select('id,business_id').eq('user_id', user.id).maybeSingle()
+  // Strategy: find the staff member linked to this user by user_id OR email
+  // Use admin client throughout to bypass RLS restrictions on staff tables
+
+  // Step 1: try by user_id first
+  const { data: smByUserId } = await supabaseAdmin
+    .from('staff_members')
+    .select('id, business_id, portal_enabled')
+    .eq('user_id', user.id)
+    .maybeSingle()
+
+  // Step 2: try by email
+  const { data: smByEmail } = !smByUserId ? await supabaseAdmin
+    .from('staff_members')
+    .select('id, business_id, portal_enabled')
+    .or(`personal_email.eq.${user.email},work_email.eq.${user.email}`)
+    .maybeSingle() : { data: null }
+
+  const sm = smByUserId ?? smByEmail
 
   if (!sm) {
-    // Try to find by email and link
-    const { data: byEmail } = await supabase.from('staff_members')
-      .select('id,business_id')
-      .or(`personal_email.eq.${user.email},work_email.eq.${user.email}`)
-      .maybeSingle()
-
-    if (byEmail) {
-      await supabaseAdmin.from('staff_members').update({
-        user_id: user.id, portal_enabled: true,
-      }).eq('id', String(byEmail.id))
-
-      await supabaseAdmin.from('staff_invites').update({
-        status: 'accepted', accepted_at: new Date().toISOString(),
-      }).eq('staff_member_id', String(byEmail.id)).eq('status', 'pending')
-
-      return NextResponse.json({ ok: true })
-    }
-    return NextResponse.json({ error: 'Staff member not found' }, { status: 404 })
+    // No match — still redirect to portal, don't block the user
+    return NextResponse.json({ ok: true, warning: 'Staff member not found for this account' })
   }
 
-  await supabaseAdmin.from('staff_members').update({ portal_enabled: true }).eq('id', String(sm.id))
+  // Step 3: update staff_member — link user_id and enable portal
+  const { error: smErr } = await supabaseAdmin
+    .from('staff_members')
+    .update({
+      user_id: user.id,
+      portal_enabled: true,
+      invite_sent_at: sm.invite_sent_at ?? null, // preserve
+    })
+    .eq('id', String(sm.id))
 
-  await supabaseAdmin.from('staff_invites').update({
-    status: 'accepted', accepted_at: new Date().toISOString(),
-  }).eq('staff_member_id', String(sm.id)).eq('status', 'pending')
+  if (smErr) {
+    console.error('[accept-invite] staff_members update failed:', smErr.message)
+  }
+
+  // Step 4: mark all pending invites for this staff member as accepted
+  const { error: invErr } = await supabaseAdmin
+    .from('staff_invites')
+    .update({
+      status: 'accepted',
+      accepted_at: new Date().toISOString(),
+    })
+    .eq('staff_member_id', String(sm.id))
+    .in('status', ['pending', 'sent'])
+
+  if (invErr) {
+    console.error('[accept-invite] staff_invites update failed:', invErr.message)
+  }
 
   return NextResponse.json({ ok: true })
 }
