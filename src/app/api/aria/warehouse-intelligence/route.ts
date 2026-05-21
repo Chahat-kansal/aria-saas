@@ -108,6 +108,7 @@ async function _POST(req: Request) {
 await trackAICall({ route: 'aria/warehouse-intelligence', model: 'claude-sonnet-4-5-20250929', businessId: business_id, purpose: 'warehouse-intelligence' }, () => anthropic.messages.create({
       model: 'claude-sonnet-4-5-20250929',
       max_tokens: 400,
+        tools: [{ type: 'web_search_20250305' as const, name: 'web_search' }],
       system: WAREHOUSE_SYSTEM,
       messages: [{
         role: 'user',

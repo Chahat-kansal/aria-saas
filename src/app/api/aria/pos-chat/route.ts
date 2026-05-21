@@ -413,6 +413,7 @@ TONE: Direct, specific, Australian English, A$ always.`
   const response = await trackAICall({ route: 'aria/pos-chat', model: 'claude-sonnet-4-5-20250929', businessId: business_id, purpose: 'pos-chat' }, () => client.messages.create({
     model: 'claude-sonnet-4-5-20250929',
     max_tokens: 1000,
+        tools: [{ type: 'web_search_20250305' as const, name: 'web_search' }],
       temperature: 0.75,
     system: systemPrompt,
     messages: [{ role: 'user', content: message }],

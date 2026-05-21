@@ -27,6 +27,7 @@ async function _POST(req: Request) {
     const _msg2 = await _client2.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 250,
+        tools: [{ type: 'web_search_20250305' as const, name: 'web_search' }],
       system: 'You are helping an Australian small business owner reply to customer reviews. Write professional, warm, authentic replies. Return ONLY the reply text — no quotes, no explanation.',
       messages: [{ role: 'user', content: prompt }],
     })

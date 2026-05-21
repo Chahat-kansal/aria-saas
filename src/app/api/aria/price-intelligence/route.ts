@@ -119,6 +119,7 @@ async function _POST(req: NextRequest) {
 await trackAICall({ route: 'aria/price-intelligence', model: 'claude-sonnet-4-5-20250929', businessId: business_id, purpose: 'price-intelligence' }, () => anthropic.messages.create({
         model: 'claude-sonnet-4-5-20250929',
         max_tokens: 60,
+        tools: [{ type: 'web_search_20250305' as const, name: 'web_search' }],
         messages: [{ role: 'user', content: `Cart: ${itemNames}. Total: A$${cartTotal.toFixed(2)}. One 1-sentence upsell tip for staff. Be specific, short, Australian.` }],
       }));
       const txt = resp.content[0].type === 'text' ? resp.content[0].text.trim() : null;

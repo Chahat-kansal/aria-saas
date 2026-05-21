@@ -38,6 +38,7 @@ async function _POST(req: Request) {
   const message = await anthropic.messages.create({
     model: 'claude-sonnet-4-5-20250929',
     max_tokens: 600,
+        tools: [{ type: 'web_search_20250305' as const, name: 'web_search' }],
     messages: [{
       role: 'user',
       content: `You are filling in product fields for an Australian SMB POS.

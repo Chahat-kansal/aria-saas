@@ -112,6 +112,7 @@ Return ONLY a valid JSON object with this exact structure:
     const resp = await trackAICall({ route: 'aria/roster', model: 'claude-sonnet-4-5-20250929', businessId: undefined, purpose: 'roster-optimization' }, () => anthropic.messages.create({
       model: "claude-sonnet-4-5-20250929",
       max_tokens: 4000,
+        tools: [{ type: 'web_search_20250305' as const, name: 'web_search' }],
       messages: [{ role: "user", content: `Generate the roster for this business:\n${context}` }],
       system: systemPrompt,
     }));

@@ -49,6 +49,7 @@ async function _POST(req: Request) {
 await trackAICall({ route: 'aria/winback-message', model: 'claude-sonnet-4-5-20250929', businessId: business_id, purpose: 'winback-message-personalize' }, () => anthropic.messages.create({
       model: 'claude-sonnet-4-5-20250929',
       max_tokens: 200,
+        tools: [{ type: 'web_search_20250305' as const, name: 'web_search' }],
       temperature: 0.75,
       system: [{ type: 'text' as const, text: systemPrompt, cache_control: { type: 'ephemeral' as const } }],
       messages: [{

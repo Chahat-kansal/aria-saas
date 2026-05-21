@@ -66,6 +66,7 @@ Recent reviews: ${(recentReviews || []).map(r => `${r.rating}★`).join(', ') ||
 await trackAICall({ route: 'aria/briefing', model: 'claude-sonnet-4-5-20250929', businessId: businessId, purpose: 'daily-briefing' }, () => anthropic.messages.create({
       model: 'claude-sonnet-4-5-20250929',
       max_tokens: 300,
+        tools: [{ type: 'web_search_20250305' as const, name: 'web_search' }],
       messages: [{
         role: 'user',
         content: `Write a short, friendly morning briefing for the business owner. 2-3 sentences max. Be specific and actionable. Context:\n${context}`,

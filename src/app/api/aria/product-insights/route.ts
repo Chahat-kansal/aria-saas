@@ -78,6 +78,7 @@ async function _POST(req: Request) {
     const response = await trackAICall({ route: 'aria/product-insights', model: 'claude-sonnet-4-5-20250929', businessId: business_id, purpose: 'product-insights' }, () => client.messages.create({
       model: 'claude-sonnet-4-5-20250929',
       max_tokens: 300,
+        tools: [{ type: 'web_search_20250305' as const, name: 'web_search' }],
       system: 'You are Aria, an AI business analyst. Give concise product insights. Max 3 bullet points. Australian dollars. Be specific with numbers. No preamble.',
       messages: [{
         role: 'user',

@@ -139,6 +139,7 @@ async function _POST(req: Request) {
 await trackAICall({ route: 'aria/pos-end-of-day', model: 'claude-sonnet-4-5-20250929', businessId: business_id, purpose: 'pos-eod-summary' }, () => anthropic.messages.create({
       model: 'claude-sonnet-4-5-20250929',
       max_tokens: 200,
+        tools: [{ type: 'web_search_20250305' as const, name: 'web_search' }],
       messages: [{ role: 'user', content: prompt }],
     }));
 
