@@ -36,7 +36,7 @@ export default function RosterPage() {
   const [isPublishing, setIsPublishing] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
   const [aiReasoning, setAiReasoning] = useState<string | null>(null)
-  const [modal, setModal] = useState<{ day: string; shift?: ShiftEntry } | null>(null)
+  const [modal, setModal] = useState<{ day: string; shift?: Partial<ShiftEntry> } | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const [availability, setAvailability] = useState<Array<{ staff_member_id: string; day_of_week: number; available: boolean; start_time: string | null; end_time: string | null; staff_name: string | null }>>([])
   const [templates, setTemplates] = useState<Array<{ id: string; name: string; shifts: ShiftEntry[] }>>([])
@@ -106,8 +106,8 @@ export default function RosterPage() {
     })
   }, [shifts, isDirty])
 
-  const handleCellClick = (staffId: string, day: string) => setModal({ day, shift: undefined })
-  const handleShiftEdit = (shift: ShiftEntry) => setModal({ day: shift.start_time.slice(0, 10), shift })
+  const handleCellClick = (staffId: string, day: string) => setModal({ day, shift: { staff_member_id: staffId } as Partial<ShiftEntry> as ShiftEntry })
+  const handleShiftEdit = (shift: ShiftEntry) => setModal({ day: shift.start_time.slice(0, 10), shift: shift as Partial<ShiftEntry> })
 
   const detectConflicts = useCallback((shiftList: ShiftEntry[]) => {
     const issues: string[] = []
@@ -406,3 +406,4 @@ function offsetDate(isoString: string, days: number): string {
   d.setDate(d.getDate() + days)
   return d.toISOString()
 }
+
