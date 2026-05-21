@@ -71,7 +71,7 @@ export default function ManageCashPage() {
           <p className="text-xs mt-0.5" style={{ color: 'var(--text-secondary, #A8B5A8)' }}>Track till float, banking, and cash drops.</p>
         </div>
         {!noTable && (
-          <button onClick={() => setAddOpen(true)} className="px-4 py-2 rounded-xl text-sm font-semibold" style={{ background: '#2D5240', color: '#7FB897' }}>
+          <button onClick={() => setAddOpen(true)} className="px-4 py-2 rounded-xl text-sm font-semibold" style={{ background: '#2D5240', color: '#006AFF' }}>
             + Record movement
           </button>
         )}
@@ -151,7 +151,7 @@ export default function ManageCashPage() {
             </div>
             <div className="flex gap-2 justify-end mt-4">
               <button onClick={() => setAddOpen(false)} className="px-4 py-2 rounded-xl text-sm" style={{ border: '1px solid rgba(127,184,151,0.2)', color: 'var(--text-secondary, #A8B5A8)' }}>Cancel</button>
-              <button onClick={save} disabled={saving} className="px-4 py-2 rounded-xl text-sm font-semibold" style={{ background: '#2D5240', color: '#7FB897' }}>
+              <button onClick={save} disabled={saving} className="px-4 py-2 rounded-xl text-sm font-semibold" style={{ background: '#2D5240', color: '#006AFF' }}>
                 {saving ? 'Saving…' : 'Save'}
               </button>
             </div>
