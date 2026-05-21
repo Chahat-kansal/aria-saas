@@ -561,50 +561,31 @@ body {
 
 .cart-action { padding: 8px 14px 10px; flex-shrink: 0; }
 .charge-btn {
-  width: 100%; padding: 11px 18px; border-radius: 12px; border: none;
-  background: linear-gradient(135deg, var(--terminal-sage-bright,#8FCAA5) 0%, var(--terminal-sage,#7FB897) 50%, var(--violet-700,#2D5240) 100%);
-  color: white; font-family: inherit; font-size: 14px; font-weight: 700;
-  letter-spacing: 0.04em; cursor: pointer;
+  width: 100%; padding: 13px 18px; border-radius: 8px; border: none;
+  background: #006AFF;
+  color: #FFFFFF; font-family: inherit; font-size: 15px; font-weight: 700;
+  letter-spacing: 0.01em; cursor: pointer;
   display: flex; align-items: center; justify-content: center; gap: 12px;
-  box-shadow:
-    inset 0 1px 0 rgba(255,255,255,0.25),
-    inset 0 -1px 0 rgba(0,0,0,0.18),
-    0 8px 24px var(--terminal-sage-glow, rgba(127,184,151,0.35)),
-    0 2px 6px rgba(0,0,0,0.2);
+  box-shadow: 0 2px 8px rgba(0,106,255,0.30);
   position: relative; overflow: hidden;
-  transition: transform 180ms, box-shadow 180ms;
+  transition: background 150ms, box-shadow 150ms, transform 100ms;
 }
-.charge-btn::before {
-  content: ''; position: absolute; inset: 0;
-  background: linear-gradient(120deg, rgba(0,0,0,0) 30%, rgba(255,255,255,0.20) 50%, rgba(0,0,0,0) 70%);
-  transform: translateX(-100%); transition: transform 700ms;
-}
-.charge-btn:hover::before { transform: translateX(100%); }
-.charge-btn:hover {
-  transform: translateY(-2px);
-  box-shadow:
-    inset 0 1px 0 rgba(255,255,255,0.3),
-    inset 0 -1px 0 rgba(0,0,0,0.18),
-    0 12px 32px var(--terminal-sage-glow, rgba(127,184,151,0.35)),
-    0 4px 8px rgba(0,0,0,0.2);
-}
+.charge-btn:hover { background: #0055CC; box-shadow: 0 4px 12px rgba(0,106,255,0.35); }
+.charge-btn:active { transform: scale(0.99); }
 .charge-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
-.charge-btn .arrow { transition: transform 240ms; }
-.charge-btn:hover .arrow { transform: translateX(4px); }
+.charge-btn .arrow { transition: transform 200ms; }
+.charge-btn:hover .arrow { transform: translateX(3px); }
 
-.cart-quick-actions { display: flex; gap: 6px; margin-top: 5px; }
+.cart-quick-actions { display: flex; gap: 6px; margin-top: 6px; }
 .quick-action {
-  flex: 1; padding: 7px; border-radius: 10px;
-  background: rgba(127,184,151,0.04);
-  border: 1px solid var(--terminal-sage-rim, rgba(127,184,151,0.16));
+  flex: 1; padding: 8px 6px; border-radius: 6px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
   color: var(--text-secondary); font-family: inherit; font-size: 11px; font-weight: 500;
   cursor: pointer; display: flex; align-items: center; justify-content: center;
-  gap: 6px; letter-spacing: 0.02em; transition: all 150ms;
+  gap: 5px; letter-spacing: 0.01em; transition: all 120ms;
 }
-.quick-action:hover {
-  background: rgba(127,184,151,0.10); color: var(--text-primary);
-  border-color: var(--terminal-sage-rim, rgba(127,184,151,0.18));
-}
+.quick-action:hover { background: var(--bg-hover); color: var(--text-primary); border-color: var(--border-strong); }
 .quick-action:disabled { opacity: 0.4; cursor: not-allowed; }
 
 /*  Ask Aria FAB  bottom-right floating action button  */
