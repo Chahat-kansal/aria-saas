@@ -12,7 +12,7 @@ interface Order {
 const STATUS_STYLE: Record<string, { bg: string; color: string }> = {
   draft:     { bg: 'rgba(212,169,94,0.12)', color: 'var(--warning,#D4A95E)' },
   sent:      { bg: 'rgba(107,150,176,0.12)', color: 'var(--info,#6B96B0)' },
-  received:  { bg: 'rgba(127,184,151,0.12)', color: 'var(--success,#65B179)' },
+  received:  { bg: 'rgba(0,106,255,0.08)', color: 'var(--success,#65B179)' },
   cancelled: { bg: 'rgba(201,112,112,0.12)', color: 'var(--destructive,#C97070)' },
 }
 const SOURCE_LABEL: Record<string, string> = { manual: 'Manual', auto_reorder: 'Auto-Reorder', agent: 'Agent' }
@@ -63,12 +63,12 @@ export default function OrdersPage() {
 
       {expiryAlerts.length > 0 && (
         <div style={{ padding: '12px 24px', background: 'rgba(249,115,22,0.06)', borderBottom: '1px solid rgba(249,115,22,0.15)' }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: '#f97316', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>⚠ Expiry Alerts</div>
+          <div style={{ fontSize: 11, fontWeight: 700, color: '#C45208', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>⚠ Expiry Alerts</div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {expiryAlerts.map(a => (
               <div key={a.id} style={{ background: 'var(--bg-surface)', borderRadius: 8, padding: '6px 12px', fontSize: 12, display: 'flex', alignItems: 'center', gap: 8, border: `1px solid ${a.days_until_expiry <= 7 ? 'rgba(239,68,68,0.3)' : 'rgba(249,115,22,0.2)'}` }}>
                 <span style={{ fontWeight: 600 }}>{a.product_name}</span>
-                <span style={{ color: a.days_until_expiry <= 7 ? '#ef4444' : '#f97316', fontWeight: 700 }}>{a.days_until_expiry}d</span>
+                <span style={{ color: a.days_until_expiry <= 7 ? '#ef4444' : '#C45208', fontWeight: 700 }}>{a.days_until_expiry}d</span>
                 <span style={{ color: 'var(--text-tertiary)' }}>{new Date(a.expiry_date).toLocaleDateString('en-AU')} · {a.quantity_at_risk} units</span>
               </div>
             ))}
