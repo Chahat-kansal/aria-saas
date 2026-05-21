@@ -20,41 +20,69 @@ export function usePOSTheme() {
   return useContext(ThemeContext)
 }
 
-// Read theme synchronously — runs before first render, no flash
-function getInitialTheme(): POSTheme {
-  if (typeof window === 'undefined') return 'dark'
-  try {
-    const saved = localStorage.getItem('pos_theme')
-    if (saved === 'light' || saved === 'dark') return saved
-  } catch { /* ignore */ }
-  // Also check html[data-theme] set by anti-flash script
-  try {
-    const dom = document.documentElement.getAttribute('data-theme')
-    if (dom === 'light' || dom === 'dark') return dom
-  } catch { /* ignore */ }
-  return 'dark'
-}
-
 export function POSThemeProvider({ children }: { children: React.ReactNode }) {
-  // Read synchronously so first render matches saved preference
-  const [theme, setThemeState] = useState<POSTheme>(getInitialTheme)
+  const [theme, setThemeState] = useState<POSTheme>('dark')
+  const [mounted, setMounted] = useState(false)
 
-  // Sync both attributes whenever theme changes
   useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme)
-    document.documentElement.setAttribute('data-pos-theme-root', theme)
-    try { localStorage.setItem('pos_theme', theme) } catch { /* ignore */ }
-  }, [theme])
+    setMounted(true)
+
+    // Read saved theme
+    const readTheme = (): POSTheme => {
+      try {
+        const saved = localStorage.getItem('pos_theme') as POSTheme
+        if (saved === 'light' || saved === 'dark') return saved
+      } catch { /* ignore */ }
+      // Also check html[data-theme] attribute set by anti-flash script
+      const attr = document.documentElement.getAttribute('data-theme')
+      if (attr === 'light' || attr === 'dark') return attr
+      return 'dark'
+    }
+
+    const t = readTheme()
+    setThemeState(t)
+    document.documentElement.setAttribute('data-theme', t)
+
+    // Listen for changes from POSSidebar (which writes to localStorage + html[data-theme])
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === 'pos_theme' && (e.newValue === 'light' || e.newValue === 'dark')) {
+        setThemeState(e.newValue as POSTheme)
+        document.documentElement.setAttribute('data-theme', e.newValue)
+      }
+    }
+
+    // Also observe html[data-theme] attribute changes directly
+    const observer = new MutationObserver((mutations) => {
+      for (const m of mutations) {
+        if (m.attributeName === 'data-theme') {
+          const val = document.documentElement.getAttribute('data-theme')
+          if (val === 'light' || val === 'dark') {
+            setThemeState(val as POSTheme)
+          }
+        }
+      }
+    })
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
+    window.addEventListener('storage', onStorage)
+
+    return () => {
+      window.removeEventListener('storage', onStorage)
+      observer.disconnect()
+    }
+  }, [])
 
   const setTheme = (t: POSTheme) => {
     setThemeState(t)
-    // Set immediately (don't wait for useEffect) so sidebar toggle is instant
     document.documentElement.setAttribute('data-theme', t)
     try { localStorage.setItem('pos_theme', t) } catch { /* ignore */ }
   }
 
   const toggleTheme = () => setTheme(theme === 'dark' ? 'light' : 'dark')
   const colors = getTheme(theme)
+
+  if (!mounted) {
+    return <div style={{ background: '#030510', minHeight: '100vh' }}>{children}</div>
+  }
 
   return (
     <ThemeContext.Provider value={{ theme, colors, toggleTheme, setTheme }}>
