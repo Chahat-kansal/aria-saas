@@ -2258,53 +2258,93 @@ export default function TerminalPage() {
             </div>
           </div>
 
-          {/* Quick sale row */}
+          {/* Quick sale row — + Item, + Note, 🔍, % Discount, + Customer, Global select */}
           <div className="px-3 py-1.5 flex gap-1.5 items-center" style={{ borderBottom: '1px solid var(--border-subtle, #1C1928)' }}>
             <button onClick={() => { setCustomItemForm(f => ({ ...f, isNote: false })); setShowCustomItem(true); }}
               title="Custom item"
               className="flex items-center justify-center gap-1 text-xs rounded-lg transition-colors whitespace-nowrap"
-              style={{ padding: '5px 10px', border: '1px dashed var(--border-strong, #2A2540)', color: 'var(--text-tertiary)', flexShrink: 0 }}>
+              style={{ padding: '5px 8px', border: '1px dashed var(--border-strong, #2A2540)', color: 'var(--text-tertiary)', flexShrink: 0 }}>
               + Item
             </button>
             <button onClick={() => { setCustomItemForm(f => ({ ...f, isNote: true, price: '0' })); setShowCustomItem(true); }}
               title="Add note to sale"
               className="flex items-center justify-center gap-1 text-xs rounded-lg transition-colors whitespace-nowrap"
-              style={{ padding: '5px 10px', border: '1px dashed var(--border-strong, #2A2540)', color: 'var(--text-tertiary)', flexShrink: 0 }}>
+              style={{ padding: '5px 8px', border: '1px dashed var(--border-strong, #2A2540)', color: 'var(--text-tertiary)', flexShrink: 0 }}>
               + Note
             </button>
             <button onClick={() => setPriceCheckMode(v => !v)}
               className="flex items-center justify-center text-xs rounded-lg transition-colors"
-              style={{ padding: '5px 8px', flexShrink: 0,
+              style={{ padding: '5px 7px', flexShrink: 0,
                 ...(priceCheckMode
                   ? { background: 'var(--violet-dim)', border: '1px solid var(--border-violet)', color: 'var(--violet)' }
                   : { border: '1px solid var(--border-strong, #2A2540)', color: 'var(--text-tertiary)' }) }}
               title="Price check mode">
               🔍
             </button>
-            {/* Layout switcher — additive */}
+            {/* Quick discount button — opens discount modal or sets 10% on selected item */}
+            <button
+              onClick={() => setShowDiscountModal(true)}
+              className="flex items-center justify-center text-xs rounded-lg transition-colors whitespace-nowrap"
+              style={{ padding: '5px 8px', flexShrink: 0, border: '1px solid var(--border-strong, #2A2540)', color: 'var(--text-tertiary)' }}
+              title="Apply discount">
+              % Disc
+            </button>
+            {/* Compact customer search — right in action bar */}
+            <div className="relative" style={{ flexShrink: 0 }}>
+              {customer ? (
+                <div className="flex items-center gap-1 rounded-lg px-2 py-1" style={{ border: '1px solid rgba(0,106,255,0.25)', background: 'var(--violet-dim)', maxWidth: 90 }}>
+                  <span className="text-xs truncate" style={{ color: 'var(--violet)', maxWidth: 60 }}>{customer.name.split(' ')[0]}</span>
+                  <button onClick={() => { setCustomer(null); setCustomerSearch(''); }} style={{ color: 'rgba(0,106,255,0.5)', fontSize: 13, lineHeight: 1, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>×</button>
+                </div>
+              ) : (
+                <>
+                  <input value={customerSearch} onChange={e => setCustomerSearch(e.target.value)}
+                    placeholder="+ Cust."
+                    className="text-xs rounded-lg px-2 py-1 outline-none"
+                    style={{ border: '1px dashed var(--border-strong)', color: 'var(--text-secondary)', background: 'transparent', width: 62 }} />
+                  {customerResults.length > 0 && (
+                    <div className="absolute top-full mt-1 left-0 rounded-xl shadow-xl z-30 overflow-hidden w-48" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-default)' }}>
+                      {customerResults.map(c => (
+                        <button key={c.id}
+                          onMouseDown={e => { e.preventDefault(); setCustomer(c); setCustomerSearch(''); setCustomerResults([]); }}
+                          className="w-full flex items-center gap-2 px-3 py-2 text-left" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-medium truncate" style={{ color: 'var(--text-primary)' }}>{c.name}</p>
+                            <p className="text-[10px]" style={{ color: 'var(--text-tertiary)' }}>{c.phone ?? c.email ?? ''}</p>
+                          </div>
+                          <span className="text-[10px]" style={{ color: 'var(--violet)' }}>{c.loyalty_points}pts</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+            {/* Spacer */}
+            <span style={{ flex: 1 }} />
+            {/* Layout switcher */}
             <LayoutSwitcher current={currentLayout} onChange={setLayout} />
-            {/* Outlet switcher — only shown when 2+ outlets — additive */}
-            {outlets.length > 1 && (
-              <select
-                value={activeOutletId ?? ''}
-                onChange={e => {
-                  const id = e.target.value;
-                  setActiveOutletId(id);
-                  localStorage.setItem('aria-active-outlet', id);
-                  localStorage.setItem('pos_outlet_id', id);
-                }}
-                title="Active outlet"
-                style={{
-                  padding: '5px 8px', borderRadius: 8, fontSize: 11, fontWeight: 500,
-                  background: 'var(--violet-dim)', border: '1px solid rgba(0,106,255,0.10)',
-                  color: 'var(--text-secondary)', cursor: 'pointer', fontFamily: 'inherit',
-                }}
-              >
-                {outlets.map((o: any) => (
-                  <option key={o.id} value={o.id}>{o.name}{o.is_global ? ' (All)' : ''}</option>
-                ))}
-              </select>
-            )}
+            {/* Outlet select — compact, max-width 90px */}
+            <select
+              value={activeOutletId ?? ''}
+              onChange={e => {
+                const id = e.target.value;
+                setActiveOutletId(id);
+                localStorage.setItem('aria-active-outlet', id);
+                localStorage.setItem('pos_outlet_id', id);
+              }}
+              title="Active outlet"
+              style={{
+                padding: '4px 6px', borderRadius: 7, fontSize: 10, fontWeight: 500,
+                background: 'var(--violet-dim)', border: '1px solid rgba(0,106,255,0.10)',
+                color: 'var(--text-secondary)', cursor: 'pointer', fontFamily: 'inherit',
+                maxWidth: 80, flexShrink: 0,
+              }}
+            >
+              {(outlets.length > 0 ? outlets : [{ id: '', name: 'Global', is_global: true }]).map((o: any) => (
+                <option key={o.id} value={o.id}>{o.is_global ? 'Global' : o.name}</option>
+              ))}
+            </select>
           </div>
 
           {priceCheckMode && (
