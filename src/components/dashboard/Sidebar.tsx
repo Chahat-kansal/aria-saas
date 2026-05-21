@@ -50,6 +50,7 @@ const ALL_ITEMS: Record<string, NavItemDef> = {
   'slow-day':                   { href: '/dashboard/churn#slow-day',             label: 'Slow day filler',   icon: DollarIcon,         badge: '⚡', section: 'Revenue' },
   'reviews':                    { href: '/dashboard/reviews',                  label: 'Reviews',           icon: StarIcon,           section: 'Reputation'   },
   'profit-leaks':               { href: '/dashboard/profit-leaks',             label: 'Profit leaks',      icon: AlertIcon,          section: 'Intelligence' },
+  'cash-flow':                  { href: '/dashboard/cash-flow',               label: 'Cash flow',         icon: TrendingUpIcon,     section: 'Intelligence' },
   'competitors':                { href: '/dashboard/competitors',              label: 'Competitor watch',  icon: SearchIcon,         section: 'Reputation'   },
   'suppliers':                  { href: '/dashboard/suppliers',                label: 'Supplier prices',   icon: SearchIcon,         section: 'Inventory'    },
   'churn':                      { href: '/dashboard/churn',                    label: 'Churn prevention',  icon: TrendingDownIcon,   section: 'Intelligence' },

@@ -63,6 +63,9 @@ interface Product {
   is_weight_based?: boolean;
   price_per_kg?: number | null;
   serial_tracked?: boolean;
+  is_schedule_drug?: boolean;
+  schedule_level?: string | null;
+  requires_script?: boolean;
 }
 interface GlobalProductHit {
   name: string; brand?: string; category?: string;
@@ -210,8 +213,15 @@ export default function TerminalPage() {
 
   /* ── Payment ──────────────────────────────────────────────────── */
   const [payMethod,      setPayMethod]      = useState<PayMethod>('card');
+  // EOD markdown — active rule if current time is past trigger
+  const [eodMarkdown, setEodMarkdown] = useState<{ discount_pct: number; name: string; category_id: string|null } | null>(null);
+
   // Surcharge rules — loaded once on mount, applied to total based on payment method
   const [surchargeRules, setSurchargeRules] = useState<Array<{ id:string; payment_type:string|null; amount_type:string|null; amount:number; is_active:boolean; day_of_week:number[]|null }>>([]);
+  // Pharmacist consultation prompt (pharmacy schedule drugs)
+  const [pharmPrompt,    setPharmPrompt]    = useState<{ product: Product } | null>(null);
+  const [pharmConfirmed, setPharmConfirmed] = useState(false);
+
   // Serial number prompt
   const [serialPrompt,   setSerialPrompt]   = useState<{ product: Product; label?: string } | null>(null);
   const [serialInput,    setSerialInput]    = useState('');
@@ -566,6 +576,32 @@ export default function TerminalPage() {
       if (kdsChannel) { try { kdsChannel.close(); } catch { /* ignore */ } }
     };
   }, [loadRegister]);
+
+  /* ── EOD markdown — check every minute if a rule is now active ── */
+  useEffect(() => {
+    if (!businessId) return;
+    function checkEod() {
+      fetch('/api/pos/eod-markdown')
+        .then(r => r.json())
+        .then((d: { rules?: Array<{ trigger_time:string; discount_pct:number; name:string; is_active:boolean; days_of_week:number[]|null; category_id:string|null }> }) => {
+          const now = new Date();
+          const todayDow = now.getDay();
+          const nowMins = now.getHours() * 60 + now.getMinutes();
+          const active = (d.rules ?? []).find(r => {
+            if (!r.is_active) return false;
+            const [h, m] = r.trigger_time.split(':').map(Number);
+            const ruleMins = h * 60 + m;
+            const dayOk = !r.days_of_week || r.days_of_week.includes(todayDow);
+            return dayOk && nowMins >= ruleMins;
+          });
+          setEodMarkdown(active ? { discount_pct: active.discount_pct, name: active.name, category_id: active.category_id } : null);
+        })
+        .catch(() => null);
+    }
+    checkEod();
+    const timer = setInterval(checkEod, 60_000);
+    return () => clearInterval(timer);
+  }, [businessId]);
 
   /* ── Load surcharge rules — additive ──────────────────────────── */
   useEffect(() => {
@@ -958,6 +994,11 @@ export default function TerminalPage() {
       }
     } catch { /* fall through */ }
     setVariantLoading(false);
+    // Schedule drug — require pharmacist consultation confirmation
+    if (p.is_schedule_drug && p.schedule_level) {
+      setPharmPrompt({ product: p });
+      return;
+    }
     // Serial tracked — prompt for serial/IMEI before adding
     if (p.serial_tracked) {
       setSerialInput('');
@@ -2062,6 +2103,25 @@ export default function TerminalPage() {
         {/* ── LEFT: Product browser ──────────────────────────────── */}
         <div className={`pos-products-panel relative flex flex-col overflow-hidden ${mobileTab !== 'products' ? 'hidden md:flex' : 'flex'}`}
           style={{ flex: '1 1 60%', minWidth: 0, borderRight: '1px solid var(--terminal-sage-rim,rgba(127,184,151,0.18))', background: 'var(--terminal-glass-2,rgba(20,33,26,0.72))', backdropFilter: 'blur(40px) saturate(1.4)', WebkitBackdropFilter: 'blur(40px) saturate(1.4)' }}>
+
+          {/* EOD Markdown banner */}
+          {eodMarkdown && cart.length > 0 && (
+            <div style={{ background:'rgba(245,158,11,0.1)', borderBottom:'1px solid rgba(245,158,11,0.3)', padding:'8px 16px', display:'flex', alignItems:'center', justifyContent:'space-between', gap:12 }}>
+              <div style={{ display:'flex', alignItems:'center', gap:8, fontSize:12, color:'#F59E0B', fontWeight:700 }}>
+                ⏰ {eodMarkdown.name} — {eodMarkdown.discount_pct}% off active
+              </div>
+              <button
+                onClick={() => {
+                  setCart(c => c.map(i => ({
+                    ...i,
+                    discount_percent: Math.max(i.discount_percent ?? 0, eodMarkdown!.discount_pct),
+                  })));
+                }}
+                style={{ padding:'4px 12px', borderRadius:7, border:'none', background:'#F59E0B', color:'#000', fontSize:11, fontWeight:800, cursor:'pointer', fontFamily:'inherit', whiteSpace:'nowrap' }}>
+                Apply to cart
+              </button>
+            </div>
+          )}
 
           {/* Quick panel slide-out */}
           {showQuickPanel && (
@@ -3487,6 +3547,50 @@ export default function TerminalPage() {
               disabled={!weightInput || parseFloat(weightInput) <= 0}
               style={{ flex: 2, padding: '11px 0', borderRadius: 10, border: 'none', background: 'var(--gradient-aria)', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', opacity: (!weightInput || parseFloat(weightInput) <= 0) ? 0.4 : 1 }}>
                 Add to cart
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Pharmacist consultation prompt (pharmacy) ────────────────── */}
+      {pharmPrompt && (
+        <div style={{ position:'fixed', inset:0, zIndex:60, display:'flex', alignItems:'center', justifyContent:'center', padding:16, background:'rgba(8,6,16,0.92)' }}>
+          <div style={{ background:'var(--bg-elevated)', border:'1px solid rgba(239,68,68,0.3)', borderRadius:20, padding:'28px 28px 24px', width:'100%', maxWidth:400, boxShadow:'0 24px 48px rgba(0,0,0,0.6)' }}>
+            <div style={{ fontSize:24, textAlign:'center', marginBottom:12 }}>💊</div>
+            <div style={{ fontSize:17, fontWeight:800, color:'var(--text-primary)', marginBottom:8, textAlign:'center' }}>
+              Pharmacist consultation required
+            </div>
+            <div style={{ background:'rgba(239,68,68,0.08)', border:'1px solid rgba(239,68,68,0.2)', borderRadius:10, padding:'12px 16px', marginBottom:20 }}>
+              <div style={{ fontSize:14, fontWeight:700, color:'#EF4444', marginBottom:4 }}>
+                {pharmPrompt.product.schedule_level} — {pharmPrompt.product.name}
+              </div>
+              <div style={{ fontSize:12, color:'var(--text-secondary)' }}>
+                {pharmPrompt.product.requires_script
+                  ? 'This item requires a valid prescription. Verify script before proceeding.'
+                  : 'This is a Schedule drug. A pharmacist must counsel the customer before dispensing.'}
+              </div>
+            </div>
+            <div style={{ marginBottom:16 }}>
+              <label style={{ display:'flex', alignItems:'flex-start', gap:10, cursor:'pointer' }}>
+                <input type="checkbox" checked={pharmConfirmed} onChange={e=>setPharmConfirmed(e.target.checked)}
+                  style={{ marginTop:2, flexShrink:0 }} />
+                <span style={{ fontSize:13, color:'var(--text-secondary)', lineHeight:1.5 }}>
+                  I confirm a pharmacist has {pharmPrompt.product.requires_script ? 'verified the prescription and ' : ''}counselled the customer about this medication.
+                </span>
+              </label>
+            </div>
+            <div style={{ display:'flex', gap:10 }}>
+              <button onClick={() => { setPharmPrompt(null); setPharmConfirmed(false) }}
+                style={{ flex:1, padding:'11px 0', borderRadius:10, border:'1px solid #2A2540', background:'transparent', color:'var(--text-secondary)', fontSize:14, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>
+                Cancel
+              </button>
+              <button disabled={!pharmConfirmed} onClick={() => {
+                  addToCartDirect(pharmPrompt.product, 1);
+                  setPharmPrompt(null); setPharmConfirmed(false);
+                }}
+                style={{ flex:2, padding:'11px 0', borderRadius:10, border:'none', background:pharmConfirmed?'#EF4444':'rgba(239,68,68,0.2)', color:'#fff', fontSize:14, fontWeight:700, cursor:pharmConfirmed?'pointer':'not-allowed', fontFamily:'inherit', opacity:pharmConfirmed?1:0.5 }}>
+                Confirm & add to sale
               </button>
             </div>
           </div>

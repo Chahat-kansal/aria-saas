@@ -8,7 +8,7 @@ import {
   BarChart3, Sparkles, Layers, UserCheck, TrendingUp, BookOpen, Zap,
   Globe, TrendingDown,
   Bot, RotateCcw, DollarSign as DollarIcon, Calendar, Activity,
-  Settings, Key, Receipt, Shield, Building, Barcode, Database, Store,
+  Settings, Key, Receipt, Shield, Building, Barcode, Database, Store, Shirt,
   Banknote, Wrench,
   Clock, Smartphone, Timer, Scissors,
   ShoppingBag, CalendarClock, Plug,
@@ -203,6 +203,9 @@ export const NAV_STRUCTURE: NavSection[] = [
     defaultOpen: false,
     items: [
       { label: 'Future Prices', href: '/pos/future-prices', icon: Clock, industries: ['liquor', 'grocery', 'convenience', 'pharmacy'] },
+      { label: 'EOD Markdown', href: '/pos/eod-markdown', icon: Tag, industries: ['bakery', 'grocery', 'convenience', 'cafe'] },
+      { label: 'Production Plan', href: '/pos/production-plan', icon: ClipboardList, industries: ['bakery', 'cafe', 'restaurant'] },
+      { label: 'Fitting Rooms', href: '/pos/fitting-room', icon: Shirt, industries: ['clothing', 'beauty'] },
       { label: 'Mobile Scanner', href: '/pos/mobile', icon: Smartphone, industries: ['liquor', 'convenience', 'grocery', 'clothing', 'gift', 'pharmacy', 'electronics', 'other'] },
       { label: 'Timesheets', href: '/pos/timesheets', icon: Timer },
       { label: 'Void & Refund', href: '/pos/void', icon: Scissors },
