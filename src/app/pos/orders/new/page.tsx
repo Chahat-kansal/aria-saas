@@ -45,6 +45,35 @@ export default function OrderBuilderPage() {
   const [businessId, setBusinessId] = useState<string | null>(null)
   const [toast, setToast] = useState('')
 
+  // Restore PO draft from sessionStorage on mount
+  const [poRestored, setPoRestored] = useState(false)
+  const [showPoResume, setShowPoResume] = useState(false)
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem('aria_po_draft_v1')
+      if (saved) {
+        const d = JSON.parse(saved)
+        if (Array.isArray(d.draft) && d.draft.length > 0) {
+          setDraft(d.draft)
+          setShowPoResume(true)
+        }
+      }
+    } catch { /* ignore */ }
+    setPoRestored(true)
+  }, [])
+
+  // Save PO draft whenever lines change
+  useEffect(() => {
+    if (!poRestored) return
+    try {
+      if (draft.length > 0) {
+        sessionStorage.setItem('aria_po_draft_v1', JSON.stringify({ draft, savedAt: Date.now() }))
+      } else {
+        sessionStorage.removeItem('aria_po_draft_v1')
+      }
+    } catch { /* ignore */ }
+  }, [draft, poRestored])
+
   useEffect(() => {
     Promise.all([
       fetch('/api/pos/products').then(r => r.json()),
@@ -177,7 +206,21 @@ export default function OrderBuilderPage() {
         <Link href="/pos/orders" style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text-secondary)', textDecoration: 'none', fontSize: 12 }}>
           <ArrowLeft size={14} /> Orders
         </Link>
-        <h1 style={{ fontSize: 16, fontWeight: 700, margin: 0, flex: 1 }}>New Order</h1>
+        
+        {/* Resume PO draft banner */}
+        {showPoResume && (
+          <div style={{ marginBottom: 12, padding: '10px 16px', borderRadius: 10, background: 'rgba(127,184,151,0.10)', border: '1px solid rgba(127,184,151,0.25)', display: 'flex', alignItems: 'center', gap: 12 }}>
+            <span style={{ fontSize: 13, color: 'var(--terminal-sage,#7FB897)', flex: 1 }}>
+              ↩ Draft order restored — {draft.length} item{draft.length !== 1 ? 's' : ''} in cart
+            </span>
+            <button onClick={() => { setDraft([]); setShowPoResume(false); try { sessionStorage.removeItem('aria_po_draft_v1') } catch { /* ignore */ } }}
+              style={{ fontSize: 11, padding: '3px 10px', borderRadius: 6, border: '1px solid rgba(127,184,151,0.25)', background: 'none', color: 'var(--text-tertiary)', cursor: 'pointer' }}>
+              Clear
+            </button>
+            <button onClick={() => setShowPoResume(false)} style={{ fontSize: 13, color: 'var(--text-tertiary)', background: 'none', border: 'none', cursor: 'pointer' }}>×</button>
+          </div>
+        )}
+<h1 style={{ fontSize: 16, fontWeight: 700, margin: 0, flex: 1 }}>New Order</h1>
         <button onClick={() => saveDraft(false)} disabled={saving || !draft.length}
           style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid var(--divider)', background: 'transparent', color: 'var(--text-secondary)', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', opacity: !draft.length ? 0.4 : 1 }}>
           {saving ? 'Saving…' : savedOrderId ? 'Update Draft' : 'Save Draft'}
