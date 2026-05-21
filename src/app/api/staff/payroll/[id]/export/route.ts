@@ -4,7 +4,7 @@ export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
-import { generateXeroCsv } from '@/lib/staff/payroll'
+import { generateXeroCsv } from '@/lib/staff/payroll-csv'
 import type { PayrollLineItem } from '@/lib/staff/payroll'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {

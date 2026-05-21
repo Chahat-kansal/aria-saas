@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { NextResponse } from 'next/server'
+import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
@@ -49,7 +50,7 @@ async function _PATCH(req: Request) {
 
   if (Object.keys(payload).length === 0) return NextResponse.json({ ok: true })
 
-  const { error } = await supabase.from('businesses').update(payload).eq('id', bid)
+  const { error } = await supabaseAdmin.from('businesses').update(payload).eq('id', bid)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ ok: true })
 }
