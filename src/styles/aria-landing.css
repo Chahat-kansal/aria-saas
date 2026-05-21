@@ -1,10 +1,10 @@
 /*
- * aria-landing.css — V3 scroll-pinned landing page styles
+ * aria-landing.css  V3 scroll-pinned landing page styles
  * Scoped to .landing-v3 wrapper to avoid leaking into POS/dashboard pages.
  * Imported globally but all selectors are prefixed so nothing bleeds.
  */
 
-/* ── Landing-specific CSS vars ─────────────────────────────────── */
+/*  Landing-specific CSS vars  */
 :root {
   --sage: #7FB897;
   --sage-light: #9FC9B0;
@@ -18,7 +18,7 @@
 /* Prevent browser smooth-scroll from fighting our JS scroll control */
 html:has(.landing-v3) { scroll-behavior: auto; }
 
-/* ── Root wrapper ──────────────────────────────────────────────── */
+/*  Root wrapper  */
 .landing-v3 {
   background: var(--bg-base);
   color: var(--text-primary);
@@ -29,10 +29,10 @@ html:has(.landing-v3) { scroll-behavior: auto; }
   -webkit-font-smoothing: antialiased;
 }
 
-/* ── SCROLL ARCHITECTURE ────────────────────────────────────────
+/*  SCROLL ARCHITECTURE 
  * Total 1300vh of scroll distance. The viewport div is fixed.
- * - 0vh → 200vh: HERO ACT (scrubbed iPad rotation + UI assembly)
- * - 200vh → 1300vh: CROSSFADE ACT (10 scenes × ~100vh each)
+ * - 0vh  200vh: HERO ACT (scrubbed iPad rotation + UI assembly)
+ * - 200vh  1300vh: CROSSFADE ACT (10 scenes  ~100vh each)
  */
 .landing-v3 .scroll-spacer {
   position: relative;
@@ -50,7 +50,7 @@ html:has(.landing-v3) { scroll-behavior: auto; }
   background: var(--bg-base);
 }
 
-/* ═══ HERO ACT (scroll-scrubbed via --hero-progress: 0 → 1) ══════ */
+/*  HERO ACT (scroll-scrubbed via --hero-progress: 0  1)  */
 .landing-v3 .hero-act {
   position: absolute;
   inset: 0;
@@ -256,7 +256,7 @@ html:has(.landing-v3) { scroll-behavior: auto; }
   margin-bottom: 24px;
   opacity: calc(1 - var(--hero-progress, 0) * 1.3);
 }
-.landing-v3 .hero-pill::before { content: '✦'; color: var(--sage); }
+.landing-v3 .hero-pill::before { content: ''; color: var(--sage); }
 
 .landing-v3 .hero-h1 {
   font-family: var(--font-display);
@@ -303,7 +303,7 @@ html:has(.landing-v3) { scroll-behavior: auto; }
   opacity: calc(1 - var(--hero-progress, 0) * 2);
 }
 .landing-v3 .hero-scroll-cue::before {
-  content: '↓';
+  content: '';
   font-size: 14px;
   animation: l-bobDown 1.8s ease-in-out infinite;
 }
@@ -334,7 +334,7 @@ html:has(.landing-v3) { scroll-behavior: auto; }
   50% { transform: translateY(-20px) scale(1.4); opacity: 1; }
 }
 
-/* ═══ CROSSFADE SCENES ═══════════════════════════════════════════ */
+/*  CROSSFADE SCENES  */
 .landing-v3 .scene {
   position: absolute;
   inset: 0;
@@ -376,7 +376,7 @@ html:has(.landing-v3) { scroll-behavior: auto; }
   opacity: 0.85;
 }
 
-/* ═══ STICKY OVERLAY ═════════════════════════════════════════════ */
+/*  STICKY OVERLAY  */
 .landing-v3 .overlay-top {
   position: fixed;
   top: 0; left: 0; right: 0;
@@ -494,13 +494,13 @@ html:has(.landing-v3) { scroll-behavior: auto; }
   box-shadow: 0 0 8px var(--sage-glow);
 }
 
-/* ═══ SHARED SCENE CONTENT ═══════════════════════════════════════ */
+/*  SHARED SCENE CONTENT  */
 .landing-v3 .scene-label { font-family: var(--font-display); font-style: italic; font-size: 13px; color: var(--sage); letter-spacing: 0.18em; text-transform: uppercase; margin-bottom: 20px; }
 .landing-v3 .scene h2 { font-family: var(--font-display); font-weight: 400; font-size: clamp(40px, 6vw, 72px); line-height: 1.04; letter-spacing: -0.025em; margin-bottom: 24px; }
 .landing-v3 .scene h2 em { font-style: italic; background: linear-gradient(135deg, var(--sage-light), var(--sage)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
 .landing-v3 .body-copy { font-size: 17px; font-weight: 300; line-height: 1.6; color: var(--text-secondary); max-width: 540px; }
 
-/* ── Scene 02: Problem ── */
+/*  Scene 02: Problem  */
 .landing-v3 .scene-problem { background: var(--bg-deeper); }
 .landing-v3 .scene-problem::before { background: radial-gradient(ellipse 50% 70% at 90% 50%, rgba(58, 90, 64, 0.12), rgba(0,0,0,0) 60%); }
 .landing-v3 .scene-problem .scene-inner { display: grid; grid-template-columns: 1fr 1fr; gap: 80px; align-items: center; }
@@ -509,7 +509,7 @@ html:has(.landing-v3) { scroll-behavior: auto; }
 .landing-v3 .problem-icon { width: 36px; height: 36px; border-radius: 8px; background: rgba(201, 112, 112, 0.12); color: var(--destructive, #C97070); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .landing-v3 .problem-card .text { font-size: 14px; color: var(--text-secondary); }
 
-/* ── Scene 03: Brain ── */
+/*  Scene 03: Brain  */
 .landing-v3 .scene-brain { background: var(--bg-canvas); }
 .landing-v3 .scene-brain::before { background: radial-gradient(circle at 50% 50%, rgba(127, 184, 151, 0.18), rgba(0,0,0,0) 60%); }
 .landing-v3 .scene-brain .scene-inner { text-align: center; display: flex; flex-direction: column; align-items: center; }
@@ -527,7 +527,7 @@ html:has(.landing-v3) { scroll-behavior: auto; }
 .landing-v3 .orbit-orb:nth-child(5) { left: calc(50% - 190px); top: calc(50% - 62px); }
 .landing-v3 .brain-caption { font-size: 16px; color: var(--text-secondary); margin-top: 8px; max-width: 420px; font-style: italic; font-family: var(--font-display); font-weight: 300; }
 
-/* ── Split scenes (04, 05, 07) ── */
+/*  Split scenes (04, 05, 07)  */
 .landing-v3 .scene-split { background: var(--bg-canvas); }
 .landing-v3 .scene-split::before { background: radial-gradient(ellipse 50% 60% at 15% 30%, rgba(127, 184, 151, 0.10), rgba(0,0,0,0) 60%); }
 .landing-v3 .scene-split.reverse::before { background: radial-gradient(ellipse 50% 60% at 85% 30%, rgba(127, 184, 151, 0.10), rgba(0,0,0,0) 60%); }
@@ -566,7 +566,7 @@ html:has(.landing-v3) { scroll-behavior: auto; }
 .landing-v3 .schedule-block.dim { background: rgba(127, 184, 151, 0.12); }
 .landing-v3 .schedule-holiday-tag { display: inline-block; background: rgba(212, 169, 94, 0.14); color: var(--warning, #D4A95E); padding: 2px 8px; border-radius: 99px; font-size: 9px; margin-top: 12px; letter-spacing: 0.06em; text-transform: uppercase; }
 
-/* ── Scene 06: Ask ── */
+/*  Scene 06: Ask  */
 .landing-v3 .scene-ask { background: var(--bg-canvas); }
 .landing-v3 .scene-ask::before { background: radial-gradient(ellipse 50% 50% at 50% 30%, rgba(127, 184, 151, 0.12), rgba(0,0,0,0) 60%); }
 .landing-v3 .scene-ask .scene-inner { text-align: center; display: flex; flex-direction: column; align-items: center; }
@@ -576,11 +576,11 @@ html:has(.landing-v3) { scroll-behavior: auto; }
 .landing-v3 .bubble.aria { background: var(--bg-elevated); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); color: var(--text-primary); align-self: flex-start; border-bottom-left-radius: 4px; box-shadow: inset 0 1px 0 rgba(127, 184, 151, 0.08), 0 4px 16px rgba(0, 0, 0, 0.3); }
 .landing-v3 .bubble.aria .stat { color: var(--sage-light); font-family: var(--font-display); font-style: italic; font-weight: 500; }
 .landing-v3 .bubble-meta { font-size: 10px; color: var(--sage); text-transform: uppercase; letter-spacing: 0.16em; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
-.landing-v3 .bubble-meta::before { content: '✦'; }
+.landing-v3 .bubble-meta::before { content: ''; }
 .landing-v3 .mini-chart { display: flex; align-items: flex-end; gap: 6px; height: 60px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--l-divider); }
 .landing-v3 .bar { flex: 1; background: linear-gradient(to top, var(--sage-dark), var(--sage)); border-radius: 3px 3px 0 0; min-height: 6px; }
 
-/* ── Scene 08: Australia ── */
+/*  Scene 08: Australia  */
 .landing-v3 .scene-australia { background: var(--bg-deeper); }
 .landing-v3 .scene-australia::before { background: radial-gradient(ellipse 50% 60% at 60% 50%, rgba(212, 169, 94, 0.06), rgba(0,0,0,0) 60%); }
 .landing-v3 .scene-australia .scene-inner { display: grid; grid-template-columns: 1fr 1.1fr; gap: 80px; align-items: center; }
@@ -590,7 +590,7 @@ html:has(.landing-v3) { scroll-behavior: auto; }
 .landing-v3 .au-map { position: relative; width: 100%; aspect-ratio: 1.1; display: flex; align-items: center; justify-content: center; }
 .landing-v3 .au-map svg { width: 100%; height: 100%; max-width: 480px; }
 
-/* ── Scene 09: Testimonial ── */
+/*  Scene 09: Testimonial  */
 .landing-v3 .scene-testimonial { background: var(--bg-canvas); }
 .landing-v3 .scene-testimonial::before { background: radial-gradient(circle at 50% 50%, rgba(127, 184, 151, 0.08), rgba(0,0,0,0) 70%); }
 .landing-v3 .scene-testimonial .scene-inner { text-align: center; max-width: 760px; margin: 0 auto; }
@@ -601,12 +601,12 @@ html:has(.landing-v3) { scroll-behavior: auto; }
 .landing-v3 .attribution strong { color: var(--text-primary); font-weight: 500; }
 .landing-v3 .attribution .em-meta { color: var(--text-tertiary); font-style: italic; }
 
-/* ── Scene 10: Pricing tiers ── */
+/*  Scene 10: Pricing tiers  */
 .landing-v3 .scene-pricing { background: var(--bg-canvas); }
 .landing-v3 .scene-pricing::before { background: radial-gradient(ellipse 60% 50% at 50% 20%, rgba(127, 184, 151, 0.16), rgba(0,0,0,0) 70%); }
 .landing-v3 .scene-pricing .scene-inner { text-align: center; }
 .landing-v3 .pricing-banner { display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; border-radius: 999px; background: rgba(212, 169, 94, 0.08); border: 1px solid rgba(212, 169, 94, 0.18); color: var(--warning, #D4A95E); font-size: 12px; margin-bottom: 32px; letter-spacing: 0.02em; }
-.landing-v3 .pricing-banner::before { content: '✦'; }
+.landing-v3 .pricing-banner::before { content: ''; }
 .landing-v3 .pricing-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; max-width: 960px; margin: 0 auto; align-items: center; }
 .landing-v3 .price-card { background: var(--bg-glass); backdrop-filter: blur(28px) saturate(1.4); -webkit-backdrop-filter: blur(28px) saturate(1.4); border-radius: 14px; padding: 28px 24px; text-align: left; box-shadow: inset 0 1px 0 rgba(127, 184, 151, 0.06), 0 12px 32px rgba(0, 0, 0, 0.3); transition: transform 600ms cubic-bezier(0.16, 1, 0.3, 1); }
 .landing-v3 .price-card.dim { opacity: 0.92; transform: scale(0.96); }
@@ -619,12 +619,12 @@ html:has(.landing-v3) { scroll-behavior: auto; }
 .landing-v3 .tier-period { font-size: 12px; color: var(--text-tertiary); margin: 8px 0 24px; }
 .landing-v3 .tier-features { list-style: none; display: flex; flex-direction: column; gap: 10px; margin-bottom: 24px; font-size: 13px; color: var(--text-secondary); }
 .landing-v3 .tier-features li { display: flex; align-items: flex-start; gap: 8px; line-height: 1.5; }
-.landing-v3 .tier-features li::before { content: '✓'; color: var(--sage); font-weight: 600; flex-shrink: 0; }
+.landing-v3 .tier-features li::before { content: ''; color: var(--sage); font-weight: 600; flex-shrink: 0; }
 .landing-v3 .tier-btn { width: 100%; padding: 12px; border-radius: 10px; font-family: inherit; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 200ms; text-decoration: none; display: block; text-align: center; }
 .landing-v3 .tier-btn.outline { background: transparent; color: var(--sage); border: 1px solid rgba(127, 184, 151, 0.3); }
 .landing-v3 .tier-btn.filled { background: linear-gradient(135deg, var(--sage), var(--sage-dark)); color: white; border: none; box-shadow: 0 4px 12px rgba(127, 184, 151, 0.4); }
 
-/* ── Scene 11: Outro ── */
+/*  Scene 11: Outro  */
 .landing-v3 .scene-outro { background: var(--bg-base); }
 .landing-v3 .scene-outro::before { background: radial-gradient(ellipse 80% 50% at 50% 30%, rgba(127, 184, 151, 0.20), rgba(0,0,0,0) 60%); animation: l-auroraPulse 8s ease-in-out infinite; }
 @keyframes l-auroraPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
@@ -639,7 +639,7 @@ html:has(.landing-v3) { scroll-behavior: auto; }
 .landing-v3 .btn-text .play-circle { width: 28px; height: 28px; border-radius: 50%; background: var(--sage-soft); display: inline-flex; align-items: center; justify-content: center; color: var(--sage); font-size: 10px; }
 .landing-v3 .outro-microtext { font-size: 12px; color: var(--text-tertiary); margin-top: 20px; letter-spacing: 0.04em; }
 
-/* ── Reduced motion ── */
+/*  Reduced motion  */
 @media (prefers-reduced-motion: reduce) {
   .landing-v3 .scene,
   .landing-v3 .scene-inner,
@@ -654,7 +654,7 @@ html:has(.landing-v3) { scroll-behavior: auto; }
   .landing-v3 .hero-act { --hero-progress: 1 !important; }
 }
 
-/* ── Mobile ── */
+/*  Mobile  */
 @media (max-width: 900px) {
   .landing-v3 .scene { padding: 80px 20px; }
   .landing-v3 .scene-problem .scene-inner,
