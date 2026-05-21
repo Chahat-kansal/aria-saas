@@ -464,26 +464,7 @@ export default function POSShell({ children, businessId, businessName }: {
       </div>
 
       <main style={{ flex: 1, overflow: 'hidden', minWidth: 0, height: '100dvh', display: 'flex', flexDirection: 'column' }}>
-        {/* Mobile top bar with hamburger */}
-        <div className={pathname.startsWith('/pos/terminal') ? 'hidden' : 'md:hidden'} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: 'var(--bg-card)', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
-          <button
-            onClick={() => setMobileSidebarOpen(v => !v)}
-            style={{ padding: 8, borderRadius: 8, background: 'var(--bg-surface)', border: '1px solid var(--border)', color: 'var(--text-primary)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-          >
-            <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
-            </svg>
-          </button>
-          <span style={{ fontFamily: 'var(--font-ui)', fontWeight: 700, fontSize: 15, color: 'var(--text-primary)', letterSpacing: '-0.3px' }}>
-            aria<span style={{ color: 'var(--green)' }}>POS</span>
-          </span>
-          <button
-            onClick={() => { setAriaOpen(v => !v); window.dispatchEvent(new CustomEvent('pos-aria-toggle')); }}
-            style={{ padding: 8, borderRadius: 8, background: 'var(--green)', border: 'none', color: '#fff', cursor: 'pointer', fontSize: 11, fontWeight: 700, fontFamily: 'var(--font-ui)' }}
-          >
-            Aria
-          </button>
-        </div>
+        {/* Mobile top bar removed — terminal has its own topbar; other pages use sidebar nav */}
         {/* Offline indicator */}
         {!online && (
           <div style={{ background: 'rgba(248,113,113,0.15)', borderBottom: '1px solid rgba(248,113,113,0.3)', padding: '8px 18px', fontSize: 13, color: '#F87171', fontFamily: 'var(--font-ui)', fontWeight: 600, flexShrink: 0 }}>
@@ -517,3 +498,4 @@ export default function POSShell({ children, businessId, businessName }: {
     </div>
   );
 }
+
