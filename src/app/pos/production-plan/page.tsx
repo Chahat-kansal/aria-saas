@@ -28,6 +28,7 @@ export default function ProductionPlanPage() {
   const [plans, setPlans] = useState<Plan[]>([])
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState(false)
+  const [message, setMessage] = useState<string | null>(null)
   const [editing, setEditing] = useState<string | null>(null)
   const [editVal, setEditVal] = useState('')
 
@@ -47,8 +48,9 @@ export default function ProductionPlanPage() {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ ai_generate: true, date }),
     })
-    const d = await res.json() as { plans?: Plan[]; day?: string }
+    const d = await res.json() as { plans?: Plan[]; day?: string; message?: string }
     setPlans(d.plans ?? [])
+    setMessage(d.message ?? null)
     setGenerating(false)
   }
 
@@ -96,6 +98,10 @@ export default function ProductionPlanPage() {
 
       {loading ? (
         <div style={{color:C.muted, textAlign:'center', padding:'40px 0'}}>Loading…</div>
+      ) : message && plans.length === 0 ? (
+        <div style={{background:'rgba(245,158,11,0.07)', border:'1px solid rgba(245,158,11,0.2)', borderRadius:12, padding:'20px 24px', color:'#F59E0B', fontSize:13, lineHeight:1.6}}>
+          ⚠️ {message}
+        </div>
       ) : plans.length === 0 ? (
         <div style={{textAlign:'center', padding:'40px 0'}}>
           <div style={{fontSize:40, marginBottom:12}}>🥐</div>

@@ -85,6 +85,17 @@ async function _DELETE(req: Request) {
   return NextResponse.json({ ok: true });
 }
 
+async function _GET(_req: Request) {
+  const supabase = createServerSupabaseClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ categories: [] })
+  const bid = await getBid(supabase, user.id)
+  if (!bid) return NextResponse.json({ categories: [] })
+  const { data } = await supabase.from('pos_categories').select('id, name, color').eq('business_id', bid).order('name')
+  return NextResponse.json({ categories: data ?? [] })
+}
+
+export const GET = withErrorCapture('pos/categories', _GET)
 export const POST = withErrorCapture('pos/categories', _POST)
 export const PATCH = withErrorCapture('pos/categories', _PATCH)
 export const DELETE = withErrorCapture('pos/categories', _DELETE)
