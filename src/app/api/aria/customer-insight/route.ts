@@ -53,19 +53,25 @@ async function _POST(req: Request) {
 
   const prompt = `${ctx}\n\nWrite ONE paragraph for the owner about this customer: who they are based on the data, what stage they are in, one specific action to take. 4-5 sentences max. No fluff. No bullet points. Australian English. Refer to the customer by first name only.`
 
-  const { callGemini } = await import('@/lib/aria/providers/gemini')
-  const geminiResult = await callGemini({
-    systemPrompt: 'You are a business analyst for Australian small businesses. Write one paragraph. No JSON. Plain prose.',
-    userPrompt: prompt,
-    maxTokens: 512,
-    businessId: (customer as Record<string, unknown>).business_id as string,
-    agentKey: 'customer_insight',
-    role: 'analysis',
-  })
-  const insight = geminiResult.raw
-
-  if (!geminiResult.success || !insight) {
+  // Switched from Gemini (429 quota errors) to Claude Haiku — reliable, no quota issues
+  let insight = ''
+  try {
+    const Anthropic = (await import('@anthropic-ai/sdk')).default
+    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+    const msg = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 512,
+      system: 'You are a business analyst for Australian small businesses. Write one paragraph. No JSON. Plain prose. Australian English.',
+      messages: [{ role: 'user', content: prompt }],
+    })
+    insight = (msg.content.find((b: any) => b.type === 'text') as any)?.text ?? ''
+  } catch (e) {
+    console.error('[customer-insight] Claude call failed:', (e as Error).message)
     return NextResponse.json({ error: 'AI error' }, { status: 500 })
+  }
+
+  if (!insight) {
+    return NextResponse.json({ error: 'AI returned empty response' }, { status: 500 })
   }
 
   return NextResponse.json({ insight })
