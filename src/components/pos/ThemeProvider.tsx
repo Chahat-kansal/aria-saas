@@ -93,6 +93,7 @@ const SQUARE_LIGHT_VARS: Record<string, string> = {
   '--pos-success':        '#00B140',
   '--pos-warning':        '#B87503',
   '--pos-danger':         '#FF1600',
+  '--sidebar-bg':         '#1A1A1A',
   '--gradient-aria':      'linear-gradient(135deg, #006AFF 0%, #0055CC 100%)',
   '--bg-aurora':          'none',
 }
