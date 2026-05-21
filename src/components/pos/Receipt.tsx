@@ -1,5 +1,5 @@
-import React from 'react';
 'use client';
+import React from 'react';
 
 /* ─── Shared type definitions ────────────────────────────────── */
 export interface ReceiptElement {

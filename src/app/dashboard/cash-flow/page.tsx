@@ -14,7 +14,7 @@ const C = {
   green:'#22C55E', red:'#EF4444', amber:'#F59E0B', violet:'#8B5CF6',
   border:'rgba(255,255,255,0.07)',
 }
-function fmt(n: number) { return ('A$' + Math.abs(n).toLocaleString('en-AU', { minimumFractionDigits:0, maximumFractionDigits:0 + ')}') }
+function fmt(n: number) { return 'A$' + Math.abs(n).toLocaleString('en-AU', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) }
 
 export default function CashFlowPage() {
   const { business } = useBusinessContext()

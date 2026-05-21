@@ -37,7 +37,7 @@ export default function IntelligencePage() {
     setLoading(true);
     try {
       const acknowledged = filter === 'unread' ? 'false' : undefined;
-      const url = ('/api/intelligence-events?business_id=' + business.id + '&limit=100${acknowledged?')&acknowledged=${acknowledged}':''}';
+      const url = '/api/intelligence-events?business_id=' + business.id + '&limit=100' + (acknowledged ? '&acknowledged=' + acknowledged : '');
       const res = await fetch(url);
       const data = await res.json();
       setEvents(data.events ?? []);

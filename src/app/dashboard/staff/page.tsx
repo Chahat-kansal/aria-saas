@@ -325,10 +325,8 @@ export default function StaffPage() {
           </table>
         </div>
       )}
+      <SalesLeaderboard businessId={business?.id ?? ''} />
     </div>
-      <div style={{ marginTop: 24 }}>
-        <Leaderboard businessId={members[0]?.business_id ?? ''} />
-      </div>
   )
 }
 
