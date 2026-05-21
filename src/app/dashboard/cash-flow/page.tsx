@@ -194,7 +194,7 @@ export default function CashFlowPage() {
               {days.map((d, i) => {
                 const isToday = !d.is_past && i === 7
                 return (
-                  <tr key={d.date} style={{borderBottom:('1px solid ' + C.border), background:isToday?'rgba(139,92,246,0.05)`:'transparent'}}>
+                  <tr key={d.date} style={{borderBottom:('1px solid ' + C.border), background:isToday?'rgba(139,92,246,0.05)':'transparent'}}>
                     <td style={{padding:'8px 12px', fontWeight:isToday?700:400, color:isToday?C.violet:C.text}}>
                       {isToday && <span style={{fontSize:9, fontWeight:800, color:C.violet, marginRight:6, background:'rgba(139,92,246,0.15)', padding:'1px 5px', borderRadius:4}}>TODAY</span>}
                       {d.day}

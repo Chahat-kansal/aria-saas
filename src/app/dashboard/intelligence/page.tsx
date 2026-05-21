@@ -143,7 +143,7 @@ export default function IntelligencePage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start justify-between gap-2 mb-1">
                         <div className="flex items-center gap-2">
-                          <span style={{ fontSize:10, fontWeight:700, padding:'2px 7px', borderRadius:99, background:'${style.dot}25`, color:style.text }}>{SEV[event.severity]?.label}</span>
+                          <span style={{ fontSize:10, fontWeight:700, padding:'2px 7px', borderRadius:99, background:(style.dot + '25'), color:style.text }}>{SEV[event.severity]?.label}</span>
                           <p className="text-sm font-medium" style={{ color:style.text }}>{event.title}</p>
                         </div>
                         <span className="text-xs flex-shrink-0" style={{ color:'rgba(255,255,255,0.3)' }}>{timeAgo(event.triggered_at)}</span>
