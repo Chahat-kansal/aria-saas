@@ -95,6 +95,8 @@ async function RetailCafeDashboard({ business }: { business: any }) {
           <StatCard label="Recoverable leaks"     value={`$${totalLeakSavings.toLocaleString()}/mo`} change="from profit leak fixes"  gradient="linear-gradient(135deg,rgba(239,68,68,0.15),rgba(239,68,68,0.03))"  border="rgba(239,68,68,0.2)" />
         </div>
 
+        {business?.id && <RevenueChart businessId={business.id} />}
+
         {/* Row 2 */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <ActivityFeed activity={activity} />

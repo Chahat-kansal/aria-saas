@@ -125,6 +125,72 @@ function Leaderboard({ businessId }: { businessId: string }) {
           ))}
         </div>
       )}
+      {business?.id && <SalesLeaderboard businessId={business.id} />}
+    </div>
+  )
+}
+
+function SalesLeaderboard({ businessId }: { businessId: string }) {
+  const [period, setPeriod] = React.useState<'today'|'week'|'month'>('week')
+  const [data, setData] = React.useState<Array<{name: string; total: number; count: number}>>([])
+  const [loading, setLoading] = React.useState(false)
+
+  React.useEffect(() => {
+    if (!businessId) return
+    setLoading(true)
+    const days = period === 'today' ? 1 : period === 'week' ? 7 : 30
+    const since = new Date(Date.now() - days * 86400000).toISOString()
+    fetch('/api/pos/sales?business_id=' + businessId + '&limit=1000&since=' + since)
+      .then(r => r.json())
+      .then((d: { sales?: Array<{served_by?: string; total_amount?: number}> }) => {
+        const map: Record<string, {total: number; count: number}> = {}
+        for (const s of d.sales ?? []) {
+          const name = s.served_by || 'Unknown'
+          if (!map[name]) map[name] = { total: 0, count: 0 }
+          map[name].total += Number(s.total_amount ?? 0)
+          map[name].count += 1
+        }
+        const sorted = Object.entries(map)
+          .map(([name, v]) => ({ name, ...v }))
+          .sort((a, b) => b.total - a.total)
+          .slice(0, 10)
+        setData(sorted)
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [businessId, period])
+
+  const max = data[0]?.total || 1
+
+  return (
+    <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 14, border: '1px solid rgba(255,255,255,0.07)', padding: '20px', marginTop: 20 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+        <h3 style={{ fontSize: 14, fontWeight: 700, color: '#fff' }}>Sales leaderboard</h3>
+        <div style={{ display: 'flex', gap: 6 }}>
+          {(['today', 'week', 'month'] as const).map(p => (
+            <button key={p} onClick={() => setPeriod(p)}
+              style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid ' + (period === p ? '#1D9E75' : 'rgba(255,255,255,0.1)'), background: period === p ? 'rgba(29,158,117,0.2)' : 'transparent', color: period === p ? '#1D9E75' : 'rgba(255,255,255,0.4)', fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', textTransform: 'capitalize' }}>
+              {p}
+            </button>
+          ))}
+        </div>
+      </div>
+      {loading && <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: 12 }}>Loading...</p>}
+      {!loading && data.length === 0 && <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: 12 }}>No sales data for this period.</p>}
+      {data.map((row, i) => (
+        <div key={row.name} style={{ marginBottom: 12 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+            <span style={{ fontSize: 13, color: i === 0 ? '#F59E0B' : '#fff', fontWeight: i === 0 ? 700 : 400 }}>
+              {i === 0 ? '🥇 ' : i === 1 ? '🥈 ' : i === 2 ? '🥉 ' : (i + 1) + '. '}{row.name}
+            </span>
+            <span style={{ fontSize: 13, color: '#1D9E75', fontWeight: 600 }}>A${Math.round(row.total).toLocaleString()}</span>
+          </div>
+          <div style={{ height: 4, background: 'rgba(255,255,255,0.06)', borderRadius: 2 }}>
+            <div style={{ height: 4, width: Math.round((row.total / max) * 100) + '%', background: 'linear-gradient(90deg,#1D9E75,#7FB897)', borderRadius: 2, transition: 'width 0.4s ease' }} />
+          </div>
+          <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', marginTop: 2 }}>{row.count} transactions</p>
+        </div>
+      ))}
     </div>
   )
 }
