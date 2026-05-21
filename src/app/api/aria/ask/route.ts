@@ -392,20 +392,7 @@ Examples of proactive enrichment:
 - Product pricing → search "[product] price Australia [competitor]" before advising
 - Staff costs → search "Fair Work ${ctx.industry} award rates ${new Date().getFullYear()}"
 - Slow periods → search "${ctx.city ?? 'Melbourne'} ${ctx.industry} busy periods ${new Date().toLocaleString('en-AU', { month: 'long' })}"
-- Google rating ${ctx.google_rating ? 
-
-RESPONSE STYLE - CRITICAL:
-You are a senior business advisor, not a chatbot. Every response must be substantive.
-
-ALWAYS give detailed answers:
-- Analyse deeply - don't just state facts, explain what they mean for the business
-- Structure: context, finding, implication, action
-- Use numbers, percentages, comparisons - be specific
-- Weave web search findings in naturally
-- Minimum 3-4 paragraphs for any business question
-- Bold key figures and recommendations
-
-NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth with the advantage of having the owner's actual live data.`(${ctx.google_rating}⭐)` : ''} → search "average Google rating ${ctx.industry} Australia" to benchmark
+- Google rating ${ctx.google_rating ? `(${ctx.google_rating}⭐)` : ''} → search "average Google rating ${ctx.industry} Australia" to benchmark
 - Any competitor mentioned → search them to get real intel
 - Weather affecting trade → search "${ctx.city ?? 'Melbourne'} weather this week"
 
@@ -490,7 +477,20 @@ After a tool returns, interpret the results plainly. Quote the exact numbers fro
 
 You can chain tools in one response — call query_sales first to find a pattern, then query_inventory to check stock for the products you found, then write your conclusion. Up to 5 tool calls per response.
 - "how many online orders today" / "what's our online revenue this week" → call query_online_orders with period=today/week/month
-${ARTIFACT_INSTRUCTIONS}`
+${ARTIFACT_INSTRUCTIONS}
+
+RESPONSE STYLE - CRITICAL:
+You are a senior business advisor, not a chatbot. Every response must be substantive.
+
+ALWAYS give detailed answers:
+- Analyse deeply - don't just state facts, explain what they mean for the business
+- Structure: context, finding, implication, action
+- Use numbers, percentages, comparisons - be specific
+- Weave web search findings in naturally
+- Minimum 3-4 paragraphs for any business question
+- Bold key figures and recommendations
+
+NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth with the advantage of having the owner's actual live data.`
 
   // 4. Add troubleshoot addendum if needed
   if (intent.type === 'troubleshoot' || intent.type === 'escalate') {
