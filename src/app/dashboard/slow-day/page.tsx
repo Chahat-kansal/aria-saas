@@ -150,6 +150,11 @@ export default function SlowDayPage() {
         <div style={{ color: C.muted, textAlign: 'center', padding: '60px 0' }}>Analysing your sales patterns...</div>
       ) : (
         <>
+
+          <div style={{ position: 'relative', height: 200, background: 'rgba(255,255,255,0.03)', borderRadius: 12, border: '1px solid rgba(255,255,255,0.07)', padding: '16px', marginBottom: 20 }}>
+            <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Average revenue by day</p>
+            <canvas ref={chartRef} role="img" aria-label="Bar chart of average revenue by day of week" />
+          </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12, marginBottom: 24 }}>
             {[
               { label: 'Slowest day', value: worstDay?.day ?? '—', sub: worstDay ? 'A$' + Math.round(worstDay.avg_revenue) + ' avg' : '', color: C.red },
