@@ -1,6 +1,7 @@
 'use client';
 import { useState, useRef, useCallback } from 'react';
 import { useBusinessContext } from '@/components/providers/BusinessProvider';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
 interface ExtractedLine {
@@ -29,14 +30,18 @@ const PROGRESS_STEPS = ['Reading image', 'Extracting items', 'Matching inventory
 
 export default function ReceiptScanPage() {
   const { business } = useBusinessContext();
+  const router = useRouter();
   const [state, setState] = useState<State>('upload');
   const [scanResult, setScanResult] = useState<ScanResult | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [progressStep, setProgressStep] = useState(0);
   const [checkedRows, setCheckedRows] = useState<Record<number, boolean>>({});
   const [newStocks, setNewStocks] = useState<Record<number, number>>({});
+  // Track which unmatched rows user wants to add as new products
+  const [addAsNew, setAddAsNew] = useState<Record<number, boolean>>({});
   const [confirming, setConfirming] = useState(false);
   const [updatedCount, setUpdatedCount] = useState(0);
+  const [createdCount, setCreatedCount] = useState(0);
   const [error, setError] = useState('');
   const [dragOver, setDragOver] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -68,7 +73,7 @@ export default function ReceiptScanPage() {
       const data: ScanResult = await res.json();
 
       if (data.line_count === 0) {
-        setError(data.error ?? 'Aria couldn\'t read this invoice clearly. Try a photo with better lighting, or make sure the invoice text is clearly visible.');
+        setError(data.error ?? "Aria couldn't read this invoice clearly. Try a photo with better lighting.");
         setState('upload');
         return;
       }
@@ -76,12 +81,15 @@ export default function ReceiptScanPage() {
       setScanResult(data);
       const initChecked: Record<number, boolean> = {};
       const initStocks: Record<number, number> = {};
+      const initAddNew: Record<number, boolean> = {};
       data.extracted_lines.forEach((line, i) => {
         initChecked[i] = line.match_confidence !== 'none';
         initStocks[i] = line.suggested_new_stock;
+        initAddNew[i] = false; // unmatched: default don't add
       });
       setCheckedRows(initChecked);
       setNewStocks(initStocks);
+      setAddAsNew(initAddNew);
       setState('review');
     } catch (err: any) {
       clearInterval(tick);
@@ -103,23 +111,45 @@ export default function ReceiptScanPage() {
     if (!business?.id || !scanResult) return;
     setConfirming(true);
 
-    const updates = scanResult.extracted_lines
+    // Stock updates for matched items
+    const updates: any[] = scanResult.extracted_lines
       .filter((line, i) => checkedRows[i] && line.matched_item)
       .map((line, i) => ({
         item_id: line.matched_item!.id,
         new_stock: newStocks[i] ?? line.suggested_new_stock,
         quantity_added: line.quantity,
+        cost_price_aud: line.unit_price_aud ?? null,
       }));
 
-    if (updates.length === 0) { setState('confirmed'); setUpdatedCount(0); setConfirming(false); return; }
+    // New products to create for unmatched lines the user approved
+    const newProducts = scanResult.extracted_lines
+      .filter((line, i) => line.match_confidence === 'none' && addAsNew[i])
+      .map(line => ({
+        create_new: true,
+        description: line.description,
+        quantity: line.quantity,
+        cost_price_aud: line.unit_price_aud ?? null,
+        supplier_name: scanResult.supplier_name,
+      }));
+
+    const payload = [...updates, ...newProducts];
+
+    if (payload.length === 0) {
+      setState('confirmed');
+      setUpdatedCount(0);
+      setCreatedCount(0);
+      setConfirming(false);
+      return;
+    }
 
     const res = await fetch('/api/aria/receipt-scan/confirm', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ business_id: business.id, updates }),
+      body: JSON.stringify({ business_id: business.id, updates: payload }),
     });
     const data = await res.json();
     setUpdatedCount(data.updated ?? 0);
+    setCreatedCount(data.created ?? 0);
     setState('confirmed');
     setConfirming(false);
   }
@@ -130,12 +160,15 @@ export default function ReceiptScanPage() {
     setPreview(null);
     setCheckedRows({});
     setNewStocks({});
+    setAddAsNew({});
     setError('');
     setProgressStep(0);
     if (inputRef.current) inputRef.current.value = '';
   }
 
   const checkedCount = Object.values(checkedRows).filter(Boolean).length;
+  const addNewCount = Object.values(addAsNew).filter(Boolean).length;
+  const unmatchedLines = scanResult?.extracted_lines.filter(l => l.match_confidence === 'none') ?? [];
 
   return (
     <div className="p-6 max-w-4xl mx-auto">
@@ -144,8 +177,8 @@ export default function ReceiptScanPage() {
         <p style={{ color: '#6b7280' }}>Photograph a supplier invoice to update stock instantly</p>
       </div>
 
-      {/* UPLOAD STATE */}
-      {(state === 'upload') && (
+      {/* UPLOAD */}
+      {state === 'upload' && (
         <div>
           {error && (
             <div className="mb-4 px-4 py-3 rounded-xl text-sm bg-red-900/20 text-red-400 border border-red-900/30">{error}</div>
@@ -170,12 +203,10 @@ export default function ReceiptScanPage() {
         </div>
       )}
 
-      {/* SCANNING STATE */}
+      {/* SCANNING */}
       {state === 'scanning' && (
         <div className="rounded-2xl p-10 text-center" style={{ background: '#13131a', border: '1px solid rgba(255,255,255,0.07)' }}>
-          {preview && (
-            <img src={preview} alt="Invoice preview" className="w-32 h-32 object-cover rounded-xl mx-auto mb-6 opacity-60" />
-          )}
+          {preview && <img src={preview} alt="" className="w-32 h-32 object-cover rounded-xl mx-auto mb-6 opacity-60" />}
           <div className="flex justify-center mb-6">
             <div className="w-8 h-8 rounded-full border-2 border-[#1D9E75] border-t-transparent animate-spin" />
           </div>
@@ -192,10 +223,9 @@ export default function ReceiptScanPage() {
         </div>
       )}
 
-      {/* REVIEW STATE */}
+      {/* REVIEW */}
       {state === 'review' && scanResult && (
         <div>
-          {/* Header */}
           <div className="rounded-xl p-4 mb-4 flex items-start justify-between" style={{ background: '#13131a', border: '1px solid rgba(255,255,255,0.07)' }}>
             <div>
               <p className="text-white font-semibold">Found {scanResult.line_count} item{scanResult.line_count !== 1 ? 's' : ''} on invoice</p>
@@ -208,40 +238,76 @@ export default function ReceiptScanPage() {
             {preview && <img src={preview} alt="" className="w-12 h-12 object-cover rounded-lg opacity-60" />}
           </div>
 
+          {/* Unmatched banner */}
+          {unmatchedLines.length > 0 && (
+            <div className="rounded-xl p-4 mb-4 flex items-start justify-between gap-4"
+              style={{ background: 'rgba(251,191,36,0.06)', border: '1px solid rgba(251,191,36,0.2)' }}>
+              <div>
+                <p className="text-sm font-semibold" style={{ color: '#fbbf24' }}>
+                  {unmatchedLines.length} product{unmatchedLines.length !== 1 ? 's' : ''} not found in your inventory
+                </p>
+                <p className="text-xs mt-0.5" style={{ color: '#9ca3af' }}>
+                  Check the boxes below to add them as new products. You can set barcodes and prices after.
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  const allUnmatched: Record<number, boolean> = {};
+                  scanResult.extracted_lines.forEach((l, i) => { if (l.match_confidence === 'none') allUnmatched[i] = true; });
+                  setAddAsNew(a => ({ ...a, ...allUnmatched }));
+                }}
+                className="flex-shrink-0 text-xs px-3 py-1.5 rounded-lg font-medium"
+                style={{ background: 'rgba(251,191,36,0.12)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.25)' }}>
+                Add all {unmatchedLines.length}
+              </button>
+            </div>
+          )}
+
           {/* Table */}
           <div className="rounded-xl overflow-hidden mb-4" style={{ border: '1px solid rgba(255,255,255,0.07)' }}>
             <table className="w-full text-sm">
               <thead>
                 <tr style={{ background: '#13131a', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
-                  {['', 'Product (invoice)', 'Qty', 'Match', 'Current', 'New Stock'].map(h => (
+                  {['', 'Product (invoice)', 'Qty', 'Match', 'Current', 'New Stock / Action'].map(h => (
                     <th key={h} className="px-3 py-3 text-left text-xs font-medium" style={{ color: '#6b7280' }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody style={{ background: '#0d0d14' }}>
                 {scanResult.extracted_lines.map((line, i) => (
-                  <tr key={i} className={`${!checkedRows[i] ? 'opacity-50' : ''}`}
-                    style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                  <tr key={i}
+                    className={line.match_confidence === 'none' && !addAsNew[i] ? 'opacity-60' : ''}
+                    style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', background: addAsNew[i] ? 'rgba(251,191,36,0.04)' : undefined }}>
                     <td className="px-3 py-3">
-                      <input type="checkbox" checked={!!checkedRows[i]}
-                        onChange={e => setCheckedRows(p => ({ ...p, [i]: e.target.checked }))}
-                        className="rounded" disabled={line.match_confidence === 'none'} />
+                      {line.match_confidence !== 'none' ? (
+                        <input type="checkbox" checked={!!checkedRows[i]}
+                          onChange={e => setCheckedRows(p => ({ ...p, [i]: e.target.checked }))}
+                          className="rounded" />
+                      ) : (
+                        <input type="checkbox" checked={!!addAsNew[i]}
+                          onChange={e => setAddAsNew(p => ({ ...p, [i]: e.target.checked }))}
+                          className="rounded"
+                          title="Add this as a new product" />
+                      )}
                     </td>
-                    <td className="px-3 py-3 text-white max-w-[200px] truncate">{line.description}</td>
+                    <td className="px-3 py-3 text-white max-w-[200px]">
+                      <span className="block truncate">{line.description}</span>
+                      {line.unit_price_aud != null && (
+                        <span className="text-xs" style={{ color: '#6b7280' }}>Cost: A${line.unit_price_aud.toFixed(2)}</span>
+                      )}
+                    </td>
                     <td className="px-3 py-3 text-white">{line.quantity} {line.unit}</td>
                     <td className="px-3 py-3">
-                      {line.match_confidence === 'exact' && (
-                        <span className="text-xs text-emerald-400">✓ {line.matched_item?.name}</span>
-                      )}
-                      {line.match_confidence === 'fuzzy' && (
-                        <span className="text-xs text-amber-400">~ {line.matched_item?.name}</span>
-                      )}
+                      {line.match_confidence === 'exact' && <span className="text-xs text-emerald-400">✓ {line.matched_item?.name}</span>}
+                      {line.match_confidence === 'fuzzy' && <span className="text-xs text-amber-400">~ {line.matched_item?.name}</span>}
                       {line.match_confidence === 'none' && (
-                        <span className="text-xs text-red-400">✗ No match</span>
+                        <span className="text-xs" style={{ color: addAsNew[i] ? '#fbbf24' : '#ef4444' }}>
+                          {addAsNew[i] ? '➕ Will add new' : '✗ No match'}
+                        </span>
                       )}
                     </td>
                     <td className="px-3 py-3" style={{ color: '#9ca3af' }}>
-                      {line.matched_item ? line.matched_item.current_stock : '—'}
+                      {line.matched_item ? line.matched_item.current_stock : addAsNew[i] ? '—' : '—'}
                     </td>
                     <td className="px-3 py-3">
                       {line.matched_item ? (
@@ -250,7 +316,11 @@ export default function ReceiptScanPage() {
                           onChange={e => setNewStocks(p => ({ ...p, [i]: parseInt(e.target.value) || 0 }))}
                           className="w-16 px-2 py-1 rounded-lg text-xs text-white outline-none"
                           style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)' }} />
-                      ) : <span style={{ color: '#6b7280' }}>—</span>}
+                      ) : addAsNew[i] ? (
+                        <span className="text-xs" style={{ color: '#fbbf24' }}>Draft — needs price</span>
+                      ) : (
+                        <span className="text-xs" style={{ color: '#6b7280' }}>Tick to add →</span>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -259,10 +329,14 @@ export default function ReceiptScanPage() {
           </div>
 
           <div className="flex gap-3">
-            <button onClick={handleConfirm} disabled={confirming || checkedCount === 0}
+            <button onClick={handleConfirm}
+              disabled={confirming || (checkedCount === 0 && addNewCount === 0)}
               className="flex-1 py-3 rounded-full text-sm font-semibold text-white disabled:opacity-40 transition-colors"
               style={{ background: '#1D9E75' }}>
-              {confirming ? 'Updating…' : `Update ${checkedCount} item${checkedCount !== 1 ? 's' : ''}`}
+              {confirming ? 'Processing…' : [
+                checkedCount > 0 ? `Update ${checkedCount} item${checkedCount !== 1 ? 's' : ''}` : '',
+                addNewCount > 0 ? `Add ${addNewCount} new` : '',
+              ].filter(Boolean).join(' + ') || 'Nothing selected'}
             </button>
             <button onClick={reset}
               className="px-6 py-3 rounded-full text-sm font-medium transition-colors"
@@ -273,7 +347,7 @@ export default function ReceiptScanPage() {
         </div>
       )}
 
-      {/* CONFIRMED STATE */}
+      {/* CONFIRMED */}
       {state === 'confirmed' && (
         <div className="rounded-2xl p-12 text-center" style={{ background: '#13131a', border: '1px solid rgba(255,255,255,0.07)' }}>
           <div className="w-16 h-16 rounded-full bg-emerald-500/20 flex items-center justify-center mx-auto mb-4">
@@ -281,11 +355,30 @@ export default function ReceiptScanPage() {
               <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
             </svg>
           </div>
-          <h2 className="text-xl font-semibold text-white mb-2">Stock updated</h2>
-          <p className="text-sm mb-8" style={{ color: '#9ca3af' }}>
-            {updatedCount} item{updatedCount !== 1 ? 's' : ''} updated from your invoice
-          </p>
+          <h2 className="text-xl font-semibold text-white mb-2">Done!</h2>
+          <div className="space-y-1 mb-8">
+            {updatedCount > 0 && (
+              <p className="text-sm" style={{ color: '#9ca3af' }}>
+                ✓ {updatedCount} item{updatedCount !== 1 ? 's' : ''} stock updated from invoice
+              </p>
+            )}
+            {createdCount > 0 && (
+              <p className="text-sm" style={{ color: '#fbbf24' }}>
+                ➕ {createdCount} new product{createdCount !== 1 ? 's' : ''} added as drafts — set their barcode and price below
+              </p>
+            )}
+            {updatedCount === 0 && createdCount === 0 && (
+              <p className="text-sm" style={{ color: '#9ca3af' }}>No changes made.</p>
+            )}
+          </div>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
+            {createdCount > 0 && (
+              <Link href="/pos/products?status=draft&source=receipt_scan"
+                className="px-6 py-2.5 rounded-full text-sm font-semibold text-center"
+                style={{ background: '#fbbf24', color: '#0d0d14' }}>
+                Set barcodes & prices ({createdCount} draft{createdCount !== 1 ? 's' : ''}) →
+              </Link>
+            )}
             <button onClick={reset}
               className="px-6 py-2.5 rounded-full text-sm font-medium text-white"
               style={{ background: '#1D9E75' }}>
