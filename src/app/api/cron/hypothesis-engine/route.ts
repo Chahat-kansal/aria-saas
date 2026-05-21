@@ -1,6 +1,6 @@
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
-export const maxDuration = 60
+export const maxDuration = 300
 
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
@@ -31,7 +31,13 @@ export async function GET(req: Request) {
     let processed = 0, totalHypotheses = 0
     const errors: Array<{ business_id: string; error: string }> = []
 
+    const DEADLINE_MS = 260_000  // 260s — stop before Vercel's 300s kill
+    const cronStart = Date.now()
     for (const biz of businesses) {
+      if (Date.now() - cronStart > DEADLINE_MS) {
+        errors.push({ business_id: 'deadline', error: 'Stopped early — approaching Vercel timeout' })
+        break
+      }
       try {
         const { hypotheses, evidence_payload } = await generateHypothesesForBusiness(biz.id)
         const inserted = await persistHypotheses(biz.id, hypotheses, evidence_payload)
