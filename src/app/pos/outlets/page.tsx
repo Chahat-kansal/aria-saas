@@ -12,7 +12,7 @@ interface Outlet {
 const C = {
   bg: 'var(--bg-base)', card: 'var(--bg-surface)', text: 'var(--text-primary)',
   muted: 'var(--text-secondary)', dim: 'var(--text-tertiary)',
-  violet: '#8B5CF6', green: '#22C55E', red: '#EF4444',
+  violet: '#006AFF', green: '#00B140', red: '#EF4444',
   border: 'rgba(255,255,255,0.07)',
 }
 const iS: React.CSSProperties = {
@@ -132,7 +132,7 @@ export default function OutletsPage() {
                     <div style={{fontSize:11,fontWeight:700,color:C.dim,textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:10}}>Registers (tills)</div>
                     <div style={{display:'flex',flexDirection:'column',gap:6,marginBottom:12}}>
                       {(outlet.pos_registers??[]).map(reg => (
-                        <div key={reg.id} style={{display:'flex',alignItems:'center',gap:12,padding:'8px 12px',background:'rgba(255,255,255,0.03)',borderRadius:8}}>
+                        <div key={reg.id} style={{display:'flex',alignItems:'center',gap:12,padding:'8px 12px',background:'#FAFAFA',borderRadius:8}}>
                           <span style={{fontSize:13,fontWeight:600,flex:1}}>🖥 {reg.name}</span>
                           <span style={{fontSize:11,color:reg.is_active?C.green:C.dim}}>{reg.is_active?'Active':'Inactive'}</span>
                           <button onClick={() => toggleRegister(reg.id,reg.is_active)} style={{padding:'4px 10px',borderRadius:6,border:`1px solid ${C.border}`,background:'transparent',color:reg.is_active?C.red:C.green,fontSize:11,cursor:'pointer',fontFamily:'inherit'}}>
