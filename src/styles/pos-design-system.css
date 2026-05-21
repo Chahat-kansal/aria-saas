@@ -778,3 +778,22 @@ html[data-theme="light"] .pos-sidebar-wrapper input {
 html[data-theme="light"] .pos-sidebar-wrapper input::placeholder {
   color: rgba(255,255,255,0.5) !important;
 }
+
+/* -- Sidebar: always dark (Square-style dark nav) -- */
+.pos-sidebar-wrapper {
+  --text-tertiary: rgba(255,255,255,0.38);
+  --text-secondary: rgba(255,255,255,0.60);
+  --text-primary: rgba(255,255,255,0.92);
+  --bg-base: #111111;
+  --bg-hover: rgba(255,255,255,0.08);
+  --bg-elevated: rgba(255,255,255,0.06);
+  --bg-glass: #1A1A1A;
+  --divider: rgba(255,255,255,0.08);
+  --border-default: rgba(255,255,255,0.10);
+  --violet-soft: rgba(0,106,255,0.20);
+  --violet-dim: rgba(0,106,255,0.15);
+}
+.pos-sidebar-wrapper aside {
+  background: #1A1A1A !important;
+  box-shadow: inset -1px 0 0 rgba(255,255,255,0.06) !important;
+}
