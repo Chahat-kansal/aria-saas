@@ -13,6 +13,7 @@ type NavItemDef = {
   icon: React.ComponentType<{ className?: string }>;
   badge?: string;
   section: string;
+  target?: string;
 };
 
 function SocialIcon({ className }: { className?: string }) {
@@ -44,12 +45,13 @@ const ALL_ITEMS: Record<string, NavItemDef> = {
   'parcel-tracking':            { href: '/dashboard/parcel-tracking',           label: 'Parcel tracking',    icon: TruckOutlineIcon,               section: 'Operations'   },
   'cash-up':                    { href: '/dashboard/cash-up',                  label: 'Daily cash-up',      icon: GridIcon,           section: 'Operations'   },
   'stocktake':                  { href: '/dashboard/stocktake',                label: 'Stocktake',          icon: GridIcon,           section: 'Operations'   },
+  'supplier-import':            { href: '/dashboard/supplier-import',          label: 'Supplier price import', icon: GridIcon,       section: 'Operations'   },
   'customer-tabs':              { href: '/dashboard/customer-tabs',            label: 'Customer tabs',      icon: UsersIcon,          section: 'Overview'     },
   'pos-online':                 { href: '/dashboard/pos/online',               label: 'Online ordering',    icon: DeliveryIcon,       badge: 'AI',  section: 'Operations'   },
   'dashboard':                  { href: '/dashboard',                          label: 'Dashboard',         icon: GridIcon,           section: 'Overview'     },
   'custom-features':            { href: '/dashboard/custom-features',          label: 'Custom features',   icon: SparklesIcon,       badge: 'New', section: 'Overview' },
   'staff':                      { href: '/dashboard/staff',                    label: 'Team',              icon: TeamIcon,           section: 'Overview'     },
-  'pos':                        { href: '/pos',                                label: 'AriaPOS',           icon: RegisterIcon,       badge: 'New', section: 'Modules' },
+  'pos':                        { href: '/pos',                                label: 'AriaPOS',           icon: RegisterIcon,       badge: 'New', section: 'Modules', target: '_blank' },
   'winback':                    { href: '/dashboard/winback',                  label: 'Customer winback',  icon: UsersIcon,          section: 'Revenue'      },
   'slow-day':                   { href: '/dashboard/churn#slow-day',             label: 'Slow day filler',   icon: DollarIcon,         badge: '⚡', section: 'Revenue' },
   'reviews':                    { href: '/dashboard/reviews',                  label: 'Reviews',           icon: StarIcon,           section: 'Reputation'   },
@@ -315,7 +317,9 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
                   <Link
                     key={item.href + item.label}
                     href={item.href}
-                    onClick={onNavigate}
+                    target={item.target}
+                    rel={item.target === '_blank' ? 'noopener noreferrer' : undefined}
+                    onClick={item.target === '_blank' ? undefined : onNavigate}
                     className={`flex items-center gap-2.5 px-3 py-2 mx-1 rounded-lg text-[12.5px] transition-colors mb-0.5 ${
                       isActive
                         ? 'bg-[rgba(29,158,117,0.15)] text-[#1D9E75]'
