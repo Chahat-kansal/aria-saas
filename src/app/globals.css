@@ -11,11 +11,11 @@
 
 * { box-sizing: border-box; }
 
-/* ── MOBILE SAFE AREA ── */
+/*  MOBILE SAFE AREA  */
 .pt-safe-top  { padding-top:    env(safe-area-inset-top,    0px); }
 .pb-safe-bottom { padding-bottom: env(safe-area-inset-bottom, 0px); }
 
-/* ── BARCODE SCANNER ── */
+/*  BARCODE SCANNER  */
 @keyframes scan-line {
   0%   { top: 6px; }
   50%  { top: calc(100% - 6px); }
@@ -26,7 +26,7 @@
   position: absolute;
 }
 
-/* ── MOBILE VIEWPORT FIX ── */
+/*  MOBILE VIEWPORT FIX  */
 /* Fixes the 100vh = address bar issue on mobile Chrome/Safari */
 html, body { height: 100%; }
 #__next { height: 100%; }
@@ -41,7 +41,7 @@ html, body { height: 100%; }
 .pb-safe { padding-bottom: env(safe-area-inset-bottom, 0px); }
 .pt-safe { padding-top: env(safe-area-inset-top, 0px); }
 
-/* ── SCROLLBARS ── */
+/*  SCROLLBARS  */
 ::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
@@ -50,7 +50,7 @@ html, body { height: 100%; }
 .scrollbar-hide::-webkit-scrollbar { display: none; }
 .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
 
-/* ── PROSE ── */
+/*  PROSE  */
 .prose-aria { 
   @apply text-[#f0f0f5] leading-relaxed;
 }
@@ -72,7 +72,7 @@ html, body { height: 100%; }
 /* Prevent code blocks from breaking layout on mobile */
 .prose-aria pre { @apply overflow-x-auto; }
 
-/* ── ANIMATIONS ── */
+/*  ANIMATIONS  */
 @keyframes typing {
   0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
   30% { transform: translateY(-4px); opacity: 1; }
@@ -87,7 +87,7 @@ html, body { height: 100%; }
 }
 .animate-float { animation: float 3s ease-in-out infinite; }
 
-/* ─── POS DESIGN SYSTEM ─────────────────────────────────────── */
+/*  POS DESIGN SYSTEM  */
 /* Font import moved to top of file */
 
 :root {
@@ -112,7 +112,7 @@ html, body { height: 100%; }
   --pos-danger:      #EF4444;
 }
 
-/* ── Light/dark theme foundation ─────────────────────────────────── */
+/*  Light/dark theme foundation  */
 /* These CSS vars are used by components that opt-in to theme support */
 :root {
   --theme-bg: rgba(17,15,26,0.95);
@@ -225,9 +225,9 @@ html, body { height: 100%; }
   50%       { opacity: 1;   }
 }
 
-/* ── POS TERMINAL RESPONSIVE LAYOUT ───────────────────────── */
+/*  POS TERMINAL RESPONSIVE LAYOUT  */
 @media (max-width: 767px) {
-  /* On mobile each panel is full-width — visibility controlled by hidden/flex Tailwind classes */
+  /* On mobile each panel is full-width  visibility controlled by hidden/flex Tailwind classes */
   .pos-products-panel {
     flex: 1 1 100% !important;
     min-width: 0 !important;
