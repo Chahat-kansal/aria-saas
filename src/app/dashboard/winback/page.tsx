@@ -1,282 +1,240 @@
-'use client';
-import { useState, useEffect, useCallback } from 'react';
-import { useBusinessContext } from '@/components/providers/BusinessProvider';
-import { AriaIntelligencePanel } from '@/components/dashboard/AriaIntelligencePanel';
+'use client'
+import { useState, useEffect, useCallback } from 'react'
+import { useBusinessContext } from '@/components/providers/BusinessProvider'
 
-interface LapsedCustomer { id: string; name: string; phone: string | null; last_visit: string | null; total_spend: number | null; }
-interface Campaign { id: string; name: string | null; type: string; message: string | null; status: string | null; sms_sent: boolean | null; created_at: string; error: string | null; }
+interface LapsedCustomer { id: string; name: string; phone: string | null; email: string | null; last_visit_at: string | null; total_spend: number | null }
+interface Campaign { id: string; name: string | null; type: string; message: string | null; status: string | null; sms_sent: boolean | null; created_at: string; error: string | null }
 
 function daysAgo(date: string | null) {
-  if (!date) return null;
-  return Math.floor((Date.now() - new Date(date).getTime()) / 86400000);
+  if (!date) return null
+  return Math.floor((Date.now() - new Date(date).getTime()) / 86400000)
 }
 
 export default function WinbackPage() {
-  const { business } = useBusinessContext();
-  const [customers, setCustomers] = useState<LapsedCustomer[]>([]);
-  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [message, setMessage] = useState('');
-  const [generating, setGenerating] = useState(false);
-  const [selected, setSelected] = useState<Record<string, boolean>>({});
-  const [sending, setSending] = useState(false);
-  const [sendResult, setSendResult] = useState<{ sent: number; failed: number; noPhone: number } | null>(null);
+  const { business } = useBusinessContext()
+  const [customers, setCustomers] = useState<LapsedCustomer[]>([])
+  const [campaigns, setCampaigns] = useState<Campaign[]>([])
+  const [loading, setLoading] = useState(true)
+  const [message, setMessage] = useState('')
+  const [generating, setGenerating] = useState(false)
+  const [selected, setSelected] = useState<Record<string, boolean>>({})
+  const [sending, setSending] = useState(false)
+  const [sendResult, setSendResult] = useState<{ sent: number; failed: number; noPhone: number } | null>(null)
+  const [activeTab, setActiveTab] = useState<'customers' | 'campaigns'>('customers')
+  const [lapsedDays, setLapsedDays] = useState(60)
 
   const load = useCallback(async () => {
-    if (!business?.id) return;
-    setLoading(true);
+    if (!business?.id) return
+    setLoading(true)
+    const cutoff = new Date(Date.now() - lapsedDays * 86400000).toISOString()
     const [custRes, campRes] = await Promise.all([
-      fetch(`/api/customers?business_id=${business.id}&lapsed=60`).then(r => r.json()).catch(() => ({ customers: [] })),
-      fetch(`/api/campaigns?business_id=${business.id}&type=winback`).then(r => r.json()).catch(() => ({ campaigns: [] })),
-    ]);
-    const lapsed: LapsedCustomer[] = custRes.customers ?? custRes.data ?? [];
-    setCustomers(lapsed);
-    setCampaigns(campRes.campaigns ?? campRes.data ?? []);
-    // Pre-select all with phones
-    const initSel: Record<string, boolean> = {};
-    lapsed.forEach((c: LapsedCustomer) => { if (c.phone) initSel[c.id] = true; });
-    setSelected(initSel);
-    setLoading(false);
-  }, [business?.id]);
+      fetch('/api/pos/customers?business_id=' + business.id + '&limit=200').then(r => r.json()).catch(() => ({ customers: [] })),
+      fetch('/api/campaigns?business_id=' + business.id + '&type=winback').then(r => r.json()).catch(() => ({ campaigns: [] })),
+    ])
+    const all: LapsedCustomer[] = custRes.customers ?? custRes.data ?? []
+    const lapsed = all.filter(c => {
+      if (!c.last_visit_at) return true
+      return c.last_visit_at < cutoff
+    })
+    setCustomers(lapsed)
+    setCampaigns(campRes.campaigns ?? campRes.data ?? [])
+    const initSel: Record<string, boolean> = {}
+    lapsed.forEach((c: LapsedCustomer) => { if (c.phone) initSel[c.id] = true })
+    setSelected(initSel)
+    setLoading(false)
+  }, [business?.id, lapsedDays])
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load() }, [load])
 
   async function generateMessage() {
-    if (!business?.id) return;
-    setGenerating(true);
+    if (!business?.id) return
+    setGenerating(true)
     try {
       const res = await fetch('/api/aria/winback-message', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ business_id: business.id }),
-      }).then(r => r.json());
-      if (res.message) setMessage(res.message);
+      }).then(r => r.json())
+      if (res.message) setMessage(res.message)
     } catch { /* keep existing */ }
-    setGenerating(false);
+    setGenerating(false)
   }
 
-  // Auto-generate message on load
-  useEffect(() => { if (business?.id && !message) generateMessage(); }, [business?.id]);
+  useEffect(() => { if (business?.id && !message) generateMessage() }, [business?.id])
 
   async function sendCampaign() {
-    if (!business?.id || !message.trim()) return;
-    const targets = customers.filter(c => selected[c.id] && c.phone);
-    if (targets.length === 0) return;
-    const confirmed = window.confirm(`Send this SMS to ${targets.length} customer${targets.length > 1 ? 's' : ''}?\n\n"${message.slice(0, 100)}${message.length > 100 ? '…' : ''}"\n\nThis will send real SMS messages that cannot be undone.`);
-    if (!confirmed) return;
-    setSending(true);
-    setSendResult(null);
-    const res = await fetch('/api/aria/winback', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        business_id: business.id,
-        customer_ids: targets.map(c => c.id),
-        message,
-      }),
-    }).then(r => r.json()).catch(() => ({ sent: 0, errors: 0 }));
-    setSendResult({ sent: res.sent ?? 0, failed: res.errors ?? 0, noPhone: customers.filter(c => selected[c.id] && !c.phone).length });
-    setSending(false);
-    load();
+    if (!business?.id || !message.trim()) return
+    const targets = customers.filter(c => selected[c.id] && c.phone)
+    if (targets.length === 0) return
+    if (!window.confirm('Send this SMS to ' + targets.length + ' customer' + (targets.length !== 1 ? 's' : '') + '?')) return
+    setSending(true)
+    try {
+      const res = await fetch('/api/aria/winback-send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ business_id: business.id, customer_ids: targets.map(c => c.id), message }),
+      }).then(r => r.json())
+      setSendResult(res)
+      load()
+    } catch { /* ignore */ }
+    setSending(false)
   }
 
-  const selectedCount = Object.values(selected).filter(Boolean).length;
-  const withPhone = customers.filter(c => selected[c.id] && c.phone).length;
-  const stats = {
-    lapsed: customers.length,
-    atRisk: customers.filter(c => { const d = daysAgo(c.last_visit); return d !== null && d >= 30 && d < 60; }).length,
-    wonBackThisMonth: campaigns.filter(c => c.created_at && new Date(c.created_at) > new Date(Date.now() - 30 * 86400000)).length,
-    lastCampaign: campaigns[0]?.created_at ? new Date(campaigns[0].created_at).toLocaleDateString() : 'Never',
-  };
+  const selectedCount = Object.values(selected).filter(Boolean).length
+  const withPhone = customers.filter(c => c.phone).length
 
-  if (loading) {
-    return (
-      <div className="p-6 max-w-5xl mx-auto animate-pulse space-y-4">
-        <div className="h-8 bg-[rgba(255,255,255,0.06)] rounded-xl w-64" />
-        <div className="grid grid-cols-4 gap-4"><div className="h-24 bg-[rgba(255,255,255,0.04)] rounded-xl col-span-4" /></div>
-        <div className="h-64 bg-[rgba(255,255,255,0.04)] rounded-xl" />
-      </div>
-    );
+  const C = {
+    bg: 'var(--bg-base)', card: 'var(--bg-surface)', text: 'var(--text-primary)',
+    muted: 'var(--text-secondary)', dim: 'var(--text-tertiary)',
+    green: '#22C55E', amber: '#F59E0B', violet: '#8B5CF6', red: '#EF4444',
+    border: 'rgba(255,255,255,0.07)',
   }
 
   return (
-    <div className="p-6 max-w-5xl mx-auto">
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold text-white mb-1">Customer Winback</h1>
-        <p style={{ color: '#6b7280' }}>Re-engage customers who haven't visited in 60+ days</p>
+    <div style={{ minHeight: '100%', background: C.bg, color: C.text, fontFamily: "'Inter',sans-serif", padding: '24px 28px' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
+        <div>
+          <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>Customer Winback</h1>
+          <p style={{ fontSize: 13, color: C.muted }}>Re-engage customers who haven't visited in a while.</p>
+        </div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <span style={{ fontSize: 12, color: C.muted }}>Lapsed after</span>
+          {[30, 60, 90].map(d => (
+            <button key={d} onClick={() => setLapsedDays(d)}
+              style={{ padding: '5px 12px', borderRadius: 8, border: '1px solid ' + (lapsedDays === d ? C.violet : C.border), background: lapsedDays === d ? 'rgba(139,92,246,0.12)' : 'transparent', color: lapsedDays === d ? C.violet : C.muted, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+              {d}d
+            </button>
+          ))}
+        </div>
       </div>
 
-      <AriaIntelligencePanel mode="customer" />
-
-      {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12, marginBottom: 24 }}>
         {[
-          { label: 'Lapsed (60d+)', value: stats.lapsed, color: '#ef4444' },
-          { label: 'At risk (30-60d)', value: stats.atRisk, color: '#f59e0b' },
-          { label: 'Campaigns this month', value: stats.wonBackThisMonth, color: '#fff' },
-          { label: 'Last campaign', value: stats.lastCampaign, color: '#9ca3af' },
+          { label: 'Lapsed customers', value: customers.length, color: C.amber },
+          { label: 'Reachable by SMS', value: withPhone, color: C.green },
+          { label: 'Selected to contact', value: selectedCount, color: C.violet },
         ].map(s => (
-          <div key={s.label} className="rounded-xl p-4" style={{ background: '#13131a', border: '1px solid rgba(255,255,255,0.07)' }}>
-            <p className="text-xs mb-1" style={{ color: '#6b7280' }}>{s.label}</p>
-            <p className="text-xl font-semibold" style={{ color: s.color }}>{s.value}</p>
+          <div key={s.label} style={{ background: C.card, border: '1px solid ' + C.border, borderRadius: 12, padding: '16px 20px' }}>
+            <div style={{ fontSize: 11, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>{s.label}</div>
+            <div style={{ fontSize: 26, fontWeight: 700, color: s.color }}>{s.value}</div>
           </div>
         ))}
       </div>
 
-      {sendResult && (
-        <div className="mb-4 px-5 py-4 rounded-xl" style={{ background: 'rgba(29,158,117,0.1)', border: '1px solid rgba(29,158,117,0.2)' }}>
-          <p className="text-sm font-medium" style={{ color: '#1D9E75' }}>
-            Campaign sent! {sendResult.sent} messages delivered
-            {sendResult.noPhone > 0 && `, ${sendResult.noPhone} skipped (no phone)`}
-            {sendResult.failed > 0 && `, ${sendResult.failed} failed`}
-          </p>
+      {/* Tabs */}
+      <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid ' + C.border, marginBottom: 20 }}>
+        {(['customers', 'campaigns'] as const).map(t => (
+          <button key={t} onClick={() => setActiveTab(t)}
+            style={{ padding: '10px 16px', border: 'none', borderBottom: '2px solid ' + (activeTab === t ? C.violet : 'transparent'), background: 'transparent', color: activeTab === t ? C.text : C.muted, fontSize: 13, fontWeight: activeTab === t ? 600 : 400, cursor: 'pointer', fontFamily: 'inherit', textTransform: 'capitalize' }}>
+            {t === 'customers' ? 'Lapsed Customers (' + customers.length + ')' : 'Past Campaigns (' + campaigns.length + ')'}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === 'customers' && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 380px', gap: 20 }}>
+          {/* Customer list */}
+          <div>
+            {loading ? (
+              <div style={{ color: C.muted, textAlign: 'center', padding: '40px 0' }}>Loading...</div>
+            ) : customers.length === 0 ? (
+              <div style={{ background: C.card, border: '1px solid ' + C.border, borderRadius: 12, padding: '32px', textAlign: 'center' }}>
+                <p style={{ fontSize: 16, fontWeight: 700, marginBottom: 6 }}>No lapsed customers</p>
+                <p style={{ fontSize: 13, color: C.muted }}>All your customers have visited within the last {lapsedDays} days.</p>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                  <button onClick={() => {
+                    const allSelected = customers.filter(c => c.phone).every(c => selected[c.id])
+                    const newSel: Record<string,boolean> = {}
+                    if (!allSelected) customers.filter(c => c.phone).forEach(c => { newSel[c.id] = true })
+                    setSelected(newSel)
+                  }}
+                    style={{ fontSize: 11, color: C.violet, background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600 }}>
+                    {customers.filter(c => c.phone).every(c => selected[c.id]) ? 'Deselect all' : 'Select all with phone'}
+                  </button>
+                  <span style={{ fontSize: 11, color: C.dim }}>{selectedCount} selected</span>
+                </div>
+                {customers.map(c => {
+                  const days = daysAgo(c.last_visit_at)
+                  const isSelected = selected[c.id]
+                  return (
+                    <div key={c.id} onClick={() => c.phone && setSelected(prev => ({ ...prev, [c.id]: !prev[c.id] }))}
+                      style={{ background: isSelected ? 'rgba(139,92,246,0.08)' : C.card, border: '1px solid ' + (isSelected ? 'rgba(139,92,246,0.3)' : C.border), borderRadius: 10, padding: '12px 14px', cursor: c.phone ? 'pointer' : 'default', display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <div style={{ width: 16, height: 16, borderRadius: 4, border: '1px solid ' + (isSelected ? C.violet : C.border), background: isSelected ? C.violet : 'transparent', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        {isSelected && <span style={{ color: '#fff', fontSize: 10 }}>✓</span>}
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{c.name}</div>
+                        <div style={{ fontSize: 11, color: C.muted }}>{c.phone ?? 'No phone'}{c.total_spend ? ' · A$' + Number(c.total_spend).toFixed(0) + ' lifetime' : ''}</div>
+                      </div>
+                      <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: (days ?? 0) > 90 ? C.red : C.amber }}>{days != null ? days + 'd ago' : 'Never'}</div>
+                        {!c.phone && <div style={{ fontSize: 10, color: C.dim }}>no SMS</div>}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Message + send */}
+          <div>
+            <div style={{ background: C.card, border: '1px solid ' + C.border, borderRadius: 12, padding: '18px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <p style={{ fontSize: 13, fontWeight: 600, color: C.text }}>SMS Message</p>
+                <button onClick={generateMessage} disabled={generating}
+                  style={{ fontSize: 11, color: C.violet, background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600, opacity: generating ? 0.5 : 1 }}>
+                  {generating ? '✨ Writing...' : '✨ Regenerate'}
+                </button>
+              </div>
+              <textarea
+                value={message}
+                onChange={e => setMessage(e.target.value)}
+                rows={5}
+                style={{ width: '100%', background: 'rgba(255,255,255,0.04)', border: '1px solid ' + C.border, borderRadius: 8, padding: '10px 12px', color: C.text, fontSize: 13, fontFamily: 'inherit', resize: 'vertical', outline: 'none', boxSizing: 'border-box' }}
+                placeholder="AI-generated winback message will appear here..."
+              />
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 6, marginBottom: 16 }}>
+                <span style={{ fontSize: 11, color: C.dim }}>{message.length}/160 chars</span>
+                <span style={{ fontSize: 11, color: message.length > 160 ? C.red : C.dim }}>{message.length > 160 ? 'Too long for 1 SMS' : '1 SMS'}</span>
+              </div>
+              <button onClick={sendCampaign} disabled={sending || selectedCount === 0 || !message.trim()}
+                style={{ width: '100%', padding: '12px', borderRadius: 10, border: 'none', background: selectedCount > 0 && message.trim() ? C.green : 'rgba(255,255,255,0.06)', color: '#fff', fontSize: 14, fontWeight: 700, cursor: selectedCount > 0 ? 'pointer' : 'not-allowed', fontFamily: 'inherit', opacity: sending ? 0.6 : 1 }}>
+                {sending ? 'Sending...' : 'Send SMS to ' + selectedCount + ' customer' + (selectedCount !== 1 ? 's' : '')}
+              </button>
+              {sendResult && (
+                <div style={{ marginTop: 12, padding: '10px 14px', background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.2)', borderRadius: 8, fontSize: 12, color: C.green }}>
+                  ✓ Sent: {sendResult.sent} · Failed: {sendResult.failed} · No phone: {sendResult.noPhone}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-        {/* Customer list */}
-        <div className="lg:col-span-3">
-          <div className="rounded-xl overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.07)' }}>
-            <div className="px-5 py-4 flex items-center justify-between" style={{ background: '#13131a', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
-              <h2 className="font-medium text-white">Lapsed customers</h2>
-              <div className="flex items-center gap-2">
-                <button onClick={() => {
-                  const all: Record<string, boolean> = {};
-                  customers.forEach(c => { if (c.phone) all[c.id] = true; });
-                  setSelected(all);
-                }} className="text-xs px-2 py-1 rounded-lg" style={{ color: '#1D9E75', background: 'rgba(29,158,117,0.1)' }}>All</button>
-                <button onClick={() => setSelected({})} className="text-xs px-2 py-1 rounded-lg" style={{ color: '#9ca3af', background: 'rgba(255,255,255,0.06)' }}>None</button>
+      {activeTab === 'campaigns' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {campaigns.length === 0 ? (
+            <div style={{ color: C.muted, textAlign: 'center', padding: '40px 0' }}>No campaigns sent yet.</div>
+          ) : campaigns.map(c => (
+            <div key={c.id} style={{ background: C.card, border: '1px solid ' + C.border, borderRadius: 12, padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <p style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{c.name ?? 'Winback Campaign'}</p>
+                <p style={{ fontSize: 12, color: C.muted }}>{c.message?.slice(0, 80)}{(c.message?.length ?? 0) > 80 ? '...' : ''}</p>
+              </div>
+              <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                <span style={{ fontSize: 11, padding: '3px 10px', borderRadius: 99, background: c.status === 'sent' ? 'rgba(34,197,94,0.15)' : 'rgba(255,255,255,0.06)', color: c.status === 'sent' ? C.green : C.muted }}>
+                  {c.status ?? 'draft'}
+                </span>
+                <p style={{ fontSize: 10, color: C.dim, marginTop: 4 }}>{new Date(c.created_at).toLocaleDateString('en-AU')}</p>
               </div>
             </div>
-            {customers.length === 0 ? (
-              <div className="px-5 py-8" style={{ background: '#0d0d14' }}>
-                <p className="text-sm font-medium text-white mb-1">No lapsed customers yet</p>
-                <p className="text-xs mb-6" style={{ color: '#6b7280' }}>
-                  Winback campaigns activate automatically as customers make purchases. Customers who haven&apos;t returned in 60+ days will appear here with a personalised SMS ready to send.
-                </p>
-                <p className="text-xs font-semibold mb-3" style={{ color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Preview — what winback looks like</p>
-                {[
-                  { name: 'Sarah M.', days: 65, spent: 234 },
-                  { name: 'James K.', days: 78, spent: 189 },
-                  { name: 'Liu W.',   days: 92, spent: 312 },
-                ].map(c => (
-                  <div key={c.name} className="flex items-center justify-between px-4 py-3 mb-2 rounded-lg" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', opacity: 0.6 }}>
-                    <div>
-                      <div className="text-sm font-medium text-white">{c.name}</div>
-                      <div className="text-xs" style={{ color: '#6b7280' }}>Last visit {c.days} days ago · A${c.spent} lifetime</div>
-                    </div>
-                    <span className="text-xs px-2 py-1 rounded" style={{ background: 'rgba(239,68,68,0.1)', color: '#f87171' }}>Lapsed</span>
-                  </div>
-                ))}
-                <div className="mt-4 px-4 py-3 rounded-lg" style={{ background: 'rgba(29,158,117,0.07)', border: '1px solid rgba(29,158,117,0.15)' }}>
-                  <div className="text-xs font-semibold mb-1" style={{ color: '#1D9E75' }}>Sample SMS</div>
-                  <div className="text-xs italic" style={{ color: '#9ca3af' }}>
-                    &ldquo;Hi Sarah! We miss you at {business?.name ?? '[Your Business]'}. It&apos;s been a while — here&apos;s 10% off your next visit. Reply STOP to opt out.&rdquo;
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <table className="w-full text-sm" style={{ background: '#0d0d14' }}>
-                <thead>
-                  <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                    {['Include', 'Name', 'Last Visit', 'Days', 'LTV'].map(h => (
-                      <th key={h} className="px-4 py-3 text-left text-xs font-medium" style={{ color: '#6b7280' }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {customers.map(c => {
-                    const days = daysAgo(c.last_visit);
-                    const hasPhone = !!c.phone;
-                    return (
-                      <tr key={c.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                        <td className="px-4 py-3">
-                          {hasPhone ? (
-                            <input type="checkbox" checked={!!selected[c.id]} onChange={e => setSelected(p => ({ ...p, [c.id]: e.target.checked }))} className="w-4 h-4 accent-[#1D9E75]" />
-                          ) : (
-                            <span className="text-xs" style={{ color: '#4b5563' }}>No phone</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-white font-medium">{c.name}</td>
-                        <td className="px-4 py-3 text-xs" style={{ color: '#9ca3af' }}>
-                          {c.last_visit ? new Date(c.last_visit).toLocaleDateString() : '—'}
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className="text-xs font-medium" style={{ color: (days ?? 0) > 90 ? '#ef4444' : '#f59e0b' }}>
-                            {days !== null ? `${days}d` : '—'}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-xs" style={{ color: '#9ca3af' }}>
-                          A${(c.total_spend ?? 0).toFixed(0)}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            )}
-          </div>
+          ))}
         </div>
-
-        {/* Campaign builder */}
-        <div className="lg:col-span-2 space-y-4">
-          <div className="rounded-xl p-5" style={{ background: '#13131a', border: '1px solid rgba(255,255,255,0.07)' }}>
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="font-medium text-white text-sm">SMS Message</h2>
-              <button onClick={generateMessage} disabled={generating}
-                className="text-xs px-3 py-1.5 rounded-lg disabled:opacity-40 flex items-center gap-1"
-                style={{ background: 'rgba(29,158,117,0.1)', color: '#1D9E75', border: '1px solid rgba(29,158,117,0.2)' }}>
-                {generating ? <><span className="inline-block w-2.5 h-2.5 border border-[#1D9E75] border-t-transparent rounded-full animate-spin" />Generating…</> : '✦ Regenerate with Aria'}
-              </button>
-            </div>
-            <textarea
-              value={message}
-              onChange={e => setMessage(e.target.value)}
-              rows={5}
-              maxLength={160}
-              placeholder="AI-generated message will appear here…"
-              className="w-full px-3 py-2 rounded-xl text-sm outline-none resize-none"
-              style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)', color: '#fff' }}
-            />
-            <div className="flex items-center justify-between mt-1">
-              <p className="text-xs" style={{ color: message.length > 150 ? '#ef4444' : '#4b5563' }}>{message.length}/160</p>
-              {message.length > 160 && <p className="text-xs text-red-400">Exceeds SMS limit</p>}
-            </div>
-          </div>
-
-          <button
-            onClick={sendCampaign}
-            disabled={sending || withPhone === 0 || !message.trim() || message.length > 160}
-            className="w-full py-3 rounded-xl text-sm font-medium text-white disabled:opacity-40 flex items-center justify-center gap-2"
-            style={{ background: '#1D9E75' }}>
-            {sending ? <><span className="inline-block w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />Sending…</> : `Send to ${withPhone} customer${withPhone !== 1 ? 's' : ''}`}
-          </button>
-          {withPhone === 0 && customers.length > 0 && (
-            <p className="text-xs text-center" style={{ color: '#6b7280' }}>Select customers with phone numbers to enable sending.</p>
-          )}
-
-          {/* Campaign history */}
-          {campaigns.length > 0 && (
-            <div>
-              <p className="text-xs font-medium text-gray-400 mb-2 uppercase tracking-wider">Past campaigns</p>
-              <div className="space-y-2">
-                {campaigns.slice(0, 8).map(c => (
-                  <div key={c.id} className="px-4 py-3 rounded-xl" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)' }}>
-                    <div className="flex items-center justify-between">
-                      <p className="text-xs text-white">{new Date(c.created_at).toLocaleDateString()}</p>
-                      <span className="text-xs px-2 py-0.5 rounded-full"
-                        style={c.sms_sent ? { background: 'rgba(29,158,117,0.15)', color: '#1D9E75' } : { background: 'rgba(239,68,68,0.1)', color: '#ef4444' }}>
-                        {c.sms_sent ? 'Sent' : c.error ? 'Failed' : c.status ?? 'Pending'}
-                      </span>
-                    </div>
-                    {c.message && <p className="text-xs mt-1 italic truncate" style={{ color: '#6b7280' }}>"{c.message.slice(0, 70)}{c.message.length > 70 ? '…' : ''}"</p>}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
+      )}
     </div>
-  );
+  )
 }

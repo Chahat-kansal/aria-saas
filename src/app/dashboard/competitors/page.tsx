@@ -1,158 +1,176 @@
-'use client';
-import { useState, useEffect, useCallback } from 'react';
-import { useBusinessContext } from '@/components/providers/BusinessProvider';
+'use client'
+import { useState, useEffect, useCallback } from 'react'
+import { useBusinessContext } from '@/components/providers/BusinessProvider'
 
-interface Alert { id: string; competitor_name: string; alert_text: string; source_url: string | null; detected_at: string; alert_type: string; }
+interface Alert { id: string; competitor_name: string; alert_text: string; source_url: string | null; detected_at: string; alert_type: string }
+interface Competitor { name: string; alerts: Alert[]; lastSeen: string; alertCount: number }
+
+const TYPE_ICONS: Record<string,string> = { pricing: '💰', promotion: '🎁', review: '⭐', new_service: '✨', web: '🌐', general: '📡' }
+const TYPE_COLORS: Record<string,string> = { pricing: '#F59E0B', promotion: '#8B5CF6', review: '#22C55E', new_service: '#3B82F6', web: '#6B7280', general: '#6B7280' }
+
+function timeAgo(dateStr: string) {
+  const diff = Date.now() - new Date(dateStr).getTime()
+  const h = Math.floor(diff / 3600000)
+  if (h < 1) return 'just now'
+  if (h < 24) return h + 'h ago'
+  return Math.floor(h / 24) + 'd ago'
+}
 
 export default function CompetitorsPage() {
-  const { business } = useBusinessContext();
-  const [alerts, setAlerts] = useState<Alert[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [scanning, setScanning] = useState(false);
-  const [competitorUrl, setCompetitorUrl] = useState('');
-  const [lastScanned, setLastScanned] = useState<string | null>(null);
-  const [error, setError] = useState('');
+  const { business } = useBusinessContext()
+  const [alerts, setAlerts] = useState<Alert[]>([])
+  const [loading, setLoading] = useState(true)
+  const [scanning, setScanning] = useState(false)
+  const [error, setError] = useState('')
+  const [selectedComp, setSelectedComp] = useState<string | null>(null)
+  const [lastScanned, setLastScanned] = useState<string | null>(null)
 
   const load = useCallback(async () => {
-    if (!business?.id) return;
-    setLoading(true);
-    const res = await fetch(`/api/competitor-alerts?business_id=${business.id}`).then(r => r.json()).catch(() => ({ alerts: [] }));
-    setAlerts(res.alerts ?? res.data ?? []);
-    if (res.alerts?.length || res.data?.length) setLastScanned(res.alerts?.[0]?.detected_at ?? null);
-    setLoading(false);
-  }, [business?.id]);
+    if (!business?.id) return
+    setLoading(true)
+    const res = await fetch('/api/competitor-alerts?business_id=' + business.id).then(r => r.json()).catch(() => ({ alerts: [] }))
+    const data: Alert[] = res.alerts ?? res.data ?? []
+    setAlerts(data)
+    if (data.length > 0) {
+      setLastScanned(data[0].detected_at)
+      setSelectedComp(data[0].competitor_name)
+    }
+    setLoading(false)
+  }, [business?.id])
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load() }, [load])
 
   async function scan() {
-    if (!business?.id) return;
-    setScanning(true); setError('');
+    if (!business?.id) return
+    setScanning(true); setError('')
     try {
-      const params = new URLSearchParams({ business_id: business.id, radius_m: '5000' });
-      const res = await fetch(`/api/aria/competitors?${params}`).then(r => r.json());
-      if (res.error) throw new Error(res.error);
-      setLastScanned(new Date().toISOString());
-      load();
-    } catch (e: any) {
-      setError(e.message);
-    }
-    setScanning(false);
+      const params = new URLSearchParams({ business_id: business.id, radius_m: '5000' })
+      const res = await fetch('/api/aria/competitors?' + params.toString()).then(r => r.json())
+      if (res.error) throw new Error(res.error)
+      setLastScanned(new Date().toISOString())
+      load()
+    } catch (e: unknown) { setError((e as Error).message) }
+    setScanning(false)
   }
 
-  const byCompetitor = alerts.reduce((acc: Record<string, Alert[]>, a) => {
-    const key = a.competitor_name ?? 'Unknown';
-    if (!acc[key]) acc[key] = [];
-    acc[key].push(a);
-    return acc;
-  }, {});
-
-  const TYPE_ICONS: Record<string, string> = {
-    pricing: '💰', promotion: '🎁', review: '⭐', new_service: '✨', web: '🌐', general: '📡',
-  };
-
-  if (loading) {
-    return (
-      <div className="p-6 max-w-4xl mx-auto animate-pulse space-y-4">
-        <div className="h-8 bg-[rgba(255,255,255,0.06)] rounded-xl w-48" />
-        <div className="h-24 bg-[rgba(255,255,255,0.04)] rounded-xl" />
-        <div className="h-64 bg-[rgba(255,255,255,0.04)] rounded-xl" />
-      </div>
-    );
+  // Group by competitor
+  const competitorMap: Record<string, Competitor> = {}
+  for (const a of alerts) {
+    const name = a.competitor_name ?? 'Unknown'
+    if (!competitorMap[name]) competitorMap[name] = { name, alerts: [], lastSeen: a.detected_at, alertCount: 0 }
+    competitorMap[name].alerts.push(a)
+    competitorMap[name].alertCount++
+    if (a.detected_at > competitorMap[name].lastSeen) competitorMap[name].lastSeen = a.detected_at
   }
+  const competitors = Object.values(competitorMap).sort((a,b) => b.alertCount - a.alertCount)
+  const currentAlerts = selectedComp ? (competitorMap[selectedComp]?.alerts ?? []) : []
+
+  // Alert type breakdown for selected competitor
+  const typeBreakdown = currentAlerts.reduce((acc: Record<string,number>, a) => {
+    acc[a.alert_type] = (acc[a.alert_type] ?? 0) + 1
+    return acc
+  }, {})
 
   return (
-    <div className="p-6 max-w-4xl mx-auto">
-      <div className="mb-6 flex items-start justify-between gap-4">
+    <div style={{ minHeight: '100%', background: 'var(--bg-base)', color: 'var(--text-primary)', fontFamily: "'Inter',sans-serif", padding: '24px 28px' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
         <div>
-          <h1 className="text-2xl font-semibold text-white mb-1">Competitor Intelligence</h1>
-          <p style={{ color: '#6b7280' }}>What your competitors are doing in {business?.city ?? 'your area'}</p>
-          {lastScanned && <p className="text-xs mt-1" style={{ color: '#4b5563' }}>Last scanned: {new Date(lastScanned).toLocaleDateString()}</p>}
+          <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>Competitor Intelligence</h1>
+          <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+            What your competitors are doing in {business?.city ?? 'your area'}
+            {lastScanned && ' · Last scanned ' + timeAgo(lastScanned)}
+          </p>
         </div>
         <button onClick={scan} disabled={scanning}
-          className="shrink-0 px-4 py-2 rounded-xl text-sm font-medium text-white disabled:opacity-40 flex items-center gap-2"
-          style={{ background: '#1D9E75' }}>
-          {scanning ? <><span className="inline-block w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />Scanning…</> : '↻ Scan competitors'}
-        </button>
-      </div>
-
-      {/* URL input */}
-      <div className="mb-6 flex gap-2">
-        <input value={competitorUrl} onChange={e => setCompetitorUrl(e.target.value)}
-          placeholder="Add a competitor URL to scan (optional)"
-          className="flex-1 px-3 py-2 rounded-xl text-sm text-white outline-none"
-          style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' }} />
-        <button onClick={scan} disabled={scanning || !competitorUrl}
-          className="px-4 py-2 rounded-xl text-sm font-medium disabled:opacity-40"
-          style={{ background: 'rgba(255,255,255,0.06)', color: '#9ca3af', border: '1px solid rgba(255,255,255,0.08)' }}>
-          Scan URL
+          style={{ padding: '9px 18px', borderRadius: 9, border: 'none', background: scanning ? 'rgba(139,92,246,0.3)' : '#8B5CF6', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', opacity: scanning ? 0.7 : 1 }}>
+          {scanning ? '🔍 Scanning...' : '🔍 Scan Area'}
         </button>
       </div>
 
       {error && (
-        <div className="mb-4 px-4 py-3 rounded-xl" style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)' }}>
-          <p className="text-sm text-red-400">{error}</p>
+        <div style={{ marginBottom: 16, padding: '12px 16px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: 10, fontSize: 13, color: '#EF4444' }}>
+          {error}
         </div>
       )}
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 gap-4 mb-6">
-        {[
-          { label: 'Competitors tracked', value: Object.keys(byCompetitor).length },
-          { label: 'Total alerts', value: alerts.length },
-        ].map(s => (
-          <div key={s.label} className="rounded-xl p-4" style={{ background: '#13131a', border: '1px solid rgba(255,255,255,0.07)' }}>
-            <p className="text-xs mb-1" style={{ color: '#6b7280' }}>{s.label}</p>
-            <p className="text-2xl font-semibold text-white">{s.value}</p>
-          </div>
-        ))}
-      </div>
-
-      {Object.keys(byCompetitor).length > 0 ? (
-        <div className="space-y-4">
-          {Object.entries(byCompetitor).map(([name, items]) => (
-            <div key={name} className="rounded-xl overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.07)' }}>
-              <div className="px-5 py-4 flex items-center justify-between" style={{ background: '#13131a' }}>
-                <h2 className="font-medium text-white">{name}</h2>
-                <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: 'rgba(255,255,255,0.06)', color: '#9ca3af' }}>
-                  {items.length} alert{items.length !== 1 ? 's' : ''}
-                </span>
-              </div>
-              <div style={{ background: '#0d0d14' }}>
-                {items.map(alert => (
-                  <div key={alert.id} className="px-5 py-3 flex items-start gap-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                    <span className="text-lg shrink-0">{TYPE_ICONS[alert.alert_type] ?? TYPE_ICONS.general}</span>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm text-white">{alert.alert_text}</p>
-                      <div className="flex items-center gap-2 mt-1">
-                        <span className="text-xs" style={{ color: '#6b7280' }}>
-                          {alert.detected_at ? new Date(alert.detected_at).toLocaleDateString() : ''}
-                        </span>
-                        {alert.source_url && (
-                          <a href={alert.source_url} target="_blank" rel="noopener noreferrer"
-                            className="text-xs hover:underline" style={{ color: '#1D9E75' }}>
-                            View source →
-                          </a>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
+      {loading ? (
+        <div style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '60px 0' }}>Loading competitor data...</div>
+      ) : alerts.length === 0 ? (
+        <div style={{ background: 'var(--bg-surface)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 14, padding: '48px 24px', textAlign: 'center' }}>
+          <div style={{ fontSize: 32, marginBottom: 12 }}>📡</div>
+          <p style={{ fontSize: 16, fontWeight: 700, marginBottom: 6 }}>No competitor data yet</p>
+          <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 20 }}>
+            Click "Scan Area" to detect competitors within 5km and monitor their activity.
+          </p>
+          <button onClick={scan} disabled={scanning}
+            style={{ padding: '10px 24px', borderRadius: 10, border: 'none', background: '#8B5CF6', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+            {scanning ? '🔍 Scanning...' : '🔍 Scan Now'}
+          </button>
         </div>
       ) : (
-        <div className="rounded-xl p-12 text-center" style={{ background: '#13131a', border: '1px solid rgba(255,255,255,0.07)' }}>
-          <div className="text-3xl mb-3">🔍</div>
-          <p className="font-semibold text-white mb-1">No competitor data yet</p>
-          <p className="text-sm mb-4" style={{ color: '#6b7280' }}>
-            Click "Scan competitors" to have Aria research what competitors in {business?.city ?? 'your area'} are doing.
-          </p>
-          <button onClick={scan} disabled={scanning} className="px-4 py-2 rounded-xl text-sm font-medium text-white" style={{ background: '#1D9E75' }}>
-            {scanning ? 'Scanning…' : 'Scan now'}
-          </button>
+        <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', gap: 20 }}>
+          {/* Competitor list */}
+          <div>
+            <p style={{ fontSize: 11, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>
+              {competitors.length} competitors tracked
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {competitors.map(c => {
+                const isSelected = selectedComp === c.name
+                return (
+                  <button key={c.name} onClick={() => setSelectedComp(c.name)}
+                    style={{ background: isSelected ? 'rgba(139,92,246,0.12)' : 'var(--bg-surface)', border: '1px solid ' + (isSelected ? 'rgba(139,92,246,0.4)' : 'rgba(255,255,255,0.07)'), borderRadius: 10, padding: '12px 14px', cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: isSelected ? '#8B5CF6' : 'var(--text-primary)' }}>{c.name}</span>
+                      <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 99, background: isSelected ? 'rgba(139,92,246,0.2)' : 'rgba(255,255,255,0.06)', color: isSelected ? '#8B5CF6' : 'var(--text-secondary)' }}>
+                        {c.alertCount}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 4 }}>{timeAgo(c.lastSeen)}</div>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Alert details */}
+          <div>
+            {selectedComp && (
+              <>
+                <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+                  {Object.entries(typeBreakdown).map(([type, count]) => (
+                    <span key={type} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 99, background: TYPE_COLORS[type] + '20', color: TYPE_COLORS[type], fontWeight: 600 }}>
+                      {TYPE_ICONS[type] ?? '📡'} {type} ({count})
+                    </span>
+                  ))}
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {currentAlerts.map(a => (
+                    <div key={a.id} style={{ background: 'var(--bg-surface)', border: '1px solid rgba(255,255,255,0.07)', borderLeft: '4px solid ' + (TYPE_COLORS[a.alert_type] ?? '#6B7280'), borderRadius: '0 12px 12px 0', padding: '14px 16px' }}>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ fontSize: 18 }}>{TYPE_ICONS[a.alert_type] ?? '📡'}</span>
+                          <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: TYPE_COLORS[a.alert_type] + '20', color: TYPE_COLORS[a.alert_type] }}>
+                            {a.alert_type}
+                          </span>
+                        </div>
+                        <span style={{ fontSize: 11, color: 'var(--text-tertiary)', flexShrink: 0 }}>{timeAgo(a.detected_at)}</span>
+                      </div>
+                      <p style={{ fontSize: 13, color: 'var(--text-primary)', lineHeight: 1.6 }}>{a.alert_text}</p>
+                      {a.source_url && (
+                        <a href={a.source_url} target="_blank" rel="noopener noreferrer"
+                          style={{ display: 'inline-block', marginTop: 8, fontSize: 11, color: 'var(--text-tertiary)', textDecoration: 'underline' }}>
+                          View source →
+                        </a>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
         </div>
       )}
     </div>
-  );
+  )
 }
