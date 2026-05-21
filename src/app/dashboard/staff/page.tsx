@@ -34,7 +34,8 @@ function PortalBadge({ member }: { member: MemberRow }) {
     setResending(false)
   }
 
-  if (member.portal_enabled && member.user_id) {
+  // Active: portal explicitly enabled, OR user has linked their account (user_id set after accepting invite)
+  if (member.portal_enabled || (member.user_id && member.invite_sent_at)) {
     return <span className="text-xs px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400">Active</span>
   }
   if (member.invite_sent_at) {
@@ -184,3 +185,4 @@ export default function StaffPage() {
     </div>
   )
 }
+
