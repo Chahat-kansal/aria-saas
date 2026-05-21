@@ -1,186 +1,57 @@
 export const dynamic = 'force-dynamic'
-import { createClient } from '@supabase/supabase-js'
+export const runtime = 'nodejs'
+
 import { NextResponse } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
 
-const getDb = () => createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  { auth: { persistSession: false } }
-)
+function adminClient() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { persistSession: false } },
+  )
+}
 
-type Params = { params: Promise<{ business_id: string }> | { business_id: string } }
+export async function POST(req: Request, { params }: { params: { business_id: string } }) {
+  const { business_id } = params
+  const body = await req.json() as {
+    customer_name: string
+    customer_phone: string
+    customer_email?: string
+    items: Array<{ product_id: string; product_name: string; quantity: number; unit_price: number }>
+    notes?: string
+    pickup_time?: string
+    source?: string
+  }
 
-export async function POST(req: Request, { params }: Params) {
-  const { business_id } = 'then' in params ? await params : params
-  const db = getDb()
+  if (!body.customer_name || !body.customer_phone || !body.items?.length)
+    return NextResponse.json({ error: 'customer_name, customer_phone and items required' }, { status: 400 })
 
-  // Verify business exists and accepts orders
-  const { data: biz } = await db.from('businesses').select('id, name').eq('id', business_id).eq('is_active', true).maybeSingle()
+  const sb = adminClient()
+
+  const { data: biz } = await sb.from('businesses').select('id').eq('id', business_id).eq('is_active', true).maybeSingle()
   if (!biz) return NextResponse.json({ error: 'Business not found' }, { status: 404 })
 
-  const { data: outlet } = await db
-    .from('pos_outlets')
-    .select('id, accepts_online_orders, online_order_throttle_per_15min, pickup_ready_estimate_minutes')
-    .eq('business_id', business_id)
-    .eq('is_active', true)
-    .limit(1)
-    .maybeSingle()
-
-  if (!outlet?.accepts_online_orders) {
-    return NextResponse.json({ error: 'Online ordering is not available for this location' }, { status: 503 })
-  }
-
-  // Throttle check — count orders in last 15 min
-  const throttleWindow = new Date(Date.now() - 15 * 60 * 1000).toISOString()
-  const { count: recentCount } = await db
-    .from('pos_online_orders')
-    .select('id', { count: 'exact', head: true })
-    .eq('business_id', business_id)
-    .gte('created_at', throttleWindow)
-
-  const throttleLimit = outlet.online_order_throttle_per_15min ?? 10
-  if ((recentCount ?? 0) >= throttleLimit) {
-    return NextResponse.json({ error: 'We are very busy right now — please try again in a few minutes' }, { status: 429 })
-  }
-
-  const body = await req.json()
-  const { customer_name, customer_phone, customer_email, items, pickup_time, notes, table_id, source = 'web', special_instructions, fulfillment_type = 'pickup', delivery_address } = body
-
-  if (!customer_name || !items?.length) {
-    return NextResponse.json({ error: 'customer_name and items are required' }, { status: 400 })
-  }
+  const total = body.items.reduce((sum, i) => sum + i.quantity * i.unit_price, 0)
 
   // Generate order number
-  const { count: orderCount } = await db.from('pos_online_orders').select('id', { count: 'exact', head: true }).eq('business_id', business_id)
-  const order_number = `ONL-${String((orderCount ?? 0) + 1).padStart(4, '0')}`
+  const orderNumber = 'ONL-' + Date.now().toString(36).toUpperCase().slice(-6)
 
-  // Compute totals
-  let subtotal = 0
-  for (const item of items as Array<{ product_id: string; quantity: number; unit_price: number; modifiers?: Array<{ price_adjustment: number }> }>) {
-    const modTotal = (item.modifiers ?? []).reduce((s, m) => s + (m.price_adjustment ?? 0), 0)
-    subtotal += (item.unit_price + modTotal) * item.quantity
-  }
-  const total = +subtotal.toFixed(2)
-
-  // Create the online order record
-  const { data: onlineOrder, error: ooErr } = await db.from('pos_online_orders').insert({
+  const { data: order, error } = await sb.from('pos_online_orders').insert({
     business_id,
-    outlet_id: outlet.id,
-    order_number,
-    customer_name: customer_name.trim(),
-    customer_phone: customer_phone?.trim() ?? null,
-    customer_email: customer_email?.trim() ?? null,
-    source,
-    pickup_time: pickup_time ?? null,
-    status: 'pending',
-    notes: notes ?? null,
-    subtotal: total,
+    order_number: orderNumber,
+    customer_name: body.customer_name,
+    customer_phone: body.customer_phone,
+    customer_email: body.customer_email ?? null,
+    items: body.items,
     total,
-    fulfillment_type: fulfillment_type ?? 'pickup',
-    delivery_address: fulfillment_type === 'delivery' ? delivery_address : null,
-    items: items ?? [],
-    special_instructions: special_instructions || null,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  }).select('id, order_number, status').single()
-
-  if (ooErr || !onlineOrder) {
-    console.error('[public/place-order] insert failed:', ooErr?.message)
-    return NextResponse.json({ error: 'Failed to place order' }, { status: 500 })
-  }
-
-  // Create pos_sale record (so it appears in POS)
-  const { data: sale } = await db.from('pos_sales').insert({
-    business_id,
-    outlet_id: outlet.id,
-    total_amount: total,
-    subtotal: total,
-    tax_amount: +(total * 0.1 / 1.1).toFixed(2),
-    discount_amount: 0,
-    payment_method: 'online',
+    notes: body.notes ?? null,
+    pickup_time: body.pickup_time ?? null,
+    source: body.source ?? 'online',
     status: 'pending',
-    order_type: 'pickup',
-    customer_name: customer_name.trim(),
-    customer_phone: customer_phone?.trim() ?? null,
-    pickup_time: pickup_time ?? null,
-    table_id: table_id ?? null,
-    order_notes: notes ?? null,
-    kds_sent: false,
-    created_at: new Date().toISOString(),
-  }).select('id').single()
+  }).select('id, order_number').single()
 
-  // Create sale items
-  if (sale) {
-    await db.from('pos_sale_items').insert(
-      (items as Array<{ product_id: string; quantity: number; unit_price: number; product_name: string; modifiers?: Array<{ name: string; price_adjustment: number }> }>)
-        .map(item => ({
-          sale_id: sale.id,
-          product_id: item.product_id,
-          product_name: item.product_name,
-          quantity: item.quantity,
-          unit_price: item.unit_price,
-          line_total: +(item.unit_price * item.quantity).toFixed(2),
-          modifiers: item.modifiers ?? [],
-          business_id,
-        }))
-    )
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-    // Link sale to online order
-    await db.from('pos_online_orders').update({ sale_id: sale.id, updated_at: new Date().toISOString() }).eq('id', onlineOrder.id)
-
-    // Fire KDS ticket (non-blocking)
-    const now = new Date().toISOString()
-    db.from('pos_kds_orders').insert({
-      business_id,
-      sale_id: sale.id,
-      table_number: table_id ? `Table ${table_id}` : `Online ${order_number}`,
-      items: (items as Array<{ product_name: string; quantity: number; modifiers?: Array<{ name: string }> }>).map(i => ({
-        name: i.product_name,
-        qty: i.quantity,
-        modifiers: (i.modifiers ?? []).map(m => m.name),
-        special_instructions: notes ?? null,
-      })),
-      status: 'new',
-      priority: 1,
-      notes: `Online order ${order_number}`,
-      created_at: now,
-    }).then(() => null, () => null)
-  }
-
-  // Fire Aria upsell async — don't await
-  if (onlineOrder?.id) {
-    void fetch(`${process.env.NEXT_PUBLIC_APP_URL ?? 'https://www.ariaos.site'}/api/pos/online-orders/aria-upsell`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ order_id: onlineOrder.id, business_id, items: items ?? [] }),
-    }).catch(() => {})
-  }
-
-  const pickupEst = outlet.pickup_ready_estimate_minutes ?? 10
-
-  // Send confirmation email if customer provided email
-  if (customer_email && onlineOrder) {
-    const resendKey = process.env.RESEND_API_KEY
-    if (resendKey) {
-      const fmtAUD = (cents: number) => `A$${cents.toFixed(2)}`
-      const itemsList = (items as Array<{ product_name: string; quantity: number; unit_price: number }>)
-        .map(i => `${i.quantity}× ${i.product_name} — ${fmtAUD(i.unit_price * i.quantity)}`).join('\n')
-      void fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${resendKey}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          from: `${biz?.name ?? 'AriaOS'} <support@ariaos.site>`,
-          to: [customer_email],
-          subject: `Order confirmed — ${order_number}`,
-          html: `<div style="font-family:Inter,sans-serif;max-width:480px;margin:0 auto;padding:32px 24px"><h2 style="color:#2D5240">Order confirmed! 🎉</h2><p style="color:#6b7280">Hi ${(customer_name as string).split(' ')[0]}, your order is on its way.</p><div style="background:#f9fafb;border-radius:12px;padding:16px;margin:16px 0"><p style="font-size:13px;color:#6b7280;margin:0 0 4px">Order number</p><p style="font-size:24px;font-weight:800;margin:0 0 12px;letter-spacing:2px">${order_number}</p><p style="font-size:13px;color:#6b7280;margin:0 0 4px">Total</p><p style="font-size:20px;font-weight:700;color:#2D5240;margin:0 0 12px">${fmtAUD(total)}</p><p style="font-size:13px;color:#6b7280;margin:0 0 4px">Ready in approximately</p><p style="font-size:18px;font-weight:700;margin:0">${pickupEst} minutes</p></div><pre style="font-size:13px;color:#374151;white-space:pre-wrap;background:#f3f4f6;padding:12px;border-radius:8px">${itemsList}</pre></div>`,
-        }),
-      }).catch(() => {})
-    }
-  }
-  return NextResponse.json({
-    ok: true,
-    order_id: onlineOrder.id,
-    order_number: onlineOrder.order_number,
-    estimated_ready_minutes: pickupEst,
-    message: `Your order has been received. Ready in ~${pickupEst} minutes.`,
-  })
+  return NextResponse.json({ ok: true, order_id: (order as {id:string}).id, order_number: (order as {order_number:string}).order_number, total })
 }
