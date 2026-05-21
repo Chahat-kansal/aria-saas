@@ -45,16 +45,26 @@ async function _POST(req: Request) {
     .from('businesses').select('id, industry').eq('id', bid).eq('user_id', user.id).maybeSingle()
   if (!biz) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-  // Fetch all products for this business
+  // Fetch all products for this business — include category name for better image queries
   const { data: products } = await supabase
     .from('pos_products')
-    .select('id, name')
+    .select('id, name, category_id, pos_categories(name)')
     .eq('business_id', bid)
     .eq('is_active', true)
 
   if (!products?.length) return NextResponse.json({ updated: 0 })
 
-  const industryHint = (biz.industry as string) === 'cafe' ? 'cafe food' : 'food product'
+  const INDUSTRY_HINTS: Record<string, string> = {
+    liquor: 'bottle alcohol drink',
+    cafe: 'cafe coffee beverage',
+    bakery: 'bakery fresh',
+    restaurant: 'restaurant dish meal',
+    retail: 'retail product',
+    pharmacy: 'pharmacy health',
+    convenience: 'convenience store',
+    fashion: 'clothing apparel',
+  }
+  const industryHint = INDUSTRY_HINTS[(biz.industry as string) ?? 'retail'] ?? 'product'
 
   let updated = 0
   // Process in batches of 5 to respect rate limits
@@ -63,7 +73,9 @@ async function _POST(req: Request) {
     const batch = products.slice(i, i + batchSize)
     const results = await Promise.all(
       batch.map(async p => {
-        const url = await fetchUnsplashUrl(`${p.name} ${industryHint}`, accessKey)
+        const catName = (p as any).pos_categories?.name ?? ''
+        const query = catName ? `${p.name} ${catName}` : `${p.name} ${industryHint}`
+        const url = await fetchUnsplashUrl(query, accessKey)
         return { id: p.id, url }
       })
     )
