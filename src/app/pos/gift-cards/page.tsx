@@ -2,7 +2,7 @@
 import { POSAriaInsight } from '@/components/pos/POSAriaInsight';
 import { useState, useEffect } from 'react';
 
-const C = { bg: 'var(--bg-base)', card: 'var(--bg-surface)', border: 'transparent', text: 'var(--text-primary)', muted: 'var(--text-secondary)', dim: 'var(--text-tertiary)', violet: '#8B5CF6', green: '#22C55E', red: '#EF4444', amber: '#F59E0B' };
+const C = { bg: 'var(--bg-base)', card: 'var(--bg-surface)', border: '#D9D9D9', text: 'var(--text-primary)', muted: 'var(--text-secondary)', dim: 'var(--text-tertiary)', violet: '#006AFF', green: '#00B140', red: '#EF4444', amber: '#F59E0B' };
 const iStyle: React.CSSProperties = { background: 'var(--bg-base)', border: `1px solid ${C.border}`, borderRadius: 8, padding: '9px 12px', fontSize: 13, color: C.text, outline: 'none', width: '100%', fontFamily: 'inherit' };
 const lStyle: React.CSSProperties = { display: 'block', fontSize: 11, fontWeight: 700, color: C.muted, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' };
 
@@ -208,7 +208,7 @@ export default function GiftCardsPage() {
         <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, overflow: 'hidden' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
-              <tr style={{ background: 'rgba(255,255,255,0.03)', borderBottom: `1px solid ${C.border}` }}>
+              <tr style={{ background: '#FAFAFA', borderBottom: `1px solid ${C.border}` }}>
                 {['Code', 'Recipient', 'Initial', 'Balance', 'Issued', 'Expires', 'Status', ''].map(h => (
                   <th key={h} style={{ textAlign: 'left', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: C.dim, padding: '10px 14px' }}>{h}</th>
                 ))}
@@ -320,7 +320,7 @@ export default function GiftCardsPage() {
               <input style={iStyle} type="number" min="1" value={reloadAmount} onChange={e => setReloadAmount(e.target.value)} placeholder="50.00" />
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={reloadGiftCard} disabled={reloading} style={{ flex: 1, background: '#2D5240', color: '#7FB897', border: 'none', borderRadius: 8, padding: '10px 0', cursor: 'pointer', fontWeight: 600 }}>
+              <button onClick={reloadGiftCard} disabled={reloading} style={{ flex: 1, background: '#2D5240', color: '#006AFF', border: 'none', borderRadius: 8, padding: '10px 0', cursor: 'pointer', fontWeight: 600 }}>
                 {reloading ? 'Adding…' : 'Add funds'}
               </button>
               <button onClick={() => { setReloadCard(null); setReloadAmount(''); }} style={{ flex: 1, background: 'transparent', color: C.muted, border: `1px solid transparent`, borderRadius: 8, padding: '10px 0', cursor: 'pointer' }}>
