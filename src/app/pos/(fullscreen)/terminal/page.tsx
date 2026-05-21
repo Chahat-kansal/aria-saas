@@ -2650,14 +2650,7 @@ export default function TerminalPage() {
 
               </div>
 
-              {/* Sale attribution (commission) */}
-              <div className="flex-shrink-0 px-4 py-1 flex items-center gap-2" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-                <span className="text-[10px] font-medium uppercase tracking-wider flex-shrink-0" style={{ color: 'var(--text-tertiary)' }}>Sale by</span>
-                <input value={servedBy} onChange={e => setServedBy(e.target.value)}
-                  placeholder="Cashier name…"
-                  className="flex-1 text-xs bg-transparent outline-none"
-                  style={{ color: 'var(--text-secondary)' }} />
-              </div>
+
 
               {/* Cart items — scrollable region, flex-1 fills remaining height */}
               <div className="cart-items">
@@ -2720,21 +2713,7 @@ export default function TerminalPage() {
 
               {/* Fixed bottom: discount pills + aria card + totals + charge */}
               <div style={{ flexShrink: 0 }}>
-                {/* Discount quick-select pills */}
-                {cart.length > 0 && (
-                  <div style={{ padding: '5px 12px', display: 'flex', gap: 4, borderTop: '1px solid var(--violet-dim)' }}>
-                    {[0, 5, 10, 15, 20].map(d => {
-                      const curDisc = cart.length > 0 ? Math.round(cart[0].discount_percent ?? 0) : 0;
-                      const active = d === 0 ? curDisc === 0 : curDisc === d;
-                      return (
-                        <button key={d} onClick={() => setCart(c => c.map(i => ({ ...i, discount_percent: d })))}
-                          style={{ flex: 1, height: 22, borderRadius: 6, border: `1px solid ${active ? 'rgba(127,184,151,0.35)' : 'var(--violet-dim)'}`, background: active ? 'rgba(127,184,151,0.12)' : 'rgba(127,184,151,0.03)', color: active ? 'var(--terminal-sage-bright,#8FCAA5)' : 'var(--text-tertiary)', fontSize: 10, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', transition: 'all 150ms' }}>
-                          {d === 0 ? '—' : `${d}%`}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
+
 
                 {/* Aria inline suggestion card */}
                 {cart.length > 0 && (
