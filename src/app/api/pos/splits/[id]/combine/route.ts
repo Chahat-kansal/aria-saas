@@ -37,10 +37,12 @@ async function _POST(req: Request, ctx: Ctx) {
   }).eq('id', id)
 
   // Move items and payments from source to target
-  await Promise.all([
-    supabase.from('pos_split_items').update({ split_id: id }).eq('split_id', merge_split_id),
-    supabase.from('pos_split_payments').update({ split_id: id }).eq('split_id', merge_split_id),
+  const [itemsMoveErr, paymentsMoveErr] = await Promise.all([
+    supabase.from('pos_split_items').update({ split_id: id }).eq('split_id', merge_split_id).then(r => r.error),
+    supabase.from('pos_split_payments').update({ split_id: id }).eq('split_id', merge_split_id).then(r => r.error),
   ])
+  if (itemsMoveErr) console.error('[splits/combine] items move failed:', itemsMoveErr.message)
+  if (paymentsMoveErr) console.error('[splits/combine] payments move failed:', paymentsMoveErr.message)
 
   // Void the merged-away split
   await supabase.from('pos_sale_splits').update({ status: 'voided' }).eq('id', merge_split_id)
