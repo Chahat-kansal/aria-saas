@@ -34,6 +34,22 @@
   --terminal-panel-shadow: inset 0 1px 0 rgba(127,184,151,0.06), 0 24px 48px rgba(0,0,0,0.3);
 }
 
+/* ── Terminal light theme overrides ─────────────────────────────── */
+html[data-theme="light"] {
+  --terminal-bg-canvas:     #F0F4EE;
+  --terminal-bg-aurora:     #E8EEE4;
+  --terminal-bg-surface:    #FFFFFF;
+  --terminal-bg-elevated:   #F8FAF6;
+  --terminal-bg-elevated-2: #F0F4EE;
+  --terminal-glass-1:       rgba(255,255,255,0.80);
+  --terminal-glass-2:       rgba(248,250,246,0.90);
+  --terminal-glass-3:       rgba(240,244,238,0.95);
+  --terminal-sage-bright: #2D5240;
+  --terminal-sage-rim:    rgba(45,82,64,0.15);
+  --terminal-sage-glow:   rgba(45,82,64,0.20);
+  --terminal-panel-shadow: 0 2px 12px rgba(14,20,17,0.08);
+}
+
 html[data-theme="dark"], html:not([data-theme]) {
   --bg-base: #0E1411;
   --bg-canvas: #0A100C;
@@ -636,3 +652,4 @@ body {
   0%, 100% { transform: scale(1); opacity: 0.8; }
   50%       { transform: scale(1.15); opacity: 0; }
 }
+
