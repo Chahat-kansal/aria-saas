@@ -159,9 +159,11 @@ export default function POSSidebar({
   }, [])
 
   // ── Helpers ──────────────────────────────────────────────────────
-  // Theme toggle
+  // Theme toggle — reads from html[data-theme] which anti-flash script sets before paint
   const [theme, setTheme] = useState<'dark'|'light'>(() => {
     if (typeof window === 'undefined') return 'dark';
+    const domTheme = document.documentElement.getAttribute('data-theme');
+    if (domTheme === 'light' || domTheme === 'dark') return domTheme;
     return (localStorage.getItem('pos_theme') as 'dark'|'light') ?? 'dark';
   });
   useEffect(() => {
@@ -785,4 +787,5 @@ function CommandPalette({
     </motion.div>
   )
 }
+
 
