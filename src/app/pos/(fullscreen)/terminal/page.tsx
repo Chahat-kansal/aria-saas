@@ -2030,18 +2030,7 @@ export default function TerminalPage() {
         </div>
       )}
 
-      {/* Low stock alert bar */}
-      {lowStockItems.length > 0 && !lowStockDismissed && (
-        <div className="low-stock-banner flex-shrink-0 flex items-center gap-3"
-          style={{ background: 'rgba(180,100,0,0.55)', borderBottom: '1px solid rgba(251,191,36,0.4)', padding: '6px 16px' }}>
-          <div style={{ flex: 1, fontSize: 12, fontWeight: 700, color: '#FBBF24', fontFamily: 'var(--font-ui, sans-serif)' }}>
-            ⚠ {lowStockItems.length} product{lowStockItems.length > 1 ? 's' : ''} running low:{' '}
-            {lowStockItems.slice(0, 3).map(p => p.name).join(', ')}{lowStockItems.length > 3 ? ' …' : ''}
-          </div>
-          <a href="/dashboard/reorder" style={{ fontSize: 12, fontWeight: 700, color: '#FBBF24', textDecoration: 'none' }}>Reorder →</a>
-          <button onClick={() => setLowStockDismissed(true)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, lineHeight: 1, color: '#FBBF24', padding: '0 4px' }}>×</button>
-        </div>
-      )}
+{/* Low stock banner removed — visible in Dashboard instead */}
 
       {/* ── TOP BAR ───────────────────────────────────────────────── */}
       <div className="flex-shrink-0 flex items-center px-3 gap-2" style={{ minHeight: 46, background: 'rgba(11,20,16,0.85)', borderBottom: '1px solid var(--terminal-sage-rim,rgba(127,184,151,0.18))', backdropFilter: 'blur(20px) saturate(1.4)', WebkitBackdropFilter: 'blur(20px) saturate(1.4)', position: 'relative', zIndex: 2, flexWrap: 'wrap', paddingTop: 6, paddingBottom: 6 }}>
@@ -3993,3 +3982,4 @@ function SearchIcon({ className }: { className?: string }) {
 function BagOutlineIcon({ className }: { className?: string }) {
   return <svg className={className} fill="none" viewBox="0 0 24 24" stroke="rgba(74,69,101,0.4)" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"/></svg>;
 }
+
