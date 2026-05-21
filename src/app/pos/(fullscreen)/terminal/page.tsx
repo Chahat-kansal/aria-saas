@@ -1794,7 +1794,7 @@ export default function TerminalPage() {
                     </div>
                   )}
                   <button onClick={() => processSale()} disabled={processing || tendered < roundedTotal}
-                    style={{ height: 50, borderRadius: 12, border: 'none', background: 'linear-gradient(135deg,#22C55E,#16A34A)', color: '#000', fontFamily: 'inherit', fontSize: 14, fontWeight: 900, cursor: (processing || tendered < roundedTotal) ? 'not-allowed' : 'pointer', opacity: (processing || tendered < roundedTotal) ? 0.4 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: '0 4px 0 rgba(22,163,74,0.5), 0 8px 20px rgba(34,197,94,0.25)' }}>
+                    style={{ height: 50, borderRadius: 12, border: 'none', background: 'var(--success)', color: '#FFFFFF', fontFamily: 'inherit', fontSize: 14, fontWeight: 900, cursor: (processing || tendered < roundedTotal) ? 'not-allowed' : 'pointer', opacity: (processing || tendered < roundedTotal) ? 0.4 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: '0 2px 8px rgba(0,177,64,0.3)' }}>
                     {processing ? 'Processing…' : `Confirm Cash · A$${roundedTotal.toFixed(2)}`}
                   </button>
                 </div>
@@ -1812,7 +1812,7 @@ export default function TerminalPage() {
                     <span style={{ fontFamily: "'JetBrains Mono',monospace", fontWeight: 700, color: 'var(--text-primary)' }}>A${splitCardAmt.toFixed(2)}</span>
                   </div>
                   <button onClick={() => processSale()} disabled={processing}
-                    style={{ height: 50, borderRadius: 12, border: 'none', background: 'linear-gradient(135deg,#00E5FF,#7B2FFF)', color: '#000', fontFamily: 'inherit', fontSize: 14, fontWeight: 900, cursor: processing ? 'not-allowed' : 'pointer', opacity: processing ? 0.4 : 1, boxShadow: '0 4px 0 rgba(0,150,200,0.4), 0 8px 20px rgba(0,229,255,0.25)' }}>
+                    style={{ height: 50, borderRadius: 12, border: 'none', background: 'var(--violet)', color: '#FFFFFF', fontFamily: 'inherit', fontSize: 14, fontWeight: 900, cursor: processing ? 'not-allowed' : 'pointer', opacity: processing ? 0.4 : 1, boxShadow: '0 2px 8px rgba(0,106,255,0.3)' }}>
                     {processing ? 'Processing…' : 'Confirm Split Payment'}
                   </button>
                 </div>
