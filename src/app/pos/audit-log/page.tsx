@@ -10,10 +10,10 @@ interface AuditEntry {
 }
 
 const ACTION_COLORS: Record<string, string> = {
-  sale:       '#7FB897',
+  sale:       '#006AFF',
   refund:     '#F59E0B',
   void:       '#EF4444',
-  discount:   '#8B5CF6',
+  discount:   '#006AFF',
   staff:      '#6B96B0',
   register:   '#94A3B8',
   product:    '#10B981',
