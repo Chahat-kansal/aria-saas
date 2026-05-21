@@ -3,14 +3,14 @@ import { useState, useEffect, useCallback, Suspense, lazy } from 'react';
 
 const BarcodeScanner = lazy(() => import('@/components/pos/BarcodeScanner'));
 
-const C = { bg: 'rgba(5,4,15,1)', card: 'var(--bg-surface)', border: 'transparent', text: 'var(--text-primary)', muted: 'var(--text-secondary)', dim: 'var(--text-tertiary)', violet: '#8B5CF6', green: '#22C55E', red: '#EF4444', amber: '#F59E0B' };
+const C = { bg: 'rgba(5,4,15,1)', card: 'var(--bg-surface)', border: '#D9D9D9', text: 'var(--text-primary)', muted: 'var(--text-secondary)', dim: 'var(--text-tertiary)', violet: '#006AFF', green: '#00B140', red: '#EF4444', amber: '#F59E0B' };
 
 type Mode = 'select' | 'count' | 'order' | 'receive';
 
 interface ScannedEntry { barcode: string; product_id: string | null; product_name: string; current_stock: number; scanned_qty: number; unit_cost_cents: number; scanned_at: string; action: string; }
 interface Product { id: string; name: string; price: number; cost_price: number | null; stock_quantity: number | null; barcode: string | null; sku: string | null; is_active: boolean; pos_categories?: { name: string; color: string } | null; }
 
-function Spinner() { return <div style={{ width: 24, height: 24, borderRadius: '50%', border: '2px solid rgba(139,92,246,0.3)', borderTopColor: '#8B5CF6', animation: 'spin 0.7s linear infinite' }} />; }
+function Spinner() { return <div style={{ width: 24, height: 24, borderRadius: '50%', border: '2px solid rgba(139,92,246,0.3)', borderTopColor: '#006AFF', animation: 'spin 0.7s linear infinite' }} />; }
 
 function QtyControl({ value, onChange }: { value: number; onChange: (v: number) => void }) {
   return (
