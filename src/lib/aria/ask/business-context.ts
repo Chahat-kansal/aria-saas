@@ -12,6 +12,12 @@ export interface AskAriaContext {
   business_id: string
   business_name: string
   industry: string
+  city: string | null
+  address: string | null
+  phone: string | null
+  abn: string | null
+  google_rating: number | null
+  google_reviews: number | null
   owner_name: string | null
   currency: string
   // Revenue snapshots
@@ -45,7 +51,7 @@ export async function buildAskAriaContext(
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1) // first of current month
 
   const [bizRes, salesTodayRes, salesWeekRes, salesMonthRes, lowStockRes, staffRes, ticketsRes, actionsRes, convHistRes, recentConvsRes] = await Promise.all([
-    supabaseAdmin.from('businesses').select('name,industry,owner_name').eq('id', businessId).maybeSingle(),
+    supabaseAdmin.from('businesses').select('name,industry,owner_name,city,address,phone,abn,google_average_rating,google_total_reviews').eq('id', businessId).maybeSingle(),
     supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', businessId).gte('created_at', todayStart.toISOString()),
     supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', businessId).gte('created_at', weekStart.toISOString()),
     supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', businessId).gte('created_at', monthStart.toISOString()),
@@ -143,6 +149,12 @@ export async function buildAskAriaContext(
     business_name: biz?.name ?? 'Your business',
     industry: biz?.industry ?? 'retail',
     owner_name: biz?.owner_name ?? null,
+    city: (biz as any)?.city ?? null,
+    address: (biz as any)?.address ?? null,
+    phone: (biz as any)?.phone ?? null,
+    abn: (biz as any)?.abn ?? null,
+    google_rating: (biz as any)?.google_average_rating ?? null,
+    google_reviews: (biz as any)?.google_total_reviews ?? null,
     currency: 'AUD',
     revenue_today_cents: todayCents,
     revenue_week_cents: weekCents,
