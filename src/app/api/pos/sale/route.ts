@@ -234,10 +234,13 @@ async function _POST(req: Request) {
       if ((split_cash ?? 0) > 0) paymentRows.push({ sale_id: sale.id, business_id: business.id, payment_method: 'cash', amount: split_cash ?? 0 });
       if ((split_card ?? 0) > 0) paymentRows.push({ sale_id: sale.id, business_id: business.id, payment_method: 'card', amount: split_card ?? 0 });
     } else {
-      paymentRows.push({ sale_id: sale.id, business_id: business.id, payment_method: pm, amount: total_amount ?? 0 });
+      paymentRows.push({ sale_id: sale.id, method: pm, amount_cents: Math.round((total_amount ?? 0) * 100) });
     }
-    if (paymentRows.length) await supabase.from('pos_sale_payments').insert(paymentRows);
-  } catch { /* non-fatal */ }
+    if (paymentRows.length) {
+      const { error: paymentsErr } = await supabase.from('pos_sale_payments').insert(paymentRows);
+      if (paymentsErr) console.error('[sale] pos_sale_payments insert failed:', paymentsErr.message);
+    }
+  } catch (e) { console.error('[sale] payment recording failed:', e); }
 
   // Decrement stock + log stock movements
   const stockOps: Promise<any>[] = [];
