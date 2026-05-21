@@ -2255,22 +2255,25 @@ export default function TerminalPage() {
           </div>
 
           {/* Quick sale row */}
-          <div className="px-3 py-1 flex gap-1.5" style={{ borderBottom: '1px solid #1C1928' }}>
+          <div className="px-3 py-1.5 flex gap-1.5 items-center" style={{ borderBottom: '1px solid var(--border-subtle, #1C1928)' }}>
             <button onClick={() => { setCustomItemForm(f => ({ ...f, isNote: false })); setShowCustomItem(true); }}
-              className="flex-1 text-xs rounded-lg py-1 transition-colors"
-              style={{ border: '1px dashed #2A2540', color: 'var(--text-tertiary)' }}>
-              + Custom item
+              title="Custom item"
+              className="flex items-center justify-center gap-1 text-xs rounded-lg transition-colors whitespace-nowrap"
+              style={{ padding: '5px 10px', border: '1px dashed var(--border-strong, #2A2540)', color: 'var(--text-tertiary)', flexShrink: 0 }}>
+              + Item
             </button>
             <button onClick={() => { setCustomItemForm(f => ({ ...f, isNote: true, price: '0' })); setShowCustomItem(true); }}
-              className="flex-1 text-xs rounded-lg py-1 transition-colors"
-              style={{ border: '1px dashed #2A2540', color: 'var(--text-tertiary)' }}>
+              title="Add note to sale"
+              className="flex items-center justify-center gap-1 text-xs rounded-lg transition-colors whitespace-nowrap"
+              style={{ padding: '5px 10px', border: '1px dashed var(--border-strong, #2A2540)', color: 'var(--text-tertiary)', flexShrink: 0 }}>
               + Note
             </button>
             <button onClick={() => setPriceCheckMode(v => !v)}
-              className="px-2.5 text-xs rounded-lg py-1 transition-colors"
-              style={priceCheckMode
-                ? { background: 'rgba(139,92,246,0.12)', border: '1px solid rgba(139,92,246,0.3)', color: '#8B5CF6' }
-                : { border: '1px solid #2A2540', color: 'var(--text-tertiary)' }}
+              className="flex items-center justify-center text-xs rounded-lg transition-colors"
+              style={{ padding: '5px 8px', flexShrink: 0,
+                ...(priceCheckMode
+                  ? { background: 'var(--violet-dim)', border: '1px solid var(--border-violet)', color: 'var(--violet)' }
+                  : { border: '1px solid var(--border-strong, #2A2540)', color: 'var(--text-tertiary)' }) }}
               title="Price check mode">
               🔍
             </button>
