@@ -38,6 +38,7 @@ async function _GET(req: Request) {
     .select('id, total_amount, tax_amount, discount_amount, payment_method, created_at, status')
     .eq('business_id', bid)
     .eq('status', 'completed')
+    .not('sale_number', 'is', null)
     .gte('created_at', `${from}T00:00:00`)
     .lte('created_at', `${to}T23:59:59`)
     .order('created_at');
@@ -69,3 +70,4 @@ async function _GET(req: Request) {
 }
 
 export const GET = withErrorCapture('pos/reports', _GET)
+
