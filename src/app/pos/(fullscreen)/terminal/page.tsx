@@ -2647,41 +2647,7 @@ export default function TerminalPage() {
                     Clear
                   </button>
                 )}
-                {/* Customer selector */}
-                {customer ? (
-                  <div className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5" style={{ border: '1px solid rgba(0,106,255,0.18)', background: 'var(--violet-dim)' }}>
-                    <div className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold flex-shrink-0" style={{ background: 'rgba(0,106,255,0.12)', color: 'var(--violet)' }}>
-                      {customer.name[0]}
-                    </div>
-                    <span className="text-xs max-w-[80px] truncate" style={{ color: 'var(--text-primary)' }}>{customer.name}</span>
-                    {customer.loyalty_points > 0 && (
-                      <span className="text-[10px]" style={{ color: 'var(--violet)' }}>{customer.loyalty_points}pts</span>
-                    )}
-                    <button onClick={() => { setCustomer(null); setCustomerSearch(''); }} className="text-base leading-none ml-0.5" style={{ color: 'rgba(139,92,246,0.5)' }}>×</button>
-                  </div>
-                ) : (
-                  <div className="relative">
-                    <input value={customerSearch} onChange={e => setCustomerSearch(e.target.value)}
-                      placeholder="+ Customer"
-                      className="text-xs rounded-lg px-2.5 py-1.5 outline-none w-28"
-                      style={{ border: '1px dashed var(--border-strong)', color: 'var(--text-secondary)', background: 'transparent' }} />
-                    {customerResults.length > 0 && (
-                      <div className="absolute top-full mt-1 right-0 rounded-xl shadow-xl z-30 overflow-hidden w-48" style={{ background: 'var(--bg-ghost)', border: '1px solid var(--border-default)' }}>
-                        {customerResults.map(c => (
-                          <button key={c.id}
-                            onMouseDown={e => { e.preventDefault(); setCustomer(c); setCustomerSearch(''); setCustomerResults([]); }}
-                            className="w-full flex items-center gap-2 px-3 py-2 text-left" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-xs font-medium truncate" style={{ color: 'var(--text-primary)' }}>{c.name}</p>
-                              <p className="text-[10px]" style={{ color: 'var(--text-tertiary)' }}>{c.phone ?? c.email ?? ''}</p>
-                            </div>
-                            <span className="text-[10px]" style={{ color: 'var(--violet)' }}>{c.loyalty_points}pts</span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
+
               </div>
 
               {/* Sale attribution (commission) */}
