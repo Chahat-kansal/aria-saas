@@ -98,7 +98,113 @@ export async function generateImageDirect(
     }
   }
 
+  // Strategy 3: SVG poster fallback — always works, no external API needed
+  console.log('[image-direct] falling back to SVG poster generation')
+  const svgResult = await generateSVGPoster(message, businessId)
+  if (svgResult) return svgResult
+
   return { ok: false, error: 'All image generation strategies failed. Keys set: gemini=' + !!GEMINI_KEY + ' openai=' + !!OPENAI_KEY }
+}
+
+async function generateSVGPoster(message: string, businessId: string): Promise<ImageDirectResult | null> {
+  try {
+    // Extract key info from the message
+    const timeMatch = message.match(/(\d{1,2}(?::\d{2})?(?:am|pm)?\s*[-–]\s*\d{1,2}(?::\d{2})?(?:am|pm)?)/i)
+    const time = timeMatch?.[1] ?? ''
+    const isOpen = /open|opening|hours/i.test(message)
+    const isAnnouncement = /announce|new|launch|introducing/i.test(message)
+
+    // Get business info
+    const { data: biz } = await supabaseAdmin
+      .from('businesses')
+      .select('name, city, phone')
+      .eq('id', businessId)
+      .single()
+
+    const bizName = (biz as any)?.name ?? 'Our Business'
+    const city = (biz as any)?.city ?? ''
+    const phone = (biz as any)?.phone ?? ''
+
+    const headline = isOpen
+      ? (time ? `Open ${time}` : 'Now Open')
+      : isAnnouncement ? 'Big Announcement' : 'Special Notice'
+
+    // Build the user's actual message into a clean tagline
+    const tagline = message
+      .replace(/^(generate|create|make|design)\s+(a\s+)?(poster|flyer|banner|image|graphic)\s+(that\s+)?(says?\s+)?/i, '')
+      .replace(/and include.*$/i, '')
+      .replace(/for (my|our) business/i, '')
+      .trim()
+      .slice(0, 80)
+
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" width="800" height="600">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a2e1a"/>
+      <stop offset="100%" style="stop-color:#0d1f0d"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#7FB897"/>
+      <stop offset="100%" style="stop-color:#22C55E"/>
+    </linearGradient>
+  </defs>
+  <!-- Background -->
+  <rect width="800" height="600" fill="url(#bg)" rx="0"/>
+  <!-- Top accent bar -->
+  <rect x="0" y="0" width="800" height="8" fill="url(#accent)"/>
+  <!-- Bottom accent bar -->
+  <rect x="0" y="592" width="800" height="8" fill="url(#accent)"/>
+  <!-- Left accent line -->
+  <rect x="60" y="60" width="4" height="480" fill="#7FB897" opacity="0.4"/>
+  <!-- Right accent line -->
+  <rect x="736" y="60" width="4" height="480" fill="#7FB897" opacity="0.4"/>
+  <!-- Corner decorations -->
+  <rect x="60" y="60" width="40" height="4" fill="#7FB897" opacity="0.6"/>
+  <rect x="700" y="60" width="40" height="4" fill="#7FB897" opacity="0.6"/>
+  <rect x="60" y="536" width="40" height="4" fill="#7FB897" opacity="0.6"/>
+  <rect x="700" y="536" width="40" height="4" fill="#7FB897" opacity="0.6"/>
+  <!-- Business name -->
+  <text x="400" y="150" font-family="Georgia, serif" font-size="52" font-weight="bold" 
+    fill="#7FB897" text-anchor="middle" letter-spacing="6">${bizName.toUpperCase()}</text>
+  <!-- Divider -->
+  <rect x="160" y="175" width="480" height="2" fill="url(#accent)" opacity="0.5"/>
+  <!-- Main headline -->
+  <text x="400" y="270" font-family="Georgia, serif" font-size="72" font-weight="bold"
+    fill="#FFFFFF" text-anchor="middle">${headline}</text>
+  <!-- Tagline -->
+  <text x="400" y="340" font-family="Arial, sans-serif" font-size="26"
+    fill="#A8D5B5" text-anchor="middle">${tagline}</text>
+  <!-- Divider -->
+  <rect x="200" y="390" width="400" height="1" fill="#7FB897" opacity="0.3"/>
+  <!-- Contact info -->
+  ${city ? `<text x="400" y="440" font-family="Arial, sans-serif" font-size="20" fill="#7FB897" text-anchor="middle">${city}</text>` : ''}
+  ${phone ? `<text x="400" y="470" font-family="Arial, sans-serif" font-size="18" fill="#6B9B7A" text-anchor="middle">${phone}</text>` : ''}
+  <!-- Footer -->
+  <text x="400" y="545" font-family="Arial, sans-serif" font-size="14" fill="#3D6B4A" text-anchor="middle" letter-spacing="2">ARIAOS.SITE</text>
+</svg>`
+
+    const buf = Buffer.from(svg, 'utf-8')
+    const filename = `poster_${Date.now()}.svg`
+    const path = `aria-generated/${businessId}/${filename}`
+
+    const { error: upErr } = await supabaseAdmin.storage
+      .from('reusable-images')
+      .upload(path, buf, { contentType: 'image/svg+xml', upsert: true })
+
+    if (upErr) {
+      console.error('[image-direct] SVG upload failed:', upErr.message)
+      return null
+    }
+
+    const { data: pub } = supabaseAdmin.storage.from('reusable-images').getPublicUrl(path)
+    if (!pub?.publicUrl) return null
+
+    console.log('[image-direct] SVG poster generated and uploaded:', pub.publicUrl.slice(0, 80))
+    return { ok: true, filename, download_url: pub.publicUrl, strategy: 'svg-poster' }
+  } catch (e) {
+    console.error('[image-direct] SVG generation failed:', String(e))
+    return null
+  }
 }
 
 async function uploadImage(buf: Buffer, businessId: string, strategy: string): Promise<ImageDirectResult | null> {

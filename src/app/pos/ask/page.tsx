@@ -31,7 +31,7 @@ interface ConvMeta { id: string; title: string; last_message_at: string }
 interface DocumentReadResult { description: string; name: string; previewUrl: string | null }
 type DisplayMsg =
   | { type: 'user'; text: string }
-  | { type: 'aria'; text: string; streaming: boolean }
+  | { type: 'aria'; text: string; streaming: boolean; downloads?: Array<{ filename: string; download_url: string; format: string; rows: number }> }
   | { type: 'tool'; toolName: string; status: 'running' | 'done'; count?: number }
   | { type: 'error'; text: string }
 
@@ -285,10 +285,11 @@ export default function AskAriaPage() {
     setMessages(
       stored
         .filter((m: { role: string }) => m.role === 'user' || m.role === 'assistant')
-        .map((m: { role: string; content: string }) => ({
+        .map((m: { role: string; content: string; downloads?: Array<{ filename: string; download_url: string; format: string; rows: number }> }) => ({
           type: m.role === 'user' ? 'user' : 'aria',
           text: m.content,
           streaming: false,
+          downloads: m.downloads?.length ? m.downloads : undefined,
         } as DisplayMsg))
     )
     setHistory([])
@@ -327,6 +328,7 @@ export default function AskAriaPage() {
       const data = await res.json() as {
         response?: string; conversation_id?: string; intent?: string
         action?: Record<string, unknown>
+        downloads?: Array<{ filename: string; download_url: string; format: string; rows: number }>
       }
       const reply = data.response ?? 'No response'
 
@@ -358,6 +360,22 @@ export default function AskAriaPage() {
           if (!convId) fetchConvs()
           return
         }
+      }
+
+      // Handle image/file downloads
+      if (data.downloads && data.downloads.length > 0) {
+        const dl = data.downloads[0]
+        const isImage = ['png','jpg','jpeg','svg','webp'].includes(dl.format)
+        setMessages(prev => [...prev, {
+          type: 'aria',
+          text: reply,
+          streaming: false,
+          downloads: data.downloads,
+        }])
+        setHistory(h => [...h, { role: 'user', content: fullContent }, { role: 'assistant', content: reply }])
+        setStreaming(false)
+        if (!convId) fetchConvs()
+        return
       }
 
       setMessages(prev => [...prev, { type: 'aria', text: reply, streaming: false }])
@@ -446,6 +464,31 @@ export default function AskAriaPage() {
                           )
                       }
                       {msg.streaming && <span style={{ display: 'inline-block', width: 2, height: 14, background: 'var(--violet)', marginLeft: 2, animation: 'blink 1s step-end infinite', verticalAlign: 'middle' }} />}
+                      {/* Download cards for images/files */}
+                      {msg.downloads && msg.downloads.length > 0 && (
+                        <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                          {msg.downloads.map((dl, di) => {
+                            const isImage = ['png','jpg','jpeg','svg','webp'].includes(dl.format)
+                            return isImage ? (
+                              <div key={di} style={{ borderRadius: 12, overflow: 'hidden', border: '1px solid rgba(127,184,151,0.3)', maxWidth: 400 }}>
+                                <img src={dl.download_url} alt={dl.filename} style={{ width: '100%', display: 'block' }} />
+                                <a href={dl.download_url} download={dl.filename} target="_blank" rel="noopener"
+                                  style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: 'rgba(127,184,151,0.08)', color: '#7FB897', textDecoration: 'none', fontSize: 12, fontWeight: 600 }}>
+                                  <span>🖼 {dl.filename}</span>
+                                  <span style={{ padding: '2px 8px', borderRadius: 6, background: 'rgba(127,184,151,0.15)', fontSize: 11 }}>↓ Download</span>
+                                </a>
+                              </div>
+                            ) : (
+                              <a key={di} href={dl.download_url} download={dl.filename} target="_blank" rel="noopener"
+                                style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 10, border: '1px solid rgba(127,184,151,0.3)', background: 'rgba(127,184,151,0.06)', color: '#7FB897', textDecoration: 'none', fontSize: 13, fontWeight: 600 }}>
+                                <span style={{ fontSize: 18 }}>📄</span>
+                                <span style={{ flex: 1 }}>{dl.filename}</span>
+                                <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 6, background: 'rgba(127,184,151,0.15)' }}>↓</span>
+                              </a>
+                            )
+                          })}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
