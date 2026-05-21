@@ -96,7 +96,9 @@
 html[data-theme="light"] .pos-shell,
 html[data-theme="light"] .pos-sidebar-wrapper,
 [data-pos-theme="light"] .pos-shell,
+[data-pos-theme="light"] html[data-theme="light"] .pos-sidebar-wrapper,
 [data-pos-theme="light"] .pos-sidebar-wrapper {
+
   --bg-base:            #F6F6F4;
   --bg-surface:         #FFFFFF;
   --bg-elevated:        #FFFFFF;
@@ -152,6 +154,21 @@ html[data-theme="light"] .pos-sidebar-wrapper,
   --shadow-lg:          0 8px 24px rgba(0,0,0,0.10);
   --shadow-card:        0 0 0 1px #EBEBEB, 0 1px 3px rgba(0,0,0,0.05);
 }
+/* -- Sidebar: dark mode always uses Aria forest green theme -- */
+html[data-theme="dark"] .pos-sidebar-wrapper,
+html:not([data-theme]) .pos-sidebar-wrapper {
+  --text-primary:   #E8EDE7;
+  --text-secondary: #A8B5A8;
+  --text-tertiary:  #6E7C6E;
+  --violet:         #7FB897;
+  --violet-dim:     rgba(127,184,151,0.10);
+  --violet-soft:    rgba(127,184,151,0.04);
+  --bg-hover:       rgba(127,184,151,0.06);
+  --bg-elevated:    rgba(26,38,32,0.55);
+  --divider:        rgba(127,184,151,0.08);
+  --border-default: rgba(127,184,151,0.12);
+}
+
 
 [data-pos-theme="light"] {
   --bg-base:            #F6F6F4;
