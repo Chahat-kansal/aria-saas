@@ -4,6 +4,9 @@ import { useRouter } from 'next/navigation'
 import IndustryProductForm from '@/components/products/industry/IndustryProductForm'
 import type { ProductDraft } from '@/components/products/industry/CommonFields'
 
+// Session key for draft persistence across navigation (cleared on window close)
+const DRAFT_KEY = (bid?: string) => `aria_product_draft_${bid ?? 'default'}`
+
 interface Supplier { id: string; name: string }
 interface Category { id: string; name: string }
 interface Draft {
@@ -132,6 +135,46 @@ export default function ProductWizard({ step, id, businessId, draft, suppliers, 
     setBarcodeLookupResult(null)
   }, [barcodeLookupResult])
 
+  // Draft persistence — restore from sessionStorage on mount, save on every change
+  const [draftRestored, setDraftRestored] = useState(false)
+  const [showResumeBanner, setShowResumeBanner] = useState(false)
+
+  // Restore draft on first mount (if no id — meaning new product, not editing existing)
+  useEffect(() => {
+    if (id || draftRestored) return // don't restore when editing existing product
+    try {
+      const key = DRAFT_KEY(businessId)
+      const saved = sessionStorage.getItem(key)
+      if (saved) {
+        const d = JSON.parse(saved)
+        if (d.ipDraft?.name) { // only restore if there's meaningful data
+          setIpDraft(d.ipDraft ?? {})
+          if (d.categoryId) setCategoryId(d.categoryId)
+          if (d.supplierId) setSupplierId(d.supplierId)
+          if (d.containerType) setContainerType(d.containerType)
+          if (d.imageUrl) setImageUrl(d.imageUrl)
+          if (d.price) setPrice(d.price)
+          if (d.costPrice) setCostPrice(d.costPrice)
+          if (d.taxRate) setTaxRate(d.taxRate)
+          if (d.stockQty) setStockQty(d.stockQty)
+          if (d.lowStockThreshold) setLowStockThreshold(d.lowStockThreshold)
+          if (d.trackStock !== undefined) setTrackStock(d.trackStock)
+          setShowResumeBanner(true)
+        }
+      }
+    } catch { /* ignore */ }
+    setDraftRestored(true)
+  }, []) // eslint-disable-line
+
+  // Save draft to sessionStorage whenever any field changes
+  useEffect(() => {
+    if (!draftRestored || id) return // don't save while still restoring or editing existing
+    try {
+      const snapshot = { ipDraft, categoryId, supplierId, containerType, imageUrl, price, costPrice, taxRate, stockQty, lowStockThreshold, trackStock, savedAt: Date.now() }
+      sessionStorage.setItem(DRAFT_KEY(businessId), JSON.stringify(snapshot))
+    } catch { /* ignore */ }
+  }, [ipDraft, categoryId, supplierId, containerType, imageUrl, price, costPrice, taxRate, stockQty, lowStockThreshold, trackStock, draftRestored, id, businessId])
+
   // Step 2 state
   const [categoryId, setCategoryId] = useState(draft.category_id ?? '')
   const [supplierId, setSupplierId] = useState(draft.supplier_id ?? '')
@@ -254,6 +297,7 @@ export default function ProductWizard({ step, id, businessId, draft, suppliers, 
       const base = id ? `/pos/products/new?id=${id}&step=${step - 1}` : `/pos/products/new?step=${step - 1}`
       router.push(base)
     } else {
+      try { sessionStorage.removeItem(DRAFT_KEY(businessId)) } catch { /* ignore */ }
       router.push('/pos/products')
     }
   }
