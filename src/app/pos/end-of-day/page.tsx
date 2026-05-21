@@ -42,7 +42,7 @@ export default function EndOfDayPage() {
   }
 
   const totalRevenue = todaySales.filter(s => s.status === 'completed').reduce((sum, s) => sum + (Number(s.total_amount) || 0), 0)
-  const STATUS_COLOR: Record<string, string> = { completed: '#7FB897', voided: '#FF6B6B', refunded: '#FFB347', parked: '#A8B5A8' }
+  const STATUS_COLOR: Record<string, string> = { completed: '#006AFF', voided: '#FF6B6B', refunded: '#FFB347', parked: '#6B6B6B' }
 
   return (
     <div className="p-5 max-w-5xl mx-auto" style={{ color: 'var(--text-primary, #E8EDE7)' }}>
@@ -72,7 +72,7 @@ export default function EndOfDayPage() {
             <div className="rounded-xl p-3 text-xs space-y-1" style={{ background: 'rgba(127,184,151,0.06)', border: '1px solid rgba(127,184,151,0.1)' }}>
               {narrative.headline && <div style={{ color: 'var(--text-primary, #E8EDE7)' }}>{narrative.headline}</div>}
               {narrative.pattern && <div style={{ color: 'var(--text-secondary, #A8B5A8)' }}>{narrative.pattern}</div>}
-              {narrative.action && <div style={{ color: '#7FB897' }}>{narrative.action}</div>}
+              {narrative.action && <div style={{ color: '#006AFF' }}>{narrative.action}</div>}
             </div>
           )}
         </div>
@@ -116,12 +116,12 @@ export default function EndOfDayPage() {
             <tbody>
               {todaySales.slice(0, 20).map(s => (
                 <tr key={s.id} style={{ borderTop: '1px solid var(--divider, rgba(232,237,231,0.04))' }}>
-                  <td className="px-4 py-2 font-mono text-xs" style={{ color: '#7FB897' }}>{s.sale_number}</td>
+                  <td className="px-4 py-2 font-mono text-xs" style={{ color: '#006AFF' }}>{s.sale_number}</td>
                   <td className="px-4 py-2 text-xs" style={{ color: 'var(--text-secondary, #A8B5A8)' }}>{new Date(s.created_at).toLocaleTimeString()}</td>
                   <td className="px-4 py-2 text-xs capitalize">{s.payment_method ?? '—'}</td>
                   <td className="px-4 py-2 font-medium">${(Number(s.total_amount) || 0).toFixed(2)}</td>
                   <td className="px-4 py-2">
-                    <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: `${STATUS_COLOR[s.status] ?? '#A8B5A8'}22`, color: STATUS_COLOR[s.status] ?? '#A8B5A8' }}>
+                    <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: `${STATUS_COLOR[s.status] ?? '#6B6B6B'}22`, color: STATUS_COLOR[s.status] ?? '#6B6B6B' }}>
                       {s.status}
                     </span>
                   </td>
