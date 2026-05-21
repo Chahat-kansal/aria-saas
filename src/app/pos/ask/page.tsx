@@ -7,7 +7,7 @@ import {
 } from 'recharts'
 import { AriaArtifact } from '@/components/aria/AriaArtifact'
 
-const COLORS = ['#8B5CF6', '#60A5FA', '#34D399', '#F59E0B', '#F87171']
+const COLORS = ['#006AFF', '#60A5FA', '#00B140', '#F59E0B', '#F87171']
 const MAX_INPUT = 1000
 
 const TOOL_LABELS: Record<string, { running: string; done: string }> = {
@@ -458,11 +458,11 @@ export default function AskAriaPage() {
               )
               if (msg.type === 'tool') return (
                 <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                  <div style={{ fontSize: 12, padding: '4px 12px', borderRadius: 99, background: msg.status === 'running' ? 'rgba(139,92,246,0.1)' : 'rgba(52,211,153,0.1)', color: msg.status === 'running' ? 'var(--violet)' : '#34D399', border: `1px solid ${msg.status === 'running' ? 'rgba(139,92,246,0.2)' : 'rgba(52,211,153,0.2)'}`, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 5 }}>
+                  <div style={{ fontSize: 12, padding: '4px 12px', borderRadius: 99, background: msg.status === 'running' ? 'rgba(139,92,246,0.1)' : 'rgba(52,211,153,0.1)', color: msg.status === 'running' ? 'var(--violet)' : '#00B140', border: `1px solid ${msg.status === 'running' ? 'rgba(0,106,255,0.12)' : 'rgba(52,211,153,0.2)'}`, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 5 }}>
                     {msg.status === 'running' ? (
                       <><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', border: '1.5px solid var(--violet)', borderTopColor: 'transparent', animation: 'spin 0.7s linear infinite' }} />{TOOL_LABELS[msg.toolName]?.running ?? `Looking at ${msg.toolName.replace(/_/g, ' ')}…`}</>
                     ) : (
-                      <><span style={{ color: '#34D399' }}>✓</span> {TOOL_LABELS[msg.toolName]?.done ?? msg.toolName.replace(/_/g, ' ')}{msg.count !== undefined ? ` (${msg.count} rows)` : ''}</>
+                      <><span style={{ color: '#00B140' }}>✓</span> {TOOL_LABELS[msg.toolName]?.done ?? msg.toolName.replace(/_/g, ' ')}{msg.count !== undefined ? ` (${msg.count} rows)` : ''}</>
                     )}
                   </div>
                 </div>
@@ -493,17 +493,17 @@ export default function AskAriaPage() {
                               <div key={di} style={{ borderRadius: 12, overflow: 'hidden', border: '1px solid rgba(127,184,151,0.3)', maxWidth: 400 }}>
                                 <img src={dl.download_url} alt={dl.filename} style={{ width: '100%', display: 'block' }} />
                                 <a href={dl.download_url} download={dl.filename} target="_blank" rel="noopener"
-                                  style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: 'rgba(127,184,151,0.08)', color: '#7FB897', textDecoration: 'none', fontSize: 12, fontWeight: 600 }}>
+                                  style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: 'rgba(0,106,255,0.06)', color: '#006AFF', textDecoration: 'none', fontSize: 12, fontWeight: 600 }}>
                                   <span>🖼 {dl.filename}</span>
-                                  <span style={{ padding: '2px 8px', borderRadius: 6, background: 'rgba(127,184,151,0.15)', fontSize: 11 }}>↓ Download</span>
+                                  <span style={{ padding: '2px 8px', borderRadius: 6, background: 'rgba(0,106,255,0.10)', fontSize: 11 }}>↓ Download</span>
                                 </a>
                               </div>
                             ) : (
                               <a key={di} href={dl.download_url} download={dl.filename} target="_blank" rel="noopener"
-                                style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 10, border: '1px solid rgba(127,184,151,0.3)', background: 'rgba(127,184,151,0.06)', color: '#7FB897', textDecoration: 'none', fontSize: 13, fontWeight: 600 }}>
+                                style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 10, border: '1px solid rgba(127,184,151,0.3)', background: 'rgba(127,184,151,0.06)', color: '#006AFF', textDecoration: 'none', fontSize: 13, fontWeight: 600 }}>
                                 <span style={{ fontSize: 18 }}>📄</span>
                                 <span style={{ flex: 1 }}>{dl.filename}</span>
-                                <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 6, background: 'rgba(127,184,151,0.15)' }}>↓</span>
+                                <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 6, background: 'rgba(0,106,255,0.10)' }}>↓</span>
                               </a>
                             )
                           })}
