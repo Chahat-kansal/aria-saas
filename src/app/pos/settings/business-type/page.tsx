@@ -109,8 +109,8 @@ const C = {
   text:  'var(--text-primary)',
   muted: 'var(--text-secondary)',
   dim:   'var(--text-tertiary)',
-  violet: '#8B5CF6',
-  green:  '#22C55E',
+  violet: '#006AFF',
+  green:  '#00B140',
   border: 'rgba(255,255,255,0.08)',
 }
 
@@ -237,7 +237,7 @@ export default function BusinessTypePage() {
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
                 <div style={{
                   width: 36, height: 36, borderRadius: 10,
-                  background: isSelected ? 'rgba(139,92,246,0.18)' : 'rgba(255,255,255,0.04)',
+                  background: isSelected ? 'rgba(139,92,246,0.18)' : '#FAFAFA',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                 }}>
                   <Icon size={18} color={isSelected ? C.violet : C.muted} />
@@ -251,7 +251,7 @@ export default function BusinessTypePage() {
                 {opt.features.map(f => (
                   <span key={f} style={{
                     fontSize: 10, padding: '3px 8px', borderRadius: 999,
-                    background: 'rgba(255,255,255,0.04)', color: C.dim,
+                    background: '#FAFAFA', color: C.dim,
                     border: '1px solid rgba(255,255,255,0.05)',
                   }}>{f}</span>
                 ))}
