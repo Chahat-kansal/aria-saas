@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
-const C = { bg:'var(--bg-base)', card:'var(--bg-surface)', border:'transparent', text:'var(--text-primary)', muted:'var(--text-secondary)', dim:'var(--text-tertiary)', violet:'#8B5CF6', green:'#22C55E', red:'#EF4444', amber:'#F59E0B', cyan:'#00E5FF' };
+const C = { bg:'var(--bg-base)', card:'var(--bg-surface)', border:'transparent', text:'var(--text-primary)', muted:'var(--text-secondary)', dim:'var(--text-tertiary)', violet:'#006AFF', green:'#00B140', red:'#EF4444', amber:'#F59E0B', cyan:'#006AFF' };
 
 const DENOMS = [
   { value: 0.05, label: '5¢' }, { value: 0.10, label: '10¢' },
@@ -155,7 +155,7 @@ export default function CloseRegisterPage() {
   }
 
   const iS: React.CSSProperties = {
-    background: 'rgba(10,9,16,0.8)',
+    background: '#FFFFFF',
     border: `1px solid ${C.border}`,
     borderRadius: 7,
     padding: '6px 10px',
@@ -285,7 +285,7 @@ export default function CloseRegisterPage() {
                   value={varianceReason}
                   onChange={e => setVarianceReason(e.target.value)}
                   placeholder="e.g. Counted short, customer gave incorrect change…"
-                  style={{ width: '100%', background: 'rgba(10,9,16,0.8)', border: `1px solid ${C.border}`, borderRadius: 8, padding: '9px 12px', fontSize: 13, color: C.text, outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' as const }}
+                  style={{ width: '100%', background: '#FFFFFF', border: `1px solid ${C.border}`, borderRadius: 8, padding: '9px 12px', fontSize: 13, color: C.text, outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' as const }}
                 />
               </div>
             </div>
@@ -297,7 +297,7 @@ export default function CloseRegisterPage() {
             </label>
             <textarea value={note} onChange={e => setNote(e.target.value)} rows={3}
               placeholder="Optional note for this closure…"
-              style={{ width: '100%', background: 'rgba(10,9,16,0.8)', border: `1px solid ${C.border}`, borderRadius: 10, padding: '10px 14px', fontSize: 13, color: C.text, outline: 'none', fontFamily: 'inherit', resize: 'vertical', boxSizing: 'border-box' as const }} />
+              style={{ width: '100%', background: '#FFFFFF', border: `1px solid ${C.border}`, borderRadius: 10, padding: '10px 14px', fontSize: 13, color: C.text, outline: 'none', fontFamily: 'inherit', resize: 'vertical', boxSizing: 'border-box' as const }} />
           </div>
 
           {closeError && (
@@ -427,7 +427,7 @@ export default function CloseRegisterPage() {
                 onChange={e => { setManagerPin(e.target.value); setManagerPinError(''); }}
                 onKeyDown={e => e.key === 'Enter' && verifyManagerPin()}
                 placeholder="••••"
-                style={{ width: '100%', background: 'rgba(10,9,16,0.8)', border: `1px solid ${C.border}`, borderRadius: 8, padding: '10px 12px', fontSize: 18, color: C.text, outline: 'none', fontFamily: "'JetBrains Mono',monospace", letterSpacing: '0.2em', boxSizing: 'border-box' as const }}
+                style={{ width: '100%', background: '#FFFFFF', border: `1px solid ${C.border}`, borderRadius: 8, padding: '10px 12px', fontSize: 18, color: C.text, outline: 'none', fontFamily: "'JetBrains Mono',monospace", letterSpacing: '0.2em', boxSizing: 'border-box' as const }}
               />
               {managerPinError && <p style={{ fontSize: 12, color: C.red, marginTop: 6 }}>{managerPinError}</p>}
             </div>
