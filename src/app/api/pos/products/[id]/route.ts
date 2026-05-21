@@ -72,7 +72,13 @@ async function _PATCH(req: NextRequest, { params }: Params) {
 
   // ── update_general ──────────────────────────────────────────────
   if (action === 'update_general') {
-    const allowed = ['name', 'sku', 'description', 'is_active', 'show_online', 'is_age_restricted']
+    const allowed = ['name', 'sku', 'description', 'is_active', 'show_online', 'is_age_restricted',
+      'colour', 'size', 'gender', 'material', 'fit_type', 'vintage', 'alcohol_percentage',
+      'standard_drinks', 'volume', 'volume_unit', 'country_of_origin', 'shelf_life_days',
+      'storage_temp', 'ingredients', 'expiry_date', 'prep_time_seconds', 'course_type',
+      'kds_station', 'is_gluten_free', 'is_vegan', 'is_vegetarian', 'is_weight_based',
+      'price_per_kg', 'schedule_level', 'requires_script', 'is_schedule_drug',
+      'brand', 'notes', 'allergens', 'is_age_restricted', 'gst_exempt']
     const payload: Record<string, unknown> = { updated_at: new Date().toISOString() }
     for (const k of allowed) if (k in body) payload[k] = body[k]
     const { data, error } = await supabase.from('pos_products').update(payload).eq('id', id).eq('business_id', bid).select().single()
