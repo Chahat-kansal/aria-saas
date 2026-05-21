@@ -1,44 +1,16 @@
 export const dynamic = 'force-dynamic'
-export const maxDuration = 45
+export const maxDuration = 55
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { NextResponse } from 'next/server'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import Anthropic from '@anthropic-ai/sdk'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string) {
   const { data: a } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
   if (a?.business_id) return a.business_id as string
   const { data } = await supabase.from('businesses').select('id').eq('user_id', userId).eq('is_active', true).limit(1).maybeSingle()
   return data?.id ?? null
-}
-
-// Industries where production planning makes sense — things you actually MAKE
-const PRODUCTION_INDUSTRIES = ['bakery', 'cafe', 'restaurant', 'food']
-
-// Product categories that involve physical production/preparation
-const PRODUCTION_CATEGORY_KEYWORDS = [
-  'bread', 'pastry', 'cake', 'bake', 'food', 'coffee', 'beverage', 'kitchen',
-  'dessert', 'sandwich', 'wrap', 'salad', 'soup', 'meal', 'snack', 'fresh',
-  'dough', 'produce', 'made', 'prepared', 'cooked', 'brewed'
-]
-
-// Things that are NEVER produced in a kitchen — filter these out
-const NON_PRODUCTION_KEYWORDS = [
-  'alcohol', 'beer', 'wine', 'spirit', 'rum', 'vodka', 'whisky', 'whiskey',
-  'gin', 'tequila', 'bourbon', 'brandy', 'cider', 'lager', 'ale', 'stout',
-  'tobacco', 'cigarette', 'vape', 'cleaning', 'supply', 'paper', 'bag',
-  'bottle', 'can', 'tin', 'packet', 'carton', 'energy drink', 'monster',
-  'red bull', 'v drink', 'cola', 'soft drink', 'soda'
-]
-
-function isProductionProduct(name: string, category: string | null): boolean {
-  const text = `${name} ${category ?? ''}`.toLowerCase()
-  // Immediately exclude non-production items
-  if (NON_PRODUCTION_KEYWORDS.some(kw => text.includes(kw))) return false
-  // Include if it matches production keywords
-  if (PRODUCTION_CATEGORY_KEYWORDS.some(kw => text.includes(kw))) return true
-  // Default: include (let the business owner decide)
-  return true
 }
 
 async function _GET(req: Request) {
@@ -66,43 +38,28 @@ async function _POST(req: Request) {
     const date = body.date ?? new Date().toISOString().split('T')[0]
     const dayOfWeek = new Date(date + 'T12:00:00').toLocaleDateString('en-AU', { weekday: 'long' })
 
-    // Get business info to understand the industry
     const { data: biz } = await supabaseAdmin
-      .from('businesses')
-      .select('name, industry')
-      .eq('id', bid)
-      .single()
-
+      .from('businesses').select('name, industry').eq('id', bid).single()
     const industry = (biz as any)?.industry ?? 'retail'
     const bizName = (biz as any)?.name ?? 'Business'
 
-    // Check if this industry even makes sense for production planning
-    const isProductionBusiness = PRODUCTION_INDUSTRIES.some(ind => industry.includes(ind))
-
-    // Get products with their categories
+    // Get products with categories
     const { data: products } = await supabaseAdmin
       .from('pos_products')
       .select('id, name, pos_categories(name)')
-      .eq('business_id', bid)
-      .eq('is_active', true)
-      .eq('track_stock', true)
-      .limit(100)
+      .eq('business_id', bid).eq('is_active', true).limit(100)
 
-    // Get last 4 weeks of sales for velocity
+    // Get sales history
     const { data: sales } = await supabaseAdmin
       .from('pos_sale_items')
       .select('product_id, product_name, quantity')
-      .eq('business_id', bid)
-      .limit(2000)
+      .eq('business_id', bid).limit(2000)
 
-    // Build product map with categories
     const productMap: Record<string, { name: string; category: string | null }> = {}
     for (const p of (products ?? [])) {
-      const catName = (p as any).pos_categories?.name ?? null
-      productMap[p.id] = { name: p.name, category: catName }
+      productMap[p.id] = { name: p.name, category: (p as any).pos_categories?.name ?? null }
     }
 
-    // Aggregate sales by product
     const totals: Record<string, { name: string; category: string | null; total: number; count: number }> = {}
     for (const s of (sales ?? [])) {
       const prod = productMap[s.product_id]
@@ -112,43 +69,77 @@ async function _POST(req: Request) {
       totals[s.product_id].count += 1
     }
 
-    // Filter to only production-relevant products based on industry + product name
-    const filteredProducts = Object.entries(totals).filter(([, v]) => {
-      // For production industries (bakery/cafe), filter strictly
-      if (isProductionBusiness) {
-        return isProductionProduct(v.name, v.category)
-      }
-      // For non-production businesses, return empty — production planning doesn't apply
-      return false
+    const productList = Object.entries(totals).map(([id, v]) => ({
+      id, name: v.name, category: v.category,
+      avg_qty: Math.round((v.total / Math.max(v.count, 1)) * 10) / 10
+    }))
+
+    if (productList.length === 0) {
+      return NextResponse.json({ plans: [], ai: true, day: dayOfWeek, message: 'No sales data yet.' })
+    }
+
+    // Use Claude to intelligently determine which products need production planning
+    // Claude knows what products are — no category needed
+    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+
+    const productJSON = JSON.stringify(productList.map(p => ({
+      id: p.id, name: p.name, category: p.category ?? 'uncategorised', avg_daily_qty: p.avg_qty
+    })))
+
+    const msg = await client.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 1000,
+      messages: [{
+        role: 'user',
+        content: `You are a production planning assistant for "${bizName}", a ${industry} business in Australia.
+
+Today is ${dayOfWeek}. The owner wants a production plan — a list of items they need to PREPARE or MAKE today.
+
+Here are the products sold at this business with their average daily sales quantity:
+${productJSON}
+
+Your job: Return ONLY the products that this business would actually need to PRODUCE/PREPARE/MAKE.
+
+Rules:
+- INCLUDE: food items made in-house, baked goods, prepared meals, coffee drinks, fresh items
+- EXCLUDE: packaged retail items like bottled beer/wine/spirits/cider, canned drinks, energy drinks, confectionery packets, tobacco, cleaning supplies, pre-packaged snacks, anything a business would just order and resell without making it
+- Use your knowledge of what these products are — "St Agnes Rum", "Monster Energy Drink", "Carlton Draught", "Quips" are retail products, NOT produced in-house
+- If a ${industry} business sells these items, they buy them wholesale, not make them
+
+Return ONLY valid JSON, no markdown:
+{"producible": [{"id": "...", "name": "...", "planned_qty": <number based on avg * 1.2 buffer>, "reason": "..."}]}
+
+If NO items are producible (e.g. a liquor store selling only packaged goods), return:
+{"producible": [], "message": "All products appear to be retail/packaged items that are purchased, not produced. Production planning applies to items made in-house."}`
+      }]
     })
 
-    if (!isProductionBusiness || filteredProducts.length === 0) {
+    const raw = msg.content[0].type === 'text' ? msg.content[0].text.trim() : '{}'
+    const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim()
+
+    let result: { producible?: Array<{ id: string; name: string; planned_qty: number; reason: string }>; message?: string } = {}
+    try { result = JSON.parse(cleaned) } catch { result = { producible: [] } }
+
+    if (!result.producible?.length) {
       return NextResponse.json({
         plans: [],
         ai: true,
         day: dayOfWeek,
-        message: isProductionBusiness
-          ? `No production-relevant products found. Add bakery/food items to your product catalog.`
-          : `Production planning is designed for bakeries and cafés. ${bizName} is set to "${industry}" industry — production planning applies to items you make in-house (bread, pastries, prepared meals), not items you sell from stock.`,
+        message: result.message ?? `No in-house produced items found for ${bizName}. Production planning applies to items you make (bread, meals, coffee), not items you buy and resell (alcohol, packaged drinks, confectionery).`,
       })
     }
 
-    const plans = filteredProducts
-      .map(([product_id, v]) => ({
-        business_id: bid,
-        plan_date: date,
-        product_id,
-        product_name: v.name,
-        planned_qty: Math.ceil((v.total / Math.max(v.count, 1)) * 1.2),
-        notes: `AI estimate for ${dayOfWeek} based on sales history`,
-      }))
-      .filter(p => p.planned_qty > 0)
-      .slice(0, 20)
+    const plans = result.producible.map(p => ({
+      business_id: bid,
+      plan_date: date,
+      product_id: p.id,
+      product_name: p.name,
+      planned_qty: Math.max(1, Math.round(p.planned_qty)),
+      notes: p.reason ?? `AI estimate for ${dayOfWeek}`,
+    }))
 
-    if (plans.length > 0) {
-      await supabaseAdmin.from('pos_production_plans')
-        .upsert(plans, { onConflict: 'business_id,plan_date,product_id' })
-    }
+    await supabaseAdmin.from('pos_production_plans')
+      .upsert(plans, { onConflict: 'business_id,plan_date,product_id' })
 
     return NextResponse.json({ plans, ai: true, day: dayOfWeek })
   }

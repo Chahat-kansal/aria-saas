@@ -31,12 +31,11 @@ export default function EodMarkdownPage() {
   const load = useCallback(async () => {
     setLoading(true)
     const [rRes, cRes] = await Promise.all([
-      fetch('/api/pos/eod-markdown'),
-      fetch('/api/pos/categories'),
+      fetch('/api/pos/eod-markdown').catch(() => null),
+      fetch('/api/pos/categories').catch(() => null),
     ])
-    const rd = await rRes.json() as { rules?: Rule[] }
-    const cd = await cRes.json() as { categories?: Category[] }
-    setRules(rd.rules ?? []); setCats(cd.categories ?? [])
+    if (rRes?.ok) { const rd = await rRes.json() as { rules?: Rule[] }; setRules(rd.rules ?? []) }
+    if (cRes?.ok) { const cd = await cRes.json() as { categories?: Category[] }; setCats(cd.categories ?? []) }
     setLoading(false)
   }, [])
 

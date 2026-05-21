@@ -28,6 +28,7 @@ export default function ProductionPlanPage() {
   const [plans, setPlans] = useState<Plan[]>([])
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState(false)
+  const [aiMessage, setAiMessage] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [editing, setEditing] = useState<string | null>(null)
   const [editVal, setEditVal] = useState('')
