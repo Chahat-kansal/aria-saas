@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 
 interface Item { id: string; name: string; created_at?: string; }
 
-const C = { bg:'var(--bg-base)', card:'var(--bg-surface)', border:'transparent', text:'var(--text-primary)', muted:'var(--text-secondary)', dim:'var(--text-tertiary)', violet:'#8B5CF6' };
+const C = { bg:'var(--bg-base)', card:'var(--bg-surface)', border:'transparent', text:'var(--text-primary)', muted:'var(--text-secondary)', dim:'var(--text-tertiary)', violet:'#006AFF' };
 type TabType = 'brand' | 'family' | 'tag';
 
 const TABS: { key: TabType; label: string; emoji: string }[] = [
@@ -74,7 +74,7 @@ export default function ClassificationsPage() {
         </div>
 
         {/* Tabs */}
-        <div style={{ display: 'flex', gap: 4, marginBottom: 20, background: 'rgba(255,255,255,0.04)', borderRadius: 12, padding: 4, width: 'fit-content' }}>
+        <div style={{ display: 'flex', gap: 4, marginBottom: 20, background: '#FAFAFA', borderRadius: 12, padding: 4, width: 'fit-content' }}>
           {TABS.map(t => (
             <button key={t.key} onClick={() => setTab(t.key)}
               style={{ padding: '6px 16px', borderRadius: 9, border: 'none', background: tab === t.key ? C.violet : 'transparent', color: tab === t.key ? '#fff' : C.muted, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', transition: 'all 150ms', display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -108,7 +108,7 @@ export default function ClassificationsPage() {
           ) : (
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
-                <tr style={{ background: 'rgba(255,255,255,0.03)', borderBottom: `1px solid ${C.border}` }}>
+                <tr style={{ background: '#FAFAFA', borderBottom: `1px solid ${C.border}` }}>
                   <th style={{ textAlign: 'left', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: C.dim, padding: '10px 16px' }}>Name</th>
                   <th style={{ textAlign: 'right', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: C.dim, padding: '10px 16px' }}>Actions</th>
                 </tr>
