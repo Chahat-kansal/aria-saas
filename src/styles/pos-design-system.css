@@ -1,4 +1,5 @@
-@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Manrope:wght@400;450;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;450;500;600;700;800&family=Manrope:wght@400;450;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+/* Inter replaces Manrope — cleaner at all sizes, better legibility on retail screens */
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -42,7 +43,7 @@
 
   /* Typography */
   --font-display: 'Instrument Serif', Georgia, serif;
-  --font-ui:      'Manrope', system-ui, sans-serif;
+  --font-ui:      'Inter', 'Manrope', system-ui, sans-serif;
   --font-mono:    'JetBrains Mono', monospace;
 
   --ease:     cubic-bezier(0.16, 1, 0.3, 1);
@@ -81,10 +82,10 @@
   --pos-warning:        #F59E0B;
   --pos-danger:         #EF4444;
   --pos-info:           #38BDF8;
-  --pos-ui:     'Manrope', system-ui, sans-serif;
+  --pos-ui:     'Inter', 'Manrope', system-ui, sans-serif;
   --pos-mono:   'JetBrains Mono', monospace;
   --pos-disp:   'Instrument Serif', Georgia, serif;
-  --pos-font-ui:   'Manrope', system-ui, sans-serif;
+  --pos-font-ui:   'Inter', 'Manrope', system-ui, sans-serif;
   --pos-font-mono: 'JetBrains Mono', monospace;
   --pos-font-disp: 'Instrument Serif', Georgia, serif;
   --pos-ease:   cubic-bezier(0.16, 1, 0.3, 1);
@@ -93,7 +94,7 @@
 /* ── Global shell ────────────────────────────────────────────────── */
 .pos-shell {
   font-family: var(--font-ui);
-  font-size: 14px;
+  font-size: 15px;
   line-height: 1.5;
   color: var(--text-primary);
   background: var(--bg-base);

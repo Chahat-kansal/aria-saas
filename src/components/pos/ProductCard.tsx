@@ -76,10 +76,10 @@ export default function ProductCard({ product, onAdd, quantity = 0, fromPrice }:
       {quantity > 0 && (
         <div style={{
           position: 'absolute', top: 8, right: 8, zIndex: 2,
-          width: 22, height: 22, borderRadius: '50%',
+          width: 26, height: 26, borderRadius: '50%',
           background: '#2D5240',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          color: 'white', fontSize: 11, fontWeight: 700,
+          color: 'white', fontSize: 12, fontWeight: 700,
         }}>
           {quantity}
         </div>
@@ -135,9 +135,9 @@ export default function ProductCard({ product, onAdd, quantity = 0, fromPrice }:
       </div>
 
       {/* Product info */}
-      <div style={{ padding: '10px 12px 12px' }}>
+      <div style={{ padding: '12px 14px 14px' }}>
         <p style={{
-          color: 'white', fontSize: 13, fontWeight: 500,
+          color: 'white', fontSize: 15, fontWeight: 600,
           margin: '0 0 4px', lineHeight: 1.3,
           display: '-webkit-box',
           WebkitLineClamp: 2,
@@ -146,7 +146,7 @@ export default function ProductCard({ product, onAdd, quantity = 0, fromPrice }:
         }}>
           {product.name}
         </p>
-        <p style={{ color: '#7FB897', fontSize: 14, fontWeight: 700, margin: 0, fontStyle: 'italic', fontFamily: "'Instrument Serif', Georgia, serif" }}>
+        <p style={{ color: '#7FB897', fontSize: 16, fontWeight: 700, margin: 0 }}>
           {fromPrice != null && fromPrice < product.price
             ? <>from A${fromPrice.toFixed(2)}</>
             : <>A${product.price.toFixed(2)}</>}

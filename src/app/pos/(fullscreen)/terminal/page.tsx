@@ -146,6 +146,8 @@ type PayMethod = 'card' | 'cash' | 'split' | 'gift_card' | 'direct_deposit';
 export default function TerminalPage() {
   /* ── Data ─────────────────────────────────────────────────────── */
   const [products,       setProducts]       = useState<Product[]>([]);
+  // Pre-loaded modifier cache — eliminates 4-5s API calls on every product tap
+  const modifierCache = useRef<Record<string, { hasModifiers: boolean; hasVariants: boolean }>>({});
   const [parkedSales,    setParkedSales]    = useState<ParkedSale[]>([]);
   const [loading,        setLoading]        = useState(true);
   const [businessId,     setBusinessId]     = useState<string | null>(null);
@@ -516,6 +518,16 @@ export default function TerminalPage() {
       const prods: Product[] = prod.products || [];
       setProducts(prods);
       setParkedSales(park.parked_sales || []);
+      // Pre-load modifier data in bulk — eliminates per-tap API round trips
+      if (prods.length > 0) {
+        const ids = prods.map(p => p.id).join(',')
+        fetch(`/api/pos/product-modifier-groups/bulk?product_ids=${ids}`)
+          .then(r => r.ok ? r.json() : { cache: {} })
+          .then((d: { cache?: Record<string, { hasModifiers: boolean; hasVariants: boolean }> }) => {
+            if (d.cache) modifierCache.current = d.cache;
+          })
+          .catch(() => {});
+      }
       setLowStockItems(prods.filter(p => p.track_stock && p.stock_quantity <= (p.low_stock_threshold ?? 5) && p.is_active));
 
       // First-run cafe setup
@@ -948,6 +960,28 @@ export default function TerminalPage() {
 
   async function checkAndAddToCart(p: Product, fromEl?: HTMLElement | null) {
     if (!p.is_active) return;
+
+    // Inline checks that never need network — instant
+    if (p.is_schedule_drug && p.schedule_level) { setPharmPrompt({ product: p }); return; }
+    if ((p as any).serial_tracked) { setSerialInput(''); setSerialPrompt({ product: p }); return; }
+    if (p.is_weight_based && p.price_per_kg) { setWeightInput(''); setWeightModal({ product: p }); return; }
+    if ((p as any).builder_type === 'sandwich') { setSandwichBuilderProduct(p); return; }
+
+    // Check pre-loaded cache — no network needed for most products
+    const cached = modifierCache.current[p.id];
+    if (cached !== undefined) {
+      if (!cached.hasModifiers && !cached.hasVariants) {
+        // Cached: no modifiers, no variants — add directly. INSTANT.
+        addToCartDirect(p, 1, undefined, undefined, [], fromEl);
+        getProductBatches(p.id).then(batches => {
+          const activeBatch = batches.find(b => b.quantity_remaining > 0 && new Date(b.expiry_date).getTime() > Date.now())
+          if (activeBatch) setExpiryPrompt({ product_id: p.id, product_name: p.name, existing_batch: activeBatch, mode: 'confirm_existing', pending_date: activeBatch.expiry_date })
+        }).catch(() => {})
+        return;
+      }
+    }
+
+    // Only fetch if cache says this product HAS modifiers, or cache miss
     // Sprint H: check pos_product_modifier_groups for ALL industries
     try {
       const checkR = await fetch(`/api/pos/product-modifier-groups?product_id=${p.id}`);
@@ -961,11 +995,6 @@ export default function TerminalPage() {
     } catch { /* fall through to existing logic */ }
     // Cafe routing — Sprint C: sandwich builder, Sprint A: modifier modal
     if (businessType === 'cafe') {
-      // Check builder_type first
-      if ((p as any).builder_type === 'sandwich') {
-        setSandwichBuilderProduct(p)
-        return
-      }
       // Fall through to modifier modal if groups attached
       try {
         const modRes = await fetch(`/api/pos/products/${p.id}/modifiers`)
@@ -994,23 +1023,6 @@ export default function TerminalPage() {
       }
     } catch { /* fall through */ }
     setVariantLoading(false);
-    // Schedule drug — require pharmacist consultation confirmation
-    if (p.is_schedule_drug && p.schedule_level) {
-      setPharmPrompt({ product: p });
-      return;
-    }
-    // Serial tracked — prompt for serial/IMEI before adding
-    if (p.serial_tracked) {
-      setSerialInput('');
-      setSerialPrompt({ product: p });
-      return;
-    }
-    // Weight-based product — show weight entry modal instead of adding directly
-    if (p.is_weight_based && p.price_per_kg) {
-      setWeightInput('');
-      setWeightModal({ product: p });
-      return;
-    }
     addToCartDirect(p, 1, undefined, undefined, [], fromEl);
     // Non-blocking expiry check after adding to cart
     getProductBatches(p.id).then(batches => {
@@ -1747,7 +1759,7 @@ export default function TerminalPage() {
                           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#00E5FF" strokeWidth="1.5" strokeLinecap="round"><path d="M6 8.32a7.43 7.43 0 0 0 0 7.36"/><path d="M9.46 6.21a11.76 11.76 0 0 0 0 11.58"/><path d="M12.91 4.1a15.91 15.91 0 0 1 0 15.8"/></svg>
                         </div>
                       </div>
-                      <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 28, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.04em' }}>A${roundedTotal.toFixed(2)}</div>
+                      <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 32, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.04em' }}>A${roundedTotal.toFixed(2)}</div>
                       <div style={{ fontSize: 10, fontWeight: 700, color: '#00E5FF', letterSpacing: '0.08em' }}>TAP TO PAY</div>
                       {/* Indicator dots */}
                       <div style={{ display: 'flex', gap: 5 }}>
@@ -2327,7 +2339,7 @@ export default function TerminalPage() {
           )}
 
           {/* Product grid */}
-          <div className="pos-product-grid flex-1 overflow-y-auto p-3">
+          <div className="pos-product-grid flex-1 overflow-y-auto p-4">
             {loading ? (
               <div className="grid grid-cols-2 gap-2">
                 {[...Array(8)].map((_, i) => (
@@ -2436,7 +2448,7 @@ export default function TerminalPage() {
                 'other':        { a: '#6366F1', b: '#312E81' },
               };
               return (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(130px,1fr))', gap: 10 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(155px,1fr))', gap: 12 }}>
                   {displayedProducts.map((p, idx) => {
                     const isOut = p.track_stock && p.stock_quantity <= 0;
                     const isLow = p.track_stock && p.stock_quantity > 0 && p.stock_quantity <= (p.low_stock_threshold ?? 5);
@@ -2481,7 +2493,7 @@ export default function TerminalPage() {
                           <div style={{ position: 'absolute', inset: 0, opacity: 0.15, background: `radial-gradient(circle at 30% 30%, ${m.a}, transparent 60%)` }} />
                           {(p as any).image_url
                             ? <img src={(p as any).image_url} alt={p.name} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
-                            : <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'JetBrains Mono',monospace", fontSize: 28, fontWeight: 800, color: m.a, letterSpacing: '-0.02em' }}>{initials}</span>
+                            : <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'JetBrains Mono',monospace", fontSize: 32, fontWeight: 800, color: m.a, letterSpacing: '-0.02em' }}>{initials}</span>
                           }
                           {isOut && (
                             <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.55)' }}>
