@@ -47,6 +47,7 @@ const ALL_ITEMS: Record<string, NavItemDef> = {
   'stocktake':                  { href: '/dashboard/stocktake',                label: 'Stocktake',          icon: GridIcon,           section: 'Operations'   },
   'supplier-import':            { href: '/dashboard/supplier-import',          label: 'Supplier price import', icon: GridIcon,       section: 'Operations'   },
   'customer-tabs':              { href: '/dashboard/customer-tabs',            label: 'Customer tabs',      icon: UsersIcon,          section: 'Overview'     },
+  'locations':                  { href: '/dashboard/locations',                label: 'Locations',          icon: GridIcon,           section: 'Overview'     },
   'pos-online':                 { href: '/dashboard/pos/online',               label: 'Online ordering',    icon: DeliveryIcon,       badge: 'AI',  section: 'Operations'   },
   'dashboard':                  { href: '/dashboard',                          label: 'Dashboard',         icon: GridIcon,           section: 'Overview'     },
   'custom-features':            { href: '/dashboard/custom-features',          label: 'Custom features',   icon: SparklesIcon,       badge: 'New', section: 'Overview' },
