@@ -250,7 +250,7 @@ async function _POST(req: Request) {
     const current = p.stock_quantity as number;
     const newStock = Math.max(0, current - i.quantity);
     stockOps.push(
-      Promise.resolve(supabase.from('pos_products').update({ stock_quantity: newStock }).eq('id', i.product_id))
+      supabase.from('pos_products').update({ stock_quantity: newStock }).eq('id', i.product_id)
     );
     // Log stock movement — non-fatal if table missing
     stockOps.push(
