@@ -20,8 +20,8 @@ function timeAgo(dateStr: string) {
   const diff = Date.now() - new Date(dateStr).getTime();
   const h = Math.floor(diff / 3600000);
   if (h < 1) return 'just now';
-  if (h < 24) return `${h}h ago`;
-  return `${Math.floor(h/24)}d ago`;
+  if (h < 24) return (h + 'h ago');
+  return (Math.floor(h/24) + 'd ago');
 }
 
 export default function IntelligencePage() {
@@ -37,7 +37,7 @@ export default function IntelligencePage() {
     setLoading(true);
     try {
       const acknowledged = filter === 'unread' ? 'false' : undefined;
-      const url = `/api/intelligence-events?business_id=${business.id}&limit=100${acknowledged?`&acknowledged=${acknowledged}`:''}`;
+      const url = ('/api/intelligence-events?business_id=' + business.id + '&limit=100${acknowledged?')&acknowledged=${acknowledged}':''}';
       const res = await fetch(url);
       const data = await res.json();
       setEvents(data.events ?? []);
@@ -107,7 +107,7 @@ export default function IntelligencePage() {
         <div className="flex gap-2">
           {(['unread','all'] as const).map(f => (
             <button key={f} onClick={() => setFilter(f)} className="px-3 py-1.5 rounded-lg text-xs capitalize"
-              style={{ background:filter===f?'rgba(29,158,117,0.2)`:'rgba(255,255,255,0.04)', color:filter===f?'#1D9E75':'rgba(255,255,255,0.5)', border:`1px solid ${filter===f?'rgba(29,158,117,0.4)':'rgba(255,255,255,0.08)'}` }}>
+              style={{ background:filter===f?'rgba(29,158,117,0.2)':'rgba(255,255,255,0.04)', color:filter===f?'#1D9E75':'rgba(255,255,255,0.5)', border:'1px solid ${filter===f?'rgba(29,158,117,0.4)':'rgba(255,255,255,0.08)'}' }}>
               {f==='unread'?'Active alerts':'All history'}
             </button>
           ))}
@@ -143,7 +143,7 @@ export default function IntelligencePage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start justify-between gap-2 mb-1">
                         <div className="flex items-center gap-2">
-                          <span style={{ fontSize:10, fontWeight:700, padding:'2px 7px', borderRadius:99, background:`${style.dot}25`, color:style.text }}>{SEV[event.severity]?.label}</span>
+                          <span style={{ fontSize:10, fontWeight:700, padding:'2px 7px', borderRadius:99, background:'${style.dot}25`, color:style.text }}>{SEV[event.severity]?.label}</span>
                           <p className="text-sm font-medium" style={{ color:style.text }}>{event.title}</p>
                         </div>
                         <span className="text-xs flex-shrink-0" style={{ color:'rgba(255,255,255,0.3)' }}>{timeAgo(event.triggered_at)}</span>

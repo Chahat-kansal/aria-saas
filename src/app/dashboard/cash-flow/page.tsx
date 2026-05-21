@@ -14,7 +14,7 @@ const C = {
   green:'#22C55E', red:'#EF4444', amber:'#F59E0B', violet:'#8B5CF6',
   border:'rgba(255,255,255,0.07)',
 }
-function fmt(n: number) { return `A$${Math.abs(n).toLocaleString('en-AU', { minimumFractionDigits:0, maximumFractionDigits:0 })}` }
+function fmt(n: number) { return ('A$' + Math.abs(n).toLocaleString('en-AU', { minimumFractionDigits:0, maximumFractionDigits:0 + ')}') }
 
 export default function CashFlowPage() {
   const { business } = useBusinessContext()
@@ -32,7 +32,7 @@ export default function CashFlowPage() {
     if (!business?.id) return
     setLoading(true)
     try {
-      const salesRes = await fetch(`/api/pos/sales?business_id=${business.id}&limit=500`)
+      const salesRes = await fetch(('/api/pos/sales?business_id=' + business.id + '&limit=500'))
       const salesData = await salesRes.json() as { sales?: Array<{ created_at:string; total_amount:number; status:string }> }
       const sales = (salesData.sales ?? []).filter(s => s.status !== 'voided')
 
@@ -97,8 +97,8 @@ export default function CashFlowPage() {
           plugins: { legend: { display: false } },
           scales: {
             x: { ticks: { color: 'rgba(255,255,255,0.3)', font: { size: 9 }, maxRotation: 45, autoSkip: true, maxTicksLimit: 14 }, grid: { color: 'rgba(255,255,255,0.04)' } },
-            y: { ticks: { color: 'rgba(255,255,255,0.3)', font: { size: 9 }, callback: (v: number) => `$${Math.round(v/1000)}k` }, grid: { color: 'rgba(255,255,255,0.04)' } },
-            y2: { position: 'right', ticks: { color: '#F59E0B', font: { size: 9 }, callback: (v: number) => `$${Math.round(v/1000)}k` }, grid: { drawOnChartArea: false } },
+            y: { ticks: { color: 'rgba(255,255,255,0.3)', font: { size: 9 }, callback: (v: number) => ('$' + Math.round(v/1000) + 'k') }, grid: { color: 'rgba(255,255,255,0.04)' } },
+            y2: { position: 'right', ticks: { color: '#F59E0B', font: { size: 9 }, callback: (v: number) => ('$' + Math.round(v/1000) + 'k') }, grid: { drawOnChartArea: false } },
           }
         }
       })
@@ -125,20 +125,20 @@ export default function CashFlowPage() {
         <div style={{display:'flex', gap:8, flexWrap:'wrap'}}>
           {(['base','optimistic','pessimistic'] as const).map(s => (
             <button key={s} onClick={()=>setScenario(s)}
-              style={{padding:'6px 12px', borderRadius:8, border:`1px solid ${scenario===s?(s==='optimistic'?C.green:s==='pessimistic'?C.red:C.violet):C.border}`, background:scenario===s?`${s==='optimistic'?C.green:s==='pessimistic'?C.red:C.violet}20`:'transparent', color:scenario===s?(s==='optimistic'?C.green:s==='pessimistic'?C.red:C.violet):C.muted, fontSize:11, fontWeight:600, cursor:'pointer', fontFamily:'inherit', textTransform:'capitalize'}}>
+              style={{padding:'6px 12px', borderRadius:8, border:('1px solid ' + scenario===s?(s==='optimistic'?C.green:s==='pessimistic'?C.red:C.violet):C.border), background:scenario===s?(s==='optimistic'?C.green:s==='pessimistic'?C.red:C.violet + '20'):'transparent', color:scenario===s?(s==='optimistic'?C.green:s==='pessimistic'?C.red:C.violet):C.muted, fontSize:11, fontWeight:600, cursor:'pointer', fontFamily:'inherit', textTransform:'capitalize'}}>
               {s}
             </button>
           ))}
           <div style={{width:1, background:C.border, margin:'0 4px'}} />
           {(['chart','table'] as const).map(v => (
             <button key={v} onClick={()=>setView(v)}
-              style={{padding:'6px 12px', borderRadius:8, border:`1px solid ${view===v?C.violet:C.border}`, background:view===v?'rgba(139,92,246,0.1)`:'transparent', color:view===v?C.violet:C.muted, fontSize:11, fontWeight:600, cursor:'pointer', fontFamily:'inherit', textTransform:'capitalize'}}>
+              style={{padding:'6px 12px', borderRadius:8, border:('1px solid ' + view===v?C.violet:C.border), background:view===v?'rgba(139,92,246,0.1)':'transparent', color:view===v?C.violet:C.muted, fontSize:11, fontWeight:600, cursor:'pointer', fontFamily:'inherit', textTransform:'capitalize'}}>
               {v}
             </button>
           ))}
           {([14,30,60] as const).map(h => (
             <button key={h} onClick={()=>setHorizon(h)}
-              style={{padding:'6px 12px', borderRadius:8, border:`1px solid ${horizon===h?C.amber:C.border}`, background:horizon===h?'rgba(245,158,11,0.1)`:'transparent', color:horizon===h?C.amber:C.muted, fontSize:11, fontWeight:600, cursor:'pointer', fontFamily:'inherit'}}>
+              style={{padding:'6px 12px', borderRadius:8, border:'1px solid ${horizon===h?C.amber:C.border}', background:horizon===h?'rgba(245,158,11,0.1)':'transparent', color:horizon===h?C.amber:C.muted, fontSize:11, fontWeight:600, cursor:'pointer', fontFamily:'inherit'}}>
               {h}d
             </button>
           ))}
@@ -148,10 +148,10 @@ export default function CashFlowPage() {
       <div style={{display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:12, marginBottom:24}}>
         {[
           { label:'Last 7 days actual', value:fmt(totalActualRevenue), color:C.green },
-          { label:`Next ${horizon}d forecast`, value:fmt(totalForecastRevenue), color:C.violet },
+          { label:('Next ' + horizon + 'd forecast'), value:fmt(totalForecastRevenue), color:C.violet },
           { label:'Projected net position', value:(netPosition>=0?'+':'')+fmt(netPosition), color:netPosition>=0?C.green:C.red },
         ].map(s => (
-          <div key={s.label} style={{background:C.card, border:`1px solid ${C.border}`, borderRadius:12, padding:'16px 20px'}}>
+          <div key={s.label} style={{background:C.card, border:('1px solid ' + C.border), borderRadius:12, padding:'16px 20px'}}>
             <div style={{fontSize:11, color:C.muted, textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:6}}>{s.label}</div>
             <div style={{fontSize:26, fontWeight:700, color:s.color}}>{s.value}</div>
           </div>
@@ -177,14 +177,14 @@ export default function CashFlowPage() {
       {loading ? (
         <div style={{color:C.muted, textAlign:'center', padding:'60px 0'}}>Calculating…</div>
       ) : view === 'chart' ? (
-        <div style={{position:'relative', height:320, background:C.card, borderRadius:12, border:`1px solid ${C.border}`, padding:'16px'}}>
+        <div style={{position:'relative', height:320, background:C.card, borderRadius:12, border:('1px solid ' + C.border), padding:'16px'}}>
           <canvas ref={chartRef} role="img" aria-label="Cash flow forecast chart showing actual and forecast revenue with cumulative net position" />
         </div>
       ) : (
         <div style={{overflowX:'auto'}}>
           <table style={{width:'100%', borderCollapse:'collapse', fontSize:12}}>
             <thead>
-              <tr style={{borderBottom:`1px solid ${C.border}`}}>
+              <tr style={{borderBottom:('1px solid ' + C.border)}}>
                 {['Date','Actual Revenue','Forecast','Est. Costs','Daily Net','Cumulative'].map(h => (
                   <th key={h} style={{padding:'8px 12px', textAlign:'left', color:C.dim, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.06em', fontSize:10}}>{h}</th>
                 ))}
@@ -194,7 +194,7 @@ export default function CashFlowPage() {
               {days.map((d, i) => {
                 const isToday = !d.is_past && i === 7
                 return (
-                  <tr key={d.date} style={{borderBottom:`1px solid ${C.border}`, background:isToday?'rgba(139,92,246,0.05)`:'transparent'}}>
+                  <tr key={d.date} style={{borderBottom:('1px solid ' + C.border), background:isToday?'rgba(139,92,246,0.05)`:'transparent'}}>
                     <td style={{padding:'8px 12px', fontWeight:isToday?700:400, color:isToday?C.violet:C.text}}>
                       {isToday && <span style={{fontSize:9, fontWeight:800, color:C.violet, marginRight:6, background:'rgba(139,92,246,0.15)', padding:'1px 5px', borderRadius:4}}>TODAY</span>}
                       {d.day}
