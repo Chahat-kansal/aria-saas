@@ -1068,12 +1068,6 @@ html[data-theme="light"] .pos-shell [style*="rgba(11,20,16"] {
 }
 
 /* ── Tailwind dark classes → Square light ────────────────────────────── */
-html[data-theme="light"] .pos-shell .bg-\[\#0A0910\],
-html[data-theme="light"] .pos-shell .bg-\[\#110F1A\],
-html[data-theme="light"] .pos-shell .bg-\[\#1A1728\] { background-color: #FFFFFF !important; }
-[data-pos-theme="light"] .pos-shell .bg-\[\#0A0910\],
-[data-pos-theme="light"] .pos-shell .bg-\[\#110F1A\],
-[data-pos-theme="light"] .pos-shell .bg-\[\#1A1728\] { background-color: #FFFFFF !important; }
 
 html[data-theme="light"] .pos-shell .text-white { color: #1A1A1A !important; }
 [data-pos-theme="light"] .pos-shell .text-white { color: #1A1A1A !important; }
