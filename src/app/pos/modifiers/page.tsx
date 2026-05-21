@@ -92,7 +92,7 @@ export default function ModifiersPage() {
         </div>
         <button onClick={() => { setForm({ name: '', price_adjustment: '0', modifier_group: 'Extras' }); setEditId(null); setShowAdd(true); }}
           className="px-4 py-2 rounded-xl text-sm font-semibold text-white"
-          style={{ background: '#8B5CF6' }}>
+          style={{ background: '#006AFF' }}>
           + Add modifier
         </button>
       </div>
@@ -104,7 +104,7 @@ export default function ModifiersPage() {
           <p className="text-4xl mb-3">⚙️</p>
           <p className="text-sm font-semibold text-[#1a1a16] mb-1">No modifiers yet</p>
           <p className="text-xs text-[rgba(26,26,22,0.4)] mb-4">Create modifiers like &ldquo;Extra shot +$0.80&rdquo; or &ldquo;No onion&rdquo; and attach them to products.</p>
-          <button onClick={() => setShowAdd(true)} className="px-4 py-2 rounded-xl text-sm font-medium text-white" style={{ background: '#8B5CF6' }}>
+          <button onClick={() => setShowAdd(true)} className="px-4 py-2 rounded-xl text-sm font-medium text-white" style={{ background: '#006AFF' }}>
             Create your first modifier
           </button>
         </div>
@@ -179,7 +179,7 @@ export default function ModifiersPage() {
               </button>
               <button onClick={save} disabled={saving || !form.name.trim()}
                 className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white disabled:opacity-50"
-                style={{ background: '#8B5CF6' }}>
+                style={{ background: '#006AFF' }}>
                 {saving ? 'Saving…' : editId ? 'Save' : 'Add'}
               </button>
             </div>
