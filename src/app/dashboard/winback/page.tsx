@@ -10,6 +10,13 @@ function daysAgo(date: string | null) {
   return Math.floor((Date.now() - new Date(date).getTime()) / 86400000)
 }
 
+const C = {
+  bg: 'var(--bg-base)', card: 'var(--bg-surface)', text: 'var(--text-primary)',
+  muted: 'var(--text-secondary)', dim: 'var(--text-tertiary)',
+  green: '#22C55E', amber: '#F59E0B', violet: '#8B5CF6', red: '#EF4444',
+  border: 'rgba(255,255,255,0.07)',
+}
+
 export default function WinbackPage() {
   const { business } = useBusinessContext()
   const [customers, setCustomers] = useState<LapsedCustomer[]>([])
@@ -21,6 +28,7 @@ export default function WinbackPage() {
   const [sending, setSending] = useState(false)
   const [sendResult, setSendResult] = useState<{ sent: number; failed: number; noPhone: number } | null>(null)
   const [activeTab, setActiveTab] = useState<'customers' | 'campaigns'>('customers')
+  // Single source of truth — lapsedDays only, no lapsedFilter
   const [lapsedDays, setLapsedDays] = useState(60)
 
   const load = useCallback(async () => {
@@ -32,10 +40,7 @@ export default function WinbackPage() {
       fetch('/api/campaigns?business_id=' + business.id + '&type=winback').then(r => r.json()).catch(() => ({ campaigns: [] })),
     ])
     const all: LapsedCustomer[] = custRes.customers ?? custRes.data ?? []
-    const lapsed = all.filter(c => {
-      if (!c.last_visit_at) return true
-      return c.last_visit_at < cutoff
-    })
+    const lapsed = all.filter(c => !c.last_visit_at || c.last_visit_at < cutoff)
     setCustomers(lapsed)
     setCampaigns(campRes.campaigns ?? campRes.data ?? [])
     const initSel: Record<string, boolean> = {}
@@ -82,13 +87,6 @@ export default function WinbackPage() {
 
   const selectedCount = Object.values(selected).filter(Boolean).length
   const withPhone = customers.filter(c => c.phone).length
-
-  const C = {
-    bg: 'var(--bg-base)', card: 'var(--bg-surface)', text: 'var(--text-primary)',
-    muted: 'var(--text-secondary)', dim: 'var(--text-tertiary)',
-    green: '#22C55E', amber: '#F59E0B', violet: '#8B5CF6', red: '#EF4444',
-    border: 'rgba(255,255,255,0.07)',
-  }
 
   return (
     <div style={{ minHeight: '100%', background: C.bg, color: C.text, fontFamily: "'Inter',sans-serif", padding: '24px 28px' }}>
@@ -147,7 +145,7 @@ export default function WinbackPage() {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                   <button onClick={() => {
                     const allSelected = customers.filter(c => c.phone).every(c => selected[c.id])
-                    const newSel: Record<string,boolean> = {}
+                    const newSel: Record<string, boolean> = {}
                     if (!allSelected) customers.filter(c => c.phone).forEach(c => { newSel[c.id] = true })
                     setSelected(newSel)
                   }}
@@ -156,16 +154,7 @@ export default function WinbackPage() {
                   </button>
                   <span style={{ fontSize: 11, color: C.dim }}>{selectedCount} selected</span>
                 </div>
-
-      <div style={{display: 'flex', gap: 8, marginBottom: 16}}>
-        {([30, 60, 90] as const).map(d => (
-          <button key={d} onClick={() => setLapsedFilter(d)}
-            style={{padding: '6px 14px', borderRadius: 8, border: '1px solid ' + (lapsedFilter === d ? '#8B5CF6' : 'rgba(255,255,255,0.1)'), background: lapsedFilter === d ? 'rgba(139,92,246,0.15)' : 'transparent', color: lapsedFilter === d ? '#8B5CF6' : 'rgba(255,255,255,0.5)', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit'}}>
-            {d}+ days lapsed
-          </button>
-        ))}
-      </div>
-                {customers.filter(c => { if (!c.last_visit_at) return true; return (Date.now() - new Date(c.last_visit_at).getTime()) > lapsedFilter * 86400000 }).map(c => {
+                {customers.map(c => {
                   const days = daysAgo(c.last_visit_at)
                   const isSelected = selected[c.id]
                   return (

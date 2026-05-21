@@ -270,7 +270,7 @@ export default function ReviewsPage() {
       )}
 
       {/* Auto-request automation toggle */}
-      <div style={{ marginBottom: 16, padding: '14px 18px', background: autoRequestEnabled ? 'rgba(127,184,151,0.08)' : 'rgba(127,184,151,0.04)', borderRadius: 10, border: ('1px solid ' + autoRequestEnabled ? 'rgba(127,184,151,0.3)' : 'rgba(127,184,151,0.15)'), display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+      <div style={{ marginBottom: 16, padding: '14px 18px', background: autoRequestEnabled ? 'rgba(127,184,151,0.08)' : 'rgba(127,184,151,0.04)', borderRadius: 10, border: autoRequestEnabled ? '1px solid rgba(127,184,151,0.3)' : '1px solid rgba(127,184,151,0.15)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
         <div style={{ flex: 1, minWidth: 240 }}>
           <p style={{ fontSize: 14, fontWeight: 700, color: '#7FB897', display: 'flex', alignItems: 'center', gap: 8 }}>
             {autoRequestEnabled ? '🤖 Autopilot ON' : '⚙️ Review request automation'}
