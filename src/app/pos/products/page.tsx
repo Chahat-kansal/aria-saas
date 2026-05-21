@@ -226,7 +226,7 @@ export default function ProductsPage() {
               Export CSV
             </button>
             {credits && (
-              <span style={{ fontSize: 11, padding: '4px 10px', borderRadius: 20, background: '#FAFAFA', border: '1px solid rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.4)', whiteSpace: 'nowrap' }}>
+              <span style={{ fontSize: 11, padding: '4px 10px', borderRadius: 20, background: 'rgba(127,184,151,0.12)', border: '1px solid rgba(127,184,151,0.3)', color: '#7FB897', whiteSpace: 'nowrap' }}>
                 🖼 {credits.free_remaining > 0
                   ? `${credits.free_remaining} free image${credits.free_remaining !== 1 ? 's' : ''}`
                   : credits.paid_credits > 0
