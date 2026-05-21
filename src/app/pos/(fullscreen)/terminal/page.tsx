@@ -1639,7 +1639,7 @@ export default function TerminalPage() {
       {/* Keyboard shortcuts modal — additive */}
       {showShortcutsModal && (
         <div onClick={() => setShowShortcutsModal(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div onClick={e => e.stopPropagation()} style={{ background: 'var(--bg-elevated)', borderRadius: 16, padding: '24px 28px', maxWidth: 400, width: '90vw', boxShadow: 'var(--shadow-lg)', fontFamily: "'Manrope',sans-serif" }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: 'var(--bg-ghost)', borderRadius: 16, padding: '24px 28px', maxWidth: 400, width: '90vw', boxShadow: 'var(--shadow-lg)', fontFamily: "'Manrope',sans-serif" }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
               <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>Keyboard Shortcuts</h3>
               <button onClick={() => setShowShortcutsModal(false)} style={{ background: 'none', border: 'none', color: 'var(--text-tertiary)', fontSize: 18, cursor: 'pointer', lineHeight: 1 }}>×</button>
@@ -1684,7 +1684,7 @@ export default function TerminalPage() {
                 const m = cMeta[cn] ?? cMeta.other;
                 const initials = item.product.name.split(' ').map((w: string) => w[0]).join('').slice(0,2).toUpperCase();
                 return (
-                  <div key={cartKey(item)} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 8, background: 'var(--bg-elevated)' }}>
+                  <div key={cartKey(item)} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 8, background: 'var(--bg-ghost)' }}>
                     <div style={{ width: 28, height: 28, borderRadius: 7, background: `linear-gradient(135deg,${m.a}33,${m.b}66)`, border: `1px solid ${m.a}44`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 800, color: m.a, fontFamily: "'JetBrains Mono',monospace", flexShrink: 0 }}>{initials}</div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.label ?? item.product.name}</div>
@@ -1729,7 +1729,7 @@ export default function TerminalPage() {
                 { id: 'direct_deposit' as const, label: 'Direct Dep.',icon: '🏦', color: '#F59E0B' },
               ]).map(m => (
                 <button key={m.id} onClick={() => setPayMethod(m.id)}
-                  style={{ flex: 1, height: 60, borderRadius: 12, border: `1.5px solid ${payMethod === m.id ? m.color + '55' : 'var(--violet-dim)'}`, background: payMethod === m.id ? `${m.color}12` : 'var(--bg-surface)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, cursor: 'pointer', transition: 'all 200ms', transform: payMethod === m.id ? 'translateY(-2px)' : 'none', boxShadow: payMethod === m.id ? `0 6px 20px ${m.color}33` : 'none' }}>
+                  style={{ flex: 1, height: 60, borderRadius: 12, border: `1.5px solid ${payMethod === m.id ? m.color + '55' : 'var(--violet-dim)'}`, background: payMethod === m.id ? `${m.color}12` : 'var(--bg-ghost)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, cursor: 'pointer', transition: 'all 200ms', transform: payMethod === m.id ? 'translateY(-2px)' : 'none', boxShadow: payMethod === m.id ? `0 6px 20px ${m.color}33` : 'none' }}>
                   <span style={{ fontSize: 18 }}>{m.icon}</span>
                   <span style={{ fontSize: 10, fontWeight: 700, color: payMethod === m.id ? m.color : 'var(--text-tertiary)', fontFamily: 'inherit' }}>{m.label}</span>
                 </button>
@@ -1775,7 +1775,7 @@ export default function TerminalPage() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10, width: 280 }}>
                   <div style={{ display: 'flex', gap: 6 }}>
                     {[...new Set([roundedTotal, Math.ceil(roundedTotal/5)*5, Math.ceil(roundedTotal/10)*10, 50, 100].filter(a=>a>=roundedTotal))].slice(0,4).map(a => (
-                      <button key={a} onClick={() => setCashTendered(a.toFixed(2))} style={{ flex: 1, height: 32, borderRadius: 8, border: '1px solid var(--border-default)', background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: "'JetBrains Mono',monospace" }}>A${a.toFixed(0)}</button>
+                      <button key={a} onClick={() => setCashTendered(a.toFixed(2))} style={{ flex: 1, height: 32, borderRadius: 8, border: '1px solid var(--border-default)', background: 'var(--bg-ghost)', color: 'var(--text-primary)', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: "'JetBrains Mono',monospace" }}>A${a.toFixed(0)}</button>
                     ))}
                   </div>
                   <div style={{ background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(0,106,255,0.10)', borderRadius: 12, padding: '10px 14px', textAlign: 'right' }}>
@@ -2124,7 +2124,7 @@ export default function TerminalPage() {
 
           {/* Quick panel slide-out */}
           {showQuickPanel && (
-            <div ref={quickPanelRef} className="absolute inset-0 z-20 flex flex-col" style={{ background: 'var(--bg-elevated)', boxShadow: '4px 0 24px rgba(0,0,0,0.5)' }}>
+            <div ref={quickPanelRef} className="absolute inset-0 z-20 flex flex-col" style={{ background: 'var(--bg-ghost)', boxShadow: '4px 0 24px rgba(0,0,0,0.5)' }}>
               <div className="flex items-center justify-between px-4 py-3" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
                 <div>
                   <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{businessName}</p>
@@ -2334,9 +2334,9 @@ export default function TerminalPage() {
               <div className="grid grid-cols-2 gap-2">
                 {[...Array(8)].map((_, i) => (
                   <div key={i} className="rounded-2xl p-3 animate-pulse" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-default)' }}>
-                    <div className="h-12 rounded-lg mb-2" style={{ background: 'var(--bg-elevated)' }} />
+                    <div className="h-12 rounded-lg mb-2" style={{ background: 'var(--bg-ghost)' }} />
                     <div className="h-3 rounded mb-1" style={{ background: 'rgba(255,255,255,0.06)', width: '70%' }} />
-                    <div className="h-3 rounded" style={{ background: 'var(--bg-elevated)', width: '45%' }} />
+                    <div className="h-3 rounded" style={{ background: 'var(--bg-ghost)', width: '45%' }} />
                   </div>
                 ))}
               </div>
@@ -2453,7 +2453,7 @@ export default function TerminalPage() {
                         }}
                         onContextMenu={e => { e.preventDefault(); setContextMenu({ product: p, x: e.clientX, y: e.clientY }); }}
                         style={{
-                          background: 'var(--bg-elevated)',
+                          background: 'var(--bg-ghost)',
                           boxShadow: 'var(--shadow-card)',
                           borderRadius: 18,
                           padding: 0,
@@ -2613,7 +2613,7 @@ export default function TerminalPage() {
                       className="text-xs rounded-lg px-2.5 py-1.5 outline-none w-28"
                       style={{ border: '1px dashed var(--border-strong)', color: 'var(--text-secondary)', background: 'transparent' }} />
                     {customerResults.length > 0 && (
-                      <div className="absolute top-full mt-1 right-0 rounded-xl shadow-xl z-30 overflow-hidden w-48" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-default)' }}>
+                      <div className="absolute top-full mt-1 right-0 rounded-xl shadow-xl z-30 overflow-hidden w-48" style={{ background: 'var(--bg-ghost)', border: '1px solid var(--border-default)' }}>
                         {customerResults.map(c => (
                           <button key={c.id}
                             onMouseDown={e => { e.preventDefault(); setCustomer(c); setCustomerSearch(''); setCustomerResults([]); }}
@@ -2962,7 +2962,7 @@ export default function TerminalPage() {
           <div className="flex-shrink-0 px-3 pb-2">
             <p className="text-[10px] uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-tertiary)' }}>Often bought together</p>
             {suggestionsLoading ? (
-              <div className="h-6 rounded animate-pulse w-2/3" style={{ background: 'var(--bg-elevated)' }} />
+              <div className="h-6 rounded animate-pulse w-2/3" style={{ background: 'var(--bg-ghost)' }} />
             ) : (
               <div className="flex flex-wrap gap-1.5">
                 {suggestions.map(s => {
@@ -2972,7 +2972,7 @@ export default function TerminalPage() {
                       onClick={() => prod && checkAndAddToCart(prod)}
                       disabled={!prod}
                       className="text-xs rounded-lg px-2.5 py-1.5 disabled:opacity-40 transition-all"
-                      style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', color: 'var(--text-secondary)' }}
+                      style={{ background: 'var(--bg-ghost)', border: '1px solid var(--border-default)', color: 'var(--text-secondary)' }}
                       onMouseEnter={e => { const el = e.currentTarget as HTMLButtonElement; el.style.border = '1px solid rgba(0,106,255,0.18)'; el.style.background = 'rgba(139,92,246,0.06)'; }}
                       onMouseLeave={e => { const el = e.currentTarget as HTMLButtonElement; el.style.border = '1px solid var(--border-default)'; el.style.background = 'var(--bg-elevated)'; }}>
                       {s.name} <span style={{ color: 'var(--violet)', fontFamily: "'JetBrains Mono',monospace" }}>+A${s.price?.toFixed(2)}</span>
@@ -3026,7 +3026,7 @@ export default function TerminalPage() {
 
         {/* Ask Aria input */}
         <div className="flex-shrink-0 px-3 pb-2">
-          <div className="flex gap-1.5 items-center rounded-[10px] px-3 py-2.5" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-default)' }}>
+          <div className="flex gap-1.5 items-center rounded-[10px] px-3 py-2.5" style={{ background: 'var(--bg-ghost)', border: '1px solid var(--border-default)' }}>
             <input value={chatInput} onChange={e => setChatInput(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendAriaChat(); } }}
               placeholder="Ask Aria…"
@@ -3121,8 +3121,8 @@ export default function TerminalPage() {
 
       {/* Variant / Modifier modal */}
       {variantModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'var(--bg-elevated)' }}>
-          <div className="rounded-2xl w-full max-w-sm overflow-hidden" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'var(--bg-ghost)' }}>
+          <div className="rounded-2xl w-full max-w-sm overflow-hidden" style={{ background: 'var(--bg-ghost)', border: '1px solid var(--border-default)', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
             <div className="px-6 py-5" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
               <h2 className="text-base font-bold" style={{ color: 'var(--text-primary)' }}>{variantModal.product.name}</h2>
               <p className="text-xs mt-0.5" style={{ color: 'var(--text-tertiary)' }}>
@@ -3193,8 +3193,8 @@ export default function TerminalPage() {
 
       {/* Open Register modal */}
       {showRegisterModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'var(--bg-elevated)' }}>
-          <div className="rounded-2xl w-full max-w-sm overflow-hidden" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'var(--bg-ghost)' }}>
+          <div className="rounded-2xl w-full max-w-sm overflow-hidden" style={{ background: 'var(--bg-ghost)', border: '1px solid var(--border-default)', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
             <div className="px-6 py-5" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
               <h2 className="text-base font-bold" style={{ color: 'var(--text-primary)' }}>Open Register</h2>
               <p className="text-xs mt-0.5" style={{ color: 'var(--text-tertiary)' }}>Enter opening float to start trading.</p>
@@ -3222,8 +3222,8 @@ export default function TerminalPage() {
 
       {/* Close Register modal */}
       {showCloseModal && registerSession && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'var(--bg-elevated)' }}>
-          <div className="rounded-2xl w-full max-w-sm overflow-hidden" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'var(--bg-ghost)' }}>
+          <div className="rounded-2xl w-full max-w-sm overflow-hidden" style={{ background: 'var(--bg-ghost)', border: '1px solid var(--border-default)', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
             <div className="px-6 py-5" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
               <h2 className="text-base font-bold" style={{ color: 'var(--text-primary)' }}>Close Register</h2>
               <p className="text-xs mt-0.5" style={{ color: 'var(--text-tertiary)' }}>
@@ -3253,8 +3253,8 @@ export default function TerminalPage() {
 
       {/* Parked sales drawer */}
       {showParked && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center p-4 md:items-center" style={{ background: 'var(--bg-elevated)' }}>
-          <div className="rounded-2xl w-full max-w-md overflow-hidden" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
+        <div className="fixed inset-0 z-50 flex items-end justify-center p-4 md:items-center" style={{ background: 'var(--bg-ghost)' }}>
+          <div className="rounded-2xl w-full max-w-md overflow-hidden" style={{ background: 'var(--bg-ghost)', border: '1px solid var(--border-default)', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
             <div className="px-6 py-5 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
               <h2 className="text-base font-bold" style={{ color: 'var(--text-primary)' }}>Parked Sales</h2>
               <button onClick={() => setShowParked(false)} className="text-xl leading-none" style={{ color: 'var(--text-tertiary)' }}>×</button>
@@ -3284,8 +3284,8 @@ export default function TerminalPage() {
 
       {/* Layby modal — additive */}
       {showLaybyModal && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 55, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, background: 'var(--bg-elevated)' }}>
-          <div style={{ background: 'var(--bg-elevated)', border: '1px solid rgba(0,106,255,0.18)', borderRadius: 20, width: '100%', maxWidth: 420, overflow: 'hidden', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
+        <div style={{ position: 'fixed', inset: 0, zIndex: 55, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, background: 'var(--bg-ghost)' }}>
+          <div style={{ background: 'var(--bg-ghost)', border: '1px solid rgba(0,106,255,0.18)', borderRadius: 20, width: '100%', maxWidth: 420, overflow: 'hidden', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
             <div style={{ padding: '18px 22px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div>
                 <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>Save as Layby</div>
@@ -3336,7 +3336,7 @@ export default function TerminalPage() {
       {/* Missed sale modal */}
       {showMissedModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-          <div className="rounded-2xl w-full max-w-sm overflow-hidden" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
+          <div className="rounded-2xl w-full max-w-sm overflow-hidden" style={{ background: 'var(--bg-ghost)', border: '1px solid var(--border-default)', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
             <div className="px-6 py-5" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
               <h2 className="text-base font-bold" style={{ color: 'var(--text-primary)' }}>Log Missed Sale</h2>
               <p className="text-xs mt-0.5" style={{ color: 'var(--text-tertiary)' }}>Record what a customer asked for that you didn't stock</p>
@@ -3381,8 +3381,8 @@ export default function TerminalPage() {
 
       {/* Custom item / Note modal */}
       {showCustomItem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'var(--bg-elevated)' }}>
-          <div className="rounded-2xl w-full max-w-sm overflow-hidden" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'var(--bg-ghost)' }}>
+          <div className="rounded-2xl w-full max-w-sm overflow-hidden" style={{ background: 'var(--bg-ghost)', border: '1px solid var(--border-default)', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
             <div className="px-6 py-5" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
               <h2 className="text-base font-bold" style={{ color: 'var(--text-primary)' }}>
                 {customItemForm.isNote ? 'Add Note to Cart' : 'Custom Item'}
@@ -3438,8 +3438,8 @@ export default function TerminalPage() {
 
       {/* Price check overlay */}
       {priceCheckProd && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'var(--bg-elevated)' }}>
-          <div className="rounded-2xl w-full max-w-xs overflow-hidden" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'var(--bg-ghost)' }}>
+          <div className="rounded-2xl w-full max-w-xs overflow-hidden" style={{ background: 'var(--bg-ghost)', border: '1px solid var(--border-default)', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
             <div className="px-6 py-4 text-center" style={{ background: 'var(--violet-dim)', borderBottom: '1px solid rgba(0,106,255,0.10)' }}>
               <p className="text-xs font-medium uppercase tracking-wider mb-1" style={{ color: 'var(--violet)' }}>Price Check</p>
               <h2 className="text-lg font-bold text-gray-900">{priceCheckProd.name}</h2>
@@ -3481,8 +3481,8 @@ export default function TerminalPage() {
 
       {/* ── Weight entry modal ─────────────────────────────────────── */}
       {weightModal && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 60, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, background: 'var(--bg-elevated)' }}>
-          <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: 20, padding: '28px 28px 24px', width: '100%', maxWidth: 360, boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
+        <div style={{ position: 'fixed', inset: 0, zIndex: 60, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, background: 'var(--bg-ghost)' }}>
+          <div style={{ background: 'var(--bg-ghost)', border: '1px solid var(--border-default)', borderRadius: 20, padding: '28px 28px 24px', width: '100%', maxWidth: 360, boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
             <div style={{ marginBottom: 20 }}>
               <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>
                 ⚖️ Enter weight
@@ -3650,8 +3650,8 @@ export default function TerminalPage() {
 
       {/* Refund modal */}
       {showRefundModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'var(--bg-elevated)' }}>
-          <div className="rounded-2xl w-full max-w-lg overflow-hidden" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'var(--bg-ghost)' }}>
+          <div className="rounded-2xl w-full max-w-lg overflow-hidden" style={{ background: 'var(--bg-ghost)', border: '1px solid var(--border-default)', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
             <div className="px-6 py-5 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
               <div>
                 <h2 className="text-base font-bold" style={{ color: 'var(--text-primary)' }}>Process Refund</h2>
@@ -3730,8 +3730,8 @@ export default function TerminalPage() {
 
       {/* Cashier switch modal */}
       {showCashierModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'var(--bg-elevated)' }}>
-          <div className="rounded-2xl w-full max-w-sm overflow-hidden" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'var(--bg-ghost)' }}>
+          <div className="rounded-2xl w-full max-w-sm overflow-hidden" style={{ background: 'var(--bg-ghost)', border: '1px solid var(--border-default)', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
             <div className="px-6 py-5" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
               <h2 className="text-base font-bold" style={{ color: 'var(--text-primary)' }}>Switch Cashier</h2>
               <p className="text-xs mt-0.5" style={{ color: 'var(--text-tertiary)' }}>Current: {registerSession?.opened_by ?? 'Unknown'}</p>
@@ -3757,8 +3757,8 @@ export default function TerminalPage() {
 
       {/* Receipt reprint modal */}
       {reprintSale && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'var(--bg-elevated)' }}>
-          <div className="rounded-2xl w-full max-w-xs overflow-hidden" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'var(--bg-ghost)' }}>
+          <div className="rounded-2xl w-full max-w-xs overflow-hidden" style={{ background: 'var(--bg-ghost)', border: '1px solid var(--border-default)', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
             <div className="px-5 py-4 flex items-center justify-between" style={{ background: 'var(--success-bg)', borderBottom: '1px solid rgba(34,197,94,0.15)' }}>
               <p className="font-semibold text-gray-900 text-sm">#{reprintSale.id.slice(-6).toUpperCase()}</p>
               <button onClick={() => setReprintSale(null)} className="text-gray-400 hover:text-gray-600">×</button>
@@ -3770,7 +3770,7 @@ export default function TerminalPage() {
             </div>
             <div className="px-5 pb-5 flex gap-2">
               <button onClick={() => setReprintSale(null)} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-500">Close</button>
-              <button onClick={() => window.print()} className="flex-1 py-2.5 rounded-xl text-sm font-medium" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', color: 'var(--text-secondary)' }}>🖨️ Print</button>
+              <button onClick={() => window.print()} className="flex-1 py-2.5 rounded-xl text-sm font-medium" style={{ background: 'var(--bg-ghost)', border: '1px solid var(--border-default)', color: 'var(--text-secondary)' }}>🖨️ Print</button>
             </div>
           </div>
         </div>
@@ -3780,7 +3780,7 @@ export default function TerminalPage() {
       {contextMenu && (
         <div className="fixed z-50" style={{ top: contextMenu.y, left: contextMenu.x }}
           onClick={() => setContextMenu(null)}>
-          <div className="rounded-xl py-1 min-w-44" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', boxShadow: '0 12px 32px rgba(0,0,0,0.6)' }}
+          <div className="rounded-xl py-1 min-w-44" style={{ background: 'var(--bg-ghost)', border: '1px solid var(--border-default)', boxShadow: '0 12px 32px rgba(0,0,0,0.6)' }}
             onClick={e => e.stopPropagation()}>
             {[
               { label: 'View price & stock', action: () => { setPriceCheckProd(contextMenu.product); setContextMenu(null); } },
@@ -3810,7 +3810,7 @@ export default function TerminalPage() {
       {/* Age verification modal */}
       {showAgeModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(8,6,16,0.92)' }}>
-          <div className="rounded-2xl w-full max-w-sm overflow-hidden" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
+          <div className="rounded-2xl w-full max-w-sm overflow-hidden" style={{ background: 'var(--bg-ghost)', border: '1px solid var(--border-default)', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
             <div className="px-6 py-5" style={{ background: 'var(--destructive-bg)', borderBottom: '1px solid rgba(255,22,0,0.10)' }}>
               <div className="flex items-center gap-3">
                 <span className="text-3xl">🔞</span>
@@ -3844,7 +3844,7 @@ export default function TerminalPage() {
       {/* Variant loading overlay */}
       {variantLoading && (
         <div className="fixed inset-0 z-40 flex items-center justify-center" style={{ background: 'rgba(8,6,16,0.5)' }}>
-          <div className="rounded-xl px-6 py-4 flex items-center gap-3" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-default)' }}>
+          <div className="rounded-xl px-6 py-4 flex items-center gap-3" style={{ background: 'var(--bg-ghost)', border: '1px solid var(--border-default)' }}>
             <Spinner /><span className="text-sm" style={{ color: 'var(--text-secondary)' }}>Loading options…</span>
           </div>
         </div>
