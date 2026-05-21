@@ -1,53 +1,3 @@
-
-/* == CORE FIX: data-pos-theme="light" sets vars on the ThemeProvider wrapper == */
-[data-pos-theme="light"] {
-  --bg-base:     #F6F6F4;
-  --bg-canvas:   #F0F0EE;
-  --bg-surface:  #FFFFFF;
-  --bg-elevated: #FFFFFF;
-  --bg-hover:    #F0F0EE;
-  --bg-active:   #E8E8E6;
-  --bg-input:    #FFFFFF;
-  --bg-card:     #FFFFFF;
-  --border-subtle:  #EBEBEB;
-  --border-default: #D9D9D9;
-  --border-strong:  #BABABA;
-  --divider:        #EBEBEB;
-  --text-primary:   #1A1A1A;
-  --text-secondary: #6B6B6B;
-  --text-tertiary:  #999999;
-  --violet:         #006AFF;
-  --violet-600:     #0055CC;
-  --violet-dim:     rgba(0,106,255,0.08);
-  --violet-soft:    rgba(0,106,255,0.05);
-  --green:          #006AFF;
-  --success:        #00B140;
-  --success-bg:     rgba(0,177,64,0.08);
-  --warning:        #B87503;
-  --warning-bg:     rgba(184,117,3,0.08);
-  --destructive:    #FF1600;
-  --destructive-bg: rgba(255,22,0,0.06);
-  --shadow-sm:   0 1px 2px rgba(0,0,0,0.06);
-  --shadow-md:   0 2px 8px rgba(0,0,0,0.08);
-  --shadow-lg:   0 8px 24px rgba(0,0,0,0.10);
-  --shadow-card: 0 0 0 1px #EBEBEB, 0 1px 3px rgba(0,0,0,0.05);
-  /* pos-* compat aliases */
-  --pos-base:           #F6F6F4;
-  --pos-surface:        #FFFFFF;
-  --pos-elevated:       #FFFFFF;
-  --pos-hover:          #F0F0EE;
-  --pos-border-default: #D9D9D9;
-  --pos-accent:         #006AFF;
-  --pos-text-primary:   #1A1A1A;
-  --pos-text-secondary: #6B6B6B;
-  --pos-text-tertiary:  #999999;
-  --pos-success:        #00B140;
-  --pos-danger:         #FF1600;
-}
-[data-pos-theme="light"] .pos-shell {
-  background: #F6F6F4;
-  color: #1A1A1A;
-}
 @import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;450;500;600;700;800&family=Manrope:wght@400;450;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
 /* Inter replaces Manrope  cleaner at all sizes, better legibility on retail screens */
 
@@ -101,7 +51,7 @@
   --dur-base: 250ms;
   --dur-slow: 400ms;
 
-  /* -- Backwards-compat aliases (existing components use --pos-* names) -- */
+  /*  Backwards-compat aliases (existing components use --pos-* names)  */
   --pos-base:           #0A0910;
   --pos-surface:        #110F1A;
   --pos-elevated:       #1A1728;
@@ -142,83 +92,52 @@
 }
 
 
-/* ==================================================================
-   SQUARE-INSPIRED LIGHT THEME  applied to all POS pages
-   Source: Square POS design system (Block Inc.)
-   Primary: #006AFF  |  Canvas: #F6F6F4  |  Text: #1A1A1A
-   Sidebar: #1A1A1A  |  Success: #00B140  |  Error: #FF1600
-   Font: Inter, Helvetica Neue, -apple-system (Square uses SF Pro / Helvetica)
-   Radii: 8px cards, 6px inputs, 4px small  flat, no glass, no gradients
-=============================================================== */
+/* -- Square POS design system light theme ----------------------------- */
 html[data-theme="light"] .pos-shell,
 html[data-theme="light"] .pos-sidebar-wrapper,
 [data-pos-theme="light"] .pos-shell,
 [data-pos-theme="light"] .pos-sidebar-wrapper {
-
-  /* -- Backgrounds ----------------------------------------------- */
-  --bg-base:     #F6F6F4;   /* Square warm off-white canvas */
-  --bg-surface:  #FFFFFF;   /* Cards, panels */
-  --bg-elevated: #FFFFFF;   /* Modals, dropdowns */
-  --bg-overlay:  rgba(255,255,255,0.97);
-  --bg-hover:    #F0F0EE;   /* Square hover  very subtle warm gray */
-  --bg-active:   #E8E8E6;   /* Pressed/selected */
-  --bg-card:     #FFFFFF;
-  --bg-input:    #FFFFFF;   /* Square inputs are pure white */
-
-  /* -- Borders --------------------------------------------------- */
-  --border-subtle:  #EBEBEB;  /* Square light divider */
-  --border-default: #D9D9D9;  /* Square standard border */
-  --border-strong:  #BABABA;  /* Square strong border */
-  --border-violet:  rgba(0,106,255,0.35);
-  --divider:        #EBEBEB;
-
-  /* -- Primary accent  Square Blue ----------------------------- */
-  --violet:         #006AFF;  /* Square primary blue */
-  --violet-600:     #0055CC;  /* Darker blue  hover on primary actions */
-  --violet-700:     #003D99;  /* Pressed state */
-  --violet-dim:     rgba(0,106,255,0.08);
-  --violet-glow:    rgba(0,106,255,0.16);
-  --violet-soft:    rgba(0,106,255,0.05);
-  --green:          #006AFF;  /* Alias for any green-branded component */
-
-  /* -- Text ------------------------------------------------------ */
-  --text-primary:   #1A1A1A;  /* Square near-black  their exact body text */
-  --text-secondary: #6B6B6B;  /* Square secondary  mid gray */
-  --text-tertiary:  #999999;  /* Square placeholder / muted */
-  --text-violet:    #006AFF;
-  --text-cyan:      #006AFF;
-  --text-inverse:   #FFFFFF;
-
-  /* -- Semantic colours ------------------------------------------ */
-  --success:         #00B140;  /* Square green  exact */
-  --success-bg:      rgba(0,177,64,0.08);
-  --warning:         #B87503;  /* Square amber */
-  --warning-bg:      rgba(184,117,3,0.08);
-  --destructive:     #FF1600;  /* Square red  exact from dev docs */
-  --destructive-bg:  rgba(255,22,0,0.06);
-  --info:            #006AFF;
-  --info-bg:         rgba(0,106,255,0.06);
-
-  /* -- Backwards-compat pos-* aliases --------------------------- */
+  --bg-base:            #F6F6F4;
+  --bg-surface:         #FFFFFF;
+  --bg-elevated:        #FFFFFF;
+  --bg-overlay:         rgba(255,255,255,0.97);
+  --bg-hover:           #F0F0EE;
+  --bg-active:          #E8E8E6;
+  --bg-card:            #FFFFFF;
+  --bg-input:           #FFFFFF;
+  --border-subtle:      #EBEBEB;
+  --border-default:     #D9D9D9;
+  --border-strong:      #BABABA;
+  --border-violet:      rgba(0,106,255,0.35);
+  --divider:            #EBEBEB;
+  --violet:             #006AFF;
+  --violet-600:         #0055CC;
+  --violet-700:         #003D99;
+  --violet-dim:         rgba(0,106,255,0.08);
+  --violet-glow:        rgba(0,106,255,0.16);
+  --violet-soft:        rgba(0,106,255,0.05);
+  --green:              #006AFF;
+  --text-primary:       #1A1A1A;
+  --text-secondary:     #6B6B6B;
+  --text-tertiary:      #999999;
+  --text-violet:        #006AFF;
+  --text-inverse:       #FFFFFF;
+  --success:            #00B140;
+  --success-bg:         rgba(0,177,64,0.08);
+  --warning:            #B87503;
+  --warning-bg:         rgba(184,117,3,0.08);
+  --destructive:        #FF1600;
+  --destructive-bg:     rgba(255,22,0,0.06);
   --pos-base:           #F6F6F4;
   --pos-surface:        #FFFFFF;
   --pos-elevated:       #FFFFFF;
   --pos-hover:          #F0F0EE;
-  --pos-active:         #E8E8E6;
-  --pos-border-subtle:  #EBEBEB;
   --pos-border-default: #D9D9D9;
-  --pos-border-strong:  #BABABA;
-  --pos-border-accent:  rgba(0,106,255,0.35);
-  --pos-border-teal:    rgba(0,106,255,0.25);
-  --pos-border-violet:  rgba(0,106,255,0.35);
   --pos-accent:         #006AFF;
   --pos-accent-600:     #0055CC;
   --pos-accent-dim:     rgba(0,106,255,0.08);
-  --pos-accent-glow:    rgba(0,106,255,0.16);
   --pos-teal:           #006AFF;
   --pos-teal-600:       #0055CC;
-  --pos-teal-dim:       rgba(0,106,255,0.08);
-  --pos-teal-glow:      rgba(0,106,255,0.16);
   --pos-text-primary:   #1A1A1A;
   --pos-text-secondary: #6B6B6B;
   --pos-text-tertiary:  #999999;
@@ -228,137 +147,47 @@ html[data-theme="light"] .pos-sidebar-wrapper,
   --pos-success:        #00B140;
   --pos-warning:        #B87503;
   --pos-danger:         #FF1600;
-
-  /* -- Shadows  Square uses very subtle, short shadows ---------- */
-  --shadow-sm:   0 1px 2px rgba(0,0,0,0.06);
-  --shadow-md:   0 2px 8px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04);
-  --shadow-lg:   0 8px 24px rgba(0,0,0,0.10), 0 2px 8px rgba(0,0,0,0.06);
-  --shadow-card: 0 0 0 1px #EBEBEB, 0 1px 3px rgba(0,0,0,0.05);
-
-  /* -- Border radius  Square's exact values --------------------- */
-  --radius-sm:  4px;
-  --radius-md:  6px;   /* inputs */
-  --radius-lg:  8px;   /* cards, panels */
-  --radius-xl:  12px;  /* modals */
+  --shadow-sm:          0 1px 2px rgba(0,0,0,0.06);
+  --shadow-md:          0 2px 8px rgba(0,0,0,0.08);
+  --shadow-lg:          0 8px 24px rgba(0,0,0,0.10);
+  --shadow-card:        0 0 0 1px #EBEBEB, 0 1px 3px rgba(0,0,0,0.05);
 }
-[data-pos-theme="light"] .pos-shell,
-[data-pos-theme="light"] .pos-sidebar-wrapper,
-[data-pos-theme="light"] .pos-shell,
-[data-pos-theme="light"] .pos-sidebar-wrapper {
 
-  /* -- Backgrounds ----------------------------------------------- */
-  --bg-base:     #F6F6F4;   /* Square warm off-white canvas */
-  --bg-surface:  #FFFFFF;   /* Cards, panels */
-  --bg-elevated: #FFFFFF;   /* Modals, dropdowns */
-  --bg-overlay:  rgba(255,255,255,0.97);
-  --bg-hover:    #F0F0EE;   /* Square hover  very subtle warm gray */
-  --bg-active:   #E8E8E6;   /* Pressed/selected */
-  --bg-card:     #FFFFFF;
-  --bg-input:    #FFFFFF;   /* Square inputs are pure white */
-
-  /* -- Borders --------------------------------------------------- */
-  --border-subtle:  #EBEBEB;  /* Square light divider */
-  --border-default: #D9D9D9;  /* Square standard border */
-  --border-strong:  #BABABA;  /* Square strong border */
-  --border-violet:  rgba(0,106,255,0.35);
-  --divider:        #EBEBEB;
-
-  /* -- Primary accent  Square Blue ----------------------------- */
-  --violet:         #006AFF;  /* Square primary blue */
-  --violet-600:     #0055CC;  /* Darker blue  hover on primary actions */
-  --violet-700:     #003D99;  /* Pressed state */
-  --violet-dim:     rgba(0,106,255,0.08);
-  --violet-glow:    rgba(0,106,255,0.16);
-  --violet-soft:    rgba(0,106,255,0.05);
-  --green:          #006AFF;  /* Alias for any green-branded component */
-
-  /* -- Text ------------------------------------------------------ */
-  --text-primary:   #1A1A1A;  /* Square near-black  their exact body text */
-  --text-secondary: #6B6B6B;  /* Square secondary  mid gray */
-  --text-tertiary:  #999999;  /* Square placeholder / muted */
-  --text-violet:    #006AFF;
-  --text-cyan:      #006AFF;
-  --text-inverse:   #FFFFFF;
-
-  /* -- Semantic colours ------------------------------------------ */
-  --success:         #00B140;  /* Square green  exact */
-  --success-bg:      rgba(0,177,64,0.08);
-  --warning:         #B87503;  /* Square amber */
-  --warning-bg:      rgba(184,117,3,0.08);
-  --destructive:     #FF1600;  /* Square red  exact from dev docs */
-  --destructive-bg:  rgba(255,22,0,0.06);
-  --info:            #006AFF;
-  --info-bg:         rgba(0,106,255,0.06);
-
-  /* -- Backwards-compat pos-* aliases --------------------------- */
+[data-pos-theme="light"] {
+  --bg-base:            #F6F6F4;
+  --bg-surface:         #FFFFFF;
+  --bg-elevated:        #FFFFFF;
+  --bg-hover:           #F0F0EE;
+  --bg-input:           #FFFFFF;
+  --border-default:     #D9D9D9;
+  --violet:             #006AFF;
+  --violet-dim:         rgba(0,106,255,0.08);
+  --violet-soft:        rgba(0,106,255,0.05);
+  --text-primary:       #1A1A1A;
+  --text-secondary:     #6B6B6B;
+  --text-tertiary:      #999999;
+  --success:            #00B140;
+  --destructive:        #FF1600;
   --pos-base:           #F6F6F4;
   --pos-surface:        #FFFFFF;
-  --pos-elevated:       #FFFFFF;
-  --pos-hover:          #F0F0EE;
-  --pos-active:         #E8E8E6;
-  --pos-border-subtle:  #EBEBEB;
-  --pos-border-default: #D9D9D9;
-  --pos-border-strong:  #BABABA;
-  --pos-border-accent:  rgba(0,106,255,0.35);
-  --pos-border-teal:    rgba(0,106,255,0.25);
-  --pos-border-violet:  rgba(0,106,255,0.35);
   --pos-accent:         #006AFF;
-  --pos-accent-600:     #0055CC;
-  --pos-accent-dim:     rgba(0,106,255,0.08);
-  --pos-accent-glow:    rgba(0,106,255,0.16);
-  --pos-teal:           #006AFF;
-  --pos-teal-600:       #0055CC;
-  --pos-teal-dim:       rgba(0,106,255,0.08);
-  --pos-teal-glow:      rgba(0,106,255,0.16);
   --pos-text-primary:   #1A1A1A;
   --pos-text-secondary: #6B6B6B;
-  --pos-text-tertiary:  #999999;
-  --pos-text-1:         #1A1A1A;
-  --pos-text-2:         #6B6B6B;
-  --pos-text-3:         #999999;
-  --pos-success:        #00B140;
-  --pos-warning:        #B87503;
-  --pos-danger:         #FF1600;
-
-  /* -- Shadows  Square uses very subtle, short shadows ---------- */
-  --shadow-sm:   0 1px 2px rgba(0,0,0,0.06);
-  --shadow-md:   0 2px 8px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04);
-  --shadow-lg:   0 8px 24px rgba(0,0,0,0.10), 0 2px 8px rgba(0,0,0,0.06);
-  --shadow-card: 0 0 0 1px #EBEBEB, 0 1px 3px rgba(0,0,0,0.05);
-
-  /* -- Border radius  Square's exact values --------------------- */
-  --radius-sm:  4px;
-  --radius-md:  6px;   /* inputs */
-  --radius-lg:  8px;   /* cards, panels */
-  --radius-xl:  12px;  /* modals */
 }
-
-/* -- Square light: scrollbar --------------------------------------- */
-html[data-theme="light"] .pos-shell ::-webkit-scrollbar-thumb {
-  background: #D9D9D9;
-  border-radius: 4px;
-}
-[data-pos-theme="light"] .pos-shell ::-webkit-scrollbar-thumb {
-  background: #D9D9D9;
-  border-radius: 4px;
-}
-html[data-theme="light"] .pos-shell ::-webkit-scrollbar-track {
+[data-pos-theme="light"] .pos-shell {
   background: #F6F6F4;
+  color: #1A1A1A;
 }
-[data-pos-theme="light"] .pos-shell ::-webkit-scrollbar-track {
-  background: #F6F6F4;
+[data-pos-theme="light"] .pos-sidebar-wrapper aside,
+[data-pos-theme="light"] .pos-sidebar-wrapper nav {
+  background: #1A1A1A;
+  color: rgba(255,255,255,0.85);
 }
 
-/* -- Square light: form elements ----------------------------------- */
+/* -- Square light: inputs ----------------------------------------------- */
 html[data-theme="light"] .pos-shell input:not([type=checkbox]):not([type=radio]):not([type=range]),
 html[data-theme="light"] .pos-shell textarea,
-html[data-theme="light"] .pos-shell select {
-  background: #FFFFFF;
-  border: 1px solid #D9D9D9;
-  border-radius: 6px;
-  color: #1A1A1A;
-  transition: border-color 150ms ease;
-}
+html[data-theme="light"] .pos-shell select,
 [data-pos-theme="light"] .pos-shell input:not([type=checkbox]):not([type=radio]):not([type=range]),
 [data-pos-theme="light"] .pos-shell textarea,
 [data-pos-theme="light"] .pos-shell select {
@@ -366,183 +195,32 @@ html[data-theme="light"] .pos-shell select {
   border: 1px solid #D9D9D9;
   border-radius: 6px;
   color: #1A1A1A;
-  transition: border-color 150ms ease;
-}
-html[data-theme="light"] .pos-shell input:focus,
-html[data-theme="light"] .pos-shell textarea:focus,
-html[data-theme="light"] .pos-shell select:focus {
-  border-color: #006AFF;
-  outline: none;
-  box-shadow: 0 0 0 3px rgba(0,106,255,0.12);
-}
-[data-pos-theme="light"] .pos-shell input:focus,
-[data-pos-theme="light"] .pos-shell textarea:focus,
-[data-pos-theme="light"] .pos-shell select:focus {
-  border-color: #006AFF;
-  outline: none;
-  box-shadow: 0 0 0 3px rgba(0,106,255,0.12);
 }
 html[data-theme="light"] .pos-shell input::placeholder,
-html[data-theme="light"] .pos-shell textarea::placeholder {
-  color: #999999;
-}
-[data-pos-theme="light"] .pos-shell input::placeholder,
-[data-pos-theme="light"] .pos-shell textarea::placeholder {
+[data-pos-theme="light"] .pos-shell input::placeholder {
   color: #999999;
 }
 
-/* -- Square light: tables ------------------------------------------ */
-html[data-theme="light"] .pos-shell th {
-  color: #6B6B6B;
-  font-weight: 500;
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  border-bottom: 1px solid #EBEBEB;
-  background: #F6F6F4;
-}
+/* -- Square light: tables ----------------------------------------------- */
+html[data-theme="light"] .pos-shell th,
 [data-pos-theme="light"] .pos-shell th {
+  background: #F6F6F4;
   color: #6B6B6B;
-  font-weight: 500;
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
   border-bottom: 1px solid #EBEBEB;
-  background: #F6F6F4;
 }
-html[data-theme="light"] .pos-shell td {
-  border-bottom: 1px solid #EBEBEB;
-  color: #1A1A1A;
-}
+html[data-theme="light"] .pos-shell td,
 [data-pos-theme="light"] .pos-shell td {
-  border-bottom: 1px solid #EBEBEB;
   color: #1A1A1A;
-}
-html[data-theme="light"] .pos-shell tr:hover td {
-  background: #F6F6F4;
-}
-[data-pos-theme="light"] .pos-shell tr:hover td {
-  background: #F6F6F4;
+  border-bottom: 1px solid #EBEBEB;
 }
 
-/* -- Square light: buttons ----------------------------------------- */
-html[data-theme="light"] .pos-shell button[class*="primary"],
-html[data-theme="light"] .pos-shell .btn-primary {
-  background: #006AFF;
-  color: #FFFFFF;
-  border: none;
-  border-radius: 6px;
-}
-[data-pos-theme="light"] .pos-shell button[class*="primary"],
-[data-pos-theme="light"] .pos-shell .btn-primary {
-  background: #006AFF;
-  color: #FFFFFF;
-  border: none;
-  border-radius: 6px;
-}
-html[data-theme="light"] .pos-shell button[class*="primary"]:hover {
-  background: #0055CC;
-}
-[data-pos-theme="light"] .pos-shell button[class*="primary"]:hover {
-  background: #0055CC;
+/* -- Square light: scrollbar -------------------------------------------- */
+html[data-theme="light"] .pos-shell ::-webkit-scrollbar-thumb,
+[data-pos-theme="light"] .pos-shell ::-webkit-scrollbar-thumb {
+  background: #D9D9D9;
+  border-radius: 4px;
 }
 
-/* -- Square light: sidebar  stays near-black like Square's nav ---- */
-html[data-theme="light"] .pos-sidebar-wrapper aside,
-html[data-theme="light"] .pos-sidebar-wrapper [class*="sidebar"],
-html[data-theme="light"] .pos-sidebar-wrapper nav {
-  background: #1A1A1A !important;
-  border-color: rgba(255,255,255,0.08) !important;
-}
-[data-pos-theme="light"] .pos-sidebar-wrapper aside,
-[data-pos-theme="light"] .pos-sidebar-wrapper [class*="sidebar"],
-[data-pos-theme="light"] .pos-sidebar-wrapper nav {
-  background: #1A1A1A !important;
-  border-color: rgba(255,255,255,0.08) !important;
-}
-html[data-theme="light"] .pos-sidebar-wrapper aside *,
-html[data-theme="light"] .pos-sidebar-wrapper [class*="sidebar"] *,
-html[data-theme="light"] .pos-sidebar-wrapper nav * {
-  color: rgba(255,255,255,0.85);
-}
-[data-pos-theme="light"] .pos-sidebar-wrapper aside *,
-[data-pos-theme="light"] .pos-sidebar-wrapper [class*="sidebar"] *,
-[data-pos-theme="light"] .pos-sidebar-wrapper nav * {
-  color: rgba(255,255,255,0.85);
-}
-html[data-theme="light"] .pos-sidebar-wrapper a:hover,
-html[data-theme="light"] .pos-sidebar-wrapper button:hover {
-  background: rgba(255,255,255,0.08) !important;
-  color: #FFFFFF !important;
-}
-[data-pos-theme="light"] .pos-sidebar-wrapper a:hover,
-[data-pos-theme="light"] .pos-sidebar-wrapper button:hover {
-  background: rgba(255,255,255,0.08) !important;
-  color: #FFFFFF !important;
-}
-/* Active nav item  Square uses white background on dark sidebar */
-html[data-theme="light"] .pos-sidebar-wrapper [aria-current="page"],
-html[data-theme="light"] .pos-sidebar-wrapper [class*="active"] {
-  background: rgba(255,255,255,0.12) !important;
-  color: #FFFFFF !important;
-}
-[data-pos-theme="light"] .pos-sidebar-wrapper [aria-current="page"],
-[data-pos-theme="light"] .pos-sidebar-wrapper [class*="active"] {
-  background: rgba(255,255,255,0.12) !important;
-  color: #FFFFFF !important;
-}
-
-/* -- Square light: cards / panels --------------------------------- */
-html[data-theme="light"] .pos-shell [class*="card"],
-html[data-theme="light"] .pos-shell [class*="panel"],
-html[data-theme="light"] .pos-shell [class*="surface"] {
-  background: #FFFFFF;
-  border: 1px solid #EBEBEB;
-  border-radius: 8px;
-}
-[data-pos-theme="light"] .pos-shell [class*="card"],
-[data-pos-theme="light"] .pos-shell [class*="panel"],
-[data-pos-theme="light"] .pos-shell [class*="surface"] {
-  background: #FFFFFF;
-  border: 1px solid #EBEBEB;
-  border-radius: 8px;
-}
-
-/* -- Square light: badges / status chips --------------------------- */
-html[data-theme="light"] .pos-shell .badge-success,
-html[data-theme="light"] .pos-shell [class*="success"] {
-  background: rgba(0,177,64,0.1);
-  color: #007A2C;
-}
-[data-pos-theme="light"] .pos-shell .badge-success,
-[data-pos-theme="light"] .pos-shell [class*="success"] {
-  background: rgba(0,177,64,0.1);
-  color: #007A2C;
-}
-html[data-theme="light"] .pos-shell .badge-error,
-html[data-theme="light"] .pos-shell [class*="danger"],
-html[data-theme="light"] .pos-shell [class*="destructive"] {
-  background: rgba(255,22,0,0.08);
-  color: #CC1400;
-}
-[data-pos-theme="light"] .pos-shell .badge-error,
-[data-pos-theme="light"] .pos-shell [class*="danger"],
-[data-pos-theme="light"] .pos-shell [class*="destructive"] {
-  background: rgba(255,22,0,0.08);
-  color: #CC1400;
-}
-html[data-theme="light"] .pos-shell .badge-warning,
-html[data-theme="light"] .pos-shell [class*="warning"] {
-  background: rgba(184,117,3,0.1);
-  color: #8A5700;
-}
-[data-pos-theme="light"] .pos-shell .badge-warning,
-[data-pos-theme="light"] .pos-shell [class*="warning"] {
-  background: rgba(184,117,3,0.1);
-  color: #8A5700;
-}
-
-/* -- Global shell -------------------------------------------------- */
 .pos-shell {
   font-family: var(--font-ui);
   font-size: 15px;
@@ -567,12 +245,12 @@ html[data-theme="light"] .pos-shell [class*="warning"] {
 .low-stock-banner a,
 .low-stock-banner button { color: #FBBF24 !important; }
 
-/* -- Scrollbar ------------------------------------------------------ */
+/*  Scrollbar  */
 .pos-shell ::-webkit-scrollbar { width: 3px; height: 3px; }
 .pos-shell ::-webkit-scrollbar-track { background: transparent; }
 .pos-shell ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 2px; }
 
-/* -- Inputs --------------------------------------------------------- */
+/*  Inputs  */
 .pos-shell input:not([type=checkbox]):not([type=radio]):not([type=range]),
 .pos-shell textarea,
 .pos-shell select {
@@ -594,7 +272,7 @@ html[data-theme="light"] .pos-shell [class*="warning"] {
   box-shadow: 0 0 0 3px rgba(139,92,246,0.08);
 }
 
-/* -- Tables --------------------------------------------------------- */
+/*  Tables  */
 .pos-shell table { width: 100%; border-collapse: collapse; }
 .pos-shell th {
   background: var(--bg-surface);
@@ -612,13 +290,13 @@ html[data-theme="light"] .pos-shell [class*="warning"] {
 }
 .pos-shell tr:hover td { background: var(--bg-hover); }
 
-/* -- Animation utility classes -------------------------------------- */
+/*  Animation utility classes  */
 .card-enter     { animation: card-enter 320ms cubic-bezier(0.16,1,0.3,1) both; }
 .pos-card-enter { animation: pos-card-enter 320ms cubic-bezier(0.16,1,0.3,1) both; }
 .scale-in       { animation: scale-in 350ms cubic-bezier(0.16,1,0.3,1) both; }
 .fade-in        { animation: fade-in 250ms ease both; }
 
-/* -- Animations ----------------------------------------------------- */
+/*  Animations  */
 @keyframes card-enter {
   from { opacity:0; transform:translateY(18px) scale(0.93) }
   to   { opacity:1; transform:translateY(0) scale(1) }
@@ -739,7 +417,7 @@ html[data-theme="light"] .pos-shell [class*="warning"] {
 }
 .card-3d { transform-style: preserve-3d; transition: transform 80ms linear; }
 
-/* -- Scan line ------------------------------------------------------ */
+/*  Scan line  */
 @keyframes scan-line {
   0%   { top: 6px; }
   50%  { top: calc(100% - 6px); }
@@ -747,7 +425,7 @@ html[data-theme="light"] .pos-shell [class*="warning"] {
 }
 .animate-scan-line { animation: scan-line 2s ease-in-out infinite; position: absolute; }
 
-/* -- Safe area ------------------------------------------------------ */
+/*  Safe area  */
 .pt-safe-top    { padding-top:    env(safe-area-inset-top,    0px); }
 .pb-safe-bottom { padding-bottom: env(safe-area-inset-bottom, 0px); }
 .pt-safe        { padding-top:    env(safe-area-inset-top,    0px); }
@@ -756,55 +434,35 @@ html[data-theme="light"] .pos-shell [class*="warning"] {
 
 
 
-/* ======================================================================
+/* 
    SQUARE LIGHT MODE  GLOBAL DEEP OVERRIDE
    Catches ALL hardcoded dark colors used throughout POS pages.
    This runs after all component styles so specificity wins.
    Only applies when html[data-theme="light"] is set.
    Dark mode is completely untouched.
-======================================================================= */
+ */
 
-/* -- Page/shell backgrounds ------------------------------------------- */
+/*  Page/shell backgrounds  */
 html[data-theme="light"] .pos-shell {
   background: #F6F6F4 !important;
   color: #1A1A1A !important;
 }
-[data-pos-theme="light"] is set.
-   Dark mode is completely untouched.
-======================================================================= */
 
-/* -- Page/shell backgrounds ------------------------------------------- */
-[data-pos-theme="light"] .pos-shell {
-  background: #F6F6F4 !important;
-  color: #1A1A1A !important;
-}
-
-/* -- All dark hardcoded backgrounds -> Square white/off-white ---------
+/*  All dark hardcoded backgrounds  Square white/off-white 
    Targets the most common dark hardcodes: #0A0910, #110F1A, #1A1728,
    #231F32, #0d0d14, #13131a, #1a2620, #1C1928, #2A2540 etc.
    We can't target exact hex in CSS  instead we use structural selectors
-   and override via the CSS var fallback chain -------------------------- */
+   and override via the CSS var fallback chain  */
 
 /* Every div/section/article inside pos-shell gets bg from var */
 html[data-theme="light"] .pos-shell > * {
   background-color: var(--bg-base, #F6F6F4);
 }
-[data-pos-theme="light"] .pos-shell > * {
-  background-color: var(--bg-base, #F6F6F4);
-}
 
-/* -- Inputs  override dark glassmorphism inputs ----------------------- */
+/*  Inputs  override dark glassmorphism inputs  */
 html[data-theme="light"] .pos-shell input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]),
 html[data-theme="light"] .pos-shell textarea,
 html[data-theme="light"] .pos-shell select {
-  background: #FFFFFF !important;
-  color: #1A1A1A !important;
-  border: 1px solid #D9D9D9 !important;
-  border-radius: 6px !important;
-}
-[data-pos-theme="light"] .pos-shell input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]),
-[data-pos-theme="light"] .pos-shell textarea,
-[data-pos-theme="light"] .pos-shell select {
   background: #FFFFFF !important;
   color: #1A1A1A !important;
   border: 1px solid #D9D9D9 !important;
@@ -817,36 +475,16 @@ html[data-theme="light"] .pos-shell select:focus {
   box-shadow: 0 0 0 3px rgba(0,106,255,0.12) !important;
   outline: none !important;
 }
-[data-pos-theme="light"] .pos-shell input:focus,
-[data-pos-theme="light"] .pos-shell textarea:focus,
-[data-pos-theme="light"] .pos-shell select:focus {
-  border-color: #006AFF !important;
-  box-shadow: 0 0 0 3px rgba(0,106,255,0.12) !important;
-  outline: none !important;
-}
 html[data-theme="light"] .pos-shell input::placeholder,
 html[data-theme="light"] .pos-shell textarea::placeholder {
   color: #999999 !important;
 }
-[data-pos-theme="light"] .pos-shell input::placeholder,
-[data-pos-theme="light"] .pos-shell textarea::placeholder {
-  color: #999999 !important;
-}
 
-/* -- Tables ------------------------------------------------------------ */
+/*  Tables  */
 html[data-theme="light"] .pos-shell table {
   background: #FFFFFF;
 }
-[data-pos-theme="light"] .pos-shell table {
-  background: #FFFFFF;
-}
 html[data-theme="light"] .pos-shell th {
-  background: #F6F6F4 !important;
-  color: #6B6B6B !important;
-  border-bottom: 1px solid #EBEBEB !important;
-  font-weight: 600 !important;
-}
-[data-pos-theme="light"] .pos-shell th {
   background: #F6F6F4 !important;
   color: #6B6B6B !important;
   border-bottom: 1px solid #EBEBEB !important;
@@ -856,38 +494,24 @@ html[data-theme="light"] .pos-shell td {
   color: #1A1A1A !important;
   border-bottom: 1px solid #EBEBEB !important;
 }
-[data-pos-theme="light"] .pos-shell td {
-  color: #1A1A1A !important;
-  border-bottom: 1px solid #EBEBEB !important;
-}
 html[data-theme="light"] .pos-shell tr:nth-child(even) td {
-  background: #FAFAFA !important;
-}
-[data-pos-theme="light"] .pos-shell tr:nth-child(even) td {
   background: #FAFAFA !important;
 }
 html[data-theme="light"] .pos-shell tr:hover td {
   background: #F0F0EE !important;
 }
-[data-pos-theme="light"] .pos-shell tr:hover td {
-  background: #F0F0EE !important;
-}
 
-/* -- Buttons  remap dark accent colors -------------------------------- */
-/* Purple/violet buttons (#8B5CF6) -> Square blue */
+/*  Buttons  remap dark accent colors  */
+/* Purple/violet buttons (#8B5CF6)  Square blue */
+html[data-theme="light"] .pos-shell button[style*="#8B5CF6"],
+html[data-theme="light"] .pos-shell a[style*="#8B5CF6"],
 html[data-theme="light"] .pos-shell [style*="background: #8B5CF6"],
 html[data-theme="light"] .pos-shell [style*="background:#8B5CF6"],
 html[data-theme="light"] .pos-shell [style*="background-color: #8B5CF6"] {
   background: #006AFF !important;
   color: #FFFFFF !important;
 }
-[data-pos-theme="light"] .pos-shell [style*="background: #8B5CF6"],
-[data-pos-theme="light"] .pos-shell [style*="background:#8B5CF6"],
-[data-pos-theme="light"] .pos-shell [style*="background-color: #8B5CF6"] {
-  background: #006AFF !important;
-  color: #FFFFFF !important;
-}
-/* Cyan/teal buttons (#00E5FF, #29b6f6) -> Square blue */
+/* Cyan/teal buttons (#00E5FF, #29b6f6)  Square blue */
 html[data-theme="light"] .pos-shell [style*="background: #00E5FF"],
 html[data-theme="light"] .pos-shell [style*="background:#00E5FF"],
 html[data-theme="light"] .pos-shell [style*="background: #29b6f6"],
@@ -895,14 +519,7 @@ html[data-theme="light"] .pos-shell [style*="background:#29b6f6"] {
   background: #006AFF !important;
   color: #FFFFFF !important;
 }
-[data-pos-theme="light"] .pos-shell [style*="background: #00E5FF"],
-[data-pos-theme="light"] .pos-shell [style*="background:#00E5FF"],
-[data-pos-theme="light"] .pos-shell [style*="background: #29b6f6"],
-[data-pos-theme="light"] .pos-shell [style*="background:#29b6f6"] {
-  background: #006AFF !important;
-  color: #FFFFFF !important;
-}
-/* Aria green buttons (#7FB897, #2D5240) -> Square blue */
+/* Aria green buttons (#7FB897, #2D5240)  Square blue */
 html[data-theme="light"] .pos-shell [style*="background: #7FB897"],
 html[data-theme="light"] .pos-shell [style*="background:#7FB897"],
 html[data-theme="light"] .pos-shell [style*="background: #2D5240"],
@@ -910,14 +527,7 @@ html[data-theme="light"] .pos-shell [style*="background:#2D5240"] {
   background: #006AFF !important;
   color: #FFFFFF !important;
 }
-[data-pos-theme="light"] .pos-shell [style*="background: #7FB897"],
-[data-pos-theme="light"] .pos-shell [style*="background:#7FB897"],
-[data-pos-theme="light"] .pos-shell [style*="background: #2D5240"],
-[data-pos-theme="light"] .pos-shell [style*="background:#2D5240"] {
-  background: #006AFF !important;
-  color: #FFFFFF !important;
-}
-/* Dark button backgrounds -> light */
+/* Dark button backgrounds  light */
 html[data-theme="light"] .pos-shell [style*="rgba(255,255,255,0.03)"],
 html[data-theme="light"] .pos-shell [style*="rgba(255,255,255,0.04)"],
 html[data-theme="light"] .pos-shell [style*="rgba(255,255,255,0.05)"],
@@ -927,28 +537,13 @@ html[data-theme="light"] .pos-shell [style*="rgba(255,255,255,0.08)"] {
   border-color: #EBEBEB !important;
   color: #1A1A1A !important;
 }
-[data-pos-theme="light"] .pos-shell [style*="rgba(255,255,255,0.03)"],
-[data-pos-theme="light"] .pos-shell [style*="rgba(255,255,255,0.04)"],
-[data-pos-theme="light"] .pos-shell [style*="rgba(255,255,255,0.05)"],
-[data-pos-theme="light"] .pos-shell [style*="rgba(255,255,255,0.06)"],
-[data-pos-theme="light"] .pos-shell [style*="rgba(255,255,255,0.08)"] {
-  background: #FFFFFF !important;
-  border-color: #EBEBEB !important;
-  color: #1A1A1A !important;
-}
 
-/* -- Text color overrides ----------------------------------------------- */
-/* Pure white text on dark -> near-black */
+/*  Text color overrides  */
+/* Pure white text on dark  near-black */
 html[data-theme="light"] .pos-shell [style*="color: #E8EDE7"],
 html[data-theme="light"] .pos-shell [style*="color:#E8EDE7"],
 html[data-theme="light"] .pos-shell [style*="color: #EDE8FF"],
 html[data-theme="light"] .pos-shell [style*="color:#EDE8FF"] {
-  color: #1A1A1A !important;
-}
-[data-pos-theme="light"] .pos-shell [style*="color: #E8EDE7"],
-[data-pos-theme="light"] .pos-shell [style*="color:#E8EDE7"],
-[data-pos-theme="light"] .pos-shell [style*="color: #EDE8FF"],
-[data-pos-theme="light"] .pos-shell [style*="color:#EDE8FF"] {
   color: #1A1A1A !important;
 }
 html[data-theme="light"] .pos-shell [style*="color: #A8B5A8"],
@@ -957,25 +552,13 @@ html[data-theme="light"] .pos-shell [style*="color: #8B85A8"],
 html[data-theme="light"] .pos-shell [style*="color:#8B85A8"] {
   color: #6B6B6B !important;
 }
-[data-pos-theme="light"] .pos-shell [style*="color: #A8B5A8"],
-[data-pos-theme="light"] .pos-shell [style*="color:#A8B5A8"],
-[data-pos-theme="light"] .pos-shell [style*="color: #8B85A8"],
-[data-pos-theme="light"] .pos-shell [style*="color:#8B85A8"] {
-  color: #6B6B6B !important;
-}
 html[data-theme="light"] .pos-shell [style*="color: #6E7C6E"],
 html[data-theme="light"] .pos-shell [style*="color:#6E7C6E"],
 html[data-theme="light"] .pos-shell [style*="color: #4A4565"],
 html[data-theme="light"] .pos-shell [style*="color:#4A4565"] {
   color: #999999 !important;
 }
-[data-pos-theme="light"] .pos-shell [style*="color: #6E7C6E"],
-[data-pos-theme="light"] .pos-shell [style*="color:#6E7C6E"],
-[data-pos-theme="light"] .pos-shell [style*="color: #4A4565"],
-[data-pos-theme="light"] .pos-shell [style*="color:#4A4565"] {
-  color: #999999 !important;
-}
-/* Violet/purple text -> Square blue */
+/* Violet/purple text  Square blue */
 html[data-theme="light"] .pos-shell [style*="color: #8B5CF6"],
 html[data-theme="light"] .pos-shell [style*="color:#8B5CF6"],
 html[data-theme="light"] .pos-shell [style*="color: #7FB897"],
@@ -986,29 +569,21 @@ html[data-theme="light"] .pos-shell [style*="color: #00E5FF"],
 html[data-theme="light"] .pos-shell [style*="color:#00E5FF"] {
   color: #006AFF !important;
 }
-[data-pos-theme="light"] .pos-shell [style*="color: #8B5CF6"],
-[data-pos-theme="light"] .pos-shell [style*="color:#8B5CF6"],
-[data-pos-theme="light"] .pos-shell [style*="color: #7FB897"],
-[data-pos-theme="light"] .pos-shell [style*="color:#7FB897"],
-[data-pos-theme="light"] .pos-shell [style*="color: #29b6f6"],
-[data-pos-theme="light"] .pos-shell [style*="color:#29b6f6"],
-[data-pos-theme="light"] .pos-shell [style*="color: #00E5FF"],
-[data-pos-theme="light"] .pos-shell [style*="color:#00E5FF"] {
-  color: #006AFF !important;
-}
 
-/* -- Border overrides -------------------------------------------------- */
-}
+/*  Border overrides  */
+html[data-theme="light"] .pos-shell [style*="border-color: rgba(255,255,255"],
+html[data-theme="light"] .pos-shell [style*="borderColor: rgba(255,255,255"],
+html[data-theme="light"] .pos-shell [style*="border: 1px solid rgba(255,255,255"] {
+  border-color: #EBEBEB !important;
 }
 html[data-theme="light"] .pos-shell [style*="border: 1px solid #2A2540"],
 html[data-theme="light"] .pos-shell [style*="border: 1px solid #1C1928"],
-}
-[data-pos-theme="light"] .pos-shell [style*="border: 1px solid #2A2540"],
-[data-pos-theme="light"] .pos-shell [style*="border: 1px solid #1C1928"],
+html[data-theme="light"] .pos-shell [style*="border: 1px solid rgba(0,229,255"] {
+  border-color: #D9D9D9 !important;
 }
 
-/* -- Card/panel backgrounds --------------------------------------------- */
-/* Dark card colors -> white */
+/*  Card/panel backgrounds  */
+/* Dark card colors  white */
 html[data-theme="light"] .pos-shell [style*="background: #1A1728"],
 html[data-theme="light"] .pos-shell [style*="background:#1A1728"],
 html[data-theme="light"] .pos-shell [style*="background: #110F1A"],
@@ -1024,45 +599,27 @@ html[data-theme="light"] .pos-shell [style*="background: #1A2620"] {
   background: #FFFFFF !important;
   color: #1A1A1A !important;
 }
-[data-pos-theme="light"] .pos-shell [style*="background: #1A1728"],
-[data-pos-theme="light"] .pos-shell [style*="background:#1A1728"],
-[data-pos-theme="light"] .pos-shell [style*="background: #110F1A"],
-[data-pos-theme="light"] .pos-shell [style*="background:#110F1A"],
-[data-pos-theme="light"] .pos-shell [style*="background: #0A0910"],
-[data-pos-theme="light"] .pos-shell [style*="background:#0A0910"],
-[data-pos-theme="light"] .pos-shell [style*="background: #231F32"],
-[data-pos-theme="light"] .pos-shell [style*="background:#231F32"],
-[data-pos-theme="light"] .pos-shell [style*="background: #13131a"],
-[data-pos-theme="light"] .pos-shell [style*="background: #0d0d14"],
-[data-pos-theme="light"] .pos-shell [style*="background: #1a2620"],
-[data-pos-theme="light"] .pos-shell [style*="background: #1A2620"] {
+/* Semi-transparent dark overlays  white card */
+html[data-theme="light"] .pos-shell [style*="rgba(8,6,16"],
+html[data-theme="light"] .pos-shell [style*="rgba(10,9,16"],
+html[data-theme="light"] .pos-shell [style*="rgba(11,20,16"] {
   background: #FFFFFF !important;
-  color: #1A1A1A !important;
-}
-/* Semi-transparent dark overlays -> white card */
-}
 }
 
-/* -- Tailwind dark classes -> Square light ------------------------------ */
+/*  Tailwind dark classes  Square light  */
+html[data-theme="light"] .pos-shell .bg-\[\#0A0910\],
+html[data-theme="light"] .pos-shell .bg-\[\#110F1A\],
+html[data-theme="light"] .pos-shell .bg-\[\#1A1728\] { background-color: #FFFFFF !important; }
 
 html[data-theme="light"] .pos-shell .text-white { color: #1A1A1A !important; }
-[data-pos-theme="light"] .pos-shell .text-white { color: #1A1A1A !important; }
 html[data-theme="light"] .pos-shell .border-white\/10,
 html[data-theme="light"] .pos-shell .border-white\/20 { border-color: #EBEBEB !important; }
-[data-pos-theme="light"] .pos-shell .border-white\/10,
-[data-pos-theme="light"] .pos-shell .border-white\/20 { border-color: #EBEBEB !important; }
 
-/* -- Status colors  keep semantic meaning, Square palette ------------- */
+/*  Status colors  keep semantic meaning, Square palette  */
 html[data-theme="light"] .pos-shell [style*="color: #22C55E"],
 html[data-theme="light"] .pos-shell [style*="color:#22C55E"],
 html[data-theme="light"] .pos-shell [style*="color: #34D399"],
 html[data-theme="light"] .pos-shell [style*="color:#34D399"] {
-  color: #007A2C !important;  /* Square success  darkened for light bg */
-}
-[data-pos-theme="light"] .pos-shell [style*="color: #22C55E"],
-[data-pos-theme="light"] .pos-shell [style*="color:#22C55E"],
-[data-pos-theme="light"] .pos-shell [style*="color: #34D399"],
-[data-pos-theme="light"] .pos-shell [style*="color:#34D399"] {
   color: #007A2C !important;  /* Square success  darkened for light bg */
 }
 html[data-theme="light"] .pos-shell [style*="color: #EF4444"],
@@ -1071,97 +628,61 @@ html[data-theme="light"] .pos-shell [style*="color: #F87171"],
 html[data-theme="light"] .pos-shell [style*="color:#F87171"] {
   color: #CC1400 !important;  /* Square error  darkened for light bg */
 }
-[data-pos-theme="light"] .pos-shell [style*="color: #EF4444"],
-[data-pos-theme="light"] .pos-shell [style*="color:#EF4444"],
-[data-pos-theme="light"] .pos-shell [style*="color: #F87171"],
-[data-pos-theme="light"] .pos-shell [style*="color:#F87171"] {
-  color: #CC1400 !important;  /* Square error  darkened for light bg */
-}
 html[data-theme="light"] .pos-shell [style*="color: #F59E0B"],
 html[data-theme="light"] .pos-shell [style*="color:#F59E0B"],
 html[data-theme="light"] .pos-shell [style*="color: #FBBF24"],
 html[data-theme="light"] .pos-shell [style*="color:#FBBF24"] {
   color: #8A5700 !important;  /* Square warning  darkened for light bg */
 }
-[data-pos-theme="light"] .pos-shell [style*="color: #F59E0B"],
-[data-pos-theme="light"] .pos-shell [style*="color:#F59E0B"],
-[data-pos-theme="light"] .pos-shell [style*="color: #FBBF24"],
-[data-pos-theme="light"] .pos-shell [style*="color:#FBBF24"] {
-  color: #8A5700 !important;  /* Square warning  darkened for light bg */
-}
 
-/* -- Dividers / separators --------------------------------------------- */
+/*  Dividers / separators  */
 html[data-theme="light"] .pos-shell hr,
-}
-[data-pos-theme="light"] .pos-shell hr,
+html[data-theme="light"] .pos-shell [style*="borderTop: '1px solid rgba(255,255,255"],
+html[data-theme="light"] .pos-shell [style*="borderBottom: '1px solid rgba(255,255,255"] {
+  border-color: #EBEBEB !important;
 }
 
-/* -- Modals / overlays ------------------------------------------------- */
+/*  Modals / overlays  */
 html[data-theme="light"] .pos-shell [style*="background: rgba(0,0,0,0.6)"],
 html[data-theme="light"] .pos-shell [style*="background: rgba(0,0,0,0.7)"],
 html[data-theme="light"] .pos-shell [style*="background: rgba(0,0,0,0.8)"] {
   background: rgba(0,0,0,0.4) !important;
 }
-[data-pos-theme="light"] .pos-shell [style*="background: rgba(0,0,0,0.6)"],
-[data-pos-theme="light"] .pos-shell [style*="background: rgba(0,0,0,0.7)"],
-[data-pos-theme="light"] .pos-shell [style*="background: rgba(0,0,0,0.8)"] {
-  background: rgba(0,0,0,0.4) !important;
-}
 
-/* -- Tailwind utility overrides ---------------------------------------- */
+/*  Tailwind utility overrides  */
 html[data-theme="light"] .pos-shell .bg-gray-900 { background-color: #FFFFFF !important; }
-[data-pos-theme="light"] .pos-shell .bg-gray-900 { background-color: #FFFFFF !important; }
 html[data-theme="light"] .pos-shell .bg-gray-800 { background-color: #F6F6F4 !important; }
-[data-pos-theme="light"] .pos-shell .bg-gray-800 { background-color: #F6F6F4 !important; }
 html[data-theme="light"] .pos-shell .text-gray-100,
 html[data-theme="light"] .pos-shell .text-gray-200 { color: #1A1A1A !important; }
-[data-pos-theme="light"] .pos-shell .text-gray-100,
-[data-pos-theme="light"] .pos-shell .text-gray-200 { color: #1A1A1A !important; }
 html[data-theme="light"] .pos-shell .text-gray-400 { color: #6B6B6B !important; }
-[data-pos-theme="light"] .pos-shell .text-gray-400 { color: #6B6B6B !important; }
 html[data-theme="light"] .pos-shell .border-gray-700,
 html[data-theme="light"] .pos-shell .border-gray-800 { border-color: #EBEBEB !important; }
-[data-pos-theme="light"] .pos-shell .border-gray-700,
-[data-pos-theme="light"] .pos-shell .border-gray-800 { border-color: #EBEBEB !important; }
 
-/* -- POSSidebar stays dark (Square's sidebar is always dark #1A1A1A) -- */
+/*  POSSidebar stays dark (Square's sidebar is always dark #1A1A1A)  */
 /* Already handled in .pos-sidebar-wrapper  no override needed here */
 
-/* -- Search bar / command palette -------------------------------------- */
+/*  Search bar / command palette  */
 html[data-theme="light"] .pos-shell [class*="search"],
 html[data-theme="light"] .pos-shell [class*="Search"] {
   background: #FFFFFF !important;
   border: 1px solid #D9D9D9 !important;
   color: #1A1A1A !important;
 }
-[data-pos-theme="light"] .pos-shell [class*="search"],
-[data-pos-theme="light"] .pos-shell [class*="Search"] {
-  background: #FFFFFF !important;
-  border: 1px solid #D9D9D9 !important;
-  color: #1A1A1A !important;
-}
 
-/* -- Additional specific overrides discovered post-audit --------------- */
+/*  Additional specific overrides discovered post-audit  */
 
-/* Sales history  Aria green sale numbers -> Square blue */
+/* Sales history  Aria green sale numbers  Square blue */
 html[data-theme="light"] .pos-shell [style*="color: #7FB897"],
 html[data-theme="light"] .pos-shell [style*="color:#7FB897"] {
   color: #006AFF !important;
 }
-[data-pos-theme="light"] .pos-shell [style*="color: #7FB897"],
-[data-pos-theme="light"] .pos-shell [style*="color:#7FB897"] {
-  color: #006AFF !important;
-}
-}
+html[data-theme="light"] .pos-shell [style*="border: 1px solid rgba(127,184,151"],
+html[data-theme="light"] .pos-shell [style*="border:1px solid rgba(127,184,151"] {
+  border-color: #D9D9D9 !important;
 }
 html[data-theme="light"] .pos-shell [style*="rgba(127,184,151,0.04)"],
 html[data-theme="light"] .pos-shell [style*="rgba(127,184,151,0.08)"],
 html[data-theme="light"] .pos-shell [style*="rgba(127,184,151,0.12)"] {
-  background: #F6F6F4 !important;
-}
-[data-pos-theme="light"] .pos-shell [style*="rgba(127,184,151,0.04)"],
-[data-pos-theme="light"] .pos-shell [style*="rgba(127,184,151,0.08)"],
-[data-pos-theme="light"] .pos-shell [style*="rgba(127,184,151,0.12)"] {
   background: #F6F6F4 !important;
 }
 html[data-theme="light"] .pos-shell [style*="rgba(127,184,151,0.15)"],
@@ -1169,33 +690,21 @@ html[data-theme="light"] .pos-shell [style*="rgba(127,184,151,0.2)"],
 html[data-theme="light"] .pos-shell [style*="rgba(127,184,151,0.3)"] {
   background: rgba(0,106,255,0.08) !important;
 }
-[data-pos-theme="light"] .pos-shell [style*="rgba(127,184,151,0.15)"],
-[data-pos-theme="light"] .pos-shell [style*="rgba(127,184,151,0.2)"],
-[data-pos-theme="light"] .pos-shell [style*="rgba(127,184,151,0.3)"] {
-  background: rgba(0,106,255,0.08) !important;
-}
 
-/* Customers page  #29b6f6 teal header -> Square blue */
+/* Customers page  #29b6f6 teal header  Square blue */
 html[data-theme="light"] .pos-shell [style*="background: #29b6f6"],
 html[data-theme="light"] .pos-shell [style*="background:#29b6f6"] {
-  background: #006AFF !important;
-}
-[data-pos-theme="light"] .pos-shell [style*="background: #29b6f6"],
-[data-pos-theme="light"] .pos-shell [style*="background:#29b6f6"] {
   background: #006AFF !important;
 }
 html[data-theme="light"] .pos-shell [style*="color: #29b6f6"],
 html[data-theme="light"] .pos-shell [style*="color:#29b6f6"] {
   color: #006AFF !important;
 }
-[data-pos-theme="light"] .pos-shell [style*="color: #29b6f6"],
-[data-pos-theme="light"] .pos-shell [style*="color:#29b6f6"] {
-  color: #006AFF !important;
-}
 
 /* Products page  dark input bg rgba(10,9,16) */
-  color: #1A1A1A !important;
-}
+html[data-theme="light"] .pos-shell [style*="rgba(10,9,16"],
+html[data-theme="light"] .pos-shell [style*="rgba(0,9,16"] {
+  background: #FFFFFF !important;
   color: #1A1A1A !important;
 }
 
@@ -1207,13 +716,6 @@ html[data-theme="light"] .pos-shell [style*="rgba(139,92,246,0.2)"],
 html[data-theme="light"] .pos-shell [style*="rgba(139,92,246,0.3)"] {
   background: rgba(0,106,255,0.08) !important;
 }
-[data-pos-theme="light"] .pos-shell [style*="rgba(139,92,246,0.08)"],
-[data-pos-theme="light"] .pos-shell [style*="rgba(139,92,246,0.12)"],
-[data-pos-theme="light"] .pos-shell [style*="rgba(139,92,246,0.15)"],
-[data-pos-theme="light"] .pos-shell [style*="rgba(139,92,246,0.2)"],
-[data-pos-theme="light"] .pos-shell [style*="rgba(139,92,246,0.3)"] {
-  background: rgba(0,106,255,0.08) !important;
-}
 html[data-theme="light"] .pos-shell [style*="rgba(0,229,255,0.07)"],
 html[data-theme="light"] .pos-shell [style*="rgba(0,229,255,0.08)"],
 html[data-theme="light"] .pos-shell [style*="rgba(0,229,255,0.12)"],
@@ -1221,19 +723,8 @@ html[data-theme="light"] .pos-shell [style*="rgba(0,229,255,0.15)"] {
   background: rgba(0,106,255,0.06) !important;
   border-color: rgba(0,106,255,0.15) !important;
 }
-[data-pos-theme="light"] .pos-shell [style*="rgba(0,229,255,0.07)"],
-[data-pos-theme="light"] .pos-shell [style*="rgba(0,229,255,0.08)"],
-[data-pos-theme="light"] .pos-shell [style*="rgba(0,229,255,0.12)"],
-[data-pos-theme="light"] .pos-shell [style*="rgba(0,229,255,0.15)"] {
-  background: rgba(0,106,255,0.06) !important;
-  border-color: rgba(0,106,255,0.15) !important;
-}
 html[data-theme="light"] .pos-shell [style*="color: #00E5FF"],
 html[data-theme="light"] .pos-shell [style*="color:#00E5FF"] {
-  color: #006AFF !important;
-}
-[data-pos-theme="light"] .pos-shell [style*="color: #00E5FF"],
-[data-pos-theme="light"] .pos-shell [style*="color:#00E5FF"] {
   color: #006AFF !important;
 }
 
@@ -1247,67 +738,43 @@ html[data-theme="light"] .pos-shell [style*="background:#2A2540"] {
   background: #FFFFFF !important;
   color: #1A1A1A !important;
 }
-[data-pos-theme="light"] .pos-shell [style*="background: #0F0D1C"],
-[data-pos-theme="light"] .pos-shell [style*="background:#0F0D1C"],
-[data-pos-theme="light"] .pos-shell [style*="background: #1C1928"],
-[data-pos-theme="light"] .pos-shell [style*="background:#1C1928"],
-[data-pos-theme="light"] .pos-shell [style*="background: #2A2540"],
-[data-pos-theme="light"] .pos-shell [style*="background:#2A2540"] {
-  background: #FFFFFF !important;
-  color: #1A1A1A !important;
-}
 html[data-theme="light"] .pos-shell [style*="border: 1px solid #2A2540"],
 html[data-theme="light"] .pos-shell [style*="border:1px solid #2A2540"],
 html[data-theme="light"] .pos-shell [style*="border: 1px solid #1C1928"],
 html[data-theme="light"] .pos-shell [style*="border:1px solid #1C1928"] {
   border-color: #D9D9D9 !important;
 }
-[data-pos-theme="light"] .pos-shell [style*="border: 1px solid #2A2540"],
-[data-pos-theme="light"] .pos-shell [style*="border:1px solid #2A2540"],
-[data-pos-theme="light"] .pos-shell [style*="border: 1px solid #1C1928"],
-[data-pos-theme="light"] .pos-shell [style*="border:1px solid #1C1928"] {
-  border-color: #D9D9D9 !important;
-}
 
 /* Open/Close dashboard page  dark metric cards */
-  color: #1A1A1A !important;
-}
+html[data-theme="light"] .pos-shell [style*="background: rgba(11,20,16"] {
+  background: #FFFFFF !important;
   color: #1A1A1A !important;
 }
 
-/* -- POS Dashboard widget colors (C.violet etc) ------------------------- */
+/*  POS Dashboard widget colors (C.violet etc)  */
 /* The C.violet = #8B5CF6 used inline */
+html[data-theme="light"] .pos-shell a[style*="#8B5CF6"],
+html[data-theme="light"] .pos-shell span[style*="#8B5CF6"],
+html[data-theme="light"] .pos-shell p[style*="#8B5CF6"],
+html[data-theme="light"] .pos-shell div[style*="#8B5CF6"] {
+  color: #006AFF !important;
+}
 
-/* -- Recharts / chart text ---------------------------------------------- */
+/*  Recharts / chart text  */
 html[data-theme="light"] .pos-shell .recharts-text,
 html[data-theme="light"] .pos-shell .recharts-cartesian-axis-tick-value {
-  fill: #6B6B6B !important;
-}
-[data-pos-theme="light"] .pos-shell .recharts-text,
-[data-pos-theme="light"] .pos-shell .recharts-cartesian-axis-tick-value {
   fill: #6B6B6B !important;
 }
 html[data-theme="light"] .pos-shell .recharts-cartesian-grid line {
   stroke: #EBEBEB !important;
 }
-[data-pos-theme="light"] .pos-shell .recharts-cartesian-grid line {
-  stroke: #EBEBEB !important;
-}
 
-/* -- POSSidebar command search bar ------------------------------------- */
+/*  POSSidebar command search bar  */
 html[data-theme="light"] .pos-sidebar-wrapper input {
   background: rgba(255,255,255,0.1) !important;
   color: #FFFFFF !important;
   border-color: rgba(255,255,255,0.2) !important;
 }
-[data-pos-theme="light"] .pos-sidebar-wrapper input {
-  background: rgba(255,255,255,0.1) !important;
-  color: #FFFFFF !important;
-  border-color: rgba(255,255,255,0.2) !important;
-}
 html[data-theme="light"] .pos-sidebar-wrapper input::placeholder {
-  color: rgba(255,255,255,0.5) !important;
-}
-[data-pos-theme="light"] .pos-sidebar-wrapper input::placeholder {
   color: rgba(255,255,255,0.5) !important;
 }
