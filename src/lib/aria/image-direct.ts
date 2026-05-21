@@ -116,7 +116,34 @@ export async function generateImageDirect(
     }
   }
 
-  // Strategy 3: SVG poster fallback — always works, no external API needed
+  // Strategy 3: DALL-E 3 (more widely available than gpt-image-1)
+  if (OPENAI_KEY) {
+    try {
+      const t0 = Date.now()
+      const res = await fetch('https://api.openai.com/v1/images/generations', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${OPENAI_KEY}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: 'dall-e-3', prompt, n: 1, size: '1024x1024', response_format: 'b64_json' }),
+        signal: AbortSignal.timeout(45_000),
+      })
+      console.log('[image-direct] dall-e-3 response:', res.status, 'in', Date.now() - t0, 'ms')
+      if (res.ok) {
+        const d = await res.json() as { data?: Array<{ b64_json?: string }> }
+        const b64 = d.data?.[0]?.b64_json
+        if (b64) {
+          const result = await uploadImage(Buffer.from(b64, 'base64'), businessId, 'dall-e-3')
+          if (result) return result
+        }
+      } else {
+        const err = await res.text()
+        console.error('[image-direct] dall-e-3 FULL ERROR:', res.status, err.slice(0, 500))
+      }
+    } catch (e) {
+      console.error('[image-direct] dall-e-3 exception:', String(e).slice(0, 200))
+    }
+  }
+
+  // Strategy 4: SVG poster fallback — always works, no external API needed
   console.log('[image-direct] falling back to SVG poster generation')
   const svgResult = await generateSVGPoster(message, businessId, { name: bizName, city: bizCity, phone: bizPhone, industry: bizIndustry })
   if (svgResult) return svgResult

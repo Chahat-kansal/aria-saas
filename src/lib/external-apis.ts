@@ -259,7 +259,7 @@ export async function sendSMS(to: string, body: string): Promise<boolean> {
   const sid  = process.env.TWILIO_ACCOUNT_SID;
   const auth = process.env.TWILIO_AUTH_TOKEN;
   const from = process.env.TWILIO_PHONE_NUMBER;
-  if (!sid || !auth || !from) { console.log('[sms] Twilio not configured'); return false; }
+  if (!sid || !auth || !from || from === 'false' || sid === 'false') { console.log('[sms] Twilio not configured'); return false; }
   try {
     const res = await fetch(
       `https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`,
