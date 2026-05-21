@@ -4,7 +4,7 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 
-const C = { bg:'var(--bg-base)', card:'var(--bg-surface)', border:'transparent', text:'var(--text-primary)', muted:'var(--text-secondary)', dim:'var(--text-tertiary)', violet:'#8B5CF6', green:'#22C55E', red:'#EF4444', amber:'#F59E0B', cyan:'#00E5FF' };
+const C = { bg:'var(--bg-base)', card:'var(--bg-surface)', border:'transparent', text:'var(--text-primary)', muted:'var(--text-secondary)', dim:'var(--text-tertiary)', violet:'#006AFF', green:'#00B140', red:'#EF4444', amber:'#F59E0B', cyan:'#006AFF' };
 type Tab = 'revenue' | 'transactions' | 'customers' | 'avg_sale';
 
 interface ClosureData {
@@ -151,7 +151,7 @@ export default function ClosureDetailPage() {
             </div>
             <div style={{ padding:'14px 20px', display:'flex', gap:12, flexWrap:'wrap' }}>
               {Object.entries(payment_totals).map(([method, total]) => (
-                <div key={method} style={{ flex:'1 1 140px', background:'rgba(255,255,255,0.04)', borderRadius:10, padding:'12px 16px', textAlign:'center' }}>
+                <div key={method} style={{ flex:'1 1 140px', background:'#FAFAFA', borderRadius:10, padding:'12px 16px', textAlign:'center' }}>
                   <p style={{ fontSize:10, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.06em', color:C.dim, marginBottom:6 }}>{method}</p>
                   <p style={{ fontFamily:'monospace', fontSize:18, fontWeight:800, color:C.violet }}>A${total.toFixed(2)}</p>
                 </div>
