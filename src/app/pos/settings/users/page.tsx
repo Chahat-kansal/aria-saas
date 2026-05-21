@@ -1,9 +1,9 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 
-const C = { bg:'var(--bg-base)', card:'var(--bg-surface)', border:'transparent', text:'var(--text-primary)', muted:'var(--text-secondary)', dim:'var(--text-tertiary)', violet:'#8B5CF6', green:'#22C55E', red:'#EF4444', amber:'#F59E0B' };
+const C = { bg:'var(--bg-base)', card:'var(--bg-surface)', border:'transparent', text:'var(--text-primary)', muted:'var(--text-secondary)', dim:'var(--text-tertiary)', violet:'#006AFF', green:'#00B140', red:'#EF4444', amber:'#F59E0B' };
 
-const iCls: React.CSSProperties = { background: 'rgba(10,9,16,0.8)', border: `1px solid ${C.border}`, borderRadius: 8, padding: '9px 12px', fontSize: 13, color: C.text, outline: 'none', fontFamily: "'Manrope',sans-serif", width: '100%', boxSizing: 'border-box' };
+const iCls: React.CSSProperties = { background: '#FFFFFF', border: `1px solid ${C.border}`, borderRadius: 8, padding: '9px 12px', fontSize: 13, color: C.text, outline: 'none', fontFamily: "'Manrope',sans-serif", width: '100%', boxSizing: 'border-box' };
 const lCls: React.CSSProperties = { display: 'block', fontSize: 11, fontWeight: 700, color: C.muted, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' };
 
 interface PosUser {
@@ -27,9 +27,9 @@ const ROLES = ['cashier', 'supervisor', 'manager', 'admin', 'owner'];
 const ROLE_COLORS: Record<string, { bg: string; color: string }> = {
   cashier:    { bg: 'rgba(59,130,246,0.15)',  color: '#60A5FA' },
   supervisor: { bg: 'rgba(245,158,11,0.15)',  color: '#F59E0B' },
-  manager:    { bg: 'rgba(139,92,246,0.15)',  color: '#8B5CF6' },
+  manager:    { bg: 'rgba(139,92,246,0.15)',  color: '#006AFF' },
   admin:      { bg: 'rgba(236,72,153,0.15)',  color: '#EC4899' },
-  owner:      { bg: 'rgba(34,197,94,0.15)',   color: '#22C55E' },
+  owner:      { bg: 'rgba(34,197,94,0.15)',   color: '#00B140' },
 };
 
 const BLANK_FORM = {
