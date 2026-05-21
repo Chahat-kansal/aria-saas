@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 
-const C = { bg: 'rgba(5,4,15,1)', card: 'var(--bg-surface)', border: 'transparent', text: 'var(--text-primary)', muted: 'var(--text-secondary)', dim: 'var(--text-tertiary)', violet: '#8B5CF6', green: '#22C55E', red: '#EF4444', amber: '#F59E0B', cyan: '#00E5FF' }
+const C = { bg: 'rgba(5,4,15,1)', card: 'var(--bg-surface)', border: '#D9D9D9', text: 'var(--text-primary)', muted: 'var(--text-secondary)', dim: 'var(--text-tertiary)', violet: '#006AFF', green: '#00B140', red: '#EF4444', amber: '#F59E0B', cyan: '#006AFF' }
 
 interface Competitor { id?: string; competitor_name: string; competitor_address: string | null; distance_m: number | null; google_rating: number | null; website: string | null; }
 interface PriceResult { competitor_name: string; price_cents: number; confidence: string; source_url?: string; }
@@ -70,7 +70,7 @@ export default function CompetitorPricesPage() {
 
   const filteredProducts = products.filter(p => p.name.toLowerCase().includes(productSearch.toLowerCase())).slice(0, 8)
 
-  const iS: React.CSSProperties = { background: 'rgba(255,255,255,0.04)', border: `1px solid ${C.border}`, borderRadius: 8, padding: '8px 12px', fontSize: 13, color: C.text, outline: 'none', fontFamily: 'inherit', width: '100%', boxSizing: 'border-box' as const }
+  const iS: React.CSSProperties = { background: '#FAFAFA', border: `1px solid ${C.border}`, borderRadius: 8, padding: '8px 12px', fontSize: 13, color: C.text, outline: 'none', fontFamily: 'inherit', width: '100%', boxSizing: 'border-box' as const }
 
   return (
     <div style={{ minHeight: '100vh', background: C.bg, color: C.text, fontFamily: "'Manrope',system-ui,sans-serif", padding: '24px 28px' }}>
