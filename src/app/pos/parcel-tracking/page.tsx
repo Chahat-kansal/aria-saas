@@ -323,10 +323,11 @@ export default function ParcelTrackingPage() {
                     ? 'No tracking events yet — click Refresh to check for updates'
                     : (
                       <div>
-                        <div style={{ fontSize: 13, marginBottom: 8 }}>Live tracking requires a Track17 API key</div>
+                        <div style={{ fontSize: 13, marginBottom: 8 }}>Live tracking requires a TrackingMore API key</div>
                         <div style={{ fontSize: 11, color: C.dim }}>
-                          Get a free key at <a href="https://www.track17.com" target="_blank" rel="noopener" style={{ color: C.green }}>track17.com</a> (free tier: 100 requests/day)<br />
-                          Then set <code style={{ background: 'rgba(127,184,151,0.1)', padding: '1px 5px', borderRadius: 3 }}>TRACK17_API_KEY</code> in your Vercel environment variables
+                          Get a free key at <a href="https://www.trackingmore.com" target="_blank" rel="noopener" style={{ color: C.green }}>trackingmore.com</a> — supports AusPost, Aramex, DHL, StarTrack &amp; 1,400+ carriers<br />
+                          Then set <code style={{ background: 'rgba(127,184,151,0.1)', padding: '1px 5px', borderRadius: 3 }}>TRACKINGMORE_API_KEY</code> in Vercel environment variables<br />
+                          <span style={{ color: C.dim, marginTop: 4, display: 'block' }}>Also set webhook: TrackingMore → Settings → Webhooks → https://www.ariaos.site/api/pos/parcel-tracking/webhook</span>
                         </div>
                       </div>
                     )

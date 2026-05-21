@@ -32,77 +32,92 @@ function detectCarrier(trackingNumber: string): { carrier: string; name: string 
   return { carrier: 'other', name: 'Unknown Carrier' }
 }
 
-// ── Track17 API lookup ─────────────────────────────────────────────────
-// Free tier: 100 requests/day, 1200+ carriers including all AU carriers
-// Sign up at: https://www.track17.com/
-async function lookupTrack17(trackingNumber: string, carrierCode?: string): Promise<{
+// ── TrackingMore API lookup ────────────────────────────────────────────
+// Supports 1,400+ carriers including AusPost, Aramex, StarTrack, DHL, FedEx
+// Free tier available — sign up at: https://www.trackingmore.com/
+// Webhooks: TrackingMore dashboard → Settings → Webhooks → https://www.ariaos.site/api/pos/parcel-tracking/webhook
+async function lookupTrackingMore(trackingNumber: string, carrierCode?: string): Promise<{
   status: string
   statusDetail: string
   events: Array<{ time: string; location: string; description: string }>
   estimatedDelivery: string | null
   deliveredAt: string | null
 } | null> {
-  const apiKey = process.env.TRACK17_API_KEY
+  const apiKey = process.env.TRACKINGMORE_API_KEY
   if (!apiKey || apiKey === 'false') {
-    console.log('[parcel-tracking] Track17 API key not set')
+    console.log('[parcel-tracking] TrackingMore API key not set — add TRACKINGMORE_API_KEY to env vars')
     return null
   }
 
+  // Map our carrier codes to TrackingMore carrier slugs
+  const carrierMap: Record<string, string> = {
+    auspost: 'australia-post', aramex: 'aramex-australia', startrack: 'startrack',
+    dhl: 'dhl', fedex: 'fedex', couriersplease: 'couriers-please', tnt: 'tnt',
+  }
+  const tmCarrier = carrierCode ? (carrierMap[carrierCode] ?? '') : ''
+
   try {
-    // Register tracking number first
-    await fetch('https://api.track17.com/track/v2/register', {
+    // Create tracking in TrackingMore
+    const createRes = await fetch('https://api.trackingmore.com/v4/trackings/create', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', '17token': apiKey },
-      body: JSON.stringify([{ number: trackingNumber, carrier: carrierCode ?? '' }]),
+      headers: { 'Content-Type': 'application/json', 'Tracking-Api-Key': apiKey },
+      body: JSON.stringify({ tracking_number: trackingNumber, courier_code: tmCarrier || undefined }),
       signal: AbortSignal.timeout(10_000),
     })
 
-    // Then fetch status
-    const res = await fetch('https://api.track17.com/track/v2/gettracklist', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', '17token': apiKey },
-      body: JSON.stringify([{ number: trackingNumber }]),
+    // Fetch tracking status
+    const tmQuery = `https://api.trackingmore.com/v4/trackings/get?tracking_numbers=${trackingNumber}${tmCarrier ? '&courier_code=' + tmCarrier : ''}`
+    const res = await fetch(tmQuery, {
+      headers: { 'Tracking-Api-Key': apiKey },
       signal: AbortSignal.timeout(10_000),
     })
 
-    if (!res.ok) return null
-    const data = await res.json() as {
-      data?: {
-        accepted?: Array<{
-          number: string
-          track: {
-            e: number // status code
-            z0?: { a: string; d: string } // current status
-            z1?: Array<{ a: string; b: string; c: string; d: string }> // events
-            b?: string // estimated delivery
-          }
-        }>
-      }
+    if (!res.ok) {
+      console.error('[parcel-tracking] TrackingMore error:', res.status)
+      return null
     }
 
-    const item = data.data?.accepted?.[0]
+    const data = await res.json() as {
+      data?: Array<{
+        tracking_number: string
+        delivery_status: string  // notfound | pending | transit | pickup | delivered | undelivered | exception | expired
+        latest_event?: string
+        latest_event_time?: string
+        origin_info?: { trackinfo?: Array<{ StatusDescription: string; Details: string; Date: string }> }
+        destination_info?: { trackinfo?: Array<{ StatusDescription: string; Details: string; Date: string }> }
+        expected_delivery?: string
+      }>
+    }
+
+    const item = data.data?.[0]
     if (!item) return null
 
-    const t = item.track
-    // Map Track17 status codes
-    const statusMap: Record<number, string> = {
-      0: 'unknown', 10: 'pending', 20: 'in_transit', 30: 'out_for_delivery',
-      40: 'delivered', 50: 'exception', 60: 'exception', 70: 'exception',
+    const statusMap: Record<string, string> = {
+      notfound: 'pending', pending: 'pending', transit: 'in_transit',
+      pickup: 'out_for_delivery', delivered: 'delivered',
+      undelivered: 'exception', exception: 'exception', expired: 'exception',
     }
-    const status = statusMap[t.e] ?? 'unknown'
-    const events = (t.z1 ?? []).map(ev => ({
-      time: ev.a, location: ev.b ?? '', description: ev.d,
+
+    const status = statusMap[item.delivery_status] ?? 'unknown'
+
+    // Combine origin + destination events into unified timeline
+    const rawEvents = [
+      ...(item.destination_info?.trackinfo ?? []),
+      ...(item.origin_info?.trackinfo ?? []),
+    ]
+    const events = rawEvents.map(ev => ({
+      time: ev.Date, location: ev.Details ?? '', description: ev.StatusDescription,
     }))
 
     return {
       status,
-      statusDetail: t.z0?.d ?? '',
+      statusDetail: item.latest_event ?? '',
       events,
-      estimatedDelivery: t.b ?? null,
-      deliveredAt: status === 'delivered' ? (events[0]?.time ?? null) : null,
+      estimatedDelivery: item.expected_delivery ?? null,
+      deliveredAt: status === 'delivered' ? (item.latest_event_time ?? null) : null,
     }
   } catch (e) {
-    console.error('[parcel-tracking] Track17 error:', String(e).slice(0, 200))
+    console.error('[parcel-tracking] TrackingMore error:', String(e).slice(0, 200))
     return null
   }
 }
@@ -160,7 +175,7 @@ async function _POST(req: Request) {
   const carrierName = carrierCode !== 'other' ? detected.name : 'Unknown Carrier'
 
   // Attempt live lookup immediately
-  const liveData = await lookupTrack17(tn, carrierCode)
+  const liveData = await lookupTrackingMore(tn, carrierCode)
 
   const { data, error } = await supabaseAdmin.from('pos_parcel_tracking').insert({
     business_id: bid,
@@ -206,7 +221,7 @@ async function _PATCH(req: Request) {
   if (body.notes !== undefined) updates.notes = body.notes
 
   if (body.refresh) {
-    const liveData = await lookupTrack17(existing.tracking_number, existing.carrier)
+    const liveData = await lookupTrackingMore(existing.tracking_number, existing.carrier)
     if (liveData) {
       updates.status = liveData.status
       updates.status_detail = liveData.statusDetail
