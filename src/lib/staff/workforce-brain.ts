@@ -93,7 +93,7 @@ Identify the most important workforce insight.`
       maxTokens: 300,
       businessId,
       agentKey: 'generic',
-      role: 'analyst' as never,
+      role: 'analysis' as never,
     },
     fallback,
   )
