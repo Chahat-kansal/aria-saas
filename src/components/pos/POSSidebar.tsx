@@ -212,8 +212,10 @@ export default function POSSidebar({
           height: '100dvh',
           position: 'sticky',
           top: 0,
-          background: 'var(--sidebar-bg, #1A1A1A)',
-          boxShadow: 'inset -1px 0 0 rgba(255,255,255,0.08)',
+          background: 'var(--bg-glass)',
+          backdropFilter: 'var(--glass-blur)',
+          WebkitBackdropFilter: 'var(--glass-blur)',
+          boxShadow: 'inset -1px 0 0 var(--divider)',
           display: 'flex',
           flexDirection: 'column',
           flexShrink: 0,
@@ -244,7 +246,7 @@ export default function POSSidebar({
             {!collapsed && (
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
                 <AriaMark size={15} />
-                <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', letterSpacing: '0.06em' }}>POS</span>
+                <span style={{ fontSize: 11, color: 'var(--text-tertiary)', letterSpacing: '0.06em' }}>POS</span>
               </div>
             )}
           </Link>
@@ -282,7 +284,7 @@ export default function POSSidebar({
               {!collapsed && (
                 <>
                   <span style={{ flex: 1 }}>Search...</span>
-                  <kbd style={{ fontSize: 10, padding: '1px 5px', borderRadius: 4, background: 'var(--bg-base)', color: 'rgba(255,255,255,0.4)', fontFamily: 'inherit' }}>⌘K</kbd>
+                  <kbd style={{ fontSize: 10, padding: '1px 5px', borderRadius: 4, background: 'var(--bg-base)', color: 'var(--text-tertiary)', fontFamily: 'inherit' }}>⌘K</kbd>
                 </>
               )}
             </button>
@@ -305,7 +307,7 @@ export default function POSSidebar({
                       width: '100%', display: 'flex', alignItems: 'center',
                       justifyContent: 'space-between',
                       padding: '7px 8px', background: 'transparent', border: 'none',
-                      color: 'rgba(255,255,255,0.4)', fontSize: 10, fontWeight: 600,
+                      color: 'var(--text-tertiary)', fontSize: 10, fontWeight: 600,
                       textTransform: 'uppercase', letterSpacing: '0.16em',
                       cursor: 'pointer', borderRadius: 6, marginTop: 2,
                     }}
@@ -379,7 +381,7 @@ export default function POSSidebar({
                                   borderRadius: 7, textDecoration: 'none',
                                   background: 'transparent',
                                   border: 'none', cursor: 'pointer',
-                                  color: 'rgba(255,255,255,0.75)', fontSize: 13,
+                                  color: 'var(--text-secondary)', fontSize: 13,
                                   justifyContent: collapsed ? 'center' : 'flex-start',
                                   transition: 'background 150ms',
                                   fontFamily: 'inherit',
@@ -404,8 +406,8 @@ export default function POSSidebar({
                                   padding: collapsed ? '9px' : '7px 8px',
                                   marginLeft: collapsed ? 0 : 4,
                                   borderRadius: 7, textDecoration: 'none',
-                                  color: isActive ? '#FFFFFF' : 'rgba(255,255,255,0.75)',
-                                  background: isActive ? 'rgba(255,255,255,0.12)' : 'transparent',
+                                  color: isActive ? 'var(--text-primary)' : 'var(--text-secondary)',
+                                  background: isActive ? 'var(--violet-soft)' : 'transparent',
                                   fontSize: 13, fontWeight: isActive ? 500 : 400,
                                   position: 'relative',
                                   transition: 'background 150ms, color 150ms',
@@ -479,7 +481,7 @@ export default function POSSidebar({
                                   style={{
                                     position: 'absolute', left: 'calc(100% + 8px)', top: '50%',
                                     transform: 'translateY(-50%)',
-                                    background: 'rgba(255,255,255,0.05)', color: 'var(--text-primary)',
+                                    background: 'var(--bg-elevated)', color: 'var(--text-primary)',
                                     padding: '5px 10px', borderRadius: 7, fontSize: 12,
                                     whiteSpace: 'nowrap', boxShadow: 'var(--shadow-md)',
                                     pointerEvents: 'none', zIndex: 100,
@@ -589,7 +591,7 @@ export default function POSSidebar({
                 transition={springs.snappy}
                 style={{
                   position: 'absolute', bottom: 'calc(100% + 6px)', left: 10, right: 10,
-                  background: 'rgba(255,255,255,0.05)',
+                  background: 'var(--bg-elevated)',
                   borderRadius: 10, boxShadow: 'var(--shadow-lg)', overflow: 'hidden', zIndex: 100,
                 }}
               >
@@ -719,7 +721,7 @@ function CommandPalette({
         transition={springs.snappy}
         style={{
           width: 'min(540px, 90vw)',
-          background: 'rgba(255,255,255,0.05)',
+          background: 'var(--bg-elevated)',
           backdropFilter: 'var(--glass-blur-strong)',
           borderRadius: 14, overflow: 'hidden',
           boxShadow: 'var(--shadow-plane-4), 0 0 0 1px var(--divider) inset',
