@@ -220,7 +220,7 @@ export default function TransfersPage() {
               <div className="mt-4 rounded-xl p-4 text-left max-w-xs mx-auto" style={{ background: 'rgba(255,179,71,0.08)', border: '1px solid rgba(255,179,71,0.4)' }}>
                 <div className="text-sm font-semibold text-[#FFB347]">You only have {outlets.length === 0 ? 'no' : '1'} outlet</div>
                 <div className="text-xs mt-1" style={{ color: 'var(--text-secondary, #A8B5A8)' }}>Inventory transfers move stock between outlets. Create a second outlet first.</div>
-                <a href="/pos/settings/registers" className="inline-block mt-3 text-xs px-3 py-1.5 rounded-lg font-medium" style={{ background: '#2D5240', color: '#7FB897' }}>+ Add outlet</a>
+                <a href="/pos/settings/registers" className="inline-block mt-3 text-xs px-3 py-1.5 rounded-lg font-medium" style={{ background: '#2D5240', color: '#006AFF' }}>+ Add outlet</a>
               </div>
             )}
           </div>
