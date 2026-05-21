@@ -627,4 +627,19 @@ body {
   50%       { transform: scale(1.15); opacity: 0; }
 }
 
-
+/* -- Light mode: cart totals use neutral colors not forest green/amber -- */
+html[data-theme="light"] .totals-grand {
+  background: #F0F4FF;
+  border: 1px solid rgba(0,106,255,0.15);
+}
+html[data-theme="light"] .totals-grand::before { display: none; }
+html[data-theme="light"] .totals-grand-label { color: #6B6B6B; }
+html[data-theme="light"] .totals-grand-value { color: #1A1A1A; }
+html[data-theme="light"] .totals-grand-value .cents {
+  -webkit-text-fill-color: #1A1A1A;
+  color: #1A1A1A;
+}
+html[data-theme="light"] .charge-btn { background: #006AFF; color: #FFFFFF; }
+html[data-theme="light"] .charge-btn:hover { background: #0055CC; }
+html[data-theme="light"] .cart-totals { border-top-color: #EBEBEB; }
+html[data-theme="light"] .cart-items::-webkit-scrollbar-thumb { background: #D9D9D9; }
