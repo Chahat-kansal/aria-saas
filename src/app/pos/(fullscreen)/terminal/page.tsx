@@ -1258,6 +1258,10 @@ export default function TerminalPage() {
 
   async function processSale() {
     if (!cart.length || processing) return;
+    if (roundedTotal <= 0) {
+      alert('Cannot process a $0 sale. Please set prices on all items.');
+      return;
+    }
     // Age restriction gate — require ID check confirmation before proceeding
     const hasAgeRestricted = cart.some(i => i.product.is_age_restricted);
     if (hasAgeRestricted && !ageVerified) {
