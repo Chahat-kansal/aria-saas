@@ -3,6 +3,10 @@
 import { withSentryConfig } from '@sentry/nextjs'
 
 const nextConfig = {
+  generateBuildId: async () => {
+    // Force unique build ID every deployment so Vercel never restores stale CSS cache
+    return `build-${Date.now()}`
+  },
   productionBrowserSourceMaps: false,
   experimental: {
     serverComponentsExternalPackages: ['mongoose'],
