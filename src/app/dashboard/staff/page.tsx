@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
 import type { StaffMember } from '@/types/staff'
 
@@ -50,6 +50,83 @@ function PortalBadge({ member }: { member: MemberRow }) {
     )
   }
   return <span className="text-xs px-2 py-0.5 rounded bg-[rgba(255,255,255,0.06)]" style={{ color: 'var(--text-secondary, #A8B5A8)' }}>Not invited</span>
+}
+
+
+interface StaffSale { served_by: string; total: number; count: number }
+
+function Leaderboard({ businessId }: { businessId: string }) {
+  const [data, setData] = React.useState<StaffSale[]>([])
+  const [loading, setLoading] = React.useState(true)
+  const [period, setPeriod] = React.useState(30)
+
+  React.useEffect(() => {
+    if (!businessId) return
+    setLoading(true)
+    const since = new Date(Date.now() - period * 86400000).toISOString()
+    fetch('/api/pos/sales?business_id=' + businessId + '&limit=2000&since=' + since)
+      .then(r => r.json())
+      .then(d => {
+        const sales = (d.sales ?? []).filter((s: { status?: string; served_by?: string }) => s.status !== 'voided' && s.served_by)
+        const byStaff: Record<string, { total: number; count: number }> = {}
+        for (const s of sales) {
+          const name = (s as { served_by?: string }).served_by ?? 'Unknown'
+          if (!byStaff[name]) byStaff[name] = { total: 0, count: 0 }
+          byStaff[name].total += Number((s as { total_amount?: number }).total_amount ?? 0)
+          byStaff[name].count++
+        }
+        const sorted = Object.entries(byStaff).map(([served_by, v]) => ({ served_by, ...v })).sort((a, b) => b.total - a.total)
+        setData(sorted)
+        setLoading(false)
+      })
+      .catch(() => setLoading(false))
+  }, [businessId, period])
+
+  const best = data[0]?.total ?? 1
+  const MEDALS = ['🥇', '🥈', '🥉']
+
+  return (
+    <div style={{ background: 'var(--bg-elevated, #1A2620)', border: '1px solid rgba(232,237,231,0.04)', borderRadius: 12, padding: '20px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+        <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary, #E8EDE7)', margin: 0 }}>Sales Leaderboard</h2>
+        <div style={{ display: 'flex', gap: 6 }}>
+          {[7, 30, 90].map(p => (
+            <button key={p} onClick={() => setPeriod(p)}
+              style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid ' + (period === p ? 'rgba(127,184,151,0.5)' : 'rgba(232,237,231,0.08)'), background: period === p ? 'rgba(127,184,151,0.1)' : 'transparent', color: period === p ? '#7FB897' : 'var(--text-secondary, #A8B5A8)', fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+              {p}d
+            </button>
+          ))}
+        </div>
+      </div>
+      {loading ? (
+        <div style={{ textAlign: 'center', padding: '24px 0', color: 'var(--text-secondary, #A8B5A8)', fontSize: 13 }}>Loading...</div>
+      ) : data.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '24px 0', color: 'var(--text-secondary, #A8B5A8)', fontSize: 13 }}>
+          No sales data with staff attribution yet. Make sure served_by is recorded in sales.
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {data.map((staff, i) => (
+            <div key={staff.served_by} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <span style={{ fontSize: 18, width: 28, textAlign: 'center', flexShrink: 0 }}>{MEDALS[i] ?? (i + 1)}</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary, #E8EDE7)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{staff.served_by}</span>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: '#7FB897', flexShrink: 0, marginLeft: 8 }}>A${Math.round(staff.total).toLocaleString('en-AU')}</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{ flex: 1, height: 4, background: 'rgba(255,255,255,0.06)', borderRadius: 2 }}>
+                    <div style={{ height: 4, width: (staff.total / best * 100) + '%', background: i === 0 ? '#1D9E75' : i === 1 ? '#7FB897' : 'rgba(127,184,151,0.4)', borderRadius: 2, transition: 'width 0.5s' }} />
+                  </div>
+                  <span style={{ fontSize: 11, color: 'var(--text-secondary, #A8B5A8)', flexShrink: 0 }}>{staff.count} sales · A${Math.round(staff.total / staff.count).toLocaleString('en-AU')} avg</span>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
 }
 
 export default function StaffPage() {
@@ -183,6 +260,9 @@ export default function StaffPage() {
         </div>
       )}
     </div>
+      <div style={{ marginTop: 24 }}>
+        <Leaderboard businessId={members[0]?.business_id ?? ''} />
+      </div>
   )
 }
 

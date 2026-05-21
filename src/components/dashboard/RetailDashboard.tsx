@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { MorningCommandCentre } from '@/components/dashboard/MorningCommandCentre';
@@ -50,6 +50,82 @@ function TrendBadge({ pct }: { pct: number | null }) {
       {up ? '↑' : '↓'} {Math.abs(pct).toFixed(0)}%
     </span>
   );
+}
+
+
+function RevenueChart({ businessId }: { businessId: string }) {
+  const [data, setData] = React.useState<Array<{ day: string; revenue: number }>>([])
+  const [loading, setLoading] = React.useState(true)
+  const chartRef = React.useRef<HTMLCanvasElement>(null)
+  const chartInst = React.useRef<unknown>(null)
+
+  React.useEffect(() => {
+    if (!businessId) return
+    fetch('/api/pos/sales?business_id=' + businessId + '&limit=500')
+      .then(r => r.json())
+      .then(d => {
+        const sales = (d.sales ?? []).filter((s: { status?: string }) => s.status !== 'voided')
+        const byDate: Record<string, number> = {}
+        for (const s of sales) {
+          const day = (s as { created_at?: string }).created_at?.split('T')[0]
+          if (day) byDate[day] = (byDate[day] ?? 0) + Number((s as { total_amount?: number }).total_amount ?? 0)
+        }
+        const last7: Array<{ day: string; revenue: number }> = []
+        for (let i = 6; i >= 0; i--) {
+          const d = new Date(); d.setDate(d.getDate() - i)
+          const dateStr = d.toISOString().split('T')[0]
+          last7.push({ day: d.toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric' }), revenue: Math.round(byDate[dateStr] ?? 0) })
+        }
+        setData(last7)
+        setLoading(false)
+      })
+      .catch(() => setLoading(false))
+  }, [businessId])
+
+  React.useEffect(() => {
+    if (loading || !chartRef.current || data.length === 0) return
+    const win = window as unknown as Record<string, unknown>
+    function build() {
+      if (!win.Chart) return
+      const ChartJS = win.Chart as { new(el: HTMLCanvasElement, cfg: unknown): unknown }
+      if (chartInst.current) (chartInst.current as { destroy(): void }).destroy()
+      const max = Math.max(...data.map(d => d.revenue), 1)
+      chartInst.current = new ChartJS(chartRef.current!, {
+        type: 'bar',
+        data: {
+          labels: data.map(d => d.day),
+          datasets: [{ label: 'Revenue', data: data.map(d => d.revenue), backgroundColor: data.map(d => d.revenue === max ? '#1D9E75' : 'rgba(29,158,117,0.3)'), borderRadius: 6, borderSkipped: false }]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { ticks: { color: 'rgba(255,255,255,0.4)', font: { size: 10 } }, grid: { display: false } },
+            y: { ticks: { color: 'rgba(255,255,255,0.4)', font: { size: 10 }, callback: (v: number) => 'A$' + Math.round(v/1000) + 'k' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+          }
+        }
+      })
+    }
+    if (win.Chart) { build() } else {
+      const s = document.createElement('script')
+      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js'
+      s.onload = build
+      document.head.appendChild(s)
+    }
+  }, [data, loading])
+
+  if (loading) return null
+  return (
+    <div className="rounded-xl p-4" style={{ background: '#13131a', border: '1px solid rgba(255,255,255,0.07)' }}>
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-sm font-semibold" style={{ color: '#E8EDE7' }}>Revenue — last 7 days</p>
+        <p className="text-xs" style={{ color: '#6b7280' }}>A${data.reduce((s, d) => s + d.revenue, 0).toLocaleString('en-AU')} total</p>
+      </div>
+      <div style={{ position: 'relative', height: 160 }}>
+        <canvas ref={chartRef} role="img" aria-label="Bar chart of revenue for the last 7 days" />
+      </div>
+    </div>
+  )
 }
 
 export function RetailDashboard({ business }: { business: Business }) {
@@ -287,7 +363,11 @@ export function RetailDashboard({ business }: { business: Business }) {
         )}
       </div>
 
-      {/* ─── Section 3: MorningCommandCentre (AI decisions) ── */}
+      
+      {/* ─── Revenue Chart ───────────────────────────────── */}
+      <RevenueChart businessId={business.id} />
+
+{/* ─── Section 3: MorningCommandCentre (AI decisions) ── */}
       <MorningCommandCentre />
 
       {/* ─── Section 4: Insights Grid ─────────────────────── */}
