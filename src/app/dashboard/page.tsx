@@ -464,7 +464,7 @@ async function SalonGymDashboard({ business }: { business: any }) {
                         {d.date ? new Date(d.date).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' }) : `Day ${i + 1}`}
                       </span>
                       <div className="flex-1 h-2 bg-[rgba(255,255,255,0.06)] rounded-full overflow-hidden">
-                        <div className={`h-full rounded-full ${pct < 30 ? 'bg-red-400' : pct < 60 ? 'bg-amber-400' : 'bg-[#1D9E75]'}`} style={{ width: `${pct}%` }} />
+                        <div className={`h-full rounded-full ${pct < 30 ? 'bg-red-400' : pct < 60 ? 'bg-amber-400' : 'bg-[#1D9E75]'}`} style={{ width: (pct + '%') }} />
                       </div>
                       <span className="text-[10px] text-[rgba(255,255,255,0.3)] w-6 text-right">{count}</span>
                     </div>
@@ -610,8 +610,8 @@ async function RealEstateDashboard({ business }: { business: any }) {
 function Blobs({ color1 = 'rgba(29,158,117,0.15)', color2 = 'rgba(124,58,237,0.12)' }: { color1?: string; color2?: string }) {
   return (
     <div className="pointer-events-none fixed inset-0 overflow-hidden z-0">
-      <div className="absolute top-0 left-1/4 w-96 h-96 rounded-full opacity-30" style={{ background: `radial-gradient(circle,${color1} 0%,transparent 70%)` }} />
-      <div className="absolute bottom-0 right-1/4 w-80 h-80 rounded-full opacity-20" style={{ background: `radial-gradient(circle,${color2} 0%,transparent 70%)` }} />
+      <div className="absolute top-0 left-1/4 w-96 h-96 rounded-full opacity-30" style={{ background: ('radial-gradient(circle,' + color1 + ' 0%,transparent 70%)') }} />
+      <div className="absolute bottom-0 right-1/4 w-80 h-80 rounded-full opacity-20" style={{ background: ('radial-gradient(circle,' + color2 + ' 0%,transparent 70%)') }} />
     </div>
   );
 }
