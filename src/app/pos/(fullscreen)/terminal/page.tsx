@@ -1457,17 +1457,17 @@ export default function TerminalPage() {
         <div style={{ position: 'absolute', width: 400, height: 400, top: '-100px', left: '-100px', borderRadius: '50%', background: 'radial-gradient(circle,rgba(20,184,166,0.12),transparent 70%)', filter: 'blur(80px)', animation: 'pos-orb-breathe 4s ease-in-out infinite', pointerEvents: 'none' }} />
         <div style={{ background: 'var(--pos-elevated,#162030)', backdropFilter: 'blur(20px)', border: '1px solid rgba(20,184,166,0.2)', borderRadius: 24, padding: '40px 32px', maxWidth: 420, width: '100%', textAlign: 'center', boxShadow: '0 24px 64px rgba(0,0,0,0.6)', animation: 'pos-scale-in 0.4s var(--pos-ease,cubic-bezier(0.16,1,0.3,1))' }}>
           <svg width={36} height={36} viewBox="0 0 32 32" fill="none" style={{ margin: '0 auto 12px' }}>
-            <path d="M16 2L28 9v14L16 30 4 23V9z" fill="rgba(139,92,246,0.15)" stroke="#8B5CF6" strokeWidth="1.5"/>
-            <path d="M16 8l7 4v8l-7 4-7-4V12z" fill="rgba(139,92,246,0.25)" stroke="#8B5CF6" strokeWidth="1"/>
-            <circle cx="16" cy="16" r="2.5" fill="#8B5CF6"/>
+            <path d="M16 2L28 9v14L16 30 4 23V9z" fill="rgba(0,106,255,0.10)" stroke="var(--violet)" strokeWidth="1.5"/>
+            <path d="M16 8l7 4v8l-7 4-7-4V12z" fill="rgba(0,106,255,0.15)" stroke="var(--violet)" strokeWidth="1"/>
+            <circle cx="16" cy="16" r="2.5" fill="var(--violet)"/>
           </svg>
-          <p style={{ fontFamily: "'Instrument Serif',Georgia,serif", fontStyle: 'italic', fontSize: 26, color: '#8B5CF6', marginBottom: 6, lineHeight: 1 }}>AriaPOS</p>
+          <p style={{ fontFamily: "'Instrument Serif',Georgia,serif", fontStyle: 'italic', fontSize: 26, color: 'var(--violet)', marginBottom: 6, lineHeight: 1 }}>AriaPOS</p>
           <p style={{ fontSize: 13, color: 'var(--pos-text-secondary,#7A9BB5)', marginBottom: 32 }}>{businessName}</p>
           <p style={{ fontSize: 20, fontWeight: 700, color: 'var(--pos-text-primary,#E8F4F8)', marginBottom: 6, fontFamily: "'Manrope',sans-serif" }}>Register is closed</p>
           <p style={{ fontSize: 13, color: 'var(--pos-text-secondary,#7A9BB5)', marginBottom: 28 }}>Enter your opening float to start trading.</p>
           <div style={{ marginBottom: 20 }}>
             <p style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--pos-text-tertiary,#3D5A73)', marginBottom: 10, fontFamily: "'Manrope',sans-serif" }}>Opening Float</p>
-            <div style={{ display: 'flex', alignItems: 'center', border: '1px solid var(--pos-border-default,#243347)', borderRadius: 12, background: 'rgba(255,255,255,0.03)', overflow: 'hidden' }}>
+            <div style={{ display: 'flex', alignItems: 'center', border: '1px solid var(--pos-border-default,#243347)', borderRadius: 12, background: 'var(--bg-surface)', overflow: 'hidden' }}>
               <span style={{ padding: '14px 12px 14px 16px', fontFamily: "'JetBrains Mono',monospace", color: 'var(--pos-text-tertiary,#3D5A73)', fontSize: 14 }}>A$</span>
               <input
                 type="number" min="0" step="0.01"
@@ -1478,10 +1478,10 @@ export default function TerminalPage() {
                 autoFocus
               />
             </div>
-            {registerError && <p style={{ marginTop: 8, fontSize: 12, color: '#EF4444', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 8, padding: '8px 12px' }}>{registerError}</p>}
+            {registerError && <p style={{ marginTop: 8, fontSize: 12, color: 'var(--destructive)', background: 'var(--destructive-bg)', border: '1px solid rgba(255,22,0,0.12)', borderRadius: 8, padding: '8px 12px' }}>{registerError}</p>}
           </div>
           <button onClick={openRegister} disabled={openingRegister}
-            style={{ width: '100%', height: 52, borderRadius: 14, border: 'none', background: '#8B5CF6', boxShadow: '0 4px 0 rgba(124,58,237,0.4),0 6px 20px rgba(139,92,246,0.33)', color: '#fff', fontFamily: "'Manrope',sans-serif", fontWeight: 700, fontSize: 15, cursor: openingRegister ? 'not-allowed' : 'pointer', opacity: openingRegister ? 0.6 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+            style={{ width: '100%', height: 52, borderRadius: 14, border: 'none', background: 'var(--violet)', boxShadow: '0 4px 0 rgba(124,58,237,0.4),0 6px 20px rgba(139,92,246,0.33)', color: '#fff', fontFamily: "'Manrope',sans-serif", fontWeight: 700, fontSize: 15, cursor: openingRegister ? 'not-allowed' : 'pointer', opacity: openingRegister ? 0.6 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
             {openingRegister ? 'Opening…' : 'Open Register'}
           </button>
         </div>
@@ -1529,12 +1529,12 @@ export default function TerminalPage() {
         <div onClick={() => setShowFloorPlan(false)}
           style={{ position: 'fixed', inset: 0, zIndex: 299, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(4px)', display: 'flex', flexDirection: 'column' }}>
           <div onClick={e => e.stopPropagation()}
-            style={{ background: '#090e0b', border: '1px solid rgba(127,184,151,0.2)', borderRadius: '0 0 16px 16px', maxHeight: '80vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid rgba(127,184,151,0.15)' }}>
-              <span style={{ color: '#7FB897', fontWeight: 700, fontSize: 14, fontFamily: "'Fraunces',serif" }}>Floor Plan — Select Table</span>
+            style={{ background: '#090e0b', border: '1px solid rgba(0,106,255,0.12)', borderRadius: '0 0 16px 16px', maxHeight: '80vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid rgba(0,106,255,0.10)' }}>
+              <span style={{ color: 'var(--violet)', fontWeight: 700, fontSize: 14, fontFamily: "'Fraunces',serif" }}>Floor Plan — Select Table</span>
               <div style={{ display: 'flex', gap: 8 }}>
                 <button onClick={() => setFloorPlanEditMode(v => !v)}
-                  style={{ fontSize: 11, padding: '3px 10px', borderRadius: 6, border: `1px solid ${floorPlanEditMode ? 'rgba(127,184,151,0.4)' : 'rgba(255,255,255,0.1)'}`, background: floorPlanEditMode ? 'rgba(127,184,151,0.1)' : 'transparent', color: floorPlanEditMode ? '#7FB897' : 'rgba(255,255,255,0.4)', cursor: 'pointer', fontFamily: 'inherit' }}>
+                  style={{ fontSize: 11, padding: '3px 10px', borderRadius: 6, border: `1px solid ${floorPlanEditMode ? 'rgba(127,184,151,0.4)' : 'rgba(255,255,255,0.1)'}`, background: floorPlanEditMode ? 'var(--violet-dim)' : 'transparent', color: floorPlanEditMode ? 'var(--violet)' : 'rgba(255,255,255,0.4)', cursor: 'pointer', fontFamily: 'inherit' }}>
                   {floorPlanEditMode ? '✓ Done editing' : '⚙ Edit layout'}
                 </button>
                 <button onClick={() => setShowFloorPlan(false)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', cursor: 'pointer', fontSize: 20 }}>×</button>
@@ -1605,7 +1605,7 @@ export default function TerminalPage() {
             )}
             {expiryPrompt.mode === 'ask_track' && (
               <>
-                <div style={{ fontSize: 11, fontWeight: 700, color: '#7FB897', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>Track in System?</div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--violet)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>Track in System?</div>
                 <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 6px' }}>{expiryPrompt.product_name}</p>
                 <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '0 0 20px' }}>
                   Add <strong style={{ color: 'var(--text-primary)' }}>{new Date(expiryPrompt.pending_date).toLocaleDateString('en-AU')}</strong> to the system and let Aria monitor expiry for this product?
@@ -1616,7 +1616,7 @@ export default function TerminalPage() {
                       await fetch('/api/pos/product-batches', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ business_id: businessId, product_id: expiryPrompt.product_id, expiry_date: expiryPrompt.pending_date, quantity_received: 1, quantity_remaining: 0, expiry_tracked: true, source: 'pos_sale' }) })
                     } catch { /* non-fatal */ }
                     setExpiryPrompt(null)
-                  }} style={{ flex: 1, padding: '10px 0', borderRadius: 10, border: 'none', background: '#7FB897', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>Yes, Track It</button>
+                  }} style={{ flex: 1, padding: '10px 0', borderRadius: 10, border: 'none', background: 'var(--violet)', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>Yes, Track It</button>
                   <button onClick={() => setExpiryPrompt(null)} style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid var(--divider)', background: 'transparent', color: 'var(--text-secondary)', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>No Thanks</button>
                 </div>
               </>
@@ -1670,8 +1670,8 @@ export default function TerminalPage() {
       {terminalView === 'checkout' && (
         <div style={{ position: 'absolute', inset: 0, zIndex: 50, display: 'flex', fontFamily: "'Manrope',sans-serif", background: 'var(--bg-base)', backdropFilter: 'blur(20px)' }}>
           {/* Left: Summary */}
-          <div style={{ width: 300, display: 'flex', flexDirection: 'column', background: 'var(--bg-surface)', borderRight: '1px solid rgba(0,229,255,0.07)' }}>
-            <div style={{ padding: '14px 18px', borderBottom: '1px solid rgba(0,229,255,0.07)', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ width: 300, display: 'flex', flexDirection: 'column', background: 'var(--bg-surface)', borderRight: '1px solid var(--violet-dim)' }}>
+            <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--violet-dim)', display: 'flex', alignItems: 'center', gap: 10 }}>
               <button onClick={() => setTerminalView('pos')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, fontFamily: 'inherit', padding: 0 }}>
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg> Back
               </button>
@@ -1680,7 +1680,7 @@ export default function TerminalPage() {
             <div style={{ flex: 1, overflowY: 'auto', padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 6 }}>
               {cart.map(item => {
                 const cn = (item.product.pos_categories?.name ?? 'other').toLowerCase();
-                const cMeta: Record<string, { a: string; b: string }> = { beer: { a:'#F59E0B', b:'#92400E' }, 'beer & cider': { a:'#F59E0B', b:'#92400E' }, wine: { a:'#9333EA', b:'#4C1D95' }, spirits: { a:'#00E5FF', b:'#7B2FFF' }, coffee: { a:'#A16207', b:'#451A03' }, food: { a:'#EF4444', b:'#7F1D1D' }, snacks: { a:'#F97316', b:'#7C2D12' }, other: { a:'#6366F1', b:'#312E81' } };
+                const cMeta: Record<string, { a: string; b: string }> = { beer: { a:'#F59E0B', b:'#92400E' }, 'beer & cider': { a:'#F59E0B', b:'#92400E' }, wine: { a:'#9333EA', b:'#4C1D95' }, spirits: { a:'var(--violet)', b:'var(--violet)' }, coffee: { a:'#A16207', b:'#451A03' }, food: { a:'var(--destructive)', b:'#7F1D1D' }, snacks: { a:'#F97316', b:'#7C2D12' }, other: { a:'#6366F1', b:'#312E81' } };
                 const m = cMeta[cn] ?? cMeta.other;
                 const initials = item.product.name.split(' ').map((w: string) => w[0]).join('').slice(0,2).toUpperCase();
                 return (
@@ -1695,12 +1695,12 @@ export default function TerminalPage() {
                 );
               })}
             </div>
-            <div style={{ padding: '12px 18px', borderTop: '1px solid rgba(0,229,255,0.07)' }}>
+            <div style={{ padding: '12px 18px', borderTop: '1px solid var(--violet-dim)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                 <span style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>Loyalty earned</span>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'rgba(0,229,255,0.07)', border: '1px solid rgba(0,229,255,0.2)', borderRadius: 20, padding: '3px 10px' }}>
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#00E5FF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-                  <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, fontWeight: 800, color: '#00E5FF' }}>{loyaltyPoints}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'var(--violet-dim)', border: '1px solid rgba(0,229,255,0.2)', borderRadius: 20, padding: '3px 10px' }}>
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--violet)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                  <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, fontWeight: 800, color: 'var(--violet)' }}>{loyaltyPoints}</span>
                   <span style={{ fontSize: 9, color: 'var(--text-tertiary)', fontWeight: 600 }}>PTS</span>
                 </div>
               </div>
@@ -1720,16 +1720,16 @@ export default function TerminalPage() {
           {/* Right: Payment */}
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
             {/* Payment method tabs */}
-            <div style={{ padding: '12px 20px', borderBottom: '1px solid rgba(0,229,255,0.07)', display: 'flex', gap: 8 }}>
+            <div style={{ padding: '12px 20px', borderBottom: '1px solid var(--violet-dim)', display: 'flex', gap: 8 }}>
               {([
-                { id: 'card'           as const, label: 'Card',       icon: '💳', color: '#00E5FF' },
-                { id: 'cash'           as const, label: 'Cash',       icon: '💵', color: '#22C55E' },
+                { id: 'card'           as const, label: 'Card',       icon: '💳', color: 'var(--violet)' },
+                { id: 'cash'           as const, label: 'Cash',       icon: '💵', color: 'var(--success)' },
                 { id: 'split'          as const, label: 'Split',      icon: '✂️', color: '#F59E0B' },
-                { id: 'gift_card'      as const, label: 'Gift Card',  icon: '🎁', color: '#8B5CF6' },
+                { id: 'gift_card'      as const, label: 'Gift Card',  icon: '🎁', color: 'var(--violet)' },
                 { id: 'direct_deposit' as const, label: 'Direct Dep.',icon: '🏦', color: '#F59E0B' },
               ]).map(m => (
                 <button key={m.id} onClick={() => setPayMethod(m.id)}
-                  style={{ flex: 1, height: 60, borderRadius: 12, border: `1.5px solid ${payMethod === m.id ? m.color + '55' : 'rgba(0,229,255,0.08)'}`, background: payMethod === m.id ? `${m.color}12` : 'rgba(0,229,255,0.02)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, cursor: 'pointer', transition: 'all 200ms', transform: payMethod === m.id ? 'translateY(-2px)' : 'none', boxShadow: payMethod === m.id ? `0 6px 20px ${m.color}33` : 'none' }}>
+                  style={{ flex: 1, height: 60, borderRadius: 12, border: `1.5px solid ${payMethod === m.id ? m.color + '55' : 'var(--violet-dim)'}`, background: payMethod === m.id ? `${m.color}12` : 'rgba(0,229,255,0.02)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, cursor: 'pointer', transition: 'all 200ms', transform: payMethod === m.id ? 'translateY(-2px)' : 'none', boxShadow: payMethod === m.id ? `0 6px 20px ${m.color}33` : 'none' }}>
                   <span style={{ fontSize: 18 }}>{m.icon}</span>
                   <span style={{ fontSize: 10, fontWeight: 700, color: payMethod === m.id ? m.color : 'var(--text-tertiary)', fontFamily: 'inherit' }}>{m.label}</span>
                 </button>
@@ -1741,7 +1741,7 @@ export default function TerminalPage() {
               {payMethod === 'card' && (
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 20 }}>
                   {/* 3D EFTPOS terminal */}
-                  <div style={{ width: 220, background: 'linear-gradient(160deg,rgba(17,22,40,0.97),rgba(6,9,22,0.99))', border: '1px solid rgba(0,229,255,0.15)', borderRadius: 24, padding: 20, boxShadow: '0 22px 64px rgba(0,0,0,0.65), 0 0 50px rgba(0,229,255,0.1), inset 0 1px 0 rgba(0,229,255,0.06)', transform: 'perspective(600px) rotateX(6deg)' }}>
+                  <div style={{ width: 220, background: 'linear-gradient(160deg,rgba(17,22,40,0.97),rgba(6,9,22,0.99))', border: '1px solid rgba(0,106,255,0.10)', borderRadius: 24, padding: 20, boxShadow: '0 22px 64px rgba(0,0,0,0.65), 0 0 50px rgba(0,229,255,0.1), inset 0 1px 0 rgba(0,229,255,0.06)', transform: 'perspective(600px) rotateX(6deg)' }}>
                     {/* Screen */}
                     <div style={{ background: '#050A14', borderRadius: 14, padding: '20px 16px', border: '1px solid rgba(0,229,255,0.1)', marginBottom: 14, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, position: 'relative', overflow: 'hidden' }}>
                       <div style={{ position: 'absolute', inset: 0, background: 'repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,229,255,0.012) 2px,rgba(0,229,255,0.012) 4px)', borderRadius: 14, pointerEvents: 'none' }} />
@@ -1751,14 +1751,14 @@ export default function TerminalPage() {
                           <div key={i} style={{ position: 'absolute', width: 48 + i * 20, height: 48 + i * 20, borderRadius: '50%', border: `1.5px solid rgba(0,229,255,${0.6 - i * 0.18})`, animation: `nfc-pulse 2s ease-in-out infinite`, animationDelay: `${i * 0.4}s` }} />
                         ))}
                         <div style={{ width: 38, height: 38, borderRadius: '50%', border: '2px solid rgba(0,229,255,0.7)', background: 'rgba(0,229,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', zIndex: 1 }}>
-                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#00E5FF" strokeWidth="1.5" strokeLinecap="round"><path d="M6 8.32a7.43 7.43 0 0 0 0 7.36"/><path d="M9.46 6.21a11.76 11.76 0 0 0 0 11.58"/><path d="M12.91 4.1a15.91 15.91 0 0 1 0 15.8"/></svg>
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--violet)" strokeWidth="1.5" strokeLinecap="round"><path d="M6 8.32a7.43 7.43 0 0 0 0 7.36"/><path d="M9.46 6.21a11.76 11.76 0 0 0 0 11.58"/><path d="M12.91 4.1a15.91 15.91 0 0 1 0 15.8"/></svg>
                         </div>
                       </div>
                       <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 32, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.04em' }}>A${roundedTotal.toFixed(2)}</div>
-                      <div style={{ fontSize: 10, fontWeight: 700, color: '#00E5FF', letterSpacing: '0.08em' }}>TAP TO PAY</div>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--violet)', letterSpacing: '0.08em' }}>TAP TO PAY</div>
                       {/* Indicator dots */}
                       <div style={{ display: 'flex', gap: 5 }}>
-                        {[0, 1, 2].map(i => <div key={i} style={{ width: 6, height: 6, borderRadius: '50%', background: i === 1 ? '#00E5FF' : 'rgba(0,229,255,0.2)', boxShadow: i === 1 ? '0 0 6px #00E5FF' : 'none' }} />)}
+                        {[0, 1, 2].map(i => <div key={i} style={{ width: 6, height: 6, borderRadius: '50%', background: i === 1 ? 'var(--violet)' : 'rgba(0,229,255,0.2)', boxShadow: i === 1 ? '0 0 6px #00E5FF' : 'none' }} />)}
                       </div>
                     </div>
                   </div>
@@ -1778,7 +1778,7 @@ export default function TerminalPage() {
                       <button key={a} onClick={() => setCashTendered(a.toFixed(2))} style={{ flex: 1, height: 32, borderRadius: 8, border: '1px solid rgba(0,229,255,0.12)', background: 'rgba(0,229,255,0.04)', color: 'var(--text-primary)', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: "'JetBrains Mono',monospace" }}>A${a.toFixed(0)}</button>
                     ))}
                   </div>
-                  <div style={{ background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(0,229,255,0.15)', borderRadius: 12, padding: '10px 14px', textAlign: 'right' }}>
+                  <div style={{ background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(0,106,255,0.10)', borderRadius: 12, padding: '10px 14px', textAlign: 'right' }}>
                     <div style={{ fontSize: 9, color: 'var(--text-tertiary)', marginBottom: 4, letterSpacing: '0.06em' }}>CASH TENDERED</div>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
                       <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 13, color: 'var(--text-tertiary)' }}>A$</span>
@@ -1788,9 +1788,9 @@ export default function TerminalPage() {
                     </div>
                   </div>
                   {tendered >= roundedTotal && (
-                    <div style={{ background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.25)', borderRadius: 10, padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontSize: 12, fontWeight: 700, color: '#22C55E' }}>Change due</span>
-                      <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 22, fontWeight: 800, color: '#22C55E' }}>A${change.toFixed(2)}</span>
+                    <div style={{ background: 'var(--success-bg)', border: '1px solid rgba(34,197,94,0.25)', borderRadius: 10, padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--success)' }}>Change due</span>
+                      <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 22, fontWeight: 800, color: 'var(--success)' }}>A${change.toFixed(2)}</span>
                     </div>
                   )}
                   <button onClick={() => processSale()} disabled={processing || tendered < roundedTotal}
@@ -1803,7 +1803,7 @@ export default function TerminalPage() {
               {payMethod === 'split' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12, width: 280, textAlign: 'center' }}>
                   <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Cash portion:</p>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(0,229,255,0.15)', borderRadius: 12, padding: '8px 14px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(0,106,255,0.10)', borderRadius: 12, padding: '8px 14px' }}>
                     <span style={{ fontFamily: "'JetBrains Mono',monospace", color: 'var(--text-tertiary)' }}>A$</span>
                     <input type="number" value={splitCash} onChange={e => setSplitCash(e.target.value)} placeholder="0.00" autoFocus style={{ flex: 1, background: 'none', border: 'none', outline: 'none', fontFamily: "'JetBrains Mono',monospace", fontSize: 24, fontWeight: 800, color: 'var(--text-primary)' }} />
                   </div>
@@ -1828,23 +1828,23 @@ export default function TerminalPage() {
                         onChange={e => { setGiftCardCode(e.target.value.toUpperCase()); setGiftCardBalance(null); setGiftCardError(''); }}
                         onKeyDown={e => e.key === 'Enter' && checkGiftCard()}
                         placeholder="XXXX-XXXX"
-                        style={{ flex:1, background:'var(--bg-surface)', border:'1px solid rgba(0,229,255,0.15)', borderRadius:10, padding:'10px 14px', fontSize:16, fontFamily:"'JetBrains Mono',monospace", color:'var(--text-primary)', outline:'none', letterSpacing:'0.1em' }}
+                        style={{ flex:1, background:'var(--bg-surface)', border:'1px solid rgba(0,106,255,0.10)', borderRadius:10, padding:'10px 14px', fontSize:16, fontFamily:"'JetBrains Mono',monospace", color:'var(--text-primary)', outline:'none', letterSpacing:'0.1em' }}
                       />
                       <button onClick={checkGiftCard} disabled={!giftCardCode.trim() || giftCardChecking}
-                        style={{ padding:'10px 16px', borderRadius:10, border:'none', background:'rgba(139,92,246,0.2)', color:'#8B5CF6', fontSize:13, fontWeight:700, cursor:'pointer', fontFamily:'inherit', opacity:!giftCardCode.trim()?0.4:1 }}>
+                        style={{ padding:'10px 16px', borderRadius:10, border:'none', background:'rgba(0,106,255,0.12)', color:'var(--violet)', fontSize:13, fontWeight:700, cursor:'pointer', fontFamily:'inherit', opacity:!giftCardCode.trim()?0.4:1 }}>
                         {giftCardChecking ? '…' : 'Check'}
                       </button>
                     </div>
-                    {giftCardError && <p style={{ fontSize:12, color:'#EF4444', marginTop:6 }}>{giftCardError}</p>}
+                    {giftCardError && <p style={{ fontSize:12, color:'var(--destructive)', marginTop:6 }}>{giftCardError}</p>}
                   </div>
                   {giftCardBalance !== null && (
-                    <div style={{ width:'100%', background:'rgba(139,92,246,0.08)', border:'1px solid rgba(139,92,246,0.2)', borderRadius:12, padding:'14px 18px' }}>
+                    <div style={{ width:'100%', background:'var(--violet-dim)', border:'1px solid rgba(0,106,255,0.12)', borderRadius:12, padding:'14px 18px' }}>
                       <div style={{ fontSize:11, color:'var(--text-secondary)', marginBottom:4 }}>Available Balance</div>
-                      <div style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:28, fontWeight:800, color: giftCardBalance >= roundedTotal ? '#22C55E' : '#EF4444' }}>
+                      <div style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:28, fontWeight:800, color: giftCardBalance >= roundedTotal ? 'var(--success)' : 'var(--destructive)' }}>
                         A${giftCardBalance.toFixed(2)}
                       </div>
                       {giftCardBalance < roundedTotal && (
-                        <p style={{ fontSize:12, color:'#EF4444', marginTop:6 }}>Insufficient — A${(roundedTotal - giftCardBalance).toFixed(2)} short</p>
+                        <p style={{ fontSize:12, color:'var(--destructive)', marginTop:6 }}>Insufficient — A${(roundedTotal - giftCardBalance).toFixed(2)} short</p>
                       )}
                       {giftCardBalance > roundedTotal && (
                         <p style={{ fontSize:12, color:'var(--text-secondary)', marginTop:4 }}>Change due: A${(giftCardBalance - roundedTotal).toFixed(2)}</p>
@@ -1854,7 +1854,7 @@ export default function TerminalPage() {
                   <button
                     onClick={() => processSale()}
                     disabled={processing || giftCardBalance === null || giftCardBalance <= 0}
-                    style={{ height:52, padding:'0 36px', borderRadius:14, border:'none', background:'linear-gradient(135deg,#8B5CF6,#6D28D9)', color:'#fff', fontFamily:'inherit', fontSize:14, fontWeight:900, cursor:(processing||giftCardBalance===null||giftCardBalance<=0)?'not-allowed':'pointer', boxShadow:'0 5px 0 rgba(109,40,217,0.5), 0 10px 30px rgba(139,92,246,0.3)', transition:'all 200ms', opacity:(processing||giftCardBalance===null||giftCardBalance<=0)?0.4:1 }}>
+                    style={{ height:52, padding:'0 36px', borderRadius:14, border:'none', background:'linear-gradient(135deg,#8B5CF6,#6D28D9)', color:'#fff', fontFamily:'inherit', fontSize:14, fontWeight:900, cursor:(processing||giftCardBalance===null||giftCardBalance<=0)?'not-allowed':'pointer', boxShadow:'0 5px 0 rgba(109,40,217,0.5), 0 10px 30px rgba(0,106,255,0.18)', transition:'all 200ms', opacity:(processing||giftCardBalance===null||giftCardBalance<=0)?0.4:1 }}>
                     {processing ? 'Processing…' : `Pay with Gift Card · A$${roundedTotal.toFixed(2)}`}
                   </button>
                 </div>
@@ -1869,7 +1869,7 @@ export default function TerminalPage() {
                       value={directDepositRef}
                       onChange={e => setDirectDepositRef(e.target.value)}
                       placeholder="e.g. REF-20260506"
-                      style={{ width:'100%', background:'var(--bg-surface)', border:'1px solid rgba(0,229,255,0.15)', borderRadius:10, padding:'10px 14px', fontSize:14, color:'var(--text-primary)', outline:'none', fontFamily:'inherit', boxSizing:'border-box' }}
+                      style={{ width:'100%', background:'var(--bg-surface)', border:'1px solid rgba(0,106,255,0.10)', borderRadius:10, padding:'10px 14px', fontSize:14, color:'var(--text-primary)', outline:'none', fontFamily:'inherit', boxSizing:'border-box' }}
                     />
                   </div>
                   <div>
@@ -1878,7 +1878,7 @@ export default function TerminalPage() {
                       value={directDepositName}
                       onChange={e => setDirectDepositName(e.target.value)}
                       placeholder="e.g. John Smith"
-                      style={{ width:'100%', background:'var(--bg-surface)', border:'1px solid rgba(0,229,255,0.15)', borderRadius:10, padding:'10px 14px', fontSize:14, color:'var(--text-primary)', outline:'none', fontFamily:'inherit', boxSizing:'border-box' }}
+                      style={{ width:'100%', background:'var(--bg-surface)', border:'1px solid rgba(0,106,255,0.10)', borderRadius:10, padding:'10px 14px', fontSize:14, color:'var(--text-primary)', outline:'none', fontFamily:'inherit', boxSizing:'border-box' }}
                     />
                   </div>
                   <button
@@ -1905,7 +1905,7 @@ export default function TerminalPage() {
                 <div key={i} style={{ position: 'absolute', width: 76 + i * 24, height: 76 + i * 24, borderRadius: '50%', border: `1.5px solid rgba(34,197,94,${0.55 - i * 0.15})`, animation: `paid-ring 1.6s ${i * 0.3}s ease-out infinite` }} />
               ))}
               <div style={{ width: 80, height: 80, borderRadius: '50%', background: 'rgba(34,197,94,0.1)', border: '2px solid rgba(34,197,94,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 60px rgba(34,197,94,0.3)', animation: 'scale-in 0.5s cubic-bezier(0.16,1,0.3,1)', position: 'relative', zIndex: 1 }}>
-                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#22C55E" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--success)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
               </div>
             </div>
             {/* Title */}
@@ -1925,17 +1925,17 @@ export default function TerminalPage() {
                 <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{(showReceipt.cartSnapshot ?? []).reduce((s: number, i: CartItem) => s + i.qty, 0)} items</span>
                 <span style={{ fontSize: 12, fontFamily: "'JetBrains Mono',monospace", color: 'var(--text-secondary)' }}>A${showReceipt.total_amount?.toFixed(2) ?? roundedTotal.toFixed(2)}</span>
               </div>
-              <div style={{ height: 1, background: 'rgba(0,229,255,0.07)', margin: '10px 0' }} />
+              <div style={{ height: 1, background: 'var(--violet-dim)', margin: '10px 0' }} />
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
                 <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>Charged</span>
-                <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 30, fontWeight: 900, color: '#22C55E', letterSpacing: '-0.05em' }}>A${showReceipt.total_amount?.toFixed(2) ?? roundedTotal.toFixed(2)}</span>
+                <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 30, fontWeight: 900, color: 'var(--success)', letterSpacing: '-0.05em' }}>A${showReceipt.total_amount?.toFixed(2) ?? roundedTotal.toFixed(2)}</span>
               </div>
-              <div style={{ height: 1, background: 'rgba(0,229,255,0.07)', margin: '10px 0' }} />
+              <div style={{ height: 1, background: 'var(--violet-dim)', margin: '10px 0' }} />
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>Points earned</span>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'rgba(0,229,255,0.07)', border: '1px solid rgba(0,229,255,0.2)', borderRadius: 20, padding: '3px 10px' }}>
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#00E5FF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-                  <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, fontWeight: 800, color: '#00E5FF' }}>{loyaltyPoints}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'var(--violet-dim)', border: '1px solid rgba(0,229,255,0.2)', borderRadius: 20, padding: '3px 10px' }}>
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--violet)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                  <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, fontWeight: 800, color: 'var(--violet)' }}>{loyaltyPoints}</span>
                   <span style={{ fontSize: 9, color: 'var(--text-tertiary)', fontWeight: 600 }}>PTS</span>
                 </div>
               </div>
@@ -2006,7 +2006,7 @@ export default function TerminalPage() {
       {/* Mobile mode banner */}
       {showMobileBanner && (
         <div className="fixed top-0 left-0 right-0 z-40 flex items-center justify-between px-4 py-3 flex-shrink-0"
-          style={{ background: '#8B5CF6' }}>
+          style={{ background: 'var(--violet)' }}>
           <div>
             <p className="text-white text-sm font-semibold leading-tight">Mobile device detected</p>
             <p className="text-xs" style={{ color: 'rgba(255,255,255,0.75)' }}>Switch to mobile mode for camera barcode scanning</p>
@@ -2019,7 +2019,7 @@ export default function TerminalPage() {
             </button>
             <a href="/pos/mobile"
               className="px-3 py-1.5 rounded-lg text-xs font-bold"
-              style={{ background: '#fff', color: '#8B5CF6' }}>
+              style={{ background: '#fff', color: 'var(--violet)' }}>
               Switch →
             </a>
           </div>
@@ -2031,12 +2031,12 @@ export default function TerminalPage() {
       {/* ── TOP BAR ───────────────────────────────────────────────── */}
       <div className="flex-shrink-0 flex items-center px-3 gap-2" style={{ minHeight: 46, background: 'var(--terminal-glass-3,rgba(11,20,16,0.85))', borderBottom: '1px solid var(--terminal-sage-rim,rgba(127,184,151,0.18))', backdropFilter: 'blur(20px) saturate(1.4)', WebkitBackdropFilter: 'blur(20px) saturate(1.4)', position: 'relative', zIndex: 2, flexWrap: 'wrap', paddingTop: 6, paddingBottom: 6 }}>
         <svg width="20" height="20" viewBox="0 0 32 32" fill="none" style={{ flexShrink: 0 }}>
-          <rect x="16" y="2" width="19" height="19" rx="3" transform="rotate(45 16 2)" stroke="#00E5FF" strokeWidth="1.8" fill="none"/>
-          <circle cx="16" cy="16" r="3" fill="#00E5FF"/>
-          <circle cx="16" cy="4.5" r="1.8" fill="#00E5FF" opacity="0.4"/>
-          <circle cx="27.5" cy="16" r="1.8" fill="#00E5FF" opacity="0.4"/>
-          <circle cx="16" cy="27.5" r="1.8" fill="#00E5FF" opacity="0.4"/>
-          <circle cx="4.5" cy="16" r="1.8" fill="#00E5FF" opacity="0.4"/>
+          <rect x="16" y="2" width="19" height="19" rx="3" transform="rotate(45 16 2)" stroke="var(--violet)" strokeWidth="1.8" fill="none"/>
+          <circle cx="16" cy="16" r="3" fill="var(--violet)"/>
+          <circle cx="16" cy="4.5" r="1.8" fill="var(--violet)" opacity="0.4"/>
+          <circle cx="27.5" cy="16" r="1.8" fill="var(--violet)" opacity="0.4"/>
+          <circle cx="16" cy="27.5" r="1.8" fill="var(--violet)" opacity="0.4"/>
+          <circle cx="4.5" cy="16" r="1.8" fill="var(--violet)" opacity="0.4"/>
         </svg>
         <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>Point of Sale</span>
         <span style={{ fontSize: 11, color: 'var(--text-tertiary)', fontWeight: 400 }}>{businessName}</span>
@@ -2080,18 +2080,18 @@ export default function TerminalPage() {
           {businessType === 'cafe' && (
             <button onClick={() => setShowKdsTracker(v => !v)}
               className="px-3 py-1 rounded-md text-xs whitespace-nowrap flex-shrink-0"
-              style={{ color: kdsReadyOrders.length > 0 ? '#7FB897' : 'var(--text-secondary)', border: kdsReadyOrders.length > 0 ? '1px solid rgba(127,184,151,0.4)' : '1px solid #2A2540', background: kdsReadyOrders.length > 0 ? 'rgba(127,184,151,0.1)' : 'rgba(255,255,255,0.03)' }}>
+              style={{ color: kdsReadyOrders.length > 0 ? 'var(--violet)' : 'var(--text-secondary)', border: kdsReadyOrders.length > 0 ? '1px solid rgba(127,184,151,0.4)' : '1px solid var(--border-default)', background: kdsReadyOrders.length > 0 ? 'var(--violet-dim)' : 'var(--bg-surface)' }}>
               🍳{kdsReadyOrders.length > 0 ? ` ${kdsReadyOrders.length} ready` : ' Kitchen'}
             </button>
           )}
           {!registerLoading && (
-            <button onClick={toggleTrainingMode} className="px-3 py-1 rounded-md text-xs whitespace-nowrap flex-shrink-0" style={{ color: trainingMode ? '#F59E0B' : 'var(--text-secondary)', border: `1px solid ${trainingMode ? 'rgba(245,158,11,0.4)' : '#2A2540'}`, background: trainingMode ? 'rgba(245,158,11,0.08)' : 'rgba(255,255,255,0.03)' }}>
+            <button onClick={toggleTrainingMode} className="px-3 py-1 rounded-md text-xs whitespace-nowrap flex-shrink-0" style={{ color: trainingMode ? '#F59E0B' : 'var(--text-secondary)', border: `1px solid ${trainingMode ? 'rgba(245,158,11,0.4)' : '#2A2540'}`, background: trainingMode ? 'rgba(245,158,11,0.08)' : 'var(--bg-surface)' }}>
               {trainingMode ? '🎓 Training ON' : '🎓'}
             </button>
           )}
           {!registerLoading && (registerIsOpen
-            ? <button onClick={() => setShowCloseModal(true)} className="px-3 py-1 rounded-md text-xs whitespace-nowrap flex-shrink-0" style={{ color: '#EF4444', border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.06)' }}>Close reg.</button>
-            : <button onClick={() => setShowRegisterModal(true)} className="px-3 py-1 rounded-md text-xs whitespace-nowrap flex-shrink-0" style={{ color: '#22C55E', border: '1px solid rgba(34,197,94,0.3)', background: 'rgba(34,197,94,0.06)' }}>Open reg.</button>
+            ? <button onClick={() => setShowCloseModal(true)} className="px-3 py-1 rounded-md text-xs whitespace-nowrap flex-shrink-0" style={{ color: 'var(--destructive)', border: '1px solid rgba(255,22,0,0.18)', background: 'rgba(239,68,68,0.06)' }}>Close reg.</button>
+            : <button onClick={() => setShowRegisterModal(true)} className="px-3 py-1 rounded-md text-xs whitespace-nowrap flex-shrink-0" style={{ color: 'var(--success)', border: '1px solid rgba(34,197,94,0.3)', background: 'rgba(34,197,94,0.06)' }}>Open reg.</button>
           )}
         </div>
       </div>
@@ -2125,7 +2125,7 @@ export default function TerminalPage() {
           {/* Quick panel slide-out */}
           {showQuickPanel && (
             <div ref={quickPanelRef} className="absolute inset-0 z-20 flex flex-col" style={{ background: 'var(--bg-elevated)', boxShadow: '4px 0 24px rgba(0,0,0,0.5)' }}>
-              <div className="flex items-center justify-between px-4 py-3" style={{ borderBottom: '1px solid #1C1928' }}>
+              <div className="flex items-center justify-between px-4 py-3" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
                 <div>
                   <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{businessName}</p>
                   <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>{new Date().toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })}</p>
@@ -2146,7 +2146,7 @@ export default function TerminalPage() {
                   <a key={link.href} href={link.href}
                     className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors"
                     style={{ color: 'var(--text-secondary)' }}
-                    onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.background = 'rgba(255,255,255,0.04)'; (e.currentTarget as HTMLAnchorElement).style.color = 'var(--text-primary)'; }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.background = 'var(--bg-elevated)'; (e.currentTarget as HTMLAnchorElement).style.color = 'var(--text-primary)'; }}
                     onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.background = ''; (e.currentTarget as HTMLAnchorElement).style.color = 'var(--text-secondary)'; }}>
                     <span className="text-base w-6 text-center">{link.icon}</span>
                     <span>{link.label}</span>
@@ -2158,7 +2158,7 @@ export default function TerminalPage() {
                     {(['in', 'out'] as const).map(m => (
                       <button key={m} onClick={() => { setClockMode(m); setShowClockModal(true); setClockPin(''); setClockResult(null); }}
                         className="flex-1 py-2 rounded-lg text-xs font-medium transition-colors capitalize"
-                        style={{ background: m === 'in' ? 'rgba(45,82,64,0.4)' : 'rgba(239,68,68,0.15)', color: m === 'in' ? '#7FB897' : '#fca5a5', border: `1px solid ${m === 'in' ? 'rgba(45,82,64,0.5)' : 'rgba(239,68,68,0.3)'}` }}>
+                        style={{ background: m === 'in' ? 'rgba(45,82,64,0.4)' : 'rgba(255,22,0,0.10)', color: m === 'in' ? 'var(--violet)' : '#fca5a5', border: `1px solid ${m === 'in' ? 'rgba(45,82,64,0.5)' : 'rgba(255,22,0,0.18)'}` }}>
                         Clock {m}
                       </button>
                     ))}
@@ -2185,7 +2185,7 @@ export default function TerminalPage() {
                 </button>
               </div>
               {lowStockItems.length > 0 && (
-                <div className="p-3" style={{ borderTop: '1px solid #1C1928' }}>
+                <div className="p-3" style={{ borderTop: '1px solid var(--border-subtle)' }}>
                   <p className="text-[10px] uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-tertiary)' }}>Low stock</p>
                   {lowStockItems.slice(0, 3).map(p => (
                     <p key={p.id} className="text-xs py-0.5" style={{ color: '#F59E0B' }}>⚠ {p.name} ({p.stock_quantity} left)</p>
@@ -2193,10 +2193,10 @@ export default function TerminalPage() {
                 </div>
               )}
               {registerIsOpen && (
-                <div className="p-3" style={{ borderTop: '1px solid #1C1928' }}>
+                <div className="p-3" style={{ borderTop: '1px solid var(--border-subtle)' }}>
                   <button onClick={() => { setShowCloseModal(true); setShowQuickPanel(false); }}
                     className="w-full py-2.5 rounded-xl text-sm font-medium"
-                    style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', color: '#EF4444' }}>
+                    style={{ background: 'var(--destructive-bg)', border: '1px solid rgba(255,22,0,0.12)', color: 'var(--destructive)' }}>
                     Close Register
                   </button>
                 </div>
@@ -2208,7 +2208,7 @@ export default function TerminalPage() {
           <div className="px-3 py-1.5 flex gap-2" style={{ borderBottom: '1px solid rgba(0,229,255,0.06)' }}>
             <button onClick={() => setShowQuickPanel(v => !v)}
               className="flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-xl text-base"
-              style={{ border: '1px solid #2A2540', background: 'rgba(255,255,255,0.03)', color: 'var(--text-secondary)' }}>
+              style={{ border: '1px solid var(--border-default)', background: 'var(--bg-surface)', color: 'var(--text-secondary)' }}>
               ≡
             </button>
             <div className="relative flex-1">
@@ -2219,7 +2219,7 @@ export default function TerminalPage() {
                 onChange={e => setSearch(e.target.value)}
                 placeholder="Search or scan barcode…"
                 className="w-full pl-9 pr-8 py-1.5 rounded-[10px] text-sm outline-none"
-                style={{ background: 'rgba(0,229,255,0.04)', border: '1px solid rgba(0,229,255,0.08)', color: 'var(--text-primary)', fontFamily: "'Manrope', sans-serif" }}
+                style={{ background: 'rgba(0,229,255,0.04)', border: '1px solid var(--violet-dim)', color: 'var(--text-primary)', fontFamily: "'Manrope', sans-serif" }}
               />
               {search && (
                 <button onClick={() => setSearch('')}
@@ -2232,21 +2232,21 @@ export default function TerminalPage() {
           </div>
 
           {/* Category tabs */}
-          <div className="px-3 py-1 overflow-x-auto" style={{ borderBottom: '1px solid #1C1928', scrollbarWidth: 'none' }}>
+          <div className="px-3 py-1 overflow-x-auto" style={{ borderBottom: '1px solid var(--border-subtle)', scrollbarWidth: 'none' }}>
             <div className="flex gap-1.5 whitespace-nowrap">
               <button onClick={() => setActiveCategory(null)}
                 className="text-xs font-semibold px-2.5 py-0.5 rounded-lg flex-shrink-0 transition-all"
                 style={!activeCategory
-                  ? { background: 'rgba(139,92,246,0.12)', border: '1px solid rgba(139,92,246,0.25)', color: '#8B5CF6' }
-                  : { background: 'rgba(255,255,255,0.03)', border: '1px solid transparent', color: 'rgba(139,133,168,0.5)' }}>
+                  ? { background: 'var(--violet-dim)', border: '1px solid rgba(0,106,255,0.15)', color: 'var(--violet)' }
+                  : { background: 'var(--bg-surface)', border: '1px solid transparent', color: 'rgba(139,133,168,0.5)' }}>
                 All
               </button>
               {categories.map(c => (
                 <button key={c.name} onClick={() => setActiveCategory(activeCategory === c.name ? null : c.name)}
                   className="text-xs font-semibold px-2.5 py-0.5 rounded-lg flex-shrink-0 flex items-center gap-1.5 transition-all"
                   style={activeCategory === c.name
-                    ? { background: 'rgba(139,92,246,0.12)', border: '1px solid rgba(139,92,246,0.25)', color: '#8B5CF6' }
-                    : { background: 'rgba(255,255,255,0.03)', border: '1px solid transparent', color: 'rgba(139,133,168,0.5)' }}>
+                    ? { background: 'var(--violet-dim)', border: '1px solid rgba(0,106,255,0.15)', color: 'var(--violet)' }
+                    : { background: 'var(--bg-surface)', border: '1px solid transparent', color: 'rgba(139,133,168,0.5)' }}>
                   <span className="text-sm leading-none">{getCategoryEmoji(c.name)}</span>
                   <span>{c.name}</span>
                 </button>
@@ -2292,7 +2292,7 @@ export default function TerminalPage() {
                 title="Active outlet"
                 style={{
                   padding: '5px 8px', borderRadius: 8, fontSize: 11, fontWeight: 500,
-                  background: 'rgba(127,184,151,0.06)', border: '1px solid rgba(127,184,151,0.15)',
+                  background: 'var(--violet-dim)', border: '1px solid rgba(0,106,255,0.10)',
                   color: 'var(--text-secondary)', cursor: 'pointer', fontFamily: 'inherit',
                 }}
               >
@@ -2304,8 +2304,8 @@ export default function TerminalPage() {
           </div>
 
           {priceCheckMode && (
-            <div className="px-3 py-1.5" style={{ background: 'rgba(139,92,246,0.06)', borderBottom: '1px solid rgba(139,92,246,0.15)' }}>
-              <p className="text-xs font-medium" style={{ color: '#8B5CF6' }}>Price check mode — tap product to check price, not add to cart</p>
+            <div className="px-3 py-1.5" style={{ background: 'rgba(139,92,246,0.06)', borderBottom: '1px solid rgba(0,106,255,0.10)' }}>
+              <p className="text-xs font-medium" style={{ color: 'var(--violet)' }}>Price check mode — tap product to check price, not add to cart</p>
             </div>
           )}
 
@@ -2313,8 +2313,8 @@ export default function TerminalPage() {
           {(barcodeScanning || barcodeLookupHit) && (
             <div className="mx-3 mb-2 mt-1">
               {barcodeScanning ? (
-                <div className="rounded-lg px-3 py-2 text-xs flex items-center gap-2" style={{ background: 'rgba(139,92,246,0.06)', border: '1px solid rgba(139,92,246,0.2)', color: '#8B5CF6' }}>
-                  <span className="w-3 h-3 rounded-full border border-t-transparent animate-spin" style={{ borderColor: '#8B5CF6', borderTopColor: 'transparent' }} />
+                <div className="rounded-lg px-3 py-2 text-xs flex items-center gap-2" style={{ background: 'rgba(139,92,246,0.06)', border: '1px solid rgba(0,106,255,0.12)', color: 'var(--violet)' }}>
+                  <span className="w-3 h-3 rounded-full border border-t-transparent animate-spin" style={{ borderColor: 'var(--violet)', borderTopColor: 'transparent' }} />
                   Looking up barcode…
                 </div>
               ) : barcodeLookupHit && (
@@ -2333,10 +2333,10 @@ export default function TerminalPage() {
             {loading ? (
               <div className="grid grid-cols-2 gap-2">
                 {[...Array(8)].map((_, i) => (
-                  <div key={i} className="rounded-2xl p-3 animate-pulse" style={{ background: 'var(--bg-surface)', border: '1px solid #2A2540' }}>
-                    <div className="h-12 rounded-lg mb-2" style={{ background: 'rgba(255,255,255,0.04)' }} />
+                  <div key={i} className="rounded-2xl p-3 animate-pulse" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-default)' }}>
+                    <div className="h-12 rounded-lg mb-2" style={{ background: 'var(--bg-elevated)' }} />
                     <div className="h-3 rounded mb-1" style={{ background: 'rgba(255,255,255,0.06)', width: '70%' }} />
-                    <div className="h-3 rounded" style={{ background: 'rgba(255,255,255,0.04)', width: '45%' }} />
+                    <div className="h-3 rounded" style={{ background: 'var(--bg-elevated)', width: '45%' }} />
                   </div>
                 ))}
               </div>
@@ -2428,9 +2428,9 @@ export default function TerminalPage() {
                 'beer':         { a: '#F59E0B', b: '#92400E' },
                 'beer & cider': { a: '#F59E0B', b: '#92400E' },
                 'wine':         { a: '#9333EA', b: '#4C1D95' },
-                'spirits':      { a: '#00E5FF', b: '#7B2FFF' },
+                'spirits':      { a: 'var(--violet)', b: 'var(--violet)' },
                 'coffee':       { a: '#A16207', b: '#451A03' },
-                'food':         { a: '#EF4444', b: '#7F1D1D' },
+                'food':         { a: 'var(--destructive)', b: '#7F1D1D' },
                 'soft drinks':  { a: '#10B981', b: '#064E3B' },
                 'rtd':          { a: '#10B981', b: '#064E3B' },
                 'snacks':       { a: '#F97316', b: '#7C2D12' },
@@ -2471,7 +2471,7 @@ export default function TerminalPage() {
                         }}
                         onMouseLeave={e => {
                           const el = e.currentTarget as HTMLElement;
-                          el.style.border = '1px solid rgba(0,229,255,0.08)';
+                          el.style.border = '1px solid var(--violet-dim)';
                           el.style.boxShadow = '';
                           el.style.transform = '';
                         }}
@@ -2545,8 +2545,8 @@ export default function TerminalPage() {
               )}
               {/* Table + customer context bar — cafe, additive */}
               {businessType === 'cafe' && (selectedTable || customerDetails?.name) && (
-                <div style={{ display: 'flex', gap: 8, padding: '5px 12px', background: 'rgba(127,184,151,0.06)', borderBottom: '1px solid rgba(127,184,151,0.15)', fontSize: 11, alignItems: 'center' }}>
-                  {selectedTable && <span style={{ color: '#7FB897' }}>🪑 {selectedTable.name}</span>}
+                <div style={{ display: 'flex', gap: 8, padding: '5px 12px', background: 'var(--violet-dim)', borderBottom: '1px solid rgba(0,106,255,0.10)', fontSize: 11, alignItems: 'center' }}>
+                  {selectedTable && <span style={{ color: 'var(--violet)' }}>🪑 {selectedTable.name}</span>}
                   {customerDetails?.name && <span style={{ color: 'rgba(255,255,255,0.6)' }}>👤 {customerDetails.name}</span>}
                   {customerDetails?.pickup_time && <span style={{ color: 'rgba(255,255,255,0.4)' }}>⏰ {new Date(customerDetails.pickup_time).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}</span>}
                   <button onClick={() => { setSelectedTable(null); setCustomerDetails(null) }} style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'rgba(255,255,255,0.3)', cursor: 'pointer', fontSize: 13 }}>×</button>
@@ -2565,10 +2565,10 @@ export default function TerminalPage() {
                 />
               )}
               {/* Cart header */}
-              <div ref={cartAnchor} className="flex-shrink-0 px-4 py-2 flex items-center gap-2" style={{ borderBottom: '1px solid #1C1928' }}>
+              <div ref={cartAnchor} className="flex-shrink-0 px-4 py-2 flex items-center gap-2" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
                 <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Order</span>
                 {cart.length > 0 && (
-                  <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(139,92,246,0.12)', border: '1px solid rgba(139,92,246,0.25)', color: '#8B5CF6' }}>
+                  <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style={{ background: 'var(--violet-dim)', border: '1px solid rgba(0,106,255,0.15)', color: 'var(--violet)' }}>
                     {cart.reduce((s, i) => s + i.qty, 0)} item{cart.reduce((s, i) => s + i.qty, 0) !== 1 ? 's' : ''}
                   </span>
                 )}
@@ -2583,26 +2583,26 @@ export default function TerminalPage() {
                 {cart.length > 0 && (
                   <button onClick={() => parkSale()}
                     className="text-xs px-2.5 py-1.5 rounded-lg transition-colors"
-                    style={{ border: '1px solid #2A2540', color: 'var(--text-secondary)' }}>
+                    style={{ border: '1px solid var(--border-default)', color: 'var(--text-secondary)' }}>
                     Park
                   </button>
                 )}
                 {cart.length > 0 && (
                   <button onClick={confirmClear}
                     className="text-xs px-2.5 py-1.5 rounded-lg transition-colors"
-                    style={{ border: '1px solid #2A2540', color: 'var(--text-secondary)' }}>
+                    style={{ border: '1px solid var(--border-default)', color: 'var(--text-secondary)' }}>
                     Clear
                   </button>
                 )}
                 {/* Customer selector */}
                 {customer ? (
-                  <div className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5" style={{ border: '1px solid rgba(139,92,246,0.3)', background: 'rgba(139,92,246,0.08)' }}>
-                    <div className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold flex-shrink-0" style={{ background: 'rgba(139,92,246,0.2)', color: '#8B5CF6' }}>
+                  <div className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5" style={{ border: '1px solid rgba(0,106,255,0.18)', background: 'var(--violet-dim)' }}>
+                    <div className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold flex-shrink-0" style={{ background: 'rgba(0,106,255,0.12)', color: 'var(--violet)' }}>
                       {customer.name[0]}
                     </div>
                     <span className="text-xs max-w-[80px] truncate" style={{ color: 'var(--text-primary)' }}>{customer.name}</span>
                     {customer.loyalty_points > 0 && (
-                      <span className="text-[10px]" style={{ color: '#8B5CF6' }}>{customer.loyalty_points}pts</span>
+                      <span className="text-[10px]" style={{ color: 'var(--violet)' }}>{customer.loyalty_points}pts</span>
                     )}
                     <button onClick={() => { setCustomer(null); setCustomerSearch(''); }} className="text-base leading-none ml-0.5" style={{ color: 'rgba(139,92,246,0.5)' }}>×</button>
                   </div>
@@ -2611,18 +2611,18 @@ export default function TerminalPage() {
                     <input value={customerSearch} onChange={e => setCustomerSearch(e.target.value)}
                       placeholder="+ Customer"
                       className="text-xs rounded-lg px-2.5 py-1.5 outline-none w-28"
-                      style={{ border: '1px dashed #2A2540', color: 'var(--text-secondary)', background: 'transparent' }} />
+                      style={{ border: '1px dashed var(--border-strong)', color: 'var(--text-secondary)', background: 'transparent' }} />
                     {customerResults.length > 0 && (
-                      <div className="absolute top-full mt-1 right-0 rounded-xl shadow-xl z-30 overflow-hidden w-48" style={{ background: 'var(--bg-elevated)', border: '1px solid #2A2540' }}>
+                      <div className="absolute top-full mt-1 right-0 rounded-xl shadow-xl z-30 overflow-hidden w-48" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-default)' }}>
                         {customerResults.map(c => (
                           <button key={c.id}
                             onMouseDown={e => { e.preventDefault(); setCustomer(c); setCustomerSearch(''); setCustomerResults([]); }}
-                            className="w-full flex items-center gap-2 px-3 py-2 text-left" style={{ borderBottom: '1px solid #1C1928' }}>
+                            className="w-full flex items-center gap-2 px-3 py-2 text-left" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
                             <div className="flex-1 min-w-0">
                               <p className="text-xs font-medium truncate" style={{ color: 'var(--text-primary)' }}>{c.name}</p>
                               <p className="text-[10px]" style={{ color: 'var(--text-tertiary)' }}>{c.phone ?? c.email ?? ''}</p>
                             </div>
-                            <span className="text-[10px]" style={{ color: '#8B5CF6' }}>{c.loyalty_points}pts</span>
+                            <span className="text-[10px]" style={{ color: 'var(--violet)' }}>{c.loyalty_points}pts</span>
                           </button>
                         ))}
                       </div>
@@ -2632,7 +2632,7 @@ export default function TerminalPage() {
               </div>
 
               {/* Sale attribution (commission) */}
-              <div className="flex-shrink-0 px-4 py-1 flex items-center gap-2" style={{ borderBottom: '1px solid #1C1928' }}>
+              <div className="flex-shrink-0 px-4 py-1 flex items-center gap-2" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
                 <span className="text-[10px] font-medium uppercase tracking-wider flex-shrink-0" style={{ color: 'var(--text-tertiary)' }}>Sale by</span>
                 <input value={servedBy} onChange={e => setServedBy(e.target.value)}
                   placeholder="Cashier name…"
@@ -2645,7 +2645,7 @@ export default function TerminalPage() {
                 {cart.length === 0 ? (
                   <div className="flex flex-col items-center justify-center h-full text-center px-6 py-12">
                     <div style={{ width: 52, height: 52, borderRadius: 15, border: '1px dashed rgba(127,184,151,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 10 }}>
-                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="rgba(127,184,151,0.2)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="rgba(0,106,255,0.12)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
                     </div>
                     <p style={{ fontSize: 12, color: 'rgba(127,184,151,0.25)', lineHeight: 1.6 }}>Tap a product<br/>to begin</p>
                   </div>
@@ -2703,13 +2703,13 @@ export default function TerminalPage() {
               <div style={{ flexShrink: 0 }}>
                 {/* Discount quick-select pills */}
                 {cart.length > 0 && (
-                  <div style={{ padding: '5px 12px', display: 'flex', gap: 4, borderTop: '1px solid rgba(127,184,151,0.06)' }}>
+                  <div style={{ padding: '5px 12px', display: 'flex', gap: 4, borderTop: '1px solid var(--violet-dim)' }}>
                     {[0, 5, 10, 15, 20].map(d => {
                       const curDisc = cart.length > 0 ? Math.round(cart[0].discount_percent ?? 0) : 0;
                       const active = d === 0 ? curDisc === 0 : curDisc === d;
                       return (
                         <button key={d} onClick={() => setCart(c => c.map(i => ({ ...i, discount_percent: d })))}
-                          style={{ flex: 1, height: 22, borderRadius: 6, border: `1px solid ${active ? 'rgba(127,184,151,0.35)' : 'rgba(127,184,151,0.1)'}`, background: active ? 'rgba(127,184,151,0.12)' : 'rgba(127,184,151,0.03)', color: active ? 'var(--terminal-sage-bright,#8FCAA5)' : 'var(--text-tertiary)', fontSize: 10, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', transition: 'all 150ms' }}>
+                          style={{ flex: 1, height: 22, borderRadius: 6, border: `1px solid ${active ? 'rgba(127,184,151,0.35)' : 'var(--violet-dim)'}`, background: active ? 'rgba(127,184,151,0.12)' : 'rgba(127,184,151,0.03)', color: active ? 'var(--terminal-sage-bright,#8FCAA5)' : 'var(--text-tertiary)', fontSize: 10, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', transition: 'all 150ms' }}>
                           {d === 0 ? '—' : `${d}%`}
                         </button>
                       );
@@ -2795,13 +2795,13 @@ export default function TerminalPage() {
                         return (
                           <div style={{ padding: '6px 16px', display: 'flex', flexDirection: 'column', gap: 5 }}>
                             {earnPts > 0 && (
-                              <div style={{ fontSize: 11, color: '#7FB897', fontWeight: 600 }}>
+                              <div style={{ fontSize: 11, color: 'var(--violet)', fontWeight: 600 }}>
                                 +{earnPts} point{earnPts !== 1 ? 's' : ''} earned this sale
                               </div>
                             )}
                             {canRedeem && (
                               <button onClick={() => setRedeemActive(r => !r)}
-                                style={{ textAlign: 'left', background: redeemActive ? 'rgba(139,92,246,0.12)' : 'transparent', border: `1px solid ${redeemActive ? 'rgba(139,92,246,0.4)' : 'rgba(139,92,246,0.2)'}`, borderRadius: 8, padding: '6px 10px', cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 700, color: '#8B5CF6' }}>
+                                style={{ textAlign: 'left', background: redeemActive ? 'var(--violet-dim)' : 'transparent', border: `1px solid ${redeemActive ? 'rgba(139,92,246,0.4)' : 'rgba(0,106,255,0.12)'}`, borderRadius: 8, padding: '6px 10px', cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 700, color: 'var(--violet)' }}>
                                 {redeemActive ? `✓ Redeeming ${redeemThreshold} pts = −A$${redeemDiscount.toFixed(2)}` : `Redeem ${redeemThreshold} pts = −A$${((redeemThreshold * (loyaltyConfig.point_value_cents ?? 1)) / 100).toFixed(2)}`}
                               </button>
                             )}
@@ -2872,7 +2872,7 @@ export default function TerminalPage() {
                     await fetch(`/api/pos/online-orders/${o.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'confirmed' }) })
                     setPendingOnlineOrders(prev => prev.filter(x => x.id !== o.id))
                   }}
-                  style={{ padding: '5px 10px', borderRadius: 7, border: 'none', background: '#7FB897', color: '#0f1a26', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}>
+                  style={{ padding: '5px 10px', borderRadius: 7, border: 'none', background: 'var(--violet)', color: '#0f1a26', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}>
                   Confirm
                 </button>
               </div>
@@ -2883,9 +2883,9 @@ export default function TerminalPage() {
 
       {/* KDS Tracker drawer - cafe-only, additive */}
       {showKdsTracker && businessType === 'cafe' && (
-        <div style={{ position: 'fixed', right: 0, top: 0, bottom: 0, width: 320, background: 'var(--pos-elevated,#162030)', borderLeft: '1px solid rgba(127,184,151,0.2)', zIndex: 400, overflowY: 'auto', padding: 16, fontFamily: "'Manrope',sans-serif" }}>
+        <div style={{ position: 'fixed', right: 0, top: 0, bottom: 0, width: 320, background: 'var(--pos-elevated,#162030)', borderLeft: '1px solid rgba(0,106,255,0.12)', zIndex: 400, overflowY: 'auto', padding: 16, fontFamily: "'Manrope',sans-serif" }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <p style={{ fontWeight: 700, color: '#7FB897', margin: 0, fontSize: 14 }}>Kitchen Status</p>
+            <p style={{ fontWeight: 700, color: 'var(--violet)', margin: 0, fontSize: 14 }}>Kitchen Status</p>
             <button onClick={() => { setShowKdsTracker(false); setKdsReadyOrders([]); }} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', cursor: 'pointer', fontSize: 20 }}>x</button>
           </div>
           <KdsTracker businessId={businessId} />
@@ -2922,12 +2922,12 @@ export default function TerminalPage() {
         {/* Panel header */}
         <div className="flex-shrink-0 px-4 py-3.5 flex items-center justify-between relative overflow-hidden"
           style={{ borderBottom: '1px solid rgba(139,92,246,0.1)' }}>
-          <div style={{ position: 'absolute', top: -30, right: -20, width: 80, height: 80, borderRadius: '50%', background: 'radial-gradient(circle,rgba(139,92,246,0.3),transparent 70%)', filter: 'blur(20px)', animation: 'orb-breathe 4s ease-in-out infinite', pointerEvents: 'none' }} />
+          <div style={{ position: 'absolute', top: -30, right: -20, width: 80, height: 80, borderRadius: '50%', background: 'radial-gradient(circle,rgba(0,106,255,0.18),transparent 70%)', filter: 'blur(20px)', animation: 'orb-breathe 4s ease-in-out infinite', pointerEvents: 'none' }} />
           <div className="flex items-center gap-2 relative z-10">
-            <span style={{ fontFamily: "'Instrument Serif',serif", fontStyle: 'italic', fontSize: 18, color: '#8B5CF6' }}>Aria</span>
+            <span style={{ fontFamily: "'Instrument Serif',serif", fontStyle: 'italic', fontSize: 18, color: 'var(--violet)' }}>Aria</span>
             <div className="relative">
-              <span className="w-1.5 h-1.5 rounded-full block" style={{ background: '#22C55E' }} />
-              <span className="absolute inset-0 w-1.5 h-1.5 rounded-full animate-ping" style={{ background: '#22C55E', opacity: 0.75 }} />
+              <span className="w-1.5 h-1.5 rounded-full block" style={{ background: 'var(--success)' }} />
+              <span className="absolute inset-0 w-1.5 h-1.5 rounded-full animate-ping" style={{ background: 'var(--success)', opacity: 0.75 }} />
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -2941,12 +2941,12 @@ export default function TerminalPage() {
         {/* Proactive alerts */}
         <div className="flex-shrink-0 px-3 py-2 space-y-1.5">
           {ageRestrictedInCart && (
-            <div className="rounded-[10px] px-2.5 py-1.5 text-xs flex items-center gap-1.5 font-semibold" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.15)', color: '#EF4444' }}>
+            <div className="rounded-[10px] px-2.5 py-1.5 text-xs flex items-center gap-1.5 font-semibold" style={{ background: 'var(--destructive-bg)', border: '1px solid rgba(255,22,0,0.10)', color: 'var(--destructive)' }}>
               🔞 ID check required
             </div>
           )}
           {loyaltyCustomer && (
-            <div className="rounded-[10px] px-2.5 py-1.5 text-xs flex items-center gap-1.5 font-semibold" style={{ background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.15)', color: '#8B5CF6' }}>
+            <div className="rounded-[10px] px-2.5 py-1.5 text-xs flex items-center gap-1.5 font-semibold" style={{ background: 'var(--violet-dim)', border: '1px solid rgba(0,106,255,0.10)', color: 'var(--violet)' }}>
               ⭐ {customer!.name} has {customer!.loyalty_points} loyalty points
             </div>
           )}
@@ -2962,7 +2962,7 @@ export default function TerminalPage() {
           <div className="flex-shrink-0 px-3 pb-2">
             <p className="text-[10px] uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-tertiary)' }}>Often bought together</p>
             {suggestionsLoading ? (
-              <div className="h-6 rounded animate-pulse w-2/3" style={{ background: 'rgba(255,255,255,0.04)' }} />
+              <div className="h-6 rounded animate-pulse w-2/3" style={{ background: 'var(--bg-elevated)' }} />
             ) : (
               <div className="flex flex-wrap gap-1.5">
                 {suggestions.map(s => {
@@ -2972,10 +2972,10 @@ export default function TerminalPage() {
                       onClick={() => prod && checkAndAddToCart(prod)}
                       disabled={!prod}
                       className="text-xs rounded-lg px-2.5 py-1.5 disabled:opacity-40 transition-all"
-                      style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid #2A2540', color: 'var(--text-secondary)' }}
-                      onMouseEnter={e => { const el = e.currentTarget as HTMLButtonElement; el.style.border = '1px solid rgba(139,92,246,0.3)'; el.style.background = 'rgba(139,92,246,0.06)'; }}
-                      onMouseLeave={e => { const el = e.currentTarget as HTMLButtonElement; el.style.border = '1px solid #2A2540'; el.style.background = 'rgba(255,255,255,0.04)'; }}>
-                      {s.name} <span style={{ color: '#8B5CF6', fontFamily: "'JetBrains Mono',monospace" }}>+A${s.price?.toFixed(2)}</span>
+                      style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', color: 'var(--text-secondary)' }}
+                      onMouseEnter={e => { const el = e.currentTarget as HTMLButtonElement; el.style.border = '1px solid rgba(0,106,255,0.18)'; el.style.background = 'rgba(139,92,246,0.06)'; }}
+                      onMouseLeave={e => { const el = e.currentTarget as HTMLButtonElement; el.style.border = '1px solid var(--border-default)'; el.style.background = 'var(--bg-elevated)'; }}>
+                      {s.name} <span style={{ color: 'var(--violet)', fontFamily: "'JetBrains Mono',monospace" }}>+A${s.price?.toFixed(2)}</span>
                     </button>
                   );
                 })}
@@ -2995,20 +2995,20 @@ export default function TerminalPage() {
             m.role === 'user' ? (
               <div key={i} className="flex justify-end">
                 <div className="max-w-[90%] rounded-[10px] px-3 py-2 text-xs leading-snug"
-                  style={{ background: 'rgba(139,92,246,0.12)', border: '1px solid rgba(139,92,246,0.2)', color: 'var(--text-primary)' }}>
+                  style={{ background: 'var(--violet-dim)', border: '1px solid rgba(0,106,255,0.12)', color: 'var(--text-primary)' }}>
                   {m.content}
                 </div>
               </div>
             ) : m.structured && (m.structured.cards?.length || m.structured.data_tables?.length || m.structured.chart || m.structured.actions?.length) ? (
               <div key={i} className="flex justify-start">
-                <div className="max-w-[98%] rounded-[10px] px-3 py-2" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid #1C1928' }}>
+                <div className="max-w-[98%] rounded-[10px] px-3 py-2" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)' }}>
                   <AriaChatMessage response={m.structured} onAction={handleAriaAction} />
                 </div>
               </div>
             ) : (
               <div key={i} className="flex justify-start">
                 <div className="max-w-[90%] rounded-[10px] px-3 py-2 text-xs leading-snug"
-                  style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid #1C1928', color: 'var(--text-secondary)' }}>
+                  style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', color: 'var(--text-secondary)' }}>
                   {m.content}
                 </div>
               </div>
@@ -3016,7 +3016,7 @@ export default function TerminalPage() {
           ))}
           {chatLoading && (
             <div className="flex justify-start">
-              <div className="rounded-[10px] px-3 py-2" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid #1C1928' }}>
+              <div className="rounded-[10px] px-3 py-2" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)' }}>
                 <AriaChatMessage response={{ message: '', cards: [] }} isLoading={true} />
               </div>
             </div>
@@ -3026,7 +3026,7 @@ export default function TerminalPage() {
 
         {/* Ask Aria input */}
         <div className="flex-shrink-0 px-3 pb-2">
-          <div className="flex gap-1.5 items-center rounded-[10px] px-3 py-2.5" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid #2A2540' }}>
+          <div className="flex gap-1.5 items-center rounded-[10px] px-3 py-2.5" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-default)' }}>
             <input value={chatInput} onChange={e => setChatInput(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendAriaChat(); } }}
               placeholder="Ask Aria…"
@@ -3034,7 +3034,7 @@ export default function TerminalPage() {
               style={{ color: 'var(--text-primary)' }} />
             <button onClick={sendAriaChat} disabled={!chatInput.trim() || chatLoading}
               className="w-7 h-7 rounded-lg text-xs disabled:opacity-40 flex items-center justify-center flex-shrink-0 text-white"
-              style={{ background: '#8B5CF6' }}>↑</button>
+              style={{ background: 'var(--violet)' }}>↑</button>
           </div>
         </div>
 
@@ -3042,20 +3042,20 @@ export default function TerminalPage() {
         <div className="flex-shrink-0 px-3 pb-2">
           <button onClick={() => setShowMissedModal(true)}
             className="w-full rounded-[10px] py-2 text-xs transition-all"
-            style={{ border: '1px dashed #2A2540', color: 'var(--text-tertiary)' }}>
+            style={{ border: '1px dashed var(--border-strong)', color: 'var(--text-tertiary)' }}>
             Log missed sale
           </button>
         </div>
 
         {/* Parked sales */}
         {parkedSales.length > 0 && (
-          <div className="flex-shrink-0 px-3 py-2" style={{ borderTop: '1px solid #1C1928' }}>
+          <div className="flex-shrink-0 px-3 py-2" style={{ borderTop: '1px solid var(--border-subtle)' }}>
             <p className="text-[10px] uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-tertiary)' }}>Held sales ({parkedSales.length})</p>
             <div className="space-y-1">
               {parkedSales.slice(0, 3).map(p => (
                 <button key={p.id} onClick={() => restoreParked(p)}
                   className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-left transition-colors"
-                  style={{ background: 'var(--bg-input)', border: '1px solid #1C1928' }}>
+                  style={{ background: 'var(--bg-input)', border: '1px solid var(--border-subtle)' }}>
                   <span className="text-xs truncate" style={{ color: 'var(--text-secondary)' }}>{p.label || 'Sale'} · {Array.isArray(p.items) ? p.items.length : 0} items</span>
                   <span className="text-xs font-medium flex-shrink-0 ml-2" style={{ fontFamily: "'JetBrains Mono',monospace", color: 'var(--text-primary)' }}>A${(p.total || 0).toFixed(2)}</span>
                 </button>
@@ -3065,7 +3065,7 @@ export default function TerminalPage() {
         )}
 
         {/* Recent sales */}
-        <div className="flex-shrink-0" style={{ borderTop: '1px solid #1C1928' }}>
+        <div className="flex-shrink-0" style={{ borderTop: '1px solid var(--border-subtle)' }}>
           <div className="px-4 py-2">
             <p className="text-[10px] font-medium uppercase tracking-wider" style={{ color: 'var(--text-tertiary)' }}>Recent sales</p>
           </div>
@@ -3076,7 +3076,7 @@ export default function TerminalPage() {
           ) : (
             <div>
               {recentSales.map(s => (
-                <div key={s.id} className="py-2 group flex items-center gap-2" style={{ borderBottom: '1px solid #1C1928' }}>
+                <div key={s.id} className="py-2 group flex items-center gap-2" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
                   <div className="flex-1 min-w-0">
                     <div className="flex justify-between text-[10px] mb-0.5" style={{ color: 'var(--text-tertiary)' }}>
                       <span>#{s.id.slice(-6).toUpperCase()}</span>
@@ -3102,7 +3102,7 @@ export default function TerminalPage() {
       {/* ── FLOATING ASK ARIA BUTTON — removed in v4 (replaced by inline cart card) */}
 
       {/* Mobile bottom tab bar */}
-      <div className="sm:hidden flex-shrink-0 h-16 grid grid-cols-3" style={{ background: 'var(--bg-base)', borderTop: '1px solid #1C1928' }}>
+      <div className="sm:hidden flex-shrink-0 h-16 grid grid-cols-3" style={{ background: 'var(--bg-base)', borderTop: '1px solid var(--border-subtle)' }}>
         {([
           { tab: 'products' as const, label: 'Products', icon: '🛍️' },
           { tab: 'cart' as const, label: `Cart${cart.length > 0 ? ` (${cart.reduce((s,i)=>s+i.qty,0)})` : ''}`, icon: '🛒' },
@@ -3110,7 +3110,7 @@ export default function TerminalPage() {
         ]).map(t => (
           <button key={t.tab} onClick={() => setMobileTab(t.tab)}
             className="flex flex-col items-center justify-center gap-0.5 text-xs font-medium transition-colors"
-            style={{ color: mobileTab === t.tab ? '#8B5CF6' : 'var(--text-tertiary)' }}>
+            style={{ color: mobileTab === t.tab ? 'var(--violet)' : 'var(--text-tertiary)' }}>
             <span className="text-lg">{t.icon}</span>
             <span>{t.label}</span>
           </button>
@@ -3121,15 +3121,15 @@ export default function TerminalPage() {
 
       {/* Variant / Modifier modal */}
       {variantModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(8,6,16,0.88)' }}>
-          <div className="rounded-2xl w-full max-w-sm overflow-hidden" style={{ background: 'var(--bg-elevated)', border: '1px solid #2A2540', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
-            <div className="px-6 py-5" style={{ borderBottom: '1px solid #1C1928' }}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'var(--bg-elevated)' }}>
+          <div className="rounded-2xl w-full max-w-sm overflow-hidden" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
+            <div className="px-6 py-5" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
               <h2 className="text-base font-bold" style={{ color: 'var(--text-primary)' }}>{variantModal.product.name}</h2>
               <p className="text-xs mt-0.5" style={{ color: 'var(--text-tertiary)' }}>
                 Base A${variantModal.product.price.toFixed(2)} — select options below
               </p>
             </div>
-            <div className="px-6 py-4 space-y-5 max-h-[60vh] overflow-y-auto" style={{ borderBottom: '1px solid #1C1928' }}>
+            <div className="px-6 py-4 space-y-5 max-h-[60vh] overflow-y-auto" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
               {variantModal.variantGroups.map(g => (
                 <div key={g.id}>
                   <p className="text-xs font-semibold mb-2" style={{ color: 'var(--text-secondary)' }}>{g.name}</p>
@@ -3139,7 +3139,7 @@ export default function TerminalPage() {
                       return (
                         <button key={v} onClick={() => setSelectedVariants(p => ({ ...p, [g.id]: v }))}
                           className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
-                            selectedVariants[g.id] === v ? '' : ''} style={selectedVariants[g.id] === v ? { background: '#8B5CF6', border: '1px solid rgba(139,92,246,0.6)', color: '#fff' } : { background: 'rgba(255,255,255,0.03)', border: '1px solid #2A2540', color: 'var(--text-secondary)' }
+                            selectedVariants[g.id] === v ? '' : ''} style={selectedVariants[g.id] === v ? { background: 'var(--violet)', border: '1px solid rgba(139,92,246,0.6)', color: '#fff' } : { background: 'var(--bg-surface)', border: '1px solid var(--border-default)', color: 'var(--text-secondary)' }
                           }`}>
                           {v}{priceNote}
                         </button>
@@ -3172,18 +3172,18 @@ export default function TerminalPage() {
                 <p className="text-xs font-semibold mb-2" style={{ color: 'var(--text-secondary)' }}>Quantity</p>
                 <div className="flex items-center gap-3">
                   <button onClick={() => setVariantQty(q => Math.max(1, q - 1))}
-                    className="w-8 h-8 rounded-full flex items-center justify-center" style={{ border: '1px solid #2A2540', color: 'var(--text-secondary)' }}>−</button>
+                    className="w-8 h-8 rounded-full flex items-center justify-center" style={{ border: '1px solid var(--border-default)', color: 'var(--text-secondary)' }}>−</button>
                   <span className="text-base font-bold w-6 text-center" style={{ color: 'var(--text-primary)' }}>{variantQty}</span>
                   <button onClick={() => setVariantQty(q => q + 1)}
-                    className="w-8 h-8 rounded-full flex items-center justify-center" style={{ border: '1px solid #2A2540', color: 'var(--text-secondary)' }}>+</button>
+                    className="w-8 h-8 rounded-full flex items-center justify-center" style={{ border: '1px solid var(--border-default)', color: 'var(--text-secondary)' }}>+</button>
                 </div>
               </div>
             </div>
             <div className="px-6 pb-5 flex gap-2">
               <button onClick={() => setVariantModal(null)}
-                className="flex-1 py-2.5 rounded-xl text-sm" style={{ border: '1px solid #2A2540', color: 'var(--text-secondary)', background: 'var(--bg-input)' }}>Cancel</button>
+                className="flex-1 py-2.5 rounded-xl text-sm" style={{ border: '1px solid var(--border-default)', color: 'var(--text-secondary)', background: 'var(--bg-input)' }}>Cancel</button>
               <button onClick={confirmVariantSelection}
-                className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold" style={{ background: '#8B5CF6' }}>
+                className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold" style={{ background: 'var(--violet)' }}>
                 Add to cart
               </button>
             </div>
@@ -3193,9 +3193,9 @@ export default function TerminalPage() {
 
       {/* Open Register modal */}
       {showRegisterModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(8,6,16,0.88)' }}>
-          <div className="rounded-2xl w-full max-w-sm overflow-hidden" style={{ background: 'var(--bg-elevated)', border: '1px solid #2A2540', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
-            <div className="px-6 py-5" style={{ borderBottom: '1px solid #1C1928' }}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'var(--bg-elevated)' }}>
+          <div className="rounded-2xl w-full max-w-sm overflow-hidden" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
+            <div className="px-6 py-5" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
               <h2 className="text-base font-bold" style={{ color: 'var(--text-primary)' }}>Open Register</h2>
               <p className="text-xs mt-0.5" style={{ color: 'var(--text-tertiary)' }}>Enter opening float to start trading.</p>
             </div>
@@ -3204,15 +3204,15 @@ export default function TerminalPage() {
                 <label className="text-xs font-medium text-gray-500 block mb-1.5">Opening float (A$)</label>
                 <input type="number" min="0" step="0.01" value={openingFloat}
                   onChange={e => setOpeningFloat(e.target.value)}
-                  className="w-full rounded-xl px-4 py-2.5 text-lg font-bold outline-none" style={{ border: '1px solid #2A2540', background: 'rgba(255,255,255,0.03)', fontFamily: "'JetBrains Mono',monospace", color: 'var(--text-primary)' }} autoFocus />
+                  className="w-full rounded-xl px-4 py-2.5 text-lg font-bold outline-none" style={{ border: '1px solid var(--border-default)', background: 'var(--bg-surface)', fontFamily: "'JetBrains Mono',monospace", color: 'var(--text-primary)' }} autoFocus />
               </div>
-              {registerError && <p className="text-xs rounded-lg px-3 py-2" style={{ color: '#EF4444', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.15)' }}>{registerError}</p>}
+              {registerError && <p className="text-xs rounded-lg px-3 py-2" style={{ color: 'var(--destructive)', background: 'var(--destructive-bg)', border: '1px solid rgba(255,22,0,0.10)' }}>{registerError}</p>}
             </div>
             <div className="px-6 pb-5 flex gap-2">
               <button onClick={() => { setShowRegisterModal(false); setRegisterError(null); }}
-                className="flex-1 py-2.5 rounded-xl text-sm" style={{ border: '1px solid #2A2540', color: 'var(--text-secondary)', background: 'var(--bg-input)' }}>Cancel</button>
+                className="flex-1 py-2.5 rounded-xl text-sm" style={{ border: '1px solid var(--border-default)', color: 'var(--text-secondary)', background: 'var(--bg-input)' }}>Cancel</button>
               <button onClick={openRegister} disabled={openingRegister}
-                className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-50 flex items-center justify-center gap-2" style={{ background: '#8B5CF6' }}>
+                className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-50 flex items-center justify-center gap-2" style={{ background: 'var(--violet)' }}>
                 {openingRegister ? <><Spinner /> Opening…</> : 'Open Register'}
               </button>
             </div>
@@ -3222,9 +3222,9 @@ export default function TerminalPage() {
 
       {/* Close Register modal */}
       {showCloseModal && registerSession && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(8,6,16,0.88)' }}>
-          <div className="rounded-2xl w-full max-w-sm overflow-hidden" style={{ background: 'var(--bg-elevated)', border: '1px solid #2A2540', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
-            <div className="px-6 py-5" style={{ borderBottom: '1px solid #1C1928' }}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'var(--bg-elevated)' }}>
+          <div className="rounded-2xl w-full max-w-sm overflow-hidden" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
+            <div className="px-6 py-5" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
               <h2 className="text-base font-bold" style={{ color: 'var(--text-primary)' }}>Close Register</h2>
               <p className="text-xs mt-0.5" style={{ color: 'var(--text-tertiary)' }}>
                 Opened {new Date(registerSession.opened_at).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })} · Float A${(registerSession.opening_float || 0).toFixed(2)}
@@ -3237,13 +3237,13 @@ export default function TerminalPage() {
                   onChange={e => setClosingFloat(e.target.value)} placeholder="0.00"
                   className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-lg font-bold font-mono text-gray-900 outline-none focus:ring-2 focus:ring-red-500" autoFocus />
               </div>
-              {registerError && <p className="text-xs rounded-lg px-3 py-2" style={{ color: '#EF4444', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.15)' }}>{registerError}</p>}
+              {registerError && <p className="text-xs rounded-lg px-3 py-2" style={{ color: 'var(--destructive)', background: 'var(--destructive-bg)', border: '1px solid rgba(255,22,0,0.10)' }}>{registerError}</p>}
             </div>
             <div className="px-6 pb-5 flex gap-2">
               <button onClick={() => { setShowCloseModal(false); setRegisterError(null); }}
-                className="flex-1 py-2.5 rounded-xl text-sm" style={{ border: '1px solid #2A2540', color: 'var(--text-secondary)', background: 'var(--bg-input)' }}>Cancel</button>
+                className="flex-1 py-2.5 rounded-xl text-sm" style={{ border: '1px solid var(--border-default)', color: 'var(--text-secondary)', background: 'var(--bg-input)' }}>Cancel</button>
               <button onClick={closeRegister} disabled={closingRegister}
-                className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-50 flex items-center justify-center gap-2" style={{ background: '#EF4444' }}>
+                className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-50 flex items-center justify-center gap-2" style={{ background: 'var(--destructive)' }}>
                 {closingRegister ? <><Spinner /> Closing…</> : 'Close Register'}
               </button>
             </div>
@@ -3253,9 +3253,9 @@ export default function TerminalPage() {
 
       {/* Parked sales drawer */}
       {showParked && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center p-4 md:items-center" style={{ background: 'rgba(8,6,16,0.88)' }}>
-          <div className="rounded-2xl w-full max-w-md overflow-hidden" style={{ background: 'var(--bg-elevated)', border: '1px solid #2A2540', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
-            <div className="px-6 py-5 flex items-center justify-between" style={{ borderBottom: '1px solid #1C1928' }}>
+        <div className="fixed inset-0 z-50 flex items-end justify-center p-4 md:items-center" style={{ background: 'var(--bg-elevated)' }}>
+          <div className="rounded-2xl w-full max-w-md overflow-hidden" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
+            <div className="px-6 py-5 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
               <h2 className="text-base font-bold" style={{ color: 'var(--text-primary)' }}>Parked Sales</h2>
               <button onClick={() => setShowParked(false)} className="text-xl leading-none" style={{ color: 'var(--text-tertiary)' }}>×</button>
             </div>
@@ -3264,7 +3264,7 @@ export default function TerminalPage() {
                 <p className="text-sm text-gray-400 text-center py-4">No parked sales. Press F8 to park.</p>
               ) : parkedSales.map(p => (
                 <button key={p.id} onClick={() => restoreParked(p)}
-                  className="w-full flex items-center gap-3 p-4 rounded-xl transition-all text-left" style={{ background: 'var(--bg-input)', border: '1px solid #2A2540' }}>
+                  className="w-full flex items-center gap-3 p-4 rounded-xl transition-all text-left" style={{ background: 'var(--bg-input)', border: '1px solid var(--border-default)' }}>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{p.label || 'Parked Sale'}</p>
                     <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-tertiary)' }}>
@@ -3273,7 +3273,7 @@ export default function TerminalPage() {
                   </div>
                   <div className="text-right flex-shrink-0">
                     <p className="text-sm font-bold" style={{ fontFamily: "'JetBrains Mono',monospace", color: 'var(--text-primary)' }}>A${(p.total || 0).toFixed(2)}</p>
-                    <p className="text-[10px] mt-0.5" style={{ color: '#8B5CF6' }}>Restore →</p>
+                    <p className="text-[10px] mt-0.5" style={{ color: 'var(--violet)' }}>Restore →</p>
                   </div>
                 </button>
               ))}
@@ -3284,9 +3284,9 @@ export default function TerminalPage() {
 
       {/* Layby modal — additive */}
       {showLaybyModal && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 55, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, background: 'rgba(8,6,16,0.88)' }}>
-          <div style={{ background: 'var(--bg-elevated)', border: '1px solid rgba(139,92,246,0.3)', borderRadius: 20, width: '100%', maxWidth: 420, overflow: 'hidden', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
-            <div style={{ padding: '18px 22px', borderBottom: '1px solid #1C1928', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ position: 'fixed', inset: 0, zIndex: 55, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, background: 'var(--bg-elevated)' }}>
+          <div style={{ background: 'var(--bg-elevated)', border: '1px solid rgba(0,106,255,0.18)', borderRadius: 20, width: '100%', maxWidth: 420, overflow: 'hidden', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
+            <div style={{ padding: '18px 22px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div>
                 <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>Save as Layby</div>
                 {customer && <div style={{ fontSize: 12, color: 'var(--violet)', marginTop: 2 }}>{customer.name}</div>}
@@ -3322,8 +3322,8 @@ export default function TerminalPage() {
                   style={{ width: '100%', background: 'var(--bg-input)', border: '1px solid var(--border-default)', borderRadius: 9, padding: '10px 13px', fontSize: 14, color: 'var(--text-primary)', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' }} />
               </div>
             </div>
-            <div style={{ padding: '14px 22px', borderTop: '1px solid #1C1928', display: 'flex', gap: 10 }}>
-              <button onClick={() => setShowLaybyModal(false)} style={{ flex: 1, padding: '11px', borderRadius: 10, border: '1px solid #2A2540', background: 'transparent', color: 'var(--text-secondary)', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>
+            <div style={{ padding: '14px 22px', borderTop: '1px solid var(--border-subtle)', display: 'flex', gap: 10 }}>
+              <button onClick={() => setShowLaybyModal(false)} style={{ flex: 1, padding: '11px', borderRadius: 10, border: '1px solid var(--border-default)', background: 'transparent', color: 'var(--text-secondary)', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>
               <button onClick={saveLayby} disabled={laybyLoading || !customer}
                 style={{ flex: 2, padding: '11px', borderRadius: 10, border: 'none', background: customer ? 'var(--violet)' : 'var(--bg-elevated)', color: customer ? '#fff' : 'var(--text-tertiary)', fontSize: 13, fontWeight: 700, cursor: (laybyLoading || !customer) ? 'not-allowed' : 'pointer', fontFamily: 'inherit' }}>
                 {laybyLoading ? 'Saving…' : '🛍️ Save Layby'}
@@ -3336,27 +3336,27 @@ export default function TerminalPage() {
       {/* Missed sale modal */}
       {showMissedModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-          <div className="rounded-2xl w-full max-w-sm overflow-hidden" style={{ background: 'var(--bg-elevated)', border: '1px solid #2A2540', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
-            <div className="px-6 py-5" style={{ borderBottom: '1px solid #1C1928' }}>
+          <div className="rounded-2xl w-full max-w-sm overflow-hidden" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
+            <div className="px-6 py-5" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
               <h2 className="text-base font-bold" style={{ color: 'var(--text-primary)' }}>Log Missed Sale</h2>
               <p className="text-xs mt-0.5" style={{ color: 'var(--text-tertiary)' }}>Record what a customer asked for that you didn't stock</p>
             </div>
             <div className="px-6 py-5 space-y-3">
               <input value={missedName} onChange={e => setMissedName(e.target.value)}
-                className="w-full rounded-xl px-4 py-2.5 text-sm outline-none" style={{ border: '1px solid #2A2540', background: 'rgba(255,255,255,0.03)', color: 'var(--text-primary)' }}
+                className="w-full rounded-xl px-4 py-2.5 text-sm outline-none" style={{ border: '1px solid var(--border-default)', background: 'var(--bg-surface)', color: 'var(--text-primary)' }}
                 placeholder="Product name e.g. Oat Milk 1L" autoFocus />
               <div>
                 <label className="text-xs mb-1 block" style={{ color: 'var(--text-tertiary)' }}>Qty wanted</label>
                 <input type="number" min="1" value={missedQty} onChange={e => setMissedQty(e.target.value)}
-                  className="w-full rounded-xl px-4 py-2.5 text-sm outline-none" style={{ border: '1px solid #2A2540', background: 'rgba(255,255,255,0.03)', color: 'var(--text-primary)' }} />
+                  className="w-full rounded-xl px-4 py-2.5 text-sm outline-none" style={{ border: '1px solid var(--border-default)', background: 'var(--bg-surface)', color: 'var(--text-primary)' }} />
               </div>
               <input value={missedNote} onChange={e => setMissedNote(e.target.value)}
-                className="w-full rounded-xl px-4 py-2.5 text-sm outline-none" style={{ border: '1px solid #2A2540', background: 'rgba(255,255,255,0.03)', color: 'var(--text-primary)' }}
+                className="w-full rounded-xl px-4 py-2.5 text-sm outline-none" style={{ border: '1px solid var(--border-default)', background: 'var(--bg-surface)', color: 'var(--text-primary)' }}
                 placeholder="Customer note (optional)" />
             </div>
             <div className="px-6 pb-5 flex gap-2">
               <button onClick={() => { setShowMissedModal(false); setMissedName(''); setMissedQty('1'); setMissedNote(''); }}
-                className="flex-1 py-2.5 rounded-xl text-sm" style={{ border: '1px solid #2A2540', color: 'var(--text-secondary)', background: 'var(--bg-input)' }}>Cancel</button>
+                className="flex-1 py-2.5 rounded-xl text-sm" style={{ border: '1px solid var(--border-default)', color: 'var(--text-secondary)', background: 'var(--bg-input)' }}>Cancel</button>
               <button disabled={savingMissed || !missedName.trim()}
                 onClick={async () => {
                   if (!businessId || !missedName.trim()) return;
@@ -3381,9 +3381,9 @@ export default function TerminalPage() {
 
       {/* Custom item / Note modal */}
       {showCustomItem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(8,6,16,0.88)' }}>
-          <div className="rounded-2xl w-full max-w-sm overflow-hidden" style={{ background: 'var(--bg-elevated)', border: '1px solid #2A2540', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
-            <div className="px-6 py-5" style={{ borderBottom: '1px solid #1C1928' }}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'var(--bg-elevated)' }}>
+          <div className="rounded-2xl w-full max-w-sm overflow-hidden" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
+            <div className="px-6 py-5" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
               <h2 className="text-base font-bold" style={{ color: 'var(--text-primary)' }}>
                 {customItemForm.isNote ? 'Add Note to Cart' : 'Custom Item'}
               </h2>
@@ -3395,7 +3395,7 @@ export default function TerminalPage() {
               <div>
                 <label className="text-xs mb-1 block" style={{ color: 'var(--text-tertiary)' }}>{customItemForm.isNote ? 'Note text' : 'Description'}</label>
                 <input value={customItemForm.desc} onChange={e => setCustomItemForm(f => ({ ...f, desc: e.target.value }))}
-                  className="w-full rounded-xl px-4 py-2.5 text-sm outline-none" style={{ border: '1px solid #2A2540', background: 'rgba(255,255,255,0.03)', color: 'var(--text-primary)' }}
+                  className="w-full rounded-xl px-4 py-2.5 text-sm outline-none" style={{ border: '1px solid var(--border-default)', background: 'var(--bg-surface)', color: 'var(--text-primary)' }}
                   placeholder={customItemForm.isNote ? 'e.g. Gift wrap requested' : 'e.g. Custom engraving'} autoFocus />
               </div>
               {!customItemForm.isNote && (
@@ -3405,13 +3405,13 @@ export default function TerminalPage() {
                       <label className="text-xs mb-1 block" style={{ color: 'var(--text-tertiary)' }}>Price (A$)</label>
                       <input type="number" min="0" step="0.01" value={customItemForm.price}
                         onChange={e => setCustomItemForm(f => ({ ...f, price: e.target.value }))}
-                        className="w-full rounded-xl px-4 py-2.5 text-sm outline-none" style={{ border: '1px solid #2A2540', background: 'rgba(255,255,255,0.03)', color: 'var(--text-primary)' }} />
+                        className="w-full rounded-xl px-4 py-2.5 text-sm outline-none" style={{ border: '1px solid var(--border-default)', background: 'var(--bg-surface)', color: 'var(--text-primary)' }} />
                     </div>
                     <div className="w-20">
                       <label className="text-xs mb-1 block" style={{ color: 'var(--text-tertiary)' }}>Qty</label>
                       <input type="number" min="1" value={customItemForm.qty}
                         onChange={e => setCustomItemForm(f => ({ ...f, qty: e.target.value }))}
-                        className="w-full rounded-xl px-4 py-2.5 text-sm outline-none" style={{ border: '1px solid #2A2540', background: 'rgba(255,255,255,0.03)', color: 'var(--text-primary)' }} />
+                        className="w-full rounded-xl px-4 py-2.5 text-sm outline-none" style={{ border: '1px solid var(--border-default)', background: 'var(--bg-surface)', color: 'var(--text-primary)' }} />
                     </div>
                   </div>
                   <label className="flex items-center gap-2 cursor-pointer">
@@ -3425,10 +3425,10 @@ export default function TerminalPage() {
             </div>
             <div className="px-6 pb-5 flex gap-2">
               <button onClick={() => { setShowCustomItem(false); setCustomItemForm({ desc: '', price: '', qty: '1', taxable: true, isNote: false }); }}
-                className="flex-1 py-2.5 rounded-xl text-sm" style={{ border: '1px solid #2A2540', color: 'var(--text-secondary)', background: 'var(--bg-input)' }}>Cancel</button>
+                className="flex-1 py-2.5 rounded-xl text-sm" style={{ border: '1px solid var(--border-default)', color: 'var(--text-secondary)', background: 'var(--bg-input)' }}>Cancel</button>
               <button onClick={addCustomItemToCart}
                 disabled={!customItemForm.desc.trim() || (!customItemForm.isNote && !customItemForm.price)}
-                className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-40" style={{ background: '#8B5CF6' }}>
+                className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-40" style={{ background: 'var(--violet)' }}>
                 Add to cart
               </button>
             </div>
@@ -3438,10 +3438,10 @@ export default function TerminalPage() {
 
       {/* Price check overlay */}
       {priceCheckProd && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(8,6,16,0.88)' }}>
-          <div className="rounded-2xl w-full max-w-xs overflow-hidden" style={{ background: 'var(--bg-elevated)', border: '1px solid #2A2540', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
-            <div className="px-6 py-4 text-center" style={{ background: 'rgba(139,92,246,0.08)', borderBottom: '1px solid rgba(139,92,246,0.15)' }}>
-              <p className="text-xs font-medium uppercase tracking-wider mb-1" style={{ color: '#8B5CF6' }}>Price Check</p>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'var(--bg-elevated)' }}>
+          <div className="rounded-2xl w-full max-w-xs overflow-hidden" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
+            <div className="px-6 py-4 text-center" style={{ background: 'var(--violet-dim)', borderBottom: '1px solid rgba(0,106,255,0.10)' }}>
+              <p className="text-xs font-medium uppercase tracking-wider mb-1" style={{ color: 'var(--violet)' }}>Price Check</p>
               <h2 className="text-lg font-bold text-gray-900">{priceCheckProd.name}</h2>
               {priceCheckProd.pos_categories && <p className="text-sm text-gray-500">{priceCheckProd.pos_categories.name}</p>}
             </div>
@@ -3449,17 +3449,17 @@ export default function TerminalPage() {
               <p className="text-4xl font-bold mb-1" style={{ fontFamily: "'JetBrains Mono',monospace", color: 'var(--text-primary)' }}>A${priceCheckProd.price.toFixed(2)}</p>
               <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>Includes GST: A${(priceCheckProd.price - priceCheckProd.price / 1.1).toFixed(2)}</p>
               {priceCheckProd.track_stock && (
-                <p className="mt-3 text-sm font-medium" style={{ color: priceCheckProd.stock_quantity <= 0 ? '#EF4444' : priceCheckProd.stock_quantity <= priceCheckProd.low_stock_threshold ? '#F59E0B' : '#22C55E' }}>
+                <p className="mt-3 text-sm font-medium" style={{ color: priceCheckProd.stock_quantity <= 0 ? 'var(--destructive)' : priceCheckProd.stock_quantity <= priceCheckProd.low_stock_threshold ? '#F59E0B' : 'var(--success)' }}>
                   {priceCheckProd.stock_quantity <= 0 ? 'Out of stock' : `${priceCheckProd.stock_quantity} in stock`}
                 </p>
               )}
             </div>
             <div className="px-6 pb-5 flex gap-2">
               <button onClick={() => setPriceCheckProd(null)}
-                className="flex-1 py-2.5 rounded-xl text-sm" style={{ border: '1px solid #2A2540', color: 'var(--text-secondary)', background: 'var(--bg-input)' }}>Close</button>
+                className="flex-1 py-2.5 rounded-xl text-sm" style={{ border: '1px solid var(--border-default)', color: 'var(--text-secondary)', background: 'var(--bg-input)' }}>Close</button>
               <button onClick={() => { checkAndAddToCart(priceCheckProd); setPriceCheckProd(null); setPriceCheckMode(false); }}
                 disabled={priceCheckProd.track_stock && priceCheckProd.stock_quantity <= 0}
-                className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-40" style={{ background: '#8B5CF6' }}>
+                className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-40" style={{ background: 'var(--violet)' }}>
                 Add to cart
               </button>
             </div>
@@ -3481,8 +3481,8 @@ export default function TerminalPage() {
 
       {/* ── Weight entry modal ─────────────────────────────────────── */}
       {weightModal && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 60, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, background: 'rgba(8,6,16,0.88)' }}>
-          <div style={{ background: 'var(--bg-elevated)', border: '1px solid #2A2540', borderRadius: 20, padding: '28px 28px 24px', width: '100%', maxWidth: 360, boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
+        <div style={{ position: 'fixed', inset: 0, zIndex: 60, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, background: 'var(--bg-elevated)' }}>
+          <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: 20, padding: '28px 28px 24px', width: '100%', maxWidth: 360, boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
             <div style={{ marginBottom: 20 }}>
               <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>
                 ⚖️ Enter weight
@@ -3492,7 +3492,7 @@ export default function TerminalPage() {
               </div>
             </div>
             <div style={{ marginBottom: 16 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--bg-base)', border: '1px solid #2A2540', borderRadius: 12, padding: '12px 16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--bg-base)', border: '1px solid var(--border-default)', borderRadius: 12, padding: '12px 16px' }}>
                 <input
                   autoFocus
                   type="number"
@@ -3532,14 +3532,14 @@ export default function TerminalPage() {
                   else if (k === '.' && weightInput.includes('.')) return
                   else setWeightInput(w => w + k)
                 }}
-                style={{ padding: '14px 0', borderRadius: 10, border: '1px solid #2A2540', background: k === '⌫' ? 'rgba(239,68,68,0.08)' : 'var(--bg-base)', color: k === '⌫' ? '#EF4444' : 'var(--text-primary)', fontSize: 18, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+                style={{ padding: '14px 0', borderRadius: 10, border: '1px solid var(--border-default)', background: k === '⌫' ? 'var(--destructive-bg)' : 'var(--bg-base)', color: k === '⌫' ? 'var(--destructive)' : 'var(--text-primary)', fontSize: 18, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
                   {k}
                 </button>
               ))}
             </div>
             <div style={{ display: 'flex', gap: 10 }}>
               <button onClick={() => { setWeightModal(null); setWeightInput('') }}
-                style={{ flex: 1, padding: '11px 0', borderRadius: 10, border: '1px solid #2A2540', background: 'transparent', color: 'var(--text-secondary)', fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+                style={{ flex: 1, padding: '11px 0', borderRadius: 10, border: '1px solid var(--border-default)', background: 'transparent', color: 'var(--text-secondary)', fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
                 Cancel
               </button>
               <button onClick={() => {
@@ -3564,13 +3564,13 @@ export default function TerminalPage() {
       {/* ── Pharmacist consultation prompt (pharmacy) ────────────────── */}
       {pharmPrompt && (
         <div style={{ position:'fixed', inset:0, zIndex:60, display:'flex', alignItems:'center', justifyContent:'center', padding:16, background:'rgba(8,6,16,0.92)' }}>
-          <div style={{ background:'var(--bg-elevated)', border:'1px solid rgba(239,68,68,0.3)', borderRadius:20, padding:'28px 28px 24px', width:'100%', maxWidth:400, boxShadow:'0 24px 48px rgba(0,0,0,0.6)' }}>
+          <div style={{ background:'var(--bg-elevated)', border:'1px solid rgba(255,22,0,0.18)', borderRadius:20, padding:'28px 28px 24px', width:'100%', maxWidth:400, boxShadow:'0 24px 48px rgba(0,0,0,0.6)' }}>
             <div style={{ fontSize:24, textAlign:'center', marginBottom:12 }}>💊</div>
             <div style={{ fontSize:17, fontWeight:800, color:'var(--text-primary)', marginBottom:8, textAlign:'center' }}>
               Pharmacist consultation required
             </div>
-            <div style={{ background:'rgba(239,68,68,0.08)', border:'1px solid rgba(239,68,68,0.2)', borderRadius:10, padding:'12px 16px', marginBottom:20 }}>
-              <div style={{ fontSize:14, fontWeight:700, color:'#EF4444', marginBottom:4 }}>
+            <div style={{ background:'var(--destructive-bg)', border:'1px solid rgba(255,22,0,0.12)', borderRadius:10, padding:'12px 16px', marginBottom:20 }}>
+              <div style={{ fontSize:14, fontWeight:700, color:'var(--destructive)', marginBottom:4 }}>
                 {pharmPrompt.product.schedule_level} — {pharmPrompt.product.name}
               </div>
               <div style={{ fontSize:12, color:'var(--text-secondary)' }}>
@@ -3590,14 +3590,14 @@ export default function TerminalPage() {
             </div>
             <div style={{ display:'flex', gap:10 }}>
               <button onClick={() => { setPharmPrompt(null); setPharmConfirmed(false) }}
-                style={{ flex:1, padding:'11px 0', borderRadius:10, border:'1px solid #2A2540', background:'transparent', color:'var(--text-secondary)', fontSize:14, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>
+                style={{ flex:1, padding:'11px 0', borderRadius:10, border:'1px solid var(--border-default)', background:'transparent', color:'var(--text-secondary)', fontSize:14, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>
                 Cancel
               </button>
               <button disabled={!pharmConfirmed} onClick={() => {
                   addToCartDirect(pharmPrompt.product, 1);
                   setPharmPrompt(null); setPharmConfirmed(false);
                 }}
-                style={{ flex:2, padding:'11px 0', borderRadius:10, border:'none', background:pharmConfirmed?'#EF4444':'rgba(239,68,68,0.2)', color:'#fff', fontSize:14, fontWeight:700, cursor:pharmConfirmed?'pointer':'not-allowed', fontFamily:'inherit', opacity:pharmConfirmed?1:0.5 }}>
+                style={{ flex:2, padding:'11px 0', borderRadius:10, border:'none', background:pharmConfirmed?'var(--destructive)':'rgba(255,22,0,0.12)', color:'#fff', fontSize:14, fontWeight:700, cursor:pharmConfirmed?'pointer':'not-allowed', fontFamily:'inherit', opacity:pharmConfirmed?1:0.5 }}>
                 Confirm & add to sale
               </button>
             </div>
@@ -3607,8 +3607,8 @@ export default function TerminalPage() {
 
       {/* ── Serial number / IMEI prompt ──────────────────────────────── */}
       {serialPrompt && (
-        <div style={{ position:'fixed', inset:0, zIndex:60, display:'flex', alignItems:'center', justifyContent:'center', padding:16, background:'rgba(8,6,16,0.88)' }}>
-          <div style={{ background:'var(--bg-elevated)', border:'1px solid #2A2540', borderRadius:20, padding:'28px 28px 24px', width:'100%', maxWidth:360, boxShadow:'0 24px 48px rgba(0,0,0,0.6)' }}>
+        <div style={{ position:'fixed', inset:0, zIndex:60, display:'flex', alignItems:'center', justifyContent:'center', padding:16, background:'var(--bg-elevated)' }}>
+          <div style={{ background:'var(--bg-elevated)', border:'1px solid var(--border-default)', borderRadius:20, padding:'28px 28px 24px', width:'100%', maxWidth:360, boxShadow:'0 24px 48px rgba(0,0,0,0.6)' }}>
             <div style={{ marginBottom:20 }}>
               <div style={{ fontSize:18, fontWeight:700, color:'var(--text-primary)', marginBottom:4 }}>🔢 Serial / IMEI</div>
               <div style={{ fontSize:13, color:'var(--text-secondary)' }}>{serialPrompt.product.name}</div>
@@ -3626,11 +3626,11 @@ export default function TerminalPage() {
                 }
                 if (e.key === 'Escape') { setSerialPrompt(null); setSerialInput(''); }
               }}
-              style={{ width:'100%', padding:'12px 16px', borderRadius:10, border:'1px solid #2A2540', background:'var(--bg-base)', color:'var(--text-primary)', fontSize:15, fontFamily:'inherit', outline:'none', boxSizing:'border-box', marginBottom:16 }}
+              style={{ width:'100%', padding:'12px 16px', borderRadius:10, border:'1px solid var(--border-default)', background:'var(--bg-base)', color:'var(--text-primary)', fontSize:15, fontFamily:'inherit', outline:'none', boxSizing:'border-box', marginBottom:16 }}
             />
             <div style={{ display:'flex', gap:10 }}>
               <button onClick={() => { setSerialPrompt(null); setSerialInput(''); }}
-                style={{ flex:1, padding:'11px 0', borderRadius:10, border:'1px solid #2A2540', background:'transparent', color:'var(--text-secondary)', fontSize:14, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>
+                style={{ flex:1, padding:'11px 0', borderRadius:10, border:'1px solid var(--border-default)', background:'transparent', color:'var(--text-secondary)', fontSize:14, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>
                 Cancel
               </button>
               <button onClick={() => {
@@ -3650,9 +3650,9 @@ export default function TerminalPage() {
 
       {/* Refund modal */}
       {showRefundModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(8,6,16,0.88)' }}>
-          <div className="rounded-2xl w-full max-w-lg overflow-hidden" style={{ background: 'var(--bg-elevated)', border: '1px solid #2A2540', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
-            <div className="px-6 py-5 flex items-center justify-between" style={{ borderBottom: '1px solid #1C1928' }}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'var(--bg-elevated)' }}>
+          <div className="rounded-2xl w-full max-w-lg overflow-hidden" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
+            <div className="px-6 py-5 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
               <div>
                 <h2 className="text-base font-bold" style={{ color: 'var(--text-primary)' }}>Process Refund</h2>
                 <p className="text-xs mt-0.5" style={{ color: 'var(--text-tertiary)' }}>Search by receipt number or customer name</p>
@@ -3664,12 +3664,12 @@ export default function TerminalPage() {
               {!refundSale ? (
                 <>
                   <input value={refundSearch} onChange={e => { setRefundSearch(e.target.value); searchRefundSales(e.target.value); }}
-                    className="w-full rounded-xl px-4 py-2.5 text-sm outline-none" style={{ border: '1px solid #2A2540', background: 'rgba(255,255,255,0.03)', color: 'var(--text-primary)' }}
+                    className="w-full rounded-xl px-4 py-2.5 text-sm outline-none" style={{ border: '1px solid var(--border-default)', background: 'var(--bg-surface)', color: 'var(--text-primary)' }}
                     placeholder="Search receipt # or customer name…" autoFocus />
                   <div className="space-y-2">
                     {refundResults.map((sale: any) => (
                       <button key={sale.id} onClick={() => { setRefundSale(sale); setRefundItems({}); }}
-                        className="w-full flex items-center gap-3 p-3 rounded-xl text-left transition-all" style={{ border: '1px solid #2A2540', background: 'var(--bg-input)' }}>
+                        className="w-full flex items-center gap-3 p-3 rounded-xl text-left transition-all" style={{ border: '1px solid var(--border-default)', background: 'var(--bg-input)' }}>
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>#{sale.sale_number ?? sale.id?.slice(-6).toUpperCase()}</p>
                           <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>{new Date(sale.created_at).toLocaleDateString('en-AU')} · {sale.customer_name ?? 'Walk-in'}</p>
@@ -3694,7 +3694,7 @@ export default function TerminalPage() {
                   <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>Select items to refund:</p>
                   <div className="space-y-1.5">
                     {(refundSale.items ?? []).map((item: any) => (
-                      <label key={item.id} className="flex items-center gap-3 p-2.5 rounded-lg cursor-pointer" style={{ border: '1px solid #2A2540', background: 'var(--bg-input)' }}>
+                      <label key={item.id} className="flex items-center gap-3 p-2.5 rounded-lg cursor-pointer" style={{ border: '1px solid var(--border-default)', background: 'var(--bg-input)' }}>
                         <input type="checkbox" checked={!!refundItems[item.id]}
                           onChange={e => setRefundItems(r => ({ ...r, [item.id]: e.target.checked }))}
                           className="w-4 h-4 accent-gray-900" />
@@ -3717,9 +3717,9 @@ export default function TerminalPage() {
             {refundSale && (
               <div className="px-6 pb-5 flex gap-2">
                 <button onClick={() => { setShowRefundModal(false); setRefundSale(null); }}
-                  className="flex-1 py-2.5 rounded-xl text-sm" style={{ border: '1px solid #2A2540', color: 'var(--text-secondary)', background: 'var(--bg-input)' }}>Cancel</button>
+                  className="flex-1 py-2.5 rounded-xl text-sm" style={{ border: '1px solid var(--border-default)', color: 'var(--text-secondary)', background: 'var(--bg-input)' }}>Cancel</button>
                 <button onClick={processRefund} disabled={processingRefund || Object.values(refundItems).every(v => !v)}
-                  className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-40 flex items-center justify-center gap-2" style={{ background: '#EF4444' }}>
+                  className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-40 flex items-center justify-center gap-2" style={{ background: 'var(--destructive)' }}>
                   {processingRefund ? <><Spinner /> Processing…</> : 'Process Refund'}
                 </button>
               </div>
@@ -3730,9 +3730,9 @@ export default function TerminalPage() {
 
       {/* Cashier switch modal */}
       {showCashierModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(8,6,16,0.88)' }}>
-          <div className="rounded-2xl w-full max-w-sm overflow-hidden" style={{ background: 'var(--bg-elevated)', border: '1px solid #2A2540', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
-            <div className="px-6 py-5" style={{ borderBottom: '1px solid #1C1928' }}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'var(--bg-elevated)' }}>
+          <div className="rounded-2xl w-full max-w-sm overflow-hidden" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
+            <div className="px-6 py-5" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
               <h2 className="text-base font-bold" style={{ color: 'var(--text-primary)' }}>Switch Cashier</h2>
               <p className="text-xs mt-0.5" style={{ color: 'var(--text-tertiary)' }}>Current: {registerSession?.opened_by ?? 'Unknown'}</p>
             </div>
@@ -3740,14 +3740,14 @@ export default function TerminalPage() {
               <label className="text-xs mb-1.5 block" style={{ color: 'var(--text-tertiary)' }}>New cashier name</label>
               <input value={cashierName} onChange={e => setCashierName(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') switchCashier(); }}
-                className="w-full rounded-xl px-4 py-2.5 text-sm outline-none" style={{ border: '1px solid #2A2540', background: 'rgba(255,255,255,0.03)', color: 'var(--text-primary)' }}
+                className="w-full rounded-xl px-4 py-2.5 text-sm outline-none" style={{ border: '1px solid var(--border-default)', background: 'var(--bg-surface)', color: 'var(--text-primary)' }}
                 placeholder="Enter name…" autoFocus />
             </div>
             <div className="px-6 pb-5 flex gap-2">
               <button onClick={() => { setShowCashierModal(false); setCashierName(''); }}
-                className="flex-1 py-2.5 rounded-xl text-sm" style={{ border: '1px solid #2A2540', color: 'var(--text-secondary)', background: 'var(--bg-input)' }}>Cancel</button>
+                className="flex-1 py-2.5 rounded-xl text-sm" style={{ border: '1px solid var(--border-default)', color: 'var(--text-secondary)', background: 'var(--bg-input)' }}>Cancel</button>
               <button onClick={switchCashier} disabled={!cashierName.trim() || switchingCashier}
-                className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-40 flex items-center justify-center gap-2" style={{ background: '#8B5CF6' }}>
+                className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-40 flex items-center justify-center gap-2" style={{ background: 'var(--violet)' }}>
                 {switchingCashier ? <><Spinner /> Switching…</> : 'Switch'}
               </button>
             </div>
@@ -3757,9 +3757,9 @@ export default function TerminalPage() {
 
       {/* Receipt reprint modal */}
       {reprintSale && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(8,6,16,0.88)' }}>
-          <div className="rounded-2xl w-full max-w-xs overflow-hidden" style={{ background: 'var(--bg-elevated)', border: '1px solid #2A2540', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
-            <div className="px-5 py-4 flex items-center justify-between" style={{ background: 'rgba(34,197,94,0.08)', borderBottom: '1px solid rgba(34,197,94,0.15)' }}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'var(--bg-elevated)' }}>
+          <div className="rounded-2xl w-full max-w-xs overflow-hidden" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
+            <div className="px-5 py-4 flex items-center justify-between" style={{ background: 'var(--success-bg)', borderBottom: '1px solid rgba(34,197,94,0.15)' }}>
               <p className="font-semibold text-gray-900 text-sm">#{reprintSale.id.slice(-6).toUpperCase()}</p>
               <button onClick={() => setReprintSale(null)} className="text-gray-400 hover:text-gray-600">×</button>
             </div>
@@ -3780,7 +3780,7 @@ export default function TerminalPage() {
       {contextMenu && (
         <div className="fixed z-50" style={{ top: contextMenu.y, left: contextMenu.x }}
           onClick={() => setContextMenu(null)}>
-          <div className="rounded-xl py-1 min-w-44" style={{ background: 'var(--bg-elevated)', border: '1px solid #2A2540', boxShadow: '0 12px 32px rgba(0,0,0,0.6)' }}
+          <div className="rounded-xl py-1 min-w-44" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', boxShadow: '0 12px 32px rgba(0,0,0,0.6)' }}
             onClick={e => e.stopPropagation()}>
             {[
               { label: 'View price & stock', action: () => { setPriceCheckProd(contextMenu.product); setContextMenu(null); } },
@@ -3797,11 +3797,11 @@ export default function TerminalPage() {
               { label: 'View in products', action: () => { window.location.href = `/pos/products?q=${encodeURIComponent(contextMenu.product.name)}`; setContextMenu(null); } },
             ].map(item => (
               <button key={item.label} onClick={item.action}
-                className="block w-full text-left px-4 py-2.5 text-sm transition-colors" style={{ color: 'var(--text-secondary)' }} onMouseEnter={e=>{(e.currentTarget as HTMLButtonElement).style.background='rgba(255,255,255,0.04)';}} onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.background='';}}>
+                className="block w-full text-left px-4 py-2.5 text-sm transition-colors" style={{ color: 'var(--text-secondary)' }} onMouseEnter={e=>{(e.currentTarget as HTMLButtonElement).style.background='var(--bg-elevated)';}} onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.background='';}}>
                 {item.label}
               </button>
             ))}
-            <div className="my-1" style={{ borderTop: '1px solid #1C1928' }} />
+            <div className="my-1" style={{ borderTop: '1px solid var(--border-subtle)' }} />
             <button onClick={() => setContextMenu(null)} className="block w-full text-left px-4 py-2.5 text-xs" style={{ color: 'var(--text-tertiary)' }}>Cancel</button>
           </div>
         </div>
@@ -3810,8 +3810,8 @@ export default function TerminalPage() {
       {/* Age verification modal */}
       {showAgeModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(8,6,16,0.92)' }}>
-          <div className="rounded-2xl w-full max-w-sm overflow-hidden" style={{ background: 'var(--bg-elevated)', border: '1px solid #2A2540', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
-            <div className="px-6 py-5" style={{ background: 'rgba(239,68,68,0.08)', borderBottom: '1px solid rgba(239,68,68,0.15)' }}>
+          <div className="rounded-2xl w-full max-w-sm overflow-hidden" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
+            <div className="px-6 py-5" style={{ background: 'var(--destructive-bg)', borderBottom: '1px solid rgba(255,22,0,0.10)' }}>
               <div className="flex items-center gap-3">
                 <span className="text-3xl">🔞</span>
                 <div>
@@ -3828,12 +3828,12 @@ export default function TerminalPage() {
             </div>
             <div className="px-6 pb-5 flex gap-2">
               <button onClick={() => setShowAgeModal(false)}
-                className="flex-1 py-2.5 rounded-xl text-sm" style={{ border: '1px solid #2A2540', color: 'var(--text-secondary)', background: 'var(--bg-input)' }}>
+                className="flex-1 py-2.5 rounded-xl text-sm" style={{ border: '1px solid var(--border-default)', color: 'var(--text-secondary)', background: 'var(--bg-input)' }}>
                 Cancel sale
               </button>
               <button
                 onClick={() => { setAgeVerified(true); setShowAgeModal(false); processSale(); }}
-                className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold" style={{ background: '#8B5CF6' }}>
+                className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold" style={{ background: 'var(--violet)' }}>
                 ✓ ID verified — complete sale
               </button>
             </div>
@@ -3844,7 +3844,7 @@ export default function TerminalPage() {
       {/* Variant loading overlay */}
       {variantLoading && (
         <div className="fixed inset-0 z-40 flex items-center justify-center" style={{ background: 'rgba(8,6,16,0.5)' }}>
-          <div className="rounded-xl px-6 py-4 flex items-center gap-3" style={{ background: 'var(--bg-elevated)', border: '1px solid #2A2540' }}>
+          <div className="rounded-xl px-6 py-4 flex items-center gap-3" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-default)' }}>
             <Spinner /><span className="text-sm" style={{ color: 'var(--text-secondary)' }}>Loading options…</span>
           </div>
         </div>
@@ -3903,7 +3903,7 @@ export default function TerminalPage() {
       {/* Sprint H — Edit notes inline prompt */}
       {editNotesState && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => setEditNotesState(null)}>
-          <div className="bg-[#0e1612] border border-[rgba(127,184,151,0.15)] rounded-2xl p-6 w-full max-w-sm text-[#E8EDE8]" onClick={e => e.stopPropagation()}>
+          <div className="bg-[#0e1612] border border-[rgba(0,106,255,0.10)] rounded-2xl p-6 w-full max-w-sm text-[#E8EDE8]" onClick={e => e.stopPropagation()}>
             <h2 className="text-base font-semibold mb-3">Special instructions</h2>
             <textarea
               autoFocus
@@ -3919,10 +3919,10 @@ export default function TerminalPage() {
                 }
               }}
               placeholder="No onions, well done, allergy note…"
-              className="w-full bg-[rgba(255,255,255,0.03)] border border-[rgba(127,184,151,0.2)] rounded-xl px-3 py-2 text-sm text-[#E8EDE8] placeholder:text-[rgba(232,237,232,0.3)]"
+              className="w-full bg-[var(--bg-surface)] border border-[rgba(0,106,255,0.12)] rounded-xl px-3 py-2 text-sm text-[#E8EDE8] placeholder:text-[rgba(232,237,232,0.3)]"
             />
             <div className="flex gap-2 justify-end mt-3">
-              <button onClick={() => setEditNotesState(null)} className="px-4 py-2 rounded-xl text-sm border border-[rgba(127,184,151,0.2)] text-[rgba(232,237,232,0.7)]">Done</button>
+              <button onClick={() => setEditNotesState(null)} className="px-4 py-2 rounded-xl text-sm border border-[rgba(0,106,255,0.12)] text-[rgba(232,237,232,0.7)]">Done</button>
             </div>
           </div>
         </div>
