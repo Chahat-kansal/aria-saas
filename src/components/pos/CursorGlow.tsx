@@ -7,14 +7,23 @@ export default function CursorGlow() {
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
+
+    // Hide entirely in light mode — glow only makes sense on dark backgrounds
+    const checkTheme = () => {
+      const theme = document.documentElement.getAttribute('data-theme');
+      el.style.display = theme === 'light' ? 'none' : 'block';
+    };
+    checkTheme();
+    const observer = new MutationObserver(checkTheme);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
     let raf = 0;
     let cx = 0, cy = 0;
-    // Use RAF to batch style updates — prevents layout thrashing on every mousemove
     const onMove = (e: MouseEvent) => {
       cx = e.clientX; cy = e.clientY;
-      if (raf) return; // skip if frame already queued
+      if (raf) return;
       raf = requestAnimationFrame(() => {
-        el.style.transform = `translate(${cx - 160}px,${cy - 160}px)`;
+        el.style.transform = \`translate(\${cx - 160}px,\${cy - 160}px)\`;
         el.style.opacity = '1';
         raf = 0;
       });
@@ -25,6 +34,7 @@ export default function CursorGlow() {
     return () => {
       window.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseleave', onLeave);
+      observer.disconnect();
       if (raf) cancelAnimationFrame(raf);
     };
   }, []);
@@ -40,7 +50,7 @@ export default function CursorGlow() {
         height: 320,
         top: 0, left: 0,
         borderRadius: '50%',
-        background: 'radial-gradient(circle, rgba(139,92,246,0.05) 0%, transparent 70%)',
+        background: 'radial-gradient(circle, rgba(0,106,255,0.04) 0%, transparent 70%)',
         opacity: 0,
         transition: 'opacity 300ms',
         willChange: 'transform',
