@@ -498,7 +498,7 @@ html[data-theme="light"] .pos-shell textarea::placeholder {
 }
 
 /*  Tables  */
-html[data-theme="light"] .pos-shell table {
+html[data-theme="light"] html[data-theme="light"] .pos-shell table {
   background: #FFFFFF;
 }
 html[data-theme="light"] .pos-shell th {
@@ -520,8 +520,8 @@ html[data-theme="light"] .pos-shell tr:hover td {
 
 /*  Buttons  remap dark accent colors  */
 /* Purple/violet buttons (#8B5CF6)  Square blue */
-html[data-theme="light"] .pos-shell button[style*="#8B5CF6"],
-html[data-theme="light"] .pos-shell a[style*="#8B5CF6"],
+html[data-theme="light"] html[data-theme="light"] .pos-shell button[style*="#8B5CF6"],
+html[data-theme="light"] html[data-theme="light"] .pos-shell a[style*="#8B5CF6"],
 html[data-theme="light"] .pos-shell [style*="background: #8B5CF6"],
 html[data-theme="light"] .pos-shell [style*="background:#8B5CF6"],
 html[data-theme="light"] .pos-shell [style*="background-color: #8B5CF6"] {
@@ -529,7 +529,7 @@ html[data-theme="light"] .pos-shell [style*="background-color: #8B5CF6"] {
   color: #FFFFFF !important;
 }
 /* Cyan/teal buttons (#00E5FF, #29b6f6)  Square blue */
-html[data-theme="light"] .pos-shell [style*="background: #00E5FF"],
+html[data-theme="light"] html[data-theme="light"] .pos-shell [style*="background: #00E5FF"],
 html[data-theme="light"] .pos-shell [style*="background:#00E5FF"],
 html[data-theme="light"] .pos-shell [style*="background: #29b6f6"],
 html[data-theme="light"] .pos-shell [style*="background:#29b6f6"] {
@@ -537,7 +537,7 @@ html[data-theme="light"] .pos-shell [style*="background:#29b6f6"] {
   color: #FFFFFF !important;
 }
 /* Aria green buttons (#7FB897, #2D5240)  Square blue */
-html[data-theme="light"] .pos-shell [style*="background: #7FB897"],
+html[data-theme="light"] html[data-theme="light"] .pos-shell [style*="background: #7FB897"],
 html[data-theme="light"] .pos-shell [style*="background:#7FB897"],
 html[data-theme="light"] .pos-shell [style*="background: #2D5240"],
 html[data-theme="light"] .pos-shell [style*="background:#2D5240"] {
@@ -557,19 +557,19 @@ html[data-theme="light"] .pos-shell [style*="rgba(255,255,255,0.08)"] {
 
 /*  Text color overrides  */
 /* Pure white text on dark  near-black */
-html[data-theme="light"] .pos-shell [style*="color: #E8EDE7"],
+html[data-theme="light"] html[data-theme="light"] .pos-shell [style*="color: #E8EDE7"],
 html[data-theme="light"] .pos-shell [style*="color:#E8EDE7"],
 html[data-theme="light"] .pos-shell [style*="color: #EDE8FF"],
 html[data-theme="light"] .pos-shell [style*="color:#EDE8FF"] {
   color: #1A1A1A !important;
 }
-html[data-theme="light"] .pos-shell [style*="color: #A8B5A8"],
+html[data-theme="light"] html[data-theme="light"] .pos-shell [style*="color: #A8B5A8"],
 html[data-theme="light"] .pos-shell [style*="color:#A8B5A8"],
 html[data-theme="light"] .pos-shell [style*="color: #8B85A8"],
 html[data-theme="light"] .pos-shell [style*="color:#8B85A8"] {
   color: #6B6B6B !important;
 }
-html[data-theme="light"] .pos-shell [style*="color: #6E7C6E"],
+html[data-theme="light"] html[data-theme="light"] .pos-shell [style*="color: #6E7C6E"],
 html[data-theme="light"] .pos-shell [style*="color:#6E7C6E"],
 html[data-theme="light"] .pos-shell [style*="color: #4A4565"],
 html[data-theme="light"] .pos-shell [style*="color:#4A4565"] {
@@ -578,11 +578,11 @@ html[data-theme="light"] .pos-shell [style*="color:#4A4565"] {
 /* Violet/purple text  Square blue */
 html[data-theme="light"] .pos-shell [style*="color: #8B5CF6"],
 html[data-theme="light"] .pos-shell [style*="color:#8B5CF6"],
-html[data-theme="light"] .pos-shell [style*="color: #7FB897"],
+html[data-theme="light"] html[data-theme="light"] .pos-shell [style*="color: #7FB897"],
 html[data-theme="light"] .pos-shell [style*="color:#7FB897"],
-html[data-theme="light"] .pos-shell [style*="color: #29b6f6"],
+html[data-theme="light"] html[data-theme="light"] .pos-shell [style*="color: #29b6f6"],
 html[data-theme="light"] .pos-shell [style*="color:#29b6f6"],
-html[data-theme="light"] .pos-shell [style*="color: #00E5FF"],
+html[data-theme="light"] html[data-theme="light"] .pos-shell [style*="color: #00E5FF"],
 html[data-theme="light"] .pos-shell [style*="color:#00E5FF"] {
   color: #006AFF !important;
 }
@@ -593,7 +593,7 @@ html[data-theme="light"] .pos-shell [style*="borderColor: rgba(255,255,255"],
 html[data-theme="light"] .pos-shell [style*="border: 1px solid rgba(255,255,255"] {
   border-color: #EBEBEB !important;
 }
-html[data-theme="light"] .pos-shell [style*="border: 1px solid #2A2540"],
+html[data-theme="light"] html[data-theme="light"] .pos-shell [style*="border: 1px solid #2A2540"],
 html[data-theme="light"] .pos-shell [style*="border: 1px solid #1C1928"],
 html[data-theme="light"] .pos-shell [style*="border: 1px solid rgba(0,229,255"] {
   border-color: #D9D9D9 !important;
@@ -611,14 +611,14 @@ html[data-theme="light"] .pos-shell [style*="background: #231F32"],
 html[data-theme="light"] .pos-shell [style*="background:#231F32"],
 html[data-theme="light"] .pos-shell [style*="background: #13131a"],
 html[data-theme="light"] .pos-shell [style*="background: #0d0d14"],
-html[data-theme="light"] .pos-shell [style*="background: #1a2620"],
+html[data-theme="light"] html[data-theme="light"] .pos-shell [style*="background: #1a2620"],
 html[data-theme="light"] .pos-shell [style*="background: #1A2620"] {
   background: #FFFFFF !important;
   color: #1A1A1A !important;
 }
 /* Semi-transparent dark overlays  white card */
-html[data-theme="light"] .pos-shell [style*="rgba(8,6,16"],
-html[data-theme="light"] .pos-shell [style*="rgba(10,9,16"],
+html[data-theme="light"] html[data-theme="light"] .pos-shell [style*="rgba(8,6,16"],
+html[data-theme="light"] html[data-theme="light"] .pos-shell [style*="rgba(10,9,16"],
 html[data-theme="light"] .pos-shell [style*="rgba(11,20,16"] {
   background: #FFFFFF !important;
 }
@@ -628,24 +628,24 @@ html[data-theme="light"] .pos-shell .bg-\[\#0A0910\],
 html[data-theme="light"] .pos-shell .bg-\[\#110F1A\],
 html[data-theme="light"] .pos-shell .bg-\[\#1A1728\] { background-color: #FFFFFF !important; }
 
-html[data-theme="light"] .pos-shell .text-white { color: #1A1A1A !important; }
+html[data-theme="light"] html[data-theme="light"] .pos-shell .text-white { color: #1A1A1A !important; }
 html[data-theme="light"] .pos-shell .border-white\/10,
 html[data-theme="light"] .pos-shell .border-white\/20 { border-color: #EBEBEB !important; }
 
 /*  Status colors  keep semantic meaning, Square palette  */
-html[data-theme="light"] .pos-shell [style*="color: #22C55E"],
+html[data-theme="light"] html[data-theme="light"] .pos-shell [style*="color: #22C55E"],
 html[data-theme="light"] .pos-shell [style*="color:#22C55E"],
 html[data-theme="light"] .pos-shell [style*="color: #34D399"],
 html[data-theme="light"] .pos-shell [style*="color:#34D399"] {
   color: #007A2C !important;  /* Square success  darkened for light bg */
 }
-html[data-theme="light"] .pos-shell [style*="color: #EF4444"],
+html[data-theme="light"] html[data-theme="light"] .pos-shell [style*="color: #EF4444"],
 html[data-theme="light"] .pos-shell [style*="color:#EF4444"],
 html[data-theme="light"] .pos-shell [style*="color: #F87171"],
 html[data-theme="light"] .pos-shell [style*="color:#F87171"] {
   color: #CC1400 !important;  /* Square error  darkened for light bg */
 }
-html[data-theme="light"] .pos-shell [style*="color: #F59E0B"],
+html[data-theme="light"] html[data-theme="light"] .pos-shell [style*="color: #F59E0B"],
 html[data-theme="light"] .pos-shell [style*="color:#F59E0B"],
 html[data-theme="light"] .pos-shell [style*="color: #FBBF24"],
 html[data-theme="light"] .pos-shell [style*="color:#FBBF24"] {
@@ -653,7 +653,7 @@ html[data-theme="light"] .pos-shell [style*="color:#FBBF24"] {
 }
 
 /*  Dividers / separators  */
-html[data-theme="light"] .pos-shell hr,
+html[data-theme="light"] html[data-theme="light"] .pos-shell hr,
 html[data-theme="light"] .pos-shell [style*="borderTop: '1px solid rgba(255,255,255"],
 html[data-theme="light"] .pos-shell [style*="borderBottom: '1px solid rgba(255,255,255"] {
   border-color: #EBEBEB !important;
@@ -667,19 +667,19 @@ html[data-theme="light"] .pos-shell [style*="background: rgba(0,0,0,0.8)"] {
 }
 
 /*  Tailwind utility overrides  */
-html[data-theme="light"] .pos-shell .bg-gray-900 { background-color: #FFFFFF !important; }
-html[data-theme="light"] .pos-shell .bg-gray-800 { background-color: #F6F6F4 !important; }
-html[data-theme="light"] .pos-shell .text-gray-100,
+html[data-theme="light"] html[data-theme="light"] .pos-shell .bg-gray-900 { background-color: #FFFFFF !important; }
+html[data-theme="light"] html[data-theme="light"] .pos-shell .bg-gray-800 { background-color: #F6F6F4 !important; }
+html[data-theme="light"] html[data-theme="light"] .pos-shell .text-gray-100,
 html[data-theme="light"] .pos-shell .text-gray-200 { color: #1A1A1A !important; }
-html[data-theme="light"] .pos-shell .text-gray-400 { color: #6B6B6B !important; }
-html[data-theme="light"] .pos-shell .border-gray-700,
+html[data-theme="light"] html[data-theme="light"] .pos-shell .text-gray-400 { color: #6B6B6B !important; }
+html[data-theme="light"] html[data-theme="light"] .pos-shell .border-gray-700,
 html[data-theme="light"] .pos-shell .border-gray-800 { border-color: #EBEBEB !important; }
 
 /*  POSSidebar stays dark (Square's sidebar is always dark #1A1A1A)  */
 /* Already handled in .pos-sidebar-wrapper  no override needed here */
 
 /*  Search bar / command palette  */
-html[data-theme="light"] .pos-shell [class*="search"],
+html[data-theme="light"] html[data-theme="light"] .pos-shell [class*="search"],
 html[data-theme="light"] .pos-shell [class*="Search"] {
   background: #FFFFFF !important;
   border: 1px solid #D9D9D9 !important;
@@ -689,20 +689,20 @@ html[data-theme="light"] .pos-shell [class*="Search"] {
 /*  Additional specific overrides discovered post-audit  */
 
 /* Sales history  Aria green sale numbers  Square blue */
-html[data-theme="light"] .pos-shell [style*="color: #7FB897"],
+html[data-theme="light"] html[data-theme="light"] .pos-shell [style*="color: #7FB897"],
 html[data-theme="light"] .pos-shell [style*="color:#7FB897"] {
   color: #006AFF !important;
 }
-html[data-theme="light"] .pos-shell [style*="border: 1px solid rgba(127,184,151"],
+html[data-theme="light"] html[data-theme="light"] .pos-shell [style*="border: 1px solid rgba(127,184,151"],
 html[data-theme="light"] .pos-shell [style*="border:1px solid rgba(127,184,151"] {
   border-color: #D9D9D9 !important;
 }
-html[data-theme="light"] .pos-shell [style*="rgba(127,184,151,0.04)"],
+html[data-theme="light"] html[data-theme="light"] .pos-shell [style*="rgba(127,184,151,0.04)"],
 html[data-theme="light"] .pos-shell [style*="rgba(127,184,151,0.08)"],
 html[data-theme="light"] .pos-shell [style*="rgba(127,184,151,0.12)"] {
   background: #F6F6F4 !important;
 }
-html[data-theme="light"] .pos-shell [style*="rgba(127,184,151,0.15)"],
+html[data-theme="light"] html[data-theme="light"] .pos-shell [style*="rgba(127,184,151,0.15)"],
 html[data-theme="light"] .pos-shell [style*="rgba(127,184,151,0.2)"],
 html[data-theme="light"] .pos-shell [style*="rgba(127,184,151,0.3)"] {
   background: rgba(0,106,255,0.08) !important;
@@ -713,34 +713,34 @@ html[data-theme="light"] .pos-shell [style*="background: #29b6f6"],
 html[data-theme="light"] .pos-shell [style*="background:#29b6f6"] {
   background: #006AFF !important;
 }
-html[data-theme="light"] .pos-shell [style*="color: #29b6f6"],
+html[data-theme="light"] html[data-theme="light"] .pos-shell [style*="color: #29b6f6"],
 html[data-theme="light"] .pos-shell [style*="color:#29b6f6"] {
   color: #006AFF !important;
 }
 
 /* Products page  dark input bg rgba(10,9,16) */
-html[data-theme="light"] .pos-shell [style*="rgba(10,9,16"],
+html[data-theme="light"] html[data-theme="light"] .pos-shell [style*="rgba(10,9,16"],
 html[data-theme="light"] .pos-shell [style*="rgba(0,9,16"] {
   background: #FFFFFF !important;
   color: #1A1A1A !important;
 }
 
 /* Badge backgrounds  keep semantic but on white bg */
-html[data-theme="light"] .pos-shell [style*="rgba(139,92,246,0.08)"],
+html[data-theme="light"] html[data-theme="light"] .pos-shell [style*="rgba(139,92,246,0.08)"],
 html[data-theme="light"] .pos-shell [style*="rgba(139,92,246,0.12)"],
 html[data-theme="light"] .pos-shell [style*="rgba(139,92,246,0.15)"],
 html[data-theme="light"] .pos-shell [style*="rgba(139,92,246,0.2)"],
 html[data-theme="light"] .pos-shell [style*="rgba(139,92,246,0.3)"] {
   background: rgba(0,106,255,0.08) !important;
 }
-html[data-theme="light"] .pos-shell [style*="rgba(0,229,255,0.07)"],
+html[data-theme="light"] html[data-theme="light"] .pos-shell [style*="rgba(0,229,255,0.07)"],
 html[data-theme="light"] .pos-shell [style*="rgba(0,229,255,0.08)"],
 html[data-theme="light"] .pos-shell [style*="rgba(0,229,255,0.12)"],
 html[data-theme="light"] .pos-shell [style*="rgba(0,229,255,0.15)"] {
   background: rgba(0,106,255,0.06) !important;
   border-color: rgba(0,106,255,0.15) !important;
 }
-html[data-theme="light"] .pos-shell [style*="color: #00E5FF"],
+html[data-theme="light"] html[data-theme="light"] .pos-shell [style*="color: #00E5FF"],
 html[data-theme="light"] .pos-shell [style*="color:#00E5FF"] {
   color: #006AFF !important;
 }
@@ -755,7 +755,7 @@ html[data-theme="light"] .pos-shell [style*="background:#2A2540"] {
   background: #FFFFFF !important;
   color: #1A1A1A !important;
 }
-html[data-theme="light"] .pos-shell [style*="border: 1px solid #2A2540"],
+html[data-theme="light"] html[data-theme="light"] .pos-shell [style*="border: 1px solid #2A2540"],
 html[data-theme="light"] .pos-shell [style*="border:1px solid #2A2540"],
 html[data-theme="light"] .pos-shell [style*="border: 1px solid #1C1928"],
 html[data-theme="light"] .pos-shell [style*="border:1px solid #1C1928"] {
@@ -763,14 +763,14 @@ html[data-theme="light"] .pos-shell [style*="border:1px solid #1C1928"] {
 }
 
 /* Open/Close dashboard page  dark metric cards */
-html[data-theme="light"] .pos-shell [style*="background: rgba(11,20,16"] {
+html[data-theme="light"] html[data-theme="light"] .pos-shell [style*="background: rgba(11,20,16"] {
   background: #FFFFFF !important;
   color: #1A1A1A !important;
 }
 
 /*  POS Dashboard widget colors (C.violet etc)  */
 /* The C.violet = #8B5CF6 used inline */
-html[data-theme="light"] .pos-shell a[style*="#8B5CF6"],
+html[data-theme="light"] html[data-theme="light"] .pos-shell a[style*="#8B5CF6"],
 html[data-theme="light"] .pos-shell span[style*="#8B5CF6"],
 html[data-theme="light"] .pos-shell p[style*="#8B5CF6"],
 html[data-theme="light"] .pos-shell div[style*="#8B5CF6"] {
@@ -778,11 +778,11 @@ html[data-theme="light"] .pos-shell div[style*="#8B5CF6"] {
 }
 
 /*  Recharts / chart text  */
-html[data-theme="light"] .pos-shell .recharts-text,
+html[data-theme="light"] html[data-theme="light"] .pos-shell .recharts-text,
 html[data-theme="light"] .pos-shell .recharts-cartesian-axis-tick-value {
   fill: #6B6B6B !important;
 }
-html[data-theme="light"] .pos-shell .recharts-cartesian-grid line {
+html[data-theme="light"] html[data-theme="light"] .pos-shell .recharts-cartesian-grid line {
   stroke: #EBEBEB !important;
 }
 
