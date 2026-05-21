@@ -101,7 +101,7 @@ export default function TablesPage() {
           </Link>
           <button onClick={() => setShowAdd(true)}
             className="px-4 py-2 rounded-xl text-sm font-semibold text-white"
-            style={{ background: '#8B5CF6' }}>
+            style={{ background: '#006AFF' }}>
             + Add table
           </button>
         </div>
@@ -130,7 +130,7 @@ export default function TablesPage() {
           <p className="text-xs text-[rgba(26,26,22,0.4)] mb-4">Add tables to manage your floor plan.</p>
           <button onClick={() => setShowAdd(true)}
             className="px-4 py-2 rounded-xl text-sm font-medium text-white"
-            style={{ background: '#8B5CF6' }}>
+            style={{ background: '#006AFF' }}>
             Add your first table
           </button>
         </div>
@@ -179,7 +179,7 @@ export default function TablesPage() {
               {selectedTable.status === 'available' && (
                 <Link href={`/pos/terminal?table_id=${selectedTable.id}&table_label=${encodeURIComponent('Table ' + selectedTable.table_number)}`}
                   className="flex items-center justify-center w-full py-3 rounded-xl text-sm font-bold text-white hover:opacity-90 transition-opacity"
-                  style={{ background: '#8B5CF6' }}
+                  style={{ background: '#006AFF' }}
                   onClick={() => setSelectedTable(null)}>
                   Open Table / Start Order
                 </Link>
@@ -257,7 +257,7 @@ export default function TablesPage() {
               </button>
               <button onClick={addTable} disabled={saving || !form.table_number.trim()}
                 className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white disabled:opacity-50"
-                style={{ background: '#8B5CF6' }}>
+                style={{ background: '#006AFF' }}>
                 {saving ? 'Adding…' : 'Add table'}
               </button>
             </div>
