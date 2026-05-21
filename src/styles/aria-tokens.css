@@ -446,13 +446,10 @@ body {
 
 /*  Terminal v4: Cart panel layout  */
 .cart-items {
-  flex: 1 1 0;
-  min-height: 0;
-  max-height: calc(100dvh - 390px);
-  overflow-y: auto;
+  flex: 0 0 auto;
+  overflow-y: visible;
   padding: 0 12px 6px;
   display: flex; flex-direction: column; gap: 6px;
-  -webkit-overflow-scrolling: touch;
 }
 .cart-items::-webkit-scrollbar { width: 4px; }
 .cart-items::-webkit-scrollbar-thumb { background: rgba(127,184,151,0.10); border-radius: 2px; }
