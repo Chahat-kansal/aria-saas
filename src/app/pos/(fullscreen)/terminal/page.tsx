@@ -2128,7 +2128,7 @@ export default function TerminalPage() {
 
           {/* Quick panel slide-out */}
           {showQuickPanel && (
-            <div ref={quickPanelRef} className="absolute inset-0 z-20 flex flex-col" style={{ background: 'var(--bg-ghost)', boxShadow: '4px 0 24px rgba(0,0,0,0.5)' }}>
+            <div ref={quickPanelRef} className="absolute inset-0 z-20 flex flex-col" style={{ background: 'var(--bg-elevated)', backdropFilter: 'blur(20px)', boxShadow: '4px 0 24px rgba(0,0,0,0.5)' }}>
               <div className="flex items-center justify-between px-4 py-3" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
                 <div>
                   <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{businessName}</p>
