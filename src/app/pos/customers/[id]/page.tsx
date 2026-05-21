@@ -20,11 +20,11 @@ interface Customer {
 }
 interface Sale { id: string; created_at: string; total_amount: number; payment_method: string; sale_number?: string; }
 
-const C = { bg: 'var(--bg-base)', card: 'var(--bg-surface)', border: 'transparent', text: 'var(--text-primary)', muted: 'var(--text-secondary)', dim: 'var(--text-tertiary)', violet: '#8B5CF6', green: '#22C55E', red: '#EF4444', amber: '#F59E0B' };
+const C = { bg: 'var(--bg-base)', card: 'var(--bg-surface)', border: '#D9D9D9', text: 'var(--text-primary)', muted: 'var(--text-secondary)', dim: 'var(--text-tertiary)', violet: '#006AFF', green: '#00B140', red: '#EF4444', amber: '#F59E0B' };
 const TABS = ['Purchase History','Loyalty','Notes','Tax Settings'];
 
 const SEGMENT_COLORS: Record<string, string> = {
-  Champions: '#34D399', Loyal: '#60A5FA', Promising: '#A78BFA',
+  Champions: '#00B140', Loyal: '#60A5FA', Promising: '#A78BFA',
   'At Risk': '#FBBF24', Lost: '#F87171', New: '#94A3B8',
 };
 
@@ -272,7 +272,7 @@ export default function CustomerDetailPage() {
             ) : (
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
-                  <tr style={{ background: '#29b6f6' }}>
+                  <tr style={{ background: '#006AFF' }}>
                     {['Date','Sale #','Payment','Total'].map(h => (
                       <th key={h} style={{ padding: '10px 14px', fontSize: 12, fontWeight: 700, color: '#fff', textAlign: 'left' }}>{h}</th>
                     ))}
@@ -299,7 +299,7 @@ export default function CustomerDetailPage() {
             <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
               <div>
                 <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: C.dim, marginBottom: 4 }}>Points Balance</div>
-                <div style={{ fontSize: 36, fontWeight: 800, color: '#00E5FF', fontFamily: "'JetBrains Mono',monospace" }}>{customer.loyalty_points ?? 0}</div>
+                <div style={{ fontSize: 36, fontWeight: 800, color: '#006AFF', fontFamily: "'JetBrains Mono',monospace" }}>{customer.loyalty_points ?? 0}</div>
               </div>
               <div>
                 <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: C.dim, marginBottom: 4 }}>RFM Segment</div>
@@ -391,7 +391,7 @@ export default function CustomerDetailPage() {
               </button>
               <span style={{ color: smsText.length > 140 ? '#FBBF24' : C.dim }}>{smsText.length}/160</span>
             </div>
-            {smsResult === 'sent' && <div style={{ marginBottom: 12, color: '#34D399', fontSize: 13, fontWeight: 600 }}>✓ SMS sent</div>}
+            {smsResult === 'sent' && <div style={{ marginBottom: 12, color: '#00B140', fontSize: 13, fontWeight: 600 }}>✓ SMS sent</div>}
             {smsResult === 'error' && <div style={{ marginBottom: 12, color: '#F87171', fontSize: 13 }}>Send failed — check TWILIO_* env vars in Settings</div>}
             <div style={{ display: 'flex', gap: 10 }}>
               <button onClick={() => setShowSmsModal(false)} style={{ flex: 1, padding: '10px', borderRadius: 9, border: '1px solid var(--border-default)', background: 'transparent', color: C.text, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>
