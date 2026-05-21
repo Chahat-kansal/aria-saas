@@ -120,6 +120,18 @@ export default function QuoteBuilderPage() {
     border: 'rgba(255,255,255,0.07)',
   }
 
+  function handlePrint() {
+    const printContent = document.getElementById('quote-print-area')
+    if (!printContent) return
+    const w = window.open('', '_blank')
+    if (!w) return
+    w.document.write('<html><head><title>Quote</title><style>body{font-family:Inter,sans-serif;padding:40px;color:#111}table{width:100%;border-collapse:collapse}td,th{padding:8px 12px;border:1px solid #eee;font-size:13px}th{background:#f9f9f9;font-weight:600}.total{font-size:18px;font-weight:700;text-align:right;margin-top:16px}.header{margin-bottom:32px}.label{font-size:11px;color:#888;text-transform:uppercase;letter-spacing:.06em}</style></head><body>')
+    w.document.write(printContent.innerHTML)
+    w.document.write('</body></html>')
+    w.document.close()
+    w.print()
+  }
+
   return (
     <div style={{ minHeight: '100%', background: C.bg, color: C.text, fontFamily: "'Inter',sans-serif", padding: '24px 28px' }}>
       <div style={{ marginBottom: 24 }}>

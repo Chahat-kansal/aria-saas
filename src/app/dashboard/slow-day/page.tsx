@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useBusinessContext } from '@/components/providers/BusinessProvider'
 
 interface PromoIdea {
@@ -36,6 +36,8 @@ export default function SlowDayPage() {
   const [generating, setGenerating] = useState(false)
   const [selectedDay, setSelectedDay] = useState<string | null>(null)
   const [sentMsg, setSentMsg] = useState<string | null>(null)
+  const chartRef = useRef<HTMLCanvasElement>(null)
+  const chartInstance = useRef<unknown>(null)
 
   const load = useCallback(async () => {
     if (!business?.id) return
@@ -76,6 +78,43 @@ export default function SlowDayPage() {
   }, [business?.id])
 
   useEffect(() => { load() }, [load])
+
+  useEffect(() => {
+    if (!chartRef.current || slowDays.length === 0) return
+    const win = window as unknown as Record<string, unknown>
+    function build() {
+      if (!win.Chart) return
+      const CJS = win.Chart as { new(el: HTMLCanvasElement, cfg: unknown): unknown }
+      if (chartInstance.current) (chartInstance.current as { destroy(): void }).destroy()
+      const sorted = [...slowDays].sort((a, b) => a.dow - b.dow)
+      chartInstance.current = new CJS(chartRef.current!, {
+        type: 'bar',
+        data: {
+          labels: sorted.map(d => d.day),
+          datasets: [{
+            label: 'Avg Revenue',
+            data: sorted.map(d => Math.round(d.avg_revenue)),
+            backgroundColor: sorted.map(d => d.vs_best < 60 ? 'rgba(239,68,68,0.7)' : d.vs_best < 85 ? 'rgba(245,158,11,0.7)' : 'rgba(34,197,94,0.7)'),
+            borderRadius: 6,
+          }]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { ticks: { color: 'rgba(255,255,255,0.5)', font: { size: 11 } }, grid: { display: false } },
+            y: { ticks: { color: 'rgba(255,255,255,0.4)', font: { size: 10 }, callback: (v: number) => '$' + Math.round(v) }, grid: { color: 'rgba(255,255,255,0.05)' } },
+          }
+        }
+      })
+    }
+    if (win.Chart) { build() } else {
+      const s = document.createElement('script')
+      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js'
+      s.onload = build
+      document.head.appendChild(s)
+    }
+  }, [slowDays])
 
   async function generateIdeas() {
     if (!business?.id || !selectedDay) return

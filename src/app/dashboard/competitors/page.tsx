@@ -16,6 +16,68 @@ function timeAgo(dateStr: string) {
   return Math.floor(h / 24) + 'd ago'
 }
 
+function PriceComparisonTable({ competitors }: { competitors: { name: string; url?: string | null; price_notes?: string | null }[] }) {
+  const [prices, setPrices] = useState<Record<string, string>>({})
+  const [product, setProduct] = useState('')
+  const [searching, setSearching] = useState(false)
+
+  async function searchPrices() {
+    if (!product.trim()) return
+    setSearching(true)
+    try {
+      const res = await fetch('/api/aria/competitors', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'price_check', product, competitors: competitors.map(c => c.name) })
+      })
+      const d = await res.json()
+      if (d.prices) setPrices(d.prices)
+    } catch { /* ignore */ }
+    setSearching(false)
+  }
+
+  return (
+    <div style={{background: 'rgba(255,255,255,0.03)', borderRadius: 12, border: '1px solid rgba(255,255,255,0.07)', padding: '20px', marginTop: 20}}>
+      <h3 style={{fontSize: 14, fontWeight: 700, color: '#fff', marginBottom: 12}}>Price comparison</h3>
+      <div style={{display: 'flex', gap: 8, marginBottom: 16}}>
+        <input
+          type="text"
+          placeholder="Enter a product name to compare prices..."
+          value={product}
+          onChange={e => setProduct(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && searchPrices()}
+          style={{flex: 1, padding: '8px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.05)', color: '#fff', fontSize: 13, fontFamily: 'inherit', outline: 'none'}}
+        />
+        <button onClick={searchPrices} disabled={searching || !product.trim()}
+          style={{padding: '8px 18px', borderRadius: 8, border: 'none', background: '#7FB897', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', opacity: searching ? 0.6 : 1}}>
+          {searching ? 'Searching...' : 'Compare'}
+        </button>
+      </div>
+      {Object.keys(prices).length > 0 && (
+        <table style={{width: '100%', borderCollapse: 'collapse', fontSize: 13}}>
+          <thead>
+            <tr style={{borderBottom: '1px solid rgba(255,255,255,0.07)'}}>
+              <th style={{padding: '8px 12px', textAlign: 'left', color: 'rgba(255,255,255,0.4)', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em'}}>Competitor</th>
+              <th style={{padding: '8px 12px', textAlign: 'right', color: 'rgba(255,255,255,0.4)', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em'}}>Price</th>
+              <th style={{padding: '8px 12px', textAlign: 'left', color: 'rgba(255,255,255,0.4)', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em'}}>Notes</th>
+            </tr>
+          </thead>
+          <tbody>
+            {Object.entries(prices).map(([name, price]) => (
+              <tr key={name} style={{borderBottom: '1px solid rgba(255,255,255,0.04)'}}>
+                <td style={{padding: '10px 12px', color: '#fff', fontWeight: 500}}>{name}</td>
+                <td style={{padding: '10px 12px', textAlign: 'right', color: '#22C55E', fontWeight: 700}}>{price}</td>
+                <td style={{padding: '10px 12px', color: 'rgba(255,255,255,0.4)', fontSize: 11}}>—</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+      {competitors.length > 0 && <PriceComparisonTable competitors={competitors} />}
+  )
+}
+
 export default function CompetitorsPage() {
   const { business } = useBusinessContext()
   const [alerts, setAlerts] = useState<Alert[]>([])

@@ -156,7 +156,16 @@ export default function WinbackPage() {
                   </button>
                   <span style={{ fontSize: 11, color: C.dim }}>{selectedCount} selected</span>
                 </div>
-                {customers.map(c => {
+
+      <div style={{display: 'flex', gap: 8, marginBottom: 16}}>
+        {([30, 60, 90] as const).map(d => (
+          <button key={d} onClick={() => setLapsedFilter(d)}
+            style={{padding: '6px 14px', borderRadius: 8, border: '1px solid ' + (lapsedFilter === d ? '#8B5CF6' : 'rgba(255,255,255,0.1)'), background: lapsedFilter === d ? 'rgba(139,92,246,0.15)' : 'transparent', color: lapsedFilter === d ? '#8B5CF6' : 'rgba(255,255,255,0.5)', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit'}}>
+            {d}+ days lapsed
+          </button>
+        ))}
+      </div>
+                {customers.filter(c => { if (!c.last_visit_at) return true; return (Date.now() - new Date(c.last_visit_at).getTime()) > lapsedFilter * 86400000 }).map(c => {
                   const days = daysAgo(c.last_visit_at)
                   const isSelected = selected[c.id]
                   return (
