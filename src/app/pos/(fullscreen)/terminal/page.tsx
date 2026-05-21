@@ -2222,7 +2222,7 @@ export default function TerminalPage() {
           )}
 
           {/* Search + menu button row */}
-          <div className="px-3 py-2.5 flex gap-2" style={{ borderBottom: '1px solid rgba(0,229,255,0.06)' }}>
+          <div className="px-3 py-1.5 flex gap-2" style={{ borderBottom: '1px solid rgba(0,229,255,0.06)' }}>
             <button onClick={() => setShowQuickPanel(v => !v)}
               className="flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-xl text-base"
               style={{ border: '1px solid #2A2540', background: 'rgba(255,255,255,0.03)', color: 'var(--text-secondary)' }}>
@@ -2235,7 +2235,7 @@ export default function TerminalPage() {
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 placeholder="Search or scan barcode…"
-                className="w-full pl-9 pr-8 py-2.5 rounded-[10px] text-sm outline-none"
+                className="w-full pl-9 pr-8 py-1.5 rounded-[10px] text-sm outline-none"
                 style={{ background: 'rgba(0,229,255,0.04)', border: '1px solid rgba(0,229,255,0.08)', color: 'var(--text-primary)', fontFamily: "'Manrope', sans-serif" }}
               />
               {search && (
@@ -2249,10 +2249,10 @@ export default function TerminalPage() {
           </div>
 
           {/* Category tabs */}
-          <div className="px-3 py-2 overflow-x-auto" style={{ borderBottom: '1px solid #1C1928', scrollbarWidth: 'none' }}>
+          <div className="px-3 py-1 overflow-x-auto" style={{ borderBottom: '1px solid #1C1928', scrollbarWidth: 'none' }}>
             <div className="flex gap-1.5 whitespace-nowrap">
               <button onClick={() => setActiveCategory(null)}
-                className="text-xs font-semibold px-3 py-1.5 rounded-lg flex-shrink-0 transition-all"
+                className="text-xs font-semibold px-2.5 py-0.5 rounded-lg flex-shrink-0 transition-all"
                 style={!activeCategory
                   ? { background: 'rgba(139,92,246,0.12)', border: '1px solid rgba(139,92,246,0.25)', color: '#8B5CF6' }
                   : { background: 'rgba(255,255,255,0.03)', border: '1px solid transparent', color: 'rgba(139,133,168,0.5)' }}>
@@ -2260,7 +2260,7 @@ export default function TerminalPage() {
               </button>
               {categories.map(c => (
                 <button key={c.name} onClick={() => setActiveCategory(activeCategory === c.name ? null : c.name)}
-                  className="text-xs font-semibold px-3 py-1.5 rounded-lg flex-shrink-0 flex items-center gap-1.5 transition-all"
+                  className="text-xs font-semibold px-2.5 py-0.5 rounded-lg flex-shrink-0 flex items-center gap-1.5 transition-all"
                   style={activeCategory === c.name
                     ? { background: 'rgba(139,92,246,0.12)', border: '1px solid rgba(139,92,246,0.25)', color: '#8B5CF6' }
                     : { background: 'rgba(255,255,255,0.03)', border: '1px solid transparent', color: 'rgba(139,133,168,0.5)' }}>
@@ -2272,19 +2272,19 @@ export default function TerminalPage() {
           </div>
 
           {/* Quick sale row */}
-          <div className="px-3 py-1.5 flex gap-1.5" style={{ borderBottom: '1px solid #1C1928' }}>
+          <div className="px-3 py-1 flex gap-1.5" style={{ borderBottom: '1px solid #1C1928' }}>
             <button onClick={() => { setCustomItemForm(f => ({ ...f, isNote: false })); setShowCustomItem(true); }}
-              className="flex-1 text-xs rounded-lg py-1.5 transition-colors"
+              className="flex-1 text-xs rounded-lg py-1 transition-colors"
               style={{ border: '1px dashed #2A2540', color: 'var(--text-tertiary)' }}>
               + Custom item
             </button>
             <button onClick={() => { setCustomItemForm(f => ({ ...f, isNote: true, price: '0' })); setShowCustomItem(true); }}
-              className="flex-1 text-xs rounded-lg py-1.5 transition-colors"
+              className="flex-1 text-xs rounded-lg py-1 transition-colors"
               style={{ border: '1px dashed #2A2540', color: 'var(--text-tertiary)' }}>
               + Note
             </button>
             <button onClick={() => setPriceCheckMode(v => !v)}
-              className="px-2.5 text-xs rounded-lg py-1.5 transition-colors"
+              className="px-2.5 text-xs rounded-lg py-1 transition-colors"
               style={priceCheckMode
                 ? { background: 'rgba(139,92,246,0.12)', border: '1px solid rgba(139,92,246,0.3)', color: '#8B5CF6' }
                 : { border: '1px solid #2A2540', color: 'var(--text-tertiary)' }}
@@ -2343,7 +2343,7 @@ export default function TerminalPage() {
           )}
 
           {/* Product grid */}
-          <div className="pos-product-grid flex-1 overflow-y-auto p-4">
+          <div className="pos-product-grid flex-1 overflow-y-auto p-2">
             {loading ? (
               <div className="grid grid-cols-2 gap-2">
                 {[...Array(8)].map((_, i) => (
@@ -2579,7 +2579,7 @@ export default function TerminalPage() {
                 />
               )}
               {/* Cart header */}
-              <div ref={cartAnchor} className="flex-shrink-0 px-4 py-3 flex items-center gap-2" style={{ borderBottom: '1px solid #1C1928' }}>
+              <div ref={cartAnchor} className="flex-shrink-0 px-4 py-2 flex items-center gap-2" style={{ borderBottom: '1px solid #1C1928' }}>
                 <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Order</span>
                 {cart.length > 0 && (
                   <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(139,92,246,0.12)', border: '1px solid rgba(139,92,246,0.25)', color: '#8B5CF6' }}>
@@ -2646,7 +2646,7 @@ export default function TerminalPage() {
               </div>
 
               {/* Sale attribution (commission) */}
-              <div className="flex-shrink-0 px-4 py-1.5 flex items-center gap-2" style={{ borderBottom: '1px solid #1C1928' }}>
+              <div className="flex-shrink-0 px-4 py-1 flex items-center gap-2" style={{ borderBottom: '1px solid #1C1928' }}>
                 <span className="text-[10px] font-medium uppercase tracking-wider flex-shrink-0" style={{ color: 'var(--text-tertiary)' }}>Sale by</span>
                 <input value={servedBy} onChange={e => setServedBy(e.target.value)}
                   placeholder="Cashier name…"
@@ -2717,13 +2717,13 @@ export default function TerminalPage() {
               <div style={{ flexShrink: 0 }}>
                 {/* Discount quick-select pills */}
                 {cart.length > 0 && (
-                  <div style={{ padding: '8px 12px', display: 'flex', gap: 5, borderTop: '1px solid rgba(127,184,151,0.06)' }}>
+                  <div style={{ padding: '5px 12px', display: 'flex', gap: 4, borderTop: '1px solid rgba(127,184,151,0.06)' }}>
                     {[0, 5, 10, 15, 20].map(d => {
                       const curDisc = cart.length > 0 ? Math.round(cart[0].discount_percent ?? 0) : 0;
                       const active = d === 0 ? curDisc === 0 : curDisc === d;
                       return (
                         <button key={d} onClick={() => setCart(c => c.map(i => ({ ...i, discount_percent: d })))}
-                          style={{ flex: 1, height: 26, borderRadius: 7, border: `1px solid ${active ? 'rgba(127,184,151,0.35)' : 'rgba(127,184,151,0.1)'}`, background: active ? 'rgba(127,184,151,0.12)' : 'rgba(127,184,151,0.03)', color: active ? 'var(--terminal-sage-bright,#8FCAA5)' : 'var(--text-tertiary)', fontSize: 10, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', transition: 'all 150ms' }}>
+                          style={{ flex: 1, height: 22, borderRadius: 6, border: `1px solid ${active ? 'rgba(127,184,151,0.35)' : 'rgba(127,184,151,0.1)'}`, background: active ? 'rgba(127,184,151,0.12)' : 'rgba(127,184,151,0.03)', color: active ? 'var(--terminal-sage-bright,#8FCAA5)' : 'var(--text-tertiary)', fontSize: 10, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', transition: 'all 150ms' }}>
                           {d === 0 ? '—' : `${d}%`}
                         </button>
                       );
