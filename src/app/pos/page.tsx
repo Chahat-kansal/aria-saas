@@ -19,9 +19,9 @@ interface DayRevenue { date: string; revenue: number; label: string; }
 function LogoMark() {
   return (
     <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
-      <path d="M16 2L28 9v14L16 30 4 23V9z" fill="rgba(139,92,246,0.15)" stroke="#8B5CF6" strokeWidth="1.5"/>
-      <path d="M16 8l7 4v8l-7 4-7-4V12z" fill="rgba(139,92,246,0.25)" stroke="#8B5CF6" strokeWidth="1"/>
-      <circle cx="16" cy="16" r="2.5" fill="#8B5CF6"/>
+      <path d="M16 2L28 9v14L16 30 4 23V9z" fill="rgba(0,106,255,0.10)" stroke="#006AFF" strokeWidth="1.5"/>
+      <path d="M16 8l7 4v8l-7 4-7-4V12z" fill="rgba(139,92,246,0.25)" stroke="#006AFF" strokeWidth="1"/>
+      <circle cx="16" cy="16" r="2.5" fill="#006AFF"/>
     </svg>
   );
 }
@@ -144,7 +144,7 @@ export default function POSHomePage() {
   if (loading) {
     return (
       <div className="h-full flex items-center justify-center" style={{ background: 'var(--bg-base)' }}>
-        <div style={{ width: 24, height: 24, borderRadius: '50%', border: '2px solid rgba(139,92,246,0.3)', borderTopColor: '#8B5CF6', animation: 'processing 0.7s linear infinite' }} />
+        <div style={{ width: 24, height: 24, borderRadius: '50%', border: '2px solid rgba(0,106,255,0.15)', borderTopColor: '#006AFF', animation: 'processing 0.7s linear infinite' }} />
       </div>
     );
   }
@@ -153,20 +153,20 @@ export default function POSHomePage() {
   if (!session) {
     return (
       <div className="h-full flex items-center justify-center p-6" style={{ background: 'var(--bg-base)', position: 'relative', overflow: 'hidden' }}>
-        <Orb style={{ width: 400, height: 400, top: '-100px', left: '-100px', background: 'radial-gradient(circle,rgba(139,92,246,0.2),transparent 70%)', filter: 'blur(60px)', animation: 'orb-pulse-0 4s ease-in-out infinite' }} />
+        <Orb style={{ width: 400, height: 400, top: '-100px', left: '-100px', background: 'radial-gradient(circle,rgba(0,106,255,0.12),transparent 70%)', filter: 'blur(60px)', animation: 'orb-pulse-0 4s ease-in-out infinite' }} />
         <Orb style={{ width: 300, height: 300, bottom: '-80px', right: '-80px', background: 'radial-gradient(circle,rgba(99,102,241,0.15),transparent 70%)', filter: 'blur(50px)', animation: 'orb-pulse-1 5s ease-in-out infinite 1s' }} />
         <Orb style={{ width: 250, height: 250, top: '40%', left: '60%', background: 'radial-gradient(circle,rgba(139,92,246,0.1),transparent 70%)', filter: 'blur(40px)', animation: 'orb-pulse-2 6s ease-in-out infinite 2s' }} />
 
-        <div className="w-full max-w-sm relative z-10 pos-scale-in" style={{ background: 'rgba(26,23,40,0.8)', backdropFilter: 'blur(24px)', border: '1px solid rgba(139,92,246,0.2)', borderRadius: 24, padding: 40, boxShadow: '0 24px 64px rgba(0,0,0,0.7), 0 0 0 1px rgba(139,92,246,0.08)' }}>
+        <div className="w-full max-w-sm relative z-10 pos-scale-in" style={{ background: 'rgba(26,23,40,0.8)', backdropFilter: 'blur(24px)', border: '1px solid rgba(0,106,255,0.12)', borderRadius: 24, padding: 40, boxShadow: '0 24px 64px rgba(0,0,0,0.7), 0 0 0 1px rgba(0,106,255,0.06)' }}>
           <div className="flex flex-col items-center mb-8">
             <LogoMark />
-            <p style={{ fontFamily: "'Instrument Serif',serif", fontStyle: 'italic', fontSize: 28, color: '#8B5CF6', marginTop: 12, lineHeight: 1 }}>AriaPOS</p>
+            <p style={{ fontFamily: "'Instrument Serif',serif", fontStyle: 'italic', fontSize: 28, color: '#006AFF', marginTop: 12, lineHeight: 1 }}>AriaPOS</p>
             <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 6 }}>{businessName}</p>
           </div>
 
           <div className="mb-5">
             <p style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-tertiary)', marginBottom: 10 }}>Opening Float</p>
-            <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #2A2540', borderRadius: 12, background: 'rgba(255,255,255,0.03)', overflow: 'hidden' }}>
+            <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #2A2540', borderRadius: 12, background: '#FAFAFA', overflow: 'hidden' }}>
               <span style={{ padding: '14px 14px 14px 16px', fontFamily: "'JetBrains Mono',monospace", color: 'var(--text-tertiary)', fontSize: 14 }}>A$</span>
               <input
                 type="number" min="0" step="0.01"
@@ -187,7 +187,7 @@ export default function POSHomePage() {
             disabled={opening}
             style={{
               width: '100%', height: 52, borderRadius: 14, border: 'none',
-              background: '#8B5CF6',
+              background: '#006AFF',
               boxShadow: '0 4px 0 rgba(124,58,237,0.4), 0 6px 20px rgba(139,92,246,0.33)',
               color: '#fff', fontFamily: "'Manrope',sans-serif", fontWeight: 700, fontSize: 15,
               cursor: opening ? 'not-allowed' : 'pointer', opacity: opening ? 0.6 : 1,
@@ -212,7 +212,7 @@ export default function POSHomePage() {
   /* ── OPEN: Dashboard ───────────────────────────────────────────── */
   return (
     <div className="h-full overflow-y-auto" style={{ background: 'var(--bg-base)', position: 'relative' }}>
-      <Orb style={{ width: 300, height: 300, top: 0, left: '20%', background: 'radial-gradient(circle,rgba(139,92,246,0.12),transparent 70%)', filter: 'blur(60px)', animation: 'orb-pulse-0 4s ease-in-out infinite', pointerEvents: 'none', position: 'fixed', zIndex: 0 }} />
+      <Orb style={{ width: 300, height: 300, top: 0, left: '20%', background: 'radial-gradient(circle,rgba(0,106,255,0.08),transparent 70%)', filter: 'blur(60px)', animation: 'orb-pulse-0 4s ease-in-out infinite', pointerEvents: 'none', position: 'fixed', zIndex: 0 }} />
 
       {/* Session header */}
       <div style={{ position: 'sticky', top: 0, zIndex: 10, background: 'rgba(8,6,16,0.92)', backdropFilter: 'blur(16px)', borderBottom: '1px solid #1C1928', padding: '12px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -223,7 +223,7 @@ export default function POSHomePage() {
             <span style={{ marginLeft: 12, color: 'var(--text-tertiary)' }}>
               · 👤 {(posUser as { name: string }).name}
               <button onClick={() => { localStorage.removeItem('aria_pos_user'); setPosUser(null); }}
-                style={{ marginLeft: 6, color: '#8B5CF6', background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, textDecoration: 'underline' }}>
+                style={{ marginLeft: 6, color: '#006AFF', background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, textDecoration: 'underline' }}>
                 switch
               </button>
             </span>
@@ -258,7 +258,7 @@ export default function POSHomePage() {
             onClick={() => router.push('/pos/terminal')}
             style={{
               width: 280, height: 72, borderRadius: 20,
-              background: '#8B5CF6',
+              background: '#006AFF',
               boxShadow: '0 4px 0 rgba(124,58,237,0.4), 0 8px 32px rgba(139,92,246,0.4)',
               border: 'none', cursor: 'pointer', color: '#fff',
               fontFamily: "'Instrument Serif',serif", fontStyle: 'italic', fontSize: 22,
@@ -276,7 +276,7 @@ export default function POSHomePage() {
 
         {/* Mobile selling card */}
         <a href="/pos/mobile" style={{ display: 'block', background: 'var(--bg-elevated)', border: '1px solid #2A2540', borderRadius: 20, padding: '16px 20px', marginBottom: 16, textDecoration: 'none', transition: 'border 150ms ease' }}
-          onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.border = '1px solid rgba(139,92,246,0.3)'; }}
+          onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.border = '1px solid rgba(0,106,255,0.15)'; }}
           onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.border = '1px solid #2A2540'; }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 8 }}>
             <div style={{ width: 44, height: 44, borderRadius: 12, background: 'rgba(139,92,246,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>📱</div>
@@ -284,7 +284,7 @@ export default function POSHomePage() {
               <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>Mobile selling</p>
               <p style={{ fontSize: 12, color: '#3D5A73' }}>Camera barcode scanning · Works offline</p>
             </div>
-            <span style={{ marginLeft: 'auto', fontSize: 13, color: '#8B5CF6', fontWeight: 600 }}>Open →</span>
+            <span style={{ marginLeft: 'auto', fontSize: 13, color: '#006AFF', fontWeight: 600 }}>Open →</span>
           </div>
           <p style={{ fontSize: 12, color: '#3D5A73', lineHeight: 1.5 }}>
             Point your phone camera at any product barcode to add it to a sale instantly. Sales are queued offline when there&apos;s no internet.
@@ -292,10 +292,10 @@ export default function POSHomePage() {
         </a>
 
         {/* Aria insight */}
-        <div style={{ background: 'rgba(139,92,246,0.06)', border: '1px solid rgba(139,92,246,0.15)', borderRadius: 16, padding: '16px 20px', marginBottom: 16 }}>
+        <div style={{ background: 'rgba(139,92,246,0.06)', border: '1px solid rgba(0,106,255,0.10)', borderRadius: 16, padding: '16px 20px', marginBottom: 16 }}>
           {insightText ? (
             <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-              <span style={{ color: '#8B5CF6', fontWeight: 600 }}>Aria: </span>{insightText}
+              <span style={{ color: '#006AFF', fontWeight: 600 }}>Aria: </span>{insightText}
             </p>
           ) : (
             <div style={{ height: 16, borderRadius: 6, background: 'rgba(139,92,246,0.1)', width: '70%', animation: 'pulse 2s ease-in-out infinite' }} />
@@ -318,7 +318,7 @@ export default function POSHomePage() {
             <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 12 }}>Last 7 days</p>
             <ResponsiveContainer width="100%" height={100}>
               <BarChart data={chartData} barCategoryGap="30%">
-                <Bar dataKey="revenue" fill="#8B5CF6" radius={[3, 3, 0, 0]} />
+                <Bar dataKey="revenue" fill="#006AFF" radius={[3, 3, 0, 0]} />
                 <Tooltip
                   contentStyle={{ background: 'var(--bg-elevated)', border: '1px solid #2A2540', borderRadius: 8, fontSize: 12, color: 'var(--text-primary)' }}
                   formatter={(v: unknown) => { const num = typeof v === 'number' ? v : 0; return [`A$${num.toFixed(2)}`, 'Revenue']; }}
