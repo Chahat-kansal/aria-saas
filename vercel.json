@@ -119,5 +119,6 @@
       "path": "/api/cron/leave-accrual",
       "schedule": "0 1 * * *"
     }
-  ]
+  ],
+  "nodeVersion": "20.x"
 }
