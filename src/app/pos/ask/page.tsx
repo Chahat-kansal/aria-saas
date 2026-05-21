@@ -401,11 +401,31 @@ export default function AskAriaPage() {
         </div>
         <div style={{ flex: 1, overflowY: 'auto', padding: '8px 4px' }}>
           {conversations.map(c => (
-            <div key={c.id} onClick={() => loadConversation(c.id)} style={{ padding: '9px 10px', borderRadius: 8, cursor: 'pointer', background: convId === c.id ? 'var(--violet-soft)' : 'transparent', borderLeft: convId === c.id ? '2px solid var(--violet)' : '2px solid transparent', marginBottom: 2 }}
-              onMouseEnter={e => { if (convId !== c.id) (e.currentTarget as HTMLElement).style.background = 'var(--bg-elevated)' }}
-              onMouseLeave={e => { if (convId !== c.id) (e.currentTarget as HTMLElement).style.background = 'transparent' }}>
-              <div style={{ fontSize: 12, fontWeight: 500, color: convId === c.id ? 'var(--text-violet)' : 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.title || 'Untitled'}</div>
-              <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: 2 }}>{(() => { const raw = c.last_message_at ?? (c as any).created_at; if (!raw) return ''; const d = new Date(raw); return isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' }); })()}</div>
+            <div key={c.id} style={{ position: 'relative', marginBottom: 2 }}
+              onMouseEnter={e => { const btn = (e.currentTarget as HTMLElement).querySelector('.del-btn') as HTMLElement; if (btn) btn.style.opacity = '1'; }}
+              onMouseLeave={e => { const btn = (e.currentTarget as HTMLElement).querySelector('.del-btn') as HTMLElement; if (btn) btn.style.opacity = '0'; }}>
+              <div onClick={() => loadConversation(c.id)} style={{ padding: '9px 28px 9px 10px', borderRadius: 8, cursor: 'pointer', background: convId === c.id ? 'var(--violet-soft)' : 'transparent', borderLeft: convId === c.id ? '2px solid var(--violet)' : '2px solid transparent' }}
+                onMouseEnter={e => { if (convId !== c.id) (e.currentTarget as HTMLElement).style.background = 'var(--bg-elevated)' }}
+                onMouseLeave={e => { if (convId !== c.id) (e.currentTarget as HTMLElement).style.background = 'transparent' }}>
+                <div style={{ fontSize: 12, fontWeight: 500, color: convId === c.id ? 'var(--text-violet)' : 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.title || 'Untitled'}</div>
+                <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: 2 }}>{(() => { const raw = c.last_message_at ?? (c as any).created_at; if (!raw) return ''; const d = new Date(raw); return isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' }); })()}</div>
+              </div>
+              <button
+                className="del-btn"
+                onClick={async (e) => {
+                  e.stopPropagation()
+                  if (!confirm('Delete this chat?')) return
+                  await fetch('/api/aria/ask/delete', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: c.id }) })
+                  if (convId === c.id) { setMessages([]); setConvId(null) }
+                  fetchConvs()
+                }}
+                style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', opacity: 0, transition: 'opacity 150ms', background: 'none', border: 'none', cursor: 'pointer', padding: 4, borderRadius: 4, color: 'var(--text-tertiary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                title="Delete chat"
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </button>
             </div>
           ))}
         </div>
@@ -562,3 +582,4 @@ export default function AskAriaPage() {
     </div>
   )
 }
+
