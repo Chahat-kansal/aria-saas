@@ -423,14 +423,10 @@ export default function TerminalPage() {
   const barcodeTs     = useRef<number>(0);
   const quickPanelRef = useRef<HTMLDivElement>(null);
 
-  /* ── Terminal always dark — override theme ───────────────────── */
+  /* ── Apply saved theme on terminal mount ─────────────────────── */
   useEffect(() => {
-    const prev = document.documentElement.getAttribute('data-theme')
-    document.documentElement.setAttribute('data-theme', 'dark')
-    return () => {
-      const stored = localStorage.getItem('aria-theme') || 'dark'
-      document.documentElement.setAttribute('data-theme', stored)
-    }
+    const stored = localStorage.getItem('pos_theme') || 'dark'
+    document.documentElement.setAttribute('data-theme', stored)
   }, [])
 
   /* ── sessionStorage cart persistence ─────────────────────────── */
@@ -2033,7 +2029,7 @@ export default function TerminalPage() {
 {/* Low stock banner removed — visible in Dashboard instead */}
 
       {/* ── TOP BAR ───────────────────────────────────────────────── */}
-      <div className="flex-shrink-0 flex items-center px-3 gap-2" style={{ minHeight: 46, background: 'rgba(11,20,16,0.85)', borderBottom: '1px solid var(--terminal-sage-rim,rgba(127,184,151,0.18))', backdropFilter: 'blur(20px) saturate(1.4)', WebkitBackdropFilter: 'blur(20px) saturate(1.4)', position: 'relative', zIndex: 2, flexWrap: 'wrap', paddingTop: 6, paddingBottom: 6 }}>
+      <div className="flex-shrink-0 flex items-center px-3 gap-2" style={{ minHeight: 46, background: 'var(--terminal-glass-3,rgba(11,20,16,0.85))', borderBottom: '1px solid var(--terminal-sage-rim,rgba(127,184,151,0.18))', backdropFilter: 'blur(20px) saturate(1.4)', WebkitBackdropFilter: 'blur(20px) saturate(1.4)', position: 'relative', zIndex: 2, flexWrap: 'wrap', paddingTop: 6, paddingBottom: 6 }}>
         <svg width="20" height="20" viewBox="0 0 32 32" fill="none" style={{ flexShrink: 0 }}>
           <rect x="16" y="2" width="19" height="19" rx="3" transform="rotate(45 16 2)" stroke="#00E5FF" strokeWidth="1.8" fill="none"/>
           <circle cx="16" cy="16" r="3" fill="#00E5FF"/>
@@ -3982,4 +3978,5 @@ function SearchIcon({ className }: { className?: string }) {
 function BagOutlineIcon({ className }: { className?: string }) {
   return <svg className={className} fill="none" viewBox="0 0 24 24" stroke="rgba(74,69,101,0.4)" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"/></svg>;
 }
+
 
