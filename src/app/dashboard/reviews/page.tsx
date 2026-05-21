@@ -270,7 +270,7 @@ export default function ReviewsPage() {
       )}
 
       {/* Auto-request automation toggle */}
-      <div style={{ marginBottom: 16, padding: '14px 18px', background: autoRequestEnabled ? 'rgba(127,184,151,0.08)' : 'rgba(127,184,151,0.04)', borderRadius: 10, border: `1px solid ${autoRequestEnabled ? 'rgba(127,184,151,0.3)' : 'rgba(127,184,151,0.15)'}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+      <div style={{ marginBottom: 16, padding: '14px 18px', background: autoRequestEnabled ? 'rgba(127,184,151,0.08)' : 'rgba(127,184,151,0.04)', borderRadius: 10, border: ('1px solid ' + autoRequestEnabled ? 'rgba(127,184,151,0.3)' : 'rgba(127,184,151,0.15)'), display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
         <div style={{ flex: 1, minWidth: 240 }}>
           <p style={{ fontSize: 14, fontWeight: 700, color: '#7FB897', display: 'flex', alignItems: 'center', gap: 8 }}>
             {autoRequestEnabled ? '🤖 Autopilot ON' : '⚙️ Review request automation'}
@@ -313,7 +313,7 @@ export default function ReviewsPage() {
             </div>
           ))}
           {reputation?.score != null && (
-            <div style={{ background: 'var(--bg-surface)', border: `1px solid ${GRADE_COLOR[reputation.grade ?? 'C'] ?? '#EF9F27'}44`, borderRadius: 12, padding: '12px 16px', minWidth: 130 }}>
+            <div style={{ background: 'var(--bg-surface)', border: ('1px solid ' + GRADE_COLOR[reputation.grade ?? 'C'] ?? '#EF9F27' + '44'), borderRadius: 12, padding: '12px 16px', minWidth: 130 }}>
               <p style={{ fontSize: 11, color: 'var(--text-tertiary)', margin: '0 0 4px' }}>Reputation score</p>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
                 <p style={{ fontSize: 22, fontWeight: 700, margin: 0, color: GRADE_COLOR[reputation.grade ?? 'C'] }}>{reputation.score}</p>
@@ -335,7 +335,7 @@ export default function ReviewsPage() {
               const maxCount = Math.max(1, ...analytics.monthly_trend.map(m => m.count))
               return analytics.monthly_trend.map((m, i) => (
                 <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-                  <div style={{ width: '100%', background: '#2D5240', borderRadius: 3, height: `${Math.max(4, (m.count / maxCount) * 40)}px`, transition: 'height 0.4s' }} title={`${m.count} reviews, avg ${m.avg_rating}★`} />
+                  <div style={{ width: '100%', background: '#2D5240', borderRadius: 3, height: (Math.max(4, (m.count / maxCount) * 40) + 'px'), transition: 'height 0.4s' }} title={(m.count + ' reviews, avg ' + m.avg_rating + '★')} />
                   <span style={{ fontSize: 9, color: 'var(--text-tertiary)' }}>{m.month.slice(5)}</span>
                 </div>
               ))
@@ -358,7 +358,7 @@ export default function ReviewsPage() {
                 <span style={{ fontSize: 11, color: 'var(--text-tertiary)', width: 12, textAlign: 'right' }}>{star}</span>
                 <svg width={10} height={10} viewBox="0 0 24 24" fill="#F59E0B" stroke="none"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
                 <div style={{ flex: 1, height: 7, borderRadius: 4, background: 'var(--bg-elevated)', overflow: 'hidden' }}>
-                  <div style={{ height: '100%', borderRadius: 4, background: '#F59E0B', width: `${((dist[star] ?? 0) / maxDist) * 100}%`, transition: 'width 0.4s' }} />
+                  <div style={{ height: '100%', borderRadius: 4, background: '#F59E0B', width: (((dist[star] ?? 0) / maxDist) * 100 + '%'), transition: 'width 0.4s' }} />
                 </div>
                 <span style={{ fontSize: 11, color: 'var(--text-tertiary)', width: 14 }}>{dist[star] ?? 0}</span>
               </div>
@@ -389,7 +389,7 @@ export default function ReviewsPage() {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {reviews.map(review => (
-            <div key={review.id} style={{ background: 'var(--bg-surface)', border: '1px solid var(--divider)', borderRadius: 14, padding: '18px 20px', borderLeft: `3px solid ${review.rating != null && review.rating <= 2 ? '#EF4444' : review.has_reply ? '#7FB897' : 'var(--violet)'}` }}>
+            <div key={review.id} style={{ background: 'var(--bg-surface)', border: '1px solid var(--divider)', borderRadius: 14, padding: '18px 20px', borderLeft: ('3px solid ' + review.rating != null && review.rating <= 2 ? '#EF4444' : review.has_reply ? '#7FB897' : 'var(--violet)') }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 10 }}>
                 {review.reviewer_avatar ? (
                   <img src={review.reviewer_avatar} alt="" width={34} height={34} style={{ borderRadius: '50%', flexShrink: 0 }} />
@@ -403,7 +403,7 @@ export default function ReviewsPage() {
                     <span style={{ fontWeight: 700, fontSize: 14 }}>{review.reviewer_name ?? 'Anonymous'}</span>
                     <StarRow rating={review.rating} />
                     <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>{timeAgo(review.review_date)}</span>
-                    {review.sentiment && <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 99, fontWeight: 700, background: `${SENTIMENT_COLOR[review.sentiment] ?? '#94A3B8'}18`, color: SENTIMENT_COLOR[review.sentiment] ?? '#94A3B8' }}>{review.sentiment}</span>}
+                    {review.sentiment && <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 99, fontWeight: 700, background: (SENTIMENT_COLOR[review.sentiment] ?? '#94A3B8' + '18'), color: SENTIMENT_COLOR[review.sentiment] ?? '#94A3B8' }}>{review.sentiment}</span>}
                     {review.has_reply && <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 99, fontWeight: 700, background: 'rgba(127,184,151,0.12)', color: '#7FB897' }}>Replied</span>}
                     {gmbStatus[review.id] === 'published' && <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 99, fontWeight: 700, background: 'rgba(127,184,151,0.12)', color: '#7FB897' }}>✓ Published to Google</span>}
                     {gmbStatus[review.id] === 'saved' && <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 99, fontWeight: 700, background: 'rgba(148,163,184,0.12)', color: '#94A3B8' }}>Saved locally</span>}

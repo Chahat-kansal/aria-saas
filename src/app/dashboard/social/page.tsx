@@ -16,7 +16,7 @@ const PLATFORM_COLORS: Record<string, string> = { instagram: '#E1306C', facebook
 
 function PlatformBadge({ platform }: { platform: string }) {
   return (
-    <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 99, background: `${PLATFORM_COLORS[platform] ?? '#666'}20`, color: PLATFORM_COLORS[platform] ?? '#aaa', fontWeight: 700, border: `1px solid ${PLATFORM_COLORS[platform] ?? '#666'}40` }}>
+    <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 99, background: (PLATFORM_COLORS[platform] ?? '#666' + '20'), color: PLATFORM_COLORS[platform] ?? '#aaa', fontWeight: 700, border: ('1px solid ' + PLATFORM_COLORS[platform] ?? '#666' + '40') }}>
       {PLATFORM_ICONS[platform]} {platform.replace('_', ' ')}
     </span>
   );
@@ -271,14 +271,14 @@ export default function SocialPage() {
         <p style={{ fontSize: 14, color: C.muted }}>{INDUSTRY_SUBTITLE[industry] || INDUSTRY_SUBTITLE.retail}</p>
       </div>
 
-      {urlError && <div style={{ background: 'rgba(239,68,68,0.08)', border: `1px solid rgba(239,68,68,0.25)`, borderRadius: 12, padding: '12px 16px', marginBottom: 20, fontSize: 13, color: C.red }}>⚠️ {urlError.replace(/\+/g, ' ')}</div>}
-      {urlSuccess && <div style={{ background: 'rgba(34,197,94,0.06)', border: `1px solid rgba(34,197,94,0.2)`, borderRadius: 12, padding: '12px 16px', marginBottom: 20, fontSize: 13, color: C.green }}>✓ {urlSuccess} connected successfully</div>}
+      {urlError && <div style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: 12, padding: '12px 16px', marginBottom: 20, fontSize: 13, color: C.red }}>⚠️ {urlError.replace(/\+/g, ' ')}</div>}
+      {urlSuccess && <div style={{ background: 'rgba(34,197,94,0.06)', border: '1px solid rgba(34,197,94,0.2)', borderRadius: 12, padding: '12px 16px', marginBottom: 20, fontSize: 13, color: C.green }}>✓ {urlSuccess} connected successfully</div>}
 
       {/* Main tabs */}
       <div style={{ display: 'flex', gap: 4, marginBottom: 24, borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: 0 }}>
         {([['posts', '📝 Posts'], ['library', '🖼️ Photo Library'], ['calendar', '📅 Monthly Calendar']] as const).map(([t, label]) => (
           <button key={t} onClick={() => setActiveTab(t as any)}
-            style={{ padding: '10px 18px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: activeTab === t ? 700 : 400, color: activeTab === t ? '#8B5CF6' : C.muted, borderBottom: `2px solid ${activeTab === t ? '#8B5CF6' : 'transparent'}`, marginBottom: -1 }}>
+            style={{ padding: '10px 18px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: activeTab === t ? 700 : 400, color: activeTab === t ? '#8B5CF6' : C.muted, borderBottom: ('2px solid ' + activeTab === t ? '#8B5CF6' : 'transparent'), marginBottom: -1 }}>
             {label}
           </button>
         ))}
@@ -392,7 +392,7 @@ export default function SocialPage() {
 
       {/* Creative Tools Status Bar */}
       {providers && (
-        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '12px 16px', marginBottom: 24, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <div style={{ background: C.card, border: ('1px solid ' + C.border), borderRadius: 12, padding: '12px 16px', marginBottom: 24, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 12, fontWeight: 700, color: C.muted, marginRight: 4 }}>Creative Tools:</span>
           {[
             { label: 'SDXL', active: providers.image.stability_ai, group: 'image' },
@@ -404,7 +404,7 @@ export default function SocialPage() {
           ].map(({ label, active, group }) => {
             const col = group === 'image' ? C.violet : group === 'video' ? C.blue : C.amber;
             return (
-              <span key={label} style={{ fontSize: 11, padding: '3px 10px', borderRadius: 99, fontWeight: 600, border: `1px solid ${active ? col + '60' : C.border}`, background: active ? col + '15' : 'transparent', color: active ? col : C.dim }}>
+              <span key={label} style={{ fontSize: 11, padding: '3px 10px', borderRadius: 99, fontWeight: 600, border: ('1px solid ' + active ? col + '60' : C.border), background: active ? col + '15' : 'transparent', color: active ? col : C.dim }}>
                 {active ? '✓' : '○'} {label}
               </span>
             );
@@ -467,7 +467,7 @@ export default function SocialPage() {
         {loadingPosts ? (
           <p style={{ color: C.dim, fontSize: 13, padding: '24px 0' }}>Loading posts…</p>
         ) : draftPosts.length === 0 ? (
-          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: '40px 24px', textAlign: 'center' }}>
+          <div style={{ background: C.card, border: ('1px solid ' + C.border), borderRadius: 16, padding: '40px 24px', textAlign: 'center' }}>
             <p style={{ fontSize: 32, marginBottom: 12 }}>✨</p>
             <p style={{ color: C.muted, fontSize: 14 }}>No suggestions yet</p>
             <p style={{ color: C.dim, fontSize: 12, marginTop: 4 }}>Click "Generate new" and Aria will create posts based on your sales data</p>
@@ -475,7 +475,7 @@ export default function SocialPage() {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             {draftPosts.map(post => (
-              <div key={post.id} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, overflow: 'hidden' }}>
+              <div key={post.id} style={{ background: C.card, border: ('1px solid ' + C.border), borderRadius: 16, overflow: 'hidden' }}>
                 <div style={{ padding: '16px 20px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
                     <PlatformBadge platform={post.platform} />
@@ -491,7 +491,7 @@ export default function SocialPage() {
                     {post.image_url ? (
                       <img src={post.image_url} alt="" style={{ width: 80, height: 80, objectFit: 'cover', borderRadius: 10, flexShrink: 0 }} onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                     ) : (
-                      <div style={{ width: 80, height: 80, borderRadius: 10, background: 'rgba(139,92,246,0.08)', border: `1px dashed ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, flexShrink: 0 }}>📷</div>
+                      <div style={{ width: 80, height: 80, borderRadius: 10, background: 'rgba(139,92,246,0.08)', border: ('1px dashed ' + C.border), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, flexShrink: 0 }}>📷</div>
                     )}
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <p style={{ fontSize: 11, color: C.dim, marginBottom: 4 }}>Suggested image:</p>
@@ -499,11 +499,11 @@ export default function SocialPage() {
                       <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
                         <button onClick={() => generateImage(post.id, post.image_prompt, (post as any).image_search_query)}
                           disabled={!!imgGenerating[post.id]}
-                          style={{ fontSize: 11, padding: '3px 10px', borderRadius: 6, border: `1px solid ${C.border}`, background: 'transparent', color: C.muted, cursor: 'pointer', fontFamily: 'inherit', opacity: imgGenerating[post.id] ? 0.6 : 1 }}>
+                          style={{ fontSize: 11, padding: '3px 10px', borderRadius: 6, border: ('1px solid ' + C.border), background: 'transparent', color: C.muted, cursor: 'pointer', fontFamily: 'inherit', opacity: imgGenerating[post.id] ? 0.6 : 1 }}>
                           {imgGenerating[post.id] ? '⏳ Generating…' : '🔄 New image'}
                         </button>
                         <button onClick={() => { setImageGridId(imageGridId === post.id ? null : post.id); if (imageGridId !== post.id) loadImages(post.id, post.image_prompt); }}
-                          style={{ fontSize: 11, padding: '3px 10px', borderRadius: 6, border: `1px solid ${C.border}`, background: 'transparent', color: C.muted, cursor: 'pointer', fontFamily: 'inherit' }}>
+                          style={{ fontSize: 11, padding: '3px 10px', borderRadius: 6, border: ('1px solid ' + C.border), background: 'transparent', color: C.muted, cursor: 'pointer', fontFamily: 'inherit' }}>
                           🖼 Pick from search
                         </button>
                       </div>
@@ -568,14 +568,14 @@ export default function SocialPage() {
                           ✓ Save & Approve
                         </button>
                         <button onClick={() => setEditingId(null)}
-                          style={{ padding: '7px 12px', borderRadius: 8, border: `1px solid ${C.border}`, background: 'transparent', color: C.muted, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>
+                          style={{ padding: '7px 12px', borderRadius: 8, border: ('1px solid ' + C.border), background: 'transparent', color: C.muted, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>
                           Cancel
                         </button>
                       </>
                     ) : (
                       <>
                         <button onClick={() => { setEditingId(post.id); setEditCaption(post.caption); setEditHashtags(post.hashtags.join(', ')); }}
-                          style={{ padding: '7px 14px', borderRadius: 8, border: `1px solid ${C.border}`, background: 'transparent', color: C.muted, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>
+                          style={{ padding: '7px 14px', borderRadius: 8, border: ('1px solid ' + C.border), background: 'transparent', color: C.muted, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>
                           ✏️ Edit
                         </button>
                         <button onClick={() => approve(post.id)}
@@ -583,7 +583,7 @@ export default function SocialPage() {
                           ✓ Approve & Schedule
                         </button>
                         <button onClick={() => skip(post.id)}
-                          style={{ padding: '7px 12px', borderRadius: 8, border: `1px solid rgba(239,68,68,0.3)`, background: 'rgba(239,68,68,0.05)', color: C.red, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>
+                          style={{ padding: '7px 12px', borderRadius: 8, border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.05)', color: C.red, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>
                           ✗ Skip
                         </button>
                       </>
@@ -591,22 +591,22 @@ export default function SocialPage() {
                   </div>
 
                   {/* Creative Tools */}
-                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10, paddingTop: 10, borderTop: `1px solid ${C.border}` }}>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10, paddingTop: 10, borderTop: ('1px solid ' + C.border) }}>
                     <button
                       onClick={() => generateImage(post.id, post.image_prompt, null)}
                       disabled={!!imgGenerating[post.id]}
-                      style={{ padding: '5px 12px', borderRadius: 7, border: `1px solid ${C.violet}40`, background: `${C.violet}10`, color: C.violet, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', opacity: imgGenerating[post.id] ? 0.6 : 1 }}>
+                      style={{ padding: '5px 12px', borderRadius: 7, border: ('1px solid ' + C.violet + '40'), background: (C.violet + '10'), color: C.violet, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', opacity: imgGenerating[post.id] ? 0.6 : 1 }}>
                       {imgGenerating[post.id] ? '⏳ Generating…' : '🖼 Generate Image'}
                     </button>
                     {providers?.video.runway || providers?.video.replicate ? (
                       videoJobs[post.id] ? (
-                        <span style={{ fontSize: 11, padding: '5px 12px', borderRadius: 7, border: `1px solid ${C.blue}40`, background: `${C.blue}10`, color: videoStatus[post.id]?.status === 'completed' ? C.green : C.blue }}>
+                        <span style={{ fontSize: 11, padding: '5px 12px', borderRadius: 7, border: ('1px solid ' + C.blue + '40'), background: (C.blue + '10'), color: videoStatus[post.id]?.status === 'completed' ? C.green : C.blue }}>
                           {videoStatus[post.id]?.status === 'completed' ? '✓ Video ready' : videoStatus[post.id]?.status === 'failed' ? '✗ Failed' : '⏳ Processing…'}
                           {videoStatus[post.id]?.url && <a href={videoStatus[post.id]!.url} target="_blank" rel="noreferrer" style={{ marginLeft: 6, color: C.green }}>▶ Watch</a>}
                         </span>
                       ) : (
                         <button onClick={() => generateVideo(post.id, post.reel_concept)}
-                          style={{ padding: '5px 12px', borderRadius: 7, border: `1px solid ${C.blue}40`, background: `${C.blue}10`, color: C.blue, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+                          style={{ padding: '5px 12px', borderRadius: 7, border: ('1px solid ' + C.blue + '40'), background: (C.blue + '10'), color: C.blue, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
                           🎬 Generate Video
                         </button>
                       )
@@ -616,7 +616,7 @@ export default function SocialPage() {
                         <audio controls src={voiceUrls[post.id]} style={{ height: 28, borderRadius: 7, outline: 'none' }} />
                       ) : (
                         <button onClick={() => { setVoiceOpen(post.id); setVoiceText(post.reel_script || post.caption.slice(0, 500)); }}
-                          style={{ padding: '5px 12px', borderRadius: 7, border: `1px solid ${C.amber}40`, background: `${C.amber}10`, color: C.amber, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+                          style={{ padding: '5px 12px', borderRadius: 7, border: ('1px solid ' + C.amber + '40'), background: (C.amber + '10'), color: C.amber, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
                           🎙 Generate Voice
                         </button>
                       )
@@ -634,7 +634,7 @@ export default function SocialPage() {
                           style={{ padding: '6px 14px', borderRadius: 7, border: 'none', background: C.amber, color: '#000', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', opacity: voiceGenerating ? 0.6 : 1 }}>
                           {voiceGenerating ? '⏳ Generating…' : '🎙 Create Voiceover'}
                         </button>
-                        <button onClick={() => setVoiceOpen(null)} style={{ padding: '6px 12px', borderRadius: 7, border: `1px solid ${C.border}`, background: 'transparent', color: C.muted, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>
+                        <button onClick={() => setVoiceOpen(null)} style={{ padding: '6px 12px', borderRadius: 7, border: ('1px solid ' + C.border), background: 'transparent', color: C.muted, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>
                       </div>
                     </div>
                   )}
@@ -649,9 +649,9 @@ export default function SocialPage() {
       {scheduledPosts.length > 0 && (
         <section style={{ marginBottom: 28 }}>
           <h2 style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 12 }}>Scheduled ({scheduledPosts.length})</h2>
-          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, overflow: 'hidden' }}>
+          <div style={{ background: C.card, border: ('1px solid ' + C.border), borderRadius: 14, overflow: 'hidden' }}>
             {scheduledPosts.map((post, i) => (
-              <div key={post.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderBottom: i < scheduledPosts.length - 1 ? `1px solid ${C.border}` : 'none' }}>
+              <div key={post.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderBottom: i < scheduledPosts.length - 1 ? ('1px solid ' + C.border) : 'none' }}>
                 <PlatformBadge platform={post.platform} />
                 <p style={{ flex: 1, fontSize: 13, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{post.caption.slice(0, 80)}</p>
                 <span style={{ fontSize: 11, color: C.dim, flexShrink: 0 }}>{post.scheduled_for ? new Date(post.scheduled_for).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—'}</span>
@@ -660,7 +660,7 @@ export default function SocialPage() {
                   Publish now
                 </button>
                 <button onClick={() => skip(post.id)}
-                  style={{ padding: '5px 8px', borderRadius: 7, border: `1px solid ${C.border}`, background: 'transparent', color: C.dim, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' }}>
+                  style={{ padding: '5px 8px', borderRadius: 7, border: ('1px solid ' + C.border), background: 'transparent', color: C.dim, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' }}>
                   ✕
                 </button>
               </div>
@@ -673,9 +673,9 @@ export default function SocialPage() {
       {publishedPosts.length > 0 && (
         <section style={{ marginBottom: 28 }}>
           <h2 style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 12 }}>Published (last 14 days)</h2>
-          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, overflow: 'hidden' }}>
+          <div style={{ background: C.card, border: ('1px solid ' + C.border), borderRadius: 14, overflow: 'hidden' }}>
             {publishedPosts.map((post, i) => (
-              <div key={post.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', borderBottom: i < publishedPosts.length - 1 ? `1px solid ${C.border}` : 'none' }}>
+              <div key={post.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', borderBottom: i < publishedPosts.length - 1 ? ('1px solid ' + C.border) : 'none' }}>
                 <PlatformBadge platform={post.platform} />
                 <p style={{ flex: 1, fontSize: 12, color: C.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{post.caption.slice(0, 60)}</p>
                 <span style={{ fontSize: 11, color: C.dim, flexShrink: 0 }}>{post.published_at ? new Date(post.published_at).toLocaleDateString('en-AU') : '—'}</span>
@@ -692,14 +692,14 @@ export default function SocialPage() {
           ⚙️ Preferences {prefsOpen ? '▲' : '▼'}
         </button>
         {prefsOpen && (
-          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: 18 }}>
+          <div style={{ background: C.card, border: ('1px solid ' + C.border), borderRadius: 16, padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: 18 }}>
             {/* Brand voice */}
             <div>
               <label style={S}>Brand Voice</label>
               <div style={{ display: 'flex', gap: 6 }}>
                 {['friendly','professional','casual','excited'].map(v => (
                   <button key={v} onClick={() => setPrefs(p => ({ ...p, brand_voice: v }))}
-                    style={{ padding: '6px 14px', borderRadius: 20, border: `1px solid ${prefs.brand_voice === v ? C.violet : C.border}`, background: prefs.brand_voice === v ? 'rgba(139,92,246,0.15)' : 'transparent', color: prefs.brand_voice === v ? C.violet : C.muted, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', textTransform: 'capitalize' }}>
+                    style={{ padding: '6px 14px', borderRadius: 20, border: ('1px solid ' + prefs.brand_voice === v ? C.violet : C.border), background: prefs.brand_voice === v ? 'rgba(139,92,246,0.15)' : 'transparent', color: prefs.brand_voice === v ? C.violet : C.muted, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', textTransform: 'capitalize' }}>
                     {v}
                   </button>
                 ))}
@@ -711,7 +711,7 @@ export default function SocialPage() {
               <div style={{ display: 'flex', gap: 6 }}>
                 {[['daily','Daily'],['3x_week','3× week'],['weekly','Weekly'],['on_demand','Only when I ask']].map(([v, l]) => (
                   <button key={v} onClick={() => setPrefs(p => ({ ...p, post_frequency: v }))}
-                    style={{ padding: '6px 12px', borderRadius: 20, border: `1px solid ${prefs.post_frequency === v ? C.violet : C.border}`, background: prefs.post_frequency === v ? 'rgba(139,92,246,0.15)' : 'transparent', color: prefs.post_frequency === v ? C.violet : C.muted, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+                    style={{ padding: '6px 12px', borderRadius: 20, border: ('1px solid ' + prefs.post_frequency === v ? C.violet : C.border), background: prefs.post_frequency === v ? 'rgba(139,92,246,0.15)' : 'transparent', color: prefs.post_frequency === v ? C.violet : C.muted, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
                     {l}
                   </button>
                 ))}
