@@ -37,7 +37,6 @@ import type { ProductForTerminal } from '@/components/terminal/layouts/types';
 import { getCurrentLayout, TerminalLayout } from '@/lib/terminal/layouts';
 import { getAriaSuggestions } from '@/lib/terminal/aria-suggestions';
 import { AuroraCanvas } from '@/components/terminal/AuroraCanvas';
-import { LivePulseRail } from '@/components/terminal/LivePulseRail';
 import { AriaInlineCard } from '@/components/terminal/AriaInlineCard';
 import { ProductImage } from '@/components/terminal/ProductImage';
 import CafeSetupModal from '@/components/pos/CafeSetupModal';
@@ -1666,8 +1665,7 @@ export default function TerminalPage() {
       )}
       {/* Aurora canvas background — v3 redesign */}
       <AuroraCanvas />
-      {/* v4: Live pulse rail — 38px strip above main shell */}
-      <LivePulseRail businessId={businessId} />
+      {/* LivePulseRail removed — saves 38px, data shown in topbar stats instead */}
       {/* Animated dot grid removed from terminal v4 — only static aurora */}
       <CursorGlow />
       <FlyToCart ref={flyRef} />
