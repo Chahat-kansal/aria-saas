@@ -15,7 +15,7 @@ interface Product { id: string; name: string; price: number }
 const C = {
   bg: 'var(--bg-base)', card: 'var(--bg-surface)', text: 'var(--text-primary)',
   muted: 'var(--text-secondary)', dim: 'var(--text-tertiary)',
-  violet: '#8B5CF6', green: '#22C55E', red: '#EF4444',
+  violet: '#006AFF', green: '#00B140', red: '#EF4444',
   border: 'rgba(255,255,255,0.07)',
 }
 
