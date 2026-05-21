@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
 
-const C = { bg:'var(--bg-base)', card:'var(--bg-surface)', border:'transparent', text:'var(--text-primary)', muted:'var(--text-secondary)', dim:'var(--text-tertiary)', violet:'#8B5CF6', green:'#22C55E', red:'#EF4444', amber:'#F59E0B' };
+const C = { bg:'var(--bg-base)', card:'var(--bg-surface)', border:'transparent', text:'var(--text-primary)', muted:'var(--text-secondary)', dim:'var(--text-tertiary)', violet:'#006AFF', green:'#00B140', red:'#EF4444', amber:'#F59E0B' };
 
 interface IntegrationStatus {
   connected: boolean;
@@ -28,7 +28,7 @@ interface CsvPreviewRow {
   _raw: Record<string, string>;
 }
 
-const iCls = { background: 'rgba(10,9,16,0.8)', border: `1px solid ${C.border}`, borderRadius: 8, padding: '9px 12px', fontSize: 13, color: C.text, outline: 'none', fontFamily: "'Manrope',sans-serif", width: '100%', boxSizing: 'border-box' as const };
+const iCls = { background: '#FFFFFF', border: `1px solid ${C.border}`, borderRadius: 8, padding: '9px 12px', fontSize: 13, color: C.text, outline: 'none', fontFamily: "'Manrope',sans-serif", width: '100%', boxSizing: 'border-box' as const };
 const lCls = { display: 'block', fontSize: 11, fontWeight: 700, color: C.muted, marginBottom: 6, textTransform: 'uppercase' as const, letterSpacing: '0.05em' };
 
 const FIELD_LABELS: Record<string, string> = {
@@ -219,7 +219,7 @@ export default function ImportPage() {
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                 <p style={{ fontSize: 16, fontWeight: 700, color: C.text }}>Migrate from Shopfront</p>
-                <span style={{ fontSize: 10, padding: '2px 9px', borderRadius: 99, background: 'rgba(0,229,255,0.12)', color: '#00E5FF', fontWeight: 700 }}>RECOMMENDED</span>
+                <span style={{ fontSize: 10, padding: '2px 9px', borderRadius: 99, background: 'rgba(0,229,255,0.12)', color: '#006AFF', fontWeight: 700 }}>RECOMMENDED</span>
               </div>
               <p style={{ fontSize: 13, color: C.muted }}>Import all your products, customers, price lists, and sales history in one click. Everything transfers automatically.</p>
             </div>
@@ -346,7 +346,7 @@ export default function ImportPage() {
                           <select
                             value={csvMapping[col] ?? ''}
                             onChange={e => setCsvMapping(m => ({ ...m, [col]: e.target.value || null }))}
-                            style={{ background: 'rgba(10,9,16,0.8)', border: `1px solid ${C.border}`, borderRadius: 6, padding: '4px 8px', fontSize: 11, color: csvMapping[col] ? C.violet : C.dim, outline: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
+                            style={{ background: '#FFFFFF', border: `1px solid ${C.border}`, borderRadius: 6, padding: '4px 8px', fontSize: 11, color: csvMapping[col] ? C.violet : C.dim, outline: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
                             <option value="">— ignore —</option>
                             {Object.entries(FIELD_LABELS).map(([v, l]) => <option key={v} value={v} style={{ background: '#111' }}>{l}</option>)}
                           </select>
@@ -626,11 +626,11 @@ export default function ImportPage() {
 function ImportResultBanner({ result, platform }: { result: ImportResult; platform: string }) {
   return (
     <div style={{ marginTop: 14, padding: '12px 14px', background: 'rgba(34,197,94,0.07)', border: `1px solid rgba(34,197,94,0.2)`, borderRadius: 10, display: 'flex', gap: 20, flexWrap: 'wrap' }}>
-      <span style={{ fontSize: 12, color: '#22C55E', fontWeight: 700 }}>✓ {platform} import complete</span>
-      <span style={{ fontSize: 12, color: '#22C55E' }}>↑ {result.imported} new</span>
+      <span style={{ fontSize: 12, color: '#00B140', fontWeight: 700 }}>✓ {platform} import complete</span>
+      <span style={{ fontSize: 12, color: '#00B140' }}>↑ {result.imported} new</span>
       <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>↻ {result.updated} updated</span>
       {result.skipped > 0 && <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>✗ {result.skipped} skipped</span>}
-      <Link href="/pos/products" style={{ fontSize: 12, color: '#8B5CF6', textDecoration: 'none', marginLeft: 'auto' }}>View products →</Link>
+      <Link href="/pos/products" style={{ fontSize: 12, color: '#006AFF', textDecoration: 'none', marginLeft: 'auto' }}>View products →</Link>
     </div>
   );
 }
