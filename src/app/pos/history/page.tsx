@@ -19,8 +19,8 @@ interface AuditEntry {
   edited_by?: string | null; created_at: string;
 }
 
-const C = { bg:'var(--bg-base)', card:'var(--bg-surface)', border:'transparent', text:'var(--text-primary)', muted:'var(--text-secondary)', dim:'var(--text-tertiary)', violet:'#8B5CF6' };
-const PAY: Record<string, string> = { card:'#3B82F6', cash:'#22C55E', eftpos:'#38BDF8', split:'#F59E0B' };
+const C = { bg:'var(--bg-base)', card:'var(--bg-surface)', border:'transparent', text:'var(--text-primary)', muted:'var(--text-secondary)', dim:'var(--text-tertiary)', violet:'#006AFF' };
+const PAY: Record<string, string> = { card:'#3B82F6', cash:'#00B140', eftpos:'#38BDF8', split:'#F59E0B' };
 
 function fmtDate(d: Date) { return d.toISOString().split('T')[0]; }
 function relTime(iso: string) {
@@ -262,9 +262,9 @@ export default function HistoryPage() {
               <div style={{ display: 'flex', justifyContent: 'center', padding: 32 }}><div style={{ width: 20, height: 20, borderRadius: '50%', border: `2px solid rgba(139,92,246,0.3)`, borderTopColor: C.violet, animation: 'spin 0.7s linear infinite' }} /></div>
             ) : (<>
               {/* Summary */}
-              <div style={{ background: 'rgba(255,255,255,0.03)', border: `1px solid ${C.border}`, borderRadius: 12, padding: '12px 14px', marginBottom: 12 }}>
+              <div style={{ background: '#FAFAFA', border: `1px solid ${C.border}`, borderRadius: 12, padding: '12px 14px', marginBottom: 12 }}>
                 {[
-                  ['Status', <span key="s" style={{ fontSize: 10, padding: '2px 8px', borderRadius: 99, fontWeight: 600, background: 'rgba(34,197,94,0.15)', color: '#22C55E' }}>{detail?.status ?? 'completed'}</span>],
+                  ['Status', <span key="s" style={{ fontSize: 10, padding: '2px 8px', borderRadius: 99, fontWeight: 600, background: 'rgba(34,197,94,0.15)', color: '#00B140' }}>{detail?.status ?? 'completed'}</span>],
                   ['Cashier', detail?.served_by ?? selected.served_by ?? '—'],
                   ['Customer', (detail?.pos_customers as any)?.name ?? '—'],
                   ['Tender', <span key="t" style={{ display: 'flex', alignItems: 'center', gap: 6 }}><strong>{selected.payment_method?.toUpperCase() ?? '—'}</strong><span style={{ fontSize: 10, color: C.dim }}>read-only</span></span>],
@@ -277,7 +277,7 @@ export default function HistoryPage() {
               </div>
 
               {/* Financials */}
-              <div style={{ background: 'rgba(255,255,255,0.03)', border: `1px solid ${C.border}`, borderRadius: 12, padding: '12px 14px', marginBottom: 12 }}>
+              <div style={{ background: '#FAFAFA', border: `1px solid ${C.border}`, borderRadius: 12, padding: '12px 14px', marginBottom: 12 }}>
                 <p style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: C.dim, marginBottom: 8 }}>Financials</p>
                 {[['Subtotal (excl. GST)', `A$${((selected.total_amount ?? 0) / 1.1).toFixed(2)}`], ['GST (10%)', `A$${((selected.total_amount ?? 0) - (selected.total_amount ?? 0) / 1.1).toFixed(2)}`]].map(([l, v]) => (
                   <div key={l} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}><span style={{ fontSize: 12, color: C.muted }}>{l}</span><span style={{ fontSize: 12, color: C.text, fontFamily: "'JetBrains Mono',monospace" }}>{v}</span></div>
@@ -290,7 +290,7 @@ export default function HistoryPage() {
 
               {/* Items */}
               {(detail?.pos_sale_items ?? []).length > 0 && (
-                <div style={{ background: 'rgba(255,255,255,0.03)', border: `1px solid ${C.border}`, borderRadius: 12, padding: '12px 14px', marginBottom: 12 }}>
+                <div style={{ background: '#FAFAFA', border: `1px solid ${C.border}`, borderRadius: 12, padding: '12px 14px', marginBottom: 12 }}>
                   <p style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: C.dim, marginBottom: 8 }}>Items</p>
                   {(detail?.pos_sale_items ?? []).map(item => (
                     <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 7 }}>
@@ -323,10 +323,10 @@ export default function HistoryPage() {
                       }
                     </div>
                   ))}
-                  <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 8, padding: '8px 10px', marginBottom: 8 }}>
+                  <div style={{ background: '#FAFAFA', borderRadius: 8, padding: '8px 10px', marginBottom: 8 }}>
                     <span style={{ fontSize: 11, color: C.dim }}>Tender: <strong style={{ color: C.muted }}>{selected.payment_method?.toUpperCase()}</strong> — cannot change. Void and re-ring if needed.</span>
                   </div>
-                  {saveMsg && <p style={{ fontSize: 11, color: saveMsg.includes('fail') || saveMsg.includes('Error') ? '#EF4444' : '#22C55E', marginBottom: 6 }}>{saveMsg}</p>}
+                  {saveMsg && <p style={{ fontSize: 11, color: saveMsg.includes('fail') || saveMsg.includes('Error') ? '#EF4444' : '#00B140', marginBottom: 6 }}>{saveMsg}</p>}
                   <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
                     <button onClick={() => { setEditMode(false); setSaveMsg(''); }} style={{ flex: 1, padding: '7px', borderRadius: 8, border: `1px solid ${C.border}`, background: 'transparent', color: C.muted, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>
                     <button onClick={saveEdit} disabled={saving} style={{ flex: 1, padding: '7px', borderRadius: 8, border: 'none', background: C.violet, color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', opacity: saving ? 0.5 : 1 }}>{saving ? 'Saving…' : 'Save'}</button>
@@ -344,7 +344,7 @@ export default function HistoryPage() {
               )}
 
               {/* Email receipt */}
-              <div style={{ background: 'rgba(255,255,255,0.03)', border: `1px solid ${C.border}`, borderRadius: 12, padding: '12px 14px', marginBottom: 12 }}>
+              <div style={{ background: '#FAFAFA', border: `1px solid ${C.border}`, borderRadius: 12, padding: '12px 14px', marginBottom: 12 }}>
                 <p style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: C.dim, marginBottom: 8 }}>Email Receipt</p>
                 <div style={{ display: 'flex', gap: 6 }}>
                   <input value={emailAddr} onChange={e => setEmailAddr(e.target.value)} placeholder="customer@email.com" type="email"
@@ -354,11 +354,11 @@ export default function HistoryPage() {
                     {emailSending ? '…' : 'Send'}
                   </button>
                 </div>
-                {emailMsg && <p style={{ fontSize: 11, color: emailMsg.includes('✓') ? '#22C55E' : '#EF4444', marginTop: 5 }}>{emailMsg}</p>}
+                {emailMsg && <p style={{ fontSize: 11, color: emailMsg.includes('✓') ? '#00B140' : '#EF4444', marginTop: 5 }}>{emailMsg}</p>}
               </div>
 
               {/* Audit trail */}
-              <div style={{ background: 'rgba(255,255,255,0.03)', border: `1px solid ${C.border}`, borderRadius: 12, padding: '12px 14px', marginBottom: 12 }}>
+              <div style={{ background: '#FAFAFA', border: `1px solid ${C.border}`, borderRadius: 12, padding: '12px 14px', marginBottom: 12 }}>
                 <button onClick={() => { setShowAudit(v => !v); if (!showAudit && auditTrail.length === 0) loadAudit(selected.id); }}
                   style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', justifyContent: 'space-between', width: '100%', padding: 0 }}>
                   <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: C.dim }}>Modification History</span>
@@ -388,8 +388,8 @@ export default function HistoryPage() {
           {/* Action buttons */}
           <div style={{ padding: '12px 18px', borderTop: `1px solid ${C.border}`, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-              <button onClick={() => setShowReceipt(true)} style={{ padding: '8px 12px', borderRadius: 8, border: `1px solid ${C.border}`, background: 'rgba(255,255,255,0.04)', color: C.text, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>🖨️ Reprint</button>
-              <button onClick={() => { setEditMode(e => !e); setReturnMode(false); }} style={{ padding: '8px 12px', borderRadius: 8, border: `1px solid ${C.border}`, background: 'rgba(255,255,255,0.04)', color: C.text, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>✏️ Modify</button>
+              <button onClick={() => setShowReceipt(true)} style={{ padding: '8px 12px', borderRadius: 8, border: `1px solid ${C.border}`, background: '#FAFAFA', color: C.text, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>🖨️ Reprint</button>
+              <button onClick={() => { setEditMode(e => !e); setReturnMode(false); }} style={{ padding: '8px 12px', borderRadius: 8, border: `1px solid ${C.border}`, background: '#FAFAFA', color: C.text, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>✏️ Modify</button>
             </div>
             <button onClick={() => { if (selected) setShowReturnModal(true) }} style={{ padding: '8px 12px', borderRadius: 8, border: `1px solid rgba(239,68,68,0.3)`, background: 'rgba(239,68,68,0.07)', color: '#EF4444', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
               ↩️ Return Items
@@ -424,7 +424,7 @@ export default function HistoryPage() {
       )}
       {returnSuccess && (
         <div onClick={() => setReturnSuccess(null)} style={{ position:'fixed', bottom:24, left:'50%', transform:'translateX(-50%)', zIndex:600, background:'#0d1a10', border:'1px solid rgba(127,184,151,0.4)', borderRadius:12, padding:'14px 20px', cursor:'pointer', boxShadow:'0 8px 32px rgba(0,0,0,0.6)', minWidth:280 }}>
-          <p style={{ fontWeight:700, color:'#7FB897', margin:'0 0 4px', fontSize:14 }}>✓ Return {returnSuccess.return_number} processed</p>
+          <p style={{ fontWeight:700, color:'#006AFF', margin:'0 0 4px', fontSize:14 }}>✓ Return {returnSuccess.return_number} processed</p>
           <p style={{ color:'rgba(255,255,255,0.6)', fontSize:12, margin:0 }}>
             A${(Number(returnSuccess.total_refund)||0).toFixed(2)} refunded{returnSuccess.store_credit_code ? ` · Store credit code: ${returnSuccess.store_credit_code}` : ''}
           </p>
