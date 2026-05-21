@@ -107,16 +107,22 @@ export function FastGridLayout({ products, onProductClick, showStock = true }: L
               {/* Price + stock */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 'auto' }}>
                 <div style={{ lineHeight: 1 }}>
-                  <span style={{
-                    fontFamily: "var(--font-display,'Fraunces',Georgia,serif)",
-                    fontStyle: 'italic', fontWeight: 600,
-                    fontSize: 17, letterSpacing: '-0.02em',
-                    color: 'var(--terminal-amber, #E8B85C)',
-                    textShadow: '0 0 12px var(--terminal-amber-glow, rgba(232,184,92,0.32))',
-                  }}>
-                    ${dollars}
-                    <span style={{ fontSize: 11, fontStyle: 'normal', fontWeight: 500 }}>.{cents}</span>
-                  </span>
+                  {p.price === 0 ? (
+                    <span style={{
+                      fontFamily: "var(--font-ui,'Inter',system-ui,sans-serif)",
+                      fontStyle: 'normal', fontWeight: 500,
+                      fontSize: 11, color: 'rgba(127,184,151,0.4)',
+                    }}>No price set</span>
+                  ) : (
+                    <span style={{
+                      fontFamily: "var(--font-ui,'Inter',system-ui,sans-serif)",
+                      fontStyle: 'normal', fontWeight: 700,
+                      fontSize: 15, letterSpacing: '-0.01em',
+                      color: 'var(--terminal-sage, #7FB897)',
+                    }}>
+                      ${dollars}<span style={{ fontSize: 11, fontWeight: 500 }}>.{cents}</span>
+                    </span>
+                  )}
                 </div>
                 {showStock && <StockPip status={status} qty={p.stock_quantity ?? 0} />}
               </div>
