@@ -149,9 +149,11 @@ export default function BusinessTypePage() {
       setCurrentIndustry(selected)
       setSaved(true)
       setTimeout(() => setSaved(false), 2500)
-      // Reload BusinessProvider so sidebar picks up new industry immediately
+      // Reload BusinessProvider so sidebar picks up new industry
       await refreshBusiness()
-      router.refresh()
+      // Force a hard reload after 800ms so sidebar re-renders with new industry
+      // router.refresh() causes server re-render which resets client state — avoid it
+      setTimeout(() => { window.location.reload() }, 800)
     } catch {
       alert('Could not save business type — please try again.')
     } finally {

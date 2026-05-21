@@ -29,7 +29,7 @@ async function _GET(_req: Request, { params }: { params: { id: string } }) {
 
   if (!runQ.data) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  const lines: PayrollLineItem[] = (linesQ.data ?? []).map(l => ({
+  const lines = (linesQ.data ?? []).map(l => ({ // eslint-disable-line
     staff_member_id: l.staff_member_id as string | null,
     staff_name: String(l.staff_name),
     position: String(l.position ?? ''),
@@ -41,9 +41,11 @@ async function _GET(_req: Request, { params }: { params: { id: string } }) {
     superannuation_rate: Number(l.superannuation_rate) || 11.5,
     super_cents: Number(l.super_cents) || 0,
     tax_withheld_cents: Number(l.tax_withheld_cents) || 0,
-    net_estimate_cents: Number(l.net_estimate_cents) || 0,
+    net_pay_cents: Number(l.net_estimate_cents ?? l.net_pay_cents) || 0,
     timesheet_ids: (l.timesheet_ids as string[]) ?? [],
-  }))
+    allowances_cents: 0, ytd_gross_cents: 0,
+    bank_bsb: null, bank_account: null, bank_account_name: null, tax_free_threshold: false,
+  })) as PayrollLineItem[]
 
   const csv = generateXeroCsv(
     lines,

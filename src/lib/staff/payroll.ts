@@ -268,7 +268,7 @@ export async function savePayrollRun(
       net_pay_cents: l.net_pay_cents,
       ytd_gross_cents: l.ytd_gross_cents,
       timesheet_ids: l.timesheet_ids,
-    }).catch(() => {})
+    })
   }
 
   return run.id
@@ -325,4 +325,30 @@ export function generateABA(
 // ─── Format helpers ────────────────────────────────────────────────────────
 export function dollar(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`
+}
+
+// ─── Xero CSV export ────────────────────────────────────────────────────────
+export function generateXeroCsv(
+  lines: PayrollLineItem[],
+  periodStart: string,
+  periodEnd: string,
+  businessName: string,
+): string {
+  const rows: string[][] = [
+    ['Employee Name', 'Earnings Rate', 'Hours', 'Earnings Amount', 'Super Amount', 'Tax Amount', 'Net Pay', 'Period Start', 'Period End'],
+  ]
+  for (const l of lines) {
+    rows.push([
+      l.staff_name,
+      l.employment_type === 'salary' ? 'Salary' : 'Ordinary Hours',
+      l.hours_worked.toFixed(2),
+      (l.gross_pay_cents / 100).toFixed(2),
+      (l.super_cents / 100).toFixed(2),
+      (l.tax_withheld_cents / 100).toFixed(2),
+      (l.net_pay_cents / 100).toFixed(2),
+      periodStart,
+      periodEnd,
+    ])
+  }
+  return rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n')
 }
