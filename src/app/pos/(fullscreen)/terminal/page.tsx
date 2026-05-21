@@ -2046,7 +2046,7 @@ export default function TerminalPage() {
       )}
 
       {/* ── TOP BAR ───────────────────────────────────────────────── */}
-      <div className="flex-shrink-0 flex items-center px-4 gap-3" style={{ height: 46, background: 'rgba(11,20,16,0.85)', borderBottom: '1px solid var(--terminal-sage-rim,rgba(127,184,151,0.18))', backdropFilter: 'blur(20px) saturate(1.4)', WebkitBackdropFilter: 'blur(20px) saturate(1.4)', position: 'relative', zIndex: 2 }}>
+      <div className="flex-shrink-0 flex items-center px-3 gap-2" style={{ minHeight: 46, background: 'rgba(11,20,16,0.85)', borderBottom: '1px solid var(--terminal-sage-rim,rgba(127,184,151,0.18))', backdropFilter: 'blur(20px) saturate(1.4)', WebkitBackdropFilter: 'blur(20px) saturate(1.4)', position: 'relative', zIndex: 2, flexWrap: 'wrap', paddingTop: 6, paddingBottom: 6 }}>
         <svg width="20" height="20" viewBox="0 0 32 32" fill="none" style={{ flexShrink: 0 }}>
           <rect x="16" y="2" width="19" height="19" rx="3" transform="rotate(45 16 2)" stroke="#00E5FF" strokeWidth="1.8" fill="none"/>
           <circle cx="16" cy="16" r="3" fill="#00E5FF"/>
@@ -2059,7 +2059,7 @@ export default function TerminalPage() {
         <span style={{ fontSize: 11, color: 'var(--text-tertiary)', fontWeight: 400 }}>{businessName}</span>
         <div style={{ flex: 1 }} />
         {/* Register quick actions — right side of top bar */}
-        <div className="flex gap-1.5 items-center">
+        <div className="flex gap-1.5 items-center flex-wrap justify-end" style={{ maxWidth: '55%' }}>
           {!registerLoading && parkedSales.length > 0 && (
             <button onClick={() => setShowParked(true)} className="px-2 py-0.5 rounded text-xs" style={{ color: 'var(--text-secondary)', border: '1px solid #2A2540', background: 'rgba(255,255,255,0.03)' }}>
               Parked ({parkedSales.length})
@@ -2084,9 +2084,13 @@ export default function TerminalPage() {
             </button>
           )}
           {!registerLoading && registerIsOpen && (
-            <button onClick={() => setShowCashierModal(true)} className="px-2 py-0.5 rounded text-xs" style={{ color: 'var(--text-secondary)', border: '1px solid #2A2540', background: 'rgba(255,255,255,0.03)' }}>
+            <button onClick={() => setShowCashierModal(true)} className="px-2 py-0.5 rounded text-xs" style={{ color: 'var(--text-secondary)', border: '1px solid #2A2540', background: 'rgba(255,255,255,0.03)', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {registerSession?.opened_by
-                ? `👤 ${registerSession.opened_by.includes('@') ? registerSession.opened_by.split('@')[0] : registerSession.opened_by}`
+                ? `👤 ${registerSession.opened_by.includes('-') && !registerSession.opened_by.includes('@')
+                    ? 'Owner'
+                    : registerSession.opened_by.includes('@')
+                      ? registerSession.opened_by.split('@')[0]
+                      : registerSession.opened_by}`
                 : 'Switch cashier'}
             </button>
           )}
@@ -2683,13 +2687,19 @@ export default function TerminalPage() {
                         <span className="qty-num">{item.qty}</span>
                         <button className="qty-btn" onClick={e => { e.stopPropagation(); updateQty(key, item.qty + 1); }}>+</button>
                       </div>
-                      <div className="cart-line-price">
-                        {(item.discount_percent ?? 0) > 0 && (
-                          <span style={{ fontSize: 10, textDecoration: 'line-through', color: 'var(--text-tertiary)', display: 'block', textAlign: 'right' }}>
-                            ${(item.unitPrice * item.qty).toFixed(2)}
-                          </span>
+                      <div className="cart-line-price" style={item.unitPrice === 0 ? { color: '#f87171' } : {}}>
+                        {item.unitPrice === 0 ? (
+                          <span style={{ fontSize: 11 }} title="No price set — edit this product in Products">⚠ $0.00</span>
+                        ) : (
+                          <>
+                            {(item.discount_percent ?? 0) > 0 && (
+                              <span style={{ fontSize: 10, textDecoration: 'line-through', color: 'var(--text-tertiary)', display: 'block', textAlign: 'right' }}>
+                                ${(item.unitPrice * item.qty).toFixed(2)}
+                              </span>
+                            )}
+                            ${lineTotal.toFixed(2)}
+                          </>
                         )}
-                        ${lineTotal.toFixed(2)}
                       </div>
                       {/* Sprint H: per-line kebab menu */}
                       <CartLineMenu

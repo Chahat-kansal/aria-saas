@@ -470,7 +470,7 @@ body {
 }
 .cart-line-info { flex: 1; min-width: 0; }
 .cart-line-name {
-  font-size: 12px; font-weight: 500; color: var(--text-primary);
+  font-size: 13px; font-weight: 600; color: var(--text-primary);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .cart-line-meta { font-size: 10px; color: var(--text-tertiary); margin-top: 2px; }
@@ -489,14 +489,14 @@ body {
 }
 .qty-btn:hover { background: rgba(127,184,151,0.10); color: var(--terminal-sage,#7FB897); }
 .qty-num {
-  min-width: 18px; text-align: center; font-size: 12px; font-weight: 600;
-  font-family: var(--font-display,'Fraunces',Georgia,serif); font-style: italic;
+  min-width: 18px; text-align: center; font-size: 13px; font-weight: 700;
+  font-family: var(--font-ui,'Inter',system-ui,sans-serif); font-style: normal;
   color: var(--text-primary); line-height: 1;
 }
 .cart-line-price {
-  font-family: var(--font-display,'Fraunces',Georgia,serif);
-  font-style: italic; font-weight: 600; font-size: 14px;
-  color: var(--terminal-amber,#E8B85C);
+  font-family: var(--font-ui,'Inter','Manrope',system-ui,sans-serif);
+  font-style: normal; font-weight: 700; font-size: 14px;
+  color: var(--terminal-sage,#7FB897);
   min-width: 56px; text-align: right;
 }
 

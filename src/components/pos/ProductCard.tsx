@@ -104,7 +104,7 @@ export default function ProductCard({ product, onAdd, quantity = 0, fromPrice }:
       {/* Product image — 4:3 aspect ratio */}
       <div style={{
         width: '100%',
-        paddingTop: '75%',
+        paddingTop: '52%',
         position: 'relative',
         background: 'linear-gradient(135deg, rgba(45,82,64,0.08), rgba(127,184,151,0.04))',
         overflow: 'hidden',
@@ -146,11 +146,19 @@ export default function ProductCard({ product, onAdd, quantity = 0, fromPrice }:
         }}>
           {product.name}
         </p>
-        <p style={{ color: '#7FB897', fontSize: 16, fontWeight: 700, margin: 0 }}>
-          {fromPrice != null && fromPrice < product.price
-            ? <>from A${fromPrice.toFixed(2)}</>
-            : <>A${product.price.toFixed(2)}</>}
-        </p>
+        {product.price === 0 ? (
+          <p style={{ color: 'rgba(127,184,151,0.35)', fontSize: 11, fontWeight: 500, margin: 0,
+            background: 'rgba(0,0,0,0.25)', borderRadius: 4, padding: '2px 6px', display: 'inline-block' }}>
+            No price set
+          </p>
+        ) : (
+          <p style={{ color: '#7FB897', fontSize: 16, fontWeight: 700, margin: 0,
+            fontFamily: "'Inter','Manrope',system-ui,sans-serif", fontStyle: 'normal' }}>
+            {fromPrice != null && fromPrice < product.price
+              ? <>from A${fromPrice.toFixed(2)}</>
+              : <>A${product.price.toFixed(2)}</>}
+          </p>
+        )}
       </div>
     </button>
   )
