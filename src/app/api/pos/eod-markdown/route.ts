@@ -1,3 +1,4 @@
+export const maxDuration = 30
 export const dynamic = 'force-dynamic'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { NextResponse } from 'next/server'
