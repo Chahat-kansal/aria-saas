@@ -91,6 +91,103 @@
   --pos-ease:   cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+
+/* ── Light theme overrides for POS sidebar/shell ─────────────────── */
+html[data-theme="light"] .pos-shell,
+html[data-theme="light"] .pos-sidebar-wrapper {
+  --bg-base:     #F5F7F4;
+  --bg-surface:  #FFFFFF;
+  --bg-elevated: #FFFFFF;
+  --bg-overlay:  rgba(255,255,255,0.95);
+  --bg-hover:    #F0F4EC;
+  --bg-active:   #E4EDE0;
+  --bg-card:     #FFFFFF;
+  --bg-input:    #F5F7F4;
+
+  --border-subtle:  #E8EDE4;
+  --border-default: #D8E0D2;
+  --border-strong:  #B8C8B0;
+  --border-violet:  rgba(45,82,64,0.25);
+  --divider:        rgba(45,82,64,0.08);
+
+  --violet:         #2D5240;
+  --violet-600:     #1A3528;
+  --violet-700:     #0F2018;
+  --violet-dim:     rgba(45,82,64,0.08);
+  --violet-glow:    rgba(45,82,64,0.16);
+  --violet-soft:    rgba(45,82,64,0.05);
+
+  --green:          #2D5240;
+
+  --text-primary:   #0E1411;
+  --text-secondary: #3D5240;
+  --text-tertiary:  #7A9080;
+  --text-violet:    #2D5240;
+
+  --success:         #2D6E45;
+  --success-bg:      rgba(45,110,69,0.08);
+  --warning:         #A06820;
+  --warning-bg:      rgba(160,104,32,0.08);
+  --destructive:     #A03030;
+  --destructive-bg:  rgba(160,48,48,0.08);
+  --info:            #2A5A7A;
+  --info-bg:         rgba(42,90,122,0.08);
+
+  --pos-base:           #F5F7F4;
+  --pos-surface:        #FFFFFF;
+  --pos-elevated:       #FFFFFF;
+  --pos-hover:          #F0F4EC;
+  --pos-active:         #E4EDE0;
+  --pos-border-subtle:  #E8EDE4;
+  --pos-border-default: #D8E0D2;
+  --pos-border-strong:  #B8C8B0;
+  --pos-accent:         #2D5240;
+  --pos-accent-600:     #1A3528;
+  --pos-accent-dim:     rgba(45,82,64,0.08);
+  --pos-accent-glow:    rgba(45,82,64,0.16);
+  --pos-teal:           #2D5240;
+  --pos-teal-600:       #1A3528;
+  --pos-teal-dim:       rgba(45,82,64,0.08);
+  --pos-teal-glow:      rgba(45,82,64,0.16);
+  --pos-text-primary:   #0E1411;
+  --pos-text-secondary: #3D5240;
+  --pos-text-tertiary:  #7A9080;
+  --pos-text-1:         #0E1411;
+  --pos-text-2:         #3D5240;
+  --pos-text-3:         #7A9080;
+  --pos-success:        #2D6E45;
+  --pos-warning:        #A06820;
+  --pos-danger:         #A03030;
+
+  --shadow-sm: 0 1px 3px rgba(14,20,17,0.06);
+  --shadow-md: 0 4px 16px rgba(14,20,17,0.08), 0 1px 3px rgba(14,20,17,0.05);
+  --shadow-lg: 0 16px 40px rgba(14,20,17,0.10), 0 4px 16px rgba(14,20,17,0.07);
+  --shadow-card: 0 1px 3px rgba(14,20,17,0.06), 0 4px 12px rgba(14,20,17,0.05);
+}
+
+/* Light theme scrollbar */
+html[data-theme="light"] .pos-shell ::-webkit-scrollbar-thumb {
+  background: rgba(45,82,64,0.15);
+}
+html[data-theme="light"] .pos-shell input:not([type=checkbox]):not([type=radio]):not([type=range]),
+html[data-theme="light"] .pos-shell textarea,
+html[data-theme="light"] .pos-shell select {
+  background: #FFFFFF;
+  border: 1px solid #D8E0D2;
+  color: #0E1411;
+}
+html[data-theme="light"] .pos-shell input::placeholder,
+html[data-theme="light"] .pos-shell textarea::placeholder {
+  color: #7A9080;
+}
+html[data-theme="light"] .pos-shell th {
+  color: #3D5240;
+  border-bottom: 1px solid #D8E0D2;
+}
+html[data-theme="light"] .pos-shell td {
+  border-bottom: 1px solid #E8EDE4;
+}
+
 /* ── Global shell ────────────────────────────────────────────────── */
 .pos-shell {
   font-family: var(--font-ui);
@@ -301,3 +398,4 @@
 .pb-safe-bottom { padding-bottom: env(safe-area-inset-bottom, 0px); }
 .pt-safe        { padding-top:    env(safe-area-inset-top,    0px); }
 .pb-safe        { padding-bottom: env(safe-area-inset-bottom, 0px); }
+
