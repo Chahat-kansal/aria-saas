@@ -54,8 +54,8 @@ function ModifierAttachmentPanel({ productId }: { productId: string }) {
       {groups.map((pmg: any) => {
         const g = pmg.pos_modifier_groups ?? {}
         return (
-          <div key={pmg.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderRadius: 8, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}>
-            <div style={{ width: 10, height: 10, borderRadius: '50%', background: g.color ?? '#7FB897', flexShrink: 0 }} />
+          <div key={pmg.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderRadius: 8, background: '#FAFAFA', border: '1px solid rgba(255,255,255,0.07)' }}>
+            <div style={{ width: 10, height: 10, borderRadius: '50%', background: g.color ?? '#006AFF', flexShrink: 0 }} />
             <span style={{ flex: 1, fontSize: 13, color: '#fff' }}>{g.name}</span>
             <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>{g.selection_type} · {(g.pos_modifiers?.length ?? 0)} options</span>
             <button onClick={() => detach(pmg.id)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 14 }}>×</button>
@@ -68,7 +68,7 @@ function ModifierAttachmentPanel({ productId }: { productId: string }) {
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
             {available.map((g: any) => (
               <button key={g.id} onClick={() => attach(g.id)}
-                style={{ padding: '5px 12px', borderRadius: 20, border: `1px solid ${g.color ?? '#7FB897'}40`, background: `${g.color ?? '#7FB897'}10`, color: g.color ?? '#7FB897', cursor: 'pointer', fontSize: 12, fontFamily: 'inherit' }}>
+                style={{ padding: '5px 12px', borderRadius: 20, border: `1px solid ${g.color ?? '#006AFF'}40`, background: `${g.color ?? '#006AFF'}10`, color: g.color ?? '#006AFF', cursor: 'pointer', fontSize: 12, fontFamily: 'inherit' }}>
                 + {g.name}
               </button>
             ))}
@@ -93,7 +93,7 @@ interface OutletCost { id: string; outlet_name: string; avg_cost: number; last_c
 interface PricePoint { id: string; price_set_name: string; price: number; cost: number; margin_pct: number; effective_from: string; }
 interface Revision { id: string; created_at: string; changed_by: string; field_name: string; old_value: string; new_value: string; }
 
-const C = { bg:'var(--bg-base)', card:'var(--bg-surface)', border:'transparent', text:'var(--text-primary)', muted:'var(--text-secondary)', dim:'var(--text-tertiary)', violet:'#8B5CF6', green:'#22C55E', red:'#EF4444', amber:'#F59E0B' };
+const C = { bg:'var(--bg-base)', card:'var(--bg-surface)', border:'transparent', text:'var(--text-primary)', muted:'var(--text-secondary)', dim:'var(--text-tertiary)', violet:'#006AFF', green:'#00B140', red:'#EF4444', amber:'#F59E0B' };
 const TABS = ['Overview','Sell & Cost','Outlets','History','Modifiers'];
 
 export default function ProductDetailPage() {
