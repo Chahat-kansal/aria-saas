@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 
-const C = { bg: 'var(--bg-base)', card: 'var(--bg-surface)', border: 'transparent', text: 'var(--text-primary)', muted: 'var(--text-secondary)', dim: 'var(--text-tertiary)', violet: '#8B5CF6', green: '#22C55E', red: '#EF4444' };
+const C = { bg: 'var(--bg-base)', card: 'var(--bg-surface)', border: '#D9D9D9', text: 'var(--text-primary)', muted: 'var(--text-secondary)', dim: 'var(--text-tertiary)', violet: '#006AFF', green: '#00B140', red: '#EF4444' };
 const iStyle: React.CSSProperties = { background: 'var(--bg-base)', border: `1px solid ${C.border}`, borderRadius: 8, padding: '9px 12px', fontSize: 13, color: C.text, outline: 'none', width: '100%', fontFamily: 'inherit' };
 const lStyle: React.CSSProperties = { display: 'block', fontSize: 11, fontWeight: 700, color: C.muted, marginBottom: 6 };
 
@@ -97,7 +97,7 @@ export default function CategoriesPage() {
       {loading ? (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(160px,1fr))', gap: 12 }}>
           {[...Array(6)].map((_, i) => (
-            <div key={i} style={{ height: 96, borderRadius: 14, background: 'rgba(255,255,255,0.04)', animation: 'pos-processing 1s ease infinite' }} />
+            <div key={i} style={{ height: 96, borderRadius: 14, background: '#FAFAFA', animation: 'pos-processing 1s ease infinite' }} />
           ))}
         </div>
       ) : !categories.length ? (
