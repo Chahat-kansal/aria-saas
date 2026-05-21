@@ -96,7 +96,7 @@ export default function VariancePage() {
           {(['chart','table'] as const).map(v => (
             <button key={v} onClick={() => setView(v)}
               className="text-xs px-3 py-2 rounded-xl transition-colors capitalize"
-              style={{ background:view===v?'rgba(139,92,246,0.15)':'rgba(255,255,255,0.04)', color:view===v?'#8B5CF6':'rgba(255,255,255,0.4)', border:('1px solid ' + view===v?'rgba(139,92,246,0.3)':'rgba(255,255,255,0.08)') }}>
+              style={{ background: view===v ? 'rgba(139,92,246,0.15)' : 'rgba(255,255,255,0.04)', color: view===v ? '#8B5CF6' : 'rgba(255,255,255,0.4)', border: view===v ? '1px solid rgba(139,92,246,0.3)' : '1px solid rgba(255,255,255,0.08)' }}>
               {v}
             </button>
           ))}

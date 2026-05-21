@@ -107,7 +107,7 @@ export default function IntelligencePage() {
         <div className="flex gap-2">
           {(['unread','all'] as const).map(f => (
             <button key={f} onClick={() => setFilter(f)} className="px-3 py-1.5 rounded-lg text-xs capitalize"
-              style={{ background:filter===f?'rgba(29,158,117,0.2)':'rgba(255,255,255,0.04)', color:filter===f?'#1D9E75':'rgba(255,255,255,0.5)', border:'1px solid ${filter===f?'rgba(29,158,117,0.4)':'rgba(255,255,255,0.08)'}' }}>
+              style={{ background: filter===f ? 'rgba(29,158,117,0.2)' : 'rgba(255,255,255,0.04)', color: filter===f ? '#1D9E75' : 'rgba(255,255,255,0.5)', border: filter===f ? '1px solid rgba(29,158,117,0.4)' : '1px solid rgba(255,255,255,0.08)' }}>
               {f==='unread'?'Active alerts':'All history'}
             </button>
           ))}

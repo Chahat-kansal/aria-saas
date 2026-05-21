@@ -73,8 +73,8 @@ function PriceComparisonTable({ competitors }: { competitors: { name: string; ur
           </tbody>
         </table>
       )}
-    </div>
       {competitors.length > 0 && <PriceComparisonTable competitors={competitors} />}
+    </div>
   )
 }
 
