@@ -465,7 +465,7 @@ export default function POSShell({ children, businessId, businessName }: {
 
       <main style={{ flex: 1, overflow: 'hidden', minWidth: 0, height: '100dvh', display: 'flex', flexDirection: 'column' }}>
         {/* Mobile top bar with hamburger */}
-        <div className="md:hidden" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: 'var(--bg-card)', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+        <div className={pathname.startsWith('/pos/terminal') ? 'hidden' : 'md:hidden'} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: 'var(--bg-card)', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
           <button
             onClick={() => setMobileSidebarOpen(v => !v)}
             style={{ padding: 8, borderRadius: 8, background: 'var(--bg-surface)', border: '1px solid var(--border)', color: 'var(--text-primary)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
