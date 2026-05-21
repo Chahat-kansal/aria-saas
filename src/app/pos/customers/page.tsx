@@ -14,7 +14,7 @@ function Sparkline({ values }: { values: number[] }) {
   const pts = values.map((v, i) => `${(i / (values.length - 1)) * w},${h - (v / max) * (h - 4) - 2}`).join(' ')
   return (
     <svg width={w} height={h}>
-      <polyline points={pts} fill="none" stroke="#29b6f6" strokeWidth={1.5} strokeLinejoin="round" strokeLinecap="round" />
+      <polyline points={pts} fill="none" stroke="#006AFF" strokeWidth={1.5} strokeLinejoin="round" strokeLinecap="round" />
     </svg>
   )
 }
@@ -64,7 +64,7 @@ export default function CustomersPage() {
   })
 
   // Blue header is branded — stays in both modes
-  const hdr: React.CSSProperties = { padding: '11px 14px', background: '#29b6f6', color: 'white', fontWeight: 700, fontSize: 13, textAlign: 'left', whiteSpace: 'nowrap' }
+  const hdr: React.CSSProperties = { padding: '11px 14px', background: '#006AFF', color: 'white', fontWeight: 700, fontSize: 13, textAlign: 'left', whiteSpace: 'nowrap' }
   const cell: React.CSSProperties = { padding: '14px', fontSize: 13, verticalAlign: 'middle' }
   const inS: React.CSSProperties = { width: '100%', padding: '10px 14px', fontSize: 14, background: 'var(--bg-input)', color: 'var(--text-primary)', border: 'none', borderRadius: 4, outline: 'none', boxSizing: 'border-box', boxShadow: 'var(--shadow-sm)', fontFamily: 'inherit' }
   const lblS: React.CSSProperties = { fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 5, display: 'block' }
@@ -78,7 +78,7 @@ export default function CustomersPage() {
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           {/* Add Customer — stays branded cyan */}
           <button onClick={() => router.push('/pos/customers/new')}
-            style={{ padding: '8px 18px', borderRadius: 6, border: 'none', background: '#29b6f6', color: 'white', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 6 }}>
+            style={{ padding: '8px 18px', borderRadius: 6, border: 'none', background: '#006AFF', color: 'white', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 6 }}>
             👤 Add Customer
           </button>
           {['↑ Export', '↓ Import', '⊗ Merge'].map(label => (
@@ -132,7 +132,7 @@ export default function CustomersPage() {
             ) : filtered.length === 0 ? (
               <tr><td colSpan={5} style={{ padding: 48, textAlign: 'center', color: 'var(--text-tertiary)', fontSize: 13 }}>
                 No customers found.{' '}
-                <span onClick={() => router.push('/pos/customers/new')} style={{ color: '#29b6f6', cursor: 'pointer' }}>Add one →</span>
+                <span onClick={() => router.push('/pos/customers/new')} style={{ color: '#006AFF', cursor: 'pointer' }}>Add one →</span>
               </td></tr>
             ) : filtered.map((c, i) => (
               <tr key={c.id}
