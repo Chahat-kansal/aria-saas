@@ -797,7 +797,9 @@ html[data-theme="light"] .pos-sidebar-wrapper input::placeholder {
 }
 
 /* -- Sidebar: always dark (Square-style dark nav) -- */
-.pos-sidebar-wrapper {
+/* Sidebar: light mode = Square dark sidebar vars */
+html[data-theme="light"] .pos-sidebar-wrapper,
+[data-pos-theme="light"] .pos-sidebar-wrapper {
   --text-tertiary: rgba(255,255,255,0.38);
   --text-secondary: rgba(255,255,255,0.60);
   --text-primary: rgba(255,255,255,0.92);
