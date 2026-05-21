@@ -57,7 +57,7 @@ export async function generateImageDirect(
         }
       } else {
         const err = await res.text()
-        console.error('[image-direct] Imagen 3 failed:', res.status, err.slice(0, 200))
+        console.error('[image-direct] Imagen 3 FULL ERROR:', res.status, res.statusText, err.slice(0, 500))
       }
     } catch (e) {
       console.error('[image-direct] Imagen 3 exception:', String(e).slice(0, 200))
@@ -91,7 +91,7 @@ export async function generateImageDirect(
         }
       } else {
         const err = await res.text()
-        console.error('[image-direct] gpt-image-1 failed:', res.status, err.slice(0, 200))
+        console.error('[image-direct] gpt-image-1 FULL ERROR:', res.status, res.statusText, err.slice(0, 500))
       }
     } catch (e) {
       console.error('[image-direct] gpt-image-1 exception:', String(e).slice(0, 200))
