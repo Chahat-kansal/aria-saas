@@ -571,7 +571,8 @@ body {
 .charge-btn {
   width: 100%; padding: 13px 18px; border-radius: 8px; border: none;
   background: #006AFF;
-  color: #FFFFFF; font-family: inherit; font-size: 15px; font-weight: 700;
+  color: #FFFFFF !important; -webkit-text-fill-color: #FFFFFF !important;
+  font-family: inherit; font-size: 15px; font-weight: 700;
   letter-spacing: 0.01em; cursor: pointer;
   display: flex; align-items: center; justify-content: center; gap: 12px;
   box-shadow: 0 2px 8px rgba(0,106,255,0.30);
