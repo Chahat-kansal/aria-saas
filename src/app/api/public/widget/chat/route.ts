@@ -135,7 +135,7 @@ Do NOT include the JSON block unless you have all details confirmed.`
       config.show_talk_to_staff && (config.escalation_phone || config.escalation_email)
         ? `If the visitor needs human help: "${config.escalation_message ?? 'Please contact us directly.'}". ${config.escalation_phone ? 'Phone: ' + config.escalation_phone : ''} ${config.escalation_email ? 'Email: ' + config.escalation_email : ''}`
         : '',
-    ].filter(Boolean).join(\n')
+    ].filter(Boolean).join('\n')
 
     // ── Build message history for Claude ──────────────────────────────
     const msgs: Message[] = [
@@ -188,7 +188,7 @@ Do NOT include the JSON block unless you have all details confirmed.`
           apptData.visitor_phone ? 'Phone: ' + apptData.visitor_phone : '',
           apptData.visitor_email ? 'Email: ' + apptData.visitor_email : '',
           'View at ariaos.site/dashboard/bookings',
-        ].filter(Boolean).join(\n')
+    ].filter(Boolean).join('\n')
         await sendSMS(ownerPhone, smsBody)
       }
 
