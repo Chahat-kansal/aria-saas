@@ -230,13 +230,14 @@ export function ProductImage({ product, size = 110, showShadow = true }: Props) 
 
   if (product.image_url && product.image_source !== 'pending') {
     return (
-      <div style={{ height: size, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+      <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
         <img
           src={product.image_url}
           alt={product.name}
           loading="lazy"
           style={{
-            height: size, width: 'auto', maxWidth: size * 1.2,
+            width: '100%',
+            height: '100%',
             objectFit: 'contain',
             filter: showShadow ? 'drop-shadow(-1px 2px 4px rgba(0,0,0,0.35))' : 'none',
           }}
@@ -264,7 +265,7 @@ export function ProductImage({ product, size = 110, showShadow = true }: Props) 
   }
 
   return (
-    <div style={{ height: size, position: 'relative', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+    <div style={{ width: '100%', height: '100%', position: 'relative', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', overflow: 'hidden' }}>
       {visual}
       {showShadow && (
         <div style={{
