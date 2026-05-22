@@ -215,8 +215,18 @@ export default function RosterPage() {
       if (data.shifts && data.shifts.length > 0) {
         setShifts(data.shifts)
         setAiReasoning(data.reasoning ?? null)
-        setIsDirty(true)
+        setIsDirty(false)
         showToast(`Aria drafted ${data.shifts.length} shifts — review and edit before publishing`)
+        // Auto-save so shifts appear in the grid immediately and persist
+        try {
+          const saveRes = await fetch('/api/staff/roster', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ week_start: weekStart, shifts: data.shifts, status: 'draft' }),
+          })
+          const saved = await saveRes.json() as { shifts?: ShiftEntry[]; summary?: RosterSummary }
+          if (saved.shifts) { setShifts(saved.shifts); setSummary(saved.summary ?? EMPTY_SUMMARY) }
+        } catch { /* grid already has shifts — save failed silently */ }
       } else {
         alert(data.reasoning || 'Aria could not generate a roster — make sure staff members are added first.')
       }

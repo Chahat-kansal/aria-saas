@@ -33,8 +33,10 @@ async function _GET(req: Request) {
   if (!bid) return NextResponse.json({ sales: [] });
 
   const { searchParams } = new URL(req.url);
-  const limit = parseInt(searchParams.get('limit') || '50');
+  const limit = Math.min(parseInt(searchParams.get('limit') || '50'), 2000);
   const session_id = searchParams.get('session_id');
+  const since = searchParams.get('since');
+  const q = searchParams.get('q');
 
   let query = supabase
     .from('pos_sales')
@@ -45,6 +47,8 @@ async function _GET(req: Request) {
     .limit(limit);
 
   if (session_id) query = query.eq('session_id', session_id);
+  if (since) query = query.gte('created_at', since);
+  if (q) query = query.or(`sale_number.ilike.%${q}%,served_by.ilike.%${q}%`);
 
   const { data: sales, error } = await query;
 
