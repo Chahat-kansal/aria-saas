@@ -2,8 +2,31 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 import { createServerSupabaseClient } from '@/lib/supabase-server';
+import { supabaseAdmin } from '@/lib/supabase-admin';
 import { NextResponse } from 'next/server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+
+// Instagram requires a clean publicly accessible URL — proxy Pexels/external images to Supabase storage
+async function ensurePublicImageUrl(imageUrl: string, postId: string): Promise<string> {
+  // Already a Supabase storage URL — use as-is
+  if (imageUrl.includes('supabase.co/storage')) return imageUrl;
+  // Fetch the image and re-upload to Supabase storage
+  try {
+    const res = await fetch(imageUrl);
+    if (!res.ok) throw new Error('Could not fetch image: ' + res.status);
+    const buf = await res.arrayBuffer();
+    const ext = imageUrl.includes('.png') ? 'png' : 'jpg';
+    const key = 'social-publish/' + postId + '.' + ext;
+    const { error } = await supabaseAdmin.storage.from('reusable-images')
+      .upload(key, buf, { contentType: 'image/' + ext, upsert: true });
+    if (error) throw new Error(error.message);
+    const { data } = supabaseAdmin.storage.from('reusable-images').getPublicUrl(key);
+    return data.publicUrl;
+  } catch (e: any) {
+    console.error('[social/publish] image proxy failed, using original URL:', e.message);
+    return imageUrl; // fallback to original — may fail on Instagram but at least we tried
+  }
+}
 
 async function _POST(req: Request) {
   const supabase = createServerSupabaseClient();
@@ -52,11 +75,13 @@ async function _POST(req: Request) {
 
     } else if (post.platform === 'instagram') {
       if (!post.image_url) throw new Error('Instagram requires an image URL');
+      const safeImageUrl = await ensurePublicImageUrl(post.image_url, post.id);
+      console.log('[social/publish] instagram image_url:', safeImageUrl);
       const containerRes = await fetch(
         `https://graph.facebook.com/v19.0/${conn.instagram_account_id}/media`,
         {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ image_url: post.image_url, caption: fullCaption, access_token: conn.access_token }),
+          body: JSON.stringify({ image_url: safeImageUrl, caption: fullCaption, access_token: conn.access_token }),
         }
       );
       const { id: creationId, error: cErr } = await containerRes.json();
