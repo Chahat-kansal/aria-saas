@@ -13,6 +13,7 @@ async function _GET() {
 
     return NextResponse.json({
       image: {
+        gemini_nano_banana: !!process.env.GEMINI_API_KEY,
         stability_ai: !!process.env.STABILITY_AI_KEY,
         dalle3: !!process.env.OPENAI_API_KEY,
         unsplash: !!process.env.UNSPLASH_ACCESS_KEY,

@@ -15,51 +15,120 @@ async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, u
   return data?.id ?? null
 }
 
-// Enhance prompt with business context for better results
 function buildEnhancedPrompt(prompt: string, style: string, format: string, biz: { name?: string; industry?: string } | null): string {
   const styleMap: Record<string, string> = {
-    photorealistic: 'photorealistic, professional photography, high quality, 8K',
-    illustration: 'digital illustration, vibrant colors, professional graphic design',
-    minimalist: 'minimalist design, clean, modern, white space, simple',
-    bold: 'bold graphic design, high contrast, striking colors, poster style',
-    vintage: 'vintage style, retro aesthetic, warm tones, nostalgic',
-    neon: 'neon glow, dark background, vibrant neon colors, night aesthetic',
+    photorealistic: 'photorealistic, professional photography, high quality, 8K, sharp focus',
+    illustration: 'digital illustration, vibrant colors, professional graphic design, clean lines',
+    minimalist: 'minimalist design, clean, modern, white space, simple, elegant',
+    bold: 'bold graphic design, high contrast, striking colours, eye-catching poster style',
+    vintage: 'vintage retro style, warm tones, nostalgic aesthetic, film grain',
+    neon: 'neon glow effects, dark background, vibrant neon colours, night city aesthetic',
   }
-  const formatHint = format === 'square' ? 'square format' : format === 'portrait' ? 'portrait orientation, tall format' : 'landscape, wide format, banner'
-  const industryHint = biz?.industry ? `for a ${biz.industry} business` : 'for a small business'
+  const formatHint = format === 'square' ? 'square composition' : format === 'portrait' ? 'portrait orientation, vertical format' : 'wide landscape, horizontal banner composition'
+  const industryHint = biz?.industry ? 'for an Australian ' + biz.industry + ' business' : 'for an Australian small business'
   const styleStr = styleMap[style] ?? styleMap.photorealistic
-  return `${prompt}, ${industryHint}, ${styleStr}, ${formatHint}, professional marketing image, no text overlay`
+  return prompt + ', ' + industryHint + ', ' + styleStr + ', ' + formatHint + ', professional marketing image, no text overlay, no watermark'
 }
 
+// Map format to Gemini aspectRatio
+function geminiAspectRatio(format: string): string {
+  if (format === 'portrait') return '9:16'
+  if (format === 'landscape') return '16:9'
+  return '1:1'
+}
+
+// ── GEMINI NANO BANANA (Primary — best image quality) ────────────────
+async function tryGeminiNanoBanana(prompt: string, format: string, usePro = false): Promise<{ url: string; provider: string } | null> {
+  const key = process.env.GEMINI_API_KEY
+  if (!key) return null
+
+  // Nano Banana 2 (fast) or Pro (best quality, slower)
+  const model = usePro ? 'gemini-3-pro-image-preview' : 'gemini-3.1-flash-image-preview'
+  const aspectRatio = geminiAspectRatio(format)
+
+  try {
+    const res = await fetch(
+      'https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent?key=' + key,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            responseModalities: ['TEXT', 'IMAGE'],
+            responseFormat: {
+              image: {
+                aspectRatio: aspectRatio,
+                imageSize: '1K',
+              },
+            },
+          },
+        }),
+      }
+    )
+
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '')
+      console.error('Gemini image error:', res.status, errText.slice(0, 200))
+      return null
+    }
+
+    const d = await res.json() as {
+      candidates?: Array<{
+        content?: {
+          parts?: Array<{ text?: string; inlineData?: { mimeType?: string; data?: string } }>
+        }
+      }>
+    }
+
+    const parts = d.candidates?.[0]?.content?.parts ?? []
+    const imagePart = parts.find(p => p.inlineData?.data)
+    if (!imagePart?.inlineData?.data) return null
+
+    // Upload base64 PNG to Vercel Blob
+    const imgBuf = Buffer.from(imagePart.inlineData.data, 'base64')
+    const { put } = await import('@vercel/blob')
+    const blob = await put('aria-studio/gemini-' + Date.now() + '.png', imgBuf, {
+      access: 'public',
+      contentType: imagePart.inlineData.mimeType ?? 'image/png',
+    })
+
+    const providerLabel = usePro ? 'Gemini Nano Banana Pro' : 'Gemini Nano Banana 2'
+    return { url: blob.url, provider: providerLabel }
+  } catch (e) {
+    console.error('Gemini image exception:', e)
+    return null
+  }
+}
+
+// ── STABILITY AI SD3.5 ───────────────────────────────────────────────
 async function tryStabilityAI(prompt: string, format: string): Promise<{ url: string; provider: string } | null> {
   const key = process.env.STABILITY_AI_KEY
   if (!key) return null
   const [w, h] = format === 'portrait' ? [768, 1344] : format === 'landscape' ? [1344, 768] : [1024, 1024]
   try {
+    const fd = new FormData()
+    fd.append('prompt', prompt)
+    fd.append('model', 'sd3.5-large-turbo')
+    fd.append('output_format', 'jpeg')
+    fd.append('width', String(w))
+    fd.append('height', String(h))
     const res = await fetch('https://api.stability.ai/v2beta/stable-image/generate/sd3', {
       method: 'POST',
       headers: { Authorization: 'Bearer ' + key, Accept: 'application/json' },
-      body: (() => {
-        const fd = new FormData()
-        fd.append('prompt', prompt)
-        fd.append('model', 'sd3.5-large-turbo')
-        fd.append('output_format', 'jpeg')
-        fd.append('width', String(w))
-        fd.append('height', String(h))
-        return fd
-      })(),
+      body: fd,
     })
     if (!res.ok) return null
     const d = await res.json() as { image?: string }
     if (!d.image) return null
-    // Upload to Vercel Blob
     const imgBuf = Buffer.from(d.image, 'base64')
     const { put } = await import('@vercel/blob')
-    const blob = await put('aria-studio/' + Date.now() + '.jpg', imgBuf, { access: 'public', contentType: 'image/jpeg' })
+    const blob = await put('aria-studio/stability-' + Date.now() + '.jpg', imgBuf, { access: 'public', contentType: 'image/jpeg' })
     return { url: blob.url, provider: 'Stability AI SD3.5' }
   } catch { return null }
 }
 
+// ── DALL-E 3 HD ──────────────────────────────────────────────────────
 async function tryDALLE3(prompt: string, format: string): Promise<{ url: string; provider: string } | null> {
   const key = process.env.OPENAI_API_KEY
   if (!key) return null
@@ -75,23 +144,23 @@ async function tryDALLE3(prompt: string, format: string): Promise<{ url: string;
     const d = await res.json() as { data?: Array<{ url?: string }> }
     const url = d.data?.[0]?.url
     if (!url) return null
-    return { url, provider: 'DALL·3' }
+    return { url, provider: 'DALL·3 HD' }
   } catch { return null }
 }
 
+// ── FLUX SCHNELL via Replicate ───────────────────────────────────────
 async function tryReplicate(prompt: string, format: string): Promise<{ url: string; provider: string } | null> {
   const key = process.env.REPLICATE_API_KEY
   if (!key) return null
   const [w, h] = format === 'portrait' ? [768, 1344] : format === 'landscape' ? [1344, 768] : [1024, 1024]
   try {
-    // FLUX Schnell — fast, high quality, free tier available
     const res = await fetch('https://api.replicate.com/v1/models/black-forest-labs/flux-schnell/predictions', {
       method: 'POST',
       headers: { Authorization: 'Bearer ' + key, 'Content-Type': 'application/json', 'Prefer': 'wait' },
       body: JSON.stringify({ input: { prompt: prompt.slice(0, 2000), width: w, height: h, num_outputs: 1, output_format: 'jpg', go_fast: true } }),
     })
     if (!res.ok) return null
-    const d = await res.json() as { output?: string[] | string; status?: string }
+    const d = await res.json() as { output?: string[] | string }
     const url = Array.isArray(d.output) ? d.output[0] : (typeof d.output === 'string' ? d.output : null)
     if (!url) return null
     return { url, provider: 'FLUX Schnell' }
@@ -123,7 +192,7 @@ async function _POST(req: Request) {
   const body = await req.json() as {
     action?: string
     prompt?: string; style?: string; format?: string; folder?: string; tags?: string[]
-    asset_id?: string; base64?: string; file_name?: string; file_type?: string
+    prefer_pro?: boolean
   }
 
   // ── Refine prompt with Aria ──────────────────────────────
@@ -133,8 +202,8 @@ async function _POST(req: Request) {
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
     const msg = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001', max_tokens: 200,
-      system: 'You are Aria, an expert at writing image generation prompts for small business marketing. Rewrite the user prompt to be detailed and effective for AI image generation. Keep it under 150 words. Return ONLY the improved prompt, no explanation.',
-      messages: [{ role: 'user', content: 'Business: ' + (biz?.name ?? '') + ' (' + (biz?.industry ?? '') + '). Original prompt: ' + body.prompt }],
+      system: 'You are Aria, an expert at writing image generation prompts for small business marketing. Rewrite the user prompt to be highly detailed and effective for AI image generation (specifically optimised for Gemini Nano Banana). Focus on lighting, composition, mood, and marketing impact. Keep it under 150 words. Return ONLY the improved prompt, no explanation.',
+      messages: [{ role: 'user', content: 'Business: ' + ((biz as any)?.name ?? '') + ' (' + ((biz as any)?.industry ?? '') + '). Original prompt: ' + body.prompt }],
     })
     const refined = msg.content[0].type === 'text' ? msg.content[0].text.trim() : body.prompt
     return NextResponse.json({ refined_prompt: refined })
@@ -145,16 +214,22 @@ async function _POST(req: Request) {
   const { data: biz } = await supabaseAdmin.from('businesses').select('name,industry').eq('id', bid).maybeSingle()
   const style = body.style ?? 'photorealistic'
   const format = body.format ?? 'square'
-  const enhancedPrompt = buildEnhancedPrompt(body.prompt, style, format, biz)
+  const usePro = body.prefer_pro === true
+  const enhancedPrompt = buildEnhancedPrompt(body.prompt, style, format, biz as any)
 
-  // Try providers in priority order: Stability → DALL-E → Replicate
+  // Provider chain: Gemini Nano Banana (primary) → Stability → DALL-E → FLUX
   let result: { url: string; provider: string } | null = null
-  result = await tryStabilityAI(enhancedPrompt, format)
+  result = await tryGeminiNanoBanana(enhancedPrompt, format, usePro)
+  if (!result) result = await tryStabilityAI(enhancedPrompt, format)
   if (!result) result = await tryDALLE3(enhancedPrompt, format)
   if (!result) result = await tryReplicate(enhancedPrompt, format)
-  if (!result) return NextResponse.json({ error: 'No image generation provider configured. Add STABILITY_AI_KEY, OPENAI_API_KEY, or REPLICATE_API_KEY to your environment variables.' }, { status: 503 })
 
-  // Save to DB
+  if (!result) {
+    return NextResponse.json({
+      error: 'No image generation provider available. GEMINI_API_KEY is already set and should work — check runtime logs. Alternatively add STABILITY_AI_KEY, OPENAI_API_KEY, or REPLICATE_API_KEY.',
+    }, { status: 503 })
+  }
+
   const { data: asset, error } = await supabaseAdmin.from('aria_studio_assets').insert({
     business_id: bid,
     prompt: body.prompt, enhanced_prompt: enhancedPrompt,

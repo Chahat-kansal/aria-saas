@@ -55,6 +55,7 @@ export default function AriaStudioPage() {
   const [format, setFormat] = useState('square')
   const [folder, setFolder] = useState('generated')
   const [tags, setTags] = useState('')
+  const [preferPro, setPreferPro] = useState(false)
 
   // UI state
   const [activeTab, setActiveTab] = useState<'generate' | 'library'>('generate')
@@ -101,7 +102,7 @@ export default function AriaStudioPage() {
     try {
       const d = await fetch('/api/aria/studio', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: prompt.trim(), style, format, folder, tags: tags ? tags.split(',').map(t => t.trim()).filter(Boolean) : [] }),
+        body: JSON.stringify({ prompt: prompt.trim(), style, format, folder, prefer_pro: preferPro, tags: tags ? tags.split(',').map(t => t.trim()).filter(Boolean) : [] }),
       }).then(r => r.json()) as { asset?: StudioAsset; url?: string; provider?: string; error?: string }
       if (d.error) { showMsg(d.error, true); return }
       if (d.asset) {
@@ -261,6 +262,20 @@ export default function AriaStudioPage() {
                 <input type="text" value={tags} onChange={e => setTags(e.target.value)} placeholder="promo, summer, sale"
                   style={{ width: '100%', padding: '9px 12px', background: S.sf2, border: '1px solid ' + S.bd2, borderRadius: 9, color: S.text, fontSize: 13, fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' }} />
               </div>
+            </div>
+
+            {/* Pro mode toggle */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: 'rgba(127,184,151,0.05)', border: '1px solid rgba(127,184,151,0.15)', borderRadius: 10, marginBottom: 16 }}>
+              <div>
+                <p style={{ fontSize: 13, fontWeight: 600, color: '#e8ede7', margin: '0 0 2px' }}>
+                  🍌 Nano Banana Pro
+                </p>
+                <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', margin: 0 }}>Higher quality, slower generation (Gemini Pro Image model)</p>
+              </div>
+              <button onClick={() => setPreferPro(p => !p)}
+                style={{ width: 44, height: 24, borderRadius: 12, border: 'none', cursor: 'pointer', background: preferPro ? '#7FB897' : 'rgba(255,255,255,0.15)', position: 'relative', transition: 'background 0.2s', flexShrink: 0 }}>
+                <span style={{ position: 'absolute', top: 3, left: preferPro ? 23 : 3, width: 18, height: 18, borderRadius: '50%', background: '#fff', transition: 'left 0.2s', display: 'block' }} />
+              </button>
             </div>
 
             {/* Generate button */}
