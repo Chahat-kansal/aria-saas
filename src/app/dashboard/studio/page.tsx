@@ -593,20 +593,29 @@ function ImageEditor({ asset, onClose, onSave }: { asset: StudioAsset; onClose: 
   const initCanvas = () => {
     const fabric = (window as any).fabric
     if (!fabric || !canvasRef.current) return
-    const MAX = 720
     const img = new window.Image()
     img.crossOrigin = 'anonymous'
     img.onload = () => {
-      const scale = Math.min(MAX / img.width, MAX / img.height, 1)
+      if (!canvasRef.current) return
+      // Size the canvas to fit the visible wrapper, preserving the image's
+      // aspect ratio. Do NOT pre-set canvasRef width/height — Fabric must
+      // own dimension setup or the bitmap and CSS sizes desync (stretched canvas).
+      const wrap = canvasRef.current.parentElement
+      const availW = Math.max(280, (wrap?.clientWidth ?? 760) - 48)
+      const availH = Math.max(280, (wrap?.clientHeight ?? 620) - 48)
+      const scale = Math.min(availW / img.width, availH / img.height, 1)
       const w = Math.round(img.width * scale)
       const h = Math.round(img.height * scale)
-      canvasRef.current!.width  = w
-      canvasRef.current!.height = h
-      const fc = new fabric.Canvas(canvasRef.current, { width: w, height: h, preserveObjectStacking: true })
+      const fc = new fabric.Canvas(canvasRef.current, { preserveObjectStacking: true })
+      fc.setDimensions({ width: w, height: h })
       fabricRef.current = fc
       fabric.Image.fromURL(img.src, (fImg: any) => {
-        fImg.set({ left: 0, top: 0, selectable: false, evented: false })
-        fImg.scaleToWidth(w)
+        // Scale the background image to exactly fill the canvas, centred.
+        fImg.set({ selectable: false, evented: false, originX: 'left', originY: 'top' })
+        fImg.scaleX = w / (fImg.width || w)
+        fImg.scaleY = h / (fImg.height || h)
+        fImg.left = 0
+        fImg.top = 0
         fc.add(fImg)
         fc.sendToBack(fImg)
         fc.renderAll()
