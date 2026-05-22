@@ -28,6 +28,7 @@ export default function CloseRegisterPage() {
   const [closeError, setCloseError] = useState('');
   const [showMore, setShowMore] = useState(false);
   const [businessId, setBusinessId] = useState<string | null>(null);
+  const [showAuditPrompt, setShowAuditPrompt] = useState(false);
 
   // Editable received amount
   const [manualReceived, setManualReceived] = useState('');
@@ -145,7 +146,8 @@ export default function CloseRegisterPage() {
         setClosing(false);
         return;
       }
-      router.push(`/pos/reports/closures/${session.id}`);
+      fetch('/api/pos/shift-reports', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ session_id: session.id }) }).catch(() => {})
+      setShowAuditPrompt(true)
     } catch (err) {
       clearTimeout(timeout);
       console.error('Close register error:', err);
@@ -197,7 +199,7 @@ export default function CloseRegisterPage() {
   return (
     <div style={{ minHeight: '100%', background: C.bg, color: C.text, fontFamily: "'Manrope',sans-serif" }}>
       {/* Header */}
-      <div style={{ padding: '18px 28px', borderBottom: `1px solid ${C.border}` }}>
+      <div style={{ padding: '18px 28px', borderBottom: '1px solid ' + C.border }}>
         <h1 style={{ fontSize: 20, fontWeight: 800 }}>Close Register</h1>
         <div style={{ display: 'flex', gap: 24, marginTop: 6 }}>
           <p style={{ fontSize: 12, color: C.muted }}>Open time: <span style={{ color: C.text, fontWeight: 600 }}>{openedAgo}</span></p>
@@ -209,11 +211,11 @@ export default function CloseRegisterPage() {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 420px', minHeight: 'calc(100vh - 73px)' }}>
 
         {/* LEFT: Payment reconciliation */}
-        <div style={{ padding: '24px 28px', borderRight: `1px solid ${C.border}`, display: 'flex', flexDirection: 'column', gap: 20 }}>
-          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, overflow: 'hidden' }}>
+        <div style={{ padding: '24px 28px', borderRight: '1px solid ' + C.border, display: 'flex', flexDirection: 'column', gap: 20 }}>
+          <div style={{ background: C.card, border: '1px solid ' + C.border, borderRadius: 14, overflow: 'hidden' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
-                <tr style={{ background: 'rgba(255,255,255,0.02)', borderBottom: `1px solid ${C.border}` }}>
+                <tr style={{ background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid ' + C.border }}>
                   {['Payment Method', 'Expected', 'Received', 'Difference'].map((h, i) => (
                     <th key={h} style={{ textAlign: i === 0 ? 'left' : 'right', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: C.dim, padding: '10px 14px' }}>{h}</th>
                   ))}
@@ -221,11 +223,11 @@ export default function CloseRegisterPage() {
               </thead>
               <tbody>
                 {PAYMENT_ROWS.map((row, i) => (
-                  <tr key={row.key} style={{ borderBottom: `1px solid ${C.border}` }}>
+                  <tr key={row.key} style={{ borderBottom: '1px solid ' + C.border }}>
                     <td style={{ padding: '12px 14px', fontSize: 13, fontWeight: 600, color: C.text }}>
                       {row.label}
                       {row.showDrawer && (
-                        <button style={{ marginLeft: 10, fontSize: 10, padding: '2px 8px', borderRadius: 5, border: `1px solid rgba(0,229,255,0.2)`, background: 'transparent', color: C.cyan, cursor: 'pointer', fontFamily: 'inherit' }}>Open Drawer</button>
+                        <button style={{ marginLeft: 10, fontSize: 10, padding: '2px 8px', borderRadius: 5, border: '1px solid rgba(0,229,255,0.2)', background: 'transparent', color: C.cyan, cursor: 'pointer', fontFamily: 'inherit' }}>Open Drawer</button>
                       )}
                     </td>
                     <td style={{ padding: '12px 14px', fontSize: 13, color: C.muted, textAlign: 'right', fontFamily: 'monospace' }}>
@@ -244,7 +246,7 @@ export default function CloseRegisterPage() {
                   </tr>
                 ))}
                 {showMore && EXTRA_ROWS.map(row => (
-                  <tr key={row.key} style={{ borderBottom: `1px solid ${C.border}` }}>
+                  <tr key={row.key} style={{ borderBottom: '1px solid ' + C.border }}>
                     <td style={{ padding: '10px 14px', fontSize: 13, color: C.muted }}>{row.label}</td>
                     <td style={{ padding: '10px 14px', fontSize: 12, color: C.dim, textAlign: 'right', fontFamily: 'monospace' }}>A${row.expected.toFixed(2)}</td>
                     <td style={{ padding: '10px 14px', fontSize: 12, color: C.dim, textAlign: 'right', fontFamily: 'monospace' }}>A${row.received.toFixed(2)}</td>
@@ -265,7 +267,7 @@ export default function CloseRegisterPage() {
 
           {/* Variance reason */}
           {Math.abs(cashDiff) > 0.01 && (
-            <div style={{ background: cashDiff >= 0 ? 'rgba(34,197,94,0.06)' : 'rgba(239,68,68,0.06)', border: `1px solid ${cashDiff >= 0 ? 'rgba(34,197,94,0.2)' : 'rgba(239,68,68,0.2)'}`, borderRadius: 12, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div style={{ background: cashDiff >= 0 ? 'rgba(34,197,94,0.06)' : 'rgba(239,68,68,0.06)', border: '1px solid ' + (cashDiff >= 0 ? 'rgba(34,197,94,0.2)' : 'rgba(239,68,68,0.2)'), borderRadius: 12, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontSize: 13, fontWeight: 700, color: cashDiff >= 0 ? C.green : C.red }}>
                   {cashDiff >= 0 ? '↑ Cash surplus' : '↓ Cash shortage'}: {cashDiff >= 0 ? '+' : ''}A${cashDiff.toFixed(2)}
@@ -285,7 +287,7 @@ export default function CloseRegisterPage() {
                   value={varianceReason}
                   onChange={e => setVarianceReason(e.target.value)}
                   placeholder="e.g. Counted short, customer gave incorrect change…"
-                  style={{ width: '100%', background: '#FFFFFF', border: `1px solid ${C.border}`, borderRadius: 8, padding: '9px 12px', fontSize: 13, color: C.text, outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' as const }}
+                  style={{ width: '100%', background: '#FFFFFF', border: '1px solid ' + C.border, borderRadius: 8, padding: '9px 12px', fontSize: 13, color: C.text, outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' as const }}
                 />
               </div>
             </div>
@@ -297,7 +299,7 @@ export default function CloseRegisterPage() {
             </label>
             <textarea value={note} onChange={e => setNote(e.target.value)} rows={3}
               placeholder="Optional note for this closure…"
-              style={{ width: '100%', background: '#FFFFFF', border: `1px solid ${C.border}`, borderRadius: 10, padding: '10px 14px', fontSize: 13, color: C.text, outline: 'none', fontFamily: 'inherit', resize: 'vertical', boxSizing: 'border-box' as const }} />
+              style={{ width: '100%', background: '#FFFFFF', border: '1px solid ' + C.border, borderRadius: 10, padding: '10px 14px', fontSize: 13, color: C.text, outline: 'none', fontFamily: 'inherit', resize: 'vertical', boxSizing: 'border-box' as const }} />
           </div>
 
           {closeError && (
@@ -306,7 +308,7 @@ export default function CloseRegisterPage() {
             </div>
           )}
           <button onClick={closeRegister} disabled={closing}
-            style={{ padding: '14px', borderRadius: 12, border: 'none', background: `linear-gradient(135deg,${C.violet},#6D28D9)`, color: '#fff', fontSize: 15, fontWeight: 800, cursor: closing ? 'not-allowed' : 'pointer', fontFamily: 'inherit', opacity: closing ? 0.6 : 1 }}>
+            style={{ padding: '14px', borderRadius: 12, border: 'none', background: 'linear-gradient(135deg,' + C.violet + ',#6D28D9)', color: '#fff', fontSize: 15, fontWeight: 800, cursor: closing ? 'not-allowed' : 'pointer', fontFamily: 'inherit', opacity: closing ? 0.6 : 1 }}>
             {closing ? 'Closing register…' : needsManagerPin ? '⚠ Close Register (Manager PIN required)' : '🔒 Close Register'}
           </button>
         </div>
@@ -314,10 +316,10 @@ export default function CloseRegisterPage() {
         {/* RIGHT: Denomination counter */}
         <div style={{ padding: '24px 20px', background: 'rgba(10,8,20,0.5)' }}>
           <p style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 14 }}>Count Cash Denominations</p>
-          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, overflow: 'hidden', marginBottom: 16 }}>
+          <div style={{ background: C.card, border: '1px solid ' + C.border, borderRadius: 14, overflow: 'hidden', marginBottom: 16 }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
-                <tr style={{ background: 'rgba(255,255,255,0.02)', borderBottom: `1px solid ${C.border}` }}>
+                <tr style={{ background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid ' + C.border }}>
                   <th style={{ textAlign: 'left', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: C.dim, padding: '8px 12px' }}>Denomination</th>
                   <th style={{ textAlign: 'right', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: C.dim, padding: '8px 12px' }}>Count</th>
                   <th style={{ textAlign: 'right', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: C.dim, padding: '8px 12px' }}>Value</th>
@@ -328,7 +330,7 @@ export default function CloseRegisterPage() {
                   const cnt = parseFloat(counts[d.value] || '0') || 0;
                   const val = cnt * d.value;
                   return (
-                    <tr key={d.value} style={{ borderBottom: i < DENOMS.length - 1 ? `1px solid ${C.border}` : 'none' }}>
+                    <tr key={d.value} style={{ borderBottom: i < DENOMS.length - 1 ? '1px solid ' + C.border : 'none' }}>
                       <td style={{ padding: '6px 12px', fontSize: 13, color: C.muted, fontFamily: 'monospace', fontWeight: 600 }}>{d.label}</td>
                       <td style={{ padding: '6px 8px' }}>
                         <input
@@ -350,7 +352,7 @@ export default function CloseRegisterPage() {
           </div>
 
           {/* Summary */}
-          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ background: C.card, border: '1px solid ' + C.border, borderRadius: 12, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span style={{ fontSize: 13, color: C.muted }}>In Drawer</span>
               <span style={{ fontSize: 16, fontWeight: 700, color: C.text, fontFamily: 'monospace' }}>A${inDrawer.toFixed(2)}</span>
@@ -363,7 +365,7 @@ export default function CloseRegisterPage() {
                   style={{ ...iS, width: 90 }} />
               </div>
             </div>
-            <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ borderTop: '1px solid ' + C.border, paddingTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontSize: 13, color: C.muted }}>From denominations</span>
                 <span style={{ fontSize: 15, fontWeight: 700, fontFamily: 'monospace', color: useManualReceived ? C.dim : C.text }}>
@@ -372,7 +374,7 @@ export default function CloseRegisterPage() {
               </div>
 
               {/* Manual override */}
-              <div style={{ background: 'rgba(139,92,246,0.06)', border: `1px solid rgba(139,92,246,0.15)`, borderRadius: 10, padding: '10px 12px' }}>
+              <div style={{ background: 'rgba(139,92,246,0.06)', border: '1px solid rgba(139,92,246,0.15)', borderRadius: 10, padding: '10px 12px' }}>
                 <p style={{ fontSize: 11, color: C.muted, marginBottom: 6 }}>Or enter cash received directly:</p>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <span style={{ fontSize: 12, color: C.dim }}>A$</span>
@@ -385,7 +387,7 @@ export default function CloseRegisterPage() {
                   />
                   {useManualReceived && (
                     <button onClick={() => { setManualReceived(''); setUseManualReceived(false); }}
-                      style={{ fontSize: 11, padding: '4px 8px', borderRadius: 6, border: `1px solid ${C.border}`, background: 'transparent', color: C.muted, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
+                      style={{ fontSize: 11, padding: '4px 8px', borderRadius: 6, border: '1px solid ' + C.border, background: 'transparent', color: C.muted, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
                       Clear
                     </button>
                   )}
@@ -393,7 +395,7 @@ export default function CloseRegisterPage() {
                 {useManualReceived && <p style={{ fontSize: 10, color: C.violet, marginTop: 4 }}>Using manual amount (overrides denomination count)</p>}
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid ' + C.border, paddingTop: 10 }}>
                 <span style={{ fontSize: 14, fontWeight: 700, color: C.text }}>Cash Received (Total)</span>
                 <span style={{ fontSize: 20, fontWeight: 800, fontFamily: 'monospace', color: cashDiff >= 0 ? C.green : C.red }}>
                   A${cashReceived.toFixed(2)}
@@ -412,7 +414,7 @@ export default function CloseRegisterPage() {
       {/* Manager PIN Modal */}
       {showManagerPin && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.7)' }}>
-          <div style={{ background: '#0F0D1C', border: `1px solid ${C.border}`, borderRadius: 20, padding: '32px', width: 360, boxShadow: '0 24px 64px rgba(0,0,0,0.7)' }}>
+          <div style={{ background: '#0F0D1C', border: '1px solid ' + C.border, borderRadius: 20, padding: '32px', width: 360, boxShadow: '0 24px 64px rgba(0,0,0,0.7)' }}>
             <h3 style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 8 }}>Manager Approval Required</h3>
             <p style={{ fontSize: 13, color: C.muted, marginBottom: 20 }}>
               Cash variance of A${Math.abs(cashDiff).toFixed(2)} exceeds A${VARIANCE_THRESHOLD}. Please enter a manager PIN to proceed.
@@ -427,7 +429,7 @@ export default function CloseRegisterPage() {
                 onChange={e => { setManagerPin(e.target.value); setManagerPinError(''); }}
                 onKeyDown={e => e.key === 'Enter' && verifyManagerPin()}
                 placeholder="••••"
-                style={{ width: '100%', background: '#FFFFFF', border: `1px solid ${C.border}`, borderRadius: 8, padding: '10px 12px', fontSize: 18, color: C.text, outline: 'none', fontFamily: "'JetBrains Mono',monospace", letterSpacing: '0.2em', boxSizing: 'border-box' as const }}
+                style={{ width: '100%', background: '#FFFFFF', border: '1px solid ' + C.border, borderRadius: 8, padding: '10px 12px', fontSize: 18, color: C.text, outline: 'none', fontFamily: "'JetBrains Mono',monospace", letterSpacing: '0.2em', boxSizing: 'border-box' as const }}
               />
               {managerPinError && <p style={{ fontSize: 12, color: C.red, marginTop: 6 }}>{managerPinError}</p>}
             </div>
@@ -437,7 +439,7 @@ export default function CloseRegisterPage() {
                 {managerPinChecking ? 'Verifying…' : 'Approve'}
               </button>
               <button onClick={() => { setShowManagerPin(false); setManagerPin(''); setManagerPinError(''); }}
-                style={{ padding: '10px 16px', borderRadius: 10, border: `1px solid ${C.border}`, background: 'transparent', color: C.muted, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit' }}>
+                style={{ padding: '10px 16px', borderRadius: 10, border: '1px solid ' + C.border, background: 'transparent', color: C.muted, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit' }}>
                 Cancel
               </button>
             </div>
@@ -445,5 +447,29 @@ export default function CloseRegisterPage() {
         </div>
       )}
     </div>
+
+      {showAuditPrompt && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+          <div style={{ background: '#1a2620', border: '1px solid rgba(127,184,151,0.3)', borderRadius: 20, padding: 32, maxWidth: 440, width: '100%', textAlign: 'center' }}>
+            <div style={{ width: 56, height: 56, borderRadius: '50%', background: 'rgba(127,184,151,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', fontSize: 24 }}>✓</div>
+            <h2 style={{ fontSize: 20, fontWeight: 700, color: '#e8ede7', margin: '0 0 8px' }}>Register closed</h2>
+            <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.5)', margin: '0 0 24px', lineHeight: 1.6 }}>Shift report generated. Would you like to complete your end-of-shift audit now?</p>
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
+              <button onClick={() => { setShowAuditPrompt(false); router.push('/dashboard/audit-checks'); }}
+                style={{ padding: '12px 24px', borderRadius: 12, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', border: 'none', background: '#2D5240', color: '#fff' }}>
+                Do audit check
+              </button>
+              <button onClick={() => { setShowAuditPrompt(false); router.push('/pos'); }}
+                style={{ padding: '12px 24px', borderRadius: 12, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', border: '1px solid rgba(255,255,255,0.12)', background: 'transparent', color: 'rgba(255,255,255,0.5)' }}>
+                Skip for now
+              </button>
+            </div>
+            <button onClick={() => { setShowAuditPrompt(false); router.push('/dashboard/shift-reports'); }}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: 'rgba(255,255,255,0.3)', marginTop: 16, fontFamily: 'inherit' }}>
+              View shift report →
+            </button>
+          </div>
+        </div>
+      )}
   );
 }

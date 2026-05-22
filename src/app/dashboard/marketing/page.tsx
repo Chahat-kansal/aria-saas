@@ -13,7 +13,7 @@ const STATUS_COLOR: Record<string, string> = { draft:'#888', scheduled:'#378ADD'
 const VARS = ['{first_name}','{business_name}','{days_since_visit}','{offer}','{google_url}']
 
 function pill(label: string, color: string) {
-  return <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 20, background: `${color}22`, color, letterSpacing: '0.03em' }}>{label}</span>
+  return <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 20, background: color + '22', color, letterSpacing: '0.03em' }}>{label}</span>
 }
 
 export default function MarketingPage() {
@@ -218,7 +218,7 @@ export default function MarketingPage() {
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>
                 {SEGMENTS.map(seg => (
                   <button key={seg} onClick={() => setFormSeg(seg)}
-                    style={{ padding: '7px 14px', borderRadius: 20, fontSize: 13, fontWeight: formSeg === seg ? 600 : 400, background: formSeg === seg ? '#2D5240' : 'rgba(255,255,255,0.04)', color: formSeg === seg ? '#7FB897' : 'var(--text-secondary)', border: `1px solid ${formSeg === seg ? 'rgba(127,184,151,0.4)' : 'rgba(255,255,255,0.08)'}`, cursor: 'pointer' }}>
+                    style={{ padding: '7px 14px', borderRadius: 20, fontSize: 13, fontWeight: formSeg === seg ? 600 : 400, background: formSeg === seg ? '#2D5240' : 'rgba(255,255,255,0.04)', color: formSeg === seg ? '#7FB897' : 'var(--text-secondary)', border: '1px solid ' + (formSeg === seg ? 'rgba(127,184,151,0.4)' : 'rgba(255,255,255,0.08)'), cursor: 'pointer' }}>
                     {SEG_LABELS[seg]} ({getSegCount(seg)})
                   </button>
                 ))}
@@ -255,7 +255,7 @@ export default function MarketingPage() {
                 <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4 }}>
                   {templates.map(t => (
                     <div key={t.id} onClick={() => { setSelectedTemplate(t.id); setFormMsg(t.sms_body ?? '') }}
-                      style={{ flexShrink: 0, width: 160, padding: '10px 12px', borderRadius: 8, background: selectedTemplate === t.id ? '#2D5240' : 'var(--bg-elevated)', border: `1px solid ${selectedTemplate === t.id ? 'rgba(127,184,151,0.4)' : 'rgba(255,255,255,0.07)'}`, cursor: 'pointer' }}>
+                      style={{ flexShrink: 0, width: 160, padding: '10px 12px', borderRadius: 8, background: selectedTemplate === t.id ? '#2D5240' : 'var(--bg-elevated)', border: '1px solid ' + (selectedTemplate === t.id ? 'rgba(127,184,151,0.4)' : 'rgba(255,255,255,0.07)'), cursor: 'pointer' }}>
                       <p style={{ fontSize: 11, fontWeight: 600, color: selectedTemplate === t.id ? '#7FB897' : 'var(--text-secondary)', marginBottom: 4 }}>{t.type?.toUpperCase()}{t.is_global && ' · Aria'}</p>
                       <p style={{ fontSize: 12, color: 'var(--text-primary)' }}>{t.name}</p>
                     </div>
@@ -265,7 +265,7 @@ export default function MarketingPage() {
               <div style={{ marginBottom: 10 }}>
                 <label style={{ display: 'block', fontSize: 12, color: 'var(--text-secondary)', marginBottom: 6 }}>SMS message <span style={{ color: formMsg.length > 160 ? '#E24B4A' : 'var(--text-secondary)' }}>({formMsg.length}/160)</span></label>
                 <textarea value={formMsg} onChange={e => setFormMsg(e.target.value)} rows={4}
-                  style={{ width: '100%', padding: '9px 12px', borderRadius: 8, background: 'var(--bg-elevated)', border: `1px solid ${formMsg.length > 160 ? 'rgba(226,75,74,0.5)' : 'rgba(255,255,255,0.1)'}`, color: 'var(--text-primary)', fontSize: 13, resize: 'vertical', boxSizing: 'border-box', outline: 'none', fontFamily: 'inherit' }} />
+                  style={{ width: '100%', padding: '9px 12px', borderRadius: 8, background: 'var(--bg-elevated)', border: '1px solid ' + (formMsg.length > 160 ? 'rgba(226,75,74,0.5)' : 'rgba(255,255,255,0.1)'), color: 'var(--text-primary)', fontSize: 13, resize: 'vertical', boxSizing: 'border-box', outline: 'none', fontFamily: 'inherit' }} />
               </div>
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 16 }}>
                 {VARS.map(v => (
