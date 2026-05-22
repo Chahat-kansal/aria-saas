@@ -44,6 +44,7 @@ export default function ParcelTrackingPage(){
   const [form,setForm]=useState(emptyForm)
   const [addErr,setAddErr]=useState('')
   const [adding,setAdding]=useState(false)
+  const [notice,setNotice]=useState('')
   const pollRef=useRef<ReturnType<typeof setInterval>|null>(null)
 
   const load=useCallback(async(silent=false)=>{
@@ -70,17 +71,19 @@ export default function ParcelTrackingPage(){
     if(!form.tracking_number.trim()){setAddErr('Enter a tracking number');return}
     setAdding(true);setAddErr('')
     const res=await fetch('/api/pos/parcel-tracking',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(form)})
-    const d=await res.json() as {parcel?:Parcel;error?:string}
+    const d=await res.json() as {parcel?:Parcel;error?:string;warning?:string;tracking_live?:boolean}
     if(d.error){setAddErr(d.error);setAdding(false);return}
     setShowAdd(false);setForm(emptyForm);setAdding(false)
+    setNotice(d.warning ?? (d.tracking_live ? 'Parcel added — live tracking is on.' : ''))
     await load();if(d.parcel)setSelected(d.parcel)
   }
 
   async function refresh(id:string){
     setRefreshing(id)
     const res=await fetch('/api/pos/parcel-tracking',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,refresh:true})})
-    const d=await res.json() as {parcel?:Parcel}
+    const d=await res.json() as {parcel?:Parcel;warning?:string}
     if(d.parcel){setParcels(ps=>ps.map(p=>p.id===id?d.parcel!:p));if(selected?.id===id)setSelected(d.parcel)}
+    if(d.warning)setNotice(d.warning)
     setRefreshing(null)
   }
 
@@ -121,7 +124,14 @@ export default function ParcelTrackingPage(){
           </div>
           <div style={{position:'relative',marginBottom:8}}>
             <span style={{position:'absolute',left:9,top:'50%',transform:'translateY(-50%)',fontSize:13,color:C.dim,pointerEvents:'none'}}>⌕</span>
-            <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search tracking number, name, order ref…" style={{...inp,paddingLeft:28,height:32,borderRadius:8}}/>
+            {notice && (
+    <div style={{margin:'0 0 10px',padding:'9px 12px',borderRadius:8,background:'rgba(245,158,11,0.12)',border:'1px solid rgba(245,158,11,0.3)',fontSize:11.5,color:'#92610a',display:'flex',alignItems:'flex-start',gap:8}}>
+      <span style={{flexShrink:0}}>{'⚠'}</span>
+      <span style={{flex:1}}>{notice}</span>
+      <button onClick={()=>setNotice('')} style={{border:'none',background:'transparent',cursor:'pointer',color:'#92610a',fontSize:13,lineHeight:1,flexShrink:0}}>{'✕'}</button>
+    </div>
+  )}
+    <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search tracking number, name, order ref…" style={{...inp,paddingLeft:28,height:32,borderRadius:8}}/>
           </div>
           <div style={{display:'flex',gap:5,flexWrap:'wrap'}}>
             {filterBtn('Active',filter==='active',()=>setFilter('active'))}

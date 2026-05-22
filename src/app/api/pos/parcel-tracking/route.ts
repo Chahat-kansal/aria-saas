@@ -13,15 +13,19 @@ async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, u
 
 // Carrier auto-detection from tracking number format
 const CARRIER_PATTERNS: Array<{ pattern: RegExp; carrier: string; name: string }> = [
-  { pattern: /^[A-Z]{2}\d{9}AU$/i,    carrier: 'auspost',        name: 'Australia Post' },
-  { pattern: /^\d{11,13}$/,            carrier: 'auspost',        name: 'Australia Post' },
-  { pattern: /^33\d{10}$/,             carrier: 'aramex',         name: 'Aramex' },
-  { pattern: /^3933\d{8}$/,            carrier: 'aramex',         name: 'Aramex' },
-  { pattern: /^\d{10}$/,               carrier: 'startrack',      name: 'StarTrack' },
-  { pattern: /^[0-9]{12}$/,            carrier: 'dhl',            name: 'DHL Express' },
-  { pattern: /^[0-9]{20}$/,            carrier: 'fedex',          name: 'FedEx' },
-  { pattern: /^[0-9]{18}$/,            carrier: 'couriersplease', name: 'Couriers Please' },
-  { pattern: /^[A-Z]{2}\d{8}/i,        carrier: 'tnt',            name: 'TNT' },
+  // Australia Post — international (CC123456789AU) and modern domestic consignment codes
+  { pattern: /^[A-Z]{2}\d{9}AU$/i,           carrier: 'auspost',        name: 'Australia Post' },
+  // Modern AusPost 23-char article id, e.g. 34PDN740013301000935104 — starts with digits, has letters
+  { pattern: /^\d{2}[A-Z]{2,4}\d{14,18}$/i,   carrier: 'auspost',        name: 'Australia Post' },
+  // AusPost / StarTrack all-numeric domestic article ids (broad — 17TRACK confirms exact carrier)
+  { pattern: /^\d{11,13}$/,                   carrier: 'auspost',        name: 'Australia Post' },
+  { pattern: /^33\d{10}$/,                    carrier: 'aramex',         name: 'Aramex' },
+  { pattern: /^3933\d{8}$/,                   carrier: 'aramex',         name: 'Aramex' },
+  { pattern: /^\d{10}$/,                      carrier: 'startrack',      name: 'StarTrack' },
+  { pattern: /^[0-9]{12}$/,                   carrier: 'dhl',            name: 'DHL Express' },
+  { pattern: /^[0-9]{20,22}$/,                carrier: 'fedex',          name: 'FedEx' },
+  { pattern: /^[0-9]{18}$/,                   carrier: 'couriersplease', name: 'Couriers Please' },
+  { pattern: /^[A-Z]{2}\d{8}/i,               carrier: 'tnt',            name: 'TNT' },
 ]
 
 function detectCarrier(tn: string): { carrier: string; name: string } {
@@ -40,15 +44,25 @@ const TRACK17_CARRIER_MAP: Record<string, string> = {
   dhl: '100003', fedex: '100002', couriersplease: '3024', tnt: '190003',
 }
 
-export async function lookup17Track(trackingNumber: string, carrierCode?: string): Promise<{
+export interface Track17Result {
   status: string; statusDetail: string
   events: Array<{ time: string; location: string; description: string }>
   estimatedDelivery: string | null; deliveredAt: string | null
-} | null> {
+}
+
+/**
+ * Looks up live tracking via 17TRACK.
+ * Returns { result } on success, or { error } describing exactly what went
+ * wrong so the UI can surface it instead of silently saving a blank parcel.
+ */
+export async function lookup17Track(
+  trackingNumber: string,
+  carrierCode?: string,
+): Promise<{ result: Track17Result | null; error: string | null }> {
   const apiKey = process.env.TRACK17_API_KEY
   if (!apiKey || apiKey === 'false') {
     console.log('[parcel-tracking] TRACK17_API_KEY not set — add to Vercel env vars')
-    return null
+    return { result: null, error: 'tracking_api_not_configured' }
   }
 
   const carrierNum = carrierCode ? (TRACK17_CARRIER_MAP[carrierCode] ?? 0) : 0
@@ -61,7 +75,12 @@ export async function lookup17Track(trackingNumber: string, carrierCode?: string
       body: JSON.stringify([{ number: trackingNumber, carrier: carrierNum || undefined }]),
       signal: AbortSignal.timeout(12_000),
     })
-    if (!registerRes.ok) console.error('[parcel-tracking] 17TRACK register error:', registerRes.status)
+    if (!registerRes.ok) {
+      console.error('[parcel-tracking] 17TRACK register error:', registerRes.status)
+      if (registerRes.status === 401 || registerRes.status === 403) {
+        return { result: null, error: 'tracking_api_key_invalid' }
+      }
+    }
 
     // Step 2: Fetch current tracking info (no quota cost after registration)
     const trackRes = await fetch('https://api.17track.net/track/v2/gettrackinfo', {
@@ -73,7 +92,10 @@ export async function lookup17Track(trackingNumber: string, carrierCode?: string
 
     if (!trackRes.ok) {
       console.error('[parcel-tracking] 17TRACK gettrackinfo error:', trackRes.status)
-      return null
+      if (trackRes.status === 401 || trackRes.status === 403) {
+        return { result: null, error: 'tracking_api_key_invalid' }
+      }
+      return { result: null, error: 'tracking_api_unavailable' }
     }
 
     const data = await trackRes.json() as {
@@ -95,11 +117,20 @@ export async function lookup17Track(trackingNumber: string, carrierCode?: string
 
     if (data.code !== 0) {
       console.error('[parcel-tracking] 17TRACK API error code:', data.code)
-      return null
+      // code -18019902 = quota exceeded; -18010012 = key issue
+      if (data.code === -18019902) return { result: null, error: 'tracking_quota_exceeded' }
+      return { result: null, error: 'tracking_api_unavailable' }
+    }
+
+    // A rejected number means 17TRACK could not match the tracking id to a carrier
+    const rejected = data.data?.rejected?.[0]
+    if (rejected) {
+      console.error('[parcel-tracking] 17TRACK rejected:', rejected.error?.message)
+      return { result: null, error: 'tracking_number_unrecognised' }
     }
 
     const item = data.data?.accepted?.[0]
-    if (!item) return null
+    if (!item) return { result: null, error: 'tracking_number_unrecognised' }
 
     const t = item.track
 
@@ -123,15 +154,18 @@ export async function lookup17Track(trackingNumber: string, carrierCode?: string
     console.log('[parcel-tracking] 17TRACK result:', trackingNumber, '→', status, '| events:', events.length)
 
     return {
-      status,
-      statusDetail: latestEvent,
-      events,
-      estimatedDelivery: t.b ?? null,
-      deliveredAt,
+      result: {
+        status,
+        statusDetail: latestEvent,
+        events,
+        estimatedDelivery: t.b ?? null,
+        deliveredAt,
+      },
+      error: null,
     }
   } catch (e) {
     console.error('[parcel-tracking] 17TRACK exception:', String(e).slice(0, 200))
-    return null
+    return { result: null, error: 'tracking_api_unavailable' }
   }
 }
 
@@ -184,7 +218,7 @@ async function _POST(req: Request) {
   const carrierCode = body.carrier ?? detected.carrier
   const carrierName = carrierCode !== 'other' ? detected.name : 'Unknown Carrier'
 
-  const liveData = await lookup17Track(tn, carrierCode)
+  const { result: liveData, error: lookupError } = await lookup17Track(tn, carrierCode)
 
   const { data, error } = await supabaseAdmin.from('pos_parcel_tracking').insert({
     business_id: bid, tracking_number: tn,
@@ -221,7 +255,18 @@ async function _POST(req: Request) {
     })
   }
 
-  return NextResponse.json({ parcel: data })
+  // Surface a human-readable warning when live detection could not run, so the
+  // operator knows the parcel was saved but tracking is not live yet.
+  const warningMap: Record<string, string> = {
+    tracking_api_not_configured: 'Parcel saved. Live tracking is not set up yet — add a 17TRACK API key in settings to auto-detect status.',
+    tracking_api_key_invalid:    'Parcel saved, but the tracking API key was rejected. Check the 17TRACK key in your environment settings.',
+    tracking_quota_exceeded:     'Parcel saved, but this month\'s free tracking lookups are used up. Status will refresh next cycle.',
+    tracking_number_unrecognised:'Parcel saved, but the carrier could not be auto-detected from this number. Pick the carrier manually, then Refresh.',
+    tracking_api_unavailable:    'Parcel saved, but the tracking service did not respond. Tap Refresh in a moment to retry.',
+  }
+  const warning = lookupError ? (warningMap[lookupError] ?? null) : null
+
+  return NextResponse.json({ parcel: data, warning, tracking_live: !!liveData })
 }
 
 // PATCH — refresh tracking, manual status override, or update fields
@@ -261,8 +306,19 @@ async function _PATCH(req: Request) {
   if (body.recipient_state !== undefined) updates.recipient_state = body.recipient_state
   if (body.recipient_postcode !== undefined) updates.recipient_postcode = body.recipient_postcode
 
+  let refreshWarning: string | null = null
   if (body.refresh) {
-    const liveData = await lookup17Track(existing.tracking_number, existing.carrier)
+    const { result: liveData, error: lookupError } = await lookup17Track(existing.tracking_number, existing.carrier)
+    if (lookupError) {
+      const wm: Record<string, string> = {
+        tracking_api_not_configured: 'Live tracking is not set up — add a 17TRACK API key in settings.',
+        tracking_api_key_invalid:    'The tracking API key was rejected. Check your 17TRACK key.',
+        tracking_quota_exceeded:     'This month\'s free tracking lookups are used up.',
+        tracking_number_unrecognised:'Carrier could not be detected — pick the carrier manually and refresh again.',
+        tracking_api_unavailable:    'Tracking service did not respond. Try again shortly.',
+      }
+      refreshWarning = wm[lookupError] ?? null
+    }
     if (liveData) {
       updates.status = body.manual_status ?? liveData.status
       updates.status_detail = liveData.statusDetail
@@ -298,7 +354,7 @@ async function _PATCH(req: Request) {
   const { data, error } = await supabaseAdmin.from('pos_parcel_tracking')
     .update(updates).eq('id', body.id).select().single()
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ parcel: data })
+  return NextResponse.json({ parcel: data, warning: refreshWarning })
 }
 
 async function _DELETE(req: Request) {
