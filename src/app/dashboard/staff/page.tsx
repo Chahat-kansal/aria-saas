@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
 import type { StaffMember } from '@/types/staff'
+import { useBusinessContext } from '@/components/providers/BusinessProvider'
 
 interface MemberRow extends StaffMember {
   staff_member_skills?: Array<{ staff_skills: { name: string; color: string } | null }>
@@ -125,7 +126,6 @@ function Leaderboard({ businessId }: { businessId: string }) {
           ))}
         </div>
       )}
-      {business?.id && <SalesLeaderboard businessId={business.id} />}
     </div>
   )
 }
@@ -296,6 +296,7 @@ function ClockWidget({ businessId }: { businessId: string }) {
 }
 
 export default function StaffPage() {
+  const { business } = useBusinessContext()
   const [members, setMembers] = useState<MemberRow[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
