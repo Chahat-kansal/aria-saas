@@ -317,6 +317,16 @@ export default function WebsiteChatPage() {
 
         {/* ── SETUP SECTION ── */}
         {activeSection === 'setup' && (
+      <div className="mb-4 p-4 rounded-2xl flex items-center justify-between gap-4" style={{ background: 'rgba(29,158,117,0.07)', border: '1px solid rgba(29,158,117,0.18)' }}>
+        <div>
+          <p className="text-sm font-semibold text-white mb-0.5">Connect to your website</p>
+          <p className="text-xs text-[rgba(255,255,255,0.4)]">No code needed — choose your platform and connect in one tap.</p>
+        </div>
+        <a href="/dashboard/website-chat/install" className="flex-shrink-0 px-4 py-2 rounded-xl text-sm font-semibold text-white no-underline" style={{ background: '#1D9E75', textDecoration: 'none' }}>
+          Connect →
+        </a>
+      </div>
+      <div>
           <div className="space-y-4">
             <Panel title="Appearance">
               <div className="grid grid-cols-2 gap-4">
