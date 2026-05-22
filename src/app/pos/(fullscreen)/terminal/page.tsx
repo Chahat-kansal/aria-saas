@@ -188,15 +188,51 @@ export default function TerminalPage() {
   /* ── Cart ─────────────────────────────────────────────────────── */
   const [cart,           setCart]           = useState<CartItem[]>([]);
 
-  // Sprint Business Fix: reset cart + reload products when active business switches
+  // Multi-business killer feature: INSTANT in-place re-skin on business switch.
+  // No window.location.reload() — we clear the cart, wipe all venue-scoped
+  // state, refetch this venue's products and re-skin the terminal. The API
+  // is already scoped to user_active_business, so the new fetch returns ONLY
+  // the switched-to venue's catalogue.
+  const [switchingBusiness, setSwitchingBusiness] = useState(false);
   useEffect(() => {
-    function handleBusinessChange() {
-      setCart([])
+    async function handleBusinessChange() {
+      setSwitchingBusiness(true);
+      // Clear everything that belongs to the previous venue
+      setCart([]);
+      setCustomer(null);
+      setSelectedItem(null);
+      setParkedSales([]);
+      setLowStockItems([]);
+      modifierCache.current = {};
       if (typeof window !== 'undefined') {
-        sessionStorage.removeItem('aria_pos_products_cache')
-        sessionStorage.removeItem('aria_pos_cart_v1')
+        sessionStorage.removeItem('aria_pos_products_cache');
+        sessionStorage.removeItem('aria_pos_cart_v1');
       }
-      window.location.reload()
+      try {
+        // Refetch — API resolves the NEW active business server-side
+        const prod = await fetch('/api/pos/products').then(r => r.json());
+        if (prod.business_id)    setBusinessId(prod.business_id);
+        if (prod.business_name)  setBusinessName(prod.business_name);
+        if (prod.business_type)  setBusinessType(prod.business_type);
+        if (prod.terminal_layout) setTerminalLayoutOverride(prod.terminal_layout as TerminalLayout);
+        const prods: Product[] = prod.products || [];
+        setProducts(prods);
+        setLowStockItems(prods.filter(p => p.track_stock && p.stock_quantity <= (p.low_stock_threshold ?? 5) && p.is_active));
+        if (prods.length > 0) {
+          const ids = prods.map(p => p.id).join(',');
+          fetch('/api/pos/product-modifier-groups/bulk?product_ids=' + ids)
+            .then(r => r.ok ? r.json() : { cache: {} })
+            .then((d: { cache?: Record<string, { hasModifiers: boolean; hasVariants: boolean }> }) => {
+              if (d.cache) modifierCache.current = d.cache;
+            })
+            .catch(() => {});
+        }
+      } catch {
+        // Network hiccup — fall back to a hard reload so we never show stale data
+        window.location.reload();
+        return;
+      }
+      setSwitchingBusiness(false);
     }
     window.addEventListener('aria:business-changed', handleBusinessChange)
     return () => window.removeEventListener('aria:business-changed', handleBusinessChange)
