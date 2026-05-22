@@ -26,11 +26,14 @@ async function _GET(req: Request) {
   let q = supabase.from('pos_online_orders')
     .select('id, order_number, customer_name, customer_phone, customer_email, status, total, notes, source, pickup_time, created_at, updated_at')
     .eq('business_id', bid)
-    .not('status', 'eq', 'archived')
     .order('created_at', { ascending: false })
     .limit(limit)
 
-  if (status) q = q.eq('status', status)
+  if (status) {
+    q = q.eq('status', status)
+  } else {
+    q = q.not('status', 'eq', 'archived')
+  }
 
   const { data, error } = await q
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })

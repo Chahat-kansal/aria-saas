@@ -18,8 +18,24 @@ async function _POST(req: Request) {
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const { customerId, businessId } = await req.json();
-  if (!customerId || !businessId) return NextResponse.json({ error: 'customerId and businessId required' }, { status: 400 });
+  const body = await req.json();
+  let customerId = body.customerId;
+  let businessId = body.businessId;
+
+  // Support review_id lookup — fetch customer from review record
+  if (!customerId && body.review_id) {
+    const { data: reviewRow } = await supabase
+      .from('reviews')
+      .select('customer_id, business_id')
+      .eq('id', body.review_id)
+      .maybeSingle();
+    if (reviewRow) {
+      customerId = reviewRow.customer_id;
+      businessId = reviewRow.business_id;
+    }
+  }
+
+  if (!customerId || !businessId) return NextResponse.json({ error: 'customerId and businessId required (or review_id)' }, { status: 400 });
 
   const [{ data: business }, { data: customer }] = await Promise.all([
     supabase.from('businesses').select('*').eq('id', businessId).eq('user_id', user.id).single(),
