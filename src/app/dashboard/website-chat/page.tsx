@@ -37,6 +37,12 @@ interface WidgetConfig {
   returns_policy: string;
   age_restricted_policy: string;
   custom_rules: string;
+  appointments_enabled: boolean;
+  appointment_duration_mins: number;
+  appointment_lead_days: number;
+  appointment_services: string;
+  notification_phone: string;
+  notification_email: string;
 }
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -66,6 +72,12 @@ const DEFAULT_CONFIG: WidgetConfig = {
   returns_policy: '',
   age_restricted_policy: '',
   custom_rules: '',
+  appointments_enabled: false,
+  appointment_duration_mins: 60,
+  appointment_lead_days: 14,
+  appointment_services: '',
+  notification_phone: '',
+  notification_email: '',
 };
 
 const inputCls = 'w-full bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.08)] rounded-xl px-3 py-2 text-sm text-white outline-none focus:border-[rgba(29,158,117,0.5)] transition-colors placeholder:text-[rgba(255,255,255,0.25)]';
@@ -117,6 +129,12 @@ export default function WebsiteChatPage() {
         returns_policy: data.returns_policy ?? '',
         age_restricted_policy: data.age_restricted_policy ?? '',
         custom_rules: data.custom_rules ?? '',
+        appointments_enabled: data.appointments_enabled ?? false,
+        appointment_duration_mins: data.appointment_duration_mins ?? 60,
+        appointment_lead_days: data.appointment_lead_days ?? 14,
+        appointment_services: data.appointment_services ?? '',
+        notification_phone: data.notification_phone ?? '',
+        notification_email: data.notification_email ?? '',
       });
     }
     // If data is null (no config exists yet) DEFAULT_CONFIG is already set — no error
@@ -169,7 +187,7 @@ export default function WebsiteChatPage() {
   function copyEmbed() {
     if (!config.api_key) return;
     const appUrl = typeof window !== 'undefined' ? window.location.origin : 'https://yourapp.com';
-    const code = `<script src="${appUrl}/widget.js" data-key="${config.api_key}" defer></script>`;
+    const code = `<script src="${appUrl}/api/public/widget/embed/${config.api_key}" defer></script>`;
     navigator.clipboard.writeText(code);
     setCopied(true);
     setTimeout(() => setCopied(false), 2500);
@@ -273,7 +291,7 @@ export default function WebsiteChatPage() {
             <span className="text-xs text-[rgba(255,255,255,0.4)]">{checklistDone}/{checklist.length} done</span>
           </div>
           <div className="w-full bg-[rgba(255,255,255,0.06)] rounded-full h-1.5 mb-4">
-            <div className="bg-[#1D9E75] h-1.5 rounded-full transition-all" style={{ width: `${(checklistDone / checklist.length) * 100}%` }} />
+            <div className="bg-[#1D9E75] h-1.5 rounded-full transition-all" style={{ width: String((checklistDone / checklist.length) * 100) + '%' }} />
           </div>
           <div className="grid grid-cols-2 gap-2">
             {checklist.map(item => (
@@ -546,6 +564,69 @@ export default function WebsiteChatPage() {
             )}
           </div>
         )}
+
+{activeSection === 'appointments' && (
+<div className="space-y-4">
+  <Panel title="Enable appointment booking">
+    <div className="flex items-center justify-between">
+      <div>
+        <p className="text-sm font-medium text-white">Allow visitors to book appointments via chat</p>
+        <p className="text-xs text-[rgba(255,255,255,0.4)] mt-1">When enabled, Aria collects booking details and notifies you via SMS instantly.</p>
+      </div>
+      <button onClick={() => setConfig(c => ({ ...c, appointments_enabled: !c.appointments_enabled }))}
+        style={{ width: 44, height: 24, borderRadius: 12, border: 'none', cursor: 'pointer',
+          background: config.appointments_enabled ? '#1D9E75' : 'rgba(255,255,255,0.15)',
+          position: 'relative', transition: 'background 0.2s', flexShrink: 0 }}>
+        <span style={{ position: 'absolute', top: 3, left: config.appointments_enabled ? 23 : 3,
+          width: 18, height: 18, borderRadius: '50%', background: '#fff', transition: 'left 0.2s', display: 'block' }}/>
+      </button>
+    </div>
+  </Panel>
+  {config.appointments_enabled && (<>
+    <Panel title="Appointment settings">
+      <div className="space-y-3">
+        <Field label="Services (one per line — leave blank if all are bookable)">
+          <textarea value={config.appointment_services} onChange={e => setConfig(c => ({ ...c, appointment_services: e.target.value }))}
+            className={textareaCls} rows={4} placeholder="Haircut
+Colour treatment
+Blowout"/>
+        </Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Book up to (days ahead)">
+            <input type="number" value={config.appointment_lead_days} min={1} max={90}
+              onChange={e => setConfig(c => ({ ...c, appointment_lead_days: parseInt(e.target.value) || 14 }))}
+              className={inputCls}/>
+          </Field>
+          <Field label="Default duration (minutes)">
+            <input type="number" value={config.appointment_duration_mins} min={15} max={480}
+              onChange={e => setConfig(c => ({ ...c, appointment_duration_mins: parseInt(e.target.value) || 60 }))}
+              className={inputCls}/>
+          </Field>
+        </div>
+      </div>
+    </Panel>
+    <Panel title="SMS notifications to you">
+      <p className="text-xs text-[rgba(255,255,255,0.4)] mb-3">You receive an instant SMS when a visitor books via your website chat.</p>
+      <div className="space-y-3">
+        <Field label="Your mobile for booking alerts">
+          <input value={config.notification_phone} onChange={e => setConfig(c => ({ ...c, notification_phone: e.target.value }))}
+            className={inputCls} placeholder="+61412345678" type="tel"/>
+        </Field>
+        <Field label="Your email for booking alerts (optional)">
+          <input value={config.notification_email} onChange={e => setConfig(c => ({ ...c, notification_email: e.target.value }))}
+            className={inputCls} placeholder="owner@yourbusiness.com.au" type="email"/>
+        </Field>
+      </div>
+      <div className="mt-3 p-3 rounded-xl text-xs leading-relaxed" style={{ background: 'rgba(29,158,117,0.06)', border: '1px solid rgba(29,158,117,0.15)' }}>
+        <p className="text-[rgba(255,255,255,0.5)] mb-1">Example SMS you will receive:</p>
+        <p className="text-[rgba(29,158,117,0.8)] font-mono text-[11px]">
+          📅 New booking via website chat! Customer: Sarah Johnson. Date: Mon 26 May. Time: 2:00 PM. Service: Haircut. Phone: 0412 345 678. View: ariaos.site/dashboard/bookings
+        </p>
+      </div>
+    </Panel>
+  </>)}
+</div>
+)}
 
         {/* Save button */}
         <div className="flex items-center gap-3 mt-6 pt-4 border-t border-[rgba(255,255,255,0.07)]">
