@@ -54,9 +54,11 @@ const CARRIER_LABELS: Record<string, string> = {
 // Sign up: https://features.17track.net/en/api — add TRACK17_API_KEY to Vercel env vars
 // Webhook: 17TRACK dashboard → Webhooks → https://www.ariaos.site/api/pos/parcel-tracking/webhook
 
-const TRACK17_CARRIER_MAP: Record<string, string> = {
-  auspost: '3011', aramex: '190189', startrack: '3011', // StarTrack uses AusPost codes
-  dhl: '100003', fedex: '100002', couriersplease: '3024', tnt: '190003',
+const TRACK17_CARRIER_MAP: Record<string, number> = {
+  // 17TRACK numeric carrier codes (see res.17track.net/asset/carrier/info/apicarrier.all.json)
+  auspost: 1151, startrack: 100176, aramex: 100129,
+  couriersplease: 100264, tnt: 100100, dhl: 7041, fedex: 100003,
+  ups: 100002, toll: 101033, sendle: 101105,
 }
 
 export interface Track17Result {
@@ -70,6 +72,26 @@ export interface Track17Result {
  * Returns { result } on success, or { error } describing exactly what went
  * wrong so the UI can surface it instead of silently saving a blank parcel.
  */
+export interface Track17Result {
+  status: string; statusDetail: string
+  events: Array<{ time: string; location: string; description: string }>
+  estimatedDelivery: string | null; deliveredAt: string | null
+}
+
+// Maps 17TRACK v2.2 main status strings to our internal status values.
+const STATUS_MAP: Record<string, string> = {
+  NotFound: 'pending', InfoReceived: 'pending', InTransit: 'in_transit',
+  Expired: 'exception', AvailableForPickup: 'awaiting_collection',
+  OutForDelivery: 'out_for_delivery', DeliveryFailure: 'exception',
+  Delivered: 'delivered', Exception: 'exception',
+}
+
+/**
+ * Looks up live tracking via the 17TRACK v2.2 API.
+ * v2.2 is NOT backward compatible with v1 — the response shape is
+ * track_info.latest_status / latest_event / tracking.providers[].events[].
+ * Returns { result } on success or { error } describing the failure.
+ */
 export async function lookup17Track(
   trackingNumber: string,
   carrierCode?: string,
@@ -81,101 +103,131 @@ export async function lookup17Track(
   }
 
   const carrierNum = carrierCode ? (TRACK17_CARRIER_MAP[carrierCode] ?? 0) : 0
+  const V2 = 'https://api.17track.net/track/v2.2'
+  const headers = { 'Content-Type': 'application/json', '17token': apiKey }
 
   try {
-    // Step 1: Register tracking number (1 quota used here — continuous updates are FREE after this)
-    const registerRes = await fetch('https://api.17track.net/track/v2/register', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', '17token': apiKey },
+    // Step 1: Register the number. Quota is only consumed here; -18019901
+    // ("already registered") is a success for our purposes.
+    const regBody = JSON.stringify([
+      { number: trackingNumber, carrier: carrierNum || undefined, auto_detection: true },
+    ])
+    const registerRes = await fetch(V2 + '/register', {
+      method: 'POST', headers, body: regBody, signal: AbortSignal.timeout(12_000),
+    })
+    if (registerRes.status === 401) {
+      console.error('[parcel-tracking] 17TRACK register 401 — key/IP/account issue')
+      return { result: null, error: 'tracking_api_key_invalid' }
+    }
+    if (registerRes.ok) {
+      const regData = await registerRes.json().catch(() => null) as
+        { code?: number; data?: { rejected?: Array<{ error?: { code?: number; message?: string } }> } } | null
+      const regRej = regData?.data?.rejected?.[0]
+      if (regRej?.error && regRej.error.code !== -18019901) {
+        const c = regRej.error.code
+        console.error('[parcel-tracking] 17TRACK register rejected:', c, regRej.error.message)
+        if (c === -18019903) return { result: null, error: 'tracking_number_unrecognised' }
+        if (c === -18019908 || c === -18019907) return { result: null, error: 'tracking_quota_exceeded' }
+        if (c === -18010012 || c === -18010013) return { result: null, error: 'tracking_number_unrecognised' }
+        return { result: null, error: 'tracking_api_unavailable' }
+      }
+    } else {
+      console.error('[parcel-tracking] 17TRACK register HTTP error:', registerRes.status)
+    }
+
+    // Step 2: Get tracking details (no quota cost).
+    const trackRes = await fetch(V2 + '/gettrackinfo', {
+      method: 'POST', headers,
       body: JSON.stringify([{ number: trackingNumber, carrier: carrierNum || undefined }]),
       signal: AbortSignal.timeout(12_000),
     })
-    if (!registerRes.ok) {
-      console.error('[parcel-tracking] 17TRACK register error:', registerRes.status)
-      if (registerRes.status === 401 || registerRes.status === 403) {
-        return { result: null, error: 'tracking_api_key_invalid' }
-      }
-    }
-
-    // Step 2: Fetch current tracking info (no quota cost after registration)
-    const trackRes = await fetch('https://api.17track.net/track/v2/gettrackinfo', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', '17token': apiKey },
-      body: JSON.stringify([{ number: trackingNumber }]),
-      signal: AbortSignal.timeout(12_000),
-    })
-
     if (!trackRes.ok) {
-      console.error('[parcel-tracking] 17TRACK gettrackinfo error:', trackRes.status)
-      if (trackRes.status === 401 || trackRes.status === 403) {
-        return { result: null, error: 'tracking_api_key_invalid' }
-      }
+      console.error('[parcel-tracking] 17TRACK gettrackinfo HTTP error:', trackRes.status)
+      if (trackRes.status === 401) return { result: null, error: 'tracking_api_key_invalid' }
+      if (trackRes.status === 429) return { result: null, error: 'tracking_api_unavailable' }
       return { result: null, error: 'tracking_api_unavailable' }
     }
 
+    // v2.2 response shape
+    interface V22Event {
+      time_utc?: string | null; time_iso?: string | null
+      description?: string | null; location?: string | null
+      stage?: string | null
+    }
+    interface V22Accepted {
+      number: string
+      track_info?: {
+        latest_status?: { status?: string; sub_status?: string }
+        latest_event?: V22Event
+        time_metrics?: { estimated_delivery_date?: { from?: string | null; to?: string | null } }
+        milestone?: Array<{ key_stage?: string; time_utc?: string | null }>
+        tracking?: { providers?: Array<{ events?: V22Event[] }> }
+      }
+    }
     const data = await trackRes.json() as {
       code: number
       data?: {
-        accepted?: Array<{
-          number: string
-          track: {
-            e: number  // status: 0=unknown,10=pending,20=transit,25=expired,30=pickup,35=undelivered,40=delivered,50=exception
-            w1?: string // carrier name
-            b?: string  // estimated delivery date
-            z0?: { a: string; d: string } // latest event {time, description}
-            z1?: Array<{ a: string; b?: string; c?: string; d: string }> // events {time, location, detail, description}
-          }
-        }>
-        rejected?: Array<{ number: string; error: { code: number; message: string } }>
+        accepted?: V22Accepted[]
+        rejected?: Array<{ number: string; error?: { code?: number; message?: string } }>
+        errors?: Array<{ code?: number; message?: string }>
       }
     }
 
     if (data.code !== 0) {
-      console.error('[parcel-tracking] 17TRACK API error code:', data.code)
-      // code -18019902 = quota exceeded; -18010012 = key issue
-      if (data.code === -18019902) return { result: null, error: 'tracking_quota_exceeded' }
+      console.error('[parcel-tracking] 17TRACK gettrackinfo code:', data.code)
+      return { result: null, error: 'tracking_api_unavailable' }
+    }
+    if (data.data?.errors?.length) {
+      console.error('[parcel-tracking] 17TRACK gettrackinfo errors:', JSON.stringify(data.data.errors))
       return { result: null, error: 'tracking_api_unavailable' }
     }
 
-    // A rejected number means 17TRACK could not match the tracking id to a carrier
     const rejected = data.data?.rejected?.[0]
     if (rejected) {
-      console.error('[parcel-tracking] 17TRACK rejected:', rejected.error?.message)
+      console.error('[parcel-tracking] 17TRACK rejected:', rejected.error?.code, rejected.error?.message)
       return { result: null, error: 'tracking_number_unrecognised' }
     }
 
     const item = data.data?.accepted?.[0]
-    if (!item) return { result: null, error: 'tracking_number_unrecognised' }
-
-    const t = item.track
-
-    // Map 17TRACK status codes to our statuses
-    const statusMap: Record<number, string> = {
-      0: 'unknown', 10: 'pending', 20: 'in_transit', 25: 'exception',
-      30: 'out_for_delivery', 35: 'exception', 40: 'delivered', 50: 'exception',
+    const ti = item?.track_info
+    if (!item || !ti) {
+      // Registered but no data crawled yet — normal for a fresh number.
+      console.log('[parcel-tracking] 17TRACK registered, no data yet:', trackingNumber)
+      return { result: { status: 'pending', statusDetail: 'Registered — awaiting carrier scan', events: [], estimatedDelivery: null, deliveredAt: null }, error: null }
     }
-    const status = statusMap[t.e] ?? 'unknown'
 
-    // Build events from z1 array (most recent first from 17TRACK)
-    const events = (t.z1 ?? []).map(ev => ({
-      time: ev.a,
-      location: ev.b ?? ev.c ?? '',
-      description: ev.d,
-    }))
+    const statusStr = ti.latest_status?.status ?? 'NotFound'
+    const status = STATUS_MAP[statusStr] ?? 'pending'
 
-    const latestEvent = t.z0?.d ?? events[0]?.description ?? ''
-    const deliveredAt = status === 'delivered' ? (t.z0?.a ?? events[0]?.time ?? null) : null
+    // Flatten every provider's events; sort newest-first.
+    const rawEvents: V22Event[] = []
+    for (const p of ti.tracking?.providers ?? []) {
+      for (const ev of p.events ?? []) rawEvents.push(ev)
+    }
+    const events = rawEvents
+      .map(ev => ({
+        time: ev.time_utc ?? ev.time_iso ?? '',
+        location: ev.location ?? '',
+        description: ev.description ?? '',
+      }))
+      .filter(e => e.time || e.description)
+      .sort((a, b) => (b.time || '').localeCompare(a.time || ''))
 
-    console.log('[parcel-tracking] 17TRACK result:', trackingNumber, '→', status, '| events:', events.length)
+    const latest = ti.latest_event
+    const statusDetail = latest?.description ?? events[0]?.description ?? statusStr
+
+    let deliveredAt: string | null = null
+    if (status === 'delivered') {
+      const dm = (ti.milestone ?? []).find(m => m.key_stage === 'Delivered')
+      deliveredAt = dm?.time_utc ?? latest?.time_utc ?? events[0]?.time ?? null
+    }
+    const edd = ti.time_metrics?.estimated_delivery_date
+    const estimatedDelivery = edd?.to ?? edd?.from ?? null
+
+    console.log('[parcel-tracking] 17TRACK v2.2 result:', trackingNumber, '->', status, '| events:', events.length)
 
     return {
-      result: {
-        status,
-        statusDetail: latestEvent,
-        events,
-        estimatedDelivery: t.b ?? null,
-        deliveredAt,
-      },
+      result: { status, statusDetail, events, estimatedDelivery, deliveredAt },
       error: null,
     }
   } catch (e) {
