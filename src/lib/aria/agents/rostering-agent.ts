@@ -31,7 +31,7 @@ export async function generateRosterDraft(
   const [staffQ, rulesQ, salesQ] = await Promise.all([
     supabaseAdmin.from('staff_members')
       .select('id,first_name,last_name,position,employment_type,color,pay_rate_cents')
-      .eq('business_id', businessId).eq('status', 'active').limit(20),
+      .eq('business_id', businessId).eq('status', 'active').limit(50),
     supabaseAdmin.from('pos_staffing_rules')
       .select('day_of_week,hour_of_day,min_staff,required_role')
       .eq('business_id', businessId).order('day_of_week').order('hour_of_day'),
@@ -82,12 +82,16 @@ export async function generateRosterDraft(
       return `${days[Number(dow)]} avg $${avg.toFixed(0)}/sale (${vals.length} sales)`
     }).join(', ')
 
+  // Build weekDays by pure string arithmetic — no Date objects, no timezone drift
+  const [wy, wm, wd] = weekStart.split('-').map(Number)
   const weekDays = Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(weekStart + 'T12:00:00Z'); d.setDate(d.getDate() + i)
+    const d = new Date(Date.UTC(wy, wm - 1, wd + i))
     return d.toISOString().slice(0, 10)
   })
 
-  const userPrompt = `Week: ${weekStart} (${weekDays.join(', ')})
+  const userPrompt = `Week: ${weekStart}
+Exact dates to use for start_time/end_time (CRITICAL — use these exact dates, not day names):
+${weekDays.map((d, i) => `  ${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][i]}: ${d}`).join('\n')}
 Outlet ID: ${outletId ?? 'default'} (use this exact value for outlet_id in all shifts)
 
 STAFF:
@@ -112,7 +116,7 @@ Generate a practical 5-6 day roster. Return JSON: {"shifts": [...], "reasoning":
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
     const msg = await client.messages.create({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 2000,
+      max_tokens: 8000,
       system: ROSTERING_SYSTEM,
       messages: [{ role: 'user', content: userPrompt }],
     })
