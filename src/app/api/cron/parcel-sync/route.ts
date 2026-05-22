@@ -6,8 +6,8 @@ import { supabaseAdmin } from '@/lib/supabase-admin'
 import { lookup17Track } from '@/app/api/pos/parcel-tracking/route'
 
 // Daily cron — polls every non-delivered parcel and refreshes its status
-// from the tracking provider (TrackingMore). This is the fallback path; the
-// webhook handles real-time pushes. Runs at 06:00 UTC (see vercel.json).
+// from 17TRACK. This is the fallback path; the webhook handles real-time
+// pushes. Runs at 06:00 UTC (see vercel.json).
 export async function GET(req: Request) {
   const auth = req.headers.get('authorization')
   if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
@@ -20,7 +20,7 @@ export async function GET(req: Request) {
     .select('id, business_id, tracking_number, carrier, status')
     .not('status', 'in', '("delivered","cancelled","failed")')
     .order('last_checked_at', { ascending: true })
-    .limit(80) // stay within provider rate limits
+    .limit(80) // stay within 17TRACK rate limits
 
   if (!parcels?.length) return NextResponse.json({ synced: 0 })
 
@@ -60,7 +60,7 @@ export async function GET(req: Request) {
     if (liveData.status === 'delivered' && parcel.status !== 'delivered') delivered++
 
     synced++
-    // Respect provider rate limits (TrackingMore: 3-10 req/s).
+    // Respect 17TRACK rate limits (3 req/s).
     await new Promise(r => setTimeout(r, 350))
   }
 
