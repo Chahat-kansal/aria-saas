@@ -87,8 +87,7 @@ export async function POST(req: Request) {
             ? (p.stock_quantity > 0 ? ' (in stock)' : ' (out of stock)')
             : ''
           return p.name + ' — A$' + (Number(p.price) || 0).toFixed(2) + stock
-        }).join('
-')
+        }).join('\n')
       }
     }
 
