@@ -29,9 +29,11 @@ export default function AdminOverview() {
   const [businesses, setBusinesses] = useState<any[]>([]);
   const [usage, setUsage] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [now, setNow] = useState(new Date());
+  const [now, setNow] = useState<Date | null>(null);
 
   useEffect(() => {
+    // Set on mount only (client-side) to avoid SSR hydration mismatch
+    setNow(new Date());
     const t = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(t);
   }, []);
@@ -77,7 +79,7 @@ export default function AdminOverview() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 28 }}>
         <div>
           <h1 style={{ fontSize: 24, fontWeight: 800, color: C.text, marginBottom: 4 }}>⚡ Aria Admin</h1>
-          <p style={{ fontSize: 13, color: C.muted }}>{now.toLocaleString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', second: '2-digit' })}</p>
+          <p style={{ fontSize: 13, color: C.muted }}>{now?.toLocaleString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', second: '2-digit' })}</p>
         </div>
         <a href="/dashboard" style={{ fontSize: 12, color: C.cyan, textDecoration: 'none', padding: '6px 14px', border: `1px solid rgba(0,229,255,0.2)`, borderRadius: 8 }}>← Back to app</a>
       </div>
