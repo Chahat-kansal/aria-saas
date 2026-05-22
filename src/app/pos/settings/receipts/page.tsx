@@ -107,9 +107,9 @@ export default function ReceiptsListPage() {
   }
 
   async function setDefault(id: string) {
-    await fetch('/api/pos/receipt-templates', {
+    await fetch(`/api/pos/receipt-templates/${id}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, is_default: true }),
+      body: JSON.stringify({ is_default: true }),
     })
     setTemplates(prev => prev.map(t => ({ ...t, is_default: t.id === id })))
   }
@@ -125,7 +125,7 @@ export default function ReceiptsListPage() {
 
   async function deleteTemplate(id: string, name: string) {
     if (!confirm(`Delete "${name}"?`)) return
-    await fetch(`/api/pos/receipt-templates?id=${id}`, { method: 'DELETE' })
+    await fetch(`/api/pos/receipt-templates/${id}`, { method: 'DELETE' })
     setTemplates(prev => prev.filter(t => t.id !== id))
   }
 
