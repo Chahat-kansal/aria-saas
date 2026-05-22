@@ -61,7 +61,7 @@ supabase
       .select('id,name,sku,barcode,description,price,cost_price,tax_rate,tax_code_id,additional_tax_code_ids,stock_quantity,low_stock_threshold,track_stock,is_active,show_online,image_url,builder_type,category_id,supplier_id,pos_categories(name,color)')
       .eq('business_id', bid)
       .order('name')
-      .limit(500),
+      .limit(5000),
     supabase
       .from('pos_categories')
       .select('*')
