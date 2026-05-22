@@ -43,7 +43,7 @@ async function tryGeminiNanoBanana(prompt: string, format: string, usePro = fals
   if (!key) return null
 
   // Nano Banana 2 (fast) or Pro (best quality, slower)
-  const model = usePro ? 'gemini-3-pro-image-preview' : 'gemini-3.1-flash-image-preview'
+  const model = 'gemini-2.5-flash-image'
   const aspectRatio = geminiAspectRatio(format)
 
   try {
@@ -55,13 +55,7 @@ async function tryGeminiNanoBanana(prompt: string, format: string, usePro = fals
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
           generationConfig: {
-            responseModalities: ['TEXT', 'IMAGE'],
-            responseFormat: {
-              image: {
-                aspectRatio: aspectRatio,
-                imageSize: '1K',
-              },
-            },
+            responseModalities: ['IMAGE', 'TEXT'],
           },
         }),
       }
@@ -69,7 +63,7 @@ async function tryGeminiNanoBanana(prompt: string, format: string, usePro = fals
 
     if (!res.ok) {
       const errText = await res.text().catch(() => '')
-      console.error('Gemini image error:', res.status, errText.slice(0, 200))
+      console.error('Aria image gen error:', res.status, errText.slice(0, 200))
       return null
     }
 
@@ -93,10 +87,10 @@ async function tryGeminiNanoBanana(prompt: string, format: string, usePro = fals
       contentType: imagePart.inlineData.mimeType ?? 'image/png',
     })
 
-    const providerLabel = usePro ? 'Gemini Nano Banana Pro' : 'Gemini Nano Banana 2'
+    const providerLabel = usePro ? 'Aria Pro' : 'Aria Fast'
     return { url: blob.url, provider: providerLabel }
   } catch (e) {
-    console.error('Gemini image exception:', e)
+    console.error('Aria image gen exception:', e)
     return null
   }
 }

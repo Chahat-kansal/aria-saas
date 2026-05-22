@@ -38,9 +38,9 @@ const TEMPLATES = [
 ]
 const HOW_STEPS = [
   { n: '01', title: 'Choose your quality', body: 'Pick Fast for quick social content, or Pro for your highest-impact campaigns and banners.', delay: 'fadeUp 0.55s 0s ease both' },
-  { n: '02', title: 'Describe your image', body: 'Write a prompt in plain English or tap a template. Use \u2726\u00a0Aria refine to turn your rough idea into a detailed creative brief.', delay: 'fadeUp 0.55s 0.1s ease both' },
-  { n: '03', title: 'Set format & style', body: 'Choose the aspect ratio that fits your channel \u2014 square, portrait Story, or landscape banner \u2014 and pick a visual style.', delay: 'fadeUp 0.55s 0.2s ease both' },
-  { n: '04', title: 'Generate & use', body: 'Hit Generate. In 15\u201360 seconds your professional marketing image is ready to download or save to your library.', delay: 'fadeUp 0.55s 0.3s ease both' },
+  { n: '02', title: 'Describe your image', body: 'Write a prompt in plain English or tap a template. Use ✦ Aria refine to turn your rough idea into a detailed creative brief.', delay: 'fadeUp 0.55s 0.1s ease both' },
+  { n: '03', title: 'Set format & style', body: 'Choose the aspect ratio that fits your channel — square, portrait Story, or landscape banner — and pick a visual style.', delay: 'fadeUp 0.55s 0.2s ease both' },
+  { n: '04', title: 'Generate & use', body: 'Hit Generate. In 15–60 seconds your professional marketing image is ready to download or save to your library.', delay: 'fadeUp 0.55s 0.3s ease both' },
 ]
 const EXAMPLES = [
   { label: 'Virtual try-on',   desc: 'Dress your products on models with a single text command.' },
@@ -168,7 +168,7 @@ export default function AriaStudioPage() {
         body:JSON.stringify({prompt:prompt.trim(),style,format:ratio,prefer_pro:mode==='pro',folder:'generated',tags:[]}),
       }).then(r=>r.json()) as {asset?:StudioAsset;provider?:string;error?:string}
       if (d.error) { showToast(d.error,false); return }
-      if (d.asset) { setLastGen(d.asset); setAssets(p=>[d.asset!,...p]); showToast('Image created \u2014 ready to download'); setTab('console') }
+      if (d.asset) { setLastGen(d.asset); setAssets(p=>[d.asset!,...p]); showToast('Image created — ready to download'); setTab('console') }
     } catch { showToast('Generation failed',false) } finally { setGen(false) }
   }
 
@@ -214,7 +214,7 @@ export default function AriaStudioPage() {
 
       {toast && (
         <div className="toast" style={{background:toast.ok?'rgba(30,50,38,0.96)':'rgba(60,15,15,0.96)',border:'1px solid '+(toast.ok?'rgba(127,184,151,0.35)':'rgba(239,68,68,0.25)'),color:toast.ok?'#7FB897':'#fca5a5'}}>
-          {toast.ok?'\u2713 ':'\u2717 '}{toast.msg}
+          {toast.ok?'✓ ':'✗ '}{toast.msg}
         </div>
       )}
 
@@ -223,7 +223,7 @@ export default function AriaStudioPage() {
         <div style={{position:'relative',maxWidth:740}}>
           <div className="fu1" style={{display:'inline-flex',alignItems:'center',gap:8,padding:'5px 14px',borderRadius:100,border:'1px solid rgba(127,184,151,0.22)',background:'rgba(127,184,151,0.055)',marginBottom:22}}>
             <span style={{width:6,height:6,borderRadius:'50%',background:'#7FB897',animation:'pulse 2s infinite',display:'inline-block'}}/>
-            <span style={{fontSize:11,fontWeight:600,letterSpacing:'0.08em',textTransform:'uppercase',color:'#7FB897'}}>\u2726 Aria Studio \u00b7 AI Image Generator</span>
+            <span style={{fontSize:11,fontWeight:600,letterSpacing:'0.08em',textTransform:'uppercase',color:'#7FB897'}}>✦ Aria Studio · AI Image Generator</span>
           </div>
           <h1 className="fu2" style={{fontFamily:"'Playfair Display',serif",fontSize:50,fontWeight:400,lineHeight:1.1,margin:'0 0 18px',color:'#ede8e3',letterSpacing:'-0.02em'}}>
             Create marketing images<br/>
@@ -231,17 +231,17 @@ export default function AriaStudioPage() {
           </h1>
           <p className="fu3" style={{fontSize:15,color:'rgba(237,232,227,0.42)',lineHeight:1.75,margin:'0 0 30px',maxWidth:530}}>
             Generate professional promo banners, posters and social content in seconds.
-            Describe your vision in plain English \u2014 Aria handles the rest.
+            Describe your vision in plain English — Aria handles the rest.
           </p>
           <div className="fu3" style={{display:'flex',gap:10,flexWrap:'wrap',alignItems:'center'}}>
-            <button className="btn btn-w" onClick={()=>setTab('console')}>\u2728 Start creating</button>
+            <button className="btn btn-w" onClick={()=>setTab('console')}>✨ Start creating</button>
             <button className="btn btn-g" onClick={()=>setTab('how')}>How it works</button>
-            <button className="btn btn-g" onClick={()=>fileRef.current?.click()} disabled={uploading}>\u2191 {uploading?'Uploading\u2026':'Upload image'}</button>
+            <button className="btn btn-g" onClick={()=>fileRef.current?.click()} disabled={uploading}>↑ {uploading?'Uploading…':'Upload image'}</button>
             <input ref={fileRef} type="file" accept="image/*" style={{display:'none'}} onChange={e=>{const f=e.target.files?.[0];if(f)upload(f);e.target.value=''}}/>
           </div>
         </div>
         <div style={{marginTop:44,display:'flex',gap:44,flexWrap:'wrap'}}>
-          {[['Fast mode','Quick generation \u00b7 great quality'],['Pro mode','Maximum quality \u00b7 complex scenes'],['6 Visual styles','Photo, illustration, neon & more'],[assets.length+' Images','In your library']].map(([k,v])=>(
+          {[['Fast mode','Quick generation · great quality'],['Pro mode','Maximum quality · complex scenes'],['6 Visual styles','Photo, illustration, neon & more'],[assets.length+' Images','In your library']].map(([k,v])=>(
             <div key={k}><div style={{fontSize:13,fontWeight:600,color:'#ede8e3',marginBottom:2}}>{k}</div><div style={{fontSize:11,color:'rgba(237,232,227,0.32)'}}>{v}</div></div>
           ))}
         </div>
@@ -249,7 +249,7 @@ export default function AriaStudioPage() {
 
       {/* TABS */}
       <div style={{borderBottom:'1px solid rgba(255,255,255,0.07)',paddingLeft:40,display:'flex',gap:2,position:'relative',zIndex:1}}>
-        <button className={'tab'+(tab==='console'?' on':'')} onClick={()=>setTab('console')}>\u2728 Generate</button>
+        <button className={'tab'+(tab==='console'?' on':'')} onClick={()=>setTab('console')}>✨ Generate</button>
         <button className={'tab'+(tab==='library'?' on':'')} onClick={()=>setTab('library')}>
           Library{assets.length>0&&<span style={{marginLeft:7,fontSize:10,padding:'1px 7px',borderRadius:10,background:'rgba(127,184,151,0.13)',color:'#7FB897'}}>{assets.length}</span>}
         </button>
@@ -303,7 +303,7 @@ export default function AriaStudioPage() {
             </table>
           </div>
           <div style={{marginTop:48,textAlign:'center'}}>
-            <button className="btn btn-w" onClick={()=>setTab('console')} style={{fontSize:15}}>\u2728 Start creating</button>
+            <button className="btn btn-w" onClick={()=>setTab('console')} style={{fontSize:15}}>✨ Start creating</button>
           </div>
         </div>
       )}
@@ -318,7 +318,7 @@ export default function AriaStudioPage() {
               {QUALITY_MODES.map(m=>(
                 <div key={m.id} className={'mc'+(mode===m.id?' on':'')} onClick={()=>setMode(m.id)}>
                   <div style={{display:'flex',alignItems:'flex-start',gap:12}}>
-                    <div style={{width:34,height:34,borderRadius:10,background:mode===m.id?'rgba(127,184,151,0.14)':'rgba(255,255,255,0.055)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:15,flexShrink:0}}>\u2726</div>
+                    <div style={{width:34,height:34,borderRadius:10,background:mode===m.id?'rgba(127,184,151,0.14)':'rgba(255,255,255,0.055)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:15,flexShrink:0}}>✦</div>
                     <div style={{flex:1}}>
                       <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:2}}>
                         <span style={{fontSize:13,fontWeight:600,color:mode===m.id?'#ede8e3':'rgba(237,232,227,0.65)'}}>{m.label}</span>
@@ -343,13 +343,13 @@ export default function AriaStudioPage() {
             <span className="lbl">Describe your image</span>
             <div style={{position:'relative',marginBottom:6}}>
               <textarea className="inp" rows={5} value={prompt} onChange={e=>setPrompt(e.target.value)}
-                placeholder="e.g. Weekend BBQ special \u2014 sizzling prawns, golden sunset, Australian summer, premium menu feel, warm atmosphere\u2026"/>
+                placeholder="e.g. Weekend BBQ special — sizzling prawns, golden sunset, Australian summer, premium menu feel, warm atmosphere…"/>
             </div>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:24}}>
               <span style={{fontSize:11,color:'rgba(237,232,227,0.2)'}}>{prompt.length}/5000</span>
               <button onClick={refine} disabled={refining||!prompt.trim()}
                 style={{fontSize:11,padding:'5px 13px',borderRadius:100,cursor:'pointer',fontFamily:'inherit',border:'1px solid rgba(127,184,151,0.28)',background:'transparent',color:'#7FB897',opacity:refining||!prompt.trim()?0.38:1,transition:'all 0.2s'}}>
-                {refining?'\u23F3 Refining\u2026':'\u2726 Aria refine'}
+                {refining?'\u23F3 Refining…':'✦ Aria refine'}
               </button>
             </div>
 
@@ -377,18 +377,18 @@ export default function AriaStudioPage() {
             <span className="lbl">Image reference <span style={{textTransform:'none',letterSpacing:0,color:'rgba(237,232,227,0.2)',fontWeight:400,marginLeft:6}}>(optional)</span></span>
             <div className={'drop'+(dragOver?' over':'')} style={{padding:'22px',textAlign:'center',marginBottom:24}}
               onDragOver={e=>{e.preventDefault();setDragOver(true)}} onDragLeave={()=>setDragOver(false)} onDrop={doDrop} onClick={()=>fileRef.current?.click()}>
-              <div style={{fontSize:22,marginBottom:8,opacity:0.35}}>{uploading?'\u23F3':'\u2191'}</div>
-              <div style={{fontSize:12,color:'rgba(237,232,227,0.32)'}}>{uploading?'Uploading\u2026':'Click or drag & drop \u00b7 PNG, JPG, WEBP'}</div>
+              <div style={{fontSize:22,marginBottom:8,opacity:0.35}}>{uploading?'\u23F3':'↑'}</div>
+              <div style={{fontSize:12,color:'rgba(237,232,227,0.32)'}}>{uploading?'Uploading…':'Click or drag & drop · PNG, JPG, WEBP'}</div>
             </div>
 
             <button onClick={generate} disabled={generating||!prompt.trim()} className="btn btn-w" style={{width:'100%',justifyContent:'center',fontSize:15,padding:'14px 24px',borderRadius:14}}>
               {generating
-                ? <><span style={{width:13,height:13,border:'2px solid rgba(0,0,0,0.25)',borderTopColor:'#080808',borderRadius:'50%',animation:'spin 0.75s linear infinite',display:'inline-block'}}/> Generating\u2026</>
-                : <>\u2728 Generate Image</>}
+                ? <><span style={{width:13,height:13,border:'2px solid rgba(0,0,0,0.25)',borderTopColor:'#080808',borderRadius:'50%',animation:'spin 0.75s linear infinite',display:'inline-block'}}/> Generating…</>
+                : <>✨ Generate Image</>}
             </button>
             {generating&&(
               <div style={{marginTop:14}}>
-                <div style={{display:'flex',justifyContent:'space-between',fontSize:11,color:'rgba(237,232,227,0.35)',marginBottom:5}}><span>Generating your image</span><span>15\u201360 sec</span></div>
+                <div style={{display:'flex',justifyContent:'space-between',fontSize:11,color:'rgba(237,232,227,0.35)',marginBottom:5}}><span>Generating your image</span><span>15–60 sec</span></div>
                 <div className="pw" key={genKey}><div className="pf"/></div>
                 <p style={{fontSize:11,color:'rgba(237,232,227,0.26)',marginTop:8,lineHeight:1.55}}>Aria is working on your image. Keep this tab open.</p>
               </div>
@@ -402,13 +402,13 @@ export default function AriaStudioPage() {
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:18}}>
                   <div>
                     <p style={{fontSize:11,fontWeight:600,letterSpacing:'0.08em',textTransform:'uppercase',color:'rgba(237,232,227,0.3)',margin:0}}>Generated image</p>
-                    <p style={{fontSize:11,color:'rgba(237,232,227,0.22)',margin:'4px 0 0'}}>{lastGen.style} \u00b7 {lastGen.format}</p>
+                    <p style={{fontSize:11,color:'rgba(237,232,227,0.22)',margin:'4px 0 0'}}>{lastGen.style} · {lastGen.format}</p>
                   </div>
                   <div style={{display:'flex',gap:8}}>
                     <button onClick={()=>toggleFav(lastGen)} style={{padding:'7px 14px',borderRadius:100,fontSize:12,cursor:'pointer',fontFamily:'inherit',border:'1px solid rgba(255,255,255,0.1)',background:'transparent',color:lastGen.favourite?'#F59E0B':'rgba(237,232,227,0.45)',transition:'all 0.2s'}}>
-                      {lastGen.favourite?'\u2605 Saved':'\u2606 Save'}
+                      {lastGen.favourite?'★ Saved':'☆ Save'}
                     </button>
-                    <a href={lastGen.image_url} download target="_blank" rel="noreferrer" className="btn btn-dg" style={{padding:'7px 18px',borderRadius:100,fontSize:12,textDecoration:'none'}}>\u2193 Download</a>
+                    <a href={lastGen.image_url} download target="_blank" rel="noreferrer" className="btn btn-dg" style={{padding:'7px 18px',borderRadius:100,fontSize:12,textDecoration:'none'}}>↓ Download</a>
                   </div>
                 </div>
                 <div style={{borderRadius:20,overflow:'hidden',background:'rgba(255,255,255,0.025)',border:'1px solid rgba(255,255,255,0.07)',marginBottom:16}}>
@@ -418,11 +418,11 @@ export default function AriaStudioPage() {
                   <p style={{fontSize:9,color:'rgba(237,232,227,0.28)',margin:'0 0 5px',textTransform:'uppercase',letterSpacing:'0.08em',fontWeight:600}}>Prompt used</p>
                   <p style={{fontSize:12,color:'rgba(237,232,227,0.42)',margin:0,lineHeight:1.65}}>{lastGen.enhanced_prompt??lastGen.prompt}</p>
                 </div>
-                <button onClick={()=>{setPrompt(lastGen.prompt??'');setStyle(lastGen.style);setRatio(lastGen.format)}} style={{fontSize:12,padding:'8px 16px',borderRadius:100,cursor:'pointer',fontFamily:'inherit',border:'1px solid rgba(255,255,255,0.09)',background:'transparent',color:'rgba(237,232,227,0.38)',transition:'all 0.2s'}}>\u21BA Regenerate with changes</button>
+                <button onClick={()=>{setPrompt(lastGen.prompt??'');setStyle(lastGen.style);setRatio(lastGen.format)}} style={{fontSize:12,padding:'8px 16px',borderRadius:100,cursor:'pointer',fontFamily:'inherit',border:'1px solid rgba(255,255,255,0.09)',background:'transparent',color:'rgba(237,232,227,0.38)',transition:'all 0.2s'}}>↺ Regenerate with changes</button>
               </div>
             ) : (
               <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',height:'100%',minHeight:420,padding:40,textAlign:'center'}}>
-                <div style={{width:80,height:80,borderRadius:24,background:'rgba(127,184,151,0.07)',border:'1px solid rgba(127,184,151,0.14)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:30,marginBottom:22}}>\u2726</div>
+                <div style={{width:80,height:80,borderRadius:24,background:'rgba(127,184,151,0.07)',border:'1px solid rgba(127,184,151,0.14)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:30,marginBottom:22}}>✦</div>
                 <h3 style={{fontFamily:"'Playfair Display',serif",fontSize:24,fontWeight:400,margin:'0 0 10px',color:'#ede8e3'}}>Ready to create</h3>
                 <p style={{fontSize:14,color:'rgba(237,232,227,0.33)',margin:'0 0 26px',lineHeight:1.7,maxWidth:360}}>Pick a template on the left, write your prompt, and hit Generate.</p>
                 <div style={{display:'flex',gap:10,flexWrap:'wrap',justifyContent:'center'}}>
@@ -436,7 +436,7 @@ export default function AriaStudioPage() {
               <div style={{padding:'0 28px 28px'}}>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}}>
                   <p style={{fontSize:10,fontWeight:600,letterSpacing:'0.08em',textTransform:'uppercase',color:'rgba(237,232,227,0.28)',margin:0}}>Recent</p>
-                  <button onClick={()=>setTab('library')} style={{fontSize:11,color:'#7FB897',background:'none',border:'none',cursor:'pointer',fontFamily:'inherit'}}>View all \u2192</button>
+                  <button onClick={()=>setTab('library')} style={{fontSize:11,color:'#7FB897',background:'none',border:'none',cursor:'pointer',fontFamily:'inherit'}}>View all →</button>
                 </div>
                 <div style={{display:'grid',gridTemplateColumns:'repeat(6,1fr)',gap:8}}>
                   {assets.slice(0,12).map(a=>(
@@ -456,7 +456,7 @@ export default function AriaStudioPage() {
         <div style={{display:'flex',minHeight:'calc(100vh - 226px)',position:'relative',zIndex:1}}>
           <div style={{width:192,borderRight:'1px solid rgba(255,255,255,0.07)',padding:'18px 10px',flexShrink:0}}>
             <span className="lbl" style={{padding:'0 8px',display:'block'}}>Filter</span>
-            {[{l:'All images',a:!ff&&!fav,fn:()=>{setFF(null);setFav(false)}},{l:'\u2605 Saved',a:fav,fn:()=>{setFav(true);setFF(null)}}].map(b=>(
+            {[{l:'All images',a:!ff&&!fav,fn:()=>{setFF(null);setFav(false)}},{l:'★ Saved',a:fav,fn:()=>{setFav(true);setFF(null)}}].map(b=>(
               <button key={b.l} onClick={b.fn} style={{width:'100%',padding:'8px 10px',borderRadius:8,fontSize:12,fontWeight:b.a?600:400,cursor:'pointer',fontFamily:'inherit',border:'none',background:b.a?'rgba(127,184,151,0.09)':'transparent',color:b.a?'#7FB897':'rgba(237,232,227,0.38)',textAlign:'left',marginBottom:2,transition:'all 0.2s'}}>{b.l}</button>
             ))}
             <span className="lbl" style={{padding:'14px 8px 6px',display:'block'}}>Folders</span>
@@ -467,12 +467,12 @@ export default function AriaStudioPage() {
             })}
           </div>
           <div className="scr" style={{flex:1,overflowY:'auto',padding:20}}>
-            {loading ? <div style={{textAlign:'center',padding:60,color:'rgba(237,232,227,0.3)',fontSize:13}}>Loading\u2026</div>
+            {loading ? <div style={{textAlign:'center',padding:60,color:'rgba(237,232,227,0.3)',fontSize:13}}>Loading…</div>
             : filtered.length===0 ? (
               <div style={{textAlign:'center',padding:60}}>
-                <div style={{fontSize:44,marginBottom:16,opacity:0.15}}>\uD83D\uDDBC</div>
+                <div style={{fontSize:44,marginBottom:16,opacity:0.15}}>🖼</div>
                 <p style={{fontSize:15,margin:'0 0 8px',color:'rgba(237,232,227,0.45)'}}>No images yet</p>
-                <button onClick={()=>setTab('console')} className="btn btn-w" style={{marginTop:16}}>\u2728 Start generating</button>
+                <button onClick={()=>setTab('console')} className="btn btn-w" style={{marginTop:16}}>✨ Start generating</button>
               </div>
             ) : (
               <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(210px,1fr))',gap:12}}>
@@ -480,10 +480,10 @@ export default function AriaStudioPage() {
                   <div key={a.id} className={'ii'+(selected?.id===a.id?' sel':'')} onClick={()=>setSel(a)}>
                     <div className="ov"/>
                     <img src={a.image_url} alt={a.prompt??''} style={{width:'100%',aspectRatio:a.format==='landscape'?'16/9':a.format==='portrait'?'4/5':'1',objectFit:'cover',display:'block'}}/>
-                    <button className={'fbtn'+(a.favourite?' on':'')} onClick={e=>toggleFav(a,e)}>{a.favourite?'\u2605':'\u2606'}</button>
+                    <button className={'fbtn'+(a.favourite?' on':'')} onClick={e=>toggleFav(a,e)}>{a.favourite?'★':'☆'}</button>
                     <div style={{padding:'10px 12px'}}>
                       <p style={{fontSize:11,fontWeight:600,margin:'0 0 2px',color:'#ede8e3',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.name??a.prompt?.slice(0,40)??'Untitled'}</p>
-                      <p style={{fontSize:10,color:'rgba(237,232,227,0.3)',margin:0}}>{a.style} \u00b7 {a.format}</p>
+                      <p style={{fontSize:10,color:'rgba(237,232,227,0.3)',margin:0}}>{a.style} · {a.format}</p>
                     </div>
                   </div>
                 ))}
@@ -494,7 +494,7 @@ export default function AriaStudioPage() {
             <div className="dp scr">
               <div style={{padding:'16px 20px',borderBottom:'1px solid rgba(255,255,255,0.07)',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
                 <span style={{fontSize:12,fontWeight:600,color:'rgba(237,232,227,0.5)'}}>Details</span>
-                <button onClick={()=>setSel(null)} style={{background:'none',border:'none',cursor:'pointer',color:'rgba(237,232,227,0.3)',fontSize:18,lineHeight:1,padding:0}}>\u00d7</button>
+                <button onClick={()=>setSel(null)} style={{background:'none',border:'none',cursor:'pointer',color:'rgba(237,232,227,0.3)',fontSize:18,lineHeight:1,padding:0}}>×</button>
               </div>
               <div style={{padding:20}}>
                 <div style={{borderRadius:14,overflow:'hidden',marginBottom:16,border:'1px solid rgba(255,255,255,0.07)'}}>
@@ -511,9 +511,9 @@ export default function AriaStudioPage() {
                 {selected.prompt&&<div style={{marginBottom:16,padding:'10px 12px',background:'rgba(255,255,255,0.025)',borderRadius:10,border:'1px solid rgba(255,255,255,0.06)'}}><p style={{fontSize:9,color:'rgba(237,232,227,0.28)',margin:'0 0 5px',textTransform:'uppercase',letterSpacing:'0.08em',fontWeight:600}}>Prompt</p><p style={{fontSize:11,color:'rgba(237,232,227,0.42)',margin:0,lineHeight:1.6}}>{selected.prompt}</p></div>}
                 {selected.tags.length>0&&<div style={{marginBottom:16,display:'flex',flexWrap:'wrap',gap:5}}>{selected.tags.map(t=><span key={t} style={{fontSize:10,padding:'2px 9px',borderRadius:100,background:'rgba(127,184,151,0.09)',color:'#7FB897'}}>{t}</span>)}</div>}
                 <div style={{display:'flex',flexDirection:'column',gap:8}}>
-                  <a href={selected.image_url} download target="_blank" rel="noreferrer" className="btn btn-w" style={{justifyContent:'center',textDecoration:'none',borderRadius:10,padding:'10px',fontSize:13}}>\u2193 Download</a>
-                  <button onClick={()=>toggleFav(selected)} style={{padding:'10px',borderRadius:10,fontSize:12,fontWeight:500,cursor:'pointer',fontFamily:'inherit',border:'1px solid rgba(255,255,255,0.09)',background:'transparent',color:selected.favourite?'#F59E0B':'rgba(237,232,227,0.38)',transition:'all 0.2s'}}>{selected.favourite?'\u2605 Remove from saved':'\u2606 Save to library'}</button>
-                  <button onClick={()=>{setPrompt(selected.prompt??'');setStyle(selected.style);setRatio(selected.format);setTab('console')}} style={{padding:'10px',borderRadius:10,fontSize:12,cursor:'pointer',fontFamily:'inherit',border:'1px solid rgba(255,255,255,0.09)',background:'transparent',color:'rgba(237,232,227,0.38)',transition:'all 0.2s'}}>\u21BA Use as template</button>
+                  <a href={selected.image_url} download target="_blank" rel="noreferrer" className="btn btn-w" style={{justifyContent:'center',textDecoration:'none',borderRadius:10,padding:'10px',fontSize:13}}>↓ Download</a>
+                  <button onClick={()=>toggleFav(selected)} style={{padding:'10px',borderRadius:10,fontSize:12,fontWeight:500,cursor:'pointer',fontFamily:'inherit',border:'1px solid rgba(255,255,255,0.09)',background:'transparent',color:selected.favourite?'#F59E0B':'rgba(237,232,227,0.38)',transition:'all 0.2s'}}>{selected.favourite?'★ Remove from saved':'☆ Save to library'}</button>
+                  <button onClick={()=>{setPrompt(selected.prompt??'');setStyle(selected.style);setRatio(selected.format);setTab('console')}} style={{padding:'10px',borderRadius:10,fontSize:12,cursor:'pointer',fontFamily:'inherit',border:'1px solid rgba(255,255,255,0.09)',background:'transparent',color:'rgba(237,232,227,0.38)',transition:'all 0.2s'}}>↺ Use as template</button>
                   <button onClick={()=>del(selected.id)} style={{padding:'10px',borderRadius:10,fontSize:12,cursor:'pointer',fontFamily:'inherit',border:'1px solid rgba(239,68,68,0.18)',background:'transparent',color:'rgba(239,68,68,0.55)',transition:'all 0.2s'}}>Delete</button>
                 </div>
               </div>
