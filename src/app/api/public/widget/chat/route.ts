@@ -104,25 +104,17 @@ export async function POST(req: Request) {
         : 'Your goal is to answer questions accurately and helpfully.',
       '',
       config.opening_hours && Object.keys(config.opening_hours).length > 0
-        ? 'Opening hours:
-' + Object.entries(config.opening_hours).map(([d, h]) => d + ': ' + h).join('
-')
+        ? 'Opening hours:\n' + Object.entries(config.opening_hours).map(([d, h]) => d + ': ' + h).join('\n')
         : '',
-      config.services ? 'Services offered:
-' + config.services : '',
-      productContext ? 'Products available:
-' + productContext : '',
+      config.services ? 'Services offered:\n' + config.services : '',
+      productContext ? 'Products available:\n' + productContext : '',
       config.faqs?.length > 0
-        ? 'FAQs:
-' + config.faqs.map((f: {q:string;a:string}) => 'Q: ' + f.q + '
-A: ' + f.a).join('
-')
+        ? 'FAQs:\n' + config.faqs.map((f: {q:string;a:string}) => 'Q: ' + f.q + '\nA: ' + f.a).join('\n')
         : '',
       config.delivery_policy ? 'Delivery policy: ' + config.delivery_policy : '',
       config.returns_policy ? 'Returns policy: ' + config.returns_policy : '',
       config.age_restricted_policy ? 'Age restrictions: ' + config.age_restricted_policy : '',
-      config.custom_rules ? 'Important rules:
-' + config.custom_rules : '',
+      config.custom_rules ? 'Important rules:\n' + config.custom_rules : '',
       config.guardrails ? 'Restrictions: ' + config.guardrails : '',
       '',
       apptEnabled

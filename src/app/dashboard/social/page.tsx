@@ -84,7 +84,7 @@ export default function SocialPage() {
   async function loadAll(businessId: string) {
     setLoadingPosts(true);
     const [postsRes, prefsRes, bizRes] = await Promise.all([
-      fetch(`/api/social/posts?business_id=${businessId}&status=draft`).then(r => r.json()).catch(() => ({ posts: [] })),
+      fetch(`/api/social/posts?business_id=${businessId}`).then(r => r.json()).catch(() => ({ posts: [] })),
       fetch(`/api/social/preferences?business_id=${businessId}`).then(r => r.json()).catch(() => ({ preferences: null })),
       fetch('/api/businesses/current').then(r => r.json()).catch(() => null),
     ]);
@@ -277,7 +277,7 @@ export default function SocialPage() {
   }
 
   const draftPosts     = posts.filter(p => p.status === 'draft');
-  const scheduledPosts = posts.filter(p => p.status === 'approved').sort((a, b) => (a.scheduled_for ?? '').localeCompare(b.scheduled_for ?? ''));
+  const scheduledPosts = posts.filter(p => p.status === 'approved' || p.status === 'scheduled').sort((a, b) => (a.scheduled_for ?? '').localeCompare(b.scheduled_for ?? ''));
   const publishedPosts = posts.filter(p => p.status === 'published' && p.published_at && new Date(p.published_at) > new Date(Date.now() - 14 * 86400000));
 
   const S = { display: 'block', fontSize: 12, fontWeight: 700, color: C.muted, marginBottom: 6, textTransform: 'uppercase' as const, letterSpacing: '0.05em' };

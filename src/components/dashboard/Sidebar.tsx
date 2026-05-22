@@ -346,11 +346,11 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
                         </span>
                       );
                       if (item.badge) return (
-                        className={
+                        <span className={
                           item.badge === 'AI'  ? 'text-[9px] px-1.5 py-0.5 rounded-full font-medium bg-[rgba(29,158,117,0.2)] text-[#1D9E75]' :
                           item.badge === 'New' ? 'text-[9px] px-1.5 py-0.5 rounded-full font-medium bg-[rgba(249,115,22,0.2)] text-orange-400' :
                           'text-[9px] px-1.5 py-0.5 rounded-full font-medium bg-[rgba(245,158,11,0.2)] text-amber-400'
-                        }
+                        }>{item.badge}</span>
                       );
                       return null;
                     })()}
