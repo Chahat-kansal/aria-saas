@@ -446,7 +446,6 @@ export default function CloseRegisterPage() {
           </div>
         </div>
       )}
-    </div>
 
       {showAuditPrompt && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
@@ -471,5 +470,6 @@ export default function CloseRegisterPage() {
           </div>
         </div>
       )}
+    </div>
   );
 }
