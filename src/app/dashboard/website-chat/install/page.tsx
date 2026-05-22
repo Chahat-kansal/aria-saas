@@ -6,136 +6,85 @@ import Link from 'next/link';
 
 const PLATFORMS = [
   {
-    id: 'wix',
-    name: 'Wix',
-    logo: '🔷',
-    desc: 'Most popular in Australia',
-    badge: 'Most common',
+    id: 'wix', name: 'Wix', logo: '🔷',
+    badge: 'No partnership needed', badgeGreen: true,
+    deepLink: 'https://manage.wix.com/dashboard/custom-code',
+    deepLinkLabel: 'Open Wix Custom Code →',
     steps: [
-      'Click "Add to Wix" below — you\'ll be taken to the Wix App Market',
-      'Click Add to Site on the Aria Chat app page',
-      'Select your Wix website and click Add',
-      'Done — the chat widget appears on your site automatically',
+      { t: 'Log into your Wix account and open your site editor' },
+      { t: 'Click Add → Embed Code → Custom Code', d: "It's in the left panel under the + Add button" },
+      { t: 'Click Add Custom Code in the header section' },
+      { t: 'Paste your Aria script tag into the code box' },
+      { t: 'Click Apply — your chat widget is live immediately' },
     ],
-    action: 'Add to Wix',
-    // Deep link to Wix App Market — update with real app ID after submission
-    url: (key: string) => `https://www.wix.com/app-market/add-app?appId=aria-chat&apiKey=${key}`,
-    available: false, // Will be true after Wix marketplace approval
-    eta: 'App under review · Est. 2 weeks',
   },
   {
-    id: 'shopify',
-    name: 'Shopify',
-    logo: '🛍️',
-    desc: 'For online stores',
-    badge: '',
+    id: 'squarespace', name: 'Squarespace', logo: '⬛',
+    badge: 'No partnership needed', badgeGreen: true,
+    deepLink: 'https://account.squarespace.com/',
+    deepLinkLabel: 'Open Squarespace →',
     steps: [
-      'Click "Add to Shopify" below',
-      'Log into your Shopify admin if prompted',
-      'Click Install on the Aria Chat app',
-      'Done — widget added to your store automatically',
+      { t: 'Log into Squarespace and open your website' },
+      { t: 'Click Settings in the left menu' },
+      { t: 'Click Advanced → Code Injection' },
+      { t: 'Paste your Aria script tag into the Header field' },
+      { t: 'Click Save — done' },
     ],
-    action: 'Add to Shopify',
-    url: (key: string) => `https://apps.shopify.com/aria-chat?api_key=${key}`,
-    available: false,
-    eta: 'App under review · Est. 3 weeks',
   },
   {
-    id: 'squarespace',
-    name: 'Squarespace',
-    logo: '⬛',
-    desc: 'For design-focused sites',
-    badge: '',
+    id: 'shopify', name: 'Shopify', logo: '🛍️',
+    badge: 'No partnership needed', badgeGreen: true,
+    deepLink: 'https://admin.shopify.com/',
+    deepLinkLabel: 'Open Shopify Admin →',
     steps: [
-      'Click "Add to Squarespace" below',
-      'Authorise Aria in your Squarespace account',
-      'Done — chat widget live on your site',
+      { t: 'In your Shopify admin, go to Online Store → Themes' },
+      { t: 'Click ••• next to your active theme → Edit code' },
+      { t: 'Open the file theme.liquid' },
+      { t: 'Find </head> and paste your Aria script tag just above it' },
+      { t: 'Click Save — live immediately' },
     ],
-    action: 'Add to Squarespace',
-    url: (key: string) => `https://www.squarespace.com/extensions/details/aria-chat?apiKey=${key}`,
-    available: false,
-    eta: 'App under review · Est. 4 weeks',
   },
   {
-    id: 'wordpress',
-    name: 'WordPress',
-    logo: '🔵',
-    desc: 'Self-hosted or WordPress.com',
-    badge: '',
+    id: 'wordpress', name: 'WordPress', logo: '🔵',
+    badge: 'No partnership needed', badgeGreen: true,
+    deepLink: 'https://wordpress.org/plugins/insert-headers-and-footers/',
+    deepLinkLabel: 'Get the free helper plugin →',
     steps: [
-      'In your WordPress dashboard, go to Plugins → Add New',
-      'Search for "Aria OS Chat"',
-      'Click Install Now, then Activate',
-      'Go to Settings → Aria Chat and paste your API key (copied below)',
-      'Done — widget live on your site',
+      { t: 'In your WordPress dashboard go to Plugins → Add New' },
+      { t: 'Search Insert Headers and Footers and install it', d: 'Free plugin — 1 million+ installs' },
+      { t: 'Go to Settings → Insert Headers and Footers' },
+      { t: 'Paste your Aria script tag in the Header section' },
+      { t: 'Click Save — done' },
     ],
-    action: 'Find on WordPress',
-    url: (_key: string) => 'https://wordpress.org/plugins/search/aria-os-chat/',
-    available: true, // Can search right now
-    eta: '',
   },
   {
-    id: 'weebly',
-    name: 'Weebly / Square Online',
-    logo: '🟧',
-    desc: 'Square-integrated stores',
-    badge: '',
+    id: 'webflow', name: 'Webflow', logo: '🌊',
+    badge: 'No partnership needed', badgeGreen: true,
+    deepLink: 'https://webflow.com/dashboard',
+    deepLinkLabel: 'Open Webflow →',
     steps: [
-      'In your Weebly editor, go to Apps → App Center',
-      'Search for Aria Chat and click Add',
-      'Your API key is pre-filled — click Connect',
-      'Done',
+      { t: 'Open your project in Webflow' },
+      { t: 'Click the gear icon → Custom Code tab' },
+      { t: 'Paste your Aria script tag in Head Code' },
+      { t: 'Click Save and publish your site' },
     ],
-    action: 'Find on Weebly',
-    url: (_key: string) => 'https://www.weebly.com/app-center',
-    available: false,
-    eta: 'Coming soon',
   },
   {
-    id: 'webflow',
-    name: 'Webflow',
-    logo: '🌊',
-    desc: 'For custom-designed sites',
-    badge: '',
+    id: 'gtm', name: 'Google Tag Manager', logo: '🏷️',
+    badge: 'For developers', badgeGreen: false,
+    deepLink: 'https://tagmanager.google.com/',
+    deepLinkLabel: 'Open Google Tag Manager →',
     steps: [
-      'In Webflow, go to Apps & Integrations',
-      'Find Aria Chat and click Install',
-      'Done',
+      { t: 'In GTM, create a new Tag → Custom HTML' },
+      { t: 'Paste your Aria script tag in the HTML field' },
+      { t: 'Set the trigger to All Pages' },
+      { t: 'Click Save, then Submit and Publish' },
     ],
-    action: 'Find on Webflow',
-    url: (_key: string) => 'https://webflow.com/apps/search/aria',
-    available: false,
-    eta: 'Coming soon',
   },
   {
-    id: 'gtm',
-    name: 'Google Tag Manager',
-    logo: '🏷️',
-    desc: 'If your developer uses GTM',
-    badge: 'Works now',
-    steps: [
-      'In GTM, click New Tag → Community Template Gallery',
-      'Search "Aria OS Chat" and click Add',
-      'Your API key is pre-filled — click Save',
-      'Publish your container',
-      'Done',
-    ],
-    action: 'Open GTM',
-    url: (_key: string) => 'https://tagmanager.google.com/',
-    available: true,
-    eta: '',
-  },
-  {
-    id: 'other',
-    name: 'Other / Custom site',
-    logo: '🌐',
-    desc: 'Any website or platform',
-    badge: '',
+    id: 'developer', name: 'Send to my developer', logo: '👨‍💻',
+    badge: 'Quickest option', badgeGreen: true,
     steps: [],
-    action: '',
-    url: (_key: string) => '',
-    available: true,
-    eta: '',
   },
 ];
 
@@ -143,236 +92,194 @@ export default function WebsiteChatInstallPage() {
   const { business } = useBusinessContext();
   const [apiKey, setApiKey] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [selected, setSelected] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
-  const [keyCopied, setKeyCopied] = useState(false);
-  const [linkCopied, setLinkCopied] = useState(false);
   const [enabling, setEnabling] = useState(false);
+  const [selected, setSelected] = useState<string | null>(null);
+  const [copied, setCopied] = useState<'script'|'link'|null>(null);
 
   const appUrl = typeof window !== 'undefined' ? window.location.origin : 'https://ariaos.site';
 
   useEffect(() => {
     if (!business?.id) return;
-    supabase
-      .from('widget_configs')
-      .select('api_key, enabled')
-      .eq('business_id', business.id)
-      .maybeSingle()
-      .then(({ data }) => {
-        setApiKey(data?.api_key ?? null);
-        setLoading(false);
-      });
+    supabase.from('widget_configs').select('api_key,enabled').eq('business_id', business.id).maybeSingle()
+      .then(({ data }) => { setApiKey(data?.api_key ?? null); setLoading(false); });
   }, [business?.id]);
 
-  const enableWidget = async () => {
+  const activate = async () => {
     if (!business?.id) return;
     setEnabling(true);
-    // Generate api_key if needed, enable the widget
     const newKey = 'aria_' + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
-    const { data } = await supabase
-      .from('widget_configs')
-      .upsert({
-        business_id: business.id,
-        enabled: true,
-        api_key: newKey,
-        bot_name: 'Aria',
-        primary_color: '#1D9E75',
-        greeting: 'Hi! How can I help you today?',
-      }, { onConflict: 'business_id' })
-      .select('api_key')
-      .single();
+    const { data } = await supabase.from('widget_configs').upsert({
+      business_id: business.id, enabled: true, api_key: newKey,
+      bot_name: 'Aria', primary_color: '#1D9E75',
+      greeting: 'Hi! How can I help you today?',
+    }, { onConflict: 'business_id' }).select('api_key').single();
     if (data?.api_key) setApiKey(data.api_key);
     setEnabling(false);
   };
 
-  const embedUrl = apiKey ? `${appUrl}/api/public/widget/embed/${apiKey}` : '';
-  const scriptTag = apiKey ? `<script src="${embedUrl}" defer></script>` : '';
-  const shareableLink = apiKey ? `${appUrl}/install-chat?key=${apiKey}` : '';
+  const scriptTag = apiKey ? '<script src="' + appUrl + '/api/public/widget/embed/' + apiKey + '" defer></script>' : '';
+  const shareLink = apiKey ? appUrl + '/install-chat?key=' + apiKey : '';
+  const plt = PLATFORMS.find(p => p.id === selected);
 
-  const copy = (text: string, setter: (v: boolean) => void) => {
-    navigator.clipboard.writeText(text);
-    setter(true);
-    setTimeout(() => setter(false), 2000);
+  const copy = (type: 'script'|'link') => {
+    navigator.clipboard.writeText(type === 'script' ? scriptTag : shareLink);
+    setCopied(type); setTimeout(() => setCopied(null), 2500);
   };
 
-  const platform = PLATFORMS.find(p => p.id === selected);
-
-  if (loading) return <div className="p-8 text-[rgba(255,255,255,0.4)] text-sm">Loading...</div>;
+  if (loading) return <div style={{ padding: 32, color: 'rgba(255,255,255,0.4)', fontSize: 14 }}>Loading...</div>;
 
   return (
-    <div style={{ maxWidth: 760, padding: '28px 24px', color: '#e8ede7' }}>
-      {/* Header */}
+    <div style={{ maxWidth: 680, padding: '28px 24px', color: '#e8ede7' }}>
+      <Link href="/dashboard/website-chat"
+        style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 4, marginBottom: 20 }}>
+        ← Website Chat settings
+      </Link>
+
+      <h1 style={{ fontSize: 22, fontWeight: 700, margin: '0 0 6px' }}>Add Aria to your website</h1>
+      <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.4)', margin: '0 0 28px', lineHeight: 1.65 }}>
+        No app stores or partnerships needed. Every major platform lets you add custom code — we show you exactly where to click.
+      </p>
+
+      {/* Step 1 */}
       <div style={{ marginBottom: 28 }}>
-        <Link href="/dashboard/website-chat" style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 4, marginBottom: 16 }}>
-          ← Back to Website Chat
-        </Link>
-        <h1 style={{ fontSize: 22, fontWeight: 700, margin: '0 0 6px' }}>Connect to your website</h1>
-        <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.45)', margin: 0 }}>
-          Choose your website platform below. No code required — just one tap.
-        </p>
-      </div>
-
-      {/* Enable step */}
-      {!apiKey && (
-        <div style={{ marginBottom: 24, padding: '20px 24px', background: 'rgba(29,158,117,0.08)', border: '1px solid rgba(29,158,117,0.25)', borderRadius: 16 }}>
-          <p style={{ fontSize: 14, fontWeight: 600, margin: '0 0 6px' }}>First, activate your chat widget</p>
-          <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.45)', margin: '0 0 16px' }}>This generates your unique key so your website knows to connect to your Aria account.</p>
-          <button onClick={enableWidget} disabled={enabling}
-            style={{ padding: '10px 24px', borderRadius: 10, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', border: 'none', background: '#1D9E75', color: '#fff', opacity: enabling ? 0.6 : 1 }}>
-            {enabling ? 'Activating...' : '✦ Activate Aria Chat'}
-          </button>
-        </div>
-      )}
-
-      {/* Platform grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))', gap: 10, marginBottom: 24 }}>
-        {PLATFORMS.map(p => (
-          <button key={p.id} onClick={() => setSelected(p.id === selected ? null : p.id)}
-            style={{
-              padding: '16px 14px', borderRadius: 14, cursor: 'pointer', fontFamily: 'inherit',
-              border: '1px solid ' + (selected === p.id ? 'rgba(29,158,117,0.5)' : 'rgba(255,255,255,0.08)'),
-              background: selected === p.id ? 'rgba(29,158,117,0.08)' : 'rgba(255,255,255,0.03)',
-              textAlign: 'left', transition: 'all 0.2s',
-            }}>
-            <div style={{ fontSize: 24, marginBottom: 8 }}>{p.logo}</div>
-            <div style={{ fontSize: 13, fontWeight: 600, color: '#e8ede7', marginBottom: 2 }}>{p.name}</div>
-            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)' }}>{p.desc}</div>
-            {p.badge && (
-              <div style={{ marginTop: 6, display: 'inline-block', fontSize: 10, padding: '2px 8px', borderRadius: 100, background: p.badge === 'Works now' ? 'rgba(29,158,117,0.15)' : 'rgba(245,158,11,0.15)', color: p.badge === 'Works now' ? '#1D9E75' : '#F59E0B', fontWeight: 600 }}>
-                {p.badge}
-              </div>
-            )}
-          </button>
-        ))}
-      </div>
-
-      {/* Platform install panel */}
-      {selected && platform && (
-        <div style={{ padding: '24px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.09)', borderRadius: 18, marginBottom: 24 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
-            <span style={{ fontSize: 28 }}>{platform.logo}</span>
-            <div>
-              <h2 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>Install on {platform.name}</h2>
-              {platform.eta && <p style={{ fontSize: 11, color: 'rgba(245,158,11,0.8)', margin: '3px 0 0' }}>⏳ {platform.eta}</p>}
-            </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+          <div style={{ width: 26, height: 26, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700,
+            background: apiKey ? '#1D9E75' : 'rgba(255,255,255,0.1)', color: apiKey ? '#fff' : 'rgba(255,255,255,0.4)' }}>
+            {apiKey ? '✓' : '1'}
           </div>
-
-          {platform.id === 'other' ? (
-            /* Custom site — show options */
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', margin: 0 }}>
-                Send the link below to your web developer — they can add the chat widget in under a minute.
+          <span style={{ fontSize: 14, fontWeight: 600, color: apiKey ? 'rgba(255,255,255,0.45)' : '#e8ede7' }}>Activate your chat widget</span>
+        </div>
+        <div style={{ marginLeft: 36 }}>
+          {!apiKey ? (
+            <div style={{ padding: '16px 20px', background: 'rgba(29,158,117,0.07)', border: '1px solid rgba(29,158,117,0.2)', borderRadius: 14 }}>
+              <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.45)', margin: '0 0 14px', lineHeight: 1.65 }}>
+                Generates your unique connection key — links your website to your Aria account.
               </p>
-              {/* Shareable link for developer */}
-              <div>
-                <p style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.3)', margin: '0 0 8px' }}>Developer install link</p>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <div style={{ flex: 1, padding: '10px 14px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, fontFamily: 'monospace', fontSize: 12, color: 'rgba(255,255,255,0.6)', wordBreak: 'break-all' }}>
-                    {shareableLink || 'Activate your widget first ↑'}
-                  </div>
-                  {apiKey && (
-                    <button onClick={() => copy(shareableLink, setLinkCopied)}
-                      style={{ padding: '10px 16px', borderRadius: 10, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', border: '1px solid rgba(255,255,255,0.12)', background: linkCopied ? 'rgba(29,158,117,0.1)' : 'rgba(255,255,255,0.05)', color: linkCopied ? '#1D9E75' : 'rgba(255,255,255,0.6)', whiteSpace: 'nowrap' }}>
-                      {linkCopied ? '✓ Copied' : 'Copy link'}
-                    </button>
-                  )}
-                </div>
-                <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.25)', margin: '6px 0 0' }}>
-                  Your developer will see exactly what to do on that page — no Aria login needed.
-                </p>
-              </div>
-              {/* Also show script tag */}
-              {apiKey && (
-                <div>
-                  <p style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.3)', margin: '0 0 8px' }}>Or — the one line of code (for developers)</p>
-                  <div style={{ position: 'relative' }}>
-                    <div style={{ padding: '12px 14px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10, fontFamily: 'monospace', fontSize: 12, color: 'rgba(255,255,255,0.5)', wordBreak: 'break-all', paddingRight: 80 }}>
-                      {scriptTag}
-                    </div>
-                    <button onClick={() => copy(scriptTag, setCopied)}
-                      style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', padding: '5px 12px', borderRadius: 7, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', border: 'none', background: copied ? 'rgba(29,158,117,0.15)' : 'rgba(255,255,255,0.08)', color: copied ? '#1D9E75' : 'rgba(255,255,255,0.5)' }}>
-                      {copied ? '✓' : 'Copy'}
-                    </button>
-                  </div>
-                  <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.25)', margin: '6px 0 0' }}>Paste into the &lt;head&gt; or &lt;body&gt; of any webpage.</p>
-                </div>
-              )}
-            </div>
-          ) : !platform.available ? (
-            /* Coming soon */
-            <div style={{ textAlign: 'center', padding: '20px 0' }}>
-              <div style={{ fontSize: 36, marginBottom: 12 }}>⏳</div>
-              <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.5)', margin: '0 0 8px' }}>
-                Aria Chat for {platform.name} is pending marketplace approval.
-              </p>
-              <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.3)', margin: '0 0 20px' }}>
-                {platform.eta}. In the meantime, use the <strong style={{ color: 'rgba(255,255,255,0.5)' }}>Other / Custom site</strong> option to share a developer install link.
-              </p>
-              {/* API key for copy */}
-              {apiKey && (
-                <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
-                  <button onClick={() => copy(shareableLink, setLinkCopied)}
-                    style={{ padding: '10px 20px', borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', border: '1px solid rgba(29,158,117,0.3)', background: 'rgba(29,158,117,0.08)', color: '#1D9E75' }}>
-                    {linkCopied ? '✓ Copied developer link' : '🔗 Copy developer install link'}
-                  </button>
-                </div>
-              )}
+              <button onClick={activate} disabled={enabling}
+                style={{ padding: '10px 24px', borderRadius: 10, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', border: 'none', background: '#1D9E75', color: '#fff', opacity: enabling ? 0.6 : 1 }}>
+                {enabling ? 'Activating...' : '✦ Activate Aria Chat'}
+              </button>
             </div>
           ) : (
-            /* Available — show steps */
-            <div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 20 }}>
-                {platform.steps.map((step, i) => (
-                  <div key={i} style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-                    <div style={{ width: 24, height: 24, borderRadius: '50%', background: 'rgba(29,158,117,0.15)', border: '1px solid rgba(29,158,117,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#1D9E75', flexShrink: 0 }}>
-                      {i + 1}
-                    </div>
-                    <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)', margin: 0, lineHeight: 1.6 }}>{step}</p>
-                  </div>
-                ))}
+            <div style={{ padding: '12px 16px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 12 }}>
+              <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', margin: '0 0 5px', fontWeight: 600, letterSpacing: '0.07em', textTransform: 'uppercase' }}>Your script tag — copy and paste on your website</p>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <code style={{ flex: 1, fontSize: 11, color: 'rgba(255,255,255,0.45)', fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{scriptTag}</code>
+                <button onClick={() => copy('script')}
+                  style={{ padding: '5px 14px', borderRadius: 8, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', border: 'none', whiteSpace: 'nowrap', flexShrink: 0,
+                    background: copied === 'script' ? 'rgba(29,158,117,0.2)' : 'rgba(255,255,255,0.08)',
+                    color: copied === 'script' ? '#1D9E75' : 'rgba(255,255,255,0.5)' }}>
+                  {copied === 'script' ? '✓ Copied' : 'Copy'}
+                </button>
               </div>
-              {/* API key display */}
-              {apiKey && platform.id === 'wordpress' && (
-                <div style={{ marginBottom: 16, padding: '12px 14px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10 }}>
-                  <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', margin: '0 0 6px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Your API key</p>
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                    <code style={{ flex: 1, fontSize: 12, color: 'rgba(255,255,255,0.6)', fontFamily: 'monospace', wordBreak: 'break-all' }}>{apiKey}</code>
-                    <button onClick={() => copy(apiKey, setKeyCopied)}
-                      style={{ padding: '5px 12px', borderRadius: 7, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', border: 'none', background: keyCopied ? 'rgba(29,158,117,0.15)' : 'rgba(255,255,255,0.08)', color: keyCopied ? '#1D9E75' : 'rgba(255,255,255,0.5)', whiteSpace: 'nowrap' }}>
-                      {keyCopied ? '✓ Copied' : 'Copy'}
-                    </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Step 2 */}
+      <div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+          <div style={{ width: 26, height: 26, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700,
+            background: selected ? '#1D9E75' : 'rgba(255,255,255,0.1)', color: selected ? '#fff' : 'rgba(255,255,255,0.4)' }}>
+            {selected ? '✓' : '2'}
+          </div>
+          <span style={{ fontSize: 14, fontWeight: 600, color: '#e8ede7' }}>Choose your website platform</span>
+        </div>
+
+        <div style={{ marginLeft: 36 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(130px,1fr))', gap: 8, marginBottom: 20 }}>
+            {PLATFORMS.map(p => (
+              <button key={p.id} onClick={() => setSelected(p.id === selected ? null : p.id)}
+                style={{ padding: '13px 11px', borderRadius: 12, cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', transition: 'all 0.15s',
+                  border: '1px solid ' + (selected === p.id ? 'rgba(29,158,117,0.5)' : 'rgba(255,255,255,0.08)'),
+                  background: selected === p.id ? 'rgba(29,158,117,0.08)' : 'rgba(255,255,255,0.03)' }}>
+                <div style={{ fontSize: 20, marginBottom: 6 }}>{p.logo}</div>
+                <div style={{ fontSize: 12, fontWeight: 600, color: '#e8ede7', marginBottom: 4 }}>{p.name}</div>
+                {p.badge && <div style={{ fontSize: 9, padding: '2px 6px', borderRadius: 100, display: 'inline-block', fontWeight: 600,
+                  background: p.badgeGreen ? 'rgba(29,158,117,0.15)' : 'rgba(245,158,11,0.15)',
+                  color: p.badgeGreen ? '#1D9E75' : '#F59E0B' }}>{p.badge}</div>}
+              </button>
+            ))}
+          </div>
+
+          {selected && plt && (
+            <div style={{ padding: '20px 22px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 18 }}>
+                <span style={{ fontSize: 20 }}>{plt.logo}</span>
+                <span style={{ fontSize: 15, fontWeight: 700 }}>{plt.name}</span>
+              </div>
+
+              {plt.id === 'developer' ? (
+                <div>
+                  <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', margin: '0 0 14px', lineHeight: 1.65 }}>
+                    Send this link to your developer. They see exactly what to do — no Aria login needed.
+                  </p>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <div style={{ flex: 1, padding: '9px 13px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 9, fontFamily: 'monospace', fontSize: 11, color: 'rgba(255,255,255,0.4)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {apiKey ? shareLink : 'Activate in step 1 first'}
+                    </div>
+                    {apiKey && <button onClick={() => copy('link')}
+                      style={{ padding: '9px 16px', borderRadius: 9, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', border: 'none', whiteSpace: 'nowrap', flexShrink: 0,
+                        background: copied === 'link' ? '#1D9E75' : 'rgba(255,255,255,0.1)', color: copied === 'link' ? '#fff' : 'rgba(255,255,255,0.6)' }}>
+                      {copied === 'link' ? '✓ Copied' : 'Copy link'}
+                    </button>}
                   </div>
+                  <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.25)', margin: '8px 0 0' }}>WhatsApp or email this to your developer.</p>
                 </div>
-              )}
-              {platform.action && (
-                <a href={apiKey ? platform.url(apiKey) : '#'} target="_blank" rel="noopener noreferrer"
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '12px 24px', borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', border: 'none', background: '#1D9E75', color: '#fff', textDecoration: 'none', opacity: apiKey ? 1 : 0.4 }}>
-                  {platform.action} →
-                </a>
+              ) : (
+                <div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 13, marginBottom: 18 }}>
+                    {plt.steps.map((s: any, i: number) => (
+                      <div key={i} style={{ display: 'flex', gap: 11 }}>
+                        <div style={{ width: 20, height: 20, borderRadius: '50%', background: 'rgba(29,158,117,0.1)', border: '1px solid rgba(29,158,117,0.22)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700, color: '#1D9E75', flexShrink: 0, marginTop: 2 }}>
+                          {i + 1}
+                        </div>
+                        <div>
+                          <p style={{ fontSize: 13, color: '#e8ede7', margin: 0, lineHeight: 1.6 }}>{s.t}</p>
+                          {s.d && <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.33)', margin: '2px 0 0' }}>{s.d}</p>}
+                        </div>
+                      </div>
+                    ))}
+                    {/* Copy step */}
+                    <div style={{ display: 'flex', gap: 11 }}>
+                      <div style={{ width: 20, height: 20, borderRadius: '50%', background: 'rgba(29,158,117,0.1)', border: '1px solid rgba(29,158,117,0.22)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700, color: '#1D9E75', flexShrink: 0, marginTop: 2 }}>
+                        {plt.steps.length + 1}
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <p style={{ fontSize: 13, color: '#e8ede7', margin: '0 0 8px', lineHeight: 1.6 }}>Copy your Aria script and paste it in:</p>
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <div style={{ flex: 1, padding: '8px 12px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 9, fontFamily: 'monospace', fontSize: 11, color: 'rgba(255,255,255,0.4)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {apiKey ? scriptTag : 'Activate first ↑'}
+                          </div>
+                          {apiKey && <button onClick={() => copy('script')}
+                            style={{ padding: '8px 16px', borderRadius: 9, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', border: 'none', whiteSpace: 'nowrap', flexShrink: 0,
+                              background: copied === 'script' ? '#1D9E75' : '#2D5240', color: '#fff' }}>
+                            {copied === 'script' ? '✓ Copied' : 'Copy script tag'}
+                          </button>}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {'deepLink' in plt && plt.deepLink && (
+                    <a href={plt.deepLink} target="_blank" rel="noopener noreferrer"
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 13, fontWeight: 600, color: '#1D9E75', textDecoration: 'none' }}>
+                      {plt.deepLinkLabel}
+                    </a>
+                  )}
+                </div>
               )}
             </div>
           )}
         </div>
-      )}
+      </div>
 
-      {/* Bottom: send to developer */}
-      {apiKey && (
-        <div style={{ padding: '20px 24px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 16 }}>
-          <p style={{ fontSize: 13, fontWeight: 600, margin: '0 0 4px' }}>Have a web developer?</p>
-          <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', margin: '0 0 14px' }}>
-            Send them this link. They can install the Aria chat widget on any platform in under 2 minutes — no Aria login required.
-          </p>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <div style={{ flex: 1, padding: '9px 14px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 9, fontFamily: 'monospace', fontSize: 12, color: 'rgba(255,255,255,0.5)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {shareableLink}
-            </div>
-            <button onClick={() => copy(shareableLink, setLinkCopied)}
-              style={{ padding: '9px 18px', borderRadius: 9, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', border: 'none', background: linkCopied ? '#1D9E75' : 'rgba(255,255,255,0.08)', color: linkCopied ? '#fff' : 'rgba(255,255,255,0.6)', whiteSpace: 'nowrap' }}>
-              {linkCopied ? '✓ Copied' : 'Copy link'}
-            </button>
-          </div>
-        </div>
-      )}
+      <div style={{ marginTop: 28, padding: '14px 18px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: 12 }}>
+        <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)', margin: 0, lineHeight: 1.7 }}>
+          <strong style={{ color: 'rgba(255,255,255,0.45)' }}>Not sure what platform your site uses?</strong> Wix sites show "wix.com" in the editor URL. Squarespace shows "squarespace.com". Shopify shows "myshopify.com". If unsure, send the link to your developer.
+        </p>
+      </div>
     </div>
   );
 }
