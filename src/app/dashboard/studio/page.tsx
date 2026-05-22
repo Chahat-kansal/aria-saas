@@ -7,109 +7,193 @@ interface StudioAsset {
   folder: string; tags: string[]; favourite: boolean; status: string; created_at: string
 }
 
+/* ─── constants ─────────────────────────────────────────────────── */
 const MODELS = [
-  { id: 'nano2', label: 'Nano Banana 2', sublabel: 'Fast & efficient', icon: '🍌', prefer_pro: false, speed: 'Fast', quality: 'High' },
-  { id: 'pro', label: 'Nano Banana Pro', sublabel: 'Premium quality', icon: '🍌', prefer_pro: true, speed: 'Slower', quality: 'Ultra' },
+  { id: 'fast',  label: 'Nano Banana 2',  sub: 'Fast · High efficiency', badge: '2', pro: false, desc: 'Best for rapid iteration and high-volume generation. Optimised for speed.' },
+  { id: 'pro',   label: 'Nano Banana Pro', sub: 'Thinking · Best quality', badge: 'Pro', pro: true, desc: 'Advanced reasoning model. Follows complex instructions and renders high-fidelity text.' },
 ]
 
-const ASPECT_RATIOS = [
-  { id: 'square',    label: '1:1',   hint: 'Post',    w: 1, h: 1 },
-  { id: 'portrait',  label: '9:16',  hint: 'Story',   w: 9, h: 16 },
-  { id: 'landscape', label: '16:9',  hint: 'Banner',  w: 16, h: 9 },
-  { id: 'p34',       label: '3:4',   hint: 'Print',   w: 3, h: 4 },
-  { id: 'l43',       label: '4:3',   hint: 'Screen',  w: 4, h: 3 },
-  { id: 'p23',       label: '2:3',   hint: 'Portrait', w: 2, h: 3 },
-  { id: 'l32',       label: '3:2',   hint: 'Landscape', w: 3, h: 2 },
+const RATIOS = [
+  { id: 'square',    label: '1:1',  hint: 'Instagram',  w: 1, h: 1 },
+  { id: 'portrait',  label: '9:16', hint: 'Story',      w: 9, h: 16 },
+  { id: 'landscape', label: '16:9', hint: 'Banner',     w: 16, h: 9 },
+  { id: '4:3',       label: '4:3',  hint: 'Presentation', w: 4, h: 3 },
+  { id: '3:4',       label: '3:4',  hint: 'Portrait',   w: 3, h: 4 },
 ]
 
 const STYLES = [
-  { id: 'photorealistic', label: 'Photorealistic' },
-  { id: 'illustration', label: 'Illustration' },
-  { id: 'minimalist', label: 'Minimalist' },
-  { id: 'bold', label: 'Bold & Graphic' },
-  { id: 'vintage', label: 'Vintage' },
-  { id: 'neon', label: 'Neon / Dark' },
+  { id: 'photorealistic', label: 'Photorealistic', emoji: '📷' },
+  { id: 'illustration',   label: 'Illustration',   emoji: '🎨' },
+  { id: 'minimalist',     label: 'Minimalist',     emoji: '◻' },
+  { id: 'bold',           label: 'Bold',           emoji: '⚡' },
+  { id: 'vintage',        label: 'Vintage',        emoji: '🎞' },
+  { id: 'neon',           label: 'Neon',           emoji: '💜' },
 ]
-
-const RESOLUTIONS = ['1K', '2K', '4K']
-const OUTPUT_FORMATS = ['PNG', 'JPG']
 
 const TEMPLATES = [
-  { label: 'Weekend Special', prompt: 'Weekend special promotion banner, warm lighting, festive Australian cafe atmosphere, golden hour' },
-  { label: 'New Arrival', prompt: 'New product arrival announcement, exciting product reveal, clean modern retail display, fresh and vibrant' },
-  { label: 'Happy Hour', prompt: 'Happy hour promotion, vibrant bar atmosphere, craft cocktails, warm amber lighting, inviting' },
-  { label: 'Seasonal Sale', prompt: 'Seasonal sale promotion, colourful Australian summer decorations, energetic shopping atmosphere' },
-  { label: 'Loyalty Reward', prompt: 'Customer loyalty reward program, warm appreciation theme, gold stars, premium premium feel' },
-  { label: 'Grand Opening', prompt: 'Grand opening celebration, ribbon cutting ceremony, excited crowd, balloons, fresh modern storefront' },
-  { label: 'Product Hero', prompt: 'Hero product showcase, professional studio lighting, premium presentation on white background' },
-  { label: 'Local Community', prompt: 'Local Australian small business community promotion, authentic warm colours, neighbourhood feel' },
-  { label: 'Staff Pick', prompt: "Staff picks and recommendations, friendly team members, warm inviting store atmosphere" },
-  { label: 'Flash Sale', prompt: 'Flash sale urgent promotion, bold graphics, high energy, red and yellow accent colours' },
+  { label: 'Weekend Special',  prompt: 'Weekend special promotion with warm festive atmosphere, golden lighting, inviting mood, Australian summer' },
+  { label: 'New Arrival',      prompt: 'New product launch announcement, clean studio lighting, exciting product reveal on dark background' },
+  { label: 'Happy Hour',       prompt: 'Happy hour drinks promotion, vibrant atmosphere, premium cocktails, warm ambient bar lighting' },
+  { label: 'Seasonal Sale',    prompt: 'Seasonal sale event, colourful festive decorations, shopping excitement, bright energetic mood' },
+  { label: 'Loyalty Reward',   prompt: 'Customer loyalty appreciation, gold stars, premium feel, warm personalised thank you message' },
+  { label: 'Grand Opening',    prompt: 'Grand opening celebration, ribbon cutting, balloons, community excitement, bright welcoming' },
+  { label: 'Product Hero',     prompt: 'Hero product showcase, professional studio lighting, white background, premium commercial photography' },
+  { label: 'Local Business',   prompt: 'Local Australian small business community promotion, authentic warm colours, neighbourhood feel' },
 ]
 
-const HOW_IT_WORKS = [
-  { step: '01', title: 'Choose your model', desc: 'Select Nano Banana 2 for speed or Nano Banana Pro for ultra-quality. Both powered by Gemini AI.', icon: '🤖' },
-  { step: '02', title: 'Describe your image', desc: 'Write what you want — or pick a template. Aria automatically enhances your prompt for better results.', icon: '✍️' },
-  { step: '03', title: 'Set format & style', desc: 'Pick aspect ratio (1:1, 16:9, 9:16 and more), resolution, and visual style to match your brand.', icon: '🎨' },
-  { step: '04', title: 'Generate & download', desc: 'AI creates your image in 15–60 seconds. Download, favourite, or use it as a starting point for your next creation.', icon: '⚡' },
+const HOW_STEPS = [
+  { n: '01', title: 'Choose your model', body: 'Select Nano Banana 2 for speed or Nano Banana Pro for professional-grade quality with advanced reasoning.' },
+  { n: '02', title: 'Describe your image', body: 'Write a prompt or pick a template. Hit \u2726\u00a0Aria refine and watch it transform your idea into a detailed generation prompt.' },
+  { n: '03', title: 'Set format & style', body: 'Pick the aspect ratio that fits your channel \u2014 Instagram square, Story portrait, or Facebook banner \u2014 and choose a visual style.' },
+  { n: '04', title: 'Generate & download', body: 'Click Generate. In 15\u201360 seconds your marketing image is ready to download, favourite, or use as a template.' },
 ]
 
-// Format → API format string
-function apiFormat(ratioId: string): string {
-  if (ratioId === 'portrait' || ratioId === 'p34' || ratioId === 'p23') return 'portrait'
-  if (ratioId === 'landscape' || ratioId === 'l43' || ratioId === 'l32') return 'landscape'
-  return 'square'
+const FOLDERS = ['generated', 'uploads', 'banners', 'social', 'promotions', 'products', 'events']
+
+/* ─── CSS injected once ─────────────────────────────────────────── */
+const CSS = `
+@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap');
+
+.aria-studio * { box-sizing: border-box; }
+.aria-studio { font-family: 'DM Sans', sans-serif; background: #000; color: #f0ede8; min-height: 100vh; }
+
+/* grain overlay */
+.aria-studio::before {
+  content: '';
+  position: fixed; inset: 0; pointer-events: none; z-index: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E");
+  background-size: 200px;
 }
 
-// AspectRatio box visual
-function RatioBox({ w, h, active }: { w: number; h: number; active: boolean }) {
-  const maxS = 20
-  const bw = h > w ? Math.round(maxS * w / h) : maxS
-  const bh = w > h ? Math.round(maxS * h / w) : maxS
-  return (
-    <div style={{ width: bw, height: bh, border: '1.5px solid ' + (active ? '#fff' : 'rgba(255,255,255,0.3)'), borderRadius: 2, flexShrink: 0 }} />
-  )
+/* ambient glow top-right */
+.aria-studio .glow-orb {
+  position: fixed; top: -200px; right: -200px;
+  width: 600px; height: 600px; border-radius: 50%;
+  background: radial-gradient(ellipse, rgba(127,184,151,0.07) 0%, transparent 70%);
+  pointer-events: none; z-index: 0;
 }
 
-// Animated progress dots
-function GeneratingDots() {
-  const [dot, setDot] = useState(0)
-  useEffect(() => {
-    const t = setInterval(() => setDot(d => (d + 1) % 4), 400)
-    return () => clearInterval(t)
-  }, [])
-  return <span>{'.'.repeat(dot)}<span style={{ opacity: 0 }}>{'.'.repeat(3 - dot)}</span></span>
-}
+@keyframes fadeUp { from { opacity:0; transform:translateY(24px); } to { opacity:1; transform:translateY(0); } }
+@keyframes shimmer { 0%,100% { opacity:0.5; } 50% { opacity:1; } }
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes pulse-ring { 0% { transform:scale(1); opacity:0.6; } 100% { transform:scale(1.6); opacity:0; } }
+@keyframes slide-in { from { opacity:0; transform:translateX(20px); } to { opacity:1; transform:translateX(0); } }
+@keyframes progress { from { width:0; } to { width:100%; } }
 
-// Animated generation log
-function GenerationLog({ provider }: { provider?: string }) {
-  const [lines, setLines] = useState<string[]>([])
-  useEffect(() => {
-    const steps = [
-      '> Connecting to ' + (provider ?? 'Gemini Nano Banana') + '...',
-      '> Enhancing prompt with Aria intelligence...',
-      '> Sending generation request...',
-      '> Processing image data...',
-      '> Applying style parameters...',
-      '> Optimising output quality...',
-      '> Uploading to secure storage...',
-    ]
-    let i = 0
-    const t = setInterval(() => {
-      if (i < steps.length) { setLines(l => [...l, steps[i]]); i++ }
-      else clearInterval(t)
-    }, 1800)
-    return () => clearInterval(t)
-  }, [])
-  return (
-    <div style={{ fontFamily: 'monospace', fontSize: 11, color: '#7FB897', lineHeight: 2 }}>
-      {lines.map((l, i) => (
-        <div key={i} style={{ opacity: i === lines.length - 1 ? 1 : 0.5 }}>{l}</div>
-      ))}
-      <div style={{ color: 'rgba(127,184,151,0.6)' }}>{'> Generating'}<GeneratingDots /></div>
-    </div>
-  )
+.fade-up-1 { animation: fadeUp 0.6s ease both; }
+.fade-up-2 { animation: fadeUp 0.6s 0.1s ease both; }
+.fade-up-3 { animation: fadeUp 0.6s 0.2s ease both; }
+
+.as-btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 12px 24px; border-radius: 100px; font-family: 'DM Sans', sans-serif;
+  font-size: 14px; font-weight: 500; cursor: pointer; border: none;
+  transition: all 0.2s;
 }
+.as-btn-primary { background: #f0ede8; color: #000; }
+.as-btn-primary:hover { background: #fff; transform: translateY(-1px); box-shadow: 0 8px 32px rgba(240,237,232,0.2); }
+.as-btn-ghost { background: rgba(255,255,255,0.06); color: #f0ede8; border: 1px solid rgba(255,255,255,0.1); }
+.as-btn-ghost:hover { background: rgba(255,255,255,0.1); }
+.as-btn-green { background: #2D5240; color: #7FB897; border: 1px solid rgba(127,184,151,0.3); }
+.as-btn-green:hover { background: #3a6b52; }
+.as-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none !important; }
+
+.as-card {
+  background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 16px; transition: border-color 0.2s;
+}
+.as-card:hover { border-color: rgba(255,255,255,0.14); }
+.as-card.active { border-color: rgba(127,184,151,0.5); background: rgba(127,184,151,0.06); }
+
+.as-input {
+  width: 100%; background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.1); border-radius: 12px;
+  color: #f0ede8; font-family: 'DM Sans', sans-serif; font-size: 14px;
+  padding: 12px 16px; outline: none; resize: vertical;
+  transition: border-color 0.2s;
+}
+.as-input:focus { border-color: rgba(127,184,151,0.4); }
+.as-input::placeholder { color: rgba(240,237,232,0.25); }
+
+.as-label { font-size: 10px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(240,237,232,0.35); margin: 0 0 10px; }
+
+.ratio-btn {
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 10px; cursor: pointer; border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(255,255,255,0.04); transition: all 0.2s; position: relative; overflow: hidden;
+}
+.ratio-btn.active { border-color: rgba(127,184,151,0.5); background: rgba(127,184,151,0.06); }
+.ratio-btn:hover { border-color: rgba(255,255,255,0.2); }
+
+.ratio-vis { background: rgba(255,255,255,0.15); border-radius: 3px; border: 1px solid rgba(255,255,255,0.3); }
+.ratio-btn.active .ratio-vis { background: rgba(127,184,151,0.4); border-color: rgba(127,184,151,0.6); }
+
+.style-chip {
+  padding: 8px 14px; border-radius: 100px; font-size: 12px; font-weight: 500;
+  cursor: pointer; border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(255,255,255,0.04); color: rgba(240,237,232,0.6);
+  transition: all 0.2s; white-space: nowrap;
+}
+.style-chip.active { border-color: rgba(127,184,151,0.5); background: rgba(127,184,151,0.1); color: #7FB897; }
+.style-chip:hover { border-color: rgba(255,255,255,0.2); color: #f0ede8; }
+
+.tmpl-chip {
+  padding: 7px 14px; border-radius: 100px; font-size: 12px; cursor: pointer;
+  border: 1px solid rgba(255,255,255,0.08); background: transparent;
+  color: rgba(240,237,232,0.5); transition: all 0.2s; white-space: nowrap; font-family: 'DM Sans', sans-serif;
+}
+.tmpl-chip:hover { border-color: rgba(255,255,255,0.2); color: #f0ede8; background: rgba(255,255,255,0.04); }
+.tmpl-chip.active { border-color: rgba(127,184,151,0.4); background: rgba(127,184,151,0.08); color: #7FB897; }
+
+.model-card {
+  padding: 16px; border-radius: 14px; cursor: pointer;
+  border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.03);
+  transition: all 0.2s; position: relative;
+}
+.model-card.active { border-color: rgba(127,184,151,0.5); background: rgba(127,184,151,0.06); }
+.model-card:hover { border-color: rgba(255,255,255,0.16); }
+
+.img-grid-item {
+  border-radius: 12px; overflow: hidden; position: relative;
+  cursor: pointer; background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.07); transition: all 0.2s;
+}
+.img-grid-item:hover { border-color: rgba(255,255,255,0.18); transform: translateY(-2px); }
+.img-grid-item.selected { border-color: rgba(127,184,151,0.5); }
+.img-grid-item .overlay { position: absolute; inset: 0; background: linear-gradient(to top, rgba(0,0,0,0.7) 0%, transparent 50%); opacity: 0; transition: opacity 0.2s; }
+.img-grid-item:hover .overlay { opacity: 1; }
+
+.drop-zone {
+  border: 2px dashed rgba(255,255,255,0.15); border-radius: 16px;
+  transition: all 0.2s; cursor: pointer;
+}
+.drop-zone.drag-over { border-color: rgba(127,184,151,0.5); background: rgba(127,184,151,0.04); }
+.drop-zone:hover { border-color: rgba(255,255,255,0.25); }
+
+.gen-progress-bar {
+  height: 2px; background: rgba(127,184,151,0.2); border-radius: 1px; overflow: hidden; margin-top: 12px;
+}
+.gen-progress-fill { height: 100%; background: #7FB897; border-radius: 1px; animation: progress 45s linear forwards; }
+
+.tab-btn { padding: 10px 20px; font-size: 13px; font-weight: 500; cursor: pointer; border: none; background: transparent; color: rgba(240,237,232,0.4); border-bottom: 2px solid transparent; transition: all 0.2s; font-family: 'DM Sans', sans-serif; }
+.tab-btn.active { color: #f0ede8; border-bottom-color: #7FB897; }
+.tab-btn:hover { color: rgba(240,237,232,0.8); }
+
+.how-step { padding: 28px 0; border-bottom: 1px solid rgba(255,255,255,0.06); }
+.how-step:last-child { border-bottom: none; }
+.how-num { font-family: 'DM Serif Display', serif; font-size: 48px; color: rgba(127,184,151,0.2); line-height: 1; }
+
+.fav-btn { position: absolute; top: 8px; right: 8px; width: 32px; height: 32px; border-radius: 50%; border: none; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); cursor: pointer; font-size: 14px; display: flex; align-items: center; justify-content: center; transition: all 0.2s; color: rgba(255,255,255,0.6); }
+.fav-btn:hover { background: rgba(0,0,0,0.85); color: #f0ede8; }
+.fav-btn.active { color: #F59E0B; }
+
+.detail-panel { width: 320px; flex-shrink: 0; border-left: 1px solid rgba(255,255,255,0.07); background: rgba(0,0,0,0.4); overflow-y: auto; animation: slide-in 0.25s ease; }
+
+scrollbar-width: thin;
+.as-scroll::-webkit-scrollbar { width: 4px; }
+.as-scroll::-webkit-scrollbar-track { background: transparent; }
+.as-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 2px; }
+`
 
 export default function AriaStudioPage() {
   const [assets, setAssets] = useState<StudioAsset[]>([])
@@ -117,35 +201,36 @@ export default function AriaStudioPage() {
   const [generating, setGenerating] = useState(false)
   const [refining, setRefining] = useState(false)
   const [uploading, setUploading] = useState(false)
-  const [dragOver, setDragOver] = useState(false)
+  const [isDragOver, setIsDragOver] = useState(false)
 
   // Generator state
   const [prompt, setPrompt] = useState('')
-  const [modelId, setModelId] = useState('nano2')
-  const [ratioId, setRatioId] = useState('square')
+  const [model, setModel] = useState('fast')
+  const [ratio, setRatio] = useState('square')
   const [style, setStyle] = useState('photorealistic')
-  const [resolution, setResolution] = useState('1K')
-  const [outputFormat, setOutputFormat] = useState('PNG')
+  const [selectedTemplate, setSelectedTemplate] = useState('')
 
-  // View state
-  const [view, setView] = useState<'studio' | 'library' | 'how'>('studio')
-  const [filterFav, setFilterFav] = useState(false)
+  // UI state
+  const [activeTab, setActiveTab] = useState<'console' | 'library' | 'how'>('console')
   const [filterFolder, setFilterFolder] = useState<string | null>(null)
+  const [filterFav, setFilterFav] = useState(false)
   const [selected, setSelected] = useState<StudioAsset | null>(null)
-  const [lastGen, setLastGen] = useState<StudioAsset | null>(null)
-  const [msg, setMsg] = useState('')
-  const [msgErr, setMsgErr] = useState(false)
-  const [generatingProvider, setGeneratingProvider] = useState<string | undefined>()
-
-  // Animation state for how-it-works
-  const [activeStep, setActiveStep] = useState(0)
-  useEffect(() => {
-    if (view !== 'how') return
-    const t = setInterval(() => setActiveStep(s => (s + 1) % HOW_IT_WORKS.length), 2500)
-    return () => clearInterval(t)
-  }, [view])
+  const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null)
+  const [lastGenerated, setLastGenerated] = useState<StudioAsset | null>(null)
+  const [genKey, setGenKey] = useState(0)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const cssInjected = useRef(false)
+
+  // Inject CSS once
+  useEffect(() => {
+    if (cssInjected.current) return
+    cssInjected.current = true
+    const el = document.createElement('style')
+    el.textContent = CSS
+    document.head.appendChild(el)
+    return () => { document.head.removeChild(el) }
+  }, [])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -154,16 +239,15 @@ export default function AriaStudioPage() {
       setAssets(d.assets ?? [])
     } finally { setLoading(false) }
   }, [])
-
   useEffect(() => { load() }, [load])
 
-  const showMsg = (text: string, err = false) => {
-    setMsg(text); setMsgErr(err)
-    setTimeout(() => setMsg(''), 5000)
+  const showToast = (msg: string, ok = true) => {
+    setToast({ msg, ok })
+    setTimeout(() => setToast(null), 3500)
   }
 
-  const refine = async () => {
-    if (!prompt.trim() || refining) return
+  const refinePrompt = async () => {
+    if (!prompt.trim()) return
     setRefining(true)
     try {
       const d = await fetch('/api/aria/studio', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'refine_prompt', prompt }) }).then(r => r.json()) as { refined_prompt?: string }
@@ -172,530 +256,439 @@ export default function AriaStudioPage() {
   }
 
   const generate = async () => {
-    if (!prompt.trim()) { showMsg('Enter a prompt first', true); return }
-    const model = MODELS.find(m => m.id === modelId)!
-    setGenerating(true)
-    setGeneratingProvider(model.label)
-    setMsg('')
+    if (!prompt.trim()) { showToast('Enter a prompt first', false); return }
+    setGenerating(true); setGenKey(k => k + 1)
     try {
       const d = await fetch('/api/aria/studio', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: prompt.trim(), style, format: apiFormat(ratioId), prefer_pro: model.prefer_pro, folder: 'generated' }),
+        body: JSON.stringify({ prompt: prompt.trim(), style, format: ratio, prefer_pro: model === 'pro', folder: 'generated', tags: [] }),
       }).then(r => r.json()) as { asset?: StudioAsset; provider?: string; error?: string }
-      if (d.error) { showMsg(d.error, true); return }
+      if (d.error) { showToast(d.error, false); return }
       if (d.asset) {
-        setLastGen(d.asset)
+        setLastGenerated(d.asset)
         setAssets(prev => [d.asset!, ...prev])
-        showMsg('Image created via ' + (d.provider ?? 'AI'))
+        showToast('Generated via ' + (d.provider ?? 'AI'))
+        setActiveTab('console')
       }
-    } catch { showMsg('Generation failed — check your API keys', true) }
-    finally { setGenerating(false); setGeneratingProvider(undefined) }
+    } catch { showToast('Generation failed', false) } finally { setGenerating(false) }
   }
 
-  const upload = async (file: File) => {
-    if (!file.type.startsWith('image/')) { showMsg('Only image files supported', true); return }
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault(); setIsDragOver(false)
+    const file = e.dataTransfer.files?.[0]
+    if (file && file.type.startsWith('image/')) await uploadFile(file)
+  }
+
+  const uploadFile = async (file: File) => {
     setUploading(true)
     try {
       const fd = new FormData(); fd.append('file', file); fd.append('folder', 'uploads')
       const d = await fetch('/api/aria/studio/upload', { method: 'POST', body: fd }).then(r => r.json()) as { asset?: StudioAsset; error?: string }
-      if (d.error) { showMsg(d.error, true); return }
-      if (d.asset) { setAssets(prev => [d.asset!, ...prev]); showMsg('Uploaded successfully') }
+      if (d.error) { showToast(d.error, false); return }
+      if (d.asset) { setAssets(prev => [d.asset!, ...prev]); showToast('Uploaded!') }
     } finally { setUploading(false) }
   }
 
-  const toggleFav = async (a: StudioAsset, e?: React.MouseEvent) => {
+  const toggleFav = async (asset: StudioAsset, e?: React.MouseEvent) => {
     e?.stopPropagation()
-    await fetch('/api/aria/studio', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: a.id, favourite: !a.favourite }) })
-    setAssets(prev => prev.map(x => x.id === a.id ? { ...x, favourite: !x.favourite } : x))
-    if (selected?.id === a.id) setSelected(prev => prev ? { ...prev, favourite: !prev.favourite } : null)
-    if (lastGen?.id === a.id) setLastGen(prev => prev ? { ...prev, favourite: !prev.favourite } : null)
+    await fetch('/api/aria/studio', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: asset.id, favourite: !asset.favourite }) })
+    setAssets(prev => prev.map(a => a.id === asset.id ? { ...a, favourite: !a.favourite } : a))
+    if (selected?.id === asset.id) setSelected(prev => prev ? { ...prev, favourite: !prev.favourite } : null)
   }
 
-  const del = async (id: string) => {
+  const deleteAsset = async (id: string) => {
     await fetch('/api/aria/studio?id=' + id, { method: 'DELETE' })
     setAssets(prev => prev.filter(a => a.id !== id))
     if (selected?.id === id) setSelected(null)
-    showMsg('Deleted')
+    showToast('Deleted')
   }
 
-  const filtered = assets.filter(a => {
+  const filteredAssets = assets.filter(a => {
     if (filterFav && !a.favourite) return false
     if (filterFolder && a.folder !== filterFolder) return false
     return true
   })
 
-  const selRatio = ASPECT_RATIOS.find(r => r.id === ratioId)!
-  const selModel = MODELS.find(m => m.id === modelId)!
-
-  // Nano Banana dark theme
-  const B = {
-    bg: '#000',
-    card: '#111',
-    card2: '#181818',
-    border: 'rgba(255,255,255,0.08)',
-    border2: 'rgba(255,255,255,0.14)',
-    text: '#fff',
-    muted: 'rgba(255,255,255,0.5)',
-    dim: 'rgba(255,255,255,0.25)',
-    green: '#7FB897',
-    green2: '#2D5240',
-    accent: '#7FB897',
+  const ratioStyle = (r: typeof RATIOS[0]) => {
+    const maxW = 28, maxH = 28
+    const scale = Math.min(maxW / r.w, maxH / r.h)
+    return { width: r.w * scale, height: r.h * scale }
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: B.bg, color: B.text, fontFamily: 'inherit' }}>
-      {/* ── Top nav ── */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 24px', height: 56, borderBottom: '1px solid ' + B.border, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(12px)', position: 'sticky', top: 0, zIndex: 50 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span style={{ fontSize: 20 }}>🍌</span>
-          <span style={{ fontSize: 15, fontWeight: 700, color: B.text }}>Aria Studio</span>
-          <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 99, background: 'rgba(127,184,151,0.15)', color: B.green, fontWeight: 700, letterSpacing: '0.04em' }}>POWERED BY GEMINI</span>
-        </div>
-        <div style={{ display: 'flex', gap: 4 }}>
-          {(['studio', 'library', 'how'] as const).map(v => (
-            <button key={v} onClick={() => setView(v)}
-              style={{ padding: '6px 14px', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', border: '1px solid ' + (view === v ? B.border2 : 'transparent'), background: view === v ? B.card2 : 'transparent', color: view === v ? B.text : B.muted, textTransform: 'capitalize' }}>
-              {v === 'studio' ? '✦ Studio' : v === 'library' ? 'Library (' + assets.length + ')' : '? How it works'}
-            </button>
-          ))}
-        </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          {msg && <span style={{ fontSize: 12, color: msgErr ? '#EF4444' : B.green, maxWidth: 300, textAlign: 'right' }}>{msg}</span>}
-          <button onClick={() => fileInputRef.current?.click()} disabled={uploading}
-            style={{ padding: '7px 14px', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', border: '1px solid ' + B.border2, background: B.card2, color: B.text, opacity: uploading ? 0.6 : 1 }}>
-            {uploading ? 'Uploading…' : '↑ Upload'}
-          </button>
-          <input ref={fileInputRef} type="file" accept="image/*" style={{ display: 'none' }}
-            onChange={e => { const f = e.target.files?.[0]; if (f) upload(f); e.target.value = '' }} />
-        </div>
-      </div>
+    <div className="aria-studio" style={{ position: 'relative', zIndex: 1 }}>
+      <div className="glow-orb" />
 
-      {/* ── HOW IT WORKS ── */}
-      {view === 'how' && (
-        <div style={{ maxWidth: 900, margin: '0 auto', padding: '60px 24px' }}>
-          <div style={{ textAlign: 'center', marginBottom: 60 }}>
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '6px 16px', borderRadius: 99, background: 'rgba(127,184,151,0.1)', border: '1px solid rgba(127,184,151,0.2)', marginBottom: 20 }}>
-              <span style={{ fontSize: 14 }}>🍌</span>
-              <span style={{ fontSize: 12, color: B.green, fontWeight: 600 }}>Powered by Gemini Nano Banana</span>
-            </div>
-            <h1 style={{ fontSize: 42, fontWeight: 800, margin: '0 0 16px', letterSpacing: '-0.02em' }}>
-              AI images for your business,<br />
-              <span style={{ color: B.green }}>in seconds</span>
-            </h1>
-            <p style={{ fontSize: 16, color: B.muted, maxWidth: 560, margin: '0 auto', lineHeight: 1.7 }}>
-              Aria Studio uses Google Gemini Nano Banana — the same AI that outperforms industry leaders in text-based image generation. Create promo banners, social posts, product shots, and more without a designer.
-            </p>
-          </div>
-
-          {/* Animated steps */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16, marginBottom: 64 }}>
-            {HOW_IT_WORKS.map((s, i) => (
-              <div key={i} onClick={() => setActiveStep(i)}
-                style={{ padding: 28, borderRadius: 16, border: '1px solid ' + (activeStep === i ? 'rgba(127,184,151,0.4)' : B.border), background: activeStep === i ? 'rgba(127,184,151,0.06)' : B.card, cursor: 'pointer', transition: 'all 0.3s' }}>
-                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16 }}>
-                  <div style={{ width: 44, height: 44, borderRadius: 12, background: activeStep === i ? 'rgba(127,184,151,0.15)' : 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>
-                    {s.icon}
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 10, color: activeStep === i ? B.green : B.dim, fontWeight: 700, letterSpacing: '0.08em', marginBottom: 6 }}>STEP {s.step}</div>
-                    <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 8, color: activeStep === i ? B.text : 'rgba(255,255,255,0.7)' }}>{s.title}</div>
-                    <div style={{ fontSize: 13, color: B.muted, lineHeight: 1.6 }}>{s.desc}</div>
-                  </div>
-                </div>
-                {activeStep === i && (
-                  <div style={{ marginTop: 16, height: 2, background: 'rgba(127,184,151,0.3)', borderRadius: 1, overflow: 'hidden' }}>
-                    <div style={{ height: '100%', background: B.green, borderRadius: 1, animation: 'progress 2.5s linear', animationFillMode: 'forwards' }} />
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-
-          {/* Example use cases */}
-          <div style={{ marginBottom: 48 }}>
-            <h2 style={{ fontSize: 22, fontWeight: 700, margin: '0 0 20px' }}>What you can create</h2>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
-              {[
-                { title: 'Promo Banners', desc: 'Weekend specials, flash sales, seasonal offers', icon: '🎯' },
-                { title: 'Social Posts', desc: 'Instagram, Facebook, Google Business images', icon: '📱' },
-                { title: 'Product Shots', desc: 'Hero images, catalogue photos, lifestyle shots', icon: '📦' },
-                { title: 'Event Posters', desc: 'Grand openings, live music, community events', icon: '🎉' },
-                { title: 'Loyalty Cards', desc: 'Reward program visuals, member materials', icon: '⭐' },
-                { title: 'Menu Visuals', desc: 'Food photography style images for menus', icon: '🍽️' },
-              ].map((u, i) => (
-                <div key={i} style={{ padding: '18px 20px', borderRadius: 12, background: B.card, border: '1px solid ' + B.border }}>
-                  <div style={{ fontSize: 24, marginBottom: 10 }}>{u.icon}</div>
-                  <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>{u.title}</div>
-                  <div style={{ fontSize: 12, color: B.muted }}>{u.desc}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Model comparison */}
-          <div style={{ marginBottom: 48 }}>
-            <h2 style={{ fontSize: 22, fontWeight: 700, margin: '0 0 20px' }}>Model comparison</h2>
-            <div style={{ borderRadius: 16, border: '1px solid ' + B.border, overflow: 'hidden' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr style={{ background: B.card2 }}>
-                    {['Model', 'Speed', 'Quality', 'Best for'].map(h => (
-                      <th key={h} style={{ padding: '12px 16px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: B.dim, textTransform: 'uppercase', letterSpacing: '0.06em', borderBottom: '1px solid ' + B.border }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr style={{ borderBottom: '1px solid ' + B.border }}>
-                    <td style={{ padding: '14px 16px' }}><div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><span>🍌</span><div><div style={{ fontSize: 13, fontWeight: 600 }}>Nano Banana 2</div><div style={{ fontSize: 11, color: B.muted }}>gemini-3.1-flash-image-preview</div></div></div></td>
-                    <td style={{ padding: '14px 16px', fontSize: 13, color: B.green }}>Fast (15–30s)</td>
-                    <td style={{ padding: '14px 16px', fontSize: 13 }}>High</td>
-                    <td style={{ padding: '14px 16px', fontSize: 12, color: B.muted }}>Daily content, quick iterations</td>
-                  </tr>
-                  <tr>
-                    <td style={{ padding: '14px 16px' }}><div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><span>🍌</span><div><div style={{ fontSize: 13, fontWeight: 600 }}>Nano Banana Pro</div><div style={{ fontSize: 11, color: B.muted }}>gemini-3-pro-image-preview</div></div></div></td>
-                    <td style={{ padding: '14px 16px', fontSize: 13, color: '#F59E0B' }}>Slower (30–60s)</td>
-                    <td style={{ padding: '14px 16px', fontSize: 13, color: B.green }}>Ultra</td>
-                    <td style={{ padding: '14px 16px', fontSize: 12, color: B.muted }}>Hero banners, complex prompts, text rendering</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <div style={{ textAlign: 'center' }}>
-            <button onClick={() => setView('studio')} style={{ padding: '14px 36px', borderRadius: 12, fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', border: 'none', background: B.green, color: '#fff' }}>
-              ✦ Start creating
-            </button>
-          </div>
-
-          <style>{`@keyframes progress { from { width: 0% } to { width: 100% } }`}</style>
+      {/* Toast */}
+      {toast && (
+        <div style={{ position: 'fixed', top: 20, right: 20, zIndex: 9999, padding: '12px 20px', borderRadius: 12, background: toast.ok ? 'rgba(45,82,64,0.95)' : 'rgba(80,20,20,0.95)', border: '1px solid ' + (toast.ok ? 'rgba(127,184,151,0.4)' : 'rgba(239,68,68,0.3)'), color: toast.ok ? '#7FB897' : '#fca5a5', fontSize: 13, fontWeight: 500, backdropFilter: 'blur(12px)', animation: 'slide-in 0.2s ease', boxShadow: '0 8px 32px rgba(0,0,0,0.4)' }}>
+          {toast.ok ? '✓ ' : '✗ '}{toast.msg}
         </div>
       )}
 
-      {/* ── STUDIO ── */}
-      {view === 'studio' && (
-        <div style={{ display: 'grid', gridTemplateColumns: '420px 1fr', minHeight: 'calc(100vh - 56px)' }}>
-          {/* ── Left panel: controls ── */}
-          <div style={{ borderRight: '1px solid ' + B.border, overflowY: 'auto', background: B.card }}>
-            <div style={{ padding: 20 }}>
+      {/* ── HERO ─────────────────────────────────────────────────── */}
+      <div style={{ borderBottom: '1px solid rgba(255,255,255,0.07)', padding: '48px 40px 40px', position: 'relative', overflow: 'hidden' }}>
+        {/* Decorative grid lines */}
+        <div style={{ position: 'absolute', inset: 0, backgroundImage: 'linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px)', backgroundSize: '60px 60px', pointerEvents: 'none' }} />
 
-              {/* Model selector */}
-              <div style={{ marginBottom: 20 }}>
-                <div style={{ fontSize: 10, color: B.dim, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 10 }}>AI Model</div>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  {MODELS.map(m => (
-                    <button key={m.id} onClick={() => setModelId(m.id)}
-                      style={{ flex: 1, padding: '12px 10px', borderRadius: 12, cursor: 'pointer', fontFamily: 'inherit', border: '1px solid ' + (modelId === m.id ? B.green : B.border), background: modelId === m.id ? 'rgba(127,184,151,0.08)' : B.card2, textAlign: 'center', transition: 'all 0.15s' }}>
-                      <div style={{ fontSize: 20, marginBottom: 4 }}>{m.icon}</div>
-                      <div style={{ fontSize: 12, fontWeight: 700, color: modelId === m.id ? B.green : B.text }}>{m.label}</div>
-                      <div style={{ fontSize: 10, color: B.muted, marginTop: 2 }}>{m.sublabel}</div>
-                      <div style={{ marginTop: 6, display: 'flex', gap: 4, justifyContent: 'center' }}>
-                        <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 4, background: 'rgba(255,255,255,0.06)', color: B.dim }}>{m.speed}</span>
-                        <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 4, background: modelId === m.id ? 'rgba(127,184,151,0.12)' : 'rgba(255,255,255,0.06)', color: modelId === m.id ? B.green : B.dim }}>{m.quality}</span>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Upload / drag-drop area */}
-              <div
-                onDragOver={e => { e.preventDefault(); setDragOver(true) }}
-                onDragLeave={() => setDragOver(false)}
-                onDrop={e => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files[0]; if (f) upload(f) }}
-                onClick={() => fileInputRef.current?.click()}
-                style={{ marginBottom: 20, padding: '16px', borderRadius: 12, border: '1px dashed ' + (dragOver ? B.green : B.border2), background: dragOver ? 'rgba(127,184,151,0.05)' : B.card2, cursor: 'pointer', textAlign: 'center', transition: 'all 0.15s' }}>
-                <div style={{ fontSize: 20, marginBottom: 6 }}>🖼</div>
-                <div style={{ fontSize: 12, color: B.muted }}>Click to upload or drag & drop</div>
-                <div style={{ fontSize: 10, color: B.dim, marginTop: 4 }}>PNG, JPG, JPEG, WEBP</div>
-              </div>
-
-              {/* Prompt */}
-              <div style={{ marginBottom: 16 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                  <div style={{ fontSize: 10, color: B.dim, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Prompt</div>
-                  <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                    <span style={{ fontSize: 10, color: B.dim }}>{prompt.length}/5000</span>
-                    <button onClick={refine} disabled={refining || !prompt.trim()}
-                      style={{ fontSize: 10, padding: '3px 8px', borderRadius: 5, cursor: 'pointer', fontFamily: 'inherit', border: '1px solid rgba(127,184,151,0.3)', background: 'transparent', color: B.green, opacity: refining || !prompt.trim() ? 0.4 : 1, fontWeight: 600 }}>
-                      {refining ? '…' : '✦ Aria refine'}
-                    </button>
-                  </div>
-                </div>
-                <textarea
-                  value={prompt} onChange={e => setPrompt(e.target.value.slice(0, 5000))}
-                  placeholder="Describe the image you want to create…"
-                  rows={4}
-                  style={{ width: '100%', padding: '12px 14px', background: B.card2, border: '1px solid ' + B.border2, borderRadius: 10, color: B.text, fontSize: 13, fontFamily: 'inherit', outline: 'none', resize: 'vertical', boxSizing: 'border-box', lineHeight: 1.6 }}
-                />
-              </div>
-
-              {/* Quick templates */}
-              <div style={{ marginBottom: 20 }}>
-                <div style={{ fontSize: 10, color: B.dim, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 10 }}>Quick Templates</div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                  {TEMPLATES.map(t => (
-                    <button key={t.label} onClick={() => setPrompt(t.prompt)}
-                      style={{ padding: '5px 10px', borderRadius: 7, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit', border: '1px solid ' + (prompt === t.prompt ? 'rgba(127,184,151,0.5)' : B.border), background: prompt === t.prompt ? 'rgba(127,184,151,0.1)' : 'transparent', color: prompt === t.prompt ? B.green : B.muted, transition: 'all 0.15s' }}>
-                      {t.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Resolution */}
-              <div style={{ marginBottom: 16 }}>
-                <div style={{ fontSize: 10, color: B.dim, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 10 }}>Resolution</div>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  {RESOLUTIONS.map(r => (
-                    <button key={r} onClick={() => setResolution(r)}
-                      style={{ flex: 1, padding: '8px', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', border: '1px solid ' + (resolution === r ? B.green : B.border), background: resolution === r ? 'rgba(127,184,151,0.1)' : B.card2, color: resolution === r ? B.green : B.muted }}>
-                      {r}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Output format */}
-              <div style={{ marginBottom: 16 }}>
-                <div style={{ fontSize: 10, color: B.dim, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 10 }}>Output Format</div>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  {OUTPUT_FORMATS.map(f => (
-                    <button key={f} onClick={() => setOutputFormat(f)}
-                      style={{ flex: 1, padding: '8px', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', border: '1px solid ' + (outputFormat === f ? B.green : B.border), background: outputFormat === f ? 'rgba(127,184,151,0.1)' : B.card2, color: outputFormat === f ? B.green : B.muted }}>
-                      {f}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Aspect ratio */}
-              <div style={{ marginBottom: 16 }}>
-                <div style={{ fontSize: 10, color: B.dim, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 10 }}>Aspect Ratio</div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                  {ASPECT_RATIOS.map(r => (
-                    <button key={r.id} onClick={() => setRatioId(r.id)}
-                      style={{ padding: '7px 10px', borderRadius: 8, cursor: 'pointer', fontFamily: 'inherit', border: '1px solid ' + (ratioId === r.id ? B.green : B.border), background: ratioId === r.id ? 'rgba(127,184,151,0.1)' : B.card2, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, minWidth: 50 }}>
-                      <RatioBox w={r.w} h={r.h} active={ratioId === r.id} />
-                      <span style={{ fontSize: 10, fontWeight: 600, color: ratioId === r.id ? B.green : B.muted }}>{r.label}</span>
-                      <span style={{ fontSize: 9, color: B.dim }}>{r.hint}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Style */}
-              <div style={{ marginBottom: 24 }}>
-                <div style={{ fontSize: 10, color: B.dim, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 10 }}>Style</div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
-                  {STYLES.map(s => (
-                    <button key={s.id} onClick={() => setStyle(s.id)}
-                      style={{ padding: '8px 6px', borderRadius: 8, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', border: '1px solid ' + (style === s.id ? B.green : B.border), background: style === s.id ? 'rgba(127,184,151,0.1)' : B.card2, color: style === s.id ? B.green : B.muted, textAlign: 'center' }}>
-                      {s.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Generate */}
-              <button onClick={generate} disabled={generating || !prompt.trim()}
-                style={{ width: '100%', padding: '14px', borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: generating || !prompt.trim() ? 'not-allowed' : 'pointer', fontFamily: 'inherit', border: 'none', background: generating || !prompt.trim() ? 'rgba(45,82,64,0.4)' : B.green, color: '#fff', letterSpacing: '0.01em', transition: 'all 0.2s' }}>
-                {generating ? '⏳ Generating…' : '✦ Generate'}
-              </button>
-
-            </div>
+        <div style={{ position: 'relative', maxWidth: 720 }}>
+          {/* Badge */}
+          <div className="fade-up-1" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '5px 14px', borderRadius: 100, border: '1px solid rgba(127,184,151,0.25)', background: 'rgba(127,184,151,0.06)', marginBottom: 20 }}>
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#7FB897', animation: 'shimmer 2s infinite', display: 'inline-block' }} />
+            <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#7FB897' }}>Gemini Nano Banana · Powered</span>
           </div>
 
-          {/* ── Right panel: output ── */}
-          <div style={{ overflowY: 'auto', background: B.bg }}>
-            {generating ? (
-              /* Generation console — Nano Banana style */
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 'calc(100vh - 56px)', padding: 48 }}>
-                <div style={{ width: '100%', maxWidth: 600 }}>
-                  {/* Pulsing circle */}
-                  <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 40 }}>
-                    <div style={{ position: 'relative', width: 100, height: 100 }}>
-                      <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: 'rgba(127,184,151,0.08)', animation: 'pulse 2s ease-in-out infinite' }} />
-                      <div style={{ position: 'absolute', inset: 8, borderRadius: '50%', background: 'rgba(127,184,151,0.12)', animation: 'pulse 2s ease-in-out 0.3s infinite' }} />
-                      <div style={{ position: 'absolute', inset: 20, borderRadius: '50%', background: 'rgba(127,184,151,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28 }}>
-                        🍌
-                      </div>
-                    </div>
-                  </div>
+          <h1 className="fade-up-2" style={{ fontFamily: "'DM Serif Display', serif", fontSize: 48, fontWeight: 400, lineHeight: 1.1, margin: '0 0 16px', color: '#f0ede8', letterSpacing: '-0.02em' }}>
+            AI Image Studio<br />
+            <em style={{ color: 'rgba(240,237,232,0.45)', fontStyle: 'italic' }}>for your business</em>
+          </h1>
 
-                  <div style={{ textAlign: 'center', marginBottom: 32 }}>
-                    <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>
-                      {generatingProvider ?? 'Gemini Nano Banana'} is creating your image
-                    </div>
-                    <div style={{ fontSize: 13, color: B.muted }}>This typically takes 15–60 seconds</div>
-                  </div>
+          <p className="fade-up-3" style={{ fontSize: 15, color: 'rgba(240,237,232,0.45)', lineHeight: 1.7, margin: '0 0 28px', maxWidth: 520 }}>
+            Generate promo banners, posters and marketing images with Gemini Nano Banana \u2014 the same model powering the world\u2019s best AI image tools. Describe your vision, generate in seconds.
+          </p>
 
-                  {/* Terminal-style log */}
-                  <div style={{ background: '#0a0a0a', border: '1px solid rgba(127,184,151,0.2)', borderRadius: 14, padding: '20px 24px', minHeight: 180 }}>
-                    <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
-                      {['#EF4444', '#F59E0B', B.green].map((c, i) => (
-                        <div key={i} style={{ width: 10, height: 10, borderRadius: '50%', background: c, opacity: 0.7 }} />
-                      ))}
-                    </div>
-                    <GenerationLog provider={generatingProvider} />
-                  </div>
+          <div className="fade-up-3" style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+            <button className="as-btn as-btn-primary" onClick={() => setActiveTab('console')}>
+              <span style={{ fontSize: 13 }}>\u2728</span> Start creating
+            </button>
+            <button className="as-btn as-btn-ghost" onClick={() => setActiveTab('how')}>
+              How it works
+            </button>
+            <button className="as-btn as-btn-ghost" onClick={() => fileInputRef.current?.click()} disabled={uploading}>
+              <span>\u2191</span> {uploading ? 'Uploading\u2026' : 'Upload image'}
+            </button>
+            <input ref={fileInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) uploadFile(f); e.target.value = '' }} />
+          </div>
+        </div>
 
-                  <div style={{ marginTop: 20, fontSize: 11, color: B.dim, textAlign: 'center' }}>
-                    Model: {selModel.label} · Ratio: {selRatio.label} · Style: {style}
-                  </div>
-                </div>
-                <style>{`@keyframes pulse { 0%,100%{transform:scale(1);opacity:1} 50%{transform:scale(1.1);opacity:0.7} }`}</style>
+        {/* Stats row */}
+        <div style={{ marginTop: 40, display: 'flex', gap: 40, flexWrap: 'wrap' }}>
+          {[['Nano Banana 2', 'Fast model · low latency'], ['Nano Banana Pro', 'Best quality · complex prompts'], ['4 Providers', 'Stability, DALL\u00b73, FLUX fallback'], [assets.length + ' Images', 'In your library']].map(([k, v]) => (
+            <div key={k}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: '#f0ede8', marginBottom: 2 }}>{k}</div>
+              <div style={{ fontSize: 11, color: 'rgba(240,237,232,0.35)' }}>{v}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ── TABS ─────────────────────────────────────────────────── */}
+      <div style={{ borderBottom: '1px solid rgba(255,255,255,0.07)', paddingLeft: 40, display: 'flex', gap: 4 }}>
+        <button className={'tab-btn' + (activeTab === 'console' ? ' active' : '')} onClick={() => setActiveTab('console')}>\u2728 Generate</button>
+        <button className={'tab-btn' + (activeTab === 'library' ? ' active' : '')} onClick={() => setActiveTab('library')}>\uD83D\uDDBC Library {assets.length > 0 && <span style={{ marginLeft: 6, fontSize: 10, padding: '1px 6px', borderRadius: 10, background: 'rgba(127,184,151,0.15)', color: '#7FB897' }}>{assets.length}</span>}</button>
+        <button className={'tab-btn' + (activeTab === 'how' ? ' active' : '')} onClick={() => setActiveTab('how')}>How it works</button>
+      </div>
+
+      {/* ── HOW IT WORKS ─────────────────────────────────────────── */}
+      {activeTab === 'how' && (
+        <div style={{ maxWidth: 680, padding: '60px 40px', margin: '0 auto' }}>
+          <div style={{ marginBottom: 48 }}>
+            <p style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(240,237,232,0.3)', marginBottom: 12 }}>HOW IT WORKS</p>
+            <h2 style={{ fontFamily: "'DM Serif Display', serif", fontSize: 36, fontWeight: 400, margin: 0, color: '#f0ede8', lineHeight: 1.2 }}>Four steps to a professional<br /><em style={{ color: 'rgba(240,237,232,0.4)' }}>marketing image</em></h2>
+          </div>
+
+          {HOW_STEPS.map((s, i) => (
+            <div key={s.n} className="how-step" style={{ display: 'grid', gridTemplateColumns: '80px 1fr', gap: 24, animation: 'fadeUp 0.6s ' + (i * 0.1) + 's ease both' }}>
+              <div>
+                <div className="how-num">{s.n}</div>
               </div>
-            ) : lastGen ? (
-              /* Generated image view */
-              <div style={{ padding: 32, display: 'flex', flexDirection: 'column', alignItems: 'center', minHeight: 'calc(100vh - 56px)' }}>
-                <div style={{ width: '100%', maxWidth: 640 }}>
-                  {/* Success badge */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 20 }}>
-                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: B.green }} />
-                    <span style={{ fontSize: 12, color: B.green, fontWeight: 600 }}>Generated via {lastGen.provider ?? 'AI'}</span>
-                  </div>
+              <div style={{ paddingTop: 8 }}>
+                <h3 style={{ fontFamily: "'DM Serif Display', serif", fontSize: 22, fontWeight: 400, margin: '0 0 10px', color: '#f0ede8' }}>{s.title}</h3>
+                <p style={{ fontSize: 14, color: 'rgba(240,237,232,0.45)', lineHeight: 1.7, margin: 0 }}>{s.body}</p>
+              </div>
+            </div>
+          ))}
 
-                  {/* Image */}
-                  <div style={{ borderRadius: 16, overflow: 'hidden', border: '1px solid ' + B.border, marginBottom: 20, position: 'relative' }}>
-                    <img src={lastGen.image_url} alt={lastGen.prompt ?? ''}
-                      style={{ width: '100%', display: 'block', aspectRatio: lastGen.format === 'landscape' ? '16/9' : lastGen.format === 'portrait' ? '4/5' : '1/1', objectFit: 'cover' }} />
-                    <button onClick={e => toggleFav(lastGen, e)}
-                      style={{ position: 'absolute', top: 12, right: 12, width: 36, height: 36, borderRadius: '50%', border: 'none', background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', color: lastGen.favourite ? '#F59E0B' : '#fff', fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}>
-                      {lastGen.favourite ? '★' : '☆'}
-                    </button>
-                  </div>
+          {/* Model comparison */}
+          <div style={{ marginTop: 60 }}>
+            <p style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(240,237,232,0.3)', marginBottom: 20 }}>MODEL COMPARISON</p>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+                  {['Model', 'Speed', 'Quality', 'Best for'].map(h => <th key={h} style={{ textAlign: 'left', padding: '8px 0', color: 'rgba(240,237,232,0.4)', fontWeight: 500, paddingRight: 24 }}>{h}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                  <td style={{ padding: '14px 0', paddingRight: 24, color: '#f0ede8', fontWeight: 500 }}>Nano Banana 2</td>
+                  <td style={{ padding: '14px 0', paddingRight: 24, color: '#7FB897' }}>Fast</td>
+                  <td style={{ padding: '14px 0', paddingRight: 24, color: 'rgba(240,237,232,0.5)' }}>High</td>
+                  <td style={{ padding: '14px 0', color: 'rgba(240,237,232,0.5)' }}>Daily social posts, rapid iteration</td>
+                </tr>
+                <tr>
+                  <td style={{ padding: '14px 0', paddingRight: 24, color: '#f0ede8', fontWeight: 500 }}>Nano Banana Pro</td>
+                  <td style={{ padding: '14px 0', paddingRight: 24, color: '#F59E0B' }}>Slower</td>
+                  <td style={{ padding: '14px 0', paddingRight: 24, color: '#7FB897' }}>Best</td>
+                  <td style={{ padding: '14px 0', color: 'rgba(240,237,232,0.5)' }}>Hero banners, text rendering, complex scenes</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
 
-                  {/* Prompt display */}
-                  <div style={{ padding: '12px 16px', background: B.card, borderRadius: 10, border: '1px solid ' + B.border, marginBottom: 16, fontSize: 13, color: B.muted, lineHeight: 1.6 }}>
-                    {lastGen.prompt}
-                  </div>
+          <div style={{ marginTop: 40, textAlign: 'center' }}>
+            <button className="as-btn as-btn-primary" onClick={() => setActiveTab('console')} style={{ fontSize: 15 }}>
+              \u2728 Start generating
+            </button>
+          </div>
+        </div>
+      )}
 
-                  {/* Actions */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 24 }}>
-                    <a href={lastGen.image_url} download target="_blank" rel="noreferrer"
-                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '11px', borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', border: 'none', background: B.green, color: '#fff', textDecoration: 'none' }}>
-                      ↓ Download
-                    </a>
-                    <button onClick={() => { setPrompt(lastGen.prompt ?? ''); setLastGen(null) }}
-                      style={{ padding: '11px', borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', border: '1px solid ' + B.border2, background: B.card2, color: B.text }}>
-                      ↺ Regenerate
-                    </button>
-                    <button onClick={() => setLastGen(null)}
-                      style={{ padding: '11px', borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', border: '1px solid ' + B.border, background: 'transparent', color: B.muted }}>
-                      + New
-                    </button>
-                  </div>
+      {/* ── CONSOLE (GENERATE) ───────────────────────────────────── */}
+      {activeTab === 'console' && (
+        <div style={{ display: 'grid', gridTemplateColumns: '400px 1fr', minHeight: 'calc(100vh - 230px)' }}>
+          {/* ── Left panel ── */}
+          <div className="as-scroll" style={{ borderRight: '1px solid rgba(255,255,255,0.07)', padding: '28px 24px', overflowY: 'auto' }}>
 
-                  {/* Meta row */}
-                  <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-                    {[['Style', lastGen.style], ['Format', lastGen.format], ['Provider', lastGen.provider ?? 'AI']].map(([k, v]) => (
-                      <div key={k}>
-                        <div style={{ fontSize: 9, color: B.dim, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>{k}</div>
-                        <div style={{ fontSize: 12, fontWeight: 600, textTransform: 'capitalize' }}>{v}</div>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Recent strip */}
-                  {assets.length > 1 && (
-                    <div style={{ marginTop: 32 }}>
-                      <div style={{ fontSize: 10, color: B.dim, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 12 }}>Recent creations</div>
-                      <div style={{ display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 4 }}>
-                        {assets.filter(a => a.id !== lastGen.id).slice(0, 8).map(a => (
-                          <div key={a.id} onClick={() => setLastGen(a)} style={{ width: 80, height: 80, borderRadius: 8, overflow: 'hidden', flexShrink: 0, cursor: 'pointer', border: '1px solid ' + B.border }}>
-                            <img src={a.image_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                          </div>
-                        ))}
-                      </div>
+            {/* Model selector */}
+            <p className="as-label">AI Model</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 24 }}>
+              {MODELS.map(m => (
+                <div key={m.id} className={'model-card' + (model === m.id ? ' active' : '')} onClick={() => setModel(m.id)}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                    <div style={{ width: 36, height: 36, borderRadius: 10, background: model === m.id ? 'rgba(127,184,151,0.15)' : 'rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>
+                      \uD83C\uDF4C
                     </div>
-                  )}
+                    <div style={{ flex: 1 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: model === m.id ? '#f0ede8' : 'rgba(240,237,232,0.7)' }}>{m.label}</span>
+                        <span style={{ fontSize: 9, padding: '1px 6px', borderRadius: 6, background: m.pro ? 'rgba(245,158,11,0.15)' : 'rgba(127,184,151,0.15)', color: m.pro ? '#F59E0B' : '#7FB897', fontWeight: 700, letterSpacing: '0.05em' }}>{m.badge}</span>
+                      </div>
+                      <div style={{ fontSize: 11, color: 'rgba(240,237,232,0.35)' }}>{m.sub}</div>
+                    </div>
+                    <div style={{ width: 18, height: 18, borderRadius: '50%', border: '2px solid ' + (model === m.id ? '#7FB897' : 'rgba(255,255,255,0.2)'), background: model === m.id ? '#7FB897' : 'transparent', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      {model === m.id && <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#000' }} />}
+                    </div>
+                  </div>
+                  {model === m.id && <p style={{ fontSize: 11, color: 'rgba(240,237,232,0.4)', margin: '10px 0 0', lineHeight: 1.5 }}>{m.desc}</p>}
                 </div>
+              ))}
+            </div>
+
+            {/* Templates */}
+            <p className="as-label">Quick templates</p>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 24 }}>
+              {TEMPLATES.map(t => (
+                <button key={t.label} className={'tmpl-chip' + (selectedTemplate === t.label ? ' active' : '')}
+                  onClick={() => { setPrompt(t.prompt); setSelectedTemplate(t.label) }}>
+                  {t.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Prompt */}
+            <p className="as-label">Prompt</p>
+            <div style={{ position: 'relative', marginBottom: 6 }}>
+              <textarea className="as-input" rows={5} value={prompt} onChange={e => setPrompt(e.target.value)}
+                placeholder="e.g. Weekend BBQ special with sizzling prawns, golden sunset light, Australian summer vibes, premium menu feel..." />
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+              <span style={{ fontSize: 11, color: 'rgba(240,237,232,0.25)' }}>{prompt.length}/5000</span>
+              <button onClick={refinePrompt} disabled={refining || !prompt.trim()}
+                style={{ fontSize: 11, padding: '5px 12px', borderRadius: 100, cursor: 'pointer', fontFamily: 'inherit', border: '1px solid rgba(127,184,151,0.3)', background: 'transparent', color: '#7FB897', opacity: refining || !prompt.trim() ? 0.4 : 1, transition: 'all 0.2s' }}>
+                {refining ? '\u23F3 Refining\u2026' : '\u2726 Aria refine'}
+              </button>
+            </div>
+
+            {/* Aspect ratio */}
+            <p className="as-label">Aspect ratio</p>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 24, flexWrap: 'wrap' }}>
+              {RATIOS.map(r => {
+                const vs = ratioStyle(r)
+                return (
+                  <div key={r.id} className={'ratio-btn' + (ratio === r.id ? ' active' : '')}
+                    onClick={() => setRatio(r.id)}
+                    style={{ padding: '10px 14px', flexDirection: 'column', gap: 8, minWidth: 64 }}>
+                    <div className="ratio-vis" style={vs} />
+                    <div style={{ textAlign: 'center' }}>
+                      <div style={{ fontSize: 11, fontWeight: 600, color: ratio === r.id ? '#7FB897' : 'rgba(240,237,232,0.7)' }}>{r.label}</div>
+                      <div style={{ fontSize: 9, color: 'rgba(240,237,232,0.3)', marginTop: 1 }}>{r.hint}</div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Style */}
+            <p className="as-label">Visual style</p>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 28 }}>
+              {STYLES.map(s => (
+                <button key={s.id} className={'style-chip' + (style === s.id ? ' active' : '')} onClick={() => setStyle(s.id)}>
+                  {s.emoji} {s.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Drop zone for image-to-image */}
+            <p className="as-label">Image reference <span style={{ textTransform: 'none', letterSpacing: 0, color: 'rgba(240,237,232,0.2)', fontWeight: 400 }}>(optional, upload a photo to guide style)</span></p>
+            <div className={'drop-zone' + (isDragOver ? ' drag-over' : '')}
+              style={{ padding: '20px', textAlign: 'center', marginBottom: 24 }}
+              onDragOver={e => { e.preventDefault(); setIsDragOver(true) }}
+              onDragLeave={() => setIsDragOver(false)}
+              onDrop={handleDrop}
+              onClick={() => fileInputRef.current?.click()}>
+              <div style={{ fontSize: 24, marginBottom: 8, opacity: 0.4 }}>{uploading ? '\u23F3' : '\u2191'}</div>
+              <div style={{ fontSize: 12, color: 'rgba(240,237,232,0.35)' }}>{uploading ? 'Uploading\u2026' : 'Click or drag & drop · PNG, JPG, WEBP'}</div>
+            </div>
+
+            {/* Generate button */}
+            <button onClick={generate} disabled={generating || !prompt.trim()}
+              className="as-btn as-btn-primary" style={{ width: '100%', justifyContent: 'center', fontSize: 15, padding: '15px 24px', borderRadius: 14 }}>
+              {generating ? (
+                <>
+                  <span style={{ width: 14, height: 14, border: '2px solid rgba(0,0,0,0.3)', borderTopColor: '#000', borderRadius: '50%', animation: 'spin 0.8s linear infinite', display: 'inline-block' }} />
+                  Generating\u2026
+                </>
+              ) : <>\u2728 Generate Image</>}
+            </button>
+
+            {generating && (
+              <div style={{ marginTop: 16 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'rgba(240,237,232,0.4)', marginBottom: 6 }}>
+                  <span>Processing your request</span>
+                  <span>~30\u201360s</span>
+                </div>
+                <div className="gen-progress-bar" key={genKey}>
+                  <div className="gen-progress-fill" />
+                </div>
+                <p style={{ fontSize: 11, color: 'rgba(240,237,232,0.3)', marginTop: 8, lineHeight: 1.5 }}>
+                  Gemini Nano Banana is generating your image. Please keep this tab open.
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* ── Right panel: preview + recent ── */}
+          <div className="as-scroll" style={{ overflowY: 'auto' }}>
+            {/* Latest generation */}
+            {lastGenerated ? (
+              <div style={{ padding: 28 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                  <div>
+                    <p style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'rgba(240,237,232,0.3)', margin: 0 }}>Latest generation</p>
+                    <p style={{ fontSize: 11, color: 'rgba(240,237,232,0.25)', margin: '4px 0 0' }}>{lastGenerated.provider} \u00b7 {lastGenerated.style} \u00b7 {lastGenerated.format}</p>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button onClick={() => toggleFav(lastGenerated)}
+                      style={{ padding: '7px 14px', borderRadius: 100, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit', border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', color: lastGenerated.favourite ? '#F59E0B' : 'rgba(240,237,232,0.5)', transition: 'all 0.2s' }}>
+                      {lastGenerated.favourite ? '\u2605 Saved' : '\u2606 Save'}
+                    </button>
+                    <a href={lastGenerated.image_url} download target="_blank" rel="noreferrer" className="as-btn as-btn-green" style={{ padding: '7px 16px', borderRadius: 100, fontSize: 12, textDecoration: 'none' }}>
+                      \u2913 Download
+                    </a>
+                  </div>
+                </div>
+
+                {/* Image */}
+                <div style={{ borderRadius: 20, overflow: 'hidden', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', marginBottom: 16 }}>
+                  <img src={lastGenerated.image_url} alt={lastGenerated.prompt ?? ''} style={{ width: '100%', display: 'block', aspectRatio: lastGenerated.format === 'landscape' ? '16/9' : lastGenerated.format === 'portrait' ? '4/5' : '1', objectFit: 'cover', maxHeight: 520 }} />
+                </div>
+
+                {/* Prompt used */}
+                <div style={{ padding: '12px 16px', background: 'rgba(255,255,255,0.03)', borderRadius: 12, border: '1px solid rgba(255,255,255,0.06)' }}>
+                  <p style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'rgba(240,237,232,0.25)', margin: '0 0 6px' }}>Prompt used</p>
+                  <p style={{ fontSize: 12, color: 'rgba(240,237,232,0.45)', margin: 0, lineHeight: 1.6 }}>{lastGenerated.enhanced_prompt ?? lastGenerated.prompt}</p>
+                </div>
+
+                {/* Use as template */}
+                <button onClick={() => { setPrompt(lastGenerated.prompt ?? ''); setStyle(lastGenerated.style); setRatio(lastGenerated.format) }}
+                  style={{ marginTop: 10, fontSize: 12, padding: '8px 16px', borderRadius: 100, cursor: 'pointer', fontFamily: 'inherit', border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', color: 'rgba(240,237,232,0.4)', transition: 'all 0.2s' }}>
+                  \u21BA Regenerate with changes
+                </button>
               </div>
             ) : (
-              /* Empty state with animation */
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 'calc(100vh - 56px)', padding: 48, textAlign: 'center' }}>
-                <div style={{ position: 'relative', width: 120, height: 120, marginBottom: 32 }}>
-                  <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', border: '1px solid rgba(127,184,151,0.15)', animation: 'spin 8s linear infinite' }} />
-                  <div style={{ position: 'absolute', inset: 10, borderRadius: '50%', border: '1px dashed rgba(127,184,151,0.1)', animation: 'spin 12s linear infinite reverse' }} />
-                  <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 44 }}>🍌</div>
+              /* Empty state */
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', minHeight: 400, padding: 40, textAlign: 'center' }}>
+                <div style={{ width: 80, height: 80, borderRadius: 24, background: 'rgba(127,184,151,0.08)', border: '1px solid rgba(127,184,151,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 32, marginBottom: 20 }}>
+                  \uD83C\uDF4C
                 </div>
-                <h2 style={{ fontSize: 22, fontWeight: 700, margin: '0 0 12px' }}>Ready to create</h2>
-                <p style={{ fontSize: 14, color: B.muted, maxWidth: 360, lineHeight: 1.7, margin: '0 0 28px' }}>
-                  Choose a model, write a prompt or pick a template, then hit Generate. Your image will appear here in seconds.
+                <h3 style={{ fontFamily: "'DM Serif Display', serif", fontSize: 22, fontWeight: 400, margin: '0 0 10px', color: '#f0ede8' }}>Ready to create</h3>
+                <p style={{ fontSize: 13, color: 'rgba(240,237,232,0.35)', margin: '0 0 24px', lineHeight: 1.6, maxWidth: 340 }}>
+                  Pick a template, write a prompt, choose your model and hit Generate. Your image will appear here.
                 </p>
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
-                  {TEMPLATES.slice(0, 4).map(t => (
-                    <button key={t.label} onClick={() => setPrompt(t.prompt)}
-                      style={{ padding: '7px 14px', borderRadius: 8, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit', border: '1px solid ' + B.border2, background: B.card, color: B.muted }}>
+                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'center' }}>
+                  {TEMPLATES.slice(0, 3).map(t => (
+                    <button key={t.label} onClick={() => { setPrompt(t.prompt); setSelectedTemplate(t.label) }}
+                      style={{ padding: '8px 16px', borderRadius: 100, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: 'rgba(240,237,232,0.5)', transition: 'all 0.2s' }}>
                       {t.label}
                     </button>
                   ))}
                 </div>
-                <style>{`@keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }`}</style>
+              </div>
+            )}
+
+            {/* Recent strip */}
+            {assets.length > 0 && (
+              <div style={{ padding: '0 28px 28px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+                  <p style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'rgba(240,237,232,0.3)', margin: 0 }}>Recent</p>
+                  <button onClick={() => setActiveTab('library')} style={{ fontSize: 11, color: '#7FB897', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>View all \u2192</button>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8 }}>
+                  {assets.slice(0, 10).map(a => (
+                    <div key={a.id} className="img-grid-item" onClick={() => { setActiveTab('library'); setSelected(a) }} style={{ aspectRatio: '1' }}>
+                      <img src={a.image_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </div>
         </div>
       )}
 
-      {/* ── LIBRARY ── */}
-      {view === 'library' && (
-        <div style={{ display: 'flex', minHeight: 'calc(100vh - 56px)' }}>
+      {/* ── LIBRARY ──────────────────────────────────────────────── */}
+      {activeTab === 'library' && (
+        <div style={{ display: 'flex', minHeight: 'calc(100vh - 230px)' }}>
           {/* Sidebar */}
-          <div style={{ width: 200, borderRight: '1px solid ' + B.border, padding: '16px 12px', flexShrink: 0, background: B.card }}>
-            <div style={{ fontSize: 10, color: B.dim, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 10 }}>Filter</div>
+          <div style={{ width: 200, borderRight: '1px solid rgba(255,255,255,0.07)', padding: '20px 12px', flexShrink: 0 }}>
+            <p className="as-label" style={{ padding: '0 8px' }}>Filter</p>
             {[
-              { label: 'All images', active: !filterFolder && !filterFav, action: () => { setFilterFolder(null); setFilterFav(false) } },
-              { label: '★ Favourites', active: filterFav, action: () => { setFilterFav(true); setFilterFolder(null) } },
-            ].map(f => (
-              <button key={f.label} onClick={f.action}
-                style={{ width: '100%', padding: '8px 10px', borderRadius: 8, fontSize: 12, fontWeight: f.active ? 600 : 400, cursor: 'pointer', fontFamily: 'inherit', border: 'none', background: f.active ? 'rgba(127,184,151,0.12)' : 'transparent', color: f.active ? B.green : B.muted, textAlign: 'left', marginBottom: 2 }}>
-                {f.label}
+              { label: 'All images', active: !filterFolder && !filterFav, onClick: () => { setFilterFolder(null); setFilterFav(false) } },
+              { label: '\u2605 Favourites', active: filterFav, onClick: () => { setFilterFav(true); setFilterFolder(null) } },
+            ].map(btn => (
+              <button key={btn.label} onClick={btn.onClick}
+                style={{ width: '100%', padding: '8px 10px', borderRadius: 8, fontSize: 12, fontWeight: btn.active ? 600 : 400, cursor: 'pointer', fontFamily: 'inherit', border: 'none', background: btn.active ? 'rgba(127,184,151,0.1)' : 'transparent', color: btn.active ? '#7FB897' : 'rgba(240,237,232,0.4)', textAlign: 'left', marginBottom: 2, transition: 'all 0.2s' }}>
+                {btn.label}
               </button>
             ))}
-            <div style={{ fontSize: 10, color: B.dim, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', margin: '16px 0 8px' }}>Folders</div>
-            {['generated', 'uploads', 'banners', 'social', 'promotions', 'products', 'events'].map(f => {
+
+            <p className="as-label" style={{ padding: '12px 8px 6px' }}>Folders</p>
+            {FOLDERS.map(f => {
               const count = assets.filter(a => a.folder === f).length
-              if (count === 0) return null
+              if (!count) return null
+              const isActive = filterFolder === f
               return (
                 <button key={f} onClick={() => { setFilterFolder(f); setFilterFav(false) }}
-                  style={{ width: '100%', padding: '7px 10px', borderRadius: 8, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit', border: 'none', background: filterFolder === f ? 'rgba(127,184,151,0.12)' : 'transparent', color: filterFolder === f ? B.green : B.muted, textAlign: 'left', display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
-                  <span>{f}</span><span style={{ fontSize: 10, color: B.dim }}>{count}</span>
+                  style={{ width: '100%', padding: '7px 10px', borderRadius: 8, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit', border: 'none', background: isActive ? 'rgba(127,184,151,0.1)' : 'transparent', color: isActive ? '#7FB897' : 'rgba(240,237,232,0.4)', textAlign: 'left', display: 'flex', justifyContent: 'space-between', marginBottom: 2, transition: 'all 0.2s' }}>
+                  <span>{f}</span>
+                  <span style={{ fontSize: 10, color: 'rgba(240,237,232,0.25)' }}>{count}</span>
                 </button>
               )
             })}
           </div>
 
           {/* Grid */}
-          <div style={{ flex: 1, overflowY: 'auto', padding: 20, background: B.bg }}>
+          <div className="as-scroll" style={{ flex: 1, overflowY: 'auto', padding: 20 }}>
             {loading ? (
-              <div style={{ textAlign: 'center', padding: 60, color: B.muted }}>Loading…</div>
-            ) : filtered.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: 80, color: B.muted }}>
-                <div style={{ fontSize: 40, marginBottom: 16, opacity: 0.2 }}>🖼</div>
-                <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>No images yet</div>
-                <div style={{ fontSize: 13, marginBottom: 24 }}>Generate your first image in the Studio</div>
-                <button onClick={() => setView('studio')} style={{ padding: '10px 24px', borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', border: 'none', background: B.green, color: '#fff' }}>
-                  ✦ Go to Studio
-                </button>
+              <div style={{ textAlign: 'center', padding: 60, color: 'rgba(240,237,232,0.3)', fontSize: 13 }}>Loading\u2026</div>
+            ) : filteredAssets.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: 60 }}>
+                <div style={{ fontSize: 48, marginBottom: 16, opacity: 0.2 }}>\uD83D\uDDBC</div>
+                <p style={{ fontSize: 15, margin: '0 0 8px', color: 'rgba(240,237,232,0.5)' }}>No images yet</p>
+                <button onClick={() => setActiveTab('console')} className="as-btn as-btn-primary" style={{ marginTop: 16 }}>\u2728 Start generating</button>
               </div>
             ) : (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 12 }}>
-                {filtered.map(a => (
-                  <div key={a.id} onClick={() => setSelected(a)}
-                    style={{ borderRadius: 14, overflow: 'hidden', cursor: 'pointer', background: B.card, border: '1px solid ' + (selected?.id === a.id ? 'rgba(127,184,151,0.5)' : B.border), position: 'relative', transition: 'border-color 0.15s' }}>
-                    <img src={a.image_url} alt={a.prompt ?? ''}
-                      style={{ width: '100%', aspectRatio: a.format === 'landscape' ? '16/9' : a.format === 'portrait' ? '4/5' : '1', objectFit: 'cover', display: 'block' }} />
-                    <button onClick={e => toggleFav(a, e)}
-                      style={{ position: 'absolute', top: 8, right: 8, width: 28, height: 28, borderRadius: '50%', border: 'none', background: 'rgba(0,0,0,0.55)', color: a.favourite ? '#F59E0B' : '#fff', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}>
-                      {a.favourite ? '★' : '☆'}
+                {filteredAssets.map(a => (
+                  <div key={a.id} className={'img-grid-item' + (selected?.id === a.id ? ' selected' : '')} onClick={() => setSelected(a)}>
+                    <div className="overlay" />
+                    <img src={a.image_url} alt={a.prompt ?? ''} style={{ width: '100%', aspectRatio: a.format === 'landscape' ? '16/9' : a.format === 'portrait' ? '4/5' : '1', objectFit: 'cover', display: 'block' }} />
+                    <button className={'fav-btn' + (a.favourite ? ' active' : '')} onClick={e => toggleFav(a, e)}>
+                      {a.favourite ? '\u2605' : '\u2606'}
                     </button>
                     <div style={{ padding: '10px 12px' }}>
-                      <div style={{ fontSize: 12, fontWeight: 600, color: B.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 3 }}>
-                        {a.name ?? a.prompt?.slice(0, 36) ?? 'Untitled'}
-                      </div>
-                      <div style={{ fontSize: 10, color: B.dim }}>{a.provider ?? a.style} · {a.format}</div>
+                      <p style={{ fontSize: 11, fontWeight: 600, margin: '0 0 2px', color: '#f0ede8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.name ?? a.prompt?.slice(0, 40) ?? 'Untitled'}</p>
+                      <p style={{ fontSize: 10, color: 'rgba(240,237,232,0.3)', margin: 0 }}>{a.provider ?? a.style} \u00b7 {a.format}</p>
                     </div>
                   </div>
                 ))}
@@ -705,49 +698,51 @@ export default function AriaStudioPage() {
 
           {/* Detail panel */}
           {selected && (
-            <div style={{ width: 300, borderLeft: '1px solid ' + B.border, padding: 20, overflowY: 'auto', flexShrink: 0, background: B.card }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                <div style={{ fontSize: 13, fontWeight: 700 }}>Details</div>
-                <button onClick={() => setSelected(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: B.muted, fontSize: 18, lineHeight: 1, padding: 0 }}>×</button>
-              </div>
-              <div style={{ borderRadius: 12, overflow: 'hidden', marginBottom: 16, border: '1px solid ' + B.border }}>
-                <img src={selected.image_url} alt={selected.prompt ?? ''}
-                  style={{ width: '100%', display: 'block', aspectRatio: selected.format === 'landscape' ? '16/9' : selected.format === 'portrait' ? '4/5' : '1', objectFit: 'cover' }} />
+            <div className="detail-panel as-scroll">
+              <div style={{ padding: '16px 20px', borderBottom: '1px solid rgba(255,255,255,0.07)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: 12, fontWeight: 600, color: 'rgba(240,237,232,0.6)' }}>Details</span>
+                <button onClick={() => setSelected(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(240,237,232,0.3)', fontSize: 18, lineHeight: 1, padding: 0 }}>\u00d7</button>
               </div>
 
-              {[['Provider', selected.provider ?? '-'], ['Style', selected.style], ['Format', selected.format], ['Folder', selected.folder],
-                ['Created', new Date(selected.created_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })]
-              ].map(([k, v]) => (
-                <div key={k} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, padding: '6px 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                  <span style={{ color: B.muted }}>{k}</span>
-                  <span style={{ fontWeight: 500, textTransform: 'capitalize' }}>{v}</span>
+              <div style={{ padding: 20 }}>
+                <div style={{ borderRadius: 14, overflow: 'hidden', marginBottom: 16, border: '1px solid rgba(255,255,255,0.08)' }}>
+                  <img src={selected.image_url} alt={selected.prompt ?? ''} style={{ width: '100%', display: 'block', aspectRatio: selected.format === 'landscape' ? '16/9' : selected.format === 'portrait' ? '4/5' : '1', objectFit: 'cover' }} />
                 </div>
-              ))}
 
-              {selected.prompt && (
-                <div style={{ margin: '14px 0', padding: '10px 12px', background: B.card2, borderRadius: 9, border: '1px solid ' + B.border }}>
-                  <div style={{ fontSize: 9, color: B.dim, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>Prompt</div>
-                  <div style={{ fontSize: 12, color: B.muted, lineHeight: 1.5 }}>{selected.prompt}</div>
+                {/* Meta */}
+                <div style={{ marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {[['Provider', selected.provider ?? '-'], ['Style', selected.style], ['Format', selected.format], ['Folder', selected.folder], ['Created', new Date(selected.created_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })]].map(([k, v]) => (
+                    <div key={k} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                      <span style={{ color: 'rgba(240,237,232,0.35)' }}>{k}</span>
+                      <span style={{ color: '#f0ede8', fontWeight: 500 }}>{v}</span>
+                    </div>
+                  ))}
                 </div>
-              )}
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 16 }}>
-                <a href={selected.image_url} download target="_blank" rel="noreferrer"
-                  style={{ display: 'block', padding: '10px', borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: 'pointer', border: 'none', background: B.green, color: '#fff', textAlign: 'center', textDecoration: 'none' }}>
-                  ↓ Download
-                </a>
-                <button onClick={() => toggleFav(selected)}
-                  style={{ padding: '9px', borderRadius: 9, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', border: '1px solid ' + B.border2, background: 'transparent', color: selected.favourite ? '#F59E0B' : B.muted }}>
-                  {selected.favourite ? '★ Remove favourite' : '☆ Add favourite'}
-                </button>
-                <button onClick={() => { setPrompt(selected.prompt ?? ''); setStyle(selected.style); setView('studio') }}
-                  style={{ padding: '9px', borderRadius: 9, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', border: '1px solid ' + B.border, background: 'transparent', color: B.muted }}>
-                  ↺ Use as starting point
-                </button>
-                <button onClick={() => del(selected.id)}
-                  style={{ padding: '9px', borderRadius: 9, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', border: '1px solid rgba(239,68,68,0.3)', background: 'transparent', color: '#EF4444' }}>
-                  Delete
-                </button>
+                {selected.prompt && (
+                  <div style={{ marginBottom: 16, padding: '10px 12px', background: 'rgba(255,255,255,0.03)', borderRadius: 10, border: '1px solid rgba(255,255,255,0.06)' }}>
+                    <p style={{ fontSize: 9, color: 'rgba(240,237,232,0.3)', margin: '0 0 5px', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600 }}>Prompt</p>
+                    <p style={{ fontSize: 11, color: 'rgba(240,237,232,0.45)', margin: 0, lineHeight: 1.6 }}>{selected.prompt}</p>
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <a href={selected.image_url} download target="_blank" rel="noreferrer" className="as-btn as-btn-primary" style={{ justifyContent: 'center', textDecoration: 'none', borderRadius: 10, padding: '10px' }}>
+                    \u2913 Download
+                  </a>
+                  <button onClick={() => toggleFav(selected)}
+                    style={{ padding: '10px', borderRadius: 10, fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', color: selected.favourite ? '#F59E0B' : 'rgba(240,237,232,0.4)', transition: 'all 0.2s' }}>
+                    {selected.favourite ? '\u2605 Remove from saved' : '\u2606 Save to favourites'}
+                  </button>
+                  <button onClick={() => { setPrompt(selected.prompt ?? ''); setStyle(selected.style); setRatio(selected.format); setActiveTab('console') }}
+                    style={{ padding: '10px', borderRadius: 10, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit', border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', color: 'rgba(240,237,232,0.4)', transition: 'all 0.2s' }}>
+                    \u21BA Use as template
+                  </button>
+                  <button onClick={() => deleteAsset(selected.id)}
+                    style={{ padding: '10px', borderRadius: 10, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit', border: '1px solid rgba(239,68,68,0.2)', background: 'transparent', color: 'rgba(239,68,68,0.6)', transition: 'all 0.2s' }}>
+                    Delete
+                  </button>
+                </div>
               </div>
             </div>
           )}
