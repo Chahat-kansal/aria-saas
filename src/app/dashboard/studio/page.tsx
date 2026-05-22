@@ -349,7 +349,7 @@ export default function AriaStudioPage() {
               <span style={{fontSize:11,color:'rgba(237,232,227,0.2)'}}>{prompt.length}/5000</span>
               <button onClick={refine} disabled={refining||!prompt.trim()}
                 style={{fontSize:11,padding:'5px 13px',borderRadius:100,cursor:'pointer',fontFamily:'inherit',border:'1px solid rgba(127,184,151,0.28)',background:'transparent',color:'#7FB897',opacity:refining||!prompt.trim()?0.38:1,transition:'all 0.2s'}}>
-                {refining?'\u23F3 Refining…':'✦ Aria refine'}
+                {refining?'⏳ Refining…':'✦ Aria refine'}
               </button>
             </div>
 
@@ -377,7 +377,7 @@ export default function AriaStudioPage() {
             <span className="lbl">Image reference <span style={{textTransform:'none',letterSpacing:0,color:'rgba(237,232,227,0.2)',fontWeight:400,marginLeft:6}}>(optional)</span></span>
             <div className={'drop'+(dragOver?' over':'')} style={{padding:'22px',textAlign:'center',marginBottom:24}}
               onDragOver={e=>{e.preventDefault();setDragOver(true)}} onDragLeave={()=>setDragOver(false)} onDrop={doDrop} onClick={()=>fileRef.current?.click()}>
-              <div style={{fontSize:22,marginBottom:8,opacity:0.35}}>{uploading?'\u23F3':'↑'}</div>
+              <div style={{fontSize:22,marginBottom:8,opacity:0.35}}>{uploading?'⏳':'↑'}</div>
               <div style={{fontSize:12,color:'rgba(237,232,227,0.32)'}}>{uploading?'Uploading…':'Click or drag & drop · PNG, JPG, WEBP'}</div>
             </div>
 
