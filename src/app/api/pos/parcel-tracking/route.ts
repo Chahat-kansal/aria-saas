@@ -13,19 +13,25 @@ async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, u
 
 // Carrier auto-detection from tracking number format
 const CARRIER_PATTERNS: Array<{ pattern: RegExp; carrier: string; name: string }> = [
-  // Australia Post — international (CC123456789AU) and modern domestic consignment codes
+  // ── Specific carrier formats first — most distinctive wins ──
+  // Australia Post international, e.g. CC123456789AU
   { pattern: /^[A-Z]{2}\d{9}AU$/i,           carrier: 'auspost',        name: 'Australia Post' },
-  // Modern AusPost 23-char article id, e.g. 34PDN740013301000935104 — starts with digits, has letters
+  // Modern AusPost 23-char article id, e.g. 34PDN740013301000935104
   { pattern: /^\d{2}[A-Z]{2,4}\d{14,18}$/i,   carrier: 'auspost',        name: 'Australia Post' },
-  // AusPost / StarTrack all-numeric domestic article ids (broad — 17TRACK confirms exact carrier)
-  { pattern: /^\d{11,13}$/,                   carrier: 'auspost',        name: 'Australia Post' },
+  // AusPost domestic id with a single embedded letter, e.g. 364Y75014137
+  { pattern: /^\d{2,5}[A-Z]\d{6,12}$/i,        carrier: 'auspost',        name: 'Australia Post' },
   { pattern: /^33\d{10}$/,                    carrier: 'aramex',         name: 'Aramex' },
   { pattern: /^3933\d{8}$/,                   carrier: 'aramex',         name: 'Aramex' },
-  { pattern: /^\d{10}$/,                      carrier: 'startrack',      name: 'StarTrack' },
-  { pattern: /^[0-9]{12}$/,                   carrier: 'dhl',            name: 'DHL Express' },
+  { pattern: /^[A-Z]{2}\d{8}/i,               carrier: 'tnt',            name: 'TNT' },
   { pattern: /^[0-9]{20,22}$/,                carrier: 'fedex',          name: 'FedEx' },
   { pattern: /^[0-9]{18}$/,                   carrier: 'couriersplease', name: 'Couriers Please' },
-  { pattern: /^[A-Z]{2}\d{8}/i,               carrier: 'tnt',            name: 'TNT' },
+  // All-numeric domestic article ids (AusPost is the common case in AU)
+  { pattern: /^\d{11,13}$/,                   carrier: 'auspost',        name: 'Australia Post' },
+  { pattern: /^[0-9]{12}$/,                   carrier: 'dhl',            name: 'DHL Express' },
+  { pattern: /^\d{10}$/,                      carrier: 'startrack',      name: 'StarTrack' },
+  // ── LAST: generic alphanumeric catch-all (10-24 chars, >=1 letter). ──
+  // Only reached if nothing specific matched; 17TRACK confirms the real carrier.
+  { pattern: /^(?=.*[A-Z])[A-Z0-9]{10,24}$/i, carrier: 'auspost',        name: 'Australia Post' },
 ]
 
 function detectCarrier(tn: string): { carrier: string; name: string } {
@@ -33,6 +39,15 @@ function detectCarrier(tn: string): { carrier: string; name: string } {
     if (cp.pattern.test(tn)) return { carrier: cp.carrier, name: cp.name }
   }
   return { carrier: 'other', name: 'Unknown Carrier' }
+}
+
+// Human labels for every carrier the dropdown can send (including ones with
+// no distinctive number format, so a manual pick always gets a proper name).
+const CARRIER_LABELS: Record<string, string> = {
+  auspost: 'Australia Post', startrack: 'StarTrack', aramex: 'Aramex',
+  couriersplease: 'Couriers Please', tnt: 'TNT', dhl: 'DHL Express',
+  fedex: 'FedEx', ups: 'UPS', toll: 'Toll', sendle: 'Sendle',
+  dhlecommerce: 'DHL eCommerce', other: 'Unknown Carrier',
 }
 
 // 17TRACK API — 3,300+ carriers, 100 free/month, continuous updates FREE after registration
@@ -214,9 +229,14 @@ async function _POST(req: Request) {
   if (!body.tracking_number?.trim()) return NextResponse.json({ error: 'tracking_number required' }, { status: 400 })
 
   const tn = body.tracking_number.trim().toUpperCase()
+  // 'other' is the dropdown's "Auto-detect" value — treat it as unspecified so
+  // auto-detection still runs. Only an explicit non-'other' carrier overrides it.
   const detected = detectCarrier(tn)
-  const carrierCode = body.carrier ?? detected.carrier
-  const carrierName = carrierCode !== 'other' ? detected.name : 'Unknown Carrier'
+  const explicitCarrier = body.carrier && body.carrier !== 'other' ? body.carrier : null
+  const carrierCode = explicitCarrier ?? detected.carrier
+  const carrierName = explicitCarrier
+    ? (CARRIER_LABELS[explicitCarrier] ?? 'Unknown Carrier')
+    : detected.name
 
   const { result: liveData, error: lookupError } = await lookup17Track(tn, carrierCode)
 
