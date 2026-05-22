@@ -213,23 +213,23 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
 
   return (
     <aside className="w-[220px] flex-shrink-0 bg-black h-screen flex flex-col overflow-y-auto">
-      {/* Logo + mobile close */}
-      <div className="px-5 pt-[22px] pb-3 flex-shrink-0 flex items-start justify-between">
-        <div className="text-lg font-medium tracking-tight">
-          <span className="text-white">aria</span>
-          <span className="text-[#1D9E75]">OS</span>
+      {/* Logo */}
+      <div className="px-5 pt-[22px] pb-3 flex-shrink-0">
+        <div className="flex items-center justify-between mb-1.5">
+          <div className="text-lg font-medium tracking-tight">
+            <span className="text-white">aria</span>
+            <span className="text-[#1D9E75]">OS</span>
+          </div>
+          {onNavigate && (
+            <button onClick={onNavigate} className="md:hidden -mr-1 -mt-1 w-8 h-8 rounded-lg flex items-center justify-center text-[rgba(255,255,255,0.4)] hover:text-white hover:bg-[rgba(255,255,255,0.06)] transition-colors" aria-label="Close menu">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+          )}
         </div>
-        {onNavigate && (
-          <button onClick={onNavigate} className="md:hidden -mr-1 -mt-1 w-8 h-8 rounded-lg flex items-center justify-center text-[rgba(255,255,255,0.4)] hover:text-white hover:bg-[rgba(255,255,255,0.06)] transition-colors" aria-label="Close menu">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
-          </button>
-        )}
-      </div>
         <div className="mt-1.5 inline-flex items-center px-2 py-0.5 rounded-full bg-[rgba(255,255,255,0.06)] border border-[rgba(255,255,255,0.08)]">
           <span className="text-[10px] text-[rgba(255,255,255,0.45)]">{config.label}</span>
         </div>
       </div>
-
       {/* Business switcher */}
       <div className="px-3 mb-3 flex-shrink-0 relative" ref={switcherRef}>
         <button
