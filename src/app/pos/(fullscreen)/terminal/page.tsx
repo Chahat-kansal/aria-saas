@@ -2036,7 +2036,14 @@ export default function TerminalPage() {
 
       {/* ── TOP BAR ───────────────────────────────────────────────── */}
       <div className="flex-shrink-0 flex items-center px-3 gap-2" style={{ minHeight: 46, background: 'var(--terminal-glass-3,rgba(11,20,16,0.85))', borderBottom: '1px solid var(--terminal-sage-rim,rgba(127,184,151,0.18))', backdropFilter: 'blur(20px) saturate(1.4)', WebkitBackdropFilter: 'blur(20px) saturate(1.4)', position: 'relative', zIndex: 2, flexWrap: 'wrap', paddingTop: 6, paddingBottom: 6 }}>
-        <svg width="20" height="20" viewBox="0 0 32 32" fill="none" style={{ flexShrink: 0 }}>
+        {/* Hamburger — mobile only, opens sidebar */}
+        <button className="sm:hidden flex-shrink-0" onClick={() => window.dispatchEvent(new CustomEvent('pos-open-sidebar'))}
+          style={{ padding: '6px 8px', borderRadius: 8, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--text-secondary)" strokeWidth="2" strokeLinecap="round">
+            <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
+          </svg>
+        </button>
+        <svg width="20" height="20" viewBox="0 0 32 32" fill="none" style={{ flexShrink: 0 }} className="hidden sm:block">
           <rect x="16" y="2" width="19" height="19" rx="3" transform="rotate(45 16 2)" stroke="var(--violet)" strokeWidth="1.8" fill="none"/>
           <circle cx="16" cy="16" r="3" fill="var(--violet)"/>
           <circle cx="16" cy="4.5" r="1.8" fill="var(--violet)" opacity="0.4"/>
@@ -2045,7 +2052,7 @@ export default function TerminalPage() {
           <circle cx="4.5" cy="16" r="1.8" fill="var(--violet)" opacity="0.4"/>
         </svg>
         <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>Point of Sale</span>
-        <span style={{ fontSize: 11, color: 'var(--text-tertiary)', fontWeight: 400 }}>{businessName}</span>
+        <span style={{ fontSize: 11, color: 'var(--text-tertiary)', fontWeight: 400 }} className="hidden sm:inline">{businessName}</span>
         <div style={{ flex: 1 }} />
         {/* Register quick actions — right side of top bar */}
         <div className="flex gap-1 items-center overflow-x-auto" style={{ flexShrink: 0, flexWrap: 'nowrap', maxWidth: '60%', scrollbarWidth: 'none' }}>
@@ -2107,7 +2114,7 @@ export default function TerminalPage() {
 
         {/* ── LEFT: Product browser ──────────────────────────────── */}
         <div className={`pos-products-panel relative flex flex-col overflow-hidden ${mobileTab !== 'products' ? 'hidden sm:flex' : 'flex'}`}
-          style={{ flex: '1 1 0', minWidth: 0, borderRight: '1px solid var(--terminal-sage-rim,rgba(127,184,151,0.18))', background: 'var(--terminal-glass-2,rgba(20,33,26,0.72))', backdropFilter: 'blur(40px) saturate(1.4)', WebkitBackdropFilter: 'blur(40px) saturate(1.4)' }}>
+          style={{ flex: '1 1 0', minWidth: 0, width: '100%', borderRight: '1px solid var(--terminal-sage-rim,rgba(127,184,151,0.18))', background: 'var(--terminal-glass-2,rgba(20,33,26,0.72))', backdropFilter: 'blur(40px) saturate(1.4)', WebkitBackdropFilter: 'blur(40px) saturate(1.4)' }}>
 
           {/* EOD Markdown banner */}
           {eodMarkdown && cart.length > 0 && (
@@ -2499,7 +2506,7 @@ export default function TerminalPage() {
 
         {/* ── CENTRE: Cart ──────────────────────────────────────── */}
         <div className={`pos-cart-panel flex flex-col overflow-hidden ${mobileTab !== 'cart' ? 'hidden sm:flex' : 'flex'}`}
-          style={{ flex: '0 0 360px', width: 360, height: '100%', background: 'var(--terminal-glass-1,rgba(28,44,36,0.55))', backdropFilter: 'blur(40px) saturate(1.4)', WebkitBackdropFilter: 'blur(40px) saturate(1.4)', borderLeft: '1px solid var(--terminal-sage-rim,rgba(127,184,151,0.18))', minHeight: 0 }}>
+          style={{ flex: '0 0 360px', width: typeof window !== 'undefined' && window.innerWidth < 640 ? '100%' : 360, height: '100%', background: 'var(--terminal-glass-1,rgba(28,44,36,0.55))', backdropFilter: 'blur(40px) saturate(1.4)', WebkitBackdropFilter: 'blur(40px) saturate(1.4)', borderLeft: '1px solid var(--terminal-sage-rim,rgba(127,184,151,0.18))', minHeight: 0 }}>
 
           {showReceipt && terminalView !== 'confirm' ? (
             /* ── RECEIPT VIEW (non-confirm, e.g. reprint) ─────── */

@@ -103,7 +103,7 @@ function PINEntry({
       {/* PIN dots */}
       <div className={shaking ? 'shake' : ''} style={{ display: 'flex', justifyContent: 'center', gap: 16, marginBottom: 8 }}>
         {[0,1,2,3].map(i => (
-          <div key={i} style={{ width: 14, height: 14, borderRadius: '50%', transition: 'all 150ms ease', background: pin.length > i ? 'var(--violet)' : 'transparent', border: `2px solid ${pin.length > i ? 'var(--violet)' : 'var(--border-strong)'}` }} />
+          <div key={i} style={{ width: 14, height: 14, borderRadius: '50%', transition: 'all 150ms ease', background: pin.length > i ? 'var(--violet)' : 'transparent', border: '2px solid ' + (pin.length > i ? 'var(--violet)' : 'var(--border-strong)') }} />
         ))}
       </div>
       {error && <p style={{ fontSize: 12, color: 'var(--destructive)', fontFamily: 'var(--font-ui)', marginBottom: 12 }}>{error}</p>}
@@ -240,7 +240,7 @@ function POSUserSelect({ businessId, businessName, onLogin }: {
 
             {/* User grid — show even during/after load error if we have cached users */}
             {users.length > 0 && (
-              <div style={{ display: 'grid', gridTemplateColumns: users.length <= 2 ? `repeat(${users.length},1fr)` : 'repeat(3,1fr)', gap: 10, marginBottom: 20 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: users.length <= 2 ? 'repeat(' + users.length + ',1fr)' : 'repeat(3,1fr)', gap: 10, marginBottom: 20 }}>
                 {users.map(u => {
                   const initials = makeInitials(u.name);
                   return (
@@ -336,6 +336,13 @@ export default function POSShell({ children, businessId, businessName }: {
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [sidebarHint, setSidebarHint] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+
+  // Mobile open-sidebar trigger from terminal hamburger
+  useEffect(() => {
+    const handler = () => setMobileSidebarOpen(true)
+    window.addEventListener('pos-open-sidebar', handler)
+    return () => window.removeEventListener('pos-open-sidebar', handler)
+  }, [])
 
   // One-time sidebar hint on first load
   useEffect(() => {
@@ -436,10 +443,11 @@ export default function POSShell({ children, businessId, businessName }: {
         />
       )}
 
-      {/* Sidebar — hidden on mobile unless open */}
+      {/* Sidebar — fixed overlay on mobile, static on desktop */}
       <div style={{
-        position: 'relative', zIndex: 201, flexShrink: 0,
-        // Mobile: slide in/out; Desktop: always visible
+        position: typeof window !== 'undefined' && window.innerWidth < 768 ? 'fixed' : 'relative',
+        top: 0, left: 0, bottom: 0,
+        zIndex: 201, flexShrink: 0,
         transform: typeof window !== 'undefined' && window.innerWidth < 768 && !mobileSidebarOpen ? 'translateX(-100%)' : 'translateX(0)',
         transition: 'transform 0.25s ease',
       }}
