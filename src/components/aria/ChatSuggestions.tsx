@@ -46,7 +46,7 @@ export default function ChatSuggestions({ onSelect, disabled }: Props) {
           }}
         >
           {loading ? (
-            <span className="block h-4 rounded bg-white/10 animate-pulse" style={{ width: `${60 + (i * 13) % 35}%` }} />
+            <span className="block h-4 rounded bg-white/10 animate-pulse" style={{ width: (60 + (i * 13) % 35) + "%" }} />
           ) : s}
         </button>
       ))}

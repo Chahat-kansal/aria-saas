@@ -225,7 +225,7 @@ function SchedulesSection() {
               return (
                 <button key={d} onClick={() => setDays(prev => active ? prev.filter(x => x !== val) : [...prev, val])}
                   className="px-2 py-1 rounded text-xs"
-                  style={{ background: active ? 'rgba(45,82,64,0.5)' : 'rgba(255,255,255,0.05)', color: active ? '#7FB897' : 'rgba(255,255,255,0.4)', border: `1px solid ${active ? 'rgba(45,82,64,0.5)' : 'rgba(255,255,255,0.08)'}` }}>
+                  style={{ background: active ? 'rgba(45,82,64,0.5)' : 'rgba(255,255,255,0.05)', color: active ? '#7FB897' : 'rgba(255,255,255,0.4)', border: "1px solid " + (active ? "rgba(45,82,64,0.5)" : "rgba(255,255,255,0.08)") }}>
                   {d}
                 </button>
               )

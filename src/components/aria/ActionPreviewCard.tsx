@@ -15,14 +15,14 @@ const RISK_BG = { low: 'rgba(34,197,94,0.05)', medium: 'rgba(245,158,11,0.05)', 
 export default function ActionPreviewCard({ action, onConfirm, onCancel, loading }: Props) {
   return (
     <div className="mt-2 rounded-xl p-4 space-y-3"
-      style={{ border: `1px solid ${RISK_BORDER[action.risk]}`, background: RISK_BG[action.risk] }}>
+      style={{ border: "1px solid " + RISK_BORDER[action.risk], background: RISK_BG[action.risk] }}>
       <div className="flex justify-between items-start gap-3">
         <div>
           <p className="font-medium text-white text-sm">{action.title}</p>
           <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.5)' }}>{action.description}</p>
         </div>
         <span className="text-xs font-medium px-2 py-0.5 rounded-full flex-shrink-0 capitalize"
-          style={{ color: RISK_COLOR[action.risk], background: `${RISK_COLOR[action.risk]}22` }}>
+          style={{ color: RISK_COLOR[action.risk], background: RISK_COLOR[action.risk] + "22" }}>
           {action.risk} risk
         </span>
       </div>

@@ -93,7 +93,7 @@ function MetricCardsView({ data }: { data: Record<string, unknown> }) {
     <div className="grid grid-cols-2 gap-2.5">
       {cards.map((c, i) => (
         <div key={i} className="rounded-lg p-3"
-          style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(127,184,151,0.12)', opacity: show ? 1 : 0, transition: `opacity 500ms ${i * 80}ms` }}>
+          style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(127,184,151,0.12)', opacity: show ? 1 : 0, transition: "opacity 500ms " + (i * 80) + "ms" }}>
           <p className="text-xs mb-1" style={{ color: 'rgba(255,255,255,0.4)' }}>{c.label}</p>
           <p className="text-xl font-medium" style={{ fontFamily: 'Fraunces, serif', fontStyle: 'italic', color: '#e5e7eb' }}>{c.value}</p>
           {typeof c.trend === 'number' && (
@@ -156,7 +156,7 @@ function BreakdownTableView({ data }: { data: Record<string, unknown> }) {
             </div>
             <div className="h-1.5 rounded-full" style={{ background: 'rgba(255,255,255,0.08)' }}>
               <div className="h-full rounded-full"
-                style={{ width: show ? `${pct}%` : '0%', background: color, transition: `width 700ms cubic-bezier(0.4,0,0.2,1) ${i * 60}ms` }} />
+                style={{ width: show ? (pct + "%") : "0%", background: color, transition: "width 700ms cubic-bezier(0.4,0,0.2,1) " + (i * 60) + "ms" }} />
             </div>
           </div>
         )
@@ -271,7 +271,7 @@ function DataRecordView({ data }: { data: Record<string, unknown> }) {
       ))}
 
       {metrics && metrics.length > 0 && (
-        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(metrics.length, 4)}, 1fr)`, gap: 8, marginTop: 14, paddingTop: 14, borderTop: '1px solid rgba(127,184,151,0.12)' }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(" + Math.min(metrics.length, 4) + ", 1fr)", gap: 8, marginTop: 14, paddingTop: 14, borderTop: "1px solid rgba(127,184,151,0.12)" }}>
           {metrics.map((m, i) => (
             <div key={i} style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 8, padding: '8px 10px', border: '1px solid rgba(127,184,151,0.1)' }}>
               <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', marginBottom: 2 }}>{m.label}</div>
