@@ -20,6 +20,8 @@ async function _POST(req: Request) {
   const { data: post } = await supabase.from('social_posts').select('*')
     .eq('id', post_id).eq('business_id', business_id).maybeSingle();
   if (!post) return NextResponse.json({ error: 'Post not found' }, { status: 404 });
+  // Allow publishing draft or approved posts — both are valid
+  if (post.status === 'published') return NextResponse.json({ error: 'Already published' }, { status: 400 });
 
   const { data: conn } = await supabase.from('social_connections').select('*')
     .eq('business_id', business_id).eq('platform', post.platform).maybeSingle();
@@ -85,6 +87,7 @@ async function _POST(req: Request) {
     }
   } catch (err: any) {
     publishError = err.message;
+    console.error('[social/publish] platform error:', post.platform, err.message);
   }
 
   await supabase.from('social_posts').update({
@@ -93,7 +96,11 @@ async function _POST(req: Request) {
     platform_post_id: platformPostId,
   }).eq('id', post_id);
 
-  if (publishError) return NextResponse.json({ error: publishError }, { status: 502 });
+  if (publishError) {
+    console.error('[social/publish] failed:', post.platform, publishError);
+    return NextResponse.json({ error: publishError }, { status: 502 });
+  }
+  console.log('[social/publish] success:', post.platform, platformPostId);
   return NextResponse.json({ ok: true, platform_post_id: platformPostId });
 }
 

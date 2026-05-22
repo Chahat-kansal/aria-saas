@@ -46,6 +46,8 @@ export default function SocialPage() {
   const [imgGenerating, setImgGenerating] = useState<Record<string, boolean>>({});
   const [videoJobs, setVideoJobs] = useState<Record<string, string>>({});
   const [videoStatus, setVideoStatus] = useState<Record<string, { status: string; url?: string }>>({});
+  const [publishing, setPublishing] = useState<Record<string, boolean>>({});
+  const [publishToast, setPublishToast] = useState<{ id: string; ok: boolean; msg: string } | null>(null);
   const [voiceOpen, setVoiceOpen] = useState<string | null>(null);
   const [voiceText, setVoiceText] = useState('');
   const [voiceGenerating, setVoiceGenerating] = useState(false);
@@ -183,9 +185,28 @@ export default function SocialPage() {
 
   async function publish(postId: string) {
     if (!bid) return;
-    const res = await fetch('/api/social/publish', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ post_id: postId, business_id: bid }) });
-    const d = await res.json();
-    if (d.ok) setPosts(prev => prev.map(p => p.id === postId ? { ...p, status: 'published', published_at: new Date().toISOString() } : p));
+    setPublishing(p => ({ ...p, [postId]: true }));
+    try {
+      const res = await fetch('/api/social/publish', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ post_id: postId, business_id: bid }),
+      });
+      const d = await res.json();
+      if (d.ok) {
+        setPosts(prev => prev.map(p =>
+          p.id === postId ? { ...p, status: 'published', published_at: new Date().toISOString() } : p
+        ));
+        setPublishToast({ id: postId, ok: true, msg: 'Posted successfully!' });
+      } else {
+        setPublishToast({ id: postId, ok: false, msg: d.error || 'Failed to post' });
+      }
+    } catch (e: any) {
+      setPublishToast({ id: postId, ok: false, msg: 'Network error — try again' });
+    } finally {
+      setPublishing(p => { const n = { ...p }; delete n[postId]; return n; });
+      setTimeout(() => setPublishToast(null), 5000);
+    }
   }
 
   async function loadImages(postId: string, prompt: string | null) {
@@ -655,9 +676,9 @@ export default function SocialPage() {
                 <PlatformBadge platform={post.platform} />
                 <p style={{ flex: 1, fontSize: 13, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{post.caption.slice(0, 80)}</p>
                 <span style={{ fontSize: 11, color: C.dim, flexShrink: 0 }}>{post.scheduled_for ? new Date(post.scheduled_for).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—'}</span>
-                <button onClick={() => publish(post.id)}
-                  style={{ padding: '5px 12px', borderRadius: 7, border: 'none', background: C.green, color: '#fff', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}>
-                  Publish now
+                <button onClick={() => publish(post.id)} disabled={publishing[post.id]}
+                  style={{ padding: '5px 12px', borderRadius: 7, border: 'none', background: publishing[post.id] ? 'rgba(29,158,117,0.5)' : C.green, color: '#fff', fontSize: 11, fontWeight: 700, cursor: publishing[post.id] ? 'wait' : 'pointer', fontFamily: 'inherit', flexShrink: 0 }}>
+                  {publishing[post.id] ? '⏳ Posting…' : 'Publish now'}
                 </button>
                 <button onClick={() => skip(post.id)}
                   style={{ padding: '5px 8px', borderRadius: 7, border: ('1px solid ' + C.border), background: 'transparent', color: C.dim, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' }}>
