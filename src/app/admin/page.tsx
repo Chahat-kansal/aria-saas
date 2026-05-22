@@ -8,7 +8,7 @@ const INDUSTRY_COLORS: Record<string, string> = { retail: '#8B5CF6', cafe: '#F59
 
 function StatCard({ label, value, sub, color }: { label: string; value: string | number; sub?: string; color?: string }) {
   return (
-    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: '20px 22px' }}>
+    <div style={{ background: C.card, border: "1px solid " + C.border, borderRadius: 16, padding: '20px 22px' }}>
       <p style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: C.dim, marginBottom: 8 }}>{label}</p>
       <p style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 30, fontWeight: 800, color: color || C.text, lineHeight: 1 }}>{value}</p>
       {sub && <p style={{ fontSize: 11, color: C.muted, marginTop: 6 }}>{sub}</p>}
@@ -81,7 +81,7 @@ export default function AdminOverview() {
           <h1 style={{ fontSize: 24, fontWeight: 800, color: C.text, marginBottom: 4 }}>⚡ Aria Admin</h1>
           <p style={{ fontSize: 13, color: C.muted }}>{now?.toLocaleString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', second: '2-digit' })}</p>
         </div>
-        <a href="/dashboard" style={{ fontSize: 12, color: C.cyan, textDecoration: 'none', padding: '6px 14px', border: `1px solid rgba(0,229,255,0.2)`, borderRadius: 8 }}>← Back to app</a>
+        <a href="/dashboard" style={{ fontSize: 12, color: C.cyan, textDecoration: 'none', padding: '6px 14px', border: "1px solid rgba(0,229,255,0.2)", borderRadius: 8 }}>← Back to app</a>
       </div>
 
       {loading ? (
@@ -101,7 +101,7 @@ export default function AdminOverview() {
           {/* Charts row */}
           <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 16, marginBottom: 28 }}>
             {/* Growth chart */}
-            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: '20px 22px' }}>
+            <div style={{ background: C.card, border: "1px solid " + C.border, borderRadius: 16, padding: '20px 22px' }}>
               <p style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 16 }}>New businesses — last 12 weeks</p>
               <ResponsiveContainer width="100%" height={160}>
                 <AreaChart data={weekData} margin={{ left: 0, right: 0, top: 4, bottom: 0 }}>
@@ -113,14 +113,14 @@ export default function AdminOverview() {
                   </defs>
                   <XAxis dataKey="week" tick={{ fill: C.dim, fontSize: 10 }} axisLine={false} tickLine={false} />
                   <YAxis tick={{ fill: C.dim, fontSize: 10 }} axisLine={false} tickLine={false} allowDecimals={false} />
-                  <Tooltip contentStyle={{ background: 'var(--bg-surface)', border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, fontSize: 12 }} />
+                  <Tooltip contentStyle={{ background: 'var(--bg-surface)', border: "1px solid " + C.border, borderRadius: 8, color: C.text, fontSize: 12 }} />
                   <Area type="monotone" dataKey="count" stroke={C.cyan} strokeWidth={2} fill="url(#cyanGrad)" name="New businesses" />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
 
             {/* Industry pie */}
-            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: '20px 22px' }}>
+            <div style={{ background: C.card, border: "1px solid " + C.border, borderRadius: 16, padding: '20px 22px' }}>
               <p style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 8 }}>By industry</p>
               <ResponsiveContainer width="100%" height={160}>
                 <PieChart>
@@ -128,20 +128,20 @@ export default function AdminOverview() {
                     {industryData.map(d => <Cell key={d.name} fill={INDUSTRY_COLORS[d.name] || INDUSTRY_COLORS.default} />)}
                   </Pie>
                   <Legend formatter={(v: string) => <span style={{ fontSize: 10, color: C.muted }}>{v}</span>} />
-                  <Tooltip contentStyle={{ background: 'var(--bg-surface)', border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, fontSize: 11 }} />
+                  <Tooltip contentStyle={{ background: 'var(--bg-surface)', border: "1px solid " + C.border, borderRadius: 8, color: C.text, fontSize: 11 }} />
                 </PieChart>
               </ResponsiveContainer>
             </div>
           </div>
 
           {/* Recent signups */}
-          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, overflow: 'hidden', marginBottom: 28 }}>
-            <div style={{ padding: '14px 18px', borderBottom: `1px solid ${C.border}` }}>
+          <div style={{ background: C.card, border: "1px solid " + C.border, borderRadius: 16, overflow: 'hidden', marginBottom: 28 }}>
+            <div style={{ padding: '14px 18px', borderBottom: "1px solid " + C.border }}>
               <p style={{ fontSize: 13, fontWeight: 700, color: C.text }}>Recent Signups</p>
             </div>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
-                <tr style={{ background: 'rgba(255,255,255,0.02)', borderBottom: `1px solid ${C.border}` }}>
+                <tr style={{ background: 'rgba(255,255,255,0.02)', borderBottom: "1px solid " + C.border }}>
                   {['Business','Industry','City','Plan','Joined'].map(h => (
                     <th key={h} style={{ textAlign: 'left', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: C.dim, padding: '8px 14px' }}>{h}</th>
                   ))}
@@ -149,7 +149,7 @@ export default function AdminOverview() {
               </thead>
               <tbody>
                 {recentSignups.map((b, i) => (
-                  <tr key={b.id} style={{ borderBottom: i < recentSignups.length - 1 ? `1px solid ${C.border}` : 'none', cursor: 'pointer' }} onClick={() => window.location.href = `/admin/businesses/${b.id}`}>
+                  <tr key={b.id} style={{ borderBottom: i < recentSignups.length - 1 ? "1px solid " + C.border : 'none', cursor: 'pointer' }} onClick={() => window.location.href = `/admin/businesses/${b.id}`}>
                     <td style={{ padding: '10px 14px', fontSize: 13, fontWeight: 600, color: C.text }}>{b.name}</td>
                     <td style={{ padding: '10px 14px', fontSize: 12, color: C.muted, textTransform: 'capitalize' }}>{b.industry || '—'}</td>
                     <td style={{ padding: '10px 14px', fontSize: 12, color: C.muted }}>{b.city || '—'}</td>
@@ -166,7 +166,7 @@ export default function AdminOverview() {
           </div>
 
           {/* System status */}
-          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: '18px 20px' }}>
+          <div style={{ background: C.card, border: "1px solid " + C.border, borderRadius: 16, padding: '18px 20px' }}>
             <p style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 12 }}>System Status</p>
             <StatusPill ok={true}  label="Supabase connection" />
             <StatusPill ok={!!process.env.NEXT_PUBLIC_SUPABASE_URL} label="Anthropic API" />
