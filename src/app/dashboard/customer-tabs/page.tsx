@@ -11,6 +11,7 @@ interface TabCustomer {
   credit_limit_cents: number
   account_number: string | null
   last_visit: string | null
+  last_visit_at: string | null
   total_spend: number | null
 }
 
@@ -23,6 +24,56 @@ const C = {
 
 function fmtCents(cents: number) {
   return 'A$' + Math.abs(cents / 100).toFixed(2)
+}
+
+function AgingReport({ customers, onEmailAll }: { customers: Array<{ id: string; name: string; email: string | null; current_balance_cents: number; last_visit: string | null; last_visit_at: string | null }>; onEmailAll: () => void }) {
+  const now = Date.now()
+  const ageOf = (c: { last_visit: string | null; last_visit_at: string | null }) => {
+    const ts = c.last_visit_at ?? c.last_visit
+    return ts ? Math.floor((now - new Date(ts).getTime()) / 86400000) : 999
+  }
+
+  const owing = customers.filter(c => (c.current_balance_cents ?? 0) > 0)
+  const b30  = owing.filter(c => ageOf(c) <= 30)
+  const b60  = owing.filter(c => ageOf(c) > 30 && ageOf(c) <= 60)
+  const b90  = owing.filter(c => ageOf(c) > 60 && ageOf(c) <= 90)
+  const b90p = owing.filter(c => ageOf(c) > 90)
+
+  const sum = (arr: typeof owing) => arr.reduce((s, c) => s + c.current_balance_cents, 0)
+  const fmtC = (cents: number) => 'A$' + (cents / 100).toFixed(0)
+
+  if (owing.length === 0) return null
+
+  return (
+    <div style={{ background: 'var(--bg-surface)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 12, padding: '18px 20px', marginBottom: 20 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+        <div>
+          <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 2 }}>Aging report</p>
+          <p style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{owing.length} customers with outstanding balances · {fmtC(sum(owing))} total</p>
+        </div>
+        {b90p.length > 0 && (
+          <button onClick={onEmailAll}
+            style={{ padding: '7px 14px', borderRadius: 8, border: 'none', background: '#EF4444', color: '#fff', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+            📧 Email all 90d+ overdue ({b90p.filter(c => c.email).length})
+          </button>
+        )}
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10 }}>
+        {[
+          { label: '0–30 days', items: b30, color: '#22C55E' },
+          { label: '31–60 days', items: b60, color: '#F59E0B' },
+          { label: '61–90 days', items: b90, color: '#F97316' },
+          { label: '90+ days', items: b90p, color: '#EF4444' },
+        ].map(bucket => (
+          <div key={bucket.label} style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 9, padding: '12px 14px' }}>
+            <p style={{ fontSize: 10, color: 'var(--text-tertiary)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{bucket.label}</p>
+            <p style={{ fontSize: 20, fontWeight: 700, color: bucket.color, marginBottom: 2 }}>{fmtC(sum(bucket.items))}</p>
+            <p style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{bucket.items.length} customer{bucket.items.length !== 1 ? 's' : ''}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
 }
 
 export default function CustomerTabsPage() {
@@ -95,6 +146,23 @@ export default function CustomerTabsPage() {
     setSendingStatement(false)
   }
 
+  async function emailAllOverdue() {
+    const overdue = customers.filter(c => {
+      const ts = c.last_visit_at ?? c.last_visit
+      const age = ts ? Math.floor((Date.now() - new Date(ts).getTime()) / 86400000) : 999
+      return (c.current_balance_cents ?? 0) > 0 && age > 90 && c.email
+    })
+    if (!overdue.length || !business?.id) return
+    await Promise.allSettled(overdue.map(c =>
+      fetch('/api/pos/customers/' + c.id + '/statement', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ business_id: business?.id }),
+      })
+    ))
+    alert('Statements sent to ' + overdue.filter(c => c.email).length + ' overdue customers.')
+  }
+
   const filtered = customers.filter(c => {
     if (search && !c.name.toLowerCase().includes(search.toLowerCase())) return false
     if (filter === 'owing' && (c.current_balance_cents ?? 0) <= 0) return false
@@ -128,6 +196,8 @@ export default function CustomerTabsPage() {
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: selected ? '1fr 360px' : '1fr', gap: 20 }}>
+        {/* Aging report */}
+        <AgingReport customers={customers} onEmailAll={emailAllOverdue} />
         {/* Customer list */}
         <div>
           <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>

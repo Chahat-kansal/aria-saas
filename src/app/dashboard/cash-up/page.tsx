@@ -28,6 +28,60 @@ const C = {
 function fmt(n: number) { return 'A$' + Math.abs(n).toFixed(2) }
 function fmtCents(c: number | null) { return c == null ? '—' : 'A$' + (Math.abs(c) / 100).toFixed(2) }
 
+function WeeklyTrendChart({ sessions }: { sessions: Array<{ closed_at: string | null; opened_at: string; variance_cents: number | null; status: string }> }) {
+  const closed = sessions.filter(s => s.status === 'closed' && s.variance_cents != null)
+  if (closed.length < 3) return null
+
+  const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+  const byDow: Record<number, number[]> = {}
+  for (const s of closed) {
+    const d = new Date(s.closed_at ?? s.opened_at).getDay()
+    if (!byDow[d]) byDow[d] = []
+    byDow[d].push(s.variance_cents!)
+  }
+  const dowData = days.map((label, i) => {
+    const vals = byDow[i] ?? []
+    const avg = vals.length > 0 ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length) : null
+    return { label, avg, count: vals.length }
+  }).filter(d => d.count > 0)
+
+  if (dowData.length < 2) return null
+
+  const maxAbs = Math.max(...dowData.map(d => Math.abs(d.avg ?? 0)), 100)
+  const midH = 60
+
+  return (
+    <div style={{ background: 'var(--bg-surface)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 12, padding: '16px 20px', marginTop: 20 }}>
+      <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>Weekly variance pattern</p>
+      <p style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 14 }}>Average till variance by day — helps spot patterns like "Friday is always short"</p>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', height: 120 }}>
+        {dowData.map(d => {
+          const v = d.avg ?? 0
+          const barH = Math.round((Math.abs(v) / maxAbs) * midH)
+          const isNeg = v < 0
+          return (
+            <div key={d.label} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+              <div style={{ fontSize: 9, color: isNeg ? '#EF4444' : v > 0 ? '#22C55E' : '#6b7280', fontWeight: 700 }}>
+                {v === 0 ? '—' : (v > 0 ? '+' : '') + 'A$' + (Math.abs(v) / 100).toFixed(0)}
+              </div>
+              <div style={{ width: '100%', display: 'flex', flexDirection: 'column', height: midH * 2, justifyContent: 'center', alignItems: 'center', position: 'relative' }}>
+                <div style={{ position: 'absolute', width: '1px', height: '100%', background: 'rgba(255,255,255,0.05)', left: '50%' }} />
+                {isNeg ? (
+                  <div style={{ position: 'absolute', top: midH, width: '80%', height: barH, background: '#EF4444', borderRadius: '0 0 4px 4px', opacity: 0.7 }} />
+                ) : (
+                  <div style={{ position: 'absolute', bottom: midH, width: '80%', height: barH, background: '#22C55E', borderRadius: '4px 4px 0 0', opacity: 0.7 }} />
+                )}
+              </div>
+              <div style={{ fontSize: 10, color: 'var(--text-tertiary)', fontWeight: 600 }}>{d.label}</div>
+              <div style={{ fontSize: 9, color: 'var(--text-tertiary)' }}>{d.count}x</div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 export default function CashUpPage() {
   const { business } = useBusinessContext()
   const [sessions, setSessions] = useState<CashSession[]>([])
@@ -289,6 +343,7 @@ export default function CashUpPage() {
             </div>
           )}
         </div>
+        <WeeklyTrendChart sessions={sessions} />
       </div>
     </div>
   )

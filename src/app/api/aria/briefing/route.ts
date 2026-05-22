@@ -32,22 +32,47 @@ async function _GET(req: Request) {
 
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
 
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
+
   const [
     { data: recentActivity, count: activityCount },
     { data: activeLeaks },
     { data: lapsedCustomers },
     { data: recentReviews },
+    { data: cashSessions },
+    { data: overdueCustomers },
+    { data: recentStocktakes },
+    { data: lowStockProducts },
   ] = await Promise.all([
     supabase.from('activity_log').select('description', { count: 'exact' }).eq('business_id', businessId).gte('created_at', sevenDaysAgo),
     supabase.from('profit_leaks').select('description,monthly_loss').eq('business_id', businessId).eq('status', 'detected'),
     supabase.from('customers').select('id', { count: 'exact' }).eq('business_id', businessId).in('churn_risk', ['medium', 'high']),
     supabase.from('reviews').select('rating,content').eq('business_id', businessId).order('created_at', { ascending: false }).limit(3),
+    // Cash-up: last 14 days of sessions with variance
+    supabase.from('pos_cash_sessions').select('variance_cents,closed_at,closed_by').eq('business_id', businessId).eq('status', 'closed').gte('closed_at', sevenDaysAgo).order('closed_at', { ascending: false }).limit(14),
+    // Customer tabs: overdue 60+ days
+    supabase.from('pos_customers').select('name,current_balance_cents,last_visit_at').eq('business_id', businessId).gt('current_balance_cents', 0).lt('last_visit_at', ninetyDaysAgo).limit(20),
+    // Most recent stocktake
+    supabase.from('pos_stock_takes').select('status,items_counted,items_with_variance,completed_at').eq('business_id', businessId).order('completed_at', { ascending: false }).limit(1),
+    // Low stock
+    supabase.from('pos_products').select('name,stock_quantity,low_stock_threshold').eq('business_id', businessId).eq('track_stock', true).lt('stock_quantity', 5).limit(5),
   ]);
 
-  const totalLeakLoss = (activeLeaks || []).reduce((s, l) => s + (l.monthly_loss || 0), 0);
+  const totalLeakLoss = (activeLeaks || []).reduce((s: number, l: { monthly_loss?: number }) => s + (l.monthly_loss || 0), 0);
 
-  const context = `
-Business: ${business.name} (${business.industry})
+  // Cash-up variance analysis
+  const cashVariances = (cashSessions || []).map((s: { variance_cents?: number | null }) => s.variance_cents ?? 0);
+  const avgVariance = cashVariances.length > 0 ? Math.round(cashVariances.reduce((a: number, b: number) => a + b, 0) / cashVariances.length) : 0;
+  const largeVariances = cashVariances.filter((v: number) => Math.abs(v) > 500);
+
+  // Overdue tab total
+  const overdueTotal = (overdueCustomers || []).reduce((s: number, c: { current_balance_cents?: number }) => s + (c.current_balance_cents ?? 0), 0);
+
+  // Stocktake summary
+  const lastStocktake = recentStocktakes?.[0];
+
+  const context = `Business: ${business.name} (${business.industry})
 Owner: ${business.owner_name}
 Plan: ${business.plan}
 Google rating: ${business.google_rating || 'not set'}
@@ -55,8 +80,13 @@ Google rating: ${business.google_rating || 'not set'}
 Last 7 days: ${activityCount || 0} actions taken
 Active profit leaks: ${activeLeaks?.length || 0} totalling $${totalLeakLoss}/mo recoverable
 At-risk customers: ${lapsedCustomers?.length || 0}
-Recent reviews: ${(recentReviews || []).map(r => `${r.rating}★`).join(', ') || 'none'}
-  `.trim();
+Recent reviews: ${(recentReviews || []).map((r: { rating?: number }) => `${r.rating}★`).join(', ') || 'none'}
+
+OPERATIONS DATA (feed into briefing):
+Cash-up (last 7 days): ${cashSessions?.length || 0} sessions. Avg variance: ${avgVariance > 0 ? '+' : ''}A$${(Math.abs(avgVariance) / 100).toFixed(2)}. ${largeVariances.length > 0 ? largeVariances.length + ' sessions had variance over $5.' : 'All sessions balanced.'}
+Overdue customer tabs (90+ days): ${overdueCustomers?.length || 0} customers owing A$${(overdueTotal / 100).toFixed(2)} total.
+Last stocktake: ${lastStocktake ? lastStocktake.items_counted + ' items counted, ' + lastStocktake.items_with_variance + ' variances found.' : 'No stocktake on record.'}
+Low stock products: ${lowStockProducts?.map((p: { name?: string; stock_quantity?: number }) => p.name + ' (' + p.stock_quantity + ' left)').join(', ') || 'none critical'}`.trim();
 
   try {
     const _bizCtx = await getBusinessContext(businessId)

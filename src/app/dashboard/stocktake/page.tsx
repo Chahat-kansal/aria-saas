@@ -56,7 +56,7 @@ export default function StocktakePage() {
     try {
       const res = await fetch('/api/pos/stock-takes')
       const d = await res.json()
-      setStocktakes(d.stocktakes ?? [])
+      setStocktakes(d.stock_takes ?? [])
     } catch { /* ignore */ }
     setLoading(false)
   }, [business?.id])
@@ -73,7 +73,7 @@ export default function StocktakePage() {
       const products = prodData.products ?? []
 
       // Create stocktake session
-      const res = await fetch('/api/pos/stocktakes', {
+      const res = await fetch('/api/pos/stock-takes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -88,15 +88,7 @@ export default function StocktakePage() {
         }),
       })
       const d = await res.json()
-      if (d.stocktake) {
-        setActiveId(d.stocktake.id)
-        setItems(d.items ?? [])
-        const initCounts: Record<string, string> = {}
-        for (const item of d.items ?? []) {
-          initCounts[item.id] = ''
-        }
-        setCounts(initCounts)
-        setView('active')
+      if (d.success || d.stock_take_id) {
         setSessionName('')
         load()
       }
@@ -108,7 +100,7 @@ export default function StocktakePage() {
     if (!business?.id) return
     setLoading(true)
     try {
-      const res = await fetch('/api/pos/stocktakes/' + id + '?business_id=' + business.id)
+      const res = await fetch('/api/pos/stock-takes/' + id + '?business_id=' + business.id)
       const d = await res.json()
       setActiveId(id)
       setItems(d.items ?? [])
@@ -127,7 +119,7 @@ export default function StocktakePage() {
     const counted = parseInt(qty)
     if (isNaN(counted)) return
     try {
-      await fetch('/api/pos/stocktakes/' + activeId + '/items/' + itemId, {
+      await fetch('/api/pos/stock-takes/' + activeId + '/items/' + itemId, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ counted_qty: counted, business_id: business.id }),
@@ -148,7 +140,7 @@ export default function StocktakePage() {
         .map(i => saveCount(i.id, counts[i.id]))
       await Promise.all(saveAll)
 
-      await fetch('/api/pos/stocktakes/' + activeId, {
+      await fetch('/api/pos/stock-takes/' + activeId, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'completed', business_id: business.id }),
@@ -185,6 +177,47 @@ export default function StocktakePage() {
   const countedCount = items.filter(i => i.counted_qty != null).length
   const varianceItems = items.filter(i => i.variance != null && i.variance !== 0)
   const progress = items.length > 0 ? Math.round((countedCount / items.length) * 100) : 0
+
+  function printVarianceReport() {
+    const bizName = business?.name ?? 'Store'
+    const date = new Date().toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric' })
+    const varItems = items.filter(i => i.variance != null && i.variance !== 0)
+    const shortItems = varItems.filter(i => (i.variance ?? 0) < 0)
+    const overItems  = varItems.filter(i => (i.variance ?? 0) > 0)
+
+    const rows = items.map(i => {
+      const v = i.variance ?? 0
+      const color = v < 0 ? '#dc2626' : v > 0 ? '#d97706' : '#16a34a'
+      return '<tr><td style="padding:6px 10px;border-bottom:1px solid #e5e7eb">' + i.product_name + '</td>' +
+        '<td style="padding:6px 10px;border-bottom:1px solid #e5e7eb;text-align:center">' + i.expected_qty + '</td>' +
+        '<td style="padding:6px 10px;border-bottom:1px solid #e5e7eb;text-align:center">' + (i.counted_qty ?? '—') + '</td>' +
+        '<td style="padding:6px 10px;border-bottom:1px solid #e5e7eb;text-align:center;color:' + color + ';font-weight:700">' + (v === 0 ? '✓' : (v > 0 ? '+' : '') + v) + '</td></tr>'
+    }).join('')
+
+    const html = '<!DOCTYPE html><html><head><title>Stocktake Variance Report — ' + bizName + '</title>' +
+      '<style>body{font-family:Arial,sans-serif;color:#111;padding:32px;max-width:800px;margin:0 auto}' +
+      'h1{font-size:22px;font-weight:700;margin-bottom:4px}' +
+      '.meta{color:#6b7280;font-size:13px;margin-bottom:24px}' +
+      '.summary{display:flex;gap:24px;margin-bottom:24px;padding:16px;background:#f9fafb;border-radius:8px}' +
+      '.kpi{text-align:center}.kpi-val{font-size:24px;font-weight:700}.kpi-lbl{font-size:11px;color:#6b7280;text-transform:uppercase}' +
+      'table{width:100%;border-collapse:collapse}th{padding:8px 10px;background:#f3f4f6;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#6b7280}' +
+      '@media print{body{padding:0}}</style></head><body>' +
+      '<h1>Stocktake Variance Report</h1>' +
+      '<div class="meta">' + bizName + ' · ' + date + ' · ' + items.length + ' products counted</div>' +
+      '<div class="summary">' +
+        '<div class="kpi"><div class="kpi-val">' + items.length + '</div><div class="kpi-lbl">Total counted</div></div>' +
+        '<div class="kpi"><div class="kpi-val" style="color:#dc2626">' + shortItems.length + '</div><div class="kpi-lbl">Items short</div></div>' +
+        '<div class="kpi"><div class="kpi-val" style="color:#d97706">' + overItems.length + '</div><div class="kpi-lbl">Items over</div></div>' +
+        '<div class="kpi"><div class="kpi-val" style="color:#16a34a">' + (items.length - varItems.length) + '</div><div class="kpi-lbl">Balanced</div></div>' +
+      '</div>' +
+      '<table><thead><tr><th>Product</th><th style="text-align:center">Expected</th><th style="text-align:center">Counted</th><th style="text-align:center">Variance</th></tr></thead>' +
+      '<tbody>' + rows + '</tbody></table>' +
+      '<p style="margin-top:32px;font-size:11px;color:#9ca3af">Generated by Aria OS · ' + new Date().toISOString() + '</p>' +
+      '<script>window.onload=function(){window.print()}</script></body></html>'
+
+    const w = window.open('', '_blank')
+    if (w) { w.document.write(html); w.document.close() }
+  }
 
   return (
     <div style={{ minHeight: '100%', background: C.bg, color: C.text, fontFamily: "'Inter',sans-serif", padding: '24px 28px' }}>
@@ -260,6 +293,10 @@ export default function StocktakePage() {
               <button onClick={downloadCSV}
                 style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid ' + C.border, background: 'transparent', color: C.muted, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>
                 Export CSV
+              </button>
+              <button onClick={printVarianceReport}
+                style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid rgba(139,92,246,0.4)', background: 'rgba(139,92,246,0.08)', color: '#8B5CF6', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+                📄 PDF report
               </button>
               <button onClick={completeStocktake} disabled={saving}
                 style={{ padding: '8px 18px', borderRadius: 8, border: 'none', background: '#1D9E75', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', opacity: saving ? 0.6 : 1 }}>

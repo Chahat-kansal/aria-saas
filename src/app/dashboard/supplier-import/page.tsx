@@ -2,7 +2,7 @@
 import { useState, useCallback } from 'react'
 import { useBusinessContext } from '@/components/providers/BusinessProvider'
 
-interface ParsedRow { name: string; sku: string | null; new_cost: number; matched: boolean; product_id: string | null; current_cost: number | null }
+interface ParsedRow { name: string; sku: string | null; new_cost: number; matched: boolean; product_id: string | null; current_cost: number | null; sell_price: number | null }
 interface UploadResult { updated: number; skipped: number; errors: string[] }
 
 const C = {
@@ -56,7 +56,7 @@ export default function SupplierImportPage() {
 
     // Load products to match against
     const res = await fetch('/api/pos/products?business_id=' + business.id)
-    const d = await res.json() as { products?: Array<{ id: string; name: string; sku?: string | null; cost_price?: number | null }> }
+    const d = await res.json() as { products?: Array<{ id: string; name: string; sku?: string | null; cost_price?: number | null; price?: number | null }> }
     const products = d.products ?? []
 
     // Match by SKU first, then name
@@ -75,6 +75,7 @@ export default function SupplierImportPage() {
         matched: !!match,
         product_id: match?.id ?? null,
         current_cost: match ? Number(match.cost_price ?? 0) : null,
+        sell_price: match ? Number(match.price ?? 0) : null,
       }
     })
 
@@ -178,7 +179,7 @@ export default function SupplierImportPage() {
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid ' + C.border, background: 'rgba(255,255,255,0.02)' }}>
-                  {['Status', 'Product', 'SKU', 'Current cost', 'New cost', 'Change'].map(h => (
+                  {['Status', 'Product', 'SKU', 'Current cost', 'New cost', 'Change', 'Margin before', 'Margin after'].map(h => (
                     <th key={h} style={{ padding: '10px 14px', textAlign: 'left', color: C.dim, fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{h}</th>
                   ))}
                 </tr>
@@ -201,6 +202,20 @@ export default function SupplierImportPage() {
                       <td style={{ padding: '10px 14px', color: diff == null ? C.dim : diff > 0 ? C.red : diff < 0 ? C.green : C.muted, fontWeight: 600 }}>
                         {diff == null ? '—' : (diff > 0 ? '+' : '') + 'A$' + diff.toFixed(2) + (diffPct != null ? ' (' + (diffPct > 0 ? '+' : '') + diffPct + '%)' : '')}
                       </td>
+                      <td style={{ padding: '10px 14px', fontSize: 12, color: C.muted }}>
+                        {r.sell_price && r.current_cost != null && r.sell_price > 0
+                          ? Math.round(((r.sell_price - r.current_cost) / r.sell_price) * 100) + '%'
+                          : '—'}
+                      </td>
+                      <td style={{ padding: '10px 14px', fontSize: 12, fontWeight: 700 }}>
+                        {(() => {
+                          if (!r.sell_price || !r.sell_price || r.sell_price <= 0) return <span style={{ color: C.dim }}>—</span>
+                          const newMarginPct = Math.round(((r.sell_price - r.new_cost) / r.sell_price) * 100)
+                          const oldMarginPct = r.current_cost != null ? Math.round(((r.sell_price - r.current_cost) / r.sell_price) * 100) : null
+                          const dropped = oldMarginPct != null && newMarginPct < oldMarginPct
+                          return <span style={{ color: newMarginPct < 20 ? '#EF4444' : newMarginPct < 35 ? '#F59E0B' : '#22C55E' }}>{newMarginPct}%{dropped && oldMarginPct != null ? ' ↓' + (oldMarginPct - newMarginPct) + 'pp' : ''}</span>
+                        })()}
+                      </td>
                     </tr>
                   )
                 })}
@@ -208,6 +223,23 @@ export default function SupplierImportPage() {
             </table>
           </div>
 
+          {(() => {
+            const marginDrops = rows.filter(r => r.matched && r.sell_price && r.sell_price > 0 && r.current_cost != null && r.new_cost > r.current_cost)
+            if (marginDrops.length === 0) return null
+            const worstDrop = marginDrops.sort((a, b) => (b.new_cost - (b.current_cost ?? 0)) - (a.new_cost - (a.current_cost ?? 0)))[0]
+            const oldM = worstDrop.sell_price && worstDrop.current_cost != null ? Math.round(((worstDrop.sell_price - worstDrop.current_cost) / worstDrop.sell_price) * 100) : null
+            const newM = worstDrop.sell_price ? Math.round(((worstDrop.sell_price - worstDrop.new_cost) / worstDrop.sell_price) * 100) : null
+            return (
+              <div style={{ padding: '12px 16px', background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 10, marginBottom: 14 }}>
+                <p style={{ fontSize: 13, color: '#EF4444', fontWeight: 600, marginBottom: 3 }}>⚠ Margin impact warning</p>
+                <p style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                  {marginDrops.length} products will have lower margins after this import.
+                  {oldM != null && newM != null && ' Biggest drop: ' + worstDrop.name + ' from ' + oldM + '% → ' + newM + '% margin.'}
+                  {newM != null && newM < 20 && ' Some products will fall below 20% — consider adjusting sell prices.'}
+                </p>
+              </div>
+            )
+          })()}
           <div style={{ display: 'flex', gap: 10 }}>
             <button onClick={() => { setStep('upload'); setRows([]) }}
               style={{ padding: '10px 20px', borderRadius: 9, border: '1px solid ' + C.border, background: 'transparent', color: C.muted, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>
