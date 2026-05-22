@@ -212,7 +212,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
     .join('');
 
   return (
-    <aside className="w-[220px] flex-shrink-0 bg-[#13131a] h-screen flex flex-col overflow-y-auto">
+    <aside className="w-[220px] flex-shrink-0 bg-black h-screen flex flex-col overflow-y-auto">
       {/* Logo + mobile close */}
       <div className="px-5 pt-[22px] pb-3 flex-shrink-0 flex items-start justify-between">
         <div className="text-lg font-medium tracking-tight">
@@ -319,7 +319,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
           if (!items?.length) return null;
           return (
             <div key={sectionName} className="mb-3">
-              <div className="px-3 py-1.5 text-[9px] uppercase tracking-[.1em] text-[rgba(255,255,255,0.25)] font-medium">
+              <div className="px-3 py-1.5 text-[9px] uppercase tracking-[.1em] text-[rgba(255,255,255,0.4)] font-semibold">
                 {sectionName}
               </div>
               {items.map(item => {
@@ -333,10 +333,10 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
                     target={item.target}
                     rel={item.target === '_blank' ? 'noopener noreferrer' : undefined}
                     onClick={item.target === '_blank' ? undefined : onNavigate}
-                    className={`flex items-center gap-2.5 px-3 py-2.5 md:py-2 mx-1 rounded-lg text-[12.5px] transition-colors mb-0.5 ${
+                    className={`flex items-center gap-2.5 px-3 py-2.5 md:py-2 mx-1 rounded-lg text-[12.5px] font-semibold transition-colors mb-0.5 ${
                       isActive
                         ? 'bg-[rgba(29,158,117,0.15)] text-[#1D9E75]'
-                        : 'text-[rgba(255,255,255,0.45)] hover:bg-[rgba(255,255,255,0.05)] hover:text-[rgba(255,255,255,0.8)]'
+                        : 'text-white hover:bg-[rgba(255,255,255,0.07)] hover:text-white'
                     }`}
                   >
                     <item.icon className="w-[13px] h-[13px] flex-shrink-0" />

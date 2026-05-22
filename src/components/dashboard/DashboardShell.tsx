@@ -30,7 +30,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   if (loading) {
     return (
       <div className="flex h-screen bg-[#0f0f13] overflow-hidden">
-        <div className="w-[220px] flex-shrink-0 bg-[#13131a] h-screen animate-pulse hidden md:block" />
+        <div className="w-[220px] flex-shrink-0 bg-black h-screen animate-pulse hidden md:block" />
         <div className="flex-1 flex flex-col">
           <div className="h-12 bg-[#13131a] animate-pulse md:hidden" />
           <main className="flex-1 overflow-y-auto" />
