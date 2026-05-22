@@ -8,8 +8,8 @@ interface StudioAsset {
 }
 
 const QUALITY_MODES = [
-  { id: 'fast', label: 'Aria Fast',  sub: 'Quick generation · great quality', badge: 'Fast', desc: 'Best for daily social posts, rapid iteration and high-volume creation.' },
-  { id: 'pro',  label: 'Aria Pro',   sub: 'Highest quality · complex scenes',  badge: 'Pro',  desc: 'Maximum detail and accuracy. Best for hero banners, signage, and campaigns that need to impress.' },
+  { id: 'fast', label: 'Fast',  sub: 'Quick generation · great quality', badge: 'Fast', desc: 'Best for daily social posts, rapid iteration and high-volume creation.' },
+  { id: 'pro',  label: 'Pro',   sub: 'Highest quality · complex scenes',  badge: 'Pro',  desc: 'Maximum detail and accuracy. Best for hero banners, signage, and campaigns that need to impress.' },
 ]
 const RATIOS = [
   { id: 'square',   label: '1:1',  hint: 'Instagram',    w: 1,  h: 1  },
@@ -124,7 +124,8 @@ export default function AriaStudioPage() {
   const [style, setStyle]   = useState('photorealistic')
   const [selT, setSelT]     = useState('')
 
-  const [tab, setTab]           = useState<'console'|'library'|'how'>('console')
+  const [tab, setTab]           = useState<'console'|'library'|'how'|'editor'>('console')
+  const [editingAsset, setEditingAsset] = useState<StudioAsset|null>(null)
   const [ff, setFF]             = useState<string|null>(null)
   const [fav, setFav]           = useState(false)
   const [selected, setSel]      = useState<StudioAsset|null>(null)
@@ -254,6 +255,7 @@ export default function AriaStudioPage() {
           Library{assets.length>0&&<span style={{marginLeft:7,fontSize:10,padding:'1px 7px',borderRadius:10,background:'rgba(127,184,151,0.13)',color:'#7FB897'}}>{assets.length}</span>}
         </button>
         <button className={'tab'+(tab==='how'?' on':'')} onClick={()=>setTab('how')}>How it works</button>
+        {editingAsset && <button className={'tab'+(tab==='editor'?' on':'')} onClick={()=>setTab('editor')} style={{color:tab==='editor'?'#7FB897':'rgba(237,232,227,0.38)',borderBottomColor:tab==='editor'?'#7FB897':'transparent'}}>✏ Image editor</button>}
       </div>
 
       {/* HOW IT WORKS */}
@@ -418,7 +420,10 @@ export default function AriaStudioPage() {
                   <p style={{fontSize:9,color:'rgba(237,232,227,0.28)',margin:'0 0 5px',textTransform:'uppercase',letterSpacing:'0.08em',fontWeight:600}}>Prompt used</p>
                   <p style={{fontSize:12,color:'rgba(237,232,227,0.42)',margin:0,lineHeight:1.65}}>{lastGen.enhanced_prompt??lastGen.prompt}</p>
                 </div>
-                <button onClick={()=>{setPrompt(lastGen.prompt??'');setStyle(lastGen.style);setRatio(lastGen.format)}} style={{fontSize:12,padding:'8px 16px',borderRadius:100,cursor:'pointer',fontFamily:'inherit',border:'1px solid rgba(255,255,255,0.09)',background:'transparent',color:'rgba(237,232,227,0.38)',transition:'all 0.2s'}}>↺ Regenerate with changes</button>
+                <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+                  <button onClick={()=>{setPrompt(lastGen.prompt??'');setStyle(lastGen.style);setRatio(lastGen.format)}} style={{fontSize:12,padding:'8px 16px',borderRadius:100,cursor:'pointer',fontFamily:'inherit',border:'1px solid rgba(255,255,255,0.09)',background:'transparent',color:'rgba(237,232,227,0.38)',transition:'all 0.2s'}}>↺ Regenerate with changes</button>
+                  <button onClick={()=>{setEditingAsset(lastGen);setTab('editor')}} style={{fontSize:12,padding:'8px 16px',borderRadius:100,cursor:'pointer',fontFamily:'inherit',border:'1px solid rgba(127,184,151,0.3)',background:'rgba(127,184,151,0.07)',color:'#7FB897',transition:'all 0.2s'}}>✏ Edit image</button>
+                </div>
               </div>
             ) : (
               <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',height:'100%',minHeight:420,padding:40,textAlign:'center'}}>
@@ -513,6 +518,7 @@ export default function AriaStudioPage() {
                 <div style={{display:'flex',flexDirection:'column',gap:8}}>
                   <a href={selected.image_url} download target="_blank" rel="noreferrer" className="btn btn-w" style={{justifyContent:'center',textDecoration:'none',borderRadius:10,padding:'10px',fontSize:13}}>↓ Download</a>
                   <button onClick={()=>toggleFav(selected)} style={{padding:'10px',borderRadius:10,fontSize:12,fontWeight:500,cursor:'pointer',fontFamily:'inherit',border:'1px solid rgba(255,255,255,0.09)',background:'transparent',color:selected.favourite?'#F59E0B':'rgba(237,232,227,0.38)',transition:'all 0.2s'}}>{selected.favourite?'★ Remove from saved':'☆ Save to library'}</button>
+                  <button onClick={()=>{setEditingAsset(selected);setTab('editor')}} style={{padding:'10px',borderRadius:10,fontSize:12,cursor:'pointer',fontFamily:'inherit',border:'1px solid rgba(127,184,151,0.3)',background:'rgba(127,184,151,0.07)',color:'#7FB897',transition:'all 0.2s'}}>✏ Edit image</button>
                   <button onClick={()=>{setPrompt(selected.prompt??'');setStyle(selected.style);setRatio(selected.format);setTab('console')}} style={{padding:'10px',borderRadius:10,fontSize:12,cursor:'pointer',fontFamily:'inherit',border:'1px solid rgba(255,255,255,0.09)',background:'transparent',color:'rgba(237,232,227,0.38)',transition:'all 0.2s'}}>↺ Use as template</button>
                   <button onClick={()=>del(selected.id)} style={{padding:'10px',borderRadius:10,fontSize:12,cursor:'pointer',fontFamily:'inherit',border:'1px solid rgba(239,68,68,0.18)',background:'transparent',color:'rgba(239,68,68,0.55)',transition:'all 0.2s'}}>Delete</button>
                 </div>
@@ -521,6 +527,269 @@ export default function AriaStudioPage() {
           )}
         </div>
       )}
+
+      {/* ── IMAGE EDITOR (Fabric.js canvas) ─────────────────── */}
+      {tab==='editor' && editingAsset && (
+        <ImageEditor asset={editingAsset} onClose={()=>setTab('console')} onSave={(url)=>{showToast('Saved to library');setAssets(p=>p.map(a=>a.id===editingAsset.id?{...a,image_url:url}:a));setTab('library')}} />
+      )}
     </div>
   )
 }
+
+
+/* ─── Image Editor Component ─────────────────────────────── */
+function ImageEditor({ asset, onClose, onSave }: { asset: StudioAsset; onClose: () => void; onSave: (url: string) => void }) {
+  const canvasRef  = useRef<HTMLCanvasElement>(null)
+  const fabricRef  = useRef<any>(null)
+  const [loading, setLoading]     = useState(true)
+  const [saving, setSaving]       = useState(false)
+  const [textInput, setTextInput] = useState('')
+  const [textColor, setTextColor] = useState('#ffffff')
+  const [textSize, setTextSize]   = useState(32)
+  const [textFont, setTextFont]   = useState('Inter')
+  const [selObj, setSelObj]       = useState<any>(null)
+  const [brightness, setBrightness] = useState(0)
+  const [contrast, setContrast]     = useState(0)
+  const [opacity, setOpacity]       = useState(100)
+  const cssRef2 = useRef(false)
+
+  const EDITOR_CSS = `
+.fed{display:flex;height:calc(100vh - 226px);background:#060606;}
+.fed-toolbar{width:260px;flex-shrink:0;border-right:1px solid rgba(255,255,255,0.07);padding:16px;overflow-y:auto;display:flex;flex-direction:column;gap:16px;}
+.fed-canvas-wrap{flex:1;display:flex;align-items:center;justify-content:center;background:repeating-conic-gradient(rgba(255,255,255,0.04) 0% 25%,transparent 0% 50%) 0 0/32px 32px;}
+.fed-section{display:flex;flex-direction:column;gap:8px;}
+.fed-label{font-size:9px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:rgba(237,232,227,0.28);}
+.fed-inp{width:100%;padding:8px 10px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:#ede8e3;font-family:'Inter',sans-serif;font-size:12px;outline:none;}
+.fed-inp:focus{border-color:rgba(127,184,151,0.4);}
+.fed-row{display:flex;gap:6px;}
+.fed-btn{flex:1;padding:8px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.05);color:rgba(237,232,227,0.7);font-family:'Inter',sans-serif;transition:all 0.2s;text-align:center;}
+.fed-btn:hover{border-color:rgba(255,255,255,0.22);color:#ede8e3;background:rgba(255,255,255,0.09);}
+.fed-btn-g{background:rgba(45,82,64,0.8);color:#7FB897;border-color:rgba(127,184,151,0.25);}.fed-btn-g:hover{background:#2D5240;}
+.fed-btn-r{background:rgba(239,68,68,0.1);color:rgba(239,68,68,0.7);border-color:rgba(239,68,68,0.2);}
+.fed-slider{width:100%;accent-color:#7FB897;cursor:pointer;}
+.fed-clr-row{display:flex;gap:6px;flex-wrap:wrap;}
+.fed-clr{width:22px;height:22px;border-radius:50%;cursor:pointer;border:2px solid transparent;transition:all 0.15s;flex-shrink:0;}
+.fed-clr.on{border-color:#ede8e3;transform:scale(1.15);}
+.fed-font-chip{padding:5px 10px;border-radius:100px;font-size:11px;cursor:pointer;border:1px solid rgba(255,255,255,0.09);background:transparent;color:rgba(237,232,227,0.45);font-family:'Inter',sans-serif;transition:all 0.15s;white-space:nowrap;}
+.fed-font-chip.on{border-color:rgba(127,184,151,0.4);background:rgba(127,184,151,0.08);color:#7FB897;}
+`
+  useEffect(() => {
+    if (cssRef2.current) return; cssRef2.current = true
+    const el = document.createElement('style'); el.textContent = EDITOR_CSS
+    document.head.appendChild(el)
+    return () => { document.head.removeChild(el) }
+  }, [])
+
+  // Load Fabric.js from CDN and initialise canvas
+  useEffect(() => {
+    if (!canvasRef.current) return
+    const script = document.createElement('script')
+    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js'
+    script.onload = () => initCanvas()
+    document.head.appendChild(script)
+    return () => { fabricRef.current?.dispose() }
+  }, [])
+
+  const initCanvas = () => {
+    const fabric = (window as any).fabric
+    if (!fabric || !canvasRef.current) return
+    const MAX = 720
+    const img = new window.Image()
+    img.crossOrigin = 'anonymous'
+    img.onload = () => {
+      const scale = Math.min(MAX / img.width, MAX / img.height, 1)
+      const w = Math.round(img.width * scale)
+      const h = Math.round(img.height * scale)
+      canvasRef.current!.width  = w
+      canvasRef.current!.height = h
+      const fc = new fabric.Canvas(canvasRef.current, { width: w, height: h, preserveObjectStacking: true })
+      fabricRef.current = fc
+      fabric.Image.fromURL(img.src, (fImg: any) => {
+        fImg.set({ left: 0, top: 0, selectable: false, evented: false })
+        fImg.scaleToWidth(w)
+        fc.add(fImg)
+        fc.sendToBack(fImg)
+        fc.renderAll()
+        setLoading(false)
+      }, { crossOrigin: 'anonymous' })
+      fc.on('selection:created', (e: any) => setSelObj(e.selected?.[0] ?? null))
+      fc.on('selection:updated', (e: any) => setSelObj(e.selected?.[0] ?? null))
+      fc.on('selection:cleared', () => setSelObj(null))
+    }
+    img.src = asset.image_url
+  }
+
+  const addText = () => {
+    const fabric = (window as any).fabric
+    if (!fabric || !fabricRef.current || !textInput.trim()) return
+    const t = new fabric.Text(textInput.trim(), {
+      left: 60, top: 60,
+      fontSize: textSize,
+      fill: textColor,
+      fontFamily: textFont,
+      fontWeight: '600',
+      shadow: 'rgba(0,0,0,0.6) 2px 2px 6px',
+    })
+    fabricRef.current.add(t)
+    fabricRef.current.setActiveObject(t)
+    fabricRef.current.renderAll()
+    setTextInput('')
+  }
+
+  const addShape = (type: 'rect'|'circle') => {
+    const fabric = (window as any).fabric
+    if (!fabric || !fabricRef.current) return
+    const obj = type === 'rect'
+      ? new fabric.Rect({ width: 160, height: 60, fill: 'rgba(45,82,64,0.7)', rx: 8, ry: 8, left: 80, top: 80 })
+      : new fabric.Circle({ radius: 50, fill: 'rgba(45,82,64,0.7)', left: 80, top: 80 })
+    fabricRef.current.add(obj)
+    fabricRef.current.setActiveObject(obj)
+    fabricRef.current.renderAll()
+  }
+
+  const deleteSelected = () => {
+    const fc = fabricRef.current
+    if (!fc) return
+    const obj = fc.getActiveObject()
+    if (obj) { fc.remove(obj); fc.discardActiveObject(); fc.renderAll(); setSelObj(null) }
+  }
+
+  const applyFilter = (bright: number, cont: number) => {
+    const fc = fabricRef.current
+    if (!fc) return
+    const bg = fc.getObjects().find((o: any) => !o.selectable)
+    if (!bg) return
+    const fabric = (window as any).fabric
+    bg.filters = [
+      new fabric.Image.filters.Brightness({ brightness: bright / 100 }),
+      new fabric.Image.filters.Contrast({ contrast: cont / 100 }),
+    ]
+    bg.applyFilters()
+    fc.renderAll()
+  }
+
+  const updateSelectedOpacity = (val: number) => {
+    const fc = fabricRef.current
+    const obj = fc?.getActiveObject()
+    if (obj) { obj.set({ opacity: val / 100 }); fc.renderAll() }
+  }
+
+  const exportImage = async () => {
+    const fc = fabricRef.current
+    if (!fc) return
+    setSaving(true)
+    try {
+      const dataUrl = fc.toDataURL({ format: 'png', multiplier: 2 })
+      const blob = await (await fetch(dataUrl)).blob()
+      const fd = new FormData()
+      fd.append('file', new File([blob], 'edited-' + Date.now() + '.png', { type: 'image/png' }))
+      fd.append('folder', 'edited')
+      const d = await fetch('/api/aria/studio/upload', { method: 'POST', body: fd }).then(r => r.json()) as { asset?: StudioAsset; url?: string }
+      if (d.asset?.image_url) onSave(d.asset.image_url)
+    } finally { setSaving(false) }
+  }
+
+  const downloadExport = () => {
+    const fc = fabricRef.current
+    if (!fc) return
+    const dataUrl = fc.toDataURL({ format: 'png', multiplier: 2 })
+    const a = document.createElement('a')
+    a.href = dataUrl; a.download = 'aria-studio-' + Date.now() + '.png'; a.click()
+  }
+
+  const COLORS = ['#ffffff','#000000','#7FB897','#F59E0B','#EF4444','#3B82F6','#EC4899','#f0ede8']
+  const FONTS  = ['Inter','Georgia','Arial','Courier New','Impact']
+
+  return (
+    <div className="fed" style={{position:'relative',zIndex:1}}>
+      {/* Toolbar */}
+      <div className="fed-toolbar scr">
+        {/* Header */}
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+          <span style={{fontSize:13,fontWeight:600,color:'#ede8e3'}}>Image Editor</span>
+          <button onClick={onClose} style={{background:'none',border:'none',cursor:'pointer',color:'rgba(237,232,227,0.4)',fontSize:16,lineHeight:1,padding:0}}>×</button>
+        </div>
+
+        {/* Add text */}
+        <div className="fed-section">
+          <span className="fed-label">Add text</span>
+          <input className="fed-inp" value={textInput} onChange={e=>setTextInput(e.target.value)}
+            onKeyDown={e=>e.key==='Enter'&&addText()}
+            placeholder="Type and press Enter or Add"/>
+          <div style={{display:'flex',gap:6,alignItems:'center'}}>
+            <span style={{fontSize:11,color:'rgba(237,232,227,0.35)',flexShrink:0}}>Size</span>
+            <input type="range" className="fed-slider" min={12} max={120} value={textSize} onChange={e=>setTextSize(+e.target.value)} style={{flex:1}}/>
+            <span style={{fontSize:11,color:'rgba(237,232,227,0.5)',width:24,textAlign:'right'}}>{textSize}</span>
+          </div>
+          <div className="fed-clr-row">
+            {COLORS.map(c=><div key={c} className={'fed-clr'+(textColor===c?' on':'')} style={{background:c,boxShadow:textColor===c?'0 0 0 1px rgba(255,255,255,0.5) inset':undefined}} onClick={()=>setTextColor(c)}/>)}
+            <input type="color" value={textColor} onChange={e=>setTextColor(e.target.value)} style={{width:22,height:22,borderRadius:'50%',border:'none',cursor:'pointer',background:'none',padding:0}}/>
+          </div>
+          <div style={{display:'flex',flexWrap:'wrap',gap:4}}>
+            {FONTS.map(f=><button key={f} className={'fed-font-chip'+(textFont===f?' on':'')} style={{fontFamily:f}} onClick={()=>setTextFont(f)}>{f}</button>)}
+          </div>
+          <button className="fed-btn fed-btn-g" onClick={addText} disabled={!textInput.trim()}>+ Add text</button>
+        </div>
+
+        {/* Shapes */}
+        <div className="fed-section">
+          <span className="fed-label">Add shape</span>
+          <div className="fed-row">
+            <button className="fed-btn" onClick={()=>addShape('rect')}>▭ Rectangle</button>
+            <button className="fed-btn" onClick={()=>addShape('circle')}>● Circle</button>
+          </div>
+        </div>
+
+        {/* Adjustments */}
+        <div className="fed-section">
+          <span className="fed-label">Adjustments</span>
+          <div style={{display:'flex',flexDirection:'column',gap:8}}>
+            {[['Brightness', brightness, setBrightness],['Contrast', contrast, setContrast]].map(([label, val, setter])=>(
+              <div key={String(label)} style={{display:'flex',alignItems:'center',gap:6}}>
+                <span style={{fontSize:11,color:'rgba(237,232,227,0.35)',width:68,flexShrink:0}}>{String(label)}</span>
+                <input type="range" className="fed-slider" min={-100} max={100} value={Number(val)}
+                  onChange={e=>{ (setter as Function)(+e.target.value); applyFilter(label==='Brightness'?+e.target.value:brightness, label==='Contrast'?+e.target.value:contrast) }}
+                  style={{flex:1}}/>
+                <span style={{fontSize:10,color:'rgba(237,232,227,0.4)',width:30,textAlign:'right'}}>{Number(val)>0?'+':''}{Number(val)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Selected object controls */}
+        {selObj && (
+          <div className="fed-section" style={{padding:'10px 12px',background:'rgba(127,184,151,0.06)',border:'1px solid rgba(127,184,151,0.15)',borderRadius:10}}>
+            <span className="fed-label" style={{color:'#7FB897'}}>Selected object</span>
+            <div style={{display:'flex',alignItems:'center',gap:6}}>
+              <span style={{fontSize:11,color:'rgba(237,232,227,0.35)',width:52,flexShrink:0}}>Opacity</span>
+              <input type="range" className="fed-slider" min={10} max={100} value={opacity}
+                onChange={e=>{setOpacity(+e.target.value);updateSelectedOpacity(+e.target.value)}} style={{flex:1}}/>
+              <span style={{fontSize:10,color:'rgba(237,232,227,0.4)',width:30,textAlign:'right'}}>{opacity}%</span>
+            </div>
+            <button className="fed-btn fed-btn-r" onClick={deleteSelected}>Delete selected</button>
+          </div>
+        )}
+
+        {/* Export */}
+        <div className="fed-section" style={{marginTop:'auto',paddingTop:8,borderTop:'1px solid rgba(255,255,255,0.07)'}}>
+          <button className="fed-btn fed-btn-g" onClick={exportImage} disabled={saving}>
+            {saving?'Saving…':'Save to library'}
+          </button>
+          <button className="fed-btn" onClick={downloadExport}>↓ Download PNG</button>
+        </div>
+      </div>
+
+      {/* Canvas area */}
+      <div className="fed-canvas-wrap">
+        {loading && (
+          <div style={{position:'absolute',display:'flex',flexDirection:'column',alignItems:'center',gap:12,color:'rgba(237,232,227,0.4)'}}>
+            <div style={{width:28,height:28,border:'2px solid rgba(127,184,151,0.3)',borderTopColor:'#7FB897',borderRadius:'50%',animation:'spin 0.8s linear infinite'}}/>
+            <span style={{fontSize:12}}>Loading canvas…</span>
+          </div>
+        )}
+        <canvas ref={canvasRef} style={{boxShadow:'0 24px 80px rgba(0,0,0,0.6)',borderRadius:4,display:loading?'none':'block'}}/>
+      </div>
+    </div>
+  )
+}
+
