@@ -16,18 +16,78 @@ async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, u
 }
 
 function buildEnhancedPrompt(prompt: string, style: string, format: string, biz: { name?: string; industry?: string } | null): string {
+  // ── Style descriptors ────────────────────────────────────────────
   const styleMap: Record<string, string> = {
-    photorealistic: 'photorealistic, professional photography, high quality, 8K, sharp focus',
-    illustration: 'digital illustration, vibrant colors, professional graphic design, clean lines',
-    minimalist: 'minimalist design, clean, modern, white space, simple, elegant',
-    bold: 'bold graphic design, high contrast, striking colours, eye-catching poster style',
-    vintage: 'vintage retro style, warm tones, nostalgic aesthetic, film grain',
-    neon: 'neon glow effects, dark background, vibrant neon colours, night city aesthetic',
+    photorealistic: 'professional commercial photography, sharp focus, high dynamic range, realistic lighting and shadows, 8K resolution, shot on DSLR',
+    illustration: 'professional digital illustration, vibrant colours, clean vector-style lines, graphic design quality, print-ready artwork',
+    minimalist: 'clean minimalist design, generous white space, simple geometric elements, modern sans-serif layout, Swiss design aesthetic',
+    bold: 'bold high-contrast graphic design, strong typography hierarchy, eye-catching colour blocking, impactful poster style, print advertising quality',
+    vintage: 'vintage Australian commercial art style, warm amber and sepia tones, retro typography, aged paper texture, nostalgic 1960s–1980s feel',
+    neon: 'neon-lit night scene, vibrant glowing neon signage, dark moody background, wet reflective surfaces, nightlife atmosphere',
   }
-  const formatHint = format === 'square' ? 'square composition' : format === 'portrait' ? 'portrait orientation, vertical format' : 'wide landscape, horizontal banner composition'
-  const industryHint = biz?.industry ? 'for an Australian ' + biz.industry + ' business' : 'for an Australian small business'
+
+  // ── Format / composition ─────────────────────────────────────────
+  const formatMap: Record<string, string> = {
+    square:    'perfect square 1:1 composition, centred subject, balanced negative space, optimised for Instagram feed',
+    portrait:  'vertical portrait 9:16 composition, full-bleed design, strong vertical flow, optimised for Instagram Stories and Reels',
+    landscape: 'wide horizontal 16:9 banner composition, panoramic layout, strong left-to-right flow, optimised for Facebook cover and digital signage',
+    '4:3':     '4:3 landscape composition, presentation-ready layout, clean slide format',
+    '3:4':     '3:4 portrait composition, tall print format, A4-proportion layout',
+  }
+
+  // ── Industry context ─────────────────────────────────────────────
+  const industryContextMap: Record<string, string> = {
+    liquor:      'Australian bottle shop and liquor retail context, premium spirits and wine merchandising, RSA-compliant marketing imagery, warm inviting retail atmosphere',
+    cafe:        'Australian specialty cafe context, artisan coffee culture, fresh food and pastries, warm hospitality atmosphere, third-wave coffee aesthetic',
+    restaurant:  'Australian restaurant dining context, premium plated food, ambient dining atmosphere, culinary excellence, upscale or casual dining setting',
+    bakery:      'Australian artisan bakery context, fresh-baked goods, warm golden bread and pastries, wholesome local community feel',
+    retail:      'Australian retail and convenience store context, clean product merchandising, inviting shop floor, customer-facing promotional display',
+    convenience: 'Australian convenience store context, everyday essentials, quick-serve products, accessible community retail',
+    professional:'Australian professional services context, clean corporate imagery, trust and credibility, modern office environment',
+  }
+
+  const bizName = biz?.name ?? ''
+  const industry = (biz?.industry ?? 'retail').toLowerCase()
+  const industryCtx = industryContextMap[industry] ?? 'Australian small business marketing context, local community focus, professional quality'
   const styleStr = styleMap[style] ?? styleMap.photorealistic
-  return prompt + ', ' + industryHint + ', ' + styleStr + ', ' + formatHint + ', professional marketing image, no text overlay, no watermark'
+  const formatStr = formatMap[format] ?? formatMap.square
+
+  // ── Detect intent: does the prompt contain text/signage to render? ──
+  const textPatterns = /(says?|reads?|text|sign|poster|banner|label|price|menu|hours?|open|closed|sale|off|discount|special|deal|promotion|announces?|displays?|shows?)/i
+  const hasTextIntent = textPatterns.test(prompt)
+
+  // ── Extract any quoted text to preserve exactly ──────────────────
+  const quotedText = prompt.match(/["']([^"']+)["']/g)
+  const textAnchor = quotedText
+    ? 'The text must read EXACTLY: ' + quotedText.join(', ') + '. Render text with absolute accuracy, high legibility, professional typography.'
+    : hasTextIntent
+      ? 'Render any text or signage with high legibility, professional typography, and accurate lettering. Text must be clearly readable.'
+      : ''
+
+  // ── Business name anchor ─────────────────────────────────────────
+  const bizAnchor = bizName ? 'This is for ' + bizName + ', an Australian ' + industry + ' business.' : 'This is for an Australian ' + industry + ' business.'
+
+  // ── Quality and usage anchors ────────────────────────────────────
+  const qualityAnchors = [
+    'Commercial marketing quality',
+    'print and digital ready',
+    'no watermarks',
+    'professional colour grading',
+    bizName ? ('Brand-appropriate for ' + bizName) : 'brand-appropriate',
+  ].join(', ')
+
+  // ── Assemble the final prompt ────────────────────────────────────
+  const parts = [
+    prompt.trim(),
+    bizAnchor,
+    industryCtx,
+    styleStr,
+    formatStr,
+    textAnchor,
+    qualityAnchors,
+  ].filter(Boolean)
+
+  return parts.join('. ')
 }
 
 // Map format to Gemini aspectRatio
@@ -192,12 +252,28 @@ async function _POST(req: Request) {
   // ── Refine prompt with Aria ──────────────────────────────
   if (body.action === 'refine_prompt') {
     if (!body.prompt) return NextResponse.json({ error: 'prompt required' }, { status: 400 })
-    const { data: biz } = await supabaseAdmin.from('businesses').select('name,industry').eq('id', bid).maybeSingle()
+    const { data: biz } = await supabaseAdmin.from('businesses').select('name,industry,city').eq('id', bid).maybeSingle()
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
     const msg = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001', max_tokens: 200,
-      system: 'You are Aria, an expert at writing image generation prompts for small business marketing. Rewrite the user prompt to be highly detailed and effective for AI image generation (specifically optimised for Gemini Nano Banana). Focus on lighting, composition, mood, and marketing impact. Keep it under 150 words. Return ONLY the improved prompt, no explanation.',
-      messages: [{ role: 'user', content: 'Business: ' + ((biz as any)?.name ?? '') + ' (' + ((biz as any)?.industry ?? '') + '). Original prompt: ' + body.prompt }],
+      system: `You are Aria, a specialist in AI image generation for Australian small business marketing.
+
+Your job: rewrite the user's rough idea into a precise, detailed image generation prompt that produces professional marketing-quality results.
+
+Rules:
+- If the prompt contains specific text to display (signs, posters, prices, hours, offers) — include it EXACTLY in quotes and add "render this text with perfect legibility and professional typography"
+- Always anchor to the business type and Australian market context
+- Specify lighting, atmosphere, composition, and mood concretely
+- Focus on commercial viability: the image must work as a real marketing asset
+- Keep under 180 words
+- Return ONLY the improved prompt — no explanation, no preamble`,
+      messages: [{ role: 'user', content: [
+        'Business name: ' + ((biz as any)?.name ?? 'Unknown'),
+        'Industry: ' + ((biz as any)?.industry ?? 'retail'),
+        'Style: ' + (body.style ?? 'photorealistic'),
+        'Format: ' + (body.format ?? 'square'),
+        'Original prompt: ' + body.prompt,
+      ].join('\n') }],
     })
     const refined = msg.content[0].type === 'text' ? msg.content[0].text.trim() : body.prompt
     return NextResponse.json({ refined_prompt: refined })
