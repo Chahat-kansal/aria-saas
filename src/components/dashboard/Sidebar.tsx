@@ -256,16 +256,12 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
                   key={biz.id}
                   onClick={() => handleSwitch(biz.id)}
                   disabled={switching === biz.id}
-                  className={`w-full px-3 py-2.5 flex items-center gap-2.5 text-left transition-colors ${
-                    isActive
-                      ? 'bg-[rgba(29,158,117,0.1)]'
-                      : 'hover:bg-[rgba(255,255,255,0.04)]'
-                  }`}
+                  className={'w-full px-3 py-2.5 flex items-center gap-2.5 text-left transition-colors ' + (isActive ? 'bg-[rgba(29,158,117,0.1)]' : 'hover:bg-[rgba(255,255,255,0.04)]')}
                 >
                   {switching === biz.id ? (
                     <Spinner />
                   ) : (
-                    <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isActive ? 'bg-[#1D9E75]' : 'bg-[rgba(255,255,255,0.2)]'}`} />
+                    <div className={'w-1.5 h-1.5 rounded-full flex-shrink-0 ' + (isActive ? 'bg-[#1D9E75]' : 'bg-[rgba(255,255,255,0.2)]')} />
                   )}
                   <div className="flex-1 min-w-0">
                     <div className="text-[12px] font-medium text-[rgba(255,255,255,0.8)] truncate">{biz.name}</div>
@@ -350,11 +346,11 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
                         </span>
                       );
                       if (item.badge) return (
-                        <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-medium ${
-                          item.badge === 'AI'  ? 'bg-[rgba(29,158,117,0.2)] text-[#1D9E75]' :
-                          item.badge === 'New' ? 'bg-[rgba(249,115,22,0.2)] text-orange-400' :
-                          'bg-[rgba(245,158,11,0.2)] text-amber-400'
-                        }`}>{item.badge}</span>
+                        className={
+                          item.badge === 'AI'  ? 'text-[9px] px-1.5 py-0.5 rounded-full font-medium bg-[rgba(29,158,117,0.2)] text-[#1D9E75]' :
+                          item.badge === 'New' ? 'text-[9px] px-1.5 py-0.5 rounded-full font-medium bg-[rgba(249,115,22,0.2)] text-orange-400' :
+                          'text-[9px] px-1.5 py-0.5 rounded-full font-medium bg-[rgba(245,158,11,0.2)] text-amber-400'
+                        }
                       );
                       return null;
                     })()}
