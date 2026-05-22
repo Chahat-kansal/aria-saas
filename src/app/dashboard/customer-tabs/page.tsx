@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { useBusinessContext } from '@/components/providers/BusinessProvider'
 
 interface TabCustomer {
@@ -88,6 +88,7 @@ export default function CustomerTabsPage() {
   const [filter, setFilter] = useState<'all' | 'owing' | 'overLimit'>('all')
   const [sendingStatement, setSendingStatement] = useState(false)
   const [statementMsg, setStatementMsg] = useState('')
+  const [ariaDebtInsight, setAriaDebtInsight] = useState('')
 
   const load = useCallback(async () => {
     if (!business?.id) return
@@ -103,6 +104,34 @@ export default function CustomerTabsPage() {
     } catch { /* ignore */ }
     setLoading(false)
   }, [business?.id])
+
+  // Compute Aria debt insight from loaded data (pure client computation, no extra API call)
+  useEffect(() => {
+    if (customers.length === 0) return
+    const now = Date.now()
+    const ageOf = (c: typeof customers[0]) => {
+      const ts = c.last_visit_at ?? c.last_visit
+      return ts ? Math.floor((now - new Date(ts).getTime()) / 86400000) : 999
+    }
+    const critical = customers.filter(c => (c.current_balance_cents ?? 0) > 0 && ageOf(c) > 90)
+    const seriousRisk = customers.filter(c => (c.current_balance_cents ?? 0) > 0 && ageOf(c) > 60 && ageOf(c) <= 90)
+    const totalCritical = critical.reduce((s, c) => s + (c.current_balance_cents ?? 0), 0)
+    const totalRisk = seriousRisk.reduce((s, c) => s + (c.current_balance_cents ?? 0), 0)
+
+    if (critical.length > 0) {
+      const emails = critical.filter(c => c.email).length
+      setAriaDebtInsight(
+        critical.length + ' customer' + (critical.length !== 1 ? 's' : '') + ' ' +
+        (critical.length === 1 ? 'has' : 'have') + ' been silent for 90+ days owing A$' + (totalCritical / 100).toFixed(0) + '. ' +
+        (seriousRisk.length > 0 ? seriousRisk.length + ' more (A$' + (totalRisk/100).toFixed(0) + ') are 60–90 days overdue. ' : '') +
+        (emails > 0 ? 'Send statements to all ' + emails + ' with email addresses now — the longer you wait, the lower the recovery rate.' : 'Add email addresses to send statements.')
+      )
+    } else if (seriousRisk.length > 0) {
+      setAriaDebtInsight(
+        seriousRisk.length + ' customer' + (seriousRisk.length !== 1 ? 's' : '') + ' are 60–90 days overdue owing A$' + (totalRisk/100).toFixed(0) + '. Contact them now before they cross the 90-day mark.'
+      )
+    }
+  }, [customers])
 
   useEffect(() => { load() }, [load])
 
@@ -196,6 +225,16 @@ export default function CustomerTabsPage() {
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: selected ? '1fr 360px' : '1fr', gap: 20 }}>
+        {/* Aria debt intelligence */}
+        {ariaDebtInsight && (
+          <div style={{ background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 12, padding: '14px 18px', marginBottom: 16 }}>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
+              <span style={{ fontSize: 14 }}>🔴</span>
+              <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>Aria Debt Intelligence</p>
+            </div>
+            <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6 }}>{ariaDebtInsight}</p>
+          </div>
+        )}
         {/* Aging report */}
         <AgingReport customers={customers} onEmailAll={emailAllOverdue} />
         {/* Customer list */}

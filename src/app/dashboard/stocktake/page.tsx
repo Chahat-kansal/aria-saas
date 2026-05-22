@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { useBusinessContext } from '@/components/providers/BusinessProvider'
 
 interface StocktakeItem {
@@ -49,6 +49,8 @@ export default function StocktakePage() {
   const [sessionName, setSessionName] = useState('')
   const [search, setSearch] = useState('')
   const [filterUncounted, setFilterUncounted] = useState(false)
+  const [ariaInsight, setAriaInsight] = useState<{ insight: string; priority: string; classified?: Array<{ name: string; variance: number; classification: string; reason: string; action: string }> } | null>(null)
+  const [ariaLoading, setAriaLoading] = useState(false)
 
   const load = useCallback(async () => {
     if (!business?.id) return
@@ -148,6 +150,13 @@ export default function StocktakePage() {
       setView('list')
       setActiveId(null)
       load()
+      // Trigger Aria intelligence analysis non-blocking
+      setAriaLoading(true)
+      fetch('/api/aria/stocktake-intelligence', { method: 'POST' })
+        .then(r => r.json())
+        .then(d => { if (d.insight) setAriaInsight(d) })
+        .catch(() => {})
+        .finally(() => setAriaLoading(false))
     } catch { /* ignore */ }
     setSaving(false)
   }
@@ -275,6 +284,40 @@ export default function StocktakePage() {
                 </div>
               ))}
             </div>
+          {/* Aria stocktake intelligence */}
+          {ariaLoading && (
+            <div style={{ padding: '14px 18px', background: 'rgba(29,158,117,0.05)', border: '1px solid rgba(29,158,117,0.15)', borderRadius: 10, marginTop: 16, display: 'flex', gap: 8, alignItems: 'center' }}>
+              <span>⏳</span>
+              <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Aria is analysing variances for shrinkage patterns...</p>
+            </div>
+          )}
+          {ariaInsight && (
+            <div style={{ background: ariaInsight.priority === 'high' ? 'rgba(239,68,68,0.06)' : 'rgba(29,158,117,0.06)', border: '1px solid ' + (ariaInsight.priority === 'high' ? 'rgba(239,68,68,0.2)' : 'rgba(29,158,117,0.2)'), borderRadius: 12, padding: '16px 20px', marginTop: 16 }}>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
+                <span style={{ fontSize: 16 }}>{ariaInsight.priority === 'high' ? '🔴' : '✦'}</span>
+                <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>Aria Variance Analysis</p>
+              </div>
+              <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: ariaInsight.classified?.length ? 12 : 0 }}>{ariaInsight.insight}</p>
+              {ariaInsight.classified && ariaInsight.classified.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
+                  {ariaInsight.classified.slice(0, 4).map((item, i) => (
+                    <div key={i} style={{ padding: '8px 12px', background: 'rgba(255,255,255,0.03)', borderRadius: 8, borderLeft: '3px solid ' + (item.classification === 'shrinkage' ? '#EF4444' : item.classification === 'counting_error' ? '#F59E0B' : '#6b7280') }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
+                        <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>{item.name}</p>
+                        <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 99, background: item.classification === 'shrinkage' ? 'rgba(239,68,68,0.15)' : 'rgba(245,158,11,0.15)', color: item.classification === 'shrinkage' ? '#EF4444' : '#F59E0B' }}>
+                          {item.classification.replace('_', ' ')}
+                        </span>
+                        <span style={{ fontSize: 11, color: item.variance < 0 ? '#EF4444' : '#22C55E', marginLeft: 'auto' }}>{item.variance > 0 ? '+' : ''}{item.variance}</span>
+                      </div>
+                      <p style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 2 }}>{item.reason}</p>
+                      <p style={{ fontSize: 11, color: '#1D9E75', fontWeight: 600 }}>→ {item.action}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <a href="/dashboard/autopilot" style={{ fontSize: 11, color: '#1D9E75', display: 'block', marginTop: 10 }}>View full analysis in Autopilot →</a>
+            </div>
+          )}
           )}
         </>
       ) : (

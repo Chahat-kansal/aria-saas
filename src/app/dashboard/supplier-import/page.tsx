@@ -1,5 +1,5 @@
 'use client'
-import { useState, useCallback } from 'react'
+import React, { useState, useCallback } from 'react'
 import { useBusinessContext } from '@/components/providers/BusinessProvider'
 
 interface ParsedRow { name: string; sku: string | null; new_cost: number; matched: boolean; product_id: string | null; current_cost: number | null; sell_price: number | null }
@@ -47,6 +47,8 @@ export default function SupplierImportPage() {
   const [result, setResult] = useState<UploadResult | null>(null)
   const [importing, setImporting] = useState(false)
   const [dragging, setDragging] = useState(false)
+  const [ariaRecs, setAriaRecs] = useState<Array<{ product_name: string; current_sell_price: number; new_cost: number; current_margin_pct: number; market_avg_price?: number; recommended_sell_price?: number; recommended_margin_pct?: number; action: string; confidence: string }>>([])
+  const [ariaLoading, setAriaLoading] = useState(false)
 
   const processFile = useCallback(async (file: File) => {
     if (!business?.id) return
@@ -81,6 +83,28 @@ export default function SupplierImportPage() {
 
     setRows(matchedRows)
     setStep('review')
+
+    // Trigger Aria margin intelligence for at-risk products (non-blocking)
+    const atRiskProducts = matchedRows.filter(r => r.matched && r.sell_price != null && r.sell_price > 0 && r.new_cost > 0)
+    if (atRiskProducts.length > 0) {
+      setAriaLoading(true)
+      fetch('/api/aria/supplier-margin-intelligence', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          products: atRiskProducts.map(r => ({
+            name: r.name,
+            new_cost: r.new_cost,
+            sell_price: r.sell_price,
+            current_cost: r.current_cost,
+          })),
+        }),
+      })
+        .then(r => r.json())
+        .then(d => { if (d.recommendations?.length) setAriaRecs(d.recommendations) })
+        .catch(() => {})
+        .finally(() => setAriaLoading(false))
+    }
   }, [business?.id])
 
   function onDrop(e: React.DragEvent) {
@@ -223,6 +247,52 @@ export default function SupplierImportPage() {
             </table>
           </div>
 
+          {/* Aria competitive pricing recommendations */}
+          {ariaLoading && (
+            <div style={{ padding: '12px 16px', background: 'rgba(29,158,117,0.05)', border: '1px solid rgba(29,158,117,0.15)', borderRadius: 10, marginBottom: 14, display: 'flex', gap: 8, alignItems: 'center' }}>
+              <span>⏳</span>
+              <p style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Aria is checking competitor prices for margin-at-risk products...</p>
+            </div>
+          )}
+          {ariaRecs.length > 0 && (
+            <div style={{ background: 'rgba(139,92,246,0.06)', border: '1px solid rgba(139,92,246,0.2)', borderRadius: 12, padding: '16px 20px', marginBottom: 16 }}>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 12 }}>
+                <span style={{ fontSize: 16 }}>✦</span>
+                <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>Aria pricing recommendations</p>
+                <span style={{ fontSize: 11, color: 'var(--text-tertiary)', marginLeft: 4 }}>Based on live competitor prices</span>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {ariaRecs.map((rec, i) => (
+                  <div key={i} style={{ padding: '12px 14px', background: 'rgba(255,255,255,0.03)', borderRadius: 9 }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 6 }}>
+                      <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{rec.product_name}</p>
+                      <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                        {rec.recommended_sell_price && (
+                          <p style={{ fontSize: 13, fontWeight: 700, color: '#1D9E75' }}>
+                            Recommend: A${rec.recommended_sell_price.toFixed(2)}
+                            {rec.recommended_margin_pct && <span style={{ fontSize: 10, color: 'var(--text-tertiary)', marginLeft: 4 }}>({rec.recommended_margin_pct.toFixed(1)}% margin)</span>}
+                          </p>
+                        )}
+                        {rec.market_avg_price && (
+                          <p style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>Market avg: A${rec.market_avg_price.toFixed(2)}</p>
+                        )}
+                      </div>
+                    </div>
+                    <p style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5 }}>{rec.action}</p>
+                    <div style={{ display: 'flex', gap: 10, marginTop: 6, fontSize: 10, color: 'var(--text-tertiary)' }}>
+                      <span>Current margin: {rec.current_margin_pct.toFixed(1)}%</span>
+                      <span>·</span>
+                      <span>Cost after import: A${rec.new_cost.toFixed(2)}</span>
+                      <span>·</span>
+                      <span style={{ color: rec.confidence === 'high' ? '#22C55E' : rec.confidence === 'medium' ? '#F59E0B' : 'var(--text-tertiary)' }}>
+                        {rec.confidence} confidence
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           {(() => {
             const marginDrops = rows.filter(r => r.matched && r.sell_price && r.sell_price > 0 && r.current_cost != null && r.new_cost > r.current_cost)
             if (marginDrops.length === 0) return null

@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { useBusinessContext } from '@/components/providers/BusinessProvider'
 
 interface CashSession {
@@ -78,6 +78,60 @@ function WeeklyTrendChart({ sessions }: { sessions: Array<{ closed_at: string | 
           )
         })}
       </div>
+    </div>
+  )
+}
+
+function AriaInsightPanel({ businessId }: { businessId: string }) {
+  const [loading, setLoading] = React.useState(false)
+  const [insight, setInsight] = React.useState<{ title?: string; insight: string; priority: string; estimated_impact_cents?: number } | null>(null)
+  const [error, setError] = React.useState('')
+
+  async function runAnalysis() {
+    setLoading(true); setError(''); setInsight(null)
+    try {
+      const res = await fetch('/api/aria/cashup-intelligence', { method: 'POST' })
+      const d = await res.json()
+      if (d.reason === 'insufficient_data') {
+        setError('Need at least 3 cash-ups to detect patterns.')
+      } else if (d.insight) {
+        setInsight(d)
+      }
+    } catch { setError('Analysis failed — try again.') }
+    setLoading(false)
+  }
+
+  React.useEffect(() => { if (businessId) runAnalysis() }, [businessId])
+
+  if (!insight && !loading && !error) return null
+
+  return (
+    <div style={{ background: loading ? 'rgba(29,158,117,0.03)' : insight?.priority === 'high' ? 'rgba(239,68,68,0.06)' : 'rgba(29,158,117,0.06)', border: '1px solid ' + (insight?.priority === 'high' ? 'rgba(239,68,68,0.2)' : 'rgba(29,158,117,0.2)'), borderRadius: 12, padding: '16px 20px', marginTop: 20 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: loading ? 0 : 8 }}>
+        <span style={{ fontSize: 16 }}>{loading ? '⏳' : insight?.priority === 'high' ? '🔴' : '✦'}</span>
+        <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
+          {loading ? 'Aria is analysing your cash-up patterns...' : insight?.title ?? 'Aria Cash Intelligence'}
+        </p>
+        {!loading && (
+          <button onClick={runAnalysis} style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text-tertiary)', background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
+            Refresh
+          </button>
+        )}
+      </div>
+      {insight && (
+        <>
+          <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: insight.estimated_impact_cents ? 8 : 0 }}>{insight.insight}</p>
+          {insight.estimated_impact_cents != null && insight.estimated_impact_cents > 0 && (
+            <p style={{ fontSize: 11, color: '#F59E0B', fontWeight: 600 }}>
+              Estimated annual impact: A${Math.round(insight.estimated_impact_cents / 100).toLocaleString()}
+            </p>
+          )}
+          <a href="/dashboard/autopilot" style={{ fontSize: 11, color: '#1D9E75', display: 'block', marginTop: 6 }}>
+            View in Autopilot →
+          </a>
+        </>
+      )}
+      {error && <p style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{error}</p>}
     </div>
   )
 }
@@ -344,6 +398,7 @@ export default function CashUpPage() {
           )}
         </div>
         <WeeklyTrendChart sessions={sessions} />
+        {business?.id && <AriaInsightPanel businessId={business.id} />}
       </div>
     </div>
   )
