@@ -284,6 +284,7 @@ export default function StocktakePage() {
                 </div>
               ))}
             </div>
+          )}
           {/* Aria stocktake intelligence */}
           {ariaLoading && (
             <div style={{ padding: '14px 18px', background: 'rgba(29,158,117,0.05)', border: '1px solid rgba(29,158,117,0.15)', borderRadius: 10, marginTop: 16, display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -317,7 +318,6 @@ export default function StocktakePage() {
               )}
               <a href="/dashboard/autopilot" style={{ fontSize: 11, color: '#1D9E75', display: 'block', marginTop: 10 }}>View full analysis in Autopilot →</a>
             </div>
-          )}
           )}
         </>
       ) : (
