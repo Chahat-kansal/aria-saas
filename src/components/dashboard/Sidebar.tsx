@@ -213,12 +213,18 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
 
   return (
     <aside className="w-[220px] flex-shrink-0 bg-[#13131a] h-screen flex flex-col overflow-y-auto">
-      {/* Logo */}
-      <div className="px-5 pt-[22px] pb-3 flex-shrink-0">
+      {/* Logo + mobile close */}
+      <div className="px-5 pt-[22px] pb-3 flex-shrink-0 flex items-start justify-between">
         <div className="text-lg font-medium tracking-tight">
           <span className="text-white">aria</span>
           <span className="text-[#1D9E75]">OS</span>
         </div>
+        {onNavigate && (
+          <button onClick={onNavigate} className="md:hidden -mr-1 -mt-1 w-8 h-8 rounded-lg flex items-center justify-center text-[rgba(255,255,255,0.4)] hover:text-white hover:bg-[rgba(255,255,255,0.06)] transition-colors" aria-label="Close menu">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+          </button>
+        )}
+      </div>
         <div className="mt-1.5 inline-flex items-center px-2 py-0.5 rounded-full bg-[rgba(255,255,255,0.06)] border border-[rgba(255,255,255,0.08)]">
           <span className="text-[10px] text-[rgba(255,255,255,0.45)]">{config.label}</span>
         </div>
@@ -327,7 +333,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
                     target={item.target}
                     rel={item.target === '_blank' ? 'noopener noreferrer' : undefined}
                     onClick={item.target === '_blank' ? undefined : onNavigate}
-                    className={`flex items-center gap-2.5 px-3 py-2 mx-1 rounded-lg text-[12.5px] transition-colors mb-0.5 ${
+                    className={`flex items-center gap-2.5 px-3 py-2.5 md:py-2 mx-1 rounded-lg text-[12.5px] transition-colors mb-0.5 ${
                       isActive
                         ? 'bg-[rgba(29,158,117,0.15)] text-[#1D9E75]'
                         : 'text-[rgba(255,255,255,0.45)] hover:bg-[rgba(255,255,255,0.05)] hover:text-[rgba(255,255,255,0.8)]'
