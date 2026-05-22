@@ -44,7 +44,7 @@ async function _POST(req: Request) {
   if (existing && !body.force) return NextResponse.json({ skipped: true, reason: 'Already sent in last 30 days' })
 
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-  let messageText = 'Hi ' + customer.name.split(' ')[0] + '! Thanks for visiting ' + (biz.name ?? '') + '. We'd love your feedback! ' + (biz.google_business_url ? biz.google_business_url + ' ' : '') + 'Reply STOP to opt out.'
+  let messageText = "Hi " + customer.name.split(' ')[0] + "! Thanks for visiting " + (biz.name ?? '') + ". We'd love your feedback! " + (biz.google_business_url ? biz.google_business_url + ' ' : '') + "Reply STOP to opt out."
   try {
     const msg = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001', max_tokens: 160,
