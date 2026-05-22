@@ -333,11 +333,10 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
                     target={item.target}
                     rel={item.target === '_blank' ? 'noopener noreferrer' : undefined}
                     onClick={item.target === '_blank' ? undefined : onNavigate}
-                    className={`flex items-center gap-2.5 px-3 py-2.5 md:py-2 mx-1 rounded-lg text-[12.5px] font-semibold transition-colors mb-0.5 ${
-                      isActive
-                        ? 'bg-[rgba(29,158,117,0.15)] text-[#1D9E75]'
-                        : 'text-white hover:bg-[rgba(255,255,255,0.07)] hover:text-white'
-                    }`}
+                    className={
+                      'flex items-center gap-2.5 px-3 py-2.5 md:py-2 mx-1 rounded-lg text-[12.5px] font-semibold transition-colors mb-0.5 ' +
+                      (isActive ? 'bg-[rgba(29,158,117,0.15)] text-[#1D9E75]' : 'text-white hover:bg-[rgba(255,255,255,0.07)] hover:text-white')
+                    }
                   >
                     <item.icon className="w-[13px] h-[13px] flex-shrink-0" />
                     <span className="flex-1">{item.label}</span>
