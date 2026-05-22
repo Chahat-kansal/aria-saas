@@ -52,6 +52,7 @@ export default function CustomerDisplayPage() {
 
   // Aria customer greeting
   const [greeting, setGreeting]               = useState<string | null>(null);
+  const [activeSuggestion, setActiveSuggestion] = useState<{ offer_text: string; discount_pct: number } | null>(null);
   const [greetingLoading, setGreetingLoading] = useState(false);
   const [greetingCustomer, setGreetingCustomer] = useState<{
     name: string; visit_count?: number; total_spent?: number;
@@ -139,11 +140,13 @@ export default function CustomerDisplayPage() {
     const bc = new BroadcastChannel('aria-pos-display');
     bc.onmessage = (ev: MessageEvent) => {
       const d = ev.data as { type?: string; items?: { name: string; category: string; price: number; quantity: number }[]; customer_name?: string; total?: number; points_earned?: number };
+      if (d?.type === 'display_suggestion') { const sd = d as any; setActiveSuggestion({ offer_text: sd.offer_text, discount_pct: sd.discount_pct }); setTimeout(() => setActiveSuggestion(null), 60000); return; }
       if (d?.type !== 'sale_completed') return;
       const items = d.items ?? [];
       const animationType = pickCelebrationAnimation(
         items.map(i => ({ product: { name: i.name, category: i.category }, qty: i.quantity, unitPrice: i.price }))
       );
+      setActiveSuggestion(null);
       setCelebration({ visible: true, animationType, customerName: d.customer_name, total: d.total ?? 0, pointsEarned: d.points_earned ?? 0 });
     };
     return () => bc.close();
@@ -393,6 +396,13 @@ export default function CustomerDisplayPage() {
           <div style={{ fontFamily: "'Instrument Serif', serif", fontSize: 16, fontStyle: 'italic', color: 'rgba(139,133,168,0.5)', letterSpacing: '-0.01em' }}>
             Your order
           </div>
+          {activeSuggestion && (
+            <div style={{ maxWidth: 420, width: '100%', background: 'rgba(127,184,151,0.1)', border: '1px solid rgba(127,184,151,0.35)', borderRadius: 16, padding: '14px 20px', marginTop: 4 }}>
+              <p style={{ fontSize: 9, color: 'rgba(127,184,151,0.6)', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', margin: '0 0 6px' }}>Today only for you</p>
+              <p style={{ fontFamily: "'Instrument Serif', serif", fontSize: 18, fontStyle: 'italic', color: 'rgba(237,232,255,0.95)', margin: 0, lineHeight: 1.4 }}>{activeSuggestion.offer_text}</p>
+              <p style={{ fontSize: 11, color: 'rgba(127,184,151,0.6)', margin: '4px 0 0' }}>{activeSuggestion.discount_pct}% off</p>
+            </div>
+          )}
 
           {/* Glass order card */}
           <div style={{ width: '100%', maxWidth: 420, background: 'rgba(20,17,32,0.7)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 22, padding: '16px 20px', backdropFilter: 'blur(30px)', boxShadow: '0 20px 80px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06)', animation: 'slide-up 0.4s cubic-bezier(0.16,1,0.3,1)' }}>
@@ -402,9 +412,9 @@ export default function CustomerDisplayPage() {
               const price = item.price ?? (item.price_cents ? item.price_cents / 100 : 0);
               const qty   = item.quantity ?? item.qty ?? 1;
               return (
-                <div key={item.id ?? i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '7px 0', borderBottom: i < Math.min(rawItems.length, 6) - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none', animation: `fade-up 0.3s ${i * 60}ms cubic-bezier(0.16,1,0.3,1) both` }}>
+                <div key={item.id ?? i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '7px 0', borderBottom: i < Math.min(rawItems.length, 6) - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none', animation: "fade-up 0.3s " + (i * 60) + "ms cubic-bezier(0.16,1,0.3,1) both" }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <div style={{ width: 6, height: 6, borderRadius: '50%', background: colA, boxShadow: `0 0 8px ${colA}` }} />
+                    <div style={{ width: 6, height: 6, borderRadius: '50%', background: colA, boxShadow: "0 0 8px " + (colA) }} />
                     <span style={{ fontSize: 14, color: 'rgba(237,232,255,0.85)', fontWeight: 500 }}>{item.name}</span>
                     <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>×{qty}</span>
                   </div>
@@ -438,7 +448,7 @@ export default function CustomerDisplayPage() {
           {/* Check with pulsing rings */}
           <div style={{ position: 'relative', width: 140, height: 140, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             {[0, 1, 2].map(i => (
-              <div key={i} style={{ position: 'absolute', width: 80 + i * 30, height: 80 + i * 30, borderRadius: '50%', border: `1.5px solid rgba(34,197,94,${0.5 - i * 0.15})`, animation: `paid-ring 1.5s ${i * 0.3}s ease-out infinite` }} />
+              <div key={i} style={{ position: 'absolute', width: 80 + i * 30, height: 80 + i * 30, borderRadius: '50%', border: "1.5px solid rgba(34,197,94," + (0.5 - i * 0.15) + ")", animation: "paid-ring 1.5s " + (i * 0.3) + "s ease-out infinite" }} />
             ))}
             <div style={{ width: 90, height: 90, borderRadius: '50%', background: 'rgba(34,197,94,0.12)', border: '2px solid rgba(34,197,94,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 60px rgba(34,197,94,0.3)', animation: 'scale-in 0.5s cubic-bezier(0.16,1,0.3,1)', position: 'relative', zIndex: 1 }}>
               <svg width={44} height={44} viewBox="0 0 24 24" fill="none" stroke="#22C55E" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">

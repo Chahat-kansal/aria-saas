@@ -44,6 +44,7 @@ async function _GET(req: Request) {
     { data: overdueCustomers },
     { data: recentStocktakes },
     { data: lowStockProducts },
+    { data: recentAudits },
   ] = await Promise.all([
     supabase.from('activity_log').select('description', { count: 'exact' }).eq('business_id', businessId).gte('created_at', sevenDaysAgo),
     supabase.from('profit_leaks').select('description,monthly_loss').eq('business_id', businessId).eq('status', 'detected'),
@@ -57,6 +58,7 @@ async function _GET(req: Request) {
     supabase.from('pos_stock_takes').select('status,items_counted,items_with_variance,completed_at').eq('business_id', businessId).order('completed_at', { ascending: false }).limit(1),
     // Low stock
     supabase.from('pos_products').select('name,stock_quantity,low_stock_threshold').eq('business_id', businessId).eq('track_stock', true).lt('stock_quantity', 5).limit(5),
+    supabase.from('pos_shift_audits').select('flagged_items,failed_checks,shift_date').eq('business_id', businessId).gte('shift_date', new Date(Date.now() - 2 * 86400_000).toISOString().slice(0, 10)).order('shift_date', { ascending: false }).limit(5),
   ]);
 
   const totalLeakLoss = (activeLeaks || []).reduce((s: number, l: { monthly_loss?: number }) => s + (l.monthly_loss || 0), 0);
@@ -86,7 +88,8 @@ OPERATIONS DATA (feed into briefing):
 Cash-up (last 7 days): ${cashSessions?.length || 0} sessions. Avg variance: ${avgVariance > 0 ? '+' : ''}A$${(Math.abs(avgVariance) / 100).toFixed(2)}. ${largeVariances.length > 0 ? largeVariances.length + ' sessions had variance over $5.' : 'All sessions balanced.'}
 Overdue customer tabs (90+ days): ${overdueCustomers?.length || 0} customers owing A$${(overdueTotal / 100).toFixed(2)} total.
 Last stocktake: ${lastStocktake ? lastStocktake.items_counted + ' items counted, ' + lastStocktake.items_with_variance + ' variances found.' : 'No stocktake on record.'}
-Low stock products: ${lowStockProducts?.map((p: { name?: string; stock_quantity?: number }) => p.name + ' (' + p.stock_quantity + ' left)').join(', ') || 'none critical'}`.trim();
+Low stock products: ${lowStockProducts?.map((p: { name?: string; stock_quantity?: number }) => p.name + ' (' + p.stock_quantity + ' left)').join(', ') || 'none critical'}
+Audit checks (last 48h): ${(() => { const aa = (recentAudits || []) as Array<{failed_checks?: number; flagged_items?: Array<{name: string}>}>; const tot = aa.reduce((s, a) => s + (a.failed_checks ?? 0), 0); const flags = aa.flatMap(a => a.flagged_items ?? []).slice(0,3).map(f => f.name).join(', '); return tot > 0 ? tot + ' required checks failed' + (flags ? ': ' + flags : '') : 'all checks passed'; })()}\``.trim();
 
   try {
     const _bizCtx = await getBusinessContext(businessId)

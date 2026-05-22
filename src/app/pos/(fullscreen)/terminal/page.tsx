@@ -205,6 +205,8 @@ export default function TerminalPage() {
   const [customer,       setCustomer]       = useState<Customer | null>(null);
   const [customerSearch, setCustomerSearch] = useState('');
   const [customerResults, setCustomerResults] = useState<Customer[]>([]);
+  const [displaySuggestion, setDisplaySuggestion] = useState<{ id: string; offer_text: string; discount_pct: number } | null>(null);
+  const [suggestionLoading, setSuggestionLoading] = useState(false);
   const [lastAddedId,    setLastAddedId]    = useState<string | null>(null);
   const [discountMode,   setDiscountMode]   = useState<'pct' | 'amt' | null>(null);
   const [discountVal,    setDiscountVal]    = useState('');
@@ -1538,7 +1540,7 @@ export default function TerminalPage() {
               <span style={{ color: 'var(--violet)', fontWeight: 700, fontSize: 14, fontFamily: "'Fraunces',serif" }}>Floor Plan — Select Table</span>
               <div style={{ display: 'flex', gap: 8 }}>
                 <button onClick={() => setFloorPlanEditMode(v => !v)}
-                  style={{ fontSize: 11, padding: '3px 10px', borderRadius: 6, border: `1px solid ${floorPlanEditMode ? 'rgba(127,184,151,0.4)' : 'rgba(255,255,255,0.1)'}`, background: floorPlanEditMode ? 'var(--violet-dim)' : 'transparent', color: floorPlanEditMode ? 'var(--violet)' : 'rgba(255,255,255,0.4)', cursor: 'pointer', fontFamily: 'inherit' }}>
+                  style={{ fontSize: 11, padding: '3px 10px', borderRadius: 6, border: "1px solid " + (floorPlanEditMode ? 'rgba(127,184,151,0.4)' : 'rgba(255,255,255,0.1)'), background: floorPlanEditMode ? 'var(--violet-dim)' : 'transparent', color: floorPlanEditMode ? 'var(--violet)' : 'rgba(255,255,255,0.4)', cursor: 'pointer', fontFamily: 'inherit' }}>
                   {floorPlanEditMode ? '✓ Done editing' : '⚙ Edit layout'}
                 </button>
                 <button onClick={() => setShowFloorPlan(false)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', cursor: 'pointer', fontSize: 20 }}>×</button>
@@ -1689,7 +1691,7 @@ export default function TerminalPage() {
                 const initials = item.product.name.split(' ').map((w: string) => w[0]).join('').slice(0,2).toUpperCase();
                 return (
                   <div key={cartKey(item)} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 8, background: 'var(--bg-ghost)' }}>
-                    <div style={{ width: 28, height: 28, borderRadius: 7, background: `linear-gradient(135deg,${m.a}33,${m.b}66)`, border: `1px solid ${m.a}44`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 800, color: m.a, fontFamily: "'JetBrains Mono',monospace", flexShrink: 0 }}>{initials}</div>
+                    <div style={{ width: 28, height: 28, borderRadius: 7, background: "linear-gradient(135deg," + (m.a) + "33," + (m.b) + "66)", border: "1px solid " + (m.a) + "44", display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 800, color: m.a, fontFamily: "'JetBrains Mono',monospace", flexShrink: 0 }}>{initials}</div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.label ?? item.product.name}</div>
                       <div style={{ fontSize: 9, color: 'var(--text-tertiary)', fontFamily: "'JetBrains Mono',monospace" }}>×{item.qty}</div>
@@ -1733,7 +1735,7 @@ export default function TerminalPage() {
                 { id: 'direct_deposit' as const, label: 'Direct Dep.',icon: '🏦', color: '#F59E0B' },
               ]).map(m => (
                 <button key={m.id} onClick={() => setPayMethod(m.id)}
-                  style={{ flex: 1, height: 60, borderRadius: 12, border: `1.5px solid ${payMethod === m.id ? m.color + '55' : 'var(--violet-dim)'}`, background: payMethod === m.id ? `${m.color}12` : 'var(--bg-ghost)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, cursor: 'pointer', transition: 'all 200ms', transform: payMethod === m.id ? 'translateY(-2px)' : 'none', boxShadow: payMethod === m.id ? `0 6px 20px ${m.color}33` : 'none' }}>
+                  style={{ flex: 1, height: 60, borderRadius: 12, border: "1.5px solid " + (payMethod === m.id ? m.color + '55' : 'var(--violet-dim)'), background: payMethod === m.id ? (m.color) + "12" : 'var(--bg-ghost)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, cursor: 'pointer', transition: 'all 200ms', transform: payMethod === m.id ? 'translateY(-2px)' : 'none', boxShadow: payMethod === m.id ? "0 6px 20px " + (m.color) + "33" : 'none' }}>
                   <span style={{ fontSize: 18 }}>{m.icon}</span>
                   <span style={{ fontSize: 10, fontWeight: 700, color: payMethod === m.id ? m.color : 'var(--text-tertiary)', fontFamily: 'inherit' }}>{m.label}</span>
                 </button>
@@ -1752,7 +1754,7 @@ export default function TerminalPage() {
                       {/* NFC rings */}
                       <div style={{ position: 'relative', width: 80, height: 80, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         {[0, 1, 2].map(i => (
-                          <div key={i} style={{ position: 'absolute', width: 48 + i * 20, height: 48 + i * 20, borderRadius: '50%', border: `1.5px solid rgba(0,229,255,${0.6 - i * 0.18})`, animation: `nfc-pulse 2s ease-in-out infinite`, animationDelay: `${i * 0.4}s` }} />
+                          <div key={i} style={{ position: 'absolute', width: 48 + i * 20, height: 48 + i * 20, borderRadius: '50%', border: "1.5px solid rgba(0,229,255," + (0.6 - i * 0.18) + ")", animation: "nfc-pulse 2s ease-in-out infinite", animationDelay: (i * 0.4) + "s" }} />
                         ))}
                         <div style={{ width: 38, height: 38, borderRadius: '50%', border: '2px solid rgba(0,106,255,0.7)', background: 'rgba(0,106,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', zIndex: 1 }}>
                           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--violet)" strokeWidth="1.5" strokeLinecap="round"><path d="M6 8.32a7.43 7.43 0 0 0 0 7.36"/><path d="M9.46 6.21a11.76 11.76 0 0 0 0 11.58"/><path d="M12.91 4.1a15.91 15.91 0 0 1 0 15.8"/></svg>
@@ -1906,7 +1908,7 @@ export default function TerminalPage() {
             {/* Green check with expanding rings */}
             <div style={{ position: 'relative', width: 120, height: 120, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               {[0, 1, 2].map(i => (
-                <div key={i} style={{ position: 'absolute', width: 76 + i * 24, height: 76 + i * 24, borderRadius: '50%', border: `1.5px solid rgba(34,197,94,${0.55 - i * 0.15})`, animation: `paid-ring 1.6s ${i * 0.3}s ease-out infinite` }} />
+                <div key={i} style={{ position: 'absolute', width: 76 + i * 24, height: 76 + i * 24, borderRadius: '50%', border: "1.5px solid rgba(34,197,94," + (0.55 - i * 0.15) + ")", animation: "paid-ring 1.6s " + (i * 0.3) + "s ease-out infinite" }} />
               ))}
               <div style={{ width: 80, height: 80, borderRadius: '50%', background: 'rgba(34,197,94,0.1)', border: '2px solid rgba(34,197,94,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 60px rgba(34,197,94,0.3)', animation: 'scale-in 0.5s cubic-bezier(0.16,1,0.3,1)', position: 'relative', zIndex: 1 }}>
                 <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--success)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
@@ -2089,7 +2091,7 @@ export default function TerminalPage() {
             </button>
           )}
           {!registerLoading && (
-            <button onClick={toggleTrainingMode} className="px-3 py-1 rounded-md text-xs whitespace-nowrap flex-shrink-0" style={{ color: trainingMode ? '#F59E0B' : 'var(--text-secondary)', border: `1px solid ${trainingMode ? 'rgba(245,158,11,0.4)' : '#2A2540'}`, background: trainingMode ? 'rgba(245,158,11,0.08)' : 'var(--bg-surface)' }}>
+            <button onClick={toggleTrainingMode} className="px-3 py-1 rounded-md text-xs whitespace-nowrap flex-shrink-0" style={{ color: trainingMode ? '#F59E0B' : 'var(--text-secondary)', border: "1px solid " + (trainingMode ? 'rgba(245,158,11,0.4)' : '#2A2540'), background: trainingMode ? 'rgba(245,158,11,0.08)' : 'var(--bg-surface)' }}>
               {trainingMode ? '🎓 Training ON' : '🎓'}
             </button>
           )}
@@ -2162,7 +2164,7 @@ export default function TerminalPage() {
                     {(['in', 'out'] as const).map(m => (
                       <button key={m} onClick={() => { setClockMode(m); setShowClockModal(true); setClockPin(''); setClockResult(null); }}
                         className="flex-1 py-2 rounded-lg text-xs font-medium transition-colors capitalize"
-                        style={{ background: m === 'in' ? 'rgba(45,82,64,0.4)' : 'rgba(255,22,0,0.10)', color: m === 'in' ? 'var(--violet)' : '#fca5a5', border: `1px solid ${m === 'in' ? 'rgba(45,82,64,0.5)' : 'rgba(255,22,0,0.18)'}` }}>
+                        style={{ background: m === 'in' ? 'rgba(45,82,64,0.4)' : 'rgba(255,22,0,0.10)', color: m === 'in' ? 'var(--violet)' : '#fca5a5', border: "1px solid " + (m === 'in' ? 'rgba(45,82,64,0.5)' : 'rgba(255,22,0,0.18)') }}>
                         Clock {m}
                       </button>
                     ))}
@@ -2315,7 +2317,24 @@ export default function TerminalPage() {
                     <div className="absolute top-full mt-1 left-0 rounded-xl shadow-xl z-30 overflow-hidden w-48" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-default)' }}>
                       {customerResults.map(c => (
                         <button key={c.id}
-                          onMouseDown={e => { e.preventDefault(); setCustomer(c); setCustomerSearch(''); setCustomerResults([]); }}
+                          onMouseDown={e => {
+                            e.preventDefault();
+                            setCustomer(c);
+                            setCustomerSearch('');
+                            setCustomerResults([]);
+                            if (c.id && businessId) {
+                              setSuggestionLoading(true);
+                              setDisplaySuggestion(null);
+                              fetch('/api/pos/display-suggestions', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ customer_id: c.id, cart_items: cart.map((i: any) => ({ name: i.name, price: i.price })) }),
+                              }).then(r => r.json()).then((d: any) => {
+                                setDisplaySuggestion(d.suggestion ?? null);
+                                setSuggestionLoading(false);
+                              }).catch(() => setSuggestionLoading(false));
+                            }
+                          }}
                           className="w-full flex items-center gap-2 px-3 py-2 text-left" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
                           <div className="flex-1 min-w-0">
                             <p className="text-xs font-medium truncate" style={{ color: 'var(--text-primary)' }}>{c.name}</p>
@@ -2708,7 +2727,7 @@ export default function TerminalPage() {
                             )}
                             {canRedeem && (
                               <button onClick={() => setRedeemActive(r => !r)}
-                                style={{ textAlign: 'left', background: redeemActive ? 'var(--violet-dim)' : 'transparent', border: `1px solid ${redeemActive ? 'rgba(139,92,246,0.4)' : 'rgba(0,106,255,0.12)'}`, borderRadius: 8, padding: '6px 10px', cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 700, color: 'var(--violet)' }}>
+                                style={{ textAlign: 'left', background: redeemActive ? 'var(--violet-dim)' : 'transparent', border: "1px solid " + (redeemActive ? 'rgba(139,92,246,0.4)' : 'rgba(0,106,255,0.12)'), borderRadius: 8, padding: '6px 10px', cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 700, color: 'var(--violet)' }}>
                                 {redeemActive ? `✓ Redeeming ${redeemThreshold} pts = −A$${redeemDiscount.toFixed(2)}` : `Redeem ${redeemThreshold} pts = −A$${((redeemThreshold * (loyaltyConfig.point_value_cents ?? 1)) / 100).toFixed(2)}`}
                               </button>
                             )}
@@ -2853,6 +2872,22 @@ export default function TerminalPage() {
           {ageRestrictedInCart && (
             <div className="rounded-[10px] px-2.5 py-1.5 text-xs flex items-center gap-1.5 font-semibold" style={{ background: 'var(--destructive-bg)', border: '1px solid rgba(255,22,0,0.10)', color: 'var(--destructive)' }}>
               🔞 ID check required
+            </div>
+          )}
+          {(displaySuggestion || suggestionLoading) && customer && (
+            <div className="flex-shrink-0 px-3 py-2" style={{ background: 'rgba(127,184,151,0.06)', borderBottom: '1px solid rgba(127,184,151,0.12)' }}>
+              {suggestionLoading ? (
+                <p className="text-[11px]" style={{ color: 'rgba(127,184,151,0.5)' }}>Aria is preparing a suggestion…</p>
+              ) : displaySuggestion ? (
+                <div>
+                  <p className="text-[10px] font-semibold mb-1.5" style={{ color: '#7FB897', letterSpacing: '0.06em', textTransform: 'uppercase' }}>Aria suggestion</p>
+                  <p className="text-xs mb-2" style={{ color: '#e8ede7' }}>{displaySuggestion.offer_text} ({displaySuggestion.discount_pct}% off)</p>
+                  <div className="flex gap-2">
+                    <button onClick={() => { fetch('/api/pos/display-suggestions', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: displaySuggestion.id, decision: 'approved' }) }).catch(() => {}); if (typeof BroadcastChannel !== 'undefined') { const bc = new BroadcastChannel('aria-pos-display'); bc.postMessage({ type: 'display_suggestion', offer_text: displaySuggestion.offer_text, discount_pct: displaySuggestion.discount_pct, customer_name: customer ? customer.name : '' }); bc.close(); } setDisplaySuggestion(null); }} className="text-[11px] px-2.5 py-1 rounded-lg font-semibold" style={{ background: 'rgba(127,184,151,0.2)', border: '1px solid rgba(127,184,151,0.4)', color: '#7FB897', cursor: 'pointer', fontFamily: 'inherit' }}>Show on display</button>
+                    <button onClick={() => { fetch('/api/pos/display-suggestions', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: displaySuggestion.id, decision: 'rejected' }) }).catch(() => {}); setDisplaySuggestion(null); }} className="text-[11px] px-2.5 py-1 rounded-lg" style={{ border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.3)', cursor: 'pointer', fontFamily: 'inherit', background: 'none' }}>Skip</button>
+                  </div>
+                </div>
+              ) : null}
             </div>
           )}
           {loyaltyCustomer && (
