@@ -102,6 +102,12 @@ const ALL_ITEMS: Record<string, NavItemDef> = {
   'warehouse/uom':              { href: '/dashboard/warehouse/uom',            label: 'Units of measure',  icon: ScaleIcon,                        section: 'Warehouse' },
   'warehouse/full-stocktake':   { href: '/dashboard/warehouse/full-stocktake', label: 'Full stocktake',    icon: ArchiveIcon,                      section: 'Warehouse' },
   'warehouse/valuation':        { href: '/dashboard/warehouse/valuation',      label: 'Stock valuation',   icon: CurrencyDollarIcon, badge: 'AI',  section: 'Warehouse' },
+  // ── Sprint AN-AR additions ─────────────────────────────────────
+  'studio':          { href: '/dashboard/studio',         label: 'Aria Studio',      icon: SparklesIcon,   badge: 'AI',  section: 'Marketing'  },
+  'marketing':       { href: '/dashboard/marketing',      label: 'Campaigns',        icon: SocialIcon,     badge: 'AI',  section: 'Marketing'  },
+  'shift-reports':   { href: '/dashboard/shift-reports',  label: 'Shift Reports',    icon: FileTextIcon,   section: 'Operations'  },
+  'audit-checks':    { href: '/dashboard/audit-checks',   label: 'Audit Checks',     icon: CheckSquareIcon, section: 'Operations' },
+  'weekly-reports':  { href: '/dashboard/weekly-reports', label: 'Weekly Reports',   icon: TrendingUpIcon, badge: 'AI',  section: 'Operations' },
 };
 
 const SECTION_ORDER = ['Overview', 'Marketing', 'Operations', 'Warehouse', 'Revenue', 'Reputation', 'Intelligence', 'Pro tools', 'VisaAI', 'Modules'];

@@ -2,7 +2,7 @@ export const industryConfig = {
   retail: {
     label: 'Retail shop (liquor, convenience, specialty)',
     published: true,
-    sidebar: ['dashboard', 'custom-features', 'staff', 'pos', 'social', 'orders', 'delivery', 'pos-online', 'winback', 'slow-day', 'reviews', 'profit-leaks', 'cash-flow', 'missed-demand', 'intelligence', 'competitors', 'churn', 'reorder', 'variance', 'receipt-scan', 'website-chat'],
+    sidebar: ['dashboard', 'custom-features', 'staff', 'pos', 'social', 'studio', 'marketing', 'orders', 'delivery', 'parcel-tracking', 'shift-reports', 'audit-checks', 'weekly-reports', 'pos-online', 'winback', 'slow-day', 'reviews', 'profit-leaks', 'cash-flow', 'missed-demand', 'intelligence', 'competitors', 'churn', 'reorder', 'variance', 'receipt-scan', 'website-chat'],
     dashboard_modules: ['revenue', 'pos_today', 'winback', 'reviews', 'profit_leaks', 'inventory_alerts'],
     show_pos: true,
     show_visa: false,
@@ -11,7 +11,7 @@ export const industryConfig = {
   cafe: {
     label: 'Café or coffee shop',
     published: true,
-    sidebar: ['dashboard', 'custom-features', 'staff', 'pos', 'social', 'orders', 'delivery', 'pos-online', 'recipes', 'bookings', 'winback', 'slow-day', 'reviews', 'profit-leaks', 'cash-flow', 'missed-demand', 'intelligence', 'competitors', 'churn', 'reorder', 'variance', 'receipt-scan', 'website-chat'],
+    sidebar: ['dashboard', 'custom-features', 'staff', 'pos', 'social', 'studio', 'marketing', 'orders', 'delivery', 'parcel-tracking', 'shift-reports', 'audit-checks', 'weekly-reports', 'pos-online', 'recipes', 'bookings', 'winback', 'slow-day', 'reviews', 'profit-leaks', 'cash-flow', 'missed-demand', 'intelligence', 'competitors', 'churn', 'reorder', 'variance', 'receipt-scan', 'website-chat'],
     dashboard_modules: ['revenue', 'pos_today', 'winback', 'slow_day', 'reviews', 'waste_alerts'],
     show_pos: true,
     show_visa: false,
@@ -20,7 +20,7 @@ export const industryConfig = {
   restaurant: {
     label: 'Restaurant or food service',
     published: true,
-    sidebar: ['dashboard', 'custom-features', 'staff', 'pos', 'social', 'orders', 'delivery', 'pos-online', 'bookings', 'recipes', 'winback', 'slow-day', 'reviews', 'profit-leaks', 'cash-flow', 'missed-demand', 'intelligence', 'competitors', 'churn', 'reorder', 'variance', 'receipt-scan', 'website-chat'],
+    sidebar: ['dashboard', 'custom-features', 'staff', 'pos', 'social', 'studio', 'marketing', 'orders', 'delivery', 'parcel-tracking', 'shift-reports', 'audit-checks', 'weekly-reports', 'pos-online', 'bookings', 'recipes', 'winback', 'slow-day', 'reviews', 'profit-leaks', 'cash-flow', 'missed-demand', 'intelligence', 'competitors', 'churn', 'reorder', 'variance', 'receipt-scan', 'website-chat'],
     dashboard_modules: ['revenue', 'pos_today', 'winback', 'slow_day', 'reviews', 'waste_alerts'],
     show_pos: true,
     show_visa: false,
