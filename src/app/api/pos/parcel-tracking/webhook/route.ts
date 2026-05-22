@@ -2,83 +2,108 @@ export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 
-// 17TRACK pushes to this endpoint automatically when carrier updates a parcel
-// Setup: 17TRACK dashboard → Settings → Webhooks → https://www.ariaos.site/api/pos/parcel-tracking/webhook
-// 17TRACK webhook payload: https://api.17track.net/docs#webhooks
+// TrackingMore pushes here automatically whenever a carrier updates a parcel.
+// Setup: TrackingMore dashboard -> Webhook -> https://www.ariaos.site/api/pos/parcel-tracking/webhook
+// Payload: { event: 'TRACKING_UPDATED', data: { tracking_number, status, origin_info, ... } }
 
-const STATUS_MAP: Record<number, string> = {
-  0: 'unknown', 10: 'pending', 20: 'in_transit', 25: 'exception',
-  30: 'out_for_delivery', 35: 'exception', 40: 'delivered', 50: 'exception',
+// TrackingMore status strings -> our internal status values.
+const STATUS_MAP: Record<string, string> = {
+  pending: 'pending', notfound: 'pending', inforeceived: 'pending',
+  transit: 'in_transit', pickup: 'awaiting_collection',
+  delivered: 'delivered', undelivered: 'exception',
+  exception: 'exception', expired: 'exception',
+}
+
+interface TMTrackEvent {
+  Date?: string; StatusDescription?: string; Details?: string
+  checkpoint_status?: string; location?: string
+}
+interface TMData {
+  tracking_number?: string
+  status?: string
+  latest_event?: string
+  scheduled_delivery_date?: string | null
+  expected_delivery?: string | null
+  origin_info?: { trackinfo?: TMTrackEvent[] }
+  destination_info?: { trackinfo?: TMTrackEvent[] }
 }
 
 export async function POST(req: Request) {
   try {
-    // 17TRACK sends an array of tracking updates
-    const body = await req.json() as Array<{
-      number: string
-      track: {
-        e: number  // status code
-        b?: string // estimated delivery
-        z0?: { a: string; d: string } // latest event
-        z1?: Array<{ a: string; b?: string; c?: string; d: string }> // all events
-      }
-    }> | {
-      // Single update format
-      number?: string
-      track?: { e: number; b?: string; z0?: { a: string; d: string }; z1?: Array<{ a: string; b?: string; c?: string; d: string }> }
+    const body = await req.json() as
+      | { event?: string; data?: TMData | TMData[] }
+      | TMData
+      | TMData[]
+
+    // Normalise the payload to a flat array of TMData objects.
+    let items: TMData[] = []
+    if (Array.isArray(body)) {
+      items = body as TMData[]
+    } else if (body && typeof body === 'object' && 'data' in body && body.data) {
+      items = Array.isArray(body.data) ? body.data : [body.data]
+    } else if (body && typeof body === 'object' && 'tracking_number' in body) {
+      items = [body as TMData]
     }
 
-    // Normalize to array
-    const updates = Array.isArray(body) ? body : (body.number ? [body as { number: string; track: typeof body.track }] : [])
+    for (const d of items) {
+      if (!d.tracking_number) continue
 
-    for (const update of updates) {
-      if (!update.number || !update.track) continue
+      const status = STATUS_MAP[(d.status ?? '').toLowerCase()] ?? 'pending'
+      const raw: TMTrackEvent[] = [
+        ...(d.destination_info?.trackinfo ?? []),
+        ...(d.origin_info?.trackinfo ?? []),
+      ]
+      const events = raw
+        .map(ev => ({
+          time: ev.Date ?? '',
+          location: ev.Details ?? ev.location ?? '',
+          description: ev.StatusDescription ?? '',
+        }))
+        .filter(e => e.time || e.description)
+        .sort((a, b) => (b.time || '').localeCompare(a.time || ''))
 
-      const t = update.track
-      const status = STATUS_MAP[t.e] ?? 'unknown'
-      const events = (t.z1 ?? []).map(ev => ({
-        time: ev.a, location: ev.b ?? ev.c ?? '', description: ev.d,
-      }))
-      const latestEvent = t.z0?.d ?? events[0]?.description ?? ''
-      const deliveredAt = status === 'delivered' ? (t.z0?.a ?? events[0]?.time ?? null) : null
+      const latestEvent = d.latest_event ?? events[0]?.description ?? (d.status ?? '')
+      const deliveredAt = status === 'delivered' ? (events[0]?.time ?? null) : null
 
-      const updates_obj: Record<string, unknown> = {
-        status, status_detail: latestEvent, events,
-        estimated_delivery: t.b ?? null,
+      const updateObj: Record<string, unknown> = {
+        status,
+        status_detail: latestEvent,
+        events,
+        estimated_delivery: d.scheduled_delivery_date ?? d.expected_delivery ?? null,
         last_checked_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       }
-      if (deliveredAt) updates_obj.delivered_at = deliveredAt
-      if (events[0]?.time) updates_obj.last_event_at = new Date(events[0].time).toISOString()
+      if (deliveredAt) updateObj.delivered_at = deliveredAt
+      if (events[0]?.time) updateObj.last_event_at = new Date(events[0].time).toISOString()
 
       await supabaseAdmin.from('pos_parcel_tracking')
-        .update(updates_obj)
-        .ilike('tracking_number', update.number.toUpperCase())
+        .update(updateObj)
+        .ilike('tracking_number', d.tracking_number.toUpperCase())
 
-      // Autopilot action on exception
+      // Raise an autopilot action the first time a parcel hits an exception.
       if (status === 'exception') {
         const { data: parcels } = await supabaseAdmin
           .from('pos_parcel_tracking')
           .select('business_id, carrier_name')
-          .ilike('tracking_number', update.number.toUpperCase())
+          .ilike('tracking_number', d.tracking_number.toUpperCase())
           .neq('status', 'exception')
           .limit(1)
         if (parcels?.[0]) {
           void supabaseAdmin.from('aria_actions').insert({
             business_id: parcels[0].business_id, category: 'delivery', priority: 'high',
-            title: `Delivery exception: ${update.number}`, status: 'pending', source: 'parcel_webhook',
-            recommendation: `Parcel ${update.number} has a delivery exception. Contact ${parcels[0].carrier_name ?? 'the carrier'}.`,
-            payload: { tracking_number: update.number },
+            title: `Delivery exception: ${d.tracking_number}`, status: 'pending', source: 'parcel_webhook',
+            recommendation: `Parcel ${d.tracking_number} has a delivery exception. Contact ${parcels[0].carrier_name ?? 'the carrier'}.`,
+            payload: { tracking_number: d.tracking_number },
           })
         }
       }
 
-      console.log(`[parcel-webhook] Updated ${update.number} → ${status}`)
+      console.log(`[parcel-webhook] Updated ${d.tracking_number} -> ${status}`)
     }
 
     return NextResponse.json({ ok: true })
   } catch (e) {
     console.error('[parcel-webhook] Error:', String(e).slice(0, 200))
-    return NextResponse.json({ ok: true }) // always 200 to 17TRACK
+    return NextResponse.json({ ok: true }) // always 200 so the provider does not retry-storm
   }
 }
