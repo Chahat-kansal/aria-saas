@@ -124,7 +124,7 @@ export default function AriaStudioPage() {
   const [style, setStyle]   = useState('photorealistic')
   const [selT, setSelT]     = useState('')
 
-  const [tab, setTab]           = useState<'console'|'library'|'how'|'editor'>('console')
+  const [tab, setTab]           = useState<'console'|'library'|'how'|'editor'|'video'>('console')
   const [editingAsset, setEditingAsset] = useState<StudioAsset|null>(null)
   const [ff, setFF]             = useState<string|null>(null)
   const [fav, setFav]           = useState(false)
@@ -256,6 +256,7 @@ export default function AriaStudioPage() {
         </button>
         <button className={'tab'+(tab==='how'?' on':'')} onClick={()=>setTab('how')}>How it works</button>
         {editingAsset && <button className={'tab'+(tab==='editor'?' on':'')} onClick={()=>setTab('editor')} style={{color:tab==='editor'?'#7FB897':'rgba(237,232,227,0.38)',borderBottomColor:tab==='editor'?'#7FB897':'transparent'}}>✏ Image editor</button>}
+        <button className={'tab'+(tab==='video'?' on':'')} onClick={()=>setTab('video')} style={{color:tab==='video'?'#7FB897':'rgba(237,232,227,0.38)',borderBottomColor:tab==='video'?'#7FB897':'transparent'}}>🎬 Video</button>
       </div>
 
       {/* HOW IT WORKS */}
@@ -532,6 +533,9 @@ export default function AriaStudioPage() {
       {tab==='editor' && editingAsset && (
         <ImageEditor asset={editingAsset} onClose={()=>setTab('console')} onSave={(url)=>{showToast('Saved to library');setAssets(p=>p.map(a=>a.id===editingAsset.id?{...a,image_url:url}:a));setTab('library')}} />
       )}
+
+      {/* ── VIDEO STUDIO (Veo) ───────────────────────────────── */}
+      {tab==='video' && <VideoStudio assets={assets} />}
     </div>
   )
 }
@@ -550,7 +554,14 @@ function ImageEditor({ asset, onClose, onSave }: { asset: StudioAsset; onClose: 
   const [selObj, setSelObj]       = useState<any>(null)
   const [brightness, setBrightness] = useState(0)
   const [contrast, setContrast]     = useState(0)
+  const [saturation, setSaturation] = useState(0)
+  const [blur, setBlur]             = useState(0)
+  const [grayscale, setGrayscale]   = useState(false)
   const [opacity, setOpacity]       = useState(100)
+  const [cropMode, setCropMode]     = useState(false)
+  const historyRef    = useRef<string[]>([])
+  const historyIdxRef = useRef(-1)
+  const cropRectRef   = useRef<any>(null)
   const cssRef2 = useRef(false)
 
   const EDITOR_CSS = `
@@ -578,6 +589,18 @@ function ImageEditor({ asset, onClose, onSave }: { asset: StudioAsset; onClose: 
     const el = document.createElement('style'); el.textContent = EDITOR_CSS
     document.head.appendChild(el)
     return () => { document.head.removeChild(el) }
+  }, [])
+
+  // Keyboard shortcuts: Ctrl+Z = undo, Ctrl+Shift+Z = redo
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.key !== 'z') return
+      e.preventDefault()
+      if (e.shiftKey) redo(); else undo()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // Load Fabric.js from CDN and initialise canvas
@@ -624,6 +647,17 @@ function ImageEditor({ asset, onClose, onSave }: { asset: StudioAsset; onClose: 
       fc.on('selection:created', (e: any) => setSelObj(e.selected?.[0] ?? null))
       fc.on('selection:updated', (e: any) => setSelObj(e.selected?.[0] ?? null))
       fc.on('selection:cleared', () => setSelObj(null))
+      // History — push snapshot on every canvas mutation, capped at 30
+      const pushHistory = () => {
+        const json = JSON.stringify(fc.toJSON())
+        historyRef.current.splice(historyIdxRef.current + 1)
+        historyRef.current.push(json)
+        if (historyRef.current.length > 30) historyRef.current.shift()
+        historyIdxRef.current = historyRef.current.length - 1
+      }
+      fc.on('object:modified', pushHistory)
+      fc.on('object:added', pushHistory)
+      fc.on('object:removed', pushHistory)
     }
     img.src = asset.image_url
   }
@@ -663,16 +697,115 @@ function ImageEditor({ asset, onClose, onSave }: { asset: StudioAsset; onClose: 
     if (obj) { fc.remove(obj); fc.discardActiveObject(); fc.renderAll(); setSelObj(null) }
   }
 
-  const applyFilter = (bright: number, cont: number) => {
+  const undo = () => {
+    const fc = fabricRef.current; if (!fc) return
+    const idx = historyIdxRef.current
+    if (idx <= 0) return
+    historyIdxRef.current = idx - 1
+    fc.loadFromJSON(JSON.parse(historyRef.current[idx - 1]), () => { fc.renderAll() })
+  }
+  const redo = () => {
+    const fc = fabricRef.current; if (!fc) return
+    const hist = historyRef.current; const idx = historyIdxRef.current
+    if (idx >= hist.length - 1) return
+    historyIdxRef.current = idx + 1
+    fc.loadFromJSON(JSON.parse(hist[idx + 1]), () => { fc.renderAll() })
+  }
+
+  const enterCrop = () => {
+    const fc = fabricRef.current; if (!fc) return
+    const fabric = (window as any).fabric
+    const w = (fc.width ?? 400) * 0.6, h = (fc.height ?? 400) * 0.6
+    const rect = new fabric.Rect({
+      left: (fc.width ?? 400) * 0.2, top: (fc.height ?? 400) * 0.2,
+      width: w, height: h,
+      fill: 'transparent', stroke: '#7FB897', strokeWidth: 2, strokeDashArray: [6, 4],
+      hasRotatingPoint: false,
+    })
+    fc.add(rect); fc.setActiveObject(rect); fc.renderAll()
+    cropRectRef.current = rect; setCropMode(true)
+  }
+  const confirmCrop = () => {
+    const fc = fabricRef.current; if (!fc || !cropRectRef.current) return
+    const rect = cropRectRef.current
+    const l = rect.left ?? 0, t = rect.top ?? 0
+    const w = (rect.width ?? 100) * (rect.scaleX ?? 1), h = (rect.height ?? 100) * (rect.scaleY ?? 1)
+    const dataUrl = fc.toDataURL({ left: l, top: t, width: w, height: h, format: 'png', multiplier: 1 } as any)
+    fc.remove(rect); cropRectRef.current = null; setCropMode(false)
+    const img2 = new window.Image(); img2.crossOrigin = 'anonymous'
+    img2.onload = () => {
+      const fabric2 = (window as any).fabric
+      fc.setDimensions({ width: img2.width, height: img2.height })
+      fabric2.Image.fromURL(img2.src, (fImg: any) => {
+        fImg.set({ selectable: false, evented: false, originX: 'left', originY: 'top', left: 0, top: 0 })
+        fImg.scaleX = 1; fImg.scaleY = 1
+        const oldBg = fc.getObjects().find((o: any) => !o.selectable)
+        if (oldBg) fc.remove(oldBg)
+        fc.add(fImg); fc.sendToBack(fImg); fc.renderAll()
+      }, { crossOrigin: 'anonymous' })
+    }
+    img2.src = dataUrl
+  }
+  const cancelCrop = () => {
+    const fc = fabricRef.current
+    if (fc && cropRectRef.current) { fc.remove(cropRectRef.current); fc.renderAll() }
+    cropRectRef.current = null; setCropMode(false)
+  }
+
+  const bringForward = () => {
+    const fc = fabricRef.current; const obj = fc?.getActiveObject()
+    if (fc && obj) { fc.bringForward(obj); fc.renderAll() }
+  }
+  const sendBackward = () => {
+    const fc = fabricRef.current; const obj = fc?.getActiveObject()
+    if (fc && obj) { fc.sendBackwards(obj); fc.renderAll() }
+  }
+  const duplicateObj = () => {
+    const fc = fabricRef.current; const obj = fc?.getActiveObject()
+    if (!fc || !obj) return
+    obj.clone((cloned: any) => {
+      cloned.set({ left: (cloned.left ?? 0) + 20, top: (cloned.top ?? 0) + 20 })
+      fc.add(cloned); fc.setActiveObject(cloned); fc.renderAll()
+    })
+  }
+  const rotate90 = () => {
+    const fc = fabricRef.current; const obj = fc?.getActiveObject()
+    if (fc && obj) { obj.rotate(((obj.angle ?? 0) + 90) % 360); fc.renderAll() }
+  }
+  const flipHorizontal = () => {
+    const fc = fabricRef.current; const obj = fc?.getActiveObject()
+    if (fc && obj) { obj.set({ flipX: !obj.flipX }); fc.renderAll() }
+  }
+  const flipVertical = () => {
+    const fc = fabricRef.current; const obj = fc?.getActiveObject()
+    if (fc && obj) { obj.set({ flipY: !obj.flipY }); fc.renderAll() }
+  }
+  const alignCenterH = () => {
+    const fc = fabricRef.current; const obj = fc?.getActiveObject()
+    if (fc && obj) { obj.set({ left: ((fc.width ?? 400) - obj.getScaledWidth()) / 2 }); obj.setCoords(); fc.renderAll() }
+  }
+  const alignCenterV = () => {
+    const fc = fabricRef.current; const obj = fc?.getActiveObject()
+    if (fc && obj) { obj.set({ top: ((fc.height ?? 400) - obj.getScaledHeight()) / 2 }); obj.setCoords(); fc.renderAll() }
+  }
+
+  const applyFilter = (bright: number, cont: number, sat?: number, blurVal?: number, gs?: boolean) => {
     const fc = fabricRef.current
     if (!fc) return
     const bg = fc.getObjects().find((o: any) => !o.selectable)
     if (!bg) return
     const fabric = (window as any).fabric
-    bg.filters = [
+    const filters: any[] = [
       new fabric.Image.filters.Brightness({ brightness: bright / 100 }),
       new fabric.Image.filters.Contrast({ contrast: cont / 100 }),
     ]
+    const s = sat !== undefined ? sat : saturation
+    if (s !== 0) filters.push(new fabric.Image.filters.Saturation({ saturation: s / 100 }))
+    const b = blurVal !== undefined ? blurVal : blur
+    if (b > 0) filters.push(new fabric.Image.filters.Blur({ blur: b / 100 }))
+    const g = gs !== undefined ? gs : grayscale
+    if (g) filters.push(new fabric.Image.filters.Grayscale())
+    bg.filters = filters
     bg.applyFilters()
     fc.renderAll()
   }
@@ -719,6 +852,15 @@ function ImageEditor({ asset, onClose, onSave }: { asset: StudioAsset; onClose: 
           <button onClick={onClose} style={{background:'none',border:'none',cursor:'pointer',color:'rgba(237,232,227,0.4)',fontSize:16,lineHeight:1,padding:0}}>×</button>
         </div>
 
+        {/* Undo / Redo */}
+        <div className="fed-section">
+          <span className="fed-label">History</span>
+          <div className="fed-row">
+            <button className="fed-btn" onClick={undo} title="Ctrl+Z">↩ Undo</button>
+            <button className="fed-btn" onClick={redo} title="Ctrl+Shift+Z">↪ Redo</button>
+          </div>
+        </div>
+
         {/* Add text */}
         <div className="fed-section">
           <span className="fed-label">Add text</span>
@@ -749,19 +891,41 @@ function ImageEditor({ asset, onClose, onSave }: { asset: StudioAsset; onClose: 
           </div>
         </div>
 
+        {/* Crop */}
+        <div className="fed-section">
+          <span className="fed-label">Crop</span>
+          {!cropMode
+            ? <button className="fed-btn" onClick={enterCrop}>✂ Enter crop mode</button>
+            : <div className="fed-row">
+                <button className="fed-btn fed-btn-g" onClick={confirmCrop}>✓ Confirm crop</button>
+                <button className="fed-btn fed-btn-r" onClick={cancelCrop}>✕ Cancel</button>
+              </div>
+          }
+        </div>
+
         {/* Adjustments */}
         <div className="fed-section">
           <span className="fed-label">Adjustments</span>
           <div style={{display:'flex',flexDirection:'column',gap:8}}>
-            {[['Brightness', brightness, setBrightness],['Contrast', contrast, setContrast]].map(([label, val, setter])=>(
-              <div key={String(label)} style={{display:'flex',alignItems:'center',gap:6}}>
-                <span style={{fontSize:11,color:'rgba(237,232,227,0.35)',width:68,flexShrink:0}}>{String(label)}</span>
-                <input type="range" className="fed-slider" min={-100} max={100} value={Number(val)}
-                  onChange={e=>{ (setter as Function)(+e.target.value); applyFilter(label==='Brightness'?+e.target.value:brightness, label==='Contrast'?+e.target.value:contrast) }}
+            {([['Brightness', brightness, setBrightness],['Contrast', contrast, setContrast],['Saturation', saturation, setSaturation],['Blur', blur, setBlur]] as [string, number, (v: number)=>void][]).map(([label, val, setter])=>(
+              <div key={label} style={{display:'flex',alignItems:'center',gap:6}}>
+                <span style={{fontSize:11,color:'rgba(237,232,227,0.35)',width:68,flexShrink:0}}>{label}</span>
+                <input type="range" className="fed-slider" min={label==='Blur'?0:-100} max={100} value={val}
+                  onChange={e=>{
+                    const v = +e.target.value; setter(v)
+                    applyFilter(label==='Brightness'?v:brightness, label==='Contrast'?v:contrast, label==='Saturation'?v:saturation, label==='Blur'?v:blur, grayscale)
+                  }}
                   style={{flex:1}}/>
-                <span style={{fontSize:10,color:'rgba(237,232,227,0.4)',width:30,textAlign:'right'}}>{Number(val)>0?'+':''}{Number(val)}</span>
+                <span style={{fontSize:10,color:'rgba(237,232,227,0.4)',width:30,textAlign:'right'}}>{val>0&&label!=='Blur'?'+':''}{val}</span>
               </div>
             ))}
+            <div style={{display:'flex',alignItems:'center',gap:8}}>
+              <span style={{fontSize:11,color:'rgba(237,232,227,0.35)',flex:1}}>Grayscale</span>
+              <button onClick={()=>{const g=!grayscale;setGrayscale(g);applyFilter(brightness,contrast,saturation,blur,g)}}
+                style={{width:36,height:20,borderRadius:10,cursor:'pointer',border:'none',position:'relative',background:grayscale?'#7FB897':'rgba(255,255,255,0.12)',transition:'background 0.2s',padding:0,flexShrink:0}}>
+                <span style={{position:'absolute',width:14,height:14,borderRadius:'50%',background:'#fff',top:3,left:grayscale?18:3,transition:'left 0.2s'}}/>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -774,6 +938,25 @@ function ImageEditor({ asset, onClose, onSave }: { asset: StudioAsset; onClose: 
               <input type="range" className="fed-slider" min={10} max={100} value={opacity}
                 onChange={e=>{setOpacity(+e.target.value);updateSelectedOpacity(+e.target.value)}} style={{flex:1}}/>
               <span style={{fontSize:10,color:'rgba(237,232,227,0.4)',width:30,textAlign:'right'}}>{opacity}%</span>
+            </div>
+            {/* Layer order */}
+            <div className="fed-row">
+              <button className="fed-btn" onClick={bringForward} title="Bring forward">↑ Forward</button>
+              <button className="fed-btn" onClick={sendBackward} title="Send backward">↓ Back</button>
+            </div>
+            {/* Transform */}
+            <div className="fed-row">
+              <button className="fed-btn" onClick={rotate90} title="Rotate 90°">↻ 90°</button>
+              <button className="fed-btn" onClick={duplicateObj} title="Duplicate">⧉ Dupe</button>
+            </div>
+            <div className="fed-row">
+              <button className="fed-btn" onClick={flipHorizontal} title="Flip horizontal">⇆ H</button>
+              <button className="fed-btn" onClick={flipVertical} title="Flip vertical">⇅ V</button>
+            </div>
+            {/* Alignment */}
+            <div className="fed-row">
+              <button className="fed-btn" onClick={alignCenterH} title="Center horizontally">↔ Center H</button>
+              <button className="fed-btn" onClick={alignCenterV} title="Center vertically">↕ Center V</button>
             </div>
             <button className="fed-btn fed-btn-r" onClick={deleteSelected}>Delete selected</button>
           </div>
@@ -798,6 +981,128 @@ function ImageEditor({ asset, onClose, onSave }: { asset: StudioAsset; onClose: 
         )}
         <canvas ref={canvasRef} style={{boxShadow:'0 24px 80px rgba(0,0,0,0.6)',borderRadius:4,display:loading?'none':'block'}}/>
       </div>
+    </div>
+  )
+}
+
+
+/* ─── Video Studio Component (Veo) ──────────────────────── */
+function VideoStudio({ assets }: { assets: StudioAsset[] }) {
+  const [videoPrompt, setVideoPrompt] = useState('')
+  const [imageUrl, setImageUrl]       = useState('')
+  const [jobId, setJobId]             = useState<string|null>(null)
+  const [videoStatus, setVideoStatus] = useState<'idle'|'processing'|'completed'|'failed'|'error'>('idle')
+  const [videoUrl, setVideoUrl]       = useState<string|null>(null)
+  const [errorMsg, setErrorMsg]       = useState('')
+  const [generating, setGenerating]   = useState(false)
+  const pollRef = useRef<ReturnType<typeof setInterval>|null>(null)
+
+  useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current) }, [])
+
+  const generate = async () => {
+    if (!videoPrompt.trim()) return
+    setGenerating(true); setVideoStatus('processing'); setErrorMsg(''); setVideoUrl(null); setJobId(null)
+    try {
+      const res = await fetch('/api/studio/generate-video', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ prompt: videoPrompt, image_url: imageUrl || undefined }),
+      }).then(r=>r.json())
+      if (res.error) {
+        setVideoStatus('failed'); setErrorMsg(res.message || res.error); setGenerating(false); return
+      }
+      if (!res.job_id) {
+        setVideoStatus('failed'); setErrorMsg('No job ID returned'); setGenerating(false); return
+      }
+      setJobId(res.job_id)
+      const poll = () => {
+        fetch('/api/studio/generate-video?job_id=' + encodeURIComponent(res.job_id))
+          .then(r=>r.json())
+          .then((s: {status:string;url?:string;error?:string}) => {
+            if (s.status==='completed') {
+              clearInterval(pollRef.current!); setVideoStatus('completed'); setVideoUrl(s.url??null); setGenerating(false)
+            } else if (s.status==='failed'||s.status==='error') {
+              clearInterval(pollRef.current!); setVideoStatus(s.status as 'failed'|'error'); setErrorMsg(s.error||'Generation failed'); setGenerating(false)
+            }
+          }).catch(()=>{})
+      }
+      pollRef.current = setInterval(poll, 6000)
+    } catch {
+      setVideoStatus('error'); setErrorMsg('Network error'); setGenerating(false)
+    }
+  }
+
+  const readyAssets = assets.filter(a=>a.status==='ready').slice(0,8)
+
+  return (
+    <div style={{maxWidth:720,padding:'40px 40px',position:'relative',zIndex:1}}>
+      <p style={{fontSize:10,fontWeight:600,letterSpacing:'0.12em',textTransform:'uppercase',color:'rgba(237,232,227,0.28)',marginBottom:14}}>ARIA STUDIO · VIDEO</p>
+      <h2 style={{fontFamily:"'Playfair Display',serif",fontSize:32,fontWeight:400,margin:'0 0 8px',color:'#ede8e3'}}>
+        Text-to-video <em style={{color:'rgba(237,232,227,0.38)'}}>with Google Veo</em>
+      </h2>
+      <p style={{fontSize:14,color:'rgba(237,232,227,0.38)',margin:'0 0 32px',lineHeight:1.7}}>
+        Describe a short video clip. Veo generates a 5-second 720p clip. Generation takes 1–3 minutes.
+      </p>
+
+      <div style={{marginBottom:20}}>
+        <span className="lbl">Video prompt</span>
+        <textarea className="inp" rows={4} value={videoPrompt} onChange={e=>setVideoPrompt(e.target.value)}
+          placeholder="e.g. A barista pouring latte art in slow motion, warm café atmosphere, golden hour lighting…" style={{resize:'vertical'}}/>
+      </div>
+
+      <div style={{marginBottom:24}}>
+        <span className="lbl">Animate a library image <span style={{textTransform:'none',letterSpacing:0,color:'rgba(237,232,227,0.2)',fontWeight:400,marginLeft:6}}>(optional)</span></span>
+        {readyAssets.length>0 ? (
+          <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:8}}>
+            {readyAssets.map(a=>(
+              <div key={a.id} onClick={()=>setImageUrl(imageUrl===a.image_url?'':a.image_url)}
+                style={{width:64,height:64,borderRadius:8,overflow:'hidden',cursor:'pointer',border:'2px solid '+(imageUrl===a.image_url?'#7FB897':'rgba(255,255,255,0.1)'),transition:'all 0.2s',flexShrink:0}}>
+                <img src={a.image_url} alt="" style={{width:'100%',height:'100%',objectFit:'cover',display:'block'}}/>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p style={{fontSize:12,color:'rgba(237,232,227,0.25)',margin:'0 0 8px'}}>Generate some images first to use them as video starting frames.</p>
+        )}
+        {imageUrl&&<p style={{fontSize:11,color:'#7FB897',margin:'4px 0 0'}}>{'✓ Image selected for image-to-video'}</p>}
+      </div>
+
+      <button onClick={generate} disabled={generating||!videoPrompt.trim()} className="btn btn-w" style={{fontSize:15,padding:'14px 28px',borderRadius:14}}>
+        {generating
+          ? <><span style={{width:13,height:13,border:'2px solid rgba(0,0,0,0.25)',borderTopColor:'#080808',borderRadius:'50%',animation:'spin 0.75s linear infinite',display:'inline-block'}}/>{' Generating…'}</>
+          : <>{'🎬 Generate video'}</>}
+      </button>
+
+      {videoStatus==='processing'&&(
+        <div style={{marginTop:24,padding:'20px 24px',background:'rgba(127,184,151,0.06)',border:'1px solid rgba(127,184,151,0.2)',borderRadius:14}}>
+          <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:10}}>
+            <div style={{width:16,height:16,border:'2px solid rgba(127,184,151,0.3)',borderTopColor:'#7FB897',borderRadius:'50%',animation:'spin 0.8s linear infinite',flexShrink:0}}/>
+            <span style={{fontSize:14,fontWeight:500,color:'#7FB897'}}>Generating your video…</span>
+          </div>
+          <p style={{fontSize:13,color:'rgba(237,232,227,0.38)',margin:0,lineHeight:1.6}}>Veo is creating your clip. This typically takes 1–3 minutes. Keep this tab open.</p>
+          {jobId&&<p style={{fontSize:10,color:'rgba(237,232,227,0.2)',marginTop:8,fontFamily:'monospace'}}>{'Job: ' + jobId.slice(0,40) + '…'}</p>}
+          <div className="pw" style={{marginTop:14}}><div className="pf" style={{animation:'progress 120s ease-in-out forwards'}}/></div>
+        </div>
+      )}
+
+      {videoStatus==='completed'&&videoUrl&&(
+        <div style={{marginTop:24}}>
+          <p style={{fontSize:11,fontWeight:600,color:'rgba(237,232,227,0.35)',letterSpacing:'0.08em',textTransform:'uppercase',marginBottom:12}}>Your video</p>
+          <div style={{borderRadius:16,overflow:'hidden',background:'rgba(0,0,0,0.4)',border:'1px solid rgba(255,255,255,0.07)',marginBottom:14}}>
+            <video controls style={{width:'100%',display:'block',maxHeight:480}} src={videoUrl}/>
+          </div>
+          <div style={{display:'flex',gap:10,flexWrap:'wrap'}}>
+            <a href={videoUrl} download className="btn btn-dg" style={{textDecoration:'none'}}>{'↓ Download video'}</a>
+            <button onClick={()=>{setVideoStatus('idle');setVideoUrl(null);setJobId(null)}} className="btn btn-g">Create another</button>
+          </div>
+        </div>
+      )}
+
+      {(videoStatus==='failed'||videoStatus==='error')&&(
+        <div style={{marginTop:24,padding:'16px 20px',background:'rgba(239,68,68,0.07)',border:'1px solid rgba(239,68,68,0.2)',borderRadius:12}}>
+          <p style={{fontSize:13,color:'#fca5a5',margin:0}}>{'✗ ' + (errorMsg||'Video generation failed. Try again.')}</p>
+          <button onClick={()=>setVideoStatus('idle')} style={{marginTop:10,fontSize:12,padding:'6px 14px',borderRadius:8,border:'1px solid rgba(239,68,68,0.3)',background:'transparent',color:'rgba(239,68,68,0.7)',cursor:'pointer',fontFamily:'inherit'}}>Dismiss</button>
+        </div>
+      )}
     </div>
   )
 }
