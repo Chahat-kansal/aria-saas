@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { MorningCommandCentre } from '@/components/dashboard/MorningCommandCentre';
 
-interface Business { id: string; name: string; owner_name?: string; industry?: string; }
+interface Business { id: string; name: string; owner_name?: string; industry?: string; pos_enabled?: boolean | null; }
 interface DailySale { total_amount: number; }
 interface Product  { id: string; name: string; stock_quantity: number; low_stock_threshold: number; }
 interface Leak     { id: string; title: string; monthly_loss: number; }
@@ -310,7 +310,7 @@ export function RetailDashboard({ business }: { business: Business }) {
                 {todayCount} transaction{todayCount !== 1 ? 's' : ''}
                 {todayCount > 0 ? ` · avg A$${(todayRevenue / todayCount).toFixed(0)}` : ''}
               </p>
-              {todayRevenue === 0 && (
+              {todayRevenue === 0 && business.pos_enabled !== false && (
                 <Link href="/pos" className="text-xs text-[#1D9E75] hover:text-[#8ff1c9] mt-2 inline-block transition-colors">
                   Open the register →
                 </Link>
@@ -484,7 +484,7 @@ export function RetailDashboard({ business }: { business: Business }) {
       <div className="rounded-xl p-4" style={{ background: '#13131a', border: '1px solid rgba(255,255,255,0.07)' }}>
         <p className="text-[10px] uppercase tracking-wider text-[rgba(255,255,255,0.3)] mb-3">Quick actions</p>
         <div className="flex gap-2 overflow-x-auto pb-1">
-          {QUICK_ACTIONS.map(action => {
+          {QUICK_ACTIONS.filter(action => business.pos_enabled !== false || !action.href.startsWith('/pos')).map(action => {
             const count = action.badgeKey ? (badgeCounts[action.badgeKey] ?? 0) : 0;
             return (
               <button

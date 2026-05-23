@@ -29,7 +29,7 @@ export default async function PosLayout({ children }: { children: React.ReactNod
 
   const { data: biz } = await supabase
     .from('businesses')
-    .select('id, name')
+    .select('id, name, pos_enabled')
     .eq('user_id', user.id)
     .eq('is_active', true)
     .order('created_at', { ascending: true })
@@ -37,6 +37,7 @@ export default async function PosLayout({ children }: { children: React.ReactNod
     .maybeSingle();
 
   if (!biz) redirect('/onboarding/industry');
+  if ((biz as { pos_enabled?: boolean | null }).pos_enabled === false) redirect('/dashboard');
 
   return (
     <POSThemeProvider>

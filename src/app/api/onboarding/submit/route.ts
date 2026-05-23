@@ -57,8 +57,8 @@ export async function POST(request: NextRequest) {
     biggest_challenge: Array.isArray(form.biggest_challenge)
       ? (form.biggest_challenge as string[]).join(', ')
       : (form.biggest_challenge as string) || '',
-    business_model: 'product',
-    pos_enabled: true,
+    business_model: (form.business_model as string) || 'product',
+    pos_enabled: (form.business_model as string) !== 'service',
   };
 
   if (abnIsValid) {

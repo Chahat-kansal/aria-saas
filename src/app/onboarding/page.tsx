@@ -20,6 +20,7 @@ type Setter = (k: keyof FD, v: FD[keyof FD]) => void;
 
 const ENTITY_TYPES = ['Sole Trader', 'Partnership', 'Company (Pty Ltd)', 'Trust', 'Other'];
 const INDUSTRIES = ['liquor', 'cafe', 'convenience', 'bakery', 'restaurant', 'retail', 'warehouse', 'other'];
+const SERVICE_INDUSTRIES = ['swim school', 'childcare / kindergarten', 'clinic / allied health', 'tutoring', 'fitness / studio', 'services other'];
 const AU_STATES = ['NSW', 'VIC', 'QLD', 'WA', 'SA', 'TAS', 'ACT', 'NT'];
 const STAFF_OPTS = ['Just me', '2–5', '6–15', '16–50', '51+'];
 const REV_OPTS = ['Under $10k', '$10k–$25k', '$25k–$50k', '$50k–$100k', '$100k–$250k', '$250k+'];
@@ -37,6 +38,7 @@ const SUBHEADINGS = [
 type FD = {
   legal_name: string; trading_name: string; owner_name: string; email: string; phone: string; entity_type: string;
   abn: string; acn: string; gst_registered: string;
+  business_model: string;
   industry: string; industry_subtype: string; address: string; city: string;
   business_state: string; postcode: string; year_established: string;
   staff_count: string; monthly_revenue: string; website: string; google_business_url: string;
@@ -46,6 +48,7 @@ type FD = {
 const EMPTY: FD = {
   legal_name: '', trading_name: '', owner_name: '', email: '', phone: '', entity_type: '',
   abn: '', acn: '', gst_registered: '',
+  business_model: '',
   industry: '', industry_subtype: '', address: '', city: '', business_state: '', postcode: '', year_established: '',
   staff_count: '', monthly_revenue: '', website: '', google_business_url: '',
   biggest_challenge: [], goals_notes: '',
@@ -53,7 +56,7 @@ const EMPTY: FD = {
 
 function isStepValid(step: number, f: FD): boolean {
   if (step === 0) return f.legal_name.trim().length > 0 && f.owner_name.trim().length > 0;
-  if (step === 2) return f.industry.length > 0;
+  if (step === 2) return f.business_model.length > 0 && f.industry.length > 0;
   return true;
 }
 
@@ -253,9 +256,33 @@ function ABN({ form, set, abnState, onABNBlur }: { form: FD; set: Setter; abnSta
 }
 
 function Details({ form, set }: { form: FD; set: Setter }) {
+  const industryOptions = form.business_model === 'service' ? SERVICE_INDUSTRIES : INDUSTRIES;
   return (
     <div className="space-y-4">
-      <Sel label="Industry *" value={form.industry} onChange={v => set('industry', v)} options={INDUSTRIES} />
+      {/* Business model question — required first */}
+      <div>
+        <label className="block text-xs font-medium text-[#2D5240] mb-2">Does your business sell products, or provide services and classes? *</label>
+        <div className="grid grid-cols-2 gap-3">
+          <button
+            type="button"
+            onClick={() => { set('business_model', 'product'); set('industry', ''); }}
+            className={'rounded-xl border-2 p-3 text-sm font-medium transition-colors text-left ' + (form.business_model === 'product' ? 'border-[#2D5240] bg-[#edf3ef] text-[#2D5240]' : 'border-[rgba(45,82,64,0.2)] text-[rgba(0,0,0,0.6)] hover:border-[#2D5240]')}
+          >
+            We sell products
+          </button>
+          <button
+            type="button"
+            onClick={() => { set('business_model', 'service'); set('industry', ''); }}
+            className={'rounded-xl border-2 p-3 text-sm font-medium transition-colors text-left ' + (form.business_model === 'service' ? 'border-[#2D5240] bg-[#edf3ef] text-[#2D5240]' : 'border-[rgba(45,82,64,0.2)] text-[rgba(0,0,0,0.6)] hover:border-[#2D5240]')}
+          >
+            We provide services / classes
+          </button>
+        </div>
+      </div>
+
+      {form.business_model && (
+        <Sel label="Industry *" value={form.industry} onChange={v => set('industry', v)} options={industryOptions} />
+      )}
       <Field label="Industry subtype" value={form.industry_subtype} onChange={v => set('industry_subtype', v)} placeholder="e.g. craft beer, Vietnamese restaurant" />
       <Field label="Street address" value={form.address} onChange={v => set('address', v)} placeholder="123 Example St" />
       <div className="grid grid-cols-2 gap-3">

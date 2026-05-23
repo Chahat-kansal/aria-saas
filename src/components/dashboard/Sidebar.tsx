@@ -189,6 +189,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
 
   for (const key of config.sidebar as readonly string[]) {
     if (key === 'dashboard') continue;
+    if (key === 'pos' && business.pos_enabled === false) continue;
     const item = ALL_ITEMS[key];
     if (!item) continue;
     if (!sections[item.section]) sections[item.section] = [];

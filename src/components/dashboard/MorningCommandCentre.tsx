@@ -464,9 +464,13 @@ export function MorningCommandCentre() {
                 Start using Aria POS or connect your existing POS to unlock live intelligence.
               </p>
               <div className="mt-3 flex flex-wrap gap-2">
-                <Link href="/pos" className="inline-flex items-center gap-1.5 rounded-xl bg-[#1D9E75] px-3 py-2 text-xs font-semibold text-white hover:bg-[#188765]">Open Aria POS</Link>
+                {business?.pos_enabled !== false && (
+                  <Link href="/pos" className="inline-flex items-center gap-1.5 rounded-xl bg-[#1D9E75] px-3 py-2 text-xs font-semibold text-white hover:bg-[#188765]">Open Aria POS</Link>
+                )}
                 <OnboardingLink href="/dashboard/integrations" label="Connect existing POS" />
-                <OnboardingLink href="/pos/products" label="Add products" />
+                {business?.pos_enabled !== false && (
+                  <OnboardingLink href="/pos/products" label="Add products" />
+                )}
                 <Link href="/dashboard/import-data" className="text-xs text-white/35 hover:text-white/60 underline px-1">Import historical data</Link>
               </div>
             </div>

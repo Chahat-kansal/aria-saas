@@ -32,6 +32,8 @@ export interface Business {
   subscription_status: string | null;
   data_source: string | null;
   square_connected: boolean | null;
+  pos_enabled: boolean | null;
+  business_model: string | null;
 }
 
 interface BusinessContextType {
