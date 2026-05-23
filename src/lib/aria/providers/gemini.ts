@@ -42,8 +42,9 @@ export async function callGemini(params: GeminiCallParams): Promise<GeminiCallRe
     return { raw: '', cost_cents: 0, latency_ms: 0, success: false, input_tokens: 0, output_tokens: 0 }
   }
 
-  // gemini-2.5-flash-lite was failing — use gemini-2.0-flash which is stable
-  const model = params.model ?? 'gemini-2.0-flash'
+  // gemini-2.0-flash was deprecated for new users as of March 2026 (404 errors).
+  // Current stable default: gemini-2.5-flash (best price-performance per Google docs).
+  const model = params.model ?? 'gemini-2.5-flash'
   const t0 = Date.now()
   let raw = '', success = true, errorMessage: string | null = null
   let inputTokens = 0, outputTokens = 0
