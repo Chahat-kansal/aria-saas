@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 import { createClient } from '@supabase/supabase-js'
+import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
@@ -8,9 +9,17 @@ import { withErrorCapture } from '@/lib/api/with-error-capture'
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
 async function _POST(req: Request) {
+  const supabase = createServerSupabaseClient()
+  const { data: { user }, error: authError } = await supabase.auth.getUser()
+  if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
   const body = await req.json() as Record<string, unknown>
   const { order_id, business_id, items } = body
   if (!order_id || !business_id) return NextResponse.json({ error: 'order_id and business_id required' }, { status: 400 })
+
+  const { data: biz } = await supabase.from('businesses').select('id').eq('id', business_id as string).eq('user_id', user.id).maybeSingle()
+  if (!biz) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
   const db = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
   const { data: products } = await db.from('pos_products').select('name, price, category').eq('business_id', business_id as string).eq('is_active', true).limit(30)
   const itemList = Array.isArray(items) ? (items as Array<{ name: string; qty: number }>).map(i => `${i.qty}x ${i.name}`).join(', ') : 'unknown items'

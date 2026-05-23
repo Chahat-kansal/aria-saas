@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { supabaseAdmin } from '@/lib/supabase'
+import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { getWeatherContext } from '@/lib/aria/get-weather-context'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 
@@ -10,11 +11,17 @@ export const dynamic = 'force-dynamic'
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
 export const POST = withErrorCapture('pos/customer-greet', async (req: Request) => {
+  const supabase = createServerSupabaseClient()
+  const { data: { user } } = await supabase.auth.getUser()
+
   const { customerName, businessId } = await req.json().catch(() => ({}))
 
-  if (!customerName || !businessId || !supabaseAdmin) {
+  if (!user || !customerName || !businessId || !supabaseAdmin) {
     return NextResponse.json({ greeting: null, customer: null })
   }
+
+  const { data: bizOwned } = await supabase.from('businesses').select('id').eq('id', businessId as string).eq('user_id', user.id).maybeSingle()
+  if (!bizOwned) return NextResponse.json({ greeting: null, customer: null })
 
   // Fetch business info
   const { data: biz } = await supabaseAdmin

@@ -22,6 +22,10 @@ async function _POST(req: Request) {
   let bid: string | null = null
 
   if (body._cron && body.business_id) {
+    const authHeader = req.headers.get('authorization')
+    if (!process.env.CRON_SECRET || authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
     bid = body.business_id
   } else {
     const { data: { user } } = await supabase.auth.getUser()
