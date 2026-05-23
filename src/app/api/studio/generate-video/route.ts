@@ -36,7 +36,9 @@ async function _POST(req: Request) {
         const buf = await imgRes.arrayBuffer()
         const b64 = Buffer.from(buf).toString('base64')
         const ct = imgRes.headers.get('content-type') ?? 'image/png'
-        instance.image = { inlineData: { mimeType: ct, data: b64 } }
+        // Veo predictLongRunning expects bytesBase64Encoded, NOT inlineData
+        // (inlineData is the Gemini chat-API format and is rejected by Veo).
+        instance.image = { bytesBase64Encoded: b64, mimeType: ct }
       }
     } catch { /* non-fatal — proceed as text-to-video */ }
   }
@@ -49,7 +51,13 @@ async function _POST(req: Request) {
     },
     body: JSON.stringify({
       instances: [instance],
-      parameters: { aspectRatio: '9:16', resolution: '720p' },
+      parameters: {
+        aspectRatio: '9:16',
+        resolution: '720p',
+        durationSeconds: '8',
+        // Image-to-video only permits 'allow_adult'; safe for text-to-video too.
+        personGeneration: body.image_url ? 'allow_adult' : 'allow_all',
+      },
     }),
   })
 
