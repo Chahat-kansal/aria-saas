@@ -54,7 +54,7 @@ async function _POST(req: Request) {
       parameters: {
         aspectRatio: '9:16',
         resolution: '720p',
-        durationSeconds: '8',
+        durationSeconds: 8, // must be a number, not a string
         // Image-to-video only permits 'allow_adult'; safe for text-to-video too.
         personGeneration: body.image_url ? 'allow_adult' : 'allow_all',
       },
