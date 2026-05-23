@@ -119,9 +119,17 @@ export async function runLiveMonitor(businessId: string): Promise<LiveMonitorRes
     safeQuery(supabase, 'pos_sales', q =>
       q.eq('business_id', businessId).gte('created_at', lastWeek.start).lte('created_at', lastWeek.end).limit(500)
     ),
-    safeQuery(supabase, 'pos_sale_items', q => // TODO: needs pos_sales join, see issue
-      q.eq('business_id', businessId).gte('created_at', today).limit(2000)
-    ),
+    (async (): Promise<Row[]> => {
+      try {
+        const { data } = await supabase
+          .from('pos_sales')
+          .select('pos_sale_items(product_name, quantity, unit_price, line_total)')
+          .eq('business_id', businessId)
+          .gte('created_at', today)
+          .limit(500);
+        return (data ?? []).flatMap((s: Row) => Array.isArray(s.pos_sale_items) ? s.pos_sale_items as Row[] : []);
+      } catch { return []; }
+    })(),
     safeQuery(supabase, 'pos_products', q =>
       q.eq('business_id', businessId).order('name').limit(1000)
     ),

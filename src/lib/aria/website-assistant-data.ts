@@ -30,7 +30,7 @@ export async function buildWebsiteAssistantContext(
     supabaseAdmin.from('businesses').select('name, industry, city, phone, email').eq('id', businessId).maybeSingle(),
     supabaseAdmin.from('pos_products').select('name, category, price_cents, current_stock, is_active').eq('business_id', businessId).eq('is_active', true).limit(200),
     supabaseAdmin.from('recipes').select('name, description, category, sell_price_cents, recipe_ingredients(ingredient_name, quantity, unit)').eq('business_id', businessId).eq('is_active', true).limit(50),
-    supabaseAdmin.from('pos_sale_items').select('product_name, quantity').eq('business_id', businessId).gte('created_at', since30).limit(1000), // TODO: needs pos_sales join, see issue
+    supabaseAdmin.from('pos_sales').select('pos_sale_items(product_name, quantity)').eq('business_id', businessId).gte('created_at', since30).limit(300),
   ]);
 
   const productRows = (productsRes.data ?? []) as Array<{ name: string; category: string | null; price_cents: number | null; current_stock: number | null; is_active: boolean }>;
@@ -55,9 +55,12 @@ export async function buildWebsiteAssistantContext(
     };
   });
 
-  // Count top sellers
+  // Count top sellers — flatten nested pos_sale_items from pos_sales join
+  const saleItemRows = (saleItemsRes.data ?? []).flatMap((s: any) =>
+    Array.isArray(s.pos_sale_items) ? s.pos_sale_items : []
+  );
   const salesCount: Record<string, number> = {};
-  for (const item of saleItemsRes.data ?? []) {
+  for (const item of saleItemRows) {
     const name = item.product_name ?? 'Unknown';
     salesCount[name] = (salesCount[name] ?? 0) + Number(item.quantity ?? 1);
   }
