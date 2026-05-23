@@ -1,6 +1,25 @@
 import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
 
+// Retry helper — catches transient 529/503/overload errors from any provider.
+// model-router's callAnthropic creates its own client without the SDK-level retry,
+// so we add the same withBackoff pattern used in providers/anthropic.ts.
+async function withBackoff<T>(fn: () => Promise<T>, maxAttempts = 3): Promise<T> {
+  let lastErr: Error | null = null;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      return await fn();
+    } catch (e) {
+      lastErr = e as Error;
+      const msg = lastErr.message ?? '';
+      const isTransient = /529|503|overload|rate.?limit/i.test(msg);
+      if (!isTransient || attempt === maxAttempts - 1) throw lastErr;
+      await new Promise(r => setTimeout(r, Math.min(1000 * Math.pow(2, attempt), 4000)));
+    }
+  }
+  throw lastErr ?? new Error('All retries failed');
+}
+
 export type AriaTask =
   | 'daily_briefing'
   | 'business_health'
@@ -99,7 +118,7 @@ export function parseModelJson(text: string) {
 }
 
 async function callAnthropic(input: RunInput) {
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, maxRetries: 0 });
   const createParams: any = {
     model: SMART_TASKS.has(input.task) ? 'claude-sonnet-4-5-20250929' : 'claude-haiku-4-5-20251001',
     max_tokens: input.maxTokens ?? 2500,
@@ -111,7 +130,8 @@ async function callAnthropic(input: RunInput) {
   const requestOpts: any = input.tools?.length
     ? { headers: { 'anthropic-beta': 'web-search-2025-03-05' } }
     : {};
-  const response = await client.messages.create(createParams, requestOpts);
+  // withBackoff handles 529/503/overload — retries up to 3x with exponential delay
+  const response = await withBackoff(() => client.messages.create(createParams, requestOpts));
   return response.content
     .map(block => (block.type === 'text' ? block.text : ''))
     .join('')
