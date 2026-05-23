@@ -19,12 +19,12 @@ const HeroAct = forwardRef<HTMLDivElement>((_, ref) => (
     </div>
 
     <div className="hero-text-layer">
-      <span className="hero-pill">Built for Australian retail</span>
+      <span className="hero-pill">Built for Australian small business</span>
       <h1 className="hero-h1">
-        The POS that
-        <em>actually thinks.</em>
+        Your AI co-owner.
+        <em>Running the back office.</em>
       </h1>
-      <p className="hero-subhead">AI agents that run your shop while you serve customers.</p>
+      <p className="hero-subhead">Daily briefings, customer win-back, compliance, bookings, profit-leak analysis — and yes, a POS too.</p>
     </div>
 
     <div className="hero-ipad-stage">

@@ -121,14 +121,16 @@ export default function LandingShell() {
 
       {/* SEO content — visible to crawlers, hidden visually */}
       <div style={{ position: 'absolute', left: -9999, opacity: 0, pointerEvents: 'none' }} aria-hidden="false">
-        <h1>Aria — The POS that actually thinks</h1>
-        <h2>AI agents that run your shop while you serve customers</h2>
-        <h2>Five agents. One brain. Yours.</h2>
-        <h2>Reorder Agent — Aria just knows when to reorder</h2>
-        <h2>Pricing Agent — Match competitors before they take your customers</h2>
-        <h2>Ask Aria — Get answers in plain English</h2>
-        <h2>Schedule Agent — The roster writes itself</h2>
-        <h2>Made in Melbourne for Australian retail</h2>
+        <h1>Aria OS — The AI co-owner for Australian small business</h1>
+        <h2>Your AI co-owner running the back office while you run your business</h2>
+        <h2>Daily briefings, customer win-back, profit-leak analysis, compliance, bookings and POS</h2>
+        <h2>Ten dashboards. One brain. Yours.</h2>
+        <h2>Daily Briefings — know your numbers every morning</h2>
+        <h2>Customer Win-back — Aria reaches out before they forget you</h2>
+        <h2>Profit-Leak Analysis — find what your business is losing</h2>
+        <h2>Compliance — RSA, food safety, public liability tracked automatically</h2>
+        <h2>Point-of-Sale — one of ten modules inside Aria OS</h2>
+        <h2>Made in Melbourne for Australian small business</h2>
         <h2>14-day free trial. No card. Cancel anytime.</h2>
       </div>
     </div>
