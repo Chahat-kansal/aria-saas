@@ -166,15 +166,6 @@ export default function ProductWizard({ step, id, businessId, draft, suppliers, 
     setDraftRestored(true)
   }, []) // eslint-disable-line
 
-  // Save draft to sessionStorage whenever any field changes
-  useEffect(() => {
-    if (!draftRestored || id) return // don't save while still restoring or editing existing
-    try {
-      const snapshot = { ipDraft, categoryId, supplierId, containerType, imageUrl, price, costPrice, taxRate, stockQty, lowStockThreshold, trackStock, savedAt: Date.now() }
-      sessionStorage.setItem(DRAFT_KEY(businessId), JSON.stringify(snapshot))
-    } catch { /* ignore */ }
-  }, [ipDraft, categoryId, supplierId, containerType, imageUrl, price, costPrice, taxRate, stockQty, lowStockThreshold, trackStock, draftRestored, id, businessId])
-
   // Step 2 state
   const [categoryId, setCategoryId] = useState(draft.category_id ?? '')
   const [supplierId, setSupplierId] = useState(draft.supplier_id ?? '')
@@ -190,6 +181,15 @@ export default function ProductWizard({ step, id, businessId, draft, suppliers, 
   const [trackStock, setTrackStock] = useState(draft.track_stock ?? true)
   const [stockQty, setStockQty] = useState(draft.stock_quantity != null ? String(draft.stock_quantity) : '0')
   const [lowStockThreshold, setLowStockThreshold] = useState(draft.low_stock_threshold != null ? String(draft.low_stock_threshold) : '5')
+
+  // Save draft to sessionStorage whenever any field changes
+  useEffect(() => {
+    if (!draftRestored || id) return // don't save while still restoring or editing existing
+    try {
+      const snapshot = { ipDraft, categoryId, supplierId, containerType, imageUrl, price, costPrice, taxRate, stockQty, lowStockThreshold, trackStock, savedAt: Date.now() }
+      sessionStorage.setItem(DRAFT_KEY(businessId), JSON.stringify(snapshot))
+    } catch { /* ignore */ }
+  }, [ipDraft, categoryId, supplierId, containerType, imageUrl, price, costPrice, taxRate, stockQty, lowStockThreshold, trackStock, draftRestored, id, businessId])
 
   const margin = (() => {
     const p = parseFloat(price); const c = parseFloat(costPrice)

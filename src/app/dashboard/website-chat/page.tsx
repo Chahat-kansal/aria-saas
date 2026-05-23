@@ -317,75 +317,76 @@ export default function WebsiteChatPage() {
 
         {/* ── SETUP SECTION ── */}
         {activeSection === 'setup' && (
-      <div className="mb-4 p-4 rounded-2xl flex items-center justify-between gap-4" style={{ background: 'rgba(29,158,117,0.07)', border: '1px solid rgba(29,158,117,0.18)' }}>
-        <div>
-          <p className="text-sm font-semibold text-white mb-0.5">Connect to your website</p>
-          <p className="text-xs text-[rgba(255,255,255,0.4)]">No code needed — choose your platform and connect in one tap.</p>
-        </div>
-        <a href="/dashboard/website-chat/install" className="flex-shrink-0 px-4 py-2 rounded-xl text-sm font-semibold text-white no-underline" style={{ background: '#1D9E75', textDecoration: 'none' }}>
-          Connect →
-        </a>
-      </div>
-      <div>
-          <div className="space-y-4">
-            <Panel title="Appearance">
-              <div className="grid grid-cols-2 gap-4">
-                <Field label="Bot name">
-                  <input value={config.bot_name} onChange={e => setConfig(c => ({ ...c, bot_name: e.target.value }))}
-                    className={inputCls} placeholder="Aria" />
-                </Field>
-                <Field label="Primary colour">
-                  <div className="flex items-center gap-2">
-                    <input type="color" value={config.primary_color}
-                      onChange={e => setConfig(c => ({ ...c, primary_color: e.target.value }))}
-                      className="w-9 h-9 rounded-lg border-0 cursor-pointer bg-transparent" />
-                    <input value={config.primary_color} onChange={e => setConfig(c => ({ ...c, primary_color: e.target.value }))}
-                      className={`${inputCls} flex-1`} placeholder="#1D9E75" />
-                  </div>
-                </Field>
+          <>
+            <div className="mb-4 p-4 rounded-2xl flex items-center justify-between gap-4" style={{ background: 'rgba(29,158,117,0.07)', border: '1px solid rgba(29,158,117,0.18)' }}>
+              <div>
+                <p className="text-sm font-semibold text-white mb-0.5">Connect to your website</p>
+                <p className="text-xs text-[rgba(255,255,255,0.4)]">No code needed — choose your platform and connect in one tap.</p>
               </div>
-              <Field label="Greeting message">
-                <input value={config.greeting} onChange={e => setConfig(c => ({ ...c, greeting: e.target.value }))}
-                  className={inputCls} placeholder="Hi! How can I help you today?" />
-              </Field>
-            </Panel>
-
-            <Panel title="Opening hours">
-              <div className="space-y-2">
-                {DAYS.map(day => (
-                  <div key={day} className="flex items-center gap-3">
-                    <span className="text-xs text-[rgba(255,255,255,0.4)] w-24 flex-shrink-0">{day}</span>
-                    <input value={config.opening_hours[day] ?? ''}
-                      onChange={e => setConfig(c => ({ ...c, opening_hours: { ...c.opening_hours, [day]: e.target.value } }))}
-                      className={`${inputCls} flex-1 text-xs`} placeholder="e.g. 9am – 5pm or Closed" />
-                  </div>
-                ))}
-              </div>
-            </Panel>
-
-            <Panel title="FAQs">
-              <div className="space-y-3">
-                {config.faqs.map((faq, i) => (
-                  <div key={i} className="bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.06)] rounded-xl p-3">
-                    <div className="flex items-start gap-2 mb-2">
-                      <input value={faq.q} onChange={e => updateFaq(i, 'q', e.target.value)}
-                        className={`${inputCls} flex-1 text-xs`} placeholder="Question…" />
-                      <button onClick={() => removeFaq(i)} className="text-[rgba(255,255,255,0.25)] hover:text-red-400 transition-colors mt-2">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
-                          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-                        </svg>
-                      </button>
+              <a href="/dashboard/website-chat/install" className="flex-shrink-0 px-4 py-2 rounded-xl text-sm font-semibold text-white no-underline" style={{ background: '#1D9E75', textDecoration: 'none' }}>
+                Connect →
+              </a>
+            </div>
+            <div className="space-y-4">
+              <Panel title="Appearance">
+                <div className="grid grid-cols-2 gap-4">
+                  <Field label="Bot name">
+                    <input value={config.bot_name} onChange={e => setConfig(c => ({ ...c, bot_name: e.target.value }))}
+                      className={inputCls} placeholder="Aria" />
+                  </Field>
+                  <Field label="Primary colour">
+                    <div className="flex items-center gap-2">
+                      <input type="color" value={config.primary_color}
+                        onChange={e => setConfig(c => ({ ...c, primary_color: e.target.value }))}
+                        className="w-9 h-9 rounded-lg border-0 cursor-pointer bg-transparent" />
+                      <input value={config.primary_color} onChange={e => setConfig(c => ({ ...c, primary_color: e.target.value }))}
+                        className={`${inputCls} flex-1`} placeholder="#1D9E75" />
                     </div>
-                    <textarea value={faq.a} onChange={e => updateFaq(i, 'a', e.target.value)}
-                      rows={2} className={`${textareaCls} w-full text-xs`} placeholder="Answer…" />
-                  </div>
-                ))}
-                <button onClick={addFaq} className="text-xs font-medium text-[#1D9E75] hover:text-white transition-colors flex items-center gap-1.5">
-                  <span className="text-lg leading-none">+</span> Add FAQ
-                </button>
-              </div>
-            </Panel>
-          </div>
+                  </Field>
+                </div>
+                <Field label="Greeting message">
+                  <input value={config.greeting} onChange={e => setConfig(c => ({ ...c, greeting: e.target.value }))}
+                    className={inputCls} placeholder="Hi! How can I help you today?" />
+                </Field>
+              </Panel>
+
+              <Panel title="Opening hours">
+                <div className="space-y-2">
+                  {DAYS.map(day => (
+                    <div key={day} className="flex items-center gap-3">
+                      <span className="text-xs text-[rgba(255,255,255,0.4)] w-24 flex-shrink-0">{day}</span>
+                      <input value={config.opening_hours[day] ?? ''}
+                        onChange={e => setConfig(c => ({ ...c, opening_hours: { ...c.opening_hours, [day]: e.target.value } }))}
+                        className={`${inputCls} flex-1 text-xs`} placeholder="e.g. 9am – 5pm or Closed" />
+                    </div>
+                  ))}
+                </div>
+              </Panel>
+
+              <Panel title="FAQs">
+                <div className="space-y-3">
+                  {config.faqs.map((faq, i) => (
+                    <div key={i} className="bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.06)] rounded-xl p-3">
+                      <div className="flex items-start gap-2 mb-2">
+                        <input value={faq.q} onChange={e => updateFaq(i, 'q', e.target.value)}
+                          className={`${inputCls} flex-1 text-xs`} placeholder="Question…" />
+                        <button onClick={() => removeFaq(i)} className="text-[rgba(255,255,255,0.25)] hover:text-red-400 transition-colors mt-2">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
+                            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                          </svg>
+                        </button>
+                      </div>
+                      <textarea value={faq.a} onChange={e => updateFaq(i, 'a', e.target.value)}
+                        rows={2} className={`${textareaCls} w-full text-xs`} placeholder="Answer…" />
+                    </div>
+                  ))}
+                  <button onClick={addFaq} className="text-xs font-medium text-[#1D9E75] hover:text-white transition-colors flex items-center gap-1.5">
+                    <span className="text-lg leading-none">+</span> Add FAQ
+                  </button>
+                </div>
+              </Panel>
+            </div>
+          </>
         )}
 
         {/* ── BEHAVIOUR SECTION ── */}

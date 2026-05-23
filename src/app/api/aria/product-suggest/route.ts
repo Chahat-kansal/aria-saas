@@ -60,7 +60,7 @@ Be conservative. Empty {} is fine if uncertain.`,
   })
 
   // content may have tool_use blocks before the text block — find the text
-  const raw = message.content.find((b: any) => b.type === 'text')?.text ?? '{}'
+  const raw = (message.content.find(b => b.type === 'text') as { text: string } | undefined)?.text ?? '{}'
   const suggestion = parseLLMJsonOr<Record<string, unknown>>(raw, {}, 'aria/product-suggest')
   return NextResponse.json({ suggestion })
 }

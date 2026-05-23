@@ -14,7 +14,7 @@ export type AgentKey =
   | 'signal_engine_synth' | 'memory_extractor' | 'customer_insight' | 'document_vision'
   | 'marketing_ai_generate' | 'review_reputation'
 
-export type AgentRole = 'agent' | 'judge' | 'data' | 'narrative' | 'classify' | 'chat' | 'export' | 'analysis'
+export type AgentRole = 'agent' | 'judge' | 'data' | 'narrative' | 'classify' | 'chat' | 'export' | 'analysis' | 'other'
 
 export interface ProductContext {
   id: string

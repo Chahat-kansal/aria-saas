@@ -201,7 +201,7 @@ Do NOT include the JSON block unless you have all details confirmed.`
         description: apptData.booking_date + ' at ' + apptData.booking_time + (apptData.service ? ' — ' + apptData.service : ''),
         suggested_action: 'Confirm appointment with customer',
         status: 'pending',
-      }).catch(() => {})
+      }).then(undefined, () => {})
     }
 
     // ── Save / update conversation ────────────────────────────────────

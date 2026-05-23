@@ -5,6 +5,7 @@ import { WarehouseDashboard } from '@/components/dashboard/WarehouseDashboard';
 import { MorningCommandCentre } from '@/components/dashboard/MorningCommandCentre';
 import { RetailDashboard } from '@/components/dashboard/RetailDashboard';
 import { CustomFeaturesSection } from '@/components/features/FeatureRenderer';
+import RevenueChart from '@/components/dashboard/RevenueChart';
 
 export default async function DashboardPage() {
   const supabase = createServerSupabaseClient();

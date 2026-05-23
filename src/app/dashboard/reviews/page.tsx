@@ -313,7 +313,7 @@ export default function ReviewsPage() {
             </div>
           ))}
           {reputation?.score != null && (
-            <div style={{ background: 'var(--bg-surface)', border: ('1px solid ' + GRADE_COLOR[reputation.grade ?? 'C'] ?? '#EF9F27' + '44'), borderRadius: 12, padding: '12px 16px', minWidth: 130 }}>
+            <div style={{ background: 'var(--bg-surface)', border: ('1px solid ' + (GRADE_COLOR[reputation.grade ?? 'C'] || '#EF9F27') + '44'), borderRadius: 12, padding: '12px 16px', minWidth: 130 }}>
               <p style={{ fontSize: 11, color: 'var(--text-tertiary)', margin: '0 0 4px' }}>Reputation score</p>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
                 <p style={{ fontSize: 22, fontWeight: 700, margin: 0, color: GRADE_COLOR[reputation.grade ?? 'C'] }}>{reputation.score}</p>
@@ -389,7 +389,7 @@ export default function ReviewsPage() {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {reviews.map(review => (
-            <div key={review.id} style={{ background: 'var(--bg-surface)', border: '1px solid var(--divider)', borderRadius: 14, padding: '18px 20px', borderLeft: ('3px solid ' + review.rating != null && review.rating <= 2 ? '#EF4444' : review.has_reply ? '#7FB897' : 'var(--violet)') }}>
+            <div key={review.id} style={{ background: 'var(--bg-surface)', border: '1px solid var(--divider)', borderRadius: 14, padding: '18px 20px', borderLeft: (review.rating != null && review.rating <= 2 ? '3px solid #EF4444' : review.has_reply ? '3px solid #7FB897' : '3px solid var(--violet)') }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 10 }}>
                 {review.reviewer_avatar ? (
                   <img src={review.reviewer_avatar} alt="" width={34} height={34} style={{ borderRadius: '50%', flexShrink: 0 }} />

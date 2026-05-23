@@ -17,14 +17,14 @@ async function _POST(_req: Request) {
   // Step 1: try by user_id first
   const { data: smByUserId } = await supabaseAdmin
     .from('staff_members')
-    .select('id, business_id, portal_enabled')
+    .select('id, business_id, portal_enabled, invite_sent_at')
     .eq('user_id', user.id)
     .maybeSingle()
 
   // Step 2: try by email
   const { data: smByEmail } = !smByUserId ? await supabaseAdmin
     .from('staff_members')
-    .select('id, business_id, portal_enabled')
+    .select('id, business_id, portal_enabled, invite_sent_at')
     .or(`personal_email.eq.${user.email},work_email.eq.${user.email}`)
     .maybeSingle() : { data: null }
 

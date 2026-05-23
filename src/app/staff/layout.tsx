@@ -1,5 +1,6 @@
 'use client'
 import type { ReactNode } from 'react'
+import type { Session } from '@supabase/supabase-js'
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
@@ -16,7 +17,8 @@ export default function StaffPortalLayout({ children }: { children: ReactNode })
   useEffect(() => {
     if (isLoginPage) { setChecking(false); return }
     if (!supabase) { router.replace('/staff/login'); return }
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then((result: { data: { session: Session | null } }) => {
+      const session = result.data.session
       if (!session) router.replace('/staff/login')
       else setChecking(false)
     })

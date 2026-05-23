@@ -197,7 +197,7 @@ Brand color: #2D5240 (dark green).`,
     is_default: true,
     created_by: 'aria',
     updated_at: new Date().toISOString(),
-  }, { onConflict: 'business_id,type,is_default' }).catch(() => {})
+  }, { onConflict: 'business_id,type,is_default' }).then(undefined, () => {})
 
   return NextResponse.json({ html, source: 'generated' })
 }

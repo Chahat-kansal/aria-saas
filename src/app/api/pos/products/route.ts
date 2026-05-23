@@ -205,8 +205,6 @@ async function _POST(req: Request) {
     schedule_level: body.schedule_level ? String(body.schedule_level) : null,
     requires_script: !!body.requires_script,
     is_schedule_drug: !!body.is_schedule_drug,
-    brand: body.brand ? String(body.brand) : null,
-    notes: body.notes ? String(body.notes) : null,
   };
 
   const { data: product, error } = await supabase

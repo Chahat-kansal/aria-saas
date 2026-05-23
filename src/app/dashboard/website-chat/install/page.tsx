@@ -101,7 +101,7 @@ export default function WebsiteChatInstallPage() {
   useEffect(() => {
     if (!business?.id) return;
     supabase.from('widget_configs').select('api_key,enabled').eq('business_id', business.id).maybeSingle()
-      .then(({ data }) => { setApiKey(data?.api_key ?? null); setLoading(false); });
+      .then(({ data }: { data: { api_key: string; enabled: boolean } | null }) => { setApiKey(data?.api_key ?? null); setLoading(false); });
   }, [business?.id]);
 
   const activate = async () => {

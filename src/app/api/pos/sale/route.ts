@@ -243,14 +243,14 @@ async function _POST(req: Request) {
   } catch (e) { console.error('[sale] payment recording failed:', e); }
 
   // Decrement stock + log stock movements
-  const stockOps: Promise<any>[] = [];
+  const stockOps: PromiseLike<any>[] = [];
   for (const i of items) {
     const p = productMap[i.product_id];
     if (!p?.track_stock || p.stock_quantity == null) continue;
     const current = p.stock_quantity as number;
     const newStock = Math.max(0, current - i.quantity);
     stockOps.push(
-      supabase.from('pos_products').update({ stock_quantity: newStock }).eq('id', i.product_id)
+      supabase.from('pos_products').update({ stock_quantity: newStock }).eq('id', i.product_id).then(r => r)
     );
     // Log stock movement — non-fatal if table missing
     stockOps.push(

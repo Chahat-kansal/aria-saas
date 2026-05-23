@@ -52,7 +52,7 @@ async function _GET(req: Request) {
   }
 
   if (toCreate.length > 0) {
-    await supabaseAdmin.from('staff_leave_balances').insert(toCreate).catch(() => {})
+    await supabaseAdmin.from('staff_leave_balances').insert(toCreate).then(undefined, () => {})
   }
 
   const { data: balances } = await supabaseAdmin

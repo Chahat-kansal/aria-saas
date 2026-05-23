@@ -13,6 +13,7 @@ interface PromoIdea {
 
 interface SlowDay {
   day: string
+  dow: number
   avg_revenue: number
   vs_best: number
   transactions: number

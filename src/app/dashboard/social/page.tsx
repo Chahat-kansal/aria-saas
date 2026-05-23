@@ -16,7 +16,7 @@ const PLATFORM_COLORS: Record<string, string> = { instagram: '#E1306C', facebook
 
 function PlatformBadge({ platform }: { platform: string }) {
   return (
-    <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 99, background: (PLATFORM_COLORS[platform] ?? '#666' + '20'), color: PLATFORM_COLORS[platform] ?? '#aaa', fontWeight: 700, border: ('1px solid ' + PLATFORM_COLORS[platform] ?? '#666' + '40') }}>
+    <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 99, background: ((PLATFORM_COLORS[platform] || '#666') + '20'), color: PLATFORM_COLORS[platform] || '#aaa', fontWeight: 700, border: ('1px solid ' + (PLATFORM_COLORS[platform] || '#666') + '40') }}>
       {PLATFORM_ICONS[platform]} {platform.replace('_', ' ')}
     </span>
   );

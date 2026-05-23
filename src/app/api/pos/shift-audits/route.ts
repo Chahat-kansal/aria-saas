@@ -85,7 +85,7 @@ async function _POST(req: Request) {
       description: ariaAssessment,
       action_data: { flagged_items: flaggedItems, audit_id: audit.id, session_id: body.session_id },
       estimated_impact: 'Compliance risk', status: 'pending',
-    }).then(() => {}).catch(() => {})
+    }).then(() => {}, () => {})
   }
 
   return NextResponse.json({ audit, ok: true }, { status: 201 })
