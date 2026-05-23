@@ -118,6 +118,10 @@
     {
       "path": "/api/cron/leave-accrual",
       "schedule": "0 1 * * *"
+    },
+    {
+      "path": "/api/cron/seo-crawl",
+      "schedule": "0 7 * * *"
     }
   ]
 }
