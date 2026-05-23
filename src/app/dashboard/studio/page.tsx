@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 interface StudioAsset {
   id: string; name: string | null; prompt: string | null; enhanced_prompt: string | null
   style: string; format: string; provider: string | null; image_url: string
+  video_url?: string | null; asset_type?: string
   folder: string; tags: string[]; favourite: boolean; status: string; created_at: string
 }
 
@@ -483,13 +484,16 @@ export default function AriaStudioPage() {
             ) : (
               <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(210px,1fr))',gap:12}}>
                 {filtered.map(a=>(
-                  <div key={a.id} className={'ii'+(selected?.id===a.id?' sel':'')} onClick={()=>setSel(a)}>
+                  <div key={a.id} className={'ii'+(selected?.id===a.id?' sel':'')} onClick={()=>setSel(a)} style={{position:'relative'}}>
                     <div className="ov"/>
-                    <img src={a.image_url} alt={a.prompt??''} style={{width:'100%',aspectRatio:a.format==='landscape'?'16/9':a.format==='portrait'?'4/5':'1',objectFit:'cover',display:'block'}}/>
+                    {a.asset_type==='video'
+                      ? <video src={a.video_url??a.image_url} muted playsInline style={{width:'100%',aspectRatio:'9/16',objectFit:'cover',display:'block',pointerEvents:'none'}}/>
+                      : <img src={a.image_url} alt={a.prompt??''} style={{width:'100%',aspectRatio:a.format==='landscape'?'16/9':a.format==='portrait'?'4/5':'1',objectFit:'cover',display:'block'}}/>}
+                    {a.asset_type==='video'&&<span style={{position:'absolute',top:8,left:8,fontSize:9,fontWeight:700,background:'rgba(0,0,0,0.6)',color:'#7FB897',padding:'2px 7px',borderRadius:6,letterSpacing:'0.06em'}}>{'▶ VIDEO'}</span>}
                     <button className={'fbtn'+(a.favourite?' on':'')} onClick={e=>toggleFav(a,e)}>{a.favourite?'★':'☆'}</button>
                     <div style={{padding:'10px 12px'}}>
                       <p style={{fontSize:11,fontWeight:600,margin:'0 0 2px',color:'#ede8e3',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.name??a.prompt?.slice(0,40)??'Untitled'}</p>
-                      <p style={{fontSize:10,color:'rgba(237,232,227,0.3)',margin:0}}>{a.style} · {a.format}</p>
+                      <p style={{fontSize:10,color:'rgba(237,232,227,0.3)',margin:0}}>{a.asset_type==='video'?'Veo video':(a.style+' · '+a.format)}</p>
                     </div>
                   </div>
                 ))}
@@ -504,7 +508,9 @@ export default function AriaStudioPage() {
               </div>
               <div style={{padding:20}}>
                 <div style={{borderRadius:14,overflow:'hidden',marginBottom:16,border:'1px solid rgba(255,255,255,0.07)'}}>
-                  <img src={selected.image_url} alt={selected.prompt??''} style={{width:'100%',display:'block',aspectRatio:selected.format==='landscape'?'16/9':selected.format==='portrait'?'4/5':'1',objectFit:'cover'}}/>
+                  {selected.asset_type==='video'
+                    ? <video src={selected.video_url??selected.image_url} controls style={{width:'100%',display:'block',maxHeight:360}}/>
+                    : <img src={selected.image_url} alt={selected.prompt??''} style={{width:'100%',display:'block',aspectRatio:selected.format==='landscape'?'16/9':selected.format==='portrait'?'4/5':'1',objectFit:'cover'}}/>}
                 </div>
                 <div style={{marginBottom:16,display:'flex',flexDirection:'column',gap:8}}>
                   {[['Style',selected.style],['Format',selected.format],['Folder',selected.folder],['Created',new Date(selected.created_at).toLocaleDateString('en-AU',{day:'numeric',month:'short'})]].map(([k,v])=>(
@@ -517,7 +523,7 @@ export default function AriaStudioPage() {
                 {selected.prompt&&<div style={{marginBottom:16,padding:'10px 12px',background:'rgba(255,255,255,0.025)',borderRadius:10,border:'1px solid rgba(255,255,255,0.06)'}}><p style={{fontSize:9,color:'rgba(237,232,227,0.28)',margin:'0 0 5px',textTransform:'uppercase',letterSpacing:'0.08em',fontWeight:600}}>Prompt</p><p style={{fontSize:11,color:'rgba(237,232,227,0.42)',margin:0,lineHeight:1.6}}>{selected.prompt}</p></div>}
                 {selected.tags.length>0&&<div style={{marginBottom:16,display:'flex',flexWrap:'wrap',gap:5}}>{selected.tags.map(t=><span key={t} style={{fontSize:10,padding:'2px 9px',borderRadius:100,background:'rgba(127,184,151,0.09)',color:'#7FB897'}}>{t}</span>)}</div>}
                 <div style={{display:'flex',flexDirection:'column',gap:8}}>
-                  <a href={selected.image_url} download target="_blank" rel="noreferrer" className="btn btn-w" style={{justifyContent:'center',textDecoration:'none',borderRadius:10,padding:'10px',fontSize:13}}>↓ Download</a>
+                  <a href={selected.asset_type==='video'?(selected.video_url??selected.image_url):selected.image_url} download target="_blank" rel="noreferrer" className="btn btn-w" style={{justifyContent:'center',textDecoration:'none',borderRadius:10,padding:'10px',fontSize:13}}>{selected.asset_type==='video'?'↓ Download video':'↓ Download'}</a>
                   <button onClick={()=>toggleFav(selected)} style={{padding:'10px',borderRadius:10,fontSize:12,fontWeight:500,cursor:'pointer',fontFamily:'inherit',border:'1px solid rgba(255,255,255,0.09)',background:'transparent',color:selected.favourite?'#F59E0B':'rgba(237,232,227,0.38)',transition:'all 0.2s'}}>{selected.favourite?'★ Remove from saved':'☆ Save to library'}</button>
                   <button onClick={()=>{setEditingAsset(selected);setTab('editor')}} style={{padding:'10px',borderRadius:10,fontSize:12,cursor:'pointer',fontFamily:'inherit',border:'1px solid rgba(127,184,151,0.3)',background:'rgba(127,184,151,0.07)',color:'#7FB897',transition:'all 0.2s'}}>✏ Edit image</button>
                   <button onClick={()=>{setPrompt(selected.prompt??'');setStyle(selected.style);setRatio(selected.format);setTab('console')}} style={{padding:'10px',borderRadius:10,fontSize:12,cursor:'pointer',fontFamily:'inherit',border:'1px solid rgba(255,255,255,0.09)',background:'transparent',color:'rgba(237,232,227,0.38)',transition:'all 0.2s'}}>↺ Use as template</button>
@@ -535,7 +541,7 @@ export default function AriaStudioPage() {
       )}
 
       {/* ── VIDEO STUDIO (Veo) ───────────────────────────────── */}
-      {tab==='video' && <VideoStudio assets={assets} />}
+      {tab==='video' && <VideoStudio assets={assets} onVideoSaved={a=>setAssets(p=>[a,...p])} />}
     </div>
   )
 }
@@ -987,25 +993,39 @@ function ImageEditor({ asset, onClose, onSave }: { asset: StudioAsset; onClose: 
 
 
 /* ─── Video Studio Component (Veo) ──────────────────────── */
-function VideoStudio({ assets }: { assets: StudioAsset[] }) {
+function VideoStudio({ assets, onVideoSaved }: { assets: StudioAsset[]; onVideoSaved?: (a: StudioAsset) => void }) {
   const [videoPrompt, setVideoPrompt] = useState('')
   const [imageUrl, setImageUrl]       = useState('')
+  const [uploadingImg, setUploadingImg] = useState(false)
   const [jobId, setJobId]             = useState<string|null>(null)
+  const [jobPrompt, setJobPrompt]     = useState<string|null>(null)
   const [videoStatus, setVideoStatus] = useState<'idle'|'processing'|'completed'|'failed'|'error'>('idle')
   const [videoUrl, setVideoUrl]       = useState<string|null>(null)
+  const [savedAsset, setSavedAsset]   = useState<StudioAsset|null>(null)
   const [errorMsg, setErrorMsg]       = useState('')
   const [generating, setGenerating]   = useState(false)
   const pollRef = useRef<ReturnType<typeof setInterval>|null>(null)
+  const fileRef = useRef<HTMLInputElement|null>(null)
 
   useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current) }, [])
 
+  const uploadImage = async (file: File) => {
+    setUploadingImg(true)
+    const fd = new FormData(); fd.append('file', file); fd.append('folder', 'uploads')
+    const r = await fetch('/api/aria/studio/upload', { method: 'POST', body: fd }).then(x=>x.json()).catch(()=>null)
+    setUploadingImg(false)
+    if (r?.url) { setImageUrl(r.url) }
+  }
+
   const generate = async () => {
     if (!videoPrompt.trim()) return
-    setGenerating(true); setVideoStatus('processing'); setErrorMsg(''); setVideoUrl(null); setJobId(null)
+    setGenerating(true); setVideoStatus('processing'); setErrorMsg(''); setVideoUrl(null); setJobId(null); setSavedAsset(null)
+    const prompt = videoPrompt.trim()
+    setJobPrompt(prompt)
     try {
       const res = await fetch('/api/studio/generate-video', {
         method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ prompt: videoPrompt, image_url: imageUrl || undefined }),
+        body: JSON.stringify({ prompt, image_url: imageUrl || undefined }),
       }).then(r=>r.json())
       if (res.error) {
         setVideoStatus('failed'); setErrorMsg(res.message || res.error); setGenerating(false); return
@@ -1015,11 +1035,13 @@ function VideoStudio({ assets }: { assets: StudioAsset[] }) {
       }
       setJobId(res.job_id)
       const poll = () => {
-        fetch('/api/studio/generate-video?job_id=' + encodeURIComponent(res.job_id))
+        const purl = '/api/studio/generate-video?job_id=' + encodeURIComponent(res.job_id) + (prompt ? '&prompt=' + encodeURIComponent(prompt) : '')
+        fetch(purl)
           .then(r=>r.json())
-          .then((s: {status:string;url?:string;error?:string}) => {
+          .then((s: {status:string;url?:string;error?:string;asset?:StudioAsset}) => {
             if (s.status==='completed') {
               clearInterval(pollRef.current!); setVideoStatus('completed'); setVideoUrl(s.url??null); setGenerating(false)
+              if (s.asset) { setSavedAsset(s.asset); onVideoSaved?.(s.asset) }
             } else if (s.status==='failed'||s.status==='error') {
               clearInterval(pollRef.current!); setVideoStatus(s.status as 'failed'|'error'); setErrorMsg(s.error||'Generation failed'); setGenerating(false)
             }
@@ -1064,6 +1086,13 @@ function VideoStudio({ assets }: { assets: StudioAsset[] }) {
           <p style={{fontSize:12,color:'rgba(237,232,227,0.25)',margin:'0 0 8px'}}>Generate some images first to use them as video starting frames.</p>
         )}
         {imageUrl&&<p style={{fontSize:11,color:'#7FB897',margin:'4px 0 0'}}>{'✓ Image selected for image-to-video'}</p>}
+        <div style={{marginTop:10,display:'flex',alignItems:'center',gap:10}}>
+          <button onClick={()=>fileRef.current?.click()} disabled={uploadingImg} style={{fontSize:12,padding:'7px 14px',borderRadius:9,border:'1px solid rgba(255,255,255,0.12)',background:'rgba(255,255,255,0.04)',color:'rgba(237,232,227,0.6)',cursor:'pointer',fontFamily:'inherit'}}>
+            {uploadingImg?'Uploading…':'↑ Upload an image instead'}
+          </button>
+          {imageUrl&&<button onClick={()=>setImageUrl('')} style={{fontSize:11,padding:'5px 10px',borderRadius:7,border:'none',background:'rgba(239,68,68,0.1)',color:'rgba(239,68,68,0.7)',cursor:'pointer',fontFamily:'inherit'}}>✕ Remove</button>}
+        </div>
+        <input ref={fileRef} type="file" accept="image/*" style={{display:'none'}} onChange={e=>{ const f=e.target.files?.[0]; if(f) uploadImage(f); e.target.value='' }}/>
       </div>
 
       <button onClick={generate} disabled={generating||!videoPrompt.trim()} className="btn btn-w" style={{fontSize:15,padding:'14px 28px',borderRadius:14}}>
@@ -1090,10 +1119,11 @@ function VideoStudio({ assets }: { assets: StudioAsset[] }) {
           <div style={{borderRadius:16,overflow:'hidden',background:'rgba(0,0,0,0.4)',border:'1px solid rgba(255,255,255,0.07)',marginBottom:14}}>
             <video controls style={{width:'100%',display:'block',maxHeight:480}} src={videoUrl}/>
           </div>
-          <div style={{display:'flex',gap:10,flexWrap:'wrap'}}>
+          <div style={{display:'flex',gap:10,flexWrap:'wrap',alignItems:'center'}}>
             <a href={videoUrl} download className="btn btn-dg" style={{textDecoration:'none'}}>{'↓ Download video'}</a>
-            <button onClick={()=>{setVideoStatus('idle');setVideoUrl(null);setJobId(null)}} className="btn btn-g">Create another</button>
+            <button onClick={()=>{setVideoStatus('idle');setVideoUrl(null);setJobId(null);setSavedAsset(null)}} className="btn btn-g">Create another</button>
           </div>
+          {savedAsset&&<p style={{fontSize:11,color:'#7FB897',marginTop:10,display:'flex',alignItems:'center',gap:5}}>{'✓ Saved to your library — find it in the Library tab'}</p>}
         </div>
       )}
 

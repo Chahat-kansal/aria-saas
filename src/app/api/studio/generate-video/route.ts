@@ -84,7 +84,9 @@ async function _GET(req: Request) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const jobId = new URL(req.url).searchParams.get('job_id')
+  const url = new URL(req.url)
+  const jobId = url.searchParams.get('job_id')
+  const prompt = url.searchParams.get('prompt') ?? null
   if (!jobId) return NextResponse.json({ error: 'job_id required' }, { status: 400 })
 
   const key = process.env.GEMINI_API_KEY
@@ -108,7 +110,7 @@ async function _GET(req: Request) {
     const videoUri = data.response?.generateVideoResponse?.generatedSamples?.[0]?.video?.uri
     if (!videoUri) return NextResponse.json({ status: 'failed', error: 'No video URI in response' })
 
-    // Video URI requires x-goog-api-key to download — fetch server-side and re-upload to Vercel Blob
+    // Fetch the video server-side (Google URI requires x-goog-api-key header).
     const videoRes = await fetch(videoUri, { headers: { 'x-goog-api-key': key } })
     if (!videoRes.ok) return NextResponse.json({ status: 'error', error: 'Could not download video from Veo' })
 
@@ -118,7 +120,41 @@ async function _GET(req: Request) {
       access: 'public',
       contentType: 'video/mp4',
     })
-    return NextResponse.json({ status: 'completed', url: blob.url })
+
+    // Persist to the studio library so the video appears in the Library tab.
+    const { supabaseAdmin } = await import('@/lib/supabase-admin')
+    const { data: activeBiz } = await supabaseAdmin
+      .from('user_active_business')
+      .select('business_id')
+      .eq('user_id', user.id)
+      .maybeSingle()
+    const businessId = activeBiz?.business_id ?? null
+
+    let asset = null
+    if (businessId) {
+      const { data: inserted } = await supabaseAdmin
+        .from('aria_studio_assets')
+        .insert({
+          business_id: businessId,
+          name: 'Veo video',
+          prompt,
+          enhanced_prompt: null,
+          style: 'video',
+          format: 'portrait',
+          provider: 'veo',
+          image_url: blob.url,   // image_url stores the Blob URL (reused for videos)
+          video_url: blob.url,   // explicit video_url for UI clarity
+          asset_type: 'video',
+          folder: 'videos',
+          tags: [],
+          status: 'ready',
+        })
+        .select()
+        .single()
+      asset = inserted
+    }
+
+    return NextResponse.json({ status: 'completed', url: blob.url, asset })
   } catch (e) {
     return NextResponse.json({ status: 'error', error: (e as Error).message ?? 'Unknown error' })
   }
