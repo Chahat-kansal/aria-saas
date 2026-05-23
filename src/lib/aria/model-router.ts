@@ -143,7 +143,7 @@ async function callOpenRouter(input: RunInput) {
       ...(process.env.OPENROUTER_APP_NAME ? { 'X-Title': process.env.OPENROUTER_APP_NAME } : {}),
     },
     body: JSON.stringify({
-      model: SMART_TASKS.has(input.task) ? 'anthropic/claude-3.5-sonnet' : 'openai/gpt-4o-mini',
+      model: SMART_TASKS.has(input.task) ? 'anthropic/claude-sonnet-4-5-20250929' : 'openai/gpt-4o-mini',
       temperature: input.temperature ?? 0.2,
       max_tokens: input.maxTokens ?? 2500,
       response_format: { type: 'json_object' },

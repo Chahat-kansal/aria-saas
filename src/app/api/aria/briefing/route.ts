@@ -95,10 +95,11 @@ Audit checks (last 48h): ${(() => { const aa = (recentAudits || []) as Array<{fa
     const _bizCtx = await getBusinessContext(businessId)
   const _industry = (JSON.parse(_bizCtx))?.business?.industry ?? 'retail'
   const systemPrompt = getSystemPrompt(_industry as string, _bizCtx)
-  const response = 
+  const response =
 await trackAICall({ route: 'aria/briefing', model: 'claude-sonnet-4-5-20250929', businessId: businessId, purpose: 'daily-briefing' }, () => anthropic.messages.create({
       model: 'claude-sonnet-4-5-20250929',
       max_tokens: 300,
+      system: systemPrompt,
         tools: [{ type: 'web_search_20250305' as const, name: 'web_search' }],
       messages: [{
         role: 'user',

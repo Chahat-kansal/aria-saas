@@ -160,6 +160,12 @@ function compactData(data: AriaBusinessData) {
           industry: data.business.industry,
           city: data.business.city,
           data_source: data.business.data_source,
+          pos_enabled: (data.business as any).pos_enabled ?? false,
+          entity_type: (data.business as any).entity_type ?? null,
+          business_model: (data.business as any).business_model ?? null,
+          year_established: (data.business as any).year_established ?? null,
+          biggest_challenge: (data.business as any).biggest_challenge ?? null,
+          access_status: (data.business as any).access_status ?? null,
         }
       : null,
     data_status: data.data_status,

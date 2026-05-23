@@ -5,6 +5,7 @@ import { getBusinessSales, getBusinessCustomers, getBusinessItems } from '@/lib/
 import { NextRequest, NextResponse } from 'next/server';
 import { getWeatherForecast, getUpcomingHolidays, getABSRetailBenchmarks, getRBAData } from '@/lib/external-apis';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { trackAICall } from '@/lib/aria/ai-telemetry'
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -301,11 +302,13 @@ async function _POST(req: NextRequest) {
     const dataStr = typeof context === 'string' ? context : JSON.stringify(context)
     const todayDate = new Date().toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Australia/Sydney' })
 
-    const _resp = await _anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 1500,
-        tools: [{ type: 'web_search_20250305' as const, name: 'web_search' }],
-      system: `You are Aria, a business intelligence engine for Australian small businesses. Output ONLY a valid JSON array. No markdown. No explanation. No text before or after the array.
+    const _resp = await trackAICall(
+      { route: 'aria/daily-briefing', model: 'claude-haiku-4-5-20251001', businessId: business_id, purpose: 'daily-briefing' },
+      () => _anthropic.messages.create({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 1500,
+          tools: [{ type: 'web_search_20250305' as const, name: 'web_search' }],
+        system: `You are Aria, a business intelligence engine for Australian small businesses. Output ONLY a valid JSON array. No markdown. No explanation. No text before or after the array.
 
 Each item in the array must have these exact fields:
 - id: string slug (e.g. "revenue-up-this-week")
@@ -321,17 +324,18 @@ Each item in the array must have these exact fields:
 - trend: "up" | "down" | "flat" | null
 
 Return 3-5 items. Use real numbers from the data. Do not invent data.`,
-      messages: [{
-        role: 'user',
-        content: `Today: ${todayDate}
+        messages: [{
+          role: 'user',
+          content: `Today: ${todayDate}
 Business: ${business.name as string} (${business.industry as string ?? 'retail'}, Australia)
 
 Business data:
 ${dataStr.slice(0, 5000)}
 
 Generate 3-5 actionable briefing items from this real data. JSON array only.`
-      }]
-    })
+        }]
+      })
+    )
 
     const raw = _resp.content[0].type === 'text' ? _resp.content[0].text.trim() : ''
     const cleaned = raw.replace(/^```(?:json)?\s*/m, '').replace(/\s*```\s*$/m, '').trim()
