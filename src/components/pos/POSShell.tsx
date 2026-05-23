@@ -1,9 +1,10 @@
 'use client';
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import { usePathname } from 'next/navigation';
 import POSSidebar from './POSSidebar';
 import POSErrorBoundary from './POSErrorBoundary';
 import { supabase } from '@/lib/supabase';
+import { TourSpotlight } from '@/components/dashboard/TourSpotlight';
 
 const POS_USER_KEY  = 'aria_pos_user';
 const SESSION_TTL   = 12 * 3600 * 1000; // 12 hours
@@ -497,6 +498,7 @@ export default function POSShell({ children, businessId, businessName }: {
           </div>
         )}
         <POSErrorBoundary><div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>{children}</div></POSErrorBoundary>
+        <Suspense fallback={null}><TourSpotlight /></Suspense>
         {sidebarHint && (
           <div style={{ position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', zIndex: 200, background: 'var(--bg-elevated)', color: 'var(--text-secondary)', padding: '10px 18px', borderRadius: 10, fontSize: 12, boxShadow: 'var(--shadow-lg)', whiteSpace: 'nowrap', fontFamily: 'var(--font-ui)', animation: 'fade-up 400ms ease forwards' }}>
             Press <kbd style={{ background: 'var(--bg-base)', padding: '1px 5px', borderRadius: 4, fontSize: 10, color: 'var(--text-primary)' }}>⌘K</kbd> to search · Click <strong>◀</strong> to collapse the sidebar

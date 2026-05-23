@@ -155,7 +155,7 @@ export default function NewStaffMemberPage() {
       {error && <p className="text-sm text-red-400">{error}</p>}
 
       <div className="flex gap-3">
-        <button onClick={save} disabled={saving}
+        <button data-tour="invite_staff" onClick={save} disabled={saving}
           className="px-6 py-2.5 rounded-xl text-sm font-semibold disabled:opacity-50"
           style={{ background: '#2D5240', color: '#7FB897' }}>
           {saving ? 'Saving…' : 'Add staff member'}

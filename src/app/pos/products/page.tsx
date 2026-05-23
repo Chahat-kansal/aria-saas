@@ -245,7 +245,7 @@ export default function ProductsPage() {
               style={{ padding: '8px 14px', borderRadius: 9, border: '1px solid rgba(127,184,151,0.3)', background: 'rgba(127,184,151,0.08)', color: '#006AFF', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
               ✨ Find images
             </button>
-            <button onClick={() => router.push('/pos/products/new')}
+            <button data-tour="add_product" onClick={() => router.push('/pos/products/new')}
               style={{ padding: '9px 20px', borderRadius: 9, border: 'none', background: C.violet, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
               + Add Product
             </button>

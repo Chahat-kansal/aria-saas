@@ -183,7 +183,7 @@ export default function CustomersPage() {
             <button onClick={exportCSV} disabled={exporting} style={{ fontSize: 12, padding: '7px 14px', borderRadius: 8, background: 'transparent', color: C.green, border: `1px solid ${C.green}44`, cursor: 'pointer' }}>
               {exporting ? 'Exporting…' : '↓ Export CSV'}
             </button>
-            <Link href="/dashboard/customers/new" style={{ fontSize: 12, padding: '7px 14px', borderRadius: 8, background: C.darkGreen, color: C.green, textDecoration: 'none', fontWeight: 600 }}>
+            <Link data-tour="add_customer" href="/dashboard/customers/new" style={{ fontSize: 12, padding: '7px 14px', borderRadius: 8, background: C.darkGreen, color: C.green, textDecoration: 'none', fontWeight: 600 }}>
               + Add customer
             </Link>
           </div>

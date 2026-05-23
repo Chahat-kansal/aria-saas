@@ -2785,7 +2785,7 @@ export default function TerminalPage() {
                           </button>
                         ) : (
                           <>
-                            <button className="charge-btn"
+                            <button data-tour="test_sale" className="charge-btn"
                               onClick={() => {
                                 if (roundedTotal <= 0) { alert('Please set prices for all items before charging.'); return; }
                                 if (registerIsOpen) setTerminalView('checkout');

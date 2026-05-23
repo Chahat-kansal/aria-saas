@@ -174,7 +174,9 @@ export default function BookingsPage() {
       {/* Tabs */}
       <div style={{display:'flex',gap:4,marginBottom:16,borderBottom:`1px solid ${C.border}`,paddingBottom:0}}>
         {([['calendar','📅 Calendar'],['list','📋 List'],['services','🛎 Services']] as const).map(([t,label])=>(
-          <button key={t} onClick={()=>setTab(t)} style={{padding:'8px 16px',background:'none',border:'none',cursor:'pointer',fontSize:13,fontWeight:tab===t?700:400,color:tab===t?C.green:C.muted,borderBottom:`2px solid ${tab===t?C.green:'transparent'}`,marginBottom:-1}}>
+          <button key={t} onClick={()=>setTab(t)}
+            {...(t === 'services' ? { 'data-tour': 'add_service' } : {})}
+            style={{padding:'8px 16px',background:'none',border:'none',cursor:'pointer',fontSize:13,fontWeight:tab===t?700:400,color:tab===t?C.green:C.muted,borderBottom:`2px solid ${tab===t?C.green:'transparent'}`,marginBottom:-1}}>
             {label}
           </button>
         ))}

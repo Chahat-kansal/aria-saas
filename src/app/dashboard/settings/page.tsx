@@ -119,6 +119,7 @@ export default function DashboardSettingsPage() {
               </a>
             </p>
             <input
+              data-tour="connect_google"
               value={googlePlaceId}
               onChange={e => setGooglePlaceId(e.target.value)}
               placeholder="ChIJN1t_tDeuEmsRUsoyG83frY4"
@@ -147,7 +148,7 @@ export default function DashboardSettingsPage() {
             </div>
           )}
           <div style={{ display: 'flex', gap: 10, alignItems: 'center', paddingTop: 8 }}>
-            <button onClick={save} disabled={saving}
+            <button data-tour="set_hours" onClick={save} disabled={saving}
               style={{ padding: '10px 24px', borderRadius: 9, border: 'none', background: 'var(--violet)', color: '#fff', fontSize: 13, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', fontFamily: 'inherit' }}>
               {saving ? 'Saving…' : 'Save changes'}
             </button>
