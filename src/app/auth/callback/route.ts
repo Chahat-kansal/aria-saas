@@ -13,17 +13,20 @@ export async function GET(request: Request) {
       // Check if this user has an existing business (returning user)
       const { data: business } = await supabase
         .from('businesses')
-        .select('id, onboarding_complete')
+        .select('id, onboarding_complete, access_status')
         .eq('user_id', data.session.user.id)
         .eq('is_active', true)
         .order('created_at', { ascending: true })
         .limit(1)
         .maybeSingle();
 
+      if (business?.access_status === 'pending_review' || business?.access_status === 'rejected') {
+        return NextResponse.redirect(`${origin}/onboarding/holding`);
+      }
       if (business?.onboarding_complete) {
         return NextResponse.redirect(`${origin}/dashboard`);
       }
-      return NextResponse.redirect(`${origin}/onboarding/industry`);
+      return NextResponse.redirect(`${origin}/onboarding`);
     }
   }
 

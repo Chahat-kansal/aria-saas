@@ -11,6 +11,20 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
+  // Access guard: pending_review and rejected businesses cannot enter the dashboard
+  try {
+    const { data: bizStatus } = await supabase
+      .from('businesses')
+      .select('access_status')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    if (bizStatus?.access_status === 'pending_review' || bizStatus?.access_status === 'rejected') {
+      redirect('/onboarding/holding');
+    }
+  } catch { /* allow through if query fails */ }
+
   // Fetch active announcement (plan check is done client-side via BusinessProvider)
   let announcement: any = null;
   try {
