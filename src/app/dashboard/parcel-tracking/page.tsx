@@ -258,9 +258,9 @@ export default function ParcelTrackingPage(){
                 <div style={{textAlign:'center',color:C.dim,fontSize:12,padding:'30px 0'}}>
                   <div style={{marginBottom:8}}>No tracking events yet</div>
                   <div style={{fontSize:11}}>
-                    Set <code style={{background:'rgba(127,184,151,0.1)',padding:'1px 5px',borderRadius:3}}>TRACKINGMORE_API_KEY</code> in Vercel env vars<br/>
+                    Set <code style={{background:'rgba(127,184,151,0.1)',padding:'1px 5px',borderRadius:3}}>TRACK17_API_KEY</code> in Vercel env vars<br/>
                     Webhook: <code style={{background:'rgba(127,184,151,0.1)',padding:'1px 5px',borderRadius:3,fontSize:10}}>ariaos.site/api/pos/parcel-tracking/webhook</code><br/>
-                    Sign up free at <a href="https://www.trackingmore.com" target="_blank" rel="noopener" style={{color:C.green}}>trackingmore.com</a>
+                    Sign up free at <a href="https://features.17track.net/en/api" target="_blank" rel="noopener" style={{color:C.green}}>17track.net</a>
                   </div>
                 </div>
               ):(
