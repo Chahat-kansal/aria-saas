@@ -34,7 +34,7 @@ async function logCall(params: {
       business_id: params.business_id,
       agent_key: 'council_context',
       provider: 'gemini',
-      model_id: 'gemini-2.5-flash',
+      model_id: 'gemini-2.5-flash-preview-05-20',
       role: 'council',
       input_tokens: params.input_tokens,
       output_tokens: params.output_tokens,
@@ -50,7 +50,7 @@ export async function runContextBrain(
 ): Promise<ContextBrainOutput> {
   const apiKey = process.env.GEMINI_API_KEY
   if (!apiKey) {
-    console.warn('[context-brain] GEMINI_API_KEY not set — skipping Context Brain')
+    console.error('[context-brain] GEMINI_API_KEY not set — Gemini Context Brain disabled')
     return { ...FAILED }
   }
 
@@ -78,7 +78,7 @@ If you find nothing relevant, return external_factors: [], risk_flags: [], oppor
 
   const body = {
     contents: [{ parts: [{ text: query }] }],
-    tools: [{ googleSearch: {} }],
+    tools: [{ google_search: {} }],
     generationConfig: { maxOutputTokens: 1500, temperature: 0.1 },
   }
 
@@ -88,7 +88,7 @@ If you find nothing relevant, return external_factors: [], risk_flags: [], oppor
 
   try {
     const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
