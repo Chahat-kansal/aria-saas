@@ -3,6 +3,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { MorningCommandCentre } from '@/components/dashboard/MorningCommandCentre';
+import { AriaBriefingCard } from '@/components/dashboard/AriaBriefingCard';
 
 interface Business { id: string; name: string; owner_name?: string; industry?: string; pos_enabled?: boolean | null; }
 interface DailySale { total_amount: number; }
@@ -142,6 +143,7 @@ export function RetailDashboard({ business }: { business: Business }) {
   const [activity,        setActivity]        = useState<ActivityEvent[] | null>(null);
   const [badgeCounts,     setBadgeCounts]     = useState<Record<string, number>>({});
   const [briefingRecs,    setBriefingRecs]    = useState<Recommendation[]>([]);
+  const [councilBriefing, setCouncilBriefing] = useState<any>(null);
   const [pulseLoading,    setPulseLoading]    = useState(true);
   const [activityLoading, setActivityLoading] = useState(true);
 
@@ -195,16 +197,25 @@ export function RetailDashboard({ business }: { business: Business }) {
 
   const loadBriefing = useCallback(async () => {
     try {
-      const res = await fetch('/api/aria/daily-briefing', {
+      // Primary: Aria Council briefing (3-brain multi-agent deliberation)
+      const res = await fetch('/api/aria/briefing?businessId=' + business.id);
+      if (res.status === 401 || res.status === 429) return;
+      if (res.ok) {
+        const d = await res.json();
+        if (d?.briefing) {
+          setCouncilBriefing(d);
+          return;
+        }
+      }
+      // Fallback: legacy daily-briefing recommendations
+      const legacyRes = await fetch('/api/aria/daily-briefing', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ business_id: business.id }),
       });
-      // 401 / 429: session expired or rate-limited — stop silently, no retry
-      if (res.status === 401 || res.status === 429) return;
-      if (!res.ok) return;
-      const d = await res.json();
-      setBriefingRecs((d.recommendations ?? []).slice(0, 4));
+      if (!legacyRes.ok) return;
+      const legacyData = await legacyRes.json();
+      setBriefingRecs((legacyData.recommendations ?? []).slice(0, 4));
     } catch { /* silent */ }
   }, [business.id]);
 
@@ -368,7 +379,9 @@ export function RetailDashboard({ business }: { business: Business }) {
       <RevenueChart businessId={business.id} />
 
 {/* ─── Section 3: MorningCommandCentre (AI decisions) ── */}
-      <MorningCommandCentre />
+      {councilBriefing
+        ? <AriaBriefingCard businessId={business.id} />
+        : <MorningCommandCentre />}
 
       {/* ─── Section 4: Insights Grid ─────────────────────── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
