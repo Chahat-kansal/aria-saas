@@ -7,12 +7,15 @@ pwd   # must be C:\Users\kansa\aria-saas-audit
 git status   # must be clean
 git pull origin main
 ```
+Confirm Prompt 19 (Aria Council) is deployed green before running this.
+src/lib/aria/council.ts must exist.
 
 ## STEP 1 — READ BEFORE WRITING
 Read how the customers table is currently used (winback / churn / reviews
 features all read it — do not break them). Read a /dashboard sub-page for
-the UI pattern and the sidebar. Read an existing route that calls Claude,
-and how aria_ai_calls rows are written. Do NOT write code first.
+the UI pattern and the sidebar. Read src/lib/aria/council.ts (the Aria
+Council — you will use runAriaCouncil for high-value customer summaries).
+Read how aria_ai_calls rows are written. Do NOT write code before reading.
 
 ## CONTEXT — DB ALREADY BUILT, do not create/alter tables
 customers has: id, business_id, name, phone, email, last_visit, visit_count,
@@ -36,49 +39,64 @@ Features:
 - Add customer form: name, email, phone, company, address, city, postcode,
   tags, notes. On save, insert a customers row with source='manual'.
 - Edit customer: same form, updates the row + updated_at.
-- Archive customer: sets archived=true. Do NOT hard-delete — other features
-  reference customers.
+- Archive customer: sets archived=true. Do NOT hard-delete.
 - Customer detail view: shows analytics (segment, churn_risk, visit_count,
   total_spent) read-only, plus notes/tags editable.
 
-## STEP 3 — AI CSV IMPORT
-An "Import from CSV" flow accessible from the customers page:
+## STEP 3 — AI CSV IMPORT (single model — correct answer, not strategic)
+Use claude-sonnet-4-5-20250929 directly (NOT the council). Column mapping
+has one correct answer — 3 arguing brains add noise, not value.
 
-1. Upload a .csv. Parse the headers and first ~20 sample rows client-side
-   using papaparse (npm install papaparse if needed, commit the lockfile).
-
+Flow:
+1. Upload a .csv. Parse headers + first ~20 sample rows client-side using
+   papaparse (npm install if needed, commit lockfile).
 2. Create a customer_import_jobs row (status='mapping', raw_headers set).
+3. POST /api/customers/import-map: send headers + sample rows to Claude
+   (claude-sonnet-4-5-20250929). Strict JSON response only:
+   { mapping: { "csvHeader": "customerField" } }
+   Fields: name, email, phone, company, address, city, postcode, notes,
+   tags, or 'ignore'. Parse safely (strip code fences).
+   Log to aria_ai_calls (agent_key='customer_import_map').
+4. Show proposed mapping — owner can correct each column. Store on import job.
+5. POST /api/customers/import-run: insert customers rows (source='csv_import')
+   applying the mapping. Dedupe on email or phone within the business (skip
+   existing for v1, count as skipped). Update import job with rows_total /
+   rows_imported / rows_skipped / status='complete'.
 
-3. Call API route /api/customers/import-map: send CSV headers + sample rows
-   to Claude (claude-sonnet-4-5-20250929) and ask it to map each CSV column
-   to a customer field (name, email, phone, company, address, city, postcode,
-   notes, tags) or 'ignore'. Claude returns STRICT JSON only:
-   { mapping: { "csvHeader": "customerField" } }. Parse safely (strip code
-   fences). Log the call to aria_ai_calls (feature='customer_import_map').
+## STEP 4 — AI CUSTOMER SUMMARY (council for high-value, single model for others)
+On the customer detail view, a "Summarise with Aria" button.
 
-4. Show the proposed mapping to the owner in a UI where they can correct
-   each column's mapping (dropdown per column). Store the final mapping on
-   the import job.
+IMPORTANT: Use the Aria Council for high-value customers only:
+  const isHighValue = (customer.total_spent ?? 0) > 500 ||
+                      (customer.visit_count ?? 0) > 10
 
-5. On confirm, API route /api/customers/import-run inserts customers rows
-   (source='csv_import') applying the mapping. Dedupe on email or phone
-   within the same business (skip existing for v1, count as skipped).
-   Update customer_import_jobs with rows_total / rows_imported / rows_skipped
-   / status='complete'. If it errors, set status='failed' + error_detail.
+If isHighValue === true:
+  Call runAriaCouncil(customerContext, businessId, 'ask_aria') from
+  src/lib/aria/council.ts. Use council.final_briefing as the summary.
+  The three brains will debate: Optimist sees a growth/upsell opportunity,
+  Critic sees churn risk or declining frequency, Strategist synthesises.
+  For a high-value customer this tension is genuinely useful.
 
-## STEP 4 — AI CUSTOMER SUMMARY
-On the customer detail view, a "Summarise with Aria" button calls an API
-route that sends that customer's data (visits, spend, segment, last visit,
-churn_risk) to Claude and returns a one-line plain-English summary (e.g.
-"Loyal monthly regular, last in 3 weeks ago — a good win-back candidate").
-Store in customers.ai_summary + ai_summary_at. Log to aria_ai_calls
-(feature='customer_summary').
+If isHighValue === false:
+  Call claude-sonnet-4-5-20250929 directly (fast, cheap, sufficient).
+  Single call, same prompt. Return a one-line summary.
+
+Both paths store the result in customers.ai_summary + ai_summary_at.
+Both paths log to aria_ai_calls (agent_key='customer_summary').
+
+customerContext string to pass to the council or single model:
+  Customer: [name], [segment], [churn_risk]
+  Visits: [visit_count] times, last [last_visit]
+  Total spent: $[total_spent]
+  Notes: [notes]
+  Business: [trading_name], [industry], [city]
 
 ## AI RULES
-- Every AI call logs to aria_ai_calls with model + token counts
-- AI is used for mapping and summarising only — never invents customer data
-- If Claude's mapping is uncertain for a column, default it to 'ignore'
-  and let the owner correct it
+- CSV mapping: always single model — one correct answer
+- High-value customer summaries: council (runAriaCouncil)
+- Low-value customer summaries: single model
+- Every AI call logs to aria_ai_calls
+- Never invent customer data
 
 ## UI RULES (locked)
 - Financial Trust palette: #2D5240 forest, #7FB897 sage
@@ -89,6 +107,4 @@ Store in customers.ai_summary + ai_summary_at. Log to aria_ai_calls
 
 ## STEP 5 — BUILD GATE
 npx tsc --noEmit, then npm run build. Both must pass. ONE commit, ONE push.
-
-Commit message:
-feat(customers): customer management page + AI-mapped CSV import + Aria customer summaries — works without the POS for service businesses
+Commit: feat(customers): customer management page + AI-mapped CSV import + Aria Council summaries for high-value customers + single-model summaries for others
