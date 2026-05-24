@@ -1,0 +1,405 @@
+'use client'
+import { useState, useEffect, useCallback } from 'react'
+import { useBusinessContext } from '@/components/providers/BusinessProvider'
+import { supabase } from '@/lib/supabase'
+
+interface SeoAudit { id: string; status: string; pages_crawled: number; issues_found: number; issues_fixed: number; health_score: number; started_at: string; finished_at: string | null }
+interface SeoIssue { id: string; page_url: string; issue_type: string; severity: string; title: string; detail: string; suggested_fix: string | null; fix_format: string | null; state: string }
+interface SeoLocal { gbp_completeness: number | null; map_pack_rank: number | null; citations_total: number | null; citations_consistent: number | null; review_velocity_30d: number | null; checklist: Array<{ item: string; ok: boolean }> | null }
+interface SeoKeyword { id: string; keyword: string; current_rank: number | null; previous_rank: number | null; search_volume: number | null }
+interface SeoPage { url: string; title: string | null }
+
+// ── Shared helpers ─────────────────────────────────────────────────────────
+
+function RingChart({ score }: { score: number }) {
+  const r = 38; const c = 2 * Math.PI * r; const pct = Math.max(0, Math.min(100, score))
+  const dash = (pct / 100) * c
+  const col = pct >= 80 ? '#7FB897' : pct >= 60 ? '#f59e0b' : '#ef4444'
+  return (
+    <svg width={96} height={96} viewBox="0 0 96 96">
+      <circle cx={48} cy={48} r={r} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth={10} />
+      <circle cx={48} cy={48} r={r} fill="none" stroke={col} strokeWidth={10} strokeDasharray={dash + ' ' + c} strokeLinecap="round" transform="rotate(-90 48 48)" />
+      <text x={48} y={54} textAnchor="middle" fill="#fff" fontSize={20} fontWeight={700}>{pct}</text>
+    </svg>
+  )
+}
+
+function CopyBtn({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false)
+  function copy() { navigator.clipboard.writeText(text).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000) }) }
+  return (
+    <button onClick={copy} style={{ padding: '4px 12px', borderRadius: 6, border: '1px solid rgba(127,184,151,0.4)', background: 'transparent', color: '#7FB897', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}>
+      {copied ? 'Copied!' : 'Copy'}
+    </button>
+  )
+}
+
+// ── Tab 1: Site Health ─────────────────────────────────────────────────────
+
+function SiteHealthTab({ businessId }: { businessId: string }) {
+  const [audit, setAudit] = useState<SeoAudit | null>(null)
+  const [issues, setIssues] = useState<SeoIssue[]>([])
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const [loading, setLoading] = useState(true)
+  const [generating, setGenerating] = useState<string | null>(null)
+  const [applying, setApplying] = useState<string | null>(null)
+
+  useEffect(() => {
+    async function load() {
+      setLoading(true)
+      const { data: a } = await supabase.from('seo_audits').select('*').eq('business_id', businessId).eq('status', 'complete').order('finished_at', { ascending: false }).limit(1).maybeSingle()
+      setAudit(a)
+      if (a) {
+        const sevOrder = { high: 0, medium: 1, low: 2 }
+        const { data: iss } = await supabase.from('seo_issues').select('*').eq('business_id', businessId).eq('audit_id', a.id).neq('state', 'verified')
+        const sorted = ((iss ?? []) as SeoIssue[]).sort((x, y) => (sevOrder[x.severity as keyof typeof sevOrder] ?? 9) - (sevOrder[y.severity as keyof typeof sevOrder] ?? 9))
+        setIssues(sorted)
+      }
+      setLoading(false)
+    }
+    load()
+  }, [businessId])
+
+  async function generateFix(issueId: string) {
+    setGenerating(issueId)
+    try {
+      const res = await fetch('/api/seo/generate-fix', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ issue_id: issueId }) })
+      const d = await res.json()
+      if (d.suggested_fix) {
+        setIssues(prev => prev.map(i => i.id === issueId ? { ...i, suggested_fix: d.suggested_fix, fix_format: d.fix_format, state: 'suggested' } : i))
+        setExpanded(prev => new Set([...prev, issueId]))
+      }
+    } catch { /* ignore */ }
+    setGenerating(null)
+  }
+
+  async function markApplied(issueId: string) {
+    setApplying(issueId)
+    try {
+      await fetch('/api/seo/generate-fix', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ issue_id: issueId, action: 'mark_applied' }) })
+      setIssues(prev => prev.map(i => i.id === issueId ? { ...i, state: 'applied' } : i))
+    } catch { /* ignore */ }
+    setApplying(null)
+  }
+
+  function toggleExpand(id: string) { setExpanded(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n }) }
+
+  const SEV: Record<string, string> = { high: '#ef4444', medium: '#f59e0b', low: '#6b7280' }
+  const cell: React.CSSProperties = { padding: '16px 20px', background: 'rgba(255,255,255,0.04)', borderRadius: 12, minWidth: 90 }
+
+  if (loading) return <p style={{ color: 'rgba(255,255,255,0.4)', textAlign: 'center', padding: 40 }}>Loading...</p>
+  if (!audit) return (
+    <div style={{ textAlign: 'center', padding: 60 }}>
+      <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 14, marginBottom: 6 }}>No crawl data yet.</p>
+      <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: 12 }}>The SEO crawler runs daily at 7 AM AEDT.</p>
+    </div>
+  )
+
+  const lastCrawl = audit.finished_at ? new Date(audit.finished_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'
+
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: 20, alignItems: 'center', marginBottom: 32, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+          <RingChart score={audit.health_score} />
+          <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Health</span>
+        </div>
+        {([['Pages crawled', audit.pages_crawled], ['Issues found', audit.issues_found], ['Fixed', audit.issues_fixed], ['Last crawl', lastCrawl]] as [string, string | number][]).map(([label, value]) => (
+          <div key={label} style={cell}>
+            <div style={{ fontSize: 22, fontWeight: 700, color: '#fff' }}>{value}</div>
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 2, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</div>
+          </div>
+        ))}
+      </div>
+      {issues.length === 0 ? (
+        <p style={{ textAlign: 'center', padding: 40, color: 'rgba(255,255,255,0.4)', fontSize: 14 }}>No open issues — great work!</p>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {issues.map(issue => (
+            <div key={issue.id} style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 12, border: '1px solid rgba(255,255,255,0.07)', overflow: 'hidden' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px' }}>
+                <span style={{ width: 8, height: 8, borderRadius: '50%', background: SEV[issue.severity] ?? '#6b7280', flexShrink: 0 }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ color: '#fff', fontSize: 13, fontWeight: 600 }}>{issue.title}</div>
+                  <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 11, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{issue.page_url}</div>
+                </div>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
+                  {issue.state === 'applied' ? (
+                    <span style={{ fontSize: 11, color: '#7FB897', background: 'rgba(127,184,151,0.12)', padding: '3px 10px', borderRadius: 20 }}>Applied</span>
+                  ) : issue.suggested_fix ? (
+                    <>
+                      <button onClick={() => toggleExpand(issue.id)} style={{ padding: '5px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', color: 'rgba(255,255,255,0.6)', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>
+                        {expanded.has(issue.id) ? 'Hide' : 'View fix'}
+                      </button>
+                      <button onClick={() => markApplied(issue.id)} disabled={applying === issue.id} style={{ padding: '5px 12px', borderRadius: 8, border: 'none', background: '#2D5240', color: '#7FB897', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', opacity: applying === issue.id ? 0.6 : 1 }}>
+                        {applying === issue.id ? '...' : 'Mark applied'}
+                      </button>
+                    </>
+                  ) : (
+                    <button onClick={() => generateFix(issue.id)} disabled={generating === issue.id} style={{ padding: '5px 14px', borderRadius: 8, border: 'none', background: '#7FB897', color: '#0E1411', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', opacity: generating === issue.id ? 0.6 : 1 }}>
+                      {generating === issue.id ? 'Generating...' : 'Generate fix'}
+                    </button>
+                  )}
+                </div>
+              </div>
+              {expanded.has(issue.id) && issue.suggested_fix && (
+                <div style={{ borderTop: '1px solid rgba(255,255,255,0.07)', padding: '14px 16px', background: 'rgba(0,0,0,0.15)' }}>
+                  <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', marginBottom: 8 }}>
+                    <pre style={{ flex: 1, margin: 0, fontSize: 12, color: '#7FB897', fontFamily: 'monospace', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{issue.suggested_fix}</pre>
+                    <CopyBtn text={issue.suggested_fix} />
+                  </div>
+                  <p style={{ margin: 0, fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>Paste this into your site&apos;s SEO settings, then click &ldquo;Mark applied&rdquo; above.</p>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Tab 2: Local SEO ───────────────────────────────────────────────────────
+
+function LocalSeoTab({ businessId }: { businessId: string }) {
+  const [local, setLocal] = useState<SeoLocal | null>(null)
+  const [loading, setLoading] = useState(true)
+  useEffect(() => {
+    supabase.from('seo_local').select('*').eq('business_id', businessId).maybeSingle().then(({ data }: { data: SeoLocal | null; error: unknown }) => { setLocal(data); setLoading(false) })
+  }, [businessId])
+  if (loading) return <p style={{ color: 'rgba(255,255,255,0.4)', textAlign: 'center', padding: 40 }}>Loading...</p>
+  if (!local) return (
+    <div style={{ textAlign: 'center', padding: 60 }}>
+      <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 14, marginBottom: 6 }}>No local SEO data yet.</p>
+      <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: 12 }}>Local SEO data will appear after your first audit sync.</p>
+    </div>
+  )
+  const pct = Math.max(0, Math.min(100, local.gbp_completeness ?? 0))
+  const checklist = Array.isArray(local.checklist) ? local.checklist : []
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 12, padding: '20px 24px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+          <span style={{ color: '#fff', fontSize: 14, fontWeight: 600 }}>Google Business Profile completeness</span>
+          <span style={{ color: '#7FB897', fontWeight: 700, fontSize: 16 }}>{pct}%</span>
+        </div>
+        <div style={{ height: 8, background: 'rgba(255,255,255,0.08)', borderRadius: 4, overflow: 'hidden' }}>
+          <div style={{ height: '100%', width: pct + '%', background: '#7FB897', borderRadius: 4 }} />
+        </div>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12 }}>
+        {([['Map pack rank', local.map_pack_rank], ['Citations', local.citations_total], ['Consistent citations', local.citations_consistent], ['Reviews (30d)', local.review_velocity_30d]] as [string, number | null][]).map(([label, value]) => (
+          <div key={label} style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 12, padding: '16px 20px' }}>
+            <div style={{ fontSize: 22, fontWeight: 700, color: '#fff' }}>{value ?? '—'}</div>
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 2, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</div>
+          </div>
+        ))}
+      </div>
+      {checklist.length > 0 && (
+        <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 12, padding: '20px 24px' }}>
+          <div style={{ color: '#fff', fontSize: 14, fontWeight: 600, marginBottom: 14 }}>GBP checklist</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {checklist.map((row, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ width: 18, height: 18, borderRadius: '50%', border: '2px solid ' + (row.ok ? '#7FB897' : 'rgba(255,255,255,0.2)'), background: row.ok ? '#7FB897' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  {row.ok && <span style={{ color: '#fff', fontSize: 10, fontWeight: 700 }}>✓</span>}
+                </span>
+                <span style={{ fontSize: 13, color: row.ok ? 'rgba(255,255,255,0.8)' : 'rgba(255,255,255,0.4)' }}>{row.item}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Tab 3: Keywords ────────────────────────────────────────────────────────
+
+function KeywordsTab({ businessId }: { businessId: string }) {
+  const [keywords, setKeywords] = useState<SeoKeyword[]>([])
+  const [newKw, setNewKw] = useState('')
+  const [adding, setAdding] = useState(false)
+  const [loading, setLoading] = useState(true)
+
+  const load = useCallback(async () => {
+    const { data } = await supabase.from('seo_keywords').select('*').eq('business_id', businessId).order('created_at', { ascending: false })
+    setKeywords(data ?? [])
+    setLoading(false)
+  }, [businessId])
+
+  useEffect(() => { load() }, [load])
+
+  async function addKeyword() {
+    if (!newKw.trim() || adding) return
+    setAdding(true)
+    await supabase.from('seo_keywords').insert({ business_id: businessId, keyword: newKw.trim() })
+    setNewKw('')
+    await load()
+    setAdding(false)
+  }
+
+  if (loading) return <p style={{ color: 'rgba(255,255,255,0.4)', textAlign: 'center', padding: 40 }}>Loading...</p>
+
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
+        <input type="text" value={newKw} onChange={e => setNewKw(e.target.value)} onKeyDown={e => e.key === 'Enter' && addKeyword()} placeholder="Enter a keyword to track..."
+          style={{ flex: 1, padding: '9px 14px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.05)', color: '#fff', fontSize: 13, fontFamily: 'inherit', outline: 'none' }} />
+        <button onClick={addKeyword} disabled={adding || !newKw.trim()} style={{ padding: '9px 18px', borderRadius: 8, border: 'none', background: '#7FB897', color: '#0E1411', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', opacity: adding || !newKw.trim() ? 0.6 : 1 }}>
+          {adding ? 'Adding...' : 'Add'}
+        </button>
+      </div>
+      {keywords.length === 0 ? (
+        <p style={{ textAlign: 'center', padding: 40, color: 'rgba(255,255,255,0.4)', fontSize: 14 }}>No keywords tracked yet. Add one above.</p>
+      ) : (
+        <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 12, border: '1px solid rgba(255,255,255,0.07)', overflow: 'hidden' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
+                {['Keyword', 'Rank', 'Change', 'Volume'].map(h => (
+                  <th key={h} style={{ padding: '10px 16px', textAlign: 'left', color: 'rgba(255,255,255,0.4)', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {keywords.map(kw => {
+                const d = kw.current_rank != null && kw.previous_rank != null ? kw.previous_rank - kw.current_rank : null
+                return (
+                  <tr key={kw.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                    <td style={{ padding: '12px 16px', color: '#fff', fontWeight: 500 }}>{kw.keyword}</td>
+                    <td style={{ padding: '12px 16px', color: kw.current_rank == null ? 'rgba(255,255,255,0.3)' : '#fff' }}>{kw.current_rank == null ? 'Not tracked yet' : '#' + kw.current_rank}</td>
+                    <td style={{ padding: '12px 16px', color: d == null ? 'rgba(255,255,255,0.3)' : d > 0 ? '#22c55e' : d < 0 ? '#ef4444' : 'rgba(255,255,255,0.4)' }}>
+                      {d == null ? '—' : d > 0 ? '▲ ' + d : d < 0 ? '▼ ' + Math.abs(d) : '—'}
+                    </td>
+                    <td style={{ padding: '12px 16px', color: kw.search_volume == null ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.7)' }}>{kw.search_volume == null ? '—' : kw.search_volume.toLocaleString()}</td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Tab 4: AI Optimizer ────────────────────────────────────────────────────
+
+const OPT_TYPES = ['missing_title', 'missing_meta_description', 'missing_schema'] as const
+const OPT_LABELS: Record<string, string> = { missing_title: 'Page title tag', missing_meta_description: 'Meta description', missing_schema: 'JSON-LD schema' }
+const OPT_INSTRUCTIONS: Record<string, string> = {
+  missing_title: "Paste into your site's <title> tag or CMS title field.",
+  missing_meta_description: "Paste into your site's meta description field.",
+  missing_schema: 'Paste into a <script type="application/ld+json"> block in your page <head>.',
+}
+
+function AiOptimizerTab({ businessId }: { businessId: string }) {
+  const [pages, setPages] = useState<SeoPage[]>([])
+  const [selectedUrl, setSelectedUrl] = useState('')
+  const [pageIssues, setPageIssues] = useState<SeoIssue[]>([])
+  const [results, setResults] = useState<Record<string, string>>({})
+  const [generating, setGenerating] = useState(false)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    supabase.from('seo_pages').select('url, title').eq('business_id', businessId).order('crawled_at', { ascending: false }).limit(50)
+      .then(({ data }: { data: SeoPage[] | null; error: unknown }) => { setPages(data ?? []); setLoading(false) })
+  }, [businessId])
+
+  useEffect(() => {
+    if (!selectedUrl) { setPageIssues([]); setResults({}); return }
+    supabase.from('seo_issues').select('*').eq('business_id', businessId).eq('page_url', selectedUrl).in('issue_type', OPT_TYPES as unknown as string[])
+      .then(({ data }: { data: SeoIssue[] | null; error: unknown }) => { setPageIssues(data ?? []); setResults({}) })
+  }, [selectedUrl, businessId])
+
+  async function generateAll() {
+    if (!pageIssues.length || generating) return
+    setGenerating(true)
+    const next: Record<string, string> = {}
+    for (const issue of pageIssues) {
+      try {
+        const res = await fetch('/api/seo/generate-fix', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ issue_id: issue.id }) })
+        const d = await res.json()
+        if (d.suggested_fix) next[issue.issue_type] = d.suggested_fix
+      } catch { /* skip */ }
+    }
+    setResults(next)
+    setGenerating(false)
+  }
+
+  if (loading) return <p style={{ color: 'rgba(255,255,255,0.4)', textAlign: 'center', padding: 40 }}>Loading...</p>
+  if (pages.length === 0) return (
+    <div style={{ textAlign: 'center', padding: 60 }}>
+      <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 14, marginBottom: 6 }}>No crawled pages yet.</p>
+      <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: 12 }}>Pages appear after the first SEO crawl.</p>
+    </div>
+  )
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+        <select value={selectedUrl} onChange={e => setSelectedUrl(e.target.value)}
+          style={{ flex: 1, padding: '9px 14px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.1)', background: '#1A2620', color: selectedUrl ? '#fff' : 'rgba(255,255,255,0.3)', fontSize: 13, fontFamily: 'inherit', outline: 'none' }}>
+          <option value="">Pick a page...</option>
+          {pages.map(p => <option key={p.url} value={p.url}>{p.title ? p.title + ' — ' + p.url : p.url}</option>)}
+        </select>
+        {selectedUrl && (
+          <button onClick={generateAll} disabled={generating || pageIssues.length === 0}
+            style={{ padding: '9px 20px', borderRadius: 8, border: 'none', background: '#7FB897', color: '#0E1411', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', opacity: generating || pageIssues.length === 0 ? 0.6 : 1 }}>
+            {generating ? 'Generating...' : 'Generate with Aria'}
+          </button>
+        )}
+      </div>
+      {selectedUrl && !generating && pageIssues.length === 0 && (
+        <p style={{ padding: 20, textAlign: 'center', color: 'rgba(255,255,255,0.4)', fontSize: 13 }}>No missing title, meta, or schema issues on this page.</p>
+      )}
+      {Object.entries(results).map(([type, fix]) => (
+        <div key={type} style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 12, border: '1px solid rgba(255,255,255,0.07)', padding: '18px 20px' }}>
+          <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>{OPT_LABELS[type] ?? type}</div>
+          <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', marginBottom: 10 }}>
+            <pre style={{ flex: 1, margin: 0, fontSize: 12, color: '#7FB897', fontFamily: 'monospace', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{fix}</pre>
+            <CopyBtn text={fix} />
+          </div>
+          <p style={{ margin: 0, fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>{OPT_INSTRUCTIONS[type]}</p>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// ── Page ───────────────────────────────────────────────────────────────────
+
+type TabId = 'health' | 'local' | 'keywords' | 'optimizer'
+const TABS: Array<{ id: TabId; label: string }> = [
+  { id: 'health', label: 'Site health' },
+  { id: 'local', label: 'Local SEO' },
+  { id: 'keywords', label: 'Keywords' },
+  { id: 'optimizer', label: 'AI optimizer' },
+]
+
+export default function SeoPage() {
+  const { business } = useBusinessContext()
+  const [tab, setTab] = useState<TabId>('health')
+  if (!business) return null
+  return (
+    <div style={{ minHeight: '100vh', background: '#0E1411', padding: '32px 24px' }}>
+      <div style={{ maxWidth: 900, margin: '0 auto' }}>
+        <h1 style={{ fontSize: 28, fontWeight: 700, color: '#fff', marginBottom: 6, fontFamily: 'Fraunces, serif', fontStyle: 'italic' }}>SEO</h1>
+        <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.4)', marginBottom: 28 }}>Analyse your site, track rankings, and copy AI-generated fixes directly into your CMS.</p>
+        <div style={{ display: 'flex', gap: 4, marginBottom: 28, borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+          {TABS.map(t => (
+            <button key={t.id} onClick={() => setTab(t.id)}
+              style={{ padding: '8px 18px', borderRadius: '8px 8px 0 0', border: 'none', background: tab === t.id ? 'rgba(127,184,151,0.12)' : 'transparent', color: tab === t.id ? '#7FB897' : 'rgba(255,255,255,0.4)', fontSize: 13, fontWeight: tab === t.id ? 700 : 400, cursor: 'pointer', fontFamily: 'inherit', borderBottom: tab === t.id ? '2px solid #7FB897' : '2px solid transparent' }}>
+              {t.label}
+            </button>
+          ))}
+        </div>
+        {tab === 'health' && <SiteHealthTab businessId={business.id} />}
+        {tab === 'local' && <LocalSeoTab businessId={business.id} />}
+        {tab === 'keywords' && <KeywordsTab businessId={business.id} />}
+        {tab === 'optimizer' && <AiOptimizerTab businessId={business.id} />}
+      </div>
+    </div>
+  )
+}

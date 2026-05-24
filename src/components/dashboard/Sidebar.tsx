@@ -56,6 +56,7 @@ const ALL_ITEMS: Record<string, NavItemDef> = {
   'winback':                    { href: '/dashboard/winback',                  label: 'Customer winback',  icon: UsersIcon,          section: 'Revenue'      },
   'slow-day':                   { href: '/dashboard/churn#slow-day',             label: 'Slow day filler',   icon: DollarIcon,         badge: '⚡', section: 'Revenue' },
   'reviews':                    { href: '/dashboard/reviews',                  label: 'Reviews',           icon: StarIcon,           section: 'Reputation'   },
+  'seo':                        { href: '/dashboard/seo',                      label: 'SEO',               icon: GlobeIcon,          badge: 'AI', section: 'Reputation' },
   'profit-leaks':               { href: '/dashboard/profit-leaks',             label: 'Profit leaks',      icon: AlertIcon,          section: 'Intelligence' },
   'cash-flow':                  { href: '/dashboard/cash-flow',               label: 'Cash flow',         icon: TrendingUpIcon,     section: 'Intelligence' },
   'competitors':                { href: '/dashboard/competitors',              label: 'Competitor watch',  icon: SearchIcon,         section: 'Reputation'   },
