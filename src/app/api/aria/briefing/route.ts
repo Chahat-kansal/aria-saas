@@ -111,6 +111,7 @@ Audit checks (last 48h): ${(() => { const aa = (recentAudits || []) as Array<{fa
       consensus: council.consensus,
       contested: council.contested,
       confidence_map: council.confidence_map,
+      layout: council.layout ?? null,
       council_mode: true,
     })
   }

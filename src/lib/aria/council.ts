@@ -11,11 +11,23 @@ export type BrainOutput = {
   reasoning: string
   failed?: boolean
 }
+export type BriefingLayout = {
+  mood: 'urgent' | 'positive' | 'strategic' | 'split' | 'external'
+  lead_type: 'metric' | 'alert' | 'question' | 'debate' | 'context'
+  lead_value: string
+  lead_label: string
+  accent: 'red' | 'green' | 'amber' | 'violet' | 'blue'
+  show_debate_first: boolean
+  highlight_metrics: string[]
+  section_order: string[]
+}
+
 export type CouncilOutput = {
   consensus: string[]
   contested: Array<{ topic: string; optimist_view: string; critic_view: string; strategist_view: string }>
   final_briefing: string
   confidence_map: Record<string, 'high' | 'medium' | 'low'>
+  layout?: BriefingLayout
   raw_brain_outputs: BrainOutput[]
   context_brain_output?: ContextBrainOutput
   meta: {
@@ -135,8 +147,26 @@ Rules:
 
 You also have external context from a web search. Use it to enrich the briefing when relevant (e.g. 'there is a public holiday next Monday — plan staffing') but always label it as external context and never treat it as more reliable than the internal business data.
 
+DESIGN THE VISUAL LAYOUT: You are also the art director. Based on what you found, decide how this briefing should look today. Choose:
+
+mood: "urgent" (critical problems, red), "positive" (growth/wins, green), "strategic" (big decisions, violet), "split" (brains disagree on something important, amber), "external" (weather/events dominate, blue)
+
+lead_type: "metric" (show a big number front and centre), "alert" (red warning banner), "question" (strategic decision the owner must make), "debate" (show the brain split prominently), "context" (external event leads)
+
+lead_value: the single most important number, phrase, or stat to display large (e.g. "$221.97", "0 customers", "77% drop", "100% rain tonight")
+
+lead_label: 3-5 word label for the lead (e.g. "Revenue this week", "Customer database", "Foot traffic risk")
+
+accent: "red" | "green" | "amber" | "violet" | "blue" — pick based on mood
+
+show_debate_first: true if the contested points are the most important thing today, false otherwise
+
+highlight_metrics: array of 3-6 specific numbers/stats pulled from the data to show as chips
+
+section_order: array deciding display order from ["lead", "briefing", "consensus", "debate", "confidence", "actions"] — put the most important first
+
 Return ONLY valid JSON, no preamble, no markdown, no code fences:
-{"consensus":["things all agreed on"],"contested":[{"topic":"...","optimist_view":"...","critic_view":"...","strategist_view":"..."}],"final_briefing":"the complete briefing text shown to the owner","confidence_map":{"insight key":"high|medium|low"}}`
+{"consensus":["things all agreed on"],"contested":[{"topic":"...","optimist_view":"...","critic_view":"...","strategist_view":"..."}],"final_briefing":"the complete briefing text shown to the owner","confidence_map":{"insight key":"high|medium|low"},"layout":{"mood":"urgent|positive|strategic|split|external","lead_type":"metric|alert|question|debate|context","lead_value":"the key value to show large","lead_label":"short label","accent":"red|green|amber|violet|blue","show_debate_first":false,"highlight_metrics":["$x","y%"],"section_order":["lead","briefing","consensus","debate","confidence"]}}`
 
 async function callBrain(
   client: Anthropic,
@@ -321,6 +351,7 @@ export async function runAriaCouncil(
     contested: synthesis.contested ?? [],
     final_briefing: synthesis.final_briefing ?? '',
     confidence_map: synthesis.confidence_map ?? {},
+    layout: synthesis.layout ?? undefined,
     raw_brain_outputs: outputs,
     context_brain_output: contextBrain,
     meta: {
