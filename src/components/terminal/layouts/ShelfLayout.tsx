@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { LayoutProps, ProductForTerminal } from './types'
 
 const CAT_EMOJI: Record<string, string> = {
@@ -70,7 +70,7 @@ function ShelfTileImage({ product, cat }: { product: ProductForTerminal; cat: st
   )
 }
 
-export function ShelfLayout({ products, onProductClick, selectedCategory }: LayoutProps) {
+export const ShelfLayout = React.memo(function ShelfLayout({ products, onProductClick, selectedCategory }: LayoutProps) {
   const [supportsHover, setSupportsHover] = useState(true)
   useEffect(() => {
     setSupportsHover(window.matchMedia('(hover: hover) and (pointer: fine)').matches)
@@ -147,4 +147,4 @@ export function ShelfLayout({ products, onProductClick, selectedCategory }: Layo
       ))}
     </div>
   )
-}
+})

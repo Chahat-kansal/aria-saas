@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { LayoutProps, ProductForTerminal } from './types'
 
 function groupByCategory(products: ProductForTerminal[], selectedCategory?: string | null) {
@@ -31,7 +31,7 @@ function getStockStatus(p: ProductForTerminal) {
   return 'normal'
 }
 
-export function CarouselLayout({ products, onProductClick, selectedCategory }: LayoutProps) {
+export const CarouselLayout = React.memo(function CarouselLayout({ products, onProductClick, selectedCategory }: LayoutProps) {
   const [supportsHover, setSupportsHover] = useState(true)
   useEffect(() => {
     setSupportsHover(window.matchMedia('(hover: hover) and (pointer: fine)').matches)
@@ -128,4 +128,4 @@ export function CarouselLayout({ products, onProductClick, selectedCategory }: L
       ))}
     </div>
   )
-}
+})

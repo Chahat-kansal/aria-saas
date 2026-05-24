@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { LayoutProps, ProductForTerminal } from './types'
 import { ProductImage } from '@/components/terminal/ProductImage'
 
@@ -26,7 +26,7 @@ function StockPip({ status, qty }: { status: string; qty: number }) {
   )
 }
 
-export function FastGridLayout({ products, onProductClick, showStock = true }: LayoutProps) {
+export const FastGridLayout = React.memo(function FastGridLayout({ products, onProductClick, showStock = true }: LayoutProps) {
   const [supportsHover, setSupportsHover] = useState(true)
   useEffect(() => {
     setSupportsHover(window.matchMedia('(hover: hover) and (pointer: fine)').matches)
@@ -137,4 +137,4 @@ export function FastGridLayout({ products, onProductClick, showStock = true }: L
       )}
     </>
   )
-}
+})

@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { LayoutProps, ProductForTerminal } from './types'
 
 const HEIGHTS = [200, 160, 240, 180, 220, 170, 250, 190]
@@ -31,7 +31,7 @@ function ProductImage({ product, size }: { product: ProductForTerminal; size: nu
   )
 }
 
-export function MasonryLayout({ products, onProductClick }: LayoutProps) {
+export const MasonryLayout = React.memo(function MasonryLayout({ products, onProductClick }: LayoutProps) {
   const [supportsHover, setSupportsHover] = useState(true)
   useEffect(() => {
     setSupportsHover(window.matchMedia('(hover: hover) and (pointer: fine)').matches)
@@ -133,4 +133,4 @@ export function MasonryLayout({ products, onProductClick }: LayoutProps) {
       )}
     </>
   )
-}
+})

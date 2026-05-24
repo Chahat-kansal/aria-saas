@@ -1,19 +1,14 @@
 // force-recompile:1779337019
 'use client';
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { ModifierModal } from '@/components/pos/ModifierModal';
-import { SandwichBuilder } from '@/components/pos/SandwichBuilder';
-import SplitModal from '@/components/pos/SplitModal';
-import { OrderTypeSelector, type OrderType } from '@/components/pos/OrderTypeSelector';
-import { CustomerCaptureModal, type CustomerDetails } from '@/components/pos/CustomerCaptureModal';
-import { FloorPlan } from '@/components/pos/FloorPlan';
+import type { OrderType } from '@/components/pos/OrderTypeSelector';
+import type { CustomerDetails } from '@/components/pos/CustomerCaptureModal';
 import type { ConfiguredCartItem } from '@/types/pos-modifiers';
 import Link from 'next/link';
 import { isMobileDevice, hasCameraSupport } from '@/lib/mobile-detect';
 import { SFX } from '@/lib/pos-utils';
 import dynamic from 'next/dynamic';
 import type { FlyToCartHandle } from '@/components/pos/FlyToCart';
-import Receipt from '@/components/pos/Receipt';
 import type { ReceiptTemplate } from '@/components/pos/Receipt';
 import { printReceiptWithTemplate } from '@/lib/pos-print';
 import { printReceipt as printESCPOS } from '@/lib/pos/escpos';
@@ -23,6 +18,19 @@ import type { AriaResponse } from '@/components/pos/AriaChatMessage';
 const CursorGlow = dynamic(() => import('@/components/pos/CursorGlow'), { ssr: false });
 // AnimatedBg removed from terminal v4 — static aurora only (AuroraCanvas handles background)
 const FlyToCart  = dynamic(() => import('@/components/pos/FlyToCart'),  { ssr: false });
+
+const ModifierModal       = dynamic(() => import('@/components/pos/ModifierModal').then(m => ({ default: m.ModifierModal })), { ssr: false });
+const SandwichBuilder     = dynamic(() => import('@/components/pos/SandwichBuilder').then(m => ({ default: m.SandwichBuilder })), { ssr: false });
+const FloorPlan           = dynamic(() => import('@/components/pos/FloorPlan').then(m => ({ default: m.FloorPlan })), { ssr: false });
+const OrderTypeSelector   = dynamic(() => import('@/components/pos/OrderTypeSelector').then(m => ({ default: m.OrderTypeSelector })), { ssr: false });
+const CustomerCaptureModal = dynamic(() => import('@/components/pos/CustomerCaptureModal').then(m => ({ default: m.CustomerCaptureModal })), { ssr: false });
+const Receipt             = dynamic(() => import('@/components/pos/Receipt'), { ssr: false });
+const SplitModal          = dynamic(() => import('@/components/pos/SplitModal'), { ssr: false });
+const CafeSetupModal      = dynamic(() => import('@/components/pos/CafeSetupModal'), { ssr: false });
+const KdsTracker          = dynamic(() => import('@/components/pos/KdsTracker'), { ssr: false });
+const DiscountBar         = dynamic(() => import('@/components/pos/DiscountBar'), { ssr: false });
+const ModifierPickerModal = dynamic(() => import('@/components/pos/ModifierPickerModal'), { ssr: false });
+const PriceOverrideModal  = dynamic(() => import('@/components/pos/PriceOverrideModal'), { ssr: false });
 
 // Layout system — additive
 import { LayoutSwitcher } from '@/components/terminal/LayoutSwitcher';
@@ -39,14 +47,10 @@ import { getAriaSuggestions } from '@/lib/terminal/aria-suggestions';
 import { AuroraCanvas } from '@/components/terminal/AuroraCanvas';
 import { AriaInlineCard } from '@/components/terminal/AriaInlineCard';
 import { ProductImage } from '@/components/terminal/ProductImage';
-import CafeSetupModal from '@/components/pos/CafeSetupModal';
 import CustomerLookupBar, { type LoyaltyCustomer } from '@/components/pos/CustomerLookupBar';
-import KdsTracker from '@/components/pos/KdsTracker';
-import DiscountBar, { type DiscountBarCartItem } from '@/components/pos/DiscountBar';
+import type { DiscountBarCartItem } from '@/components/pos/DiscountBar';
 import { useScanner } from '@/lib/hardware/scanner';
 import type { AppliedDiscount } from '@/lib/pos/discount-engine';
-import ModifierPickerModal from '@/components/pos/ModifierPickerModal';
-import PriceOverrideModal from '@/components/pos/PriceOverrideModal';
 import CartLineMenu from '@/components/pos/CartLineMenu';
 
 /* ─── Types ─────────────────────────────────────────────────────── */
@@ -623,7 +627,12 @@ export default function TerminalPage() {
     };
   }, [loadRegister]);
 
-  /* ── EOD markdown — check every minute if a rule is now active ── */
+  /* ── Layout init from business_type + localStorage — additive ── */
+  useEffect(() => {
+    setLayout(getCurrentLayout(businessType, terminalLayoutOverride));
+  }, [businessType, terminalLayoutOverride]);
+
+  /* ── businessId-gated fetches — merged to avoid waterfall ──────── */
   useEffect(() => {
     if (!businessId) return;
     function checkEod() {
@@ -644,31 +653,13 @@ export default function TerminalPage() {
         })
         .catch(() => null);
     }
-    checkEod();
-    const timer = setInterval(checkEod, 60_000);
-    return () => clearInterval(timer);
-  }, [businessId]);
-
-  /* ── Load surcharge rules — additive ──────────────────────────── */
-  useEffect(() => {
-    if (!businessId) return;
-    fetch('/api/pos/surcharge-rules')
+    const surchargeFetch = fetch('/api/pos/surcharge-rules')
       .then(r => r.json())
       .then((d: { rules?: Array<{ id:string; payment_type:string|null; amount_type:string|null; amount:number; is_active:boolean; day_of_week:number[]|null }> }) => {
         setSurchargeRules((d.rules ?? []).filter(r => r.is_active));
       })
       .catch(() => null);
-  }, [businessId]);
-
-  /* ── Layout init from business_type + localStorage — additive ── */
-  useEffect(() => {
-    setLayout(getCurrentLayout(businessType, terminalLayoutOverride));
-  }, [businessType, terminalLayoutOverride]);
-
-  /* ── Load outlets from pos_outlets — additive ───────────────── */
-  useEffect(() => {
-    if (!businessId) return;
-    import('@/lib/supabase').then(({ supabase: sb }) => {
+    const outletsFetch = import('@/lib/supabase').then(({ supabase: sb }) => {
       if (!sb) return;
       sb.from('pos_outlets')
         .select('id, name, is_global, is_default, code')
@@ -689,6 +680,10 @@ export default function TerminalPage() {
           }
         });
     });
+    Promise.all([surchargeFetch, outletsFetch]).catch(() => null);
+    checkEod();
+    const timer = setInterval(checkEod, 60_000);
+    return () => clearInterval(timer);
   // Only re-run when businessId resolves — intentionally exclude activeOutletId
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [businessId]);
@@ -709,34 +704,37 @@ export default function TerminalPage() {
 
   /* ── Customer display sync ────────────────────────────────────── */
   useEffect(() => {
-    if (showReceipt) return;
-    try {
-      const sub = cart.reduce((s, i) => s + i.unitPrice * i.qty * (1 - (i.discount_percent ?? 0) / 100), 0);
-      const tax = sub - sub / 1.1;
-      const tot = sub;
-      const payload = JSON.stringify({
-        status: cart.length > 0 ? 'active' : 'idle',
-        business_name: businessName,
-        items: cart.map(i => ({
-          id:        i.product.id,
-          name:      i.label ?? i.product.name,
-          cat:       i.product.pos_categories?.name?.toLowerCase() ?? 'other',
-          category:  i.product.pos_categories?.name ?? 'other',
-          price:     i.unitPrice,
-          price_cents: Math.round(i.unitPrice * 100),
-          quantity:  i.qty,
-        })),
-        subtotal_cents: Math.round(sub * 100),
-        discount_cents: 0,
-        tax_cents: Math.round(tax * 100),
-        total_cents: Math.round(tot * 100),
-        customer_name: customer?.name ?? null,
-        loyalty_points: customer?.loyalty_points ?? 0,
-        timestamp: Date.now(),
-      });
-      localStorage.setItem('aria_display_state', payload);
-      localStorage.setItem('aria_pos_display_state', payload); // legacy
-    } catch { /* ignore */ }
+    const timer = setTimeout(() => {
+      if (showReceipt) return;
+      try {
+        const sub = cart.reduce((s, i) => s + i.unitPrice * i.qty * (1 - (i.discount_percent ?? 0) / 100), 0);
+        const tax = sub - sub / 1.1;
+        const tot = sub;
+        const payload = JSON.stringify({
+          status: cart.length > 0 ? 'active' : 'idle',
+          business_name: businessName,
+          items: cart.map(i => ({
+            id:        i.product.id,
+            name:      i.label ?? i.product.name,
+            cat:       i.product.pos_categories?.name?.toLowerCase() ?? 'other',
+            category:  i.product.pos_categories?.name ?? 'other',
+            price:     i.unitPrice,
+            price_cents: Math.round(i.unitPrice * 100),
+            quantity:  i.qty,
+          })),
+          subtotal_cents: Math.round(sub * 100),
+          discount_cents: 0,
+          tax_cents: Math.round(tax * 100),
+          total_cents: Math.round(tot * 100),
+          customer_name: customer?.name ?? null,
+          loyalty_points: customer?.loyalty_points ?? 0,
+          timestamp: Date.now(),
+        });
+        localStorage.setItem('aria_display_state', payload);
+        localStorage.setItem('aria_pos_display_state', payload); // legacy
+      } catch { /* ignore */ }
+    }, 50);
+    return () => clearTimeout(timer);
   }, [cart, customer, businessName, showReceipt]);
 
   /* ── Barcode scanner ──────────────────────────────────────────── */
@@ -890,6 +888,39 @@ export default function TerminalPage() {
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [displayedProducts, recentProductIds, cart.map(i => i.product.id).join(',')]);
+
+  const layoutProducts = useMemo<ProductForTerminal[]>(() => displayedProducts.map(p => ({
+    id: p.id,
+    name: p.name,
+    sku: p.sku ?? '',
+    barcode: p.barcode,
+    category: p.pos_categories?.name ?? null,
+    price: p.price,
+    cost_price: p.cost_price,
+    stock_quantity: p.stock_quantity,
+    image_url: (p as any).image_url ?? null,
+    image_source: (p as any).image_source ?? null,
+    container_type: null,
+    description: (p as any).description ?? null,
+    track_inventory: p.track_stock,
+    active: p.is_active,
+  })), [displayedProducts]);
+
+  const cartForAria = useMemo(
+    () => cart.map(c => ({ name: c.label ?? c.product.name, category: c.product.pos_categories?.name ?? null })),
+    [cart]
+  );
+
+  const cartForDiscount = useMemo(
+    () => cart.map((i): DiscountBarCartItem => ({
+      product_id: i.product.id,
+      product_name: i.product.name,
+      category_id: i.product.category_id,
+      qty: i.qty,
+      unit_price: i.unitPrice,
+    })),
+    [cart]
+  );
 
   const loyaltyCustomer = customer && customer.loyalty_points > 0;
 
@@ -2473,24 +2504,6 @@ export default function TerminalPage() {
                 if (priceCheckMode) { setPriceCheckProd(p); return; }
                 checkAndAddToCart(p);
               };
-              // Map displayedProducts to ProductForTerminal shape — additive
-              const layoutProducts: ProductForTerminal[] = displayedProducts.map(p => ({
-                id: p.id,
-                name: p.name,
-                sku: p.sku ?? '',
-                barcode: p.barcode,
-                category: p.pos_categories?.name ?? null,
-                price: p.price,
-                cost_price: p.cost_price,
-                stock_quantity: p.stock_quantity,
-                image_url: (p as any).image_url ?? null,
-                image_source: (p as any).image_source ?? null,
-                container_type: null,
-                description: (p as any).description ?? null,
-                track_inventory: p.track_stock,
-                active: p.is_active,
-              }));
-
               // Search fallback: always render FastGrid when searching — additive
               const effectiveLayout: TerminalLayout =
                 search.trim().length >= 2 ? 'grid' : currentLayout;
@@ -2689,10 +2702,7 @@ export default function TerminalPage() {
                 {/* Aria inline suggestion card */}
                 {cart.length > 0 && (
                   <AriaInlineCard
-                    cartItems={cart.map(c => ({
-                      name: c.label ?? c.product.name,
-                      category: c.product.pos_categories?.name ?? null,
-                    }))}
+                    cartItems={cartForAria}
                     customer={customer ? { name: customer.name } : null}
                     onAddSuggestion={(name) => console.log('[Aria] suggestion accepted:', name)}
                   />
@@ -2702,13 +2712,7 @@ export default function TerminalPage() {
                 {businessType === 'cafe' && cart.length > 0 && (
                   <DiscountBar
                     businessType={businessType}
-                    cart={cart.map((i): DiscountBarCartItem => ({
-                      product_id: i.product.id,
-                      product_name: i.product.name,
-                      category_id: i.product.category_id,
-                      qty: i.qty,
-                      unit_price: i.unitPrice,
-                    }))}
+                    cart={cartForDiscount}
                     appliedDiscounts={appliedDiscounts}
                     onApply={d => setAppliedDiscounts(prev => prev.some(x => x.promotion_id === d.promotion_id) ? prev : [...prev, d])}
                     onRemove={pid => setAppliedDiscounts(prev => prev.filter(x => x.promotion_id !== pid))}

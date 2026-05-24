@@ -234,6 +234,8 @@ export function ProductImage({ product, size = 110, showShadow = true }: Props) 
         <img
           src={product.image_url}
           alt={product.name}
+          width={size}
+          height={size}
           loading="lazy"
           style={{
             width: '100%',

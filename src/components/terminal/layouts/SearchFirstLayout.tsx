@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { LayoutProps, ProductForTerminal } from './types'
 
 function getStockStatus(p: ProductForTerminal) {
@@ -80,7 +80,7 @@ function ProductTileCompact({
   )
 }
 
-export function SearchFirstLayout({
+export const SearchFirstLayout = React.memo(function SearchFirstLayout({
   products, onProductClick, recentProductIds = [], suggestedProductIds = [],
 }: LayoutProps) {
   const [supportsHover, setSupportsHover] = useState(true)
@@ -163,4 +163,4 @@ export function SearchFirstLayout({
       )}
     </div>
   )
-}
+})
