@@ -46,6 +46,7 @@ const ALL_ITEMS: Record<string, NavItemDef> = {
   'cash-up':                    { href: '/dashboard/cash-up',                  label: 'Daily cash-up',      icon: GridIcon,           section: 'Operations'   },
   'stocktake':                  { href: '/dashboard/stocktake',                label: 'Stocktake',          icon: GridIcon,           section: 'Operations'   },
   'supplier-import':            { href: '/dashboard/supplier-import',          label: 'Supplier price import', icon: GridIcon,       section: 'Operations'   },
+  'customers':                  { href: '/dashboard/customers',                label: 'Customers',          icon: UsersIcon,          section: 'Overview'     },
   'customer-tabs':              { href: '/dashboard/customer-tabs',            label: 'Customer tabs',      icon: UsersIcon,          section: 'Overview'     },
   'locations':                  { href: '/dashboard/locations',                label: 'Locations',          icon: GridIcon,           section: 'Overview'     },
   'pos-online':                 { href: '/dashboard/pos/online',               label: 'Online ordering',    icon: DeliveryIcon,       badge: 'AI',  section: 'Operations'   },
@@ -184,6 +185,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
 
   sections['Overview'] = [
     ALL_ITEMS['dashboard'],
+    ALL_ITEMS['customers'],
     { href: '/dashboard/ask-aria', label: 'Ask Aria', icon: ChatIcon, badge: 'AI', section: 'Overview' },
     { href: '/dashboard/integrations', label: 'Integrations', icon: PlugIcon, badge: business?.square_connected ? '●' : undefined, section: 'Overview' },
   ];
