@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { runContextBrain, type ContextBrainOutput } from './context-brain'
 
 export type BrainRole = 'optimist' | 'critic' | 'strategist'
 export type BrainOutput = {
@@ -16,6 +17,7 @@ export type CouncilOutput = {
   final_briefing: string
   confidence_map: Record<string, 'high' | 'medium' | 'low'>
   raw_brain_outputs: BrainOutput[]
+  context_brain_output?: ContextBrainOutput
   meta: {
     brains_succeeded: number
     brains_failed: number
@@ -131,6 +133,8 @@ Rules:
 8. Never invent data not in the context. If data is thin, say so.
 9. If only one or two brains succeeded, still produce the best possible briefing from what you have — note nothing about "brains" to the owner.
 
+You also have external context from a web search. Use it to enrich the briefing when relevant (e.g. 'there is a public holiday next Monday — plan staffing') but always label it as external context and never treat it as more reliable than the internal business data.
+
 Return ONLY valid JSON, no preamble, no markdown, no code fences:
 {"consensus":["things all agreed on"],"contested":[{"topic":"...","optimist_view":"...","critic_view":"...","strategist_view":"..."}],"final_briefing":"the complete briefing text shown to the owner","confidence_map":{"insight key":"high|medium|low"}}`
 
@@ -201,6 +205,7 @@ async function callSynthesis(
   outputs: BrainOutput[],
   mode: string,
   businessId: string,
+  contextBrain?: ContextBrainOutput,
 ): Promise<any> {
   const brainSummary = outputs.map(o =>
     '[' + o.role.toUpperCase() + '] confidence:' + o.confidence +
@@ -208,7 +213,14 @@ async function callSynthesis(
     '\nRecommendations: ' + o.recommendations.join('; ') +
     '\nReasoning: ' + o.reasoning
   ).join('\n\n')
-  const userPrompt = 'Business data:\n\n' + businessContext + '\n\nMode: ' + mode + '\n\nBrain outputs:\n' + brainSummary
+  const ctxSection = (contextBrain && !contextBrain.failed)
+    ? '\n\nEXTERNAL CONTEXT (from web search — treat as lower confidence than internal data):\n' +
+      'Factors: ' + (contextBrain.external_factors.join(', ') || 'none found') + '\n' +
+      'Risks: ' + (contextBrain.risk_flags.join(', ') || 'none') + '\n' +
+      'Opportunities: ' + (contextBrain.opportunities.join(', ') || 'none') + '\n' +
+      'Note: this is real-time web data — verify if acting on it.'
+    : ''
+  const userPrompt = 'Business data:\n\n' + businessContext + '\n\nMode: ' + mode + '\n\nBrain outputs:\n' + brainSummary + ctxSection
 
   const res = await callWithTimeout(
     () => withBackoff(() => client.messages.create({
@@ -245,10 +257,29 @@ export async function runAriaCouncil(
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, maxRetries: 0 })
   const userPrompt = 'Business data for analysis:\n\n' + businessContext + '\n\nMode: ' + mode
 
-  const [a, b, c] = await Promise.allSettled([
+  let bizInfo: { trading_name: string; industry: string; city: string; state: string; business_id?: string }
+  try {
+    const parsed = JSON.parse(businessContext)
+    bizInfo = {
+      trading_name: parsed?.business?.name ?? 'this business',
+      industry: parsed?.business?.industry ?? 'retail',
+      city: parsed?.business?.city ?? 'Melbourne',
+      state: 'AU',
+      business_id: businessId,
+    }
+  } catch {
+    bizInfo = { trading_name: 'this business', industry: 'retail', city: 'Melbourne', state: 'AU', business_id: businessId }
+  }
+
+  const weekStart = new Date()
+  weekStart.setDate(weekStart.getDate() - weekStart.getDay() + 1)
+  weekStart.setHours(0, 0, 0, 0)
+
+  const [a, b, c, ctxResult] = await Promise.allSettled([
     callBrain(client, 'claude-haiku-4-5-20251001', OPTIMIST_PROMPT, userPrompt, 'optimist', businessId, 45000),
     callBrain(client, 'claude-haiku-4-5-20251001', CRITIC_PROMPT, userPrompt, 'critic', businessId, 45000),
     callBrain(client, 'claude-sonnet-4-5-20250929', STRATEGIST_PROMPT, userPrompt, 'strategist', businessId, 60000),
+    runContextBrain(bizInfo, weekStart),
   ])
 
   const outputs: BrainOutput[] = []
@@ -262,10 +293,17 @@ export async function runAriaCouncil(
     throw new Error('All council brains failed — falling back to single-model briefing')
   }
 
+  const contextBrain: ContextBrainOutput | undefined =
+    ctxResult.status === 'fulfilled' && !ctxResult.value.failed ? ctxResult.value : undefined
+
+  if (ctxResult.status === 'rejected') {
+    console.error('[council] context-brain rejected:', ctxResult.reason)
+  }
+
   let synthesis: any = null
   let synthesisOk = false
   try {
-    synthesis = await callSynthesis(client, businessContext, outputs, mode, businessId)
+    synthesis = await callSynthesis(client, businessContext, outputs, mode, businessId, contextBrain)
     synthesisOk = true
   } catch (e) {
     console.error('[council] synthesis failed:', (e as Error).message)
@@ -284,6 +322,7 @@ export async function runAriaCouncil(
     final_briefing: synthesis.final_briefing ?? '',
     confidence_map: synthesis.confidence_map ?? {},
     raw_brain_outputs: outputs,
+    context_brain_output: contextBrain,
     meta: {
       brains_succeeded: succeeded,
       brains_failed: failed,
@@ -309,6 +348,7 @@ export async function insertCouncilRun(
       contested: council?.contested ?? null,
       confidence_map: council?.confidence_map ?? null,
       raw_brain_outputs: council?.raw_brain_outputs ?? null,
+      context_brain_output: council?.context_brain_output ?? null,
       brains_succeeded: council?.meta.brains_succeeded ?? 0,
       brains_failed: council?.meta.brains_failed ?? 0,
       synthesis_succeeded: council?.meta.synthesis_succeeded ?? false,
