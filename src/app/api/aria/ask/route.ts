@@ -1,6 +1,6 @@
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
-export const maxDuration = 120
+export const maxDuration = 300
 
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
@@ -20,6 +20,8 @@ import type { ExportFormat, ExportSubject } from '@/lib/aria/ask/files'
 import { planAction, isConfirmation } from '@/lib/aria/ask/action-planner'
 import { executeAction } from '@/lib/aria/ask/action-executor'
 import type { PlannedAction } from '@/lib/aria/ask/action-planner'
+import { runAriaCouncil } from '@/lib/aria/council'
+import { getBusinessContext } from '@/lib/aria/get-business-context'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
   const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
@@ -279,6 +281,34 @@ async function _POST(req: Request) {
 
   // 2. Build context
   const ctx = await buildAskAriaContext(bid, conversationId ?? undefined)
+
+  // 2b. Strategic council path — multi-brain analysis for advisory questions
+  const isStrategic = /should|recommend|best|strategy|improve|why|how can|what would|advice|suggest/i.test(message)
+  if (isStrategic) {
+    try {
+      const bizCtx = await getBusinessContext(bid)
+      const council = await runAriaCouncil(bizCtx, bid, 'ask_aria')
+      if (council?.final_briefing) {
+        let savedConvId = conversationId
+        try {
+          savedConvId = await upsertConversation(bid, user.id, conversationId, message, council.final_briefing, intent.type)
+        } catch (e) {
+          console.error('[aria/ask] upsertConversation failed (council):', (e as Error).message)
+        }
+        return NextResponse.json({
+          response: council.final_briefing,
+          conversation_id: savedConvId ?? conversationId,
+          intent: intent.type,
+          action: null,
+          cost_usd_cents: 0,
+          downloads: null,
+          tool_calls: [],
+        })
+      }
+    } catch (e) {
+      console.error('[aria/ask] council failed, falling back to single-model:', (e as Error).message)
+    }
+  }
 
   // 3. Build system prompt
   let systemPrompt = `You are Aria, the autonomous AI business co-pilot for Aria OS — for Australian small businesses.
