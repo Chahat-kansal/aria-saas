@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { WarehouseDashboard } from '@/components/dashboard/WarehouseDashboard';
 import { MorningCommandCentre } from '@/components/dashboard/MorningCommandCentre';
+import { AriaBriefingCard } from '@/components/dashboard/AriaBriefingCard';
 import { RetailDashboard } from '@/components/dashboard/RetailDashboard';
 import { CustomFeaturesSection } from '@/components/features/FeatureRenderer';
 import RevenueChart from '@/components/dashboard/RevenueChart';
@@ -91,7 +92,7 @@ async function RetailCafeDashboard({ business }: { business: any }) {
       <Blobs />
       <div className="relative z-10 max-w-6xl mx-auto space-y-6">
         <DashHeader greeting={greeting} ownerName={business.owner_name || 'there'} subtitle="Aria is monitoring your store" />
-        <MorningCommandCentre />
+        <AriaBriefingCard businessId={business.id} />
 
         {/* Stats */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
