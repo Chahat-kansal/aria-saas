@@ -11,6 +11,7 @@ import { getBusinessContext, hasEnoughData } from '@/lib/aria/get-business-conte
 import { getSystemPrompt } from '@/lib/aria/get-system-prompt'
 import { writeAriaOutcome } from '@/lib/aria/write-outcome'
 import { runAriaCouncil, insertCouncilRun } from '@/lib/aria/council'
+import { runOrchestrator } from '@/lib/aria/agents/orchestrator'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -99,6 +100,12 @@ Audit checks (last 48h): ${(() => { const aa = (recentAudits || []) as Array<{fa
 
   if (council && council.final_briefing) {
     await insertCouncilRun(businessId, 'briefing', council, false)
+    // Fire-and-forget orchestrator — does not delay the briefing response
+    if (!usedFallback) {
+      runOrchestrator(council, businessId, 'briefing').catch(e =>
+        console.error('[orchestrator] failed:', (e as Error).message)
+      )
+    }
     return NextResponse.json({
       briefing: council.final_briefing,
       consensus: council.consensus,

@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { MorningCommandCentre } from '@/components/dashboard/MorningCommandCentre';
 import { AriaBriefingCard } from '@/components/dashboard/AriaBriefingCard';
+import { PendingActionsCard } from '@/components/dashboard/PendingActionsCard';
 
 interface Business { id: string; name: string; owner_name?: string; industry?: string; pos_enabled?: boolean | null; }
 interface DailySale { total_amount: number; }
@@ -382,6 +383,7 @@ export function RetailDashboard({ business }: { business: Business }) {
       {councilBriefing
         ? <AriaBriefingCard businessId={business.id} />
         : <MorningCommandCentre />}
+      <PendingActionsCard businessId={business.id} />
 
       {/* ─── Section 4: Insights Grid ─────────────────────── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
