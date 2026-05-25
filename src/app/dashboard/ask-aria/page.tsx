@@ -238,6 +238,7 @@ export default function AskAriaPage() {
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const typewriterRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
 
@@ -371,28 +372,50 @@ export default function AskAriaPage() {
         return null
       })()
 
-      setMessages(prev => {
-        const updated = [...prev]
-        const last = updated[updated.length - 1]
-        if (last?.role === 'assistant') {
-          updated[updated.length - 1] = {
-            ...last,
-            content: data.response ?? '',
-            streaming: false,
-            action: msgAction,
-            intent: data.intent,
-            downloads: data.downloads ?? undefined,
-            tool_calls: data.tool_calls ?? undefined,
-            blocks: data.blocks ?? undefined,
-            followups: data.followups ?? undefined,
-            used_council: data.used_council ?? false,
-          }
-        }
-        return updated
-      })
+      // Typewriter effect — reveal response word by word so avatar lip-sync
+      // matches the text appearing on screen
+      const fullText = data.response ?? ''
+      const words = fullText.split(' ')
+      let wordIdx = 0
+      // Clear any previous typewriter interval
+      if (typewriterRef.current) clearInterval(typewriterRef.current)
 
-      setAriaResponseText(data.response ?? '')
-      loadHistory()
+      // Start avatar animation immediately — feeds full text for lip timing
+      setAriaResponseText(fullText)
+
+      // Reveal words progressively — ~60ms per word feels natural
+      typewriterRef.current = setInterval(() => {
+        wordIdx++
+        const revealed = words.slice(0, wordIdx).join(' ')
+        setMessages(prev => {
+          const updated = [...prev]
+          const last = updated[updated.length - 1]
+          if (last?.role === 'assistant') {
+            updated[updated.length - 1] = {
+              ...last,
+              content: revealed,
+              // Keep streaming:true until last word so avatar keeps animating
+              streaming: wordIdx < words.length,
+              // Only attach metadata on the final word
+              ...(wordIdx >= words.length ? {
+                action: msgAction,
+                intent: data.intent,
+                downloads: data.downloads ?? undefined,
+                tool_calls: data.tool_calls ?? undefined,
+                blocks: data.blocks ?? undefined,
+                followups: data.followups ?? undefined,
+                used_council: data.used_council ?? false,
+              } : {}),
+            }
+          }
+          return updated
+        })
+        if (wordIdx >= words.length) {
+          if (typewriterRef.current) clearInterval(typewriterRef.current)
+          setAriaResponseText('')   // Stop avatar animation
+          loadHistory()
+        }
+      }, 55)  // 55ms per word ≈ natural reading/speaking pace
     } catch (err: unknown) {
       const errMsg = err instanceof Error ? err.message : 'Unknown error'
       setMessages(prev => {
