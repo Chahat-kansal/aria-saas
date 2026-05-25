@@ -127,19 +127,50 @@ async function patchVroidGlb(arrayBuffer: ArrayBuffer): Promise<string> {
     if (node && VROID_TO_MIXAMO[node.name]) node.name = VROID_TO_MIXAMO[node.name]
   }
 
-  // Step 1b: If eye bones not found via bone map, find them by common VRoid names
-  // and add them as named nodes so TalkingHead's getObjectByName succeeds
-  const eyeNames = new Set(gltf.nodes?.map((n: {name:string}) => n.name) ?? [])
-  if (!eyeNames.has('LeftEye') && !eyeNames.has('RightEye')) {
-    // Try to find eye nodes under any name containing 'Eye' or 'eye'
-    const leftEyeNode = gltf.nodes?.find((n: {name:string}) =>
-      /eye/i.test(n.name) && /left|_l_|_l$/i.test(n.name)
-    )
-    const rightEyeNode = gltf.nodes?.find((n: {name:string}) =>
-      /eye/i.test(n.name) && /right|_r_|_r$/i.test(n.name)
-    )
-    if (leftEyeNode) { leftEyeNode.name = 'LeftEye'; console.log('[Avatar] Mapped eye:', leftEyeNode.name, '→ LeftEye') }
-    if (rightEyeNode) { rightEyeNode.name = 'RightEye'; console.log('[Avatar] Mapped eye:', rightEyeNode.name, '→ RightEye') }
+  // Step 1b: Ensure LeftEye/RightEye exist — TalkingHead crashes without them (L1445)
+  // Try multiple VRoid naming patterns, then inject synthetic nodes if still missing
+  {
+    const nodeNames = new Set((gltf.nodes ?? []).map((n: {name:string}) => n.name))
+
+    if (!nodeNames.has('LeftEye') || !nodeNames.has('RightEye')) {
+      // VRoid eye bone patterns (ordered by likelihood)
+      const patterns: Array<{l: RegExp, r: RegExp}> = [
+        { l: /J_Adj_L_FaceEye/,  r: /J_Adj_R_FaceEye/ },
+        { l: /J_Bip_L_Eye/,      r: /J_Bip_R_Eye/ },
+        { l: /eye.*left|left.*eye/i, r: /eye.*right|right.*eye/i },
+        { l: /_L_.*[Ee]ye|[Ee]ye.*_L_/,  r: /_R_.*[Ee]ye|[Ee]ye.*_R_/ },
+      ]
+      for (const { l, r } of patterns) {
+        if (!nodeNames.has('LeftEye')) {
+          const n = gltf.nodes?.find((n: {name:string}) => l.test(n.name))
+          if (n) { console.log('[Avatar] Eye mapped:', n.name, '→ LeftEye'); n.name = 'LeftEye'; nodeNames.add('LeftEye') }
+        }
+        if (!nodeNames.has('RightEye')) {
+          const n = gltf.nodes?.find((n: {name:string}) => r.test(n.name))
+          if (n) { console.log('[Avatar] Eye mapped:', n.name, '→ RightEye'); n.name = 'RightEye'; nodeNames.add('RightEye') }
+        }
+        if (nodeNames.has('LeftEye') && nodeNames.has('RightEye')) break
+      }
+    }
+
+    // Last resort: inject synthetic eye nodes as children of Head
+    // TalkingHead only needs getWorldPosition() to work — a positioned empty node is enough
+    if (!nodeNames.has('LeftEye') || !nodeNames.has('RightEye')) {
+      console.log('[Avatar] Eye bones not found — injecting synthetic eye nodes at Head position')
+      const headIdx = (gltf.nodes ?? []).findIndex((n: {name:string}) => n.name === 'Head')
+      if (headIdx >= 0) {
+        // Add synthetic eye nodes
+        const leftIdx = gltf.nodes.length
+        const rightIdx = gltf.nodes.length + 1
+        // VRoid heads are typically 1.5-1.7m tall; eyes ~0.07m forward, 0.03m apart
+        gltf.nodes.push({ name: 'LeftEye',  translation: [0.03,  0.07, 0.07] })
+        gltf.nodes.push({ name: 'RightEye', translation: [-0.03, 0.07, 0.07] })
+        // Attach to Head node
+        if (!gltf.nodes[headIdx].children) gltf.nodes[headIdx].children = []
+        gltf.nodes[headIdx].children.push(leftIdx, rightIdx)
+        console.log('[Avatar] Synthetic eye nodes injected as Head children')
+      }
+    }
   }
 
   // Step 2: Create a new "Armature" node that owns ALL top-level scene children
