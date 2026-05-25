@@ -614,16 +614,14 @@ export default function AskAriaPage() {
         {/* Aria 3D avatar — silent visual animation while she responds */}
         <div style={{
           position: 'absolute',
-          bottom: 80,
-          right: 16,
-          width: 110,
-          height: 160,
+          bottom: 0,
+          right: 0,
+          width: 220,
+          height: 380,
           zIndex: 20,
           pointerEvents: 'none',
           opacity: 1,
           transition: 'opacity 0.4s ease',
-          WebkitMaskImage: 'radial-gradient(ellipse 78% 82% at 50% 42%, black 22%, transparent 68%)',
-          maskImage: 'radial-gradient(ellipse 78% 82% at 50% 42%, black 22%, transparent 68%)',
         }}>
           <AriaTalkingHead
             isActive={isAriaActive}
