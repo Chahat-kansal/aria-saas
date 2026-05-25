@@ -1,37 +1,29 @@
 import Anthropic from '@anthropic-ai/sdk'
-import { supabaseAdmin } from '@/lib/supabase-admin'
-import { runContextBrain, type ContextBrainOutput } from './context-brain'
+import { createClient } from '@supabase/supabase-js'
+import type { AskBlock } from './ask-types'
 
-export type BrainRole = 'optimist' | 'critic' | 'strategist'
-export type BrainOutput = {
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
+
+// ── Types ──────────────────────────────────────────────────────────
+type BrainRole = 'growth' | 'risk' | 'strategy' | 'context'
+
+interface BrainOutput {
   role: BrainRole
   observations: string[]
   recommendations: string[]
   confidence: 'high' | 'medium' | 'low'
-  reasoning: string
-  failed?: boolean
-}
-export type BriefingLayout = {
-  mood: 'urgent' | 'positive' | 'strategic' | 'split' | 'external'
-  lead_type: 'metric' | 'alert' | 'question' | 'debate' | 'context'
-  lead_value: string
-  lead_label: string
-  accent: 'red' | 'green' | 'amber' | 'violet' | 'blue'
-  show_debate_first: boolean
-  highlight_metrics: string[]
-  section_order: string[]
+  raw: string
+  succeeded: boolean
 }
 
-export type CouncilOutput = {
-  consensus: string[]
-  contested: Array<{ topic: string; optimist_view: string; critic_view: string; strategist_view: string }>
+export interface CouncilResult {
   final_briefing: string
-  confidence_map: Record<string, 'high' | 'medium' | 'low'>
-  layout?: BriefingLayout
-  ask_blocks?: import('./ask-types').AskBlock[]
+  ask_blocks?: AskBlock[]
   ask_followups?: string[]
   raw_brain_outputs: BrainOutput[]
-  context_brain_output?: ContextBrainOutput
   meta: {
     brains_succeeded: number
     brains_failed: number
@@ -41,6 +33,7 @@ export type CouncilOutput = {
   }
 }
 
+// ── Utilities ──────────────────────────────────────────────────────
 function callWithTimeout<T>(fn: () => Promise<T>, ms: number, label: string): Promise<T> {
   return Promise.race([
     fn(),
@@ -50,41 +43,32 @@ function callWithTimeout<T>(fn: () => Promise<T>, ms: number, label: string): Pr
   ])
 }
 
-async function withBackoff<T>(fn: () => Promise<T>, maxAttempts = 3): Promise<T> {
+async function withBackoff<T>(fn: () => Promise<T>, maxAttempts = 2): Promise<T> {
   let lastErr: Error | null = null
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try { return await fn() } catch (e) {
       lastErr = e as Error
       const isTransient = /529|503|overload|rate.?limit/i.test(lastErr.message ?? '')
       if (!isTransient || attempt === maxAttempts - 1) throw lastErr
-      await new Promise(r => setTimeout(r, Math.min(1000 * Math.pow(2, attempt), 4000)))
+      await new Promise(r => setTimeout(r, Math.min(800 * Math.pow(2, attempt), 3000)))
     }
   }
   throw lastErr ?? new Error('All retries failed')
 }
 
-function safeParseJSON(text: string): any | null {
+function safeParseJSON(text: string): Record<string, unknown> | null {
   try {
-    const stripped = text.trim()
-      .replace(/^```(?:json)?/i, '')
-      .replace(/```$/i, '')
-      .trim()
-    const start = stripped.indexOf('{')
-    const end = stripped.lastIndexOf('}')
-    if (start >= 0 && end > start) return JSON.parse(stripped.slice(start, end + 1))
+    const s = text.trim().replace(/^```(?:json)?\n?/i, '').replace(/\n?```$/i, '').trim()
+    const start = s.indexOf('{'), end = s.lastIndexOf('}')
+    if (start >= 0 && end > start) return JSON.parse(s.slice(start, end + 1))
     return null
   } catch { return null }
 }
 
 async function logAICall(params: {
-  agent_key: string
-  model_id: string
-  provider: string
-  input_tokens: number
-  output_tokens: number
-  success: boolean
-  business_id: string
-  error_message?: string
+  agent_key: string; model_id: string; provider: string
+  input_tokens: number; output_tokens: number; success: boolean
+  business_id: string; error_message?: string
 }) {
   try {
     await supabaseAdmin.from('aria_ai_calls').insert({
@@ -98,103 +82,78 @@ async function logAICall(params: {
       success: params.success,
       error_message: params.error_message ?? null,
     })
-  } catch { /* non-fatal — log failure must not break the caller */ }
+  } catch { /* non-fatal */ }
 }
 
-const OPTIMIST_PROMPT = `You are Aria's Growth Brain — a senior AI analyst for an Australian small business. You handle businesses of any complexity — a 12-product corner shop or a 400-product liquor warehouse with hundreds of customers.
+// ── Brain Prompts ──────────────────────────────────────────────────
+// Each brain has a single job. They are biased but rigorous.
+// They return JSON only. No prose, no preamble.
 
-Your role: find genuine OPPORTUNITY in the business data. Look for what is working better than expected, which products/customers/time-slots are performing well, untapped potential, and positive momentum to amplify.
+const GROWTH_PROMPT = `You are Aria's Growth Brain. One job: find what is working and what could work better.
 
-You are biased toward opportunity — but you are rigorous, not naive. Every observation MUST cite a specific number from the data. Never give generic advice. If the data genuinely shows little upside, say so honestly with low confidence — do not invent positives.
-
-You can handle dense, contradictory data. If many patterns exist at once, identify the 3-5 that matter most.
-
-Return ONLY valid JSON, no preamble, no markdown, no code fences:
-{"observations":["specific observation with a number"],"recommendations":["specific action with expected outcome"],"confidence":"high|medium|low","reasoning":"why you reached these conclusions"}`
-
-const CRITIC_PROMPT = `You are Aria's Risk Brain — a senior AI analyst for an Australian small business. You handle businesses of any complexity.
-
-Your role: find genuine PROBLEMS and RISKS in the business data. Look for what is underperforming or declining, customers at risk of leaving, money leaking or being wasted, patterns that suggest something is wrong, what the owner is probably ignoring, and suspicious patterns (unusual voids, discount abuse, cash variance).
-
-You are biased toward identifying risk — but you are precise, not pessimistic. Do not manufacture problems that aren't there. Every observation MUST cite a specific number. If the data genuinely shows no problems, say so honestly with high confidence.
-
-You can handle dense, contradictory data. Prioritise the most serious risks.
-
-Return ONLY valid JSON, no preamble, no markdown, no code fences:
-{"observations":["specific problem with number evidence"],"recommendations":["specific action to fix it"],"confidence":"high|medium|low","reasoning":"why you identified these risks"}`
-
-const STRATEGIST_PROMPT = `You are Aria's Strategy Brain — a senior AI advisor for an Australian small business. Two other analysts (an Optimist and a Critic) have reviewed the same data. Your role is the WHOLE PICTURE.
-
-You handle businesses of any complexity and you excel at reconciling CONTRADICTORY signals — growth in one area while another declines — into one coherent strategic read.
-
-Identify: the business's position and trajectory over the next 30-90 days, whether the growth and risk signals are connected, the health of the customer relationship (not just the finances), and — most importantly — the SINGLE most important thing the owner should focus on this week.
-
-You are balanced. You do not lean optimistic or pessimistic. You think like a trusted advisor who has watched this business for months. Every observation cites a specific number.
-
-Return ONLY valid JSON, no preamble, no markdown, no code fences:
-{"observations":["strategic observation with a number"],"recommendations":["strategic action with rationale"],"confidence":"high|medium|low","reasoning":"your strategic assessment right now"}`
-
-const SYNTHESIS_PROMPT = `You are the final voice of Aria — an AI business co-operator for an Australian small business. Three specialised analysts (Growth, Risk, Strategy) have independently reviewed this business's data. You have their outputs. Synthesise them into ONE clear, useful output for the owner.
+Scan the data for:
+- Products/categories outperforming their weight
+- Time patterns (days, hours) with above-average results
+- Customer segments showing loyalty signals
+- Revenue opportunities being missed or under-exploited
 
 Rules:
-1. Where all three agree — state it with confidence. These are facts.
-2. Where two agree, one dissents — state the majority view, note the caveat honestly ("Aria is fairly confident, but worth watching...").
-3. Where all three disagree — present it as a genuine decision the owner must make, not a recommendation ("Our analysts are split...").
-4. Lead with the single most important thing the owner needs to know today.
-5. Be specific — use actual numbers. Never vague.
-6. Australian English. Conversational but professional — like a trusted business partner who has watched this business for months.
-7. For briefing mode: 200-300 words — lead insight, 2-3 supporting observations, 1-2 specific actions, one thing to watch.
-8. Never invent data not in the context. If data is thin, say so.
-9. If only one or two brains succeeded, still produce the best possible briefing from what you have — note nothing about "brains" to the owner.
+- Every claim must cite a specific number from the data
+- If data is thin, say so and lower your confidence
+- Be optimistic but never fabricate
 
-You also have external context from a web search. Use it to enrich the briefing when relevant (e.g. 'there is a public holiday next Monday — plan staffing') but always label it as external context and never treat it as more reliable than the internal business data.
+Return ONLY valid JSON:
+{"observations":["specific finding with number"],"recommendations":["specific action with expected outcome"],"confidence":"high|medium|low"}`
 
-DESIGN THE VISUAL LAYOUT: You are also the art director. Based on what you found, decide how this briefing should look today. Choose:
+const RISK_PROMPT = `You are Aria's Risk Brain. One job: find what is failing and what could fail.
 
-mood: "urgent" (critical problems, red), "positive" (growth/wins, green), "strategic" (big decisions, violet), "split" (brains disagree on something important, amber), "external" (weather/events dominate, blue)
+Scan the data for:
+- Revenue declining faster than seasonal norms
+- Products/categories underperforming or creating drag
+- Operational risks (stock, cash, staff coverage)
+- Customer loss signals or retention failures
 
-lead_type: "metric" (show a big number front and centre), "alert" (red warning banner), "question" (strategic decision the owner must make), "debate" (show the brain split prominently), "context" (external event leads)
+Rules:
+- Every problem must be backed by a number
+- Distinguish between structural problems vs one-off blips
+- Be precise about severity — not everything is critical
 
-lead_value: the single most important number, phrase, or stat to display large (e.g. "$221.97", "0 customers", "77% drop", "100% rain tonight")
+Return ONLY valid JSON:
+{"observations":["specific problem with evidence number"],"recommendations":["specific fix with expected impact"],"confidence":"high|medium|low"}`
 
-lead_label: 3-5 word label for the lead (e.g. "Revenue this week", "Customer database", "Foot traffic risk")
+const STRATEGY_PROMPT = `You are Aria's Strategy Brain. One job: reconcile what Growth and Risk found and decide what matters most.
 
-accent: "red" | "green" | "amber" | "violet" | "blue" — pick based on mood
+You receive the raw business data and must:
+- Identify where Growth and Risk agree (these are facts)
+- Identify where they conflict (these are decisions for the owner)
+- Determine the single most important lever for the next 7 days
+- Consider the business's competitive position and trajectory
 
-show_debate_first: true if the contested points are the most important thing today, false otherwise
+Rules:
+- Think in 7-day and 30-day horizons, not abstractions
+- Prioritise by impact, not urgency — they are different things
+- One clear recommendation trumps five vague ones
 
-highlight_metrics: array of 3-6 specific numbers/stats pulled from the data to show as chips
+Return ONLY valid JSON:
+{"observations":["strategic read with timeframe"],"recommendations":["prioritised action with rationale"],"confidence":"high|medium|low","primary_lever":"the single most important thing","time_horizon":"7d|30d"}`
 
-section_order: array deciding display order from ["lead", "briefing", "consensus", "debate", "confidence", "actions"] — put the most important first
+const CONTEXT_PROMPT = `You are Aria's Context Brain. One job: find external signals that change the interpretation of the internal data.
 
-For ask_aria mode ONLY, produce "ask_blocks" and "ask_followups".
+You receive the business data and must identify:
+- Weather or seasonal effects visible in the data
+- What day/week patterns suggest about foot traffic or demand
+- Whether the product mix matches the business identity (category confusion)
+- Any external signals mentioned in the data (competitor context, events, etc.)
 
-MANDATORY RULES FOR ask_blocks — Aria must respond like a data dashboard, not a chatbot:
-- ALWAYS start with exactly ONE "lead" block — punchy headline stat or insight
-- ALWAYS include "metric_row" with 3-4 key numbers (revenue, transactions, avg ticket, top product)
-- ALWAYS include "chart" when time-series data exists (daily/weekly revenue bars)
-- ALWAYS include "brain_readouts" showing what each brain found — this is the core differentiator
-- Include "council_split" only when brains genuinely disagree on direction
-- ALWAYS end with "action_list" of 2-3 specific actions with "Do it" buttons
-- Use "html" for heatmaps, comparison tables, or any data needing custom layout
-- Minimum 4 blocks, maximum 8. Never just lead+text. Always data-rich.
+Rules:
+- Only cite signals that are actually visible in or inferable from the data
+- Do not invent external context not supported by the data
+- If no external signals are material, say so — do not pad
 
-BLOCK TYPE EXAMPLES:
-{"type":"lead","content":"Wednesday carried your whole week — $100 of your $221 in one day"}
-{"type":"metric_row","items":[{"label":"Revenue this week","value":"$221.97","sub":"vs $187 last week","trend":"up"},{"label":"Transactions","value":"16","sub":"avg $13.87 each","trend":"flat"},{"label":"Best day","value":"Wednesday","sub":"$100.40","trend":"up"}]}
-{"type":"chart","chartType":"bar","title":"Daily revenue this week","labels":["Mon","Tue","Wed","Thu","Fri","Sat","Sun"],"values":[12,8,100,15,22,45,20],"unit":"$","metrics":[{"label":"Peak","value":"$100 Wed","color":"#7FB897"},{"label":"Low","value":"$8 Tue","color":"#F87171"},{"label":"Weekly","value":"$221.97"}]}
-{"type":"brain_readouts","items":[{"role":"growth","icon":"📈","text":"Wednesday spike is 45% of weekly revenue — one day is carrying the business"},{"role":"risk","icon":"⚠️","text":"16 sales, zero customer names captured — you cannot bring any of them back"},{"role":"strategy","icon":"🎯","text":"Fix customer capture before analysing the Wednesday pattern — you need identity behind the spike"}]}
-{"type":"action_list","items":[{"icon":"👤","title":"Turn on customer capture in POS now","sub":"Every anonymous sale is a lost repeat customer","colorVariant":"danger","prompt":"How do I enable customer capture in the POS?"},{"icon":"📦","title":"Reorder Avocado Smoothie","sub":"9 units left — out by Thursday at current pace","colorVariant":"warning","prompt":"Create a reorder for Avocado Smoothie"}]}
-{"type":"html","title":"Sales by hour","content":"<div style='display:flex;gap:3px;align-items:flex-end;height:40px'><div style='flex:1;background:rgba(127,184,151,0.15);border-radius:2px 2px 0 0;height:20%'></div><div style='flex:1;background:#7FB897;border-radius:2px 2px 0 0;height:100%'></div></div>"}
+Return ONLY valid JSON:
+{"observations":["external signal with evidence"],"recommendations":["how to respond to this signal"],"confidence":"high|medium|low"}`
 
-- "ask_followups": exactly 3 specific follow-up questions surfaced by the data, e.g. ["Why was Wednesday so strong?", "Which products should I reorder?", "How do I improve customer capture?"]
-For briefing and weekly_report modes, omit ask_blocks and ask_followups entirely.
-
-CRITICAL — ask_aria mode: final_briefing must be 1 sentence only (the blocks carry all the content). Do NOT put your analysis in final_briefing — put it in ask_blocks.
-
-Return ONLY valid JSON, no preamble, no markdown, no code fences:
-{"consensus":["..."],"contested":[{"topic":"...","optimist_view":"...","critic_view":"...","strategist_view":"..."}],"final_briefing":"One sentence only — e.g. Revenue collapsed 78% but the fix is clear.","confidence_map":{"insight key":"high|medium|low"},"layout":{"mood":"urgent","lead_type":"metric","lead_value":"$209.97","lead_label":"Revenue this week","accent":"red","show_debate_first":false,"highlight_metrics":["$13.12 avg","16 txns"],"section_order":["lead","briefing"]},"ask_blocks":[{"type":"lead","content":"Revenue collapsed 78% — and zero customers are tracked so you cannot bring a single one back."},{"type":"metric_row","items":[{"label":"This week","value":"$209.97","sub":"vs $968 last month","trend":"down"},{"label":"Transactions","value":"16","sub":"avg $13.12","trend":"flat"},{"label":"Customers tracked","value":"0","sub":"fix this today","trend":"down","color":"#F87171"}]},{"type":"chart","chartType":"bar","title":"Revenue trend","labels":["90d ago","60d ago","30d ago","This week"],"values":[1119,968,160,209],"unit":"$","metrics":[{"label":"Peak","value":"$1,119","color":"#7FB897"},{"label":"Now","value":"$209","color":"#F87171"},{"label":"Drop","value":"-78%","color":"#F87171"}]},{"type":"brain_readouts","items":[{"role":"growth","icon":"📈","text":"Caesar Salad at $34 is your anchor — 5 of your top 7 items are alcohol which contradicts the cafe identity"},{"role":"risk","icon":"⚠️","text":"Zero customers in system means no retention strategy is possible — every customer leaves as a stranger"},{"role":"strategy","icon":"🎯","text":"Fix identity confusion and capture customers before any promo — you are marketing to ghosts"}]},{"type":"action_list","items":[{"icon":"👤","title":"Capture every customer name + phone at checkout","sub":"Start today — a notebook works if the POS module isn't active","colorVariant":"danger","prompt":"How do I enable customer capture in the POS?"},{"icon":"🏪","title":"Audit your product mix — are you a cafe or a bottle shop?","sub":"Caesar Salad + bottled wine + Cold Brew is confusing both crowds","colorVariant":"warning","prompt":"Show me my top 10 products by revenue"},{"icon":"🌧️","title":"Cut tomorrow's prep and labour by 30-40%","sub":"100% rain forecast — avoid food waste on a cash-critical day","colorVariant":"warning","prompt":"How do I adjust staffing for tomorrow?"}]}],"ask_followups":["Why did revenue drop 78% from last month?","How do I turn on customer capture in POS?","Which products should I cut from the menu?"]}`
-
+// ── Brain Runner ───────────────────────────────────────────────────
 async function callBrain(
   client: Anthropic,
   model: string,
@@ -208,214 +167,184 @@ async function callBrain(
     const res = await callWithTimeout(
       () => withBackoff(() => client.messages.create({
         model,
-        max_tokens: role === 'strategist' ? 3000 : 2200,
-        temperature: 0.3,
+        max_tokens: 1200,
+        temperature: 0.25,
         system: systemPrompt,
         messages: [{ role: 'user', content: userPrompt }],
       })),
       timeoutMs,
       'council brain ' + role
     )
-    const text = res.content.filter((b: any) => b.type === 'text').map((b: any) => b.text).join('')
+    const text = res.content.filter((b: {type:string}) => b.type === 'text').map((b: {type:string,text?:string}) => (b as {text:string}).text).join('')
     const parsed = safeParseJSON(text)
     await logAICall({
-      agent_key: 'council_' + role,
-      model_id: model,
-      provider: 'anthropic',
-      input_tokens: res.usage?.input_tokens ?? 0,
-      output_tokens: res.usage?.output_tokens ?? 0,
-      success: true,
-      business_id: businessId,
+      agent_key: 'council_' + role, model_id: model, provider: 'anthropic',
+      input_tokens: res.usage.input_tokens, output_tokens: res.usage.output_tokens,
+      success: !!parsed, business_id: businessId,
     })
-    if (!parsed) {
-      return { role, observations: [], recommendations: [], confidence: 'low',
-        reasoning: 'output could not be parsed', failed: true }
-    }
+    if (!parsed) return { role, observations: [], recommendations: [], confidence: 'low', raw: text, succeeded: false }
     return {
       role,
-      observations: Array.isArray(parsed.observations) ? parsed.observations : [],
-      recommendations: Array.isArray(parsed.recommendations) ? parsed.recommendations : [],
-      confidence: parsed.confidence ?? 'low',
-      reasoning: parsed.reasoning ?? '',
-      failed: false,
+      observations: Array.isArray(parsed.observations) ? parsed.observations as string[] : [],
+      recommendations: Array.isArray(parsed.recommendations) ? parsed.recommendations as string[] : [],
+      confidence: (parsed.confidence as 'high'|'medium'|'low') ?? 'medium',
+      raw: text,
+      succeeded: true,
     }
   } catch (e) {
-    console.error('[council] brain ' + role + ' failed:', (e as Error).message)
     await logAICall({
-      agent_key: 'council_' + role,
-      model_id: model,
-      provider: 'anthropic',
-      input_tokens: 0,
-      output_tokens: 0,
-      success: false,
+      agent_key: 'council_' + role, model_id: model, provider: 'anthropic',
+      input_tokens: 0, output_tokens: 0, success: false, business_id: businessId,
       error_message: (e as Error).message,
-      business_id: businessId,
     })
-    return { role, observations: [], recommendations: [], confidence: 'low',
-      reasoning: 'brain failed: ' + (e as Error).message, failed: true }
+    return { role, observations: [], recommendations: [], confidence: 'low', raw: '', succeeded: false }
   }
 }
 
-async function callSynthesis(
-  client: Anthropic,
-  businessContext: string,
-  outputs: BrainOutput[],
-  mode: string,
-  businessId: string,
-  contextBrain?: ContextBrainOutput,
-): Promise<any> {
-  const brainSummary = outputs.map(o =>
-    '[' + o.role.toUpperCase() + '] confidence:' + o.confidence +
-    '\nObservations: ' + o.observations.join('; ') +
-    '\nRecommendations: ' + o.recommendations.join('; ') +
-    '\nReasoning: ' + o.reasoning
-  ).join('\n\n')
-  const ctxSection = (contextBrain && !contextBrain.failed)
-    ? '\n\nEXTERNAL CONTEXT (from web search — treat as lower confidence than internal data):\n' +
-      'Factors: ' + (contextBrain.external_factors.join(', ') || 'none found') + '\n' +
-      'Risks: ' + (contextBrain.risk_flags.join(', ') || 'none') + '\n' +
-      'Opportunities: ' + (contextBrain.opportunities.join(', ') || 'none') + '\n' +
-      'Note: this is real-time web data — verify if acting on it.'
-    : ''
-  const userPrompt = 'Business data:\n\n' + businessContext + '\n\nMode: ' + mode + '\n\nBrain outputs:\n' + brainSummary + ctxSection
+// ── Synthesis ──────────────────────────────────────────────────────
+// This is where Aria speaks. She has read all 4 brains.
+// Her response style is Claude — structured, visual, specific, never padded.
 
-  const res = await callWithTimeout(
-    () => withBackoff(() => client.messages.create({
-      model: 'claude-sonnet-4-5-20250929',
-      max_tokens: 3000,
-      temperature: 0.3,
-      system: SYNTHESIS_PROMPT,
-      messages: [{ role: 'user', content: userPrompt }],
-    })),
-    60000,
-    'council synthesis'
-  )
-  const text = res.content.filter((b: any) => b.type === 'text').map((b: any) => b.text).join('')
-  await logAICall({
-    agent_key: 'council_synthesis',
-    model_id: 'claude-sonnet-4-5-20250929',
-    provider: 'anthropic',
-    input_tokens: res.usage?.input_tokens ?? 0,
-    output_tokens: res.usage?.output_tokens ?? 0,
-    success: true,
-    business_id: businessId,
-  })
-  const parsed = safeParseJSON(text)
-  if (!parsed) throw new Error('synthesis output could not be parsed')
-  return parsed
-}
+const SYNTHESIS_PROMPT = `You are Aria — the final voice after 4 specialist brains have analysed this business.
 
+You have their findings. Your job is to synthesise them into a response that looks and feels exactly like Claude AI responds — structured, visual, data-dense, specific. Never a wall of text.
+
+HOW CLAUDE RESPONDS (copy this exactly):
+- Leads with the single most important insight as a punchy headline with the actual number
+- Uses structured blocks: metric cards, bar charts, comparison tables, action lists
+- Shows reasoning briefly — what the data says, why it matters, what to do
+- Ends with 2-3 specific actions with one-line rationales
+- Never pads. Never hedges. Never says "great question" or "I hope this helps"
+- Australian English. Direct. Warm but not chatty.
+- Under 50 words of prose — let the blocks carry the content
+
+AGREEMENT RULE: Where all/most brains agree → state it as fact, confidently.
+CONFLICT RULE: Where brains disagree → present it as a genuine decision, not a recommendation.
+
+BLOCK TYPES you must use:
+- "lead": ONE punchy headline sentence with the key number
+- "metric_row": 2-4 metric cards. Always include. Format: {"label":"Revenue this week","value":"$209.97","sub":"vs $968 last month","trend":"down"}
+- "chart": bar chart of time-series data. Always include when revenue/transaction data exists. {"chartType":"bar","title":"...","labels":[...],"values":[...],"unit":"$","metrics":[...]}
+- "brain_readouts": what each brain found. Always include — this is Aria's unique differentiator. {"items":[{"role":"growth","icon":"📈","text":"..."},{"role":"risk","icon":"⚠️","text":"..."},{"role":"strategy","icon":"🎯","text":"..."},{"role":"context","icon":"🌍","text":"..."}]}
+- "council_split": only when brains genuinely conflict. Shows the debate and asks owner to decide.
+- "text": supporting paragraph. Max 2 sentences. Use sparingly.
+- "action_list": 2-3 actions with "Do it" buttons. Always end with this. {"items":[{"icon":"👤","title":"Turn on customer capture","sub":"Every sale leaves as a stranger","colorVariant":"danger","prompt":"How do I enable customer capture?"}]}
+- "html": for heatmaps, custom tables, anything that needs a grid layout. Use inline styles. Dark theme. Aria green #7FB897.
+
+MANDATORY STRUCTURE for every response:
+1. lead (1 block)
+2. metric_row (1 block, always)
+3. chart (1 block, if numeric data exists)
+4. brain_readouts (1 block, always — all 4 brains)
+5. council_split (only if genuine conflict)
+6. text (0-1 blocks, max 2 sentences)
+7. action_list (1 block, always)
+
+CRITICAL: final_briefing = one sentence only. All content goes in ask_blocks.
+
+Return ONLY valid JSON:
+{"final_briefing":"One sentence.","ask_blocks":[...all blocks here...],"ask_followups":["specific question 1?","specific question 2?","specific question 3?"]}`
+
+// ── Main Export ────────────────────────────────────────────────────
 export async function runAriaCouncil(
   businessContext: string,
   businessId: string,
-  mode: 'briefing' | 'weekly_report' | 'ask_aria',
-): Promise<CouncilOutput> {
+  mode: 'ask_aria' | 'briefing' | 'weekly_report' = 'ask_aria'
+): Promise<CouncilResult | null> {
   const start = Date.now()
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, maxRetries: 0 })
-  const userPrompt = 'Business data for analysis:\n\n' + businessContext + '\n\nMode: ' + mode
+  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 
-  let bizInfo: { trading_name: string; industry: string; city: string; state: string; business_id?: string }
-  try {
-    const parsed = JSON.parse(businessContext)
-    bizInfo = {
-      trading_name: parsed?.business?.name ?? 'this business',
-      industry: parsed?.business?.industry ?? 'retail',
-      city: parsed?.business?.city ?? 'Melbourne',
-      state: 'AU',
-      business_id: businessId,
-    }
-  } catch {
-    bizInfo = { trading_name: 'this business', industry: 'retail', city: 'Melbourne', state: 'AU', business_id: businessId }
-  }
+  const HAIKU = 'claude-haiku-4-5-20251001'
+  const SONNET = 'claude-sonnet-4-5-20250929'
 
-  const weekStart = new Date()
-  weekStart.setDate(weekStart.getDate() - weekStart.getDay() + 1)
-  weekStart.setHours(0, 0, 0, 0)
+  const userPrompt = `Business data:\n${businessContext}`
 
-  const [a, b, c, ctxResult] = await Promise.allSettled([
-    callBrain(client, 'claude-haiku-4-5-20251001', OPTIMIST_PROMPT, userPrompt, 'optimist', businessId, 45000),
-    callBrain(client, 'claude-haiku-4-5-20251001', CRITIC_PROMPT, userPrompt, 'critic', businessId, 45000),
-    callBrain(client, 'claude-sonnet-4-5-20250929', STRATEGIST_PROMPT, userPrompt, 'strategist', businessId, 60000),
-    runContextBrain(bizInfo, weekStart),
+  // Run all 4 brains in parallel — 18s timeout each
+  const [growth, risk, strategy, context] = await Promise.all([
+    callBrain(client, HAIKU, GROWTH_PROMPT,   userPrompt, 'growth',   businessId, 18000),
+    callBrain(client, HAIKU, RISK_PROMPT,     userPrompt, 'risk',     businessId, 18000),
+    callBrain(client, HAIKU, STRATEGY_PROMPT, userPrompt, 'strategy', businessId, 18000),
+    callBrain(client, HAIKU, CONTEXT_PROMPT,  userPrompt, 'context',  businessId, 18000),
   ])
 
-  const outputs: BrainOutput[] = []
-  for (const r of [a, b, c]) {
-    if (r.status === 'fulfilled') outputs.push(r.value)
-  }
-  const succeeded = outputs.filter(o => !o.failed).length
-  const failed = 3 - succeeded
+  const brains = [growth, risk, strategy, context]
+  const succeeded = brains.filter(b => b.succeeded)
 
-  if (succeeded === 0) {
-    throw new Error('All council brains failed — falling back to single-model briefing')
-  }
+  if (succeeded.length === 0) return null
 
-  const contextBrain: ContextBrainOutput | undefined =
-    ctxResult.status === 'fulfilled' && !ctxResult.value.failed ? ctxResult.value : undefined
+  // Build synthesis input
+  const synthesisInput = `
+BUSINESS DATA:
+${businessContext}
 
-  if (ctxResult.status === 'rejected') {
-    console.error('[council] context-brain rejected:', ctxResult.reason)
-  }
+GROWTH BRAIN (confidence: ${growth.confidence}):
+Observations: ${growth.observations.join(' | ')}
+Recommendations: ${growth.recommendations.join(' | ')}
 
-  let synthesis: any = null
-  let synthesisOk = false
+RISK BRAIN (confidence: ${risk.confidence}):
+Observations: ${risk.observations.join(' | ')}
+Recommendations: ${risk.recommendations.join(' | ')}
+
+STRATEGY BRAIN (confidence: ${strategy.confidence}):
+Observations: ${strategy.observations.join(' | ')}
+Recommendations: ${strategy.recommendations.join(' | ')}
+Primary lever: ${(strategy.raw && safeParseJSON(strategy.raw)?.primary_lever) ?? 'not identified'}
+
+CONTEXT BRAIN (confidence: ${context.confidence}):
+Observations: ${context.observations.join(' | ')}
+Recommendations: ${context.recommendations.join(' | ')}
+
+MODE: ${mode}
+`.trim()
+
   try {
-    synthesis = await callSynthesis(client, businessContext, outputs, mode, businessId, contextBrain)
-    synthesisOk = true
+    const res = await callWithTimeout(
+      () => withBackoff(() => client.messages.create({
+        model: SONNET,
+        max_tokens: 4000,
+        temperature: 0.2,
+        system: SYNTHESIS_PROMPT,
+        messages: [{ role: 'user', content: synthesisInput }],
+      })),
+      45000,
+      'council synthesis'
+    )
+    const text = res.content.filter((b: {type:string}) => b.type === 'text').map((b: {type:string,text?:string}) => (b as {text:string}).text).join('')
+    const parsed = safeParseJSON(text)
+
+    await logAICall({
+      agent_key: 'council_synthesis', model_id: SONNET, provider: 'anthropic',
+      input_tokens: res.usage.input_tokens, output_tokens: res.usage.output_tokens,
+      success: !!parsed, business_id: businessId,
+    })
+
+    if (!parsed) {
+      return {
+        final_briefing: text.slice(0, 500),
+        raw_brain_outputs: brains,
+        meta: { brains_succeeded: succeeded.length, brains_failed: 4 - succeeded.length, synthesis_succeeded: false, fell_back: true, duration_ms: Date.now() - start },
+      }
+    }
+
+    return {
+      final_briefing: typeof parsed.final_briefing === 'string' ? parsed.final_briefing : text.slice(0, 200),
+      ask_blocks: mode === 'ask_aria' && Array.isArray(parsed.ask_blocks) ? parsed.ask_blocks as AskBlock[] : undefined,
+      ask_followups: mode === 'ask_aria' && Array.isArray(parsed.ask_followups) ? parsed.ask_followups as string[] : undefined,
+      raw_brain_outputs: brains,
+      meta: { brains_succeeded: succeeded.length, brains_failed: 4 - succeeded.length, synthesis_succeeded: true, fell_back: false, duration_ms: Date.now() - start },
+    }
   } catch (e) {
-    console.error('[council] synthesis failed:', (e as Error).message)
-    const lead = outputs.find(o => o.role === 'strategist' && !o.failed) ?? outputs.find(o => !o.failed)!
-    synthesis = {
-      consensus: lead.observations,
-      contested: [],
-      final_briefing: lead.observations.join(' ') + '\n\n' + lead.recommendations.join(' '),
-      confidence_map: {},
+    // Synthesis failed — build fallback from brain outputs directly
+    const fallbackBriefing = [
+      growth.observations[0],
+      risk.observations[0],
+      strategy.recommendations[0],
+    ].filter(Boolean).join('. ')
+
+    return {
+      final_briefing: fallbackBriefing || 'Council completed with partial data.',
+      raw_brain_outputs: brains,
+      meta: { brains_succeeded: succeeded.length, brains_failed: 4 - succeeded.length, synthesis_succeeded: false, fell_back: true, duration_ms: Date.now() - start },
     }
   }
-
-  return {
-    consensus: synthesis.consensus ?? [],
-    contested: synthesis.contested ?? [],
-    final_briefing: synthesis.final_briefing ?? '',
-    confidence_map: synthesis.confidence_map ?? {},
-    layout: synthesis.layout ?? undefined,
-    ask_blocks: Array.isArray(synthesis.ask_blocks) ? synthesis.ask_blocks : undefined,
-    ask_followups: Array.isArray(synthesis.ask_followups) ? synthesis.ask_followups : undefined,
-    raw_brain_outputs: outputs,
-    context_brain_output: contextBrain,
-    meta: {
-      brains_succeeded: succeeded,
-      brains_failed: failed,
-      synthesis_succeeded: synthesisOk,
-      fell_back: false,
-      duration_ms: Date.now() - start,
-    },
-  }
-}
-
-export async function insertCouncilRun(
-  businessId: string,
-  mode: string,
-  council: CouncilOutput | null,
-  fellBack: boolean,
-): Promise<void> {
-  try {
-    await supabaseAdmin.from('council_runs').insert({
-      business_id: businessId,
-      mode,
-      final_briefing: council?.final_briefing ?? null,
-      consensus: council?.consensus ?? null,
-      contested: council?.contested ?? null,
-      confidence_map: council?.confidence_map ?? null,
-      raw_brain_outputs: council?.raw_brain_outputs ?? null,
-      context_brain_output: council?.context_brain_output ?? null,
-      brains_succeeded: council?.meta.brains_succeeded ?? 0,
-      brains_failed: council?.meta.brains_failed ?? 0,
-      synthesis_succeeded: council?.meta.synthesis_succeeded ?? false,
-      fell_back_to_single_model: fellBack,
-      total_input_tokens: 0,
-      total_output_tokens: 0,
-      duration_ms: council?.meta.duration_ms ?? 0,
-    })
-  } catch { /* non-fatal — log failure must not break the briefing response */ }
 }

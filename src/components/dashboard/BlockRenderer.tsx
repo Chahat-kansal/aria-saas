@@ -86,7 +86,7 @@ export function BlockRenderer({ block, onChoice }: Props) {
       </div>
       <div style={{ padding: 12 }}>
         {block.items.map((item, i) => {
-          const c = item.role === 'growth' ? G : item.role === 'risk' ? R : V
+          const c = item.role === 'growth' ? G : item.role === 'risk' ? R : item.role === 'context' ? B : V
           return (
             <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '8px 0', borderBottom: i < block.items.length - 1 ? '0.5px solid rgba(255,255,255,0.05)' : 'none' }}>
               <div style={{ width: 24, height: 24, borderRadius: 7, background: `${c}18`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, flexShrink: 0 }}>{item.icon}</div>

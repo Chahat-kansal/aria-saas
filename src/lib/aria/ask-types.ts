@@ -22,7 +22,7 @@ export type AskBlock =
     }
   | {
       type: 'brain_readouts'
-      items: Array<{ role: 'growth' | 'risk' | 'strategy'; icon: string; text: string }>
+      items: Array<{ role: 'growth' | 'risk' | 'strategy' | 'context'; icon: string; text: string }>
     }
   | {
       type: 'council_split'
