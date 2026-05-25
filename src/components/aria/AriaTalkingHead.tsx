@@ -91,81 +91,99 @@ const VROID_TO_MIXAMO: Record<string, string> = {
   'J_Bip_R_ToeBase':            'RightToeBase',
 }
 
-// Rename VRoid bones in a GLB binary so TalkingHead can read them
-// GLB = 12-byte header + JSON chunk + BIN chunk
-// We patch the JSON chunk's node names in-place (or rebuild if lengths change)
+// Patch VRoid GLB — rename bones to names TalkingHead expects
+// Carefully preserves the full binary structure including morph targets
 async function patchVroidGlb(arrayBuffer: ArrayBuffer): Promise<string> {
   const view = new DataView(arrayBuffer)
-  // GLB header: magic(4) + version(4) + length(4)
   const magic = view.getUint32(0, true)
-  if (magic !== 0x46546C67) return URL.createObjectURL(new Blob([arrayBuffer], { type: 'model/gltf-binary' }))
+  if (magic !== 0x46546C67) {
+    return URL.createObjectURL(new Blob([arrayBuffer], { type: 'model/gltf-binary' }))
+  }
 
   const jsonChunkLength = view.getUint32(12, true)
-  // const jsonChunkType = view.getUint32(16, true) // 0x4E4F534A = JSON
   const jsonBytes = new Uint8Array(arrayBuffer, 20, jsonChunkLength)
-  let jsonStr = new TextDecoder().decode(jsonBytes)
+  const jsonStr = new TextDecoder().decode(jsonBytes)
 
-  // Check if this is a VRoid model
   if (!jsonStr.includes('J_Bip_')) {
     return URL.createObjectURL(new Blob([arrayBuffer], { type: 'model/gltf-binary' }))
   }
 
   console.log('[Avatar] VRoid detected — remapping bones to Mixamo naming')
 
-  // Replace bone names in the JSON
-  for (const [vroid, mixamo] of Object.entries(VROID_TO_MIXAMO)) {
-    // Match exact bone names in JSON strings
-    jsonStr = jsonStr.replaceAll(`"${vroid}"`, `"${mixamo}"`)
-  }
-
-  // TalkingHead looks for a node named "Armature" as the skeleton root
-  // VRoid uses the model name or "Armature" — add it if missing
-  // Find the node that contains mixamorig:Hips as a child and rename it Armature
+  // Parse JSON and only rename bone nodes — leave everything else untouched
   const gltf = JSON.parse(jsonStr)
-  const hipsIdx = gltf.nodes?.findIndex((n: {name: string}) => n.name === 'Hips')
-  if (hipsIdx >= 0) {
-    // Find parent of Hips — that should be Armature
-    const parentIdx = gltf.nodes?.findIndex((n: {children?: number[]}) =>
-      Array.isArray(n.children) && n.children.includes(hipsIdx)
-    )
-    if (parentIdx >= 0 && gltf.nodes[parentIdx].name !== 'Armature') {
-      console.log('[Avatar] Renaming root bone to Armature:', gltf.nodes[parentIdx].name)
-      gltf.nodes[parentIdx].name = 'Armature'
+
+  if (Array.isArray(gltf.nodes)) {
+    // Build set of bone node indices (referenced by skins)
+    const boneIndices = new Set<number>()
+    if (Array.isArray(gltf.skins)) {
+      for (const skin of gltf.skins) {
+        if (Array.isArray(skin.joints)) {
+          for (const j of skin.joints) boneIndices.add(j)
+        }
+      }
+    }
+
+    // Rename only bone nodes
+    for (const idx of boneIndices) {
+      const node = gltf.nodes[idx]
+      if (!node) continue
+      const mapped = VROID_TO_MIXAMO[node.name]
+      if (mapped) node.name = mapped
+    }
+
+    // Find Hips node and rename its parent to Armature
+    const hipsIdx = gltf.nodes.findIndex((n: {name: string}) => n.name === 'Hips')
+    if (hipsIdx >= 0) {
+      const parentIdx = gltf.nodes.findIndex((n: {children?: number[]}) =>
+        Array.isArray(n.children) && n.children.includes(hipsIdx)
+      )
+      if (parentIdx >= 0 && gltf.nodes[parentIdx].name !== 'Armature') {
+        console.log('[Avatar] Renaming root bone to Armature:', gltf.nodes[parentIdx].name)
+        gltf.nodes[parentIdx].name = 'Armature'
+      }
     }
   }
 
-  const patchedJson = JSON.stringify(gltf)
-  const patchedJsonBytes = new TextEncoder().encode(patchedJson)
-  // Pad to 4-byte alignment
-  const paddedLength = Math.ceil(patchedJsonBytes.length / 4) * 4
-  const paddedJson = new Uint8Array(paddedLength)
+  // Rebuild GLB with corrected JSON chunk
+  const patchedJsonBytes = new TextEncoder().encode(JSON.stringify(gltf))
+  const paddedLen = Math.ceil(patchedJsonBytes.length / 4) * 4
+  const paddedJson = new Uint8Array(paddedLen).fill(0x20) // space-padded per GLB spec
   paddedJson.set(patchedJsonBytes)
-  // Fill padding with spaces (0x20) — GLB spec requires JSON chunk padding with spaces
-  paddedJson.fill(0x20, patchedJsonBytes.length)
 
-  // Rebuild GLB
-  const binOffset = 20 + jsonChunkLength
-  const binChunk = new Uint8Array(arrayBuffer, binOffset)
-  const newLength = 12 + 8 + paddedLength + binChunk.length
-  const out = new ArrayBuffer(newLength)
+  // BIN chunk starts after: header(12) + json chunk header(8) + json chunk data
+  const binChunkOffset = 12 + 8 + jsonChunkLength
+  const hasBin = arrayBuffer.byteLength > binChunkOffset + 8
+  let binHeader: Uint8Array | null = null
+  let binData: Uint8Array | null = null
+  if (hasBin) {
+    binHeader = new Uint8Array(arrayBuffer, binChunkOffset, 8)
+    const binLen = new DataView(arrayBuffer, binChunkOffset).getUint32(0, true)
+    binData = new Uint8Array(arrayBuffer, binChunkOffset + 8, binLen)
+  }
+
+  const totalLen = 12 + 8 + paddedLen + (hasBin && binHeader && binData ? 8 + binData.length : 0)
+  const out = new ArrayBuffer(totalLen)
   const outView = new DataView(out)
   const outBytes = new Uint8Array(out)
 
   // Header
-  outView.setUint32(0, 0x46546C67, true)  // magic
-  outView.setUint32(4, 2, true)            // version
-  outView.setUint32(8, newLength, true)    // total length
+  outView.setUint32(0, 0x46546C67, true) // GLB magic
+  outView.setUint32(4, 2, true)           // version
+  outView.setUint32(8, totalLen, true)    // total file length
 
   // JSON chunk
-  outView.setUint32(12, paddedLength, true)
-  outView.setUint32(16, 0x4E4F534A, true)  // JSON
+  outView.setUint32(12, paddedLen, true)
+  outView.setUint32(16, 0x4E4F534A, true) // JSON
   outBytes.set(paddedJson, 20)
 
-  // BIN chunk (unchanged)
-  outBytes.set(binChunk, 20 + paddedLength)
+  // BIN chunk (exact copy, no modification)
+  if (hasBin && binHeader && binData) {
+    outBytes.set(binHeader, 20 + paddedLen)
+    outBytes.set(binData, 20 + paddedLen + 8)
+  }
 
-  const blob = new Blob([out], { type: 'model/gltf-binary' })
-  const url = URL.createObjectURL(blob)
+  const url = URL.createObjectURL(new Blob([out], { type: 'model/gltf-binary' }))
   console.log('[Avatar] VRoid bones patched — blob URL created')
   return url
 }
