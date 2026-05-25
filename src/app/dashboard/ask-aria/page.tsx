@@ -212,7 +212,7 @@ export default function AskAriaPage() {
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
-  const [ariaVideoUrl] = useState<string>('https://tcowd5vdie4rwa2o.public.blob.vercel-storage.com/3B92CB3F_1aa4cd0e215e491cb9baa6daec306586.mp4')
+  const [ariaVideoUrl] = useState<string>(process.env.NEXT_PUBLIC_ARIA_VIDEO_URL ?? '')
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
 
