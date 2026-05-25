@@ -24,7 +24,8 @@ export function AriaTalkingHead({ isActive, responseText }: AriaTalkingHeadProps
   const [scriptReady, setScriptReady] = useState(false)
   const speakingRef = useRef(false)
 
-  const avatarUrl = process.env.NEXT_PUBLIC_ARIA_AVATAR_URL ?? FALLBACK_AVATAR
+  // Proxy route auto-discovers the GLB from Blob storage — no hardcoded URL needed
+  const avatarUrl = '/api/aria/avatar'
 
   // Load TalkingHead — importmap in layout.tsx resolves bare 'three' specifier
   useEffect(() => {
