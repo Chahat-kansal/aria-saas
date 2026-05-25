@@ -194,6 +194,31 @@ function parseAriaResponse(text: string): Segment[] {
   return segments
 }
 
+// Aria's voice before the first message — personalised by time and business
+function AriaGreeting({ business }: { business: { name?: string; trading_name?: string; industry?: string | null } | null }) {
+  const hour = new Date().getHours()
+  const name = business?.trading_name ?? business?.name ?? 'your business'
+  const industry = business?.industry ?? ''
+  const greeting = hour < 12 ? 'Morning' : hour < 17 ? 'Afternoon' : 'Evening'
+  const day = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date().getDay()]
+  const openers = [
+    `${greeting}. I've been through the overnight numbers for ${name}. What do you want to look at?`,
+    `${greeting}. ${day} — I've checked everything. What's on your mind?`,
+    `${greeting}. The data's in. Ask me anything about ${name}.`,
+    industry === 'liquor'
+      ? `${greeting}. I've checked stock, sales, and the week ahead for ${name}. What do you need?`
+      : industry === 'cafe'
+      ? `${greeting}. I've been through covers, revenue, and your top sellers for ${name}. What first?`
+      : `${greeting}. I know what happened yesterday at ${name}. What do you want to tackle first?`,
+  ]
+  const opener = openers[new Date().getDay() % openers.length]
+  return (
+    <p style={{ fontSize: 15, color: 'rgba(255,255,255,0.82)', lineHeight: 1.65, margin: 0, maxWidth: 500 }}>
+      {opener}
+    </p>
+  )
+}
+
 export default function AskAriaPage() {
   const { business, loading } = useBusinessContext()
   const [messages, setMessages] = useState<Message[]>([])
@@ -561,8 +586,8 @@ export default function AskAriaPage() {
         </div>
       )}
 
-      {/* Main chat */}
-      <div className="flex-1 flex flex-col overflow-hidden" style={{ position: 'relative' }}>
+      {/* Main chat — subtle mood tint based on time of day */}
+      <div className="flex-1 flex flex-col overflow-hidden" style={{ position: 'relative', background: (() => { const h = new Date().getHours(); if (h < 6) return '#0a0a12'; if (h < 12) return '#0d0f14'; if (h < 17) return '#0d0d14'; if (h < 20) return '#0e0c13'; return '#0b0b14'; })() }}>
         {/* Aria floating avatar — absolute inside chat col, bottom-right corner
             Opposite side from Briefing button (top-right in header).
             Hidden when idle (opacity 0), visible + looping only while text streams. */}
@@ -630,7 +655,10 @@ export default function AskAriaPage() {
               </svg>
             </button>
             <div>
-              <h1 className="font-semibold text-white text-lg leading-tight">Ask Aria</h1>
+              <h1 className="font-semibold text-lg leading-tight" style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#fff' }}>
+            <span style={{ width: 28, height: 28, borderRadius: 9, background: 'rgba(127,184,151,0.13)', border: '1px solid rgba(127,184,151,0.28)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Fraunces, serif', fontStyle: 'italic', fontSize: 15, color: '#7FB897', flexShrink: 0 }}>A</span>
+            Aria
+          </h1>
               <p className="text-xs mt-0.5" style={{ color: '#6b7280' }}>
                 AI advisor for {business?.name ?? 'your business'}
                 {' · '}
@@ -670,7 +698,19 @@ export default function AskAriaPage() {
                   I use connected business data when it exists, and I will say exactly what is missing when it does not.
                 </p>
               </div>
-              <ChatSuggestions onSelect={send} disabled={sending} />
+              {messages.length === 0 && (
+            <div style={{ paddingBottom: 24 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+                <div style={{ width: 44, height: 44, borderRadius: 14, background: 'rgba(127,184,151,0.1)', border: '1px solid rgba(127,184,151,0.22)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Fraunces, serif', fontStyle: 'italic', fontSize: 22, color: '#7FB897', flexShrink: 0 }}>A</div>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: 'rgba(255,255,255,0.92)' }}>Aria</div>
+                  <div style={{ fontSize: 11, color: 'rgba(127,184,151,0.75)', marginTop: 1 }}>Your business co-operator · always on</div>
+                </div>
+              </div>
+              <AriaGreeting business={business} />
+            </div>
+          )}
+          <ChatSuggestions onSelect={send} disabled={sending} />
             </div>
           )}
 
