@@ -37,6 +37,19 @@ function extractAction(text: string): Record<string, unknown> | null {
   try { return JSON.parse(match[1]) } catch { return null }
 }
 
+function extractBlocks(text: string): import('@/lib/aria/ask-types').AskBlock[] | null {
+  const match = text.match(/<json_blocks>([\s\S]*?)<\/json_blocks>/i)
+  if (!match) return null
+  try {
+    const parsed = JSON.parse(match[1].trim())
+    return Array.isArray(parsed) ? parsed : null
+  } catch { return null }
+}
+
+function stripBlocks(text: string): string {
+  return text.replace(/<json_blocks>[\s\S]*?<\/json_blocks>/gi, '').trim()
+}
+
 function stripAction(text: string): string {
   return text.replace(/<json>[\s\S]*?<\/json>/g, '').trim()
 }
@@ -756,14 +769,20 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
     } catch { /* non-fatal */ }
   }
 
+  // Extract rich blocks from the response if Aria included them
+  const richBlocks = extractBlocks(rawResponse)
+  const finalResponse = richBlocks ? stripBlocks(cleanResponse) : cleanResponse
+
   return NextResponse.json({
-    response: cleanResponse,
+    response: finalResponse,
     conversation_id: savedConvId ?? conversationId,
     intent: intent.type,
     action: Object.keys(actionResult).length > 0 ? actionResult : null,
     cost_usd_cents: toolResult.cost_cents,
     downloads: downloads.length > 0 ? downloads : null,
     tool_calls: toolResult.tool_calls.map(t => ({ name: t.name, ms: t.ms })),
+    blocks: richBlocks ?? undefined,
+    used_council: false,
   })
 }
 

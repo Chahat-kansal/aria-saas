@@ -22,7 +22,7 @@ export function AriaTalkingHead({ isActive, responseText }: AriaTalkingHeadProps
   const [scriptReady, setScriptReady] = useState(false)
   const lastTextRef = useRef('')
 
-  const avatarUrl = process.env.NEXT_PUBLIC_ARIA_AVATAR_URL ?? ''
+  const avatarUrl = process.env.NEXT_PUBLIC_ARIA_AVATAR_URL ?? 'https://tcowd5vdie4rwa2o.public.blob.vercel-storage.com/Aria.glb'
 
   // Load TalkingHead from CDN as ES module — completely bypasses webpack
   useEffect(() => {
