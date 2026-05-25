@@ -30,20 +30,16 @@ function AriaMonogram({ isActive }: { isActive: boolean }) {
   )
 }
 
-// Aria's VRoid GLB (served as static asset) + IAcine animations
 const ARIA_GLB = '/models/Aria.glb'
 const ANIM_GLB = 'https://raw.githubusercontent.com/Yacine-Mekideche/IAcine-Virtual-Avatar/main/front/public/models/animations.glb'
 
-// VRoid morph names for facial expressions
 const VROID_BLINK_L = 'Fcl_EYE_Close_L'
 const VROID_BLINK_R = 'Fcl_EYE_Close_R'
-const VROID_BLINK   = 'Fcl_EYE_Close'   // combined fallback
+const VROID_BLINK   = 'Fcl_EYE_Close'
 
-// Mood → VRoid morph map
 const MOOD_MORPHS: Record<string, Record<string, number>> = {
-  happy:    { Fcl_ALL_Joy: 0.6 },
-  neutral:  { Fcl_ALL_Neutral: 0.3 },
-  thinking: { Fcl_BRW_Sorrow: 0.4, Fcl_EYE_Sorrow: 0.3 },
+  happy:   { Fcl_ALL_Joy: 0.5 },
+  neutral: { Fcl_ALL_Neutral: 0.2 },
 }
 
 function AvatarMesh({ isActive }: { isActive: boolean }) {
@@ -53,7 +49,6 @@ function AvatarMesh({ isActive }: { isActive: boolean }) {
   const { actions } = useAnimations(animations, group)
   const prevAnim = useRef('Idle')
 
-  // Switch animation on isActive change
   useEffect(() => {
     if (!actions) return
     const animName = isActive ? 'Talking_1' : 'Idle'
@@ -65,28 +60,23 @@ function AvatarMesh({ isActive }: { isActive: boolean }) {
     prevAnim.current = animName
   }, [isActive, actions])
 
-  // Disable frustum culling so meshes don't pop out at edges
   useEffect(() => {
     scene.traverse(obj => { obj.frustumCulled = false })
   }, [scene])
 
-  // Blink state
-  const [blink, setBlink] = useState(false)
   const blinkTarget = useRef(0)
   useEffect(() => {
     let t: ReturnType<typeof setTimeout>
     const next = () => {
       t = setTimeout(() => {
-        setBlink(true)
         blinkTarget.current = 1
-        setTimeout(() => { setBlink(false); blinkTarget.current = 0; next() }, 150)
+        setTimeout(() => { blinkTarget.current = 0; next() }, 150)
       }, Math.random() * 4000 + 1500)
     }
     next()
     return () => clearTimeout(t)
   }, [])
 
-  // Lerp morphs each frame — VRoid names
   const lerpMorph = (mesh: THREE.SkinnedMesh, name: string, target: number, speed = 0.15) => {
     const dict = mesh.morphTargetDictionary
     const infl = mesh.morphTargetInfluences
@@ -100,28 +90,22 @@ function AvatarMesh({ isActive }: { isActive: boolean }) {
     scene.traverse((child) => {
       const mesh = child as THREE.SkinnedMesh
       if (!mesh.isSkinnedMesh) return
-
-      // Blink — try both combined and per-eye VRoid morphs
       lerpMorph(mesh, VROID_BLINK,   blinkTarget.current, 0.5)
       lerpMorph(mesh, VROID_BLINK_L, blinkTarget.current, 0.5)
       lerpMorph(mesh, VROID_BLINK_R, blinkTarget.current, 0.5)
-
-      // Mood morphs
       const mood = isActive ? MOOD_MORPHS.happy : MOOD_MORPHS.neutral
-      for (const [k, v] of Object.entries(mood)) {
-        lerpMorph(mesh, k, v, 0.05)
-      }
-      // Zero out inactive moods
+      for (const [k, v] of Object.entries(mood)) lerpMorph(mesh, k, v, 0.05)
       const inactive = isActive ? MOOD_MORPHS.neutral : MOOD_MORPHS.happy
-      for (const k of Object.keys(inactive)) {
-        lerpMorph(mesh, k, 0, 0.05)
-      }
+      for (const k of Object.keys(inactive)) lerpMorph(mesh, k, 0, 0.05)
     })
   })
 
   return (
     <group ref={group} dispose={null}>
-      <primitive object={scene} />
+      {/* VRoid avatars are ~1.6m tall, origin at feet.
+          Shift down so head+shoulders fill the upper frame.
+          position-y=-1.35 puts the waist at camera center → upper body visible */}
+      <primitive object={scene} position={[0, -1.35, 0]} />
     </group>
   )
 }
@@ -137,12 +121,21 @@ function Inner({ isActive }: Props) {
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
       <Canvas
         shadows
-        camera={{ position: [0, 1.5, 3], fov: 30 }}
-        style={{ background: 'transparent' }}
         gl={{ alpha: true, antialias: true }}
+        style={{ background: 'transparent' }}
+        camera={{
+          // Camera at eye level, looking straight at the avatar's face
+          // VRoid head is at ~1.55m, so look at y=1.4 from z=1.8
+          position: [0, 0.2, 1.8],
+          fov: 28,
+          near: 0.1,
+          far: 100,
+        }}
       >
-        <ambientLight intensity={0.8} />
-        <directionalLight position={[5, 5, 5]} intensity={1} castShadow />
+        <ambientLight intensity={1.2} />
+        <directionalLight position={[2, 3, 3]} intensity={1.2} castShadow />
+        <directionalLight position={[-2, 1, 1]} intensity={0.4} />
+
         <Suspense fallback={null}>
           <AvatarMesh isActive={isActive} />
         </Suspense>
