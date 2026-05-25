@@ -239,15 +239,53 @@ function Identity({ form, set }: { form: FD; set: Setter }) {
 }
 
 function ABN({ form, set, abnState, onABNBlur }: { form: FD; set: Setter; abnState: 'valid' | 'invalid' | 'empty'; onABNBlur: () => void }) {
+  const [verifying, setVerifying] = useState(false);
+  const [verifyResult, setVerifyResult] = useState<{ entity_name?: string; gst_registered?: boolean; active?: boolean } | null>(null);
+  const [verifyError, setVerifyError] = useState<string | null>(null);
+
+  async function verifyABN() {
+    const clean = form.abn.replace(/\D/g, '');
+    if (clean.length !== 11) return;
+    setVerifying(true); setVerifyError(null); setVerifyResult(null);
+    try {
+      const res = await fetch('/api/abn-lookup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ abn: clean }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.found) { setVerifyError(data.error ?? 'ABN not found in Australian Business Register'); return; }
+      setVerifyResult(data);
+      if (data.gst_registered !== undefined) set('gst_registered', data.gst_registered ? 'yes' : 'no');
+    } catch { setVerifyError('Could not reach ABN Lookup — check your connection'); }
+    finally { setVerifying(false); }
+  }
+
+  const canVerify = form.abn.replace(/\D/g, '').length === 11;
+
   return (
     <div className="space-y-4">
       <div>
         <label className="block text-xs font-medium text-[#2D5240] mb-1">ABN (Australian Business Number)</label>
-        <input type="text" value={form.abn} onChange={e => set('abn', e.target.value)} onBlur={onABNBlur}
-          placeholder="XX XXX XXX XXX"
-          className="w-full border border-[rgba(45,82,64,0.2)] rounded-lg px-3 py-2 text-sm text-[#1a1a16] placeholder-[rgba(0,0,0,0.3)] focus:outline-none focus:border-[#2D5240] focus:ring-1 focus:ring-[rgba(45,82,64,0.3)]" />
-        {abnState === 'valid' && <p className="text-xs text-green-600 mt-1">✓ Valid ABN</p>}
-        {abnState === 'invalid' && <p className="text-xs text-amber-500 mt-1">⚠ ABN not verified — you can still continue, we'll review manually</p>}
+        <div className="flex gap-2">
+          <input type="text" value={form.abn} onChange={e => set('abn', e.target.value)} onBlur={onABNBlur}
+            placeholder="XX XXX XXX XXX"
+            className="flex-1 border border-[rgba(45,82,64,0.2)] rounded-lg px-3 py-2 text-sm text-[#1a1a16] placeholder-[rgba(0,0,0,0.3)] focus:outline-none focus:border-[#2D5240] focus:ring-1 focus:ring-[rgba(45,82,64,0.3)]" />
+          <button type="button" onClick={verifyABN} disabled={!canVerify || verifying}
+            className="px-3 py-2 rounded-lg bg-[#2D5240] text-white text-xs font-semibold disabled:opacity-40 whitespace-nowrap hover:bg-[#1e3d2e] transition-colors">
+            {verifying ? 'Checking…' : 'Verify with ABR'}
+          </button>
+        </div>
+        {abnState === 'valid' && !verifyResult && <p className="text-xs text-green-600 mt-1">✓ Valid ABN format</p>}
+        {abnState === 'invalid' && <p className="text-xs text-amber-500 mt-1">⚠ Invalid ABN format</p>}
+        {verifyError && <p className="text-xs text-red-500 mt-1">✗ {verifyError}</p>}
+        {verifyResult && (
+          <div className="mt-2 p-2.5 bg-green-50 border border-green-200 rounded-lg">
+            <p className="text-xs font-semibold text-green-700 mb-0.5">✓ Verified with Australian Business Register</p>
+            {verifyResult.entity_name && <p className="text-xs text-green-600">Registered name: <strong>{verifyResult.entity_name}</strong></p>}
+            {verifyResult.gst_registered !== undefined && <p className="text-xs text-green-600">GST: {verifyResult.gst_registered ? '✓ Registered — prefilled below' : '✗ Not registered — prefilled below'}</p>}
+          </div>
+        )}
       </div>
       <Field label="ACN (optional)" value={form.acn} onChange={v => set('acn', v)} placeholder="XXX XXX XXX" />
       <Sel label="GST registered?" value={form.gst_registered} onChange={v => set('gst_registered', v)} options={['yes', 'no']} placeholder="Select…" />
