@@ -234,7 +234,7 @@ function AriaSpeechBubble({ business }: { business: { name?: string; trading_nam
 
   return (
     <div style={{
-      maxWidth: 180,
+      maxWidth: 150,
       background: 'rgba(20,20,30,0.96)',
       border: '1px solid rgba(127,184,151,0.35)',
       borderRadius: '14px 14px 4px 14px',
@@ -656,7 +656,7 @@ export default function AskAriaPage() {
           position: 'absolute',
           bottom: 0,
           right: 8,
-          width: 180,
+          width: 130,
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'flex-end',
@@ -667,7 +667,7 @@ export default function AskAriaPage() {
           {/* Greeting speech bubble sits above avatar naturally */}
           <AriaSpeechBubble business={business} />
           {/* Avatar canvas */}
-          <div style={{ width: 180, height: 320, flexShrink: 0 }}>
+          <div style={{ width: 130, height: 220, flexShrink: 0 }}>
             <AriaTalkingHead
               isActive={isAriaActive}
               responseText={ariaResponseText}
