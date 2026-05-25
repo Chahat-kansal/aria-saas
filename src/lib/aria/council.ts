@@ -33,6 +33,14 @@ export interface CouncilResult {
   }
 }
 
+// CouncilOutput extends CouncilResult with consensus fields from prompts 19/20
+export type CouncilOutput = CouncilResult & {
+  consensus?: string[] | null
+  contested?: string[] | null
+  confidence_map?: Record<string, string> | null
+  layout?: string | null
+}
+
 // ── Utilities ──────────────────────────────────────────────────────
 function callWithTimeout<T>(fn: () => Promise<T>, ms: number, label: string): Promise<T> {
   return Promise.race([
@@ -352,4 +360,29 @@ MODE: ${mode}
       meta: { brains_succeeded: succeeded.length, brains_failed: 4 - succeeded.length, synthesis_succeeded: false, fell_back: true, duration_ms: Date.now() - start },
     }
   }
+}
+
+// ── Council run logging ────────────────────────────────────────────
+export async function insertCouncilRun(
+  businessId: string,
+  mode: string,
+  council: CouncilOutput | null,
+  fellBack: boolean,
+): Promise<void> {
+  try {
+    await supabaseAdmin.from('council_runs').insert({
+      business_id: businessId,
+      mode,
+      final_briefing: council?.final_briefing ?? null,
+      consensus: council?.consensus ?? null,
+      contested: council?.contested ?? null,
+      confidence_map: council?.confidence_map ?? null,
+      raw_brain_outputs: council?.raw_brain_outputs ?? null,
+      brains_succeeded: council?.meta?.brains_succeeded ?? 0,
+      brains_failed: council?.meta?.brains_failed ?? 0,
+      synthesis_succeeded: council?.meta?.synthesis_succeeded ?? false,
+      fell_back_to_single_model: fellBack,
+      duration_ms: council?.meta?.duration_ms ?? 0,
+    })
+  } catch { /* non-fatal — logging should never break the briefing */ }
 }
