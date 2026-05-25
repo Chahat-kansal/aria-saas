@@ -70,12 +70,12 @@ async function _POST(req: Request) {
       ? Math.max(6, Math.ceil(6 - stock))
       : Math.max(0, Math.ceil(targetStock - stock));
 
-    if (suggestedQty <= 0 && daysOfStock > 14 && dailyVelocity === 0) continue;
+    if (suggestedQty <= 0) continue;  // skip anything with no reorder needed
 
     let reason = '';
     if (stock <= 0) { reason = 'Out of stock — reorder needed'; }
     else if (dailyVelocity === 0 && stock <= 5) { reason = `Low stock (${stock} units) — no recent sales data`; }
-    else if (dailyVelocity === 0 && stock > 14) continue;  // skip only if ample stock
+    else if (dailyVelocity === 0 && stock > 5) continue;  // no velocity + enough stock = skip
     else if (daysOfStock < 3)  reason = `URGENT: ${Math.ceil(daysOfStock)} days stock remaining`;
     else if (daysOfStock < 7) reason = `Low: ${Math.ceil(daysOfStock)} days stock remaining`;
     else if (hotWeekend && ['Beer & Cider','Soft Drinks','Water','RTD','Beverages'].some(c => categoryName.includes(c)))
