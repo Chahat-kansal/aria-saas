@@ -13,6 +13,11 @@ interface Business {
   trial_ends_at: string | null;
   created_at: string;
   is_active: boolean | null;
+  abn: string | null;
+  abn_verified: boolean | null;
+  abn_status: string | null;
+  legal_name: string | null;
+  gst_registered: boolean | null;
 }
 
 const PLAN_COLORS: Record<string, string> = {
@@ -44,7 +49,7 @@ export default function BusinessesSettingsPage() {
     setLoading(true);
     const { data } = await supabase
       .from('businesses')
-      .select('id, name, industry, plan, subscription_status, stripe_subscription_id, trial_ends_at, created_at, is_active')
+      .select('id, name, industry, plan, subscription_status, stripe_subscription_id, trial_ends_at, created_at, is_active, abn, abn_verified, abn_status, legal_name, gst_registered')
       .eq('user_id', user.id)
       .order('created_at', { ascending: true });
     setBusinesses((data ?? []) as Business[]);
@@ -69,6 +74,31 @@ export default function BusinessesSettingsPage() {
     setConfirmDelete(null);
     setActionLoading(null);
     load();
+  }
+
+  const [verifyingId, setVerifyingId] = useState<string | null>(null);
+  const [verifyResults, setVerifyResults] = useState<Record<string, { entity_name?: string; gst_registered?: boolean; active?: boolean }>>({});
+  const [verifyErrors, setVerifyErrors] = useState<Record<string, string>>({});
+
+  async function verifyABN(biz: Business) {
+    if (!biz.abn) return;
+    setVerifyingId(biz.id);
+    setVerifyErrors(prev => ({ ...prev, [biz.id]: '' }));
+    try {
+      const res = await fetch('/api/abn-lookup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ abn: biz.abn, businessId: biz.id }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.found) {
+        setVerifyErrors(prev => ({ ...prev, [biz.id]: data.error ?? 'ABN not found in register' }));
+      } else {
+        setVerifyResults(prev => ({ ...prev, [biz.id]: data }));
+        load(); // refresh to show updated verified status
+      }
+    } catch { setVerifyErrors(prev => ({ ...prev, [biz.id]: 'Could not reach ABN Lookup' })); }
+    finally { setVerifyingId(null); }
   }
 
   return (
@@ -143,7 +173,35 @@ export default function BusinessesSettingsPage() {
                           </span>
                         )}
                         <span className="text-[10px] text-[rgba(255,255,255,0.25)] capitalize">{biz.industry}</span>
+                        {biz.abn && (
+                          <span className="text-[10px] text-[rgba(255,255,255,0.25)]">
+                            ABN {biz.abn.replace(/(\d{2})(\d{3})(\d{3})(\d{3})/, '$1 $2 $3 $4')}
+                            {biz.abn_verified
+                              ? <span className="ml-1 text-green-400">✓ Verified</span>
+                              : <span className="ml-1 text-amber-400">• Unverified</span>}
+                          </span>
+                        )}
                       </div>
+                      {/* ABN verification */}
+                      {biz.abn && !biz.abn_verified && (
+                        <div className="mt-2 flex items-center gap-2">
+                          <button
+                            onClick={() => verifyABN(biz)}
+                            disabled={verifyingId === biz.id}
+                            className="text-[11px] px-2.5 py-1 rounded-lg bg-[rgba(45,82,64,0.2)] text-[#7FB897] border border-[rgba(127,184,151,0.2)] hover:bg-[rgba(45,82,64,0.35)] transition-colors disabled:opacity-40"
+                          >
+                            {verifyingId === biz.id ? 'Verifying…' : 'Verify ABN with ABR'}
+                          </button>
+                          {verifyErrors[biz.id] && <span className="text-[10px] text-red-400">{verifyErrors[biz.id]}</span>}
+                        </div>
+                      )}
+                      {verifyResults[biz.id] && (
+                        <div className="mt-2 p-2 bg-green-500/10 border border-green-500/20 rounded-lg">
+                          <p className="text-[11px] text-green-400 font-semibold">✓ Verified with Australian Business Register</p>
+                          {verifyResults[biz.id].entity_name && <p className="text-[10px] text-green-300 mt-0.5">Legal name: {verifyResults[biz.id].entity_name}</p>}
+                          {verifyResults[biz.id].gst_registered !== undefined && <p className="text-[10px] text-green-300">GST: {verifyResults[biz.id].gst_registered ? 'Registered' : 'Not registered'}</p>}
+                        </div>
+                      )}
                     </div>
 
                     {!isInactive && (
