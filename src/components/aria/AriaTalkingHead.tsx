@@ -57,6 +57,42 @@ const VROID_TO_MIXAMO: Record<string, string> = {
   'J_Bip_L_Eye': 'LeftEye', 'J_Bip_R_Eye': 'RightEye',
 }
 
+// VRoid morph target names → ARKit/RPM names that TalkingHead requires.
+// TalkingHead REQUIRES: eyeBlinkLeft, eyeBlinkRight, jawOpen, viseme_* etc.
+// VRoid uses: Fcl_EYE_Close_L, Fcl_MTH_A, etc.
+const VROID_MORPH_TO_ARKIT: Record<string, string> = {
+  // Eyes
+  'Fcl_EYE_Close_L': 'eyeBlinkLeft',
+  'Fcl_EYE_Close_R': 'eyeBlinkRight',
+  'Fcl_EYE_Close': 'eyeBlinkLeft',   // some exports have combined
+  // Brows
+  'Fcl_BRW_Angry_L': 'browDownLeft',
+  'Fcl_BRW_Angry_R': 'browDownRight',
+  'Fcl_BRW_Fun_L': 'browOuterUpLeft',
+  'Fcl_BRW_Fun_R': 'browOuterUpRight',
+  'Fcl_BRW_Sorrow_L': 'browInnerUp',
+  // Mouth / jaw
+  'Fcl_MTH_A': 'viseme_aa',
+  'Fcl_MTH_I': 'viseme_I',
+  'Fcl_MTH_U': 'viseme_U',
+  'Fcl_MTH_E': 'viseme_E',
+  'Fcl_MTH_O': 'viseme_O',
+  'Fcl_MTH_Open': 'jawOpen',
+  'Fcl_MTH_Angry': 'mouthFrownLeft',
+  'Fcl_MTH_Fun': 'mouthSmileLeft',
+  'Fcl_MTH_Joy': 'mouthSmileRight',
+  'Fcl_MTH_Sorrow': 'mouthFrownRight',
+  // Alternate naming conventions
+  'eye_close_l': 'eyeBlinkLeft',
+  'eye_close_r': 'eyeBlinkRight',
+  'mouth_open': 'jawOpen',
+  'mouth_a': 'viseme_aa',
+  'mouth_i': 'viseme_I',
+  'mouth_u': 'viseme_U',
+  'mouth_e': 'viseme_E',
+  'mouth_o': 'viseme_O',
+}
+
 async function patchVroidGlb(arrayBuffer: ArrayBuffer): Promise<string> {
   const view = new DataView(arrayBuffer)
   if (view.getUint32(0, true) !== 0x46546C67) {
@@ -70,7 +106,7 @@ async function patchVroidGlb(arrayBuffer: ArrayBuffer): Promise<string> {
   console.log('[Avatar] VRoid detected — remapping bones to Mixamo naming')
   const gltf = JSON.parse(jsonStr)
 
-  // Rename skin joint bones
+  // Step 1: Rename skin joint bones
   const boneIdxs = new Set<number>()
   for (const skin of (gltf.skins ?? [])) {
     for (const j of (skin.joints ?? [])) boneIdxs.add(j)
@@ -80,7 +116,24 @@ async function patchVroidGlb(arrayBuffer: ArrayBuffer): Promise<string> {
     if (node && VROID_TO_MIXAMO[node.name]) node.name = VROID_TO_MIXAMO[node.name]
   }
 
-  // Ensure LeftEye/RightEye exist
+  // Step 2: Remap VRoid morph target names → ARKit names in mesh extras
+  // Morph target names live in mesh.primitives[].extras.targetNames
+  for (const mesh of (gltf.meshes ?? [])) {
+    for (const prim of (mesh.primitives ?? [])) {
+      const targets = prim.extras?.targetNames
+      if (Array.isArray(targets)) {
+        for (let i = 0; i < targets.length; i++) {
+          const mapped = VROID_MORPH_TO_ARKIT[targets[i]]
+          if (mapped) {
+            console.log('[Avatar] Morph remap:', targets[i], '→', mapped)
+            targets[i] = mapped
+          }
+        }
+      }
+    }
+  }
+
+  // Step 3: Ensure LeftEye/RightEye nodes exist
   {
     const nodeNames = new Set((gltf.nodes ?? []).map((n: {name:string}) => n.name))
     if (!nodeNames.has('LeftEye') || !nodeNames.has('RightEye')) {
@@ -88,7 +141,6 @@ async function patchVroidGlb(arrayBuffer: ArrayBuffer): Promise<string> {
         { l: /J_Adj_L_FaceEye/, r: /J_Adj_R_FaceEye/ },
         { l: /J_Bip_L_Eye/, r: /J_Bip_R_Eye/ },
         { l: /eye.*left|left.*eye/i, r: /eye.*right|right.*eye/i },
-        { l: /_L_.*[Ee]ye|[Ee]ye.*_L_/, r: /_R_.*[Ee]ye|[Ee]ye.*_R_/ },
       ]
       for (const { l, r } of patterns) {
         if (!nodeNames.has('LeftEye')) {
@@ -115,7 +167,7 @@ async function patchVroidGlb(arrayBuffer: ArrayBuffer): Promise<string> {
     }
   }
 
-  // Create Armature node wrapping all scene children
+  // Step 4: Create Armature node
   const sceneNodes = gltf.scenes?.[0]?.nodes ?? []
   if (sceneNodes.length > 0) {
     const armatureIdx = gltf.nodes.length
@@ -130,50 +182,15 @@ async function patchVroidGlb(arrayBuffer: ArrayBuffer): Promise<string> {
   jsonChunk.set(newJsonBytes)
   const binOffset = 20 + jsonChunkLen
   const binBytes = binOffset < arrayBuffer.byteLength
-    ? new Uint8Array(arrayBuffer, binOffset)
-    : new Uint8Array(0)
+    ? new Uint8Array(arrayBuffer, binOffset) : new Uint8Array(0)
   const total = 12 + 8 + newJsonPadded + binBytes.length
   const out = new Uint8Array(total)
   const dv = new DataView(out.buffer)
-  dv.setUint32(0, 0x46546C67, true)
-  dv.setUint32(4, 2, true)
-  dv.setUint32(8, total, true)
-  dv.setUint32(12, newJsonPadded, true)
-  dv.setUint32(16, 0x4E4F534A, true)
-  out.set(jsonChunk, 20)
-  out.set(binBytes, 20 + newJsonPadded)
+  dv.setUint32(0, 0x46546C67, true); dv.setUint32(4, 2, true); dv.setUint32(8, total, true)
+  dv.setUint32(12, newJsonPadded, true); dv.setUint32(16, 0x4E4F534A, true)
+  out.set(jsonChunk, 20); out.set(binBytes, 20 + newJsonPadded)
   console.log('[Avatar] VRoid bones patched — blob URL created')
   return URL.createObjectURL(new Blob([out.buffer], { type: 'model/gltf-binary' }))
-}
-
-/**
- * After TalkingHead loads the avatar, its animate() loop accesses
- * mesh.morphTargetInfluences[i].needsUpdate on every frame.
- * VRoid meshes that have no morph targets will have morphTargetInfluences = undefined,
- * causing the crash. We patch the Three.js scene: give every SkinnedMesh/Mesh
- * that lacks morphTargetInfluences a safe empty Float32Array so animate() won't crash.
- */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function patchSceneMorphTargets(head: any) {
-  try {
-    const scene = head?.avatar?.scene ?? head?._avatar?.scene ?? head?.scene
-    if (!scene) return
-    scene.traverse((obj: any) => { // eslint-disable-line @typescript-eslint/no-explicit-any
-      if (obj.isMesh || obj.isSkinnedMesh) {
-        // If morphTargetInfluences is missing or null, inject a safe empty array
-        if (!obj.morphTargetInfluences) {
-          obj.morphTargetInfluences = []
-        }
-        // If morphTargetDictionary is missing, inject empty object
-        if (!obj.morphTargetDictionary) {
-          obj.morphTargetDictionary = {}
-        }
-      }
-    })
-    console.log('[Avatar] Scene morph targets patched (null-safety)')
-  } catch (e) {
-    console.warn('[Avatar] patchSceneMorphTargets failed (non-fatal):', e)
-  }
 }
 
 interface Props { isActive: boolean; responseText: string }
@@ -212,7 +229,9 @@ function Inner({ isActive }: Props) {
         modelPixelRatio: Math.min(window.devicePixelRatio || 1, 2),
       })
 
+      // Try VRoid GLB first; if it fails (blend shapes not found), fall back to brunette
       let avatarUrl = 'https://raw.githubusercontent.com/met4citizen/TalkingHead/main/avatars/brunette.glb'
+      let usingVroid = false
       try {
         const res = await fetch(PROXY_URL)
         if (res.ok) {
@@ -220,35 +239,41 @@ function Inner({ isActive }: Props) {
           const patched = await patchVroidGlb(buf)
           blobUrlRef.current = patched
           avatarUrl = patched
+          usingVroid = true
           console.log('[Avatar] Using Aria GLB from Blob store (bones patched)')
         }
       } catch (e) {
         console.warn('[Avatar] Blob fetch failed, using brunette fallback:', e)
       }
 
-      headRef.current.showAvatar(
-        { url: avatarUrl, body: 'F', avatarMood: 'neutral', lipsyncLang: 'en' },
-        () => {
-          // Patch null morph targets BEFORE setting loaded=true so animate() never sees undefined
-          patchSceneMorphTargets(headRef.current)
-          setLoaded(true)
-          console.log('[Avatar] avatar loaded')
-        },
-        (e: Error) => {
-          console.error('[Avatar] avatar load error:', e)
-          if (blobUrlRef.current && avatarUrl === blobUrlRef.current) {
-            console.log('[Avatar] VRoid patch failed — falling back to brunette')
-            const fallback = 'https://raw.githubusercontent.com/met4citizen/TalkingHead/main/avatars/brunette.glb'
-            headRef.current?.showAvatar(
-              { url: fallback, body: 'F', avatarMood: 'neutral', lipsyncLang: 'en' },
-              () => { patchSceneMorphTargets(headRef.current); setLoaded(true) },
-              () => setFailed(true)
-            )
-          } else {
-            setFailed(true)
+      const tryLoad = (url: string, onSuccess: () => void, onFail: () => void) => {
+        headRef.current.showAvatar(
+          { url, body: 'F', avatarMood: 'neutral', lipsyncLang: 'en' },
+          onSuccess,
+          (e: Error) => {
+            console.error('[Avatar] load error:', e.message)
+            onFail()
           }
-        }
-      )
+        )
+      }
+
+      const onLoaded = () => { setLoaded(true); console.log('[Avatar] avatar loaded') }
+      const onFinalFail = () => setFailed(true)
+
+      if (usingVroid) {
+        tryLoad(
+          avatarUrl,
+          onLoaded,
+          // VRoid failed (likely "Blend shapes not found") — fall back to brunette
+          () => {
+            console.log('[Avatar] VRoid failed — falling back to brunette')
+            const brunette = 'https://raw.githubusercontent.com/met4citizen/TalkingHead/main/avatars/brunette.glb'
+            tryLoad(brunette, onLoaded, onFinalFail)
+          }
+        )
+      } else {
+        tryLoad(avatarUrl, onLoaded, onFinalFail)
+      }
     } catch (e) { console.error('[Avatar] init error:', e); setFailed(true) }
   }
 
