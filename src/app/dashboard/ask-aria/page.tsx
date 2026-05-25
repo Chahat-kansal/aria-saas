@@ -211,8 +211,22 @@ export default function AskAriaPage() {
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const [ariaVideoUrl] = useState<string>('')  // set to Vercel Blob URL once uploaded
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
+
+  // Video avatar: play only while Aria is responding, pause when idle
+  useEffect(() => {
+    const vid = videoRef.current
+    if (!vid || !ariaVideoUrl) return
+    if (sending) {
+      vid.play().catch(() => {})
+    } else {
+      vid.pause()
+      vid.currentTime = 0
+    }
+  }, [sending, ariaVideoUrl])
 
   useEffect(() => {
     const q = new URLSearchParams(window.location.search).get('q')
@@ -479,6 +493,34 @@ export default function AskAriaPage() {
 
   return (
     <div style={{ display: 'flex', height: '100dvh', background: '#0d0d14', overflow: 'hidden' }}>
+      {/* Aria video avatar panel — side panel layout */}
+      {ariaVideoUrl && (
+        <div style={{ width: 220, flexShrink: 0, display: 'flex', flexDirection: 'column', borderRight: '1px solid rgba(255,255,255,0.07)', background: '#070c09' }}>
+          {/* Video frame */}
+          <div style={{ flex: 1, position: 'relative', overflow: 'hidden', background: '#050a06' }}>
+            <video
+              ref={videoRef}
+              src={ariaVideoUrl}
+              muted
+              playsInline
+              loop={false}
+              style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'top center' }}
+            />
+            {/* Speaking / idle status pill */}
+            <div style={{ position: 'absolute', top: 9, left: '50%', transform: 'translateX(-50%)', background: 'rgba(0,0,0,0.55)', borderRadius: 20, padding: '3px 10px', fontSize: 9, color: '#7FB897', display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap', zIndex: 5 }}>
+              <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#7FB897', flexShrink: 0, animation: sending ? 'ariaPulse 0.5s ease-in-out infinite alternate' : 'none' }} />
+              {sending ? 'Speaking' : 'Idle'}
+            </div>
+          </div>
+          {/* Name tag */}
+          <div style={{ padding: '10px 12px', borderTop: '1px solid rgba(255,255,255,0.07)' }}>
+            <div style={{ fontSize: 11, fontWeight: 500, color: 'rgba(255,255,255,0.85)' }}>Aria</div>
+            <div style={{ fontSize: 9, color: '#7FB897', marginTop: 1 }}>Your AI business co-operator</div>
+          </div>
+        </div>
+      )}
+      {/* Pulse animation keyframe */}
+      <style>{`@keyframes ariaPulse { from { opacity: 0.3; transform: scale(0.7); } to { opacity: 1; transform: scale(1.3); } }`}</style>
       {/* Mobile backdrop */}
       {showHistory && (
         <div className="fixed inset-0 bg-black/60 z-10 md:hidden" onClick={() => setShowHistory(false)} />
