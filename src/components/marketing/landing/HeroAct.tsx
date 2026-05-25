@@ -24,7 +24,7 @@ const HeroAct = forwardRef<HTMLDivElement>((_, ref) => (
         Your AI co-owner.
         <em>Running the back office.</em>
       </h1>
-      <p className="hero-subhead">Daily briefings, customer win-back, compliance, bookings, profit-leak analysis — and yes, a POS too.</p>
+      <p className="hero-subhead">Daily briefings, customer win-back, reviews, profit-leak analysis, compliance, competitor tracking, marketing, bookings — and point-of-sale among them.</p>
     </div>
 
     <div className="hero-ipad-stage">
