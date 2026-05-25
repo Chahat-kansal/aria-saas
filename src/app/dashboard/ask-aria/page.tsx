@@ -469,20 +469,41 @@ export default function AskAriaPage() {
   const confirmAction = useCallback(async () => {
     if (!pendingAction || !conversationId) return
     setConfirmingAction(true)
+    // Add user "yes" message immediately
+    setMessages(prev => [...prev, { role: 'user', content: 'Yes, go ahead.', timestamp: new Date() }])
     try {
-      const res = await fetch('/api/aria/ask/action', {
+      // Send "yes" through the main ask route — it handles isConfirmation() and executes
+      const res = await fetch('/api/aria/ask', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ intent: 'confirm', message: 'yes', conversation_id: conversationId }),
+        body: JSON.stringify({ message: 'Yes, go ahead.', conversation_id: conversationId }),
       })
-      const data = await res.json() as { execution_result?: ExecutionResultAction; status?: string }
-      const result = data.execution_result
-      const resultText = result?.ok
-        ? `Done — ${result.affected_count} item${result.affected_count !== 1 ? 's' : ''} updated.${result.rollback_available ? ' You can undo within 1 hour.' : ''}`
-        : `Action failed: ${result?.error ?? 'Unknown error'}`
-      setMessages(prev => [...prev, { role: 'assistant', content: resultText, action: result ? { ...result, type: 'execution_result' } as ExecutionResultAction : null, timestamp: new Date() }])
+      if (!res.ok) throw new Error(`Request failed: ${res.status}`)
+      const data = await res.json() as {
+        response?: string
+        intent?: string
+        action?: { type?: string; ok?: boolean; affected_count?: number; error?: string; rollback_available?: boolean; [k: string]: unknown }
+        conversation_id?: string
+      }
+      if (data.conversation_id) setConversationId(data.conversation_id)
+      const result = data.action
+      const content = data.response ?? (
+        result?.ok
+          ? `Done — ${result.affected_count ?? 0} item${(result.affected_count ?? 0) !== 1 ? 's' : ''} updated.${result.rollback_available ? ' You can undo within 1 hour.' : ''}`
+          : `Action failed: ${result?.error ?? 'Unknown error'}`
+      )
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        content,
+        action: result?.type === 'execution_result' ? result as unknown as ExecutionResultAction : undefined,
+        timestamp: new Date(),
+      }])
       setPendingAction(null)
       loadHistory()
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Unknown error'
+      setMessages(prev => [...prev, { role: 'assistant', content: `Action failed: ${msg}`, timestamp: new Date() }])
+      setPendingAction(null)
     } finally {
       setConfirmingAction(false)
     }
