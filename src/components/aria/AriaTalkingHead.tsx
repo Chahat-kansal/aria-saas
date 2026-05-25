@@ -13,7 +13,8 @@ declare global {
 
 // Public RPM avatar with ARKit + Oculus visemes — works out of the box with TalkingHead
 // Use Aria's Blob GLB if available, otherwise this public fallback
-const FALLBACK_AVATAR = 'https://models.readyplayer.me/64bfa15f0e72c63d7c3934a6.glb?morphTargets=ARKit,Oculus+Visemes'
+// TalkingHead author's own sample — guaranteed compatible, always reachable
+const FALLBACK_AVATAR = 'https://raw.githubusercontent.com/met4citizen/TalkingHead/main/avatars/brunette.glb'
 
 export function AriaTalkingHead({ isActive, responseText }: AriaTalkingHeadProps) {
   const containerRef = useRef<HTMLDivElement>(null)
