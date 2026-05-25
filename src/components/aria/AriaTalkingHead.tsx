@@ -30,7 +30,7 @@ export function AriaTalkingHead({ isActive, responseText }: AriaTalkingHeadProps
 
     const load = async () => {
       try {
-        const mod = await import(/* webpackIgnore: true */ 'https://cdn.jsdelivr.net/gh/met4citizen/TalkingHead@1.3/modules/talkinghead.mjs')
+        const mod = await import(/* webpackIgnore: true */ 'https://cdn.jsdelivr.net/gh/met4citizen/TalkingHead@main/modules/talkinghead.mjs')
         window.TalkingHead = mod.TalkingHead ?? mod.default
         setScriptReady(true)
         console.log('[AriaTalkingHead] TalkingHead loaded')
@@ -50,7 +50,7 @@ export function AriaTalkingHead({ isActive, responseText }: AriaTalkingHeadProps
         // TalkingHead v1.3 requires a ttsEndpoint string — pass a dummy that satisfies
         // the URL check. We never call speakText() so no actual TTS requests are made.
         ttsEndpoint: 'https://texttospeech.googleapis.com/v1/text:synthesize',
-        ttsApikey: 'DISABLED', // never used — we don't call speakText()
+        ttsApikey: null,
         cameraView: 'upper',
         cameraRotateX: 6,
         cameraDistance: 0.7,
