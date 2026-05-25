@@ -10,7 +10,7 @@ const inp: React.CSSProperties = {
 }
 const lbl: React.CSSProperties = { display: 'block', fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.06em' }
 
-const TABS = ['Business Profile', 'Notifications']
+const TABS = ['Business Profile', 'Notifications', 'Privacy & Data']
 
 export default function DashboardSettingsPage() {
   const [tab,     setTab]     = useState(0)
@@ -27,6 +27,10 @@ export default function DashboardSettingsPage() {
   const [syncResult, setSyncResult] = useState('')
   const [notifEmail, setNotifEmail] = useState(true)
   const [notifSMS,   setNotifSMS]   = useState(false)
+  const [downloading,   setDownloading]   = useState(false)
+  const [deleteConfirm, setDeleteConfirm] = useState('')
+  const [deleting,      setDeleting]      = useState(false)
+  const [deleteError,   setDeleteError]   = useState('')
 
   useEffect(() => {
     fetch('/api/settings/business').then(r => r.json()).then(d => {
@@ -51,6 +55,38 @@ export default function DashboardSettingsPage() {
     }).catch(() => {})
     setSaving(false); setSaved(true)
     setTimeout(() => setSaved(false), 2500)
+  }
+
+  async function downloadData() {
+    setDownloading(true)
+    try {
+      const res = await fetch('/api/account/export')
+      if (!res.ok) { setDownloading(false); return }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'aria-data-export.json'
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch { /* silent */ }
+    setDownloading(false)
+  }
+
+  async function deleteAccount() {
+    if (deleteConfirm !== 'DELETE MY DATA') return
+    setDeleting(true)
+    setDeleteError('')
+    try {
+      const res = await fetch('/api/account/delete', {
+        method: 'DELETE', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ confirm: 'DELETE MY DATA' }),
+      })
+      if (res.ok) { window.location.href = '/goodbye'; return }
+      const d = await res.json().catch(() => ({}))
+      setDeleteError(d.error ?? 'Deletion failed. Please try again.')
+    } catch { setDeleteError('Network error. Please try again.') }
+    setDeleting(false)
   }
 
   async function syncReviews() {
@@ -153,6 +189,44 @@ export default function DashboardSettingsPage() {
               {saving ? 'Saving…' : 'Save changes'}
             </button>
             {saved && <span style={{ fontSize: 13, color: '#7FB897', fontWeight: 600 }}>✓ Saved</span>}
+          </div>
+        </div>
+      )}
+
+      {tab === 2 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 28 }}>
+          <p style={{ fontSize: 12, color: 'var(--text-tertiary)', lineHeight: 1.6 }}>
+            Your data is stored securely in Australia. Aria never sells your data to third parties.
+          </p>
+
+          {/* Download */}
+          <div style={{ padding: '18px 20px', background: 'var(--bg-elevated)', borderRadius: 10, border: '1px solid var(--divider)' }}>
+            <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>Download my data</div>
+            <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 14, lineHeight: 1.6 }}>
+              Export all your business data, customers, sales, and Aria conversations as a JSON file.
+            </div>
+            <button onClick={downloadData} disabled={downloading}
+              style={{ padding: '9px 20px', borderRadius: 8, border: '1px solid var(--divider)', background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: 13, fontWeight: 600, cursor: downloading ? 'not-allowed' : 'pointer', fontFamily: 'inherit', opacity: downloading ? 0.6 : 1 }}>
+              {downloading ? '⏳ Preparing…' : '⬇ Download my data'}
+            </button>
+          </div>
+
+          {/* Delete */}
+          <div style={{ padding: '18px 20px', background: 'rgba(239,68,68,0.04)', borderRadius: 10, border: '1px solid rgba(239,68,68,0.2)' }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: '#ef4444', marginBottom: 4 }}>Delete my account</div>
+            <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 14, lineHeight: 1.6 }}>
+              This is permanent and cannot be undone. All businesses, customers, sales history, and Aria data will be deleted immediately.
+            </div>
+            <label style={{ ...lbl, marginBottom: 6 }}>Type DELETE MY DATA to confirm</label>
+            <input style={{ ...inp, marginBottom: 12 }} value={deleteConfirm}
+              onChange={e => setDeleteConfirm(e.target.value)}
+              placeholder="DELETE MY DATA" />
+            {deleteError && <p style={{ fontSize: 12, color: '#ef4444', marginBottom: 10 }}>{deleteError}</p>}
+            <button onClick={deleteAccount}
+              disabled={deleting || deleteConfirm !== 'DELETE MY DATA'}
+              style={{ padding: '9px 20px', borderRadius: 8, border: 'none', background: deleteConfirm === 'DELETE MY DATA' ? '#ef4444' : 'var(--bg-elevated)', color: deleteConfirm === 'DELETE MY DATA' ? '#fff' : 'var(--text-tertiary)', fontSize: 13, fontWeight: 700, cursor: (deleting || deleteConfirm !== 'DELETE MY DATA') ? 'not-allowed' : 'pointer', fontFamily: 'inherit', transition: 'background 200ms' }}>
+              {deleting ? 'Deleting…' : 'Delete Account'}
+            </button>
           </div>
         </div>
       )}
