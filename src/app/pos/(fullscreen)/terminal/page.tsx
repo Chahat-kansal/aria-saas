@@ -299,10 +299,14 @@ export default function TerminalPage() {
   const [variantLoading,   setVariantLoading]   = useState(false);
 
   /* ── UI ───────────────────────────────────────────────────────── */
-  const [search,         setSearch]         = useState('');
-  const [activeCategory, setActiveCategory] = useState<string | null>(null);
-  const [showParked,     setShowParked]     = useState(false);
-  const [mobileTab,      setMobileTab]      = useState<'products' | 'cart' | 'aria'>('products');
+  const [search,           setSearch]           = useState('');
+  const [activeCategory,   setActiveCategory]   = useState<string | null>(null);
+  const [showParked,       setShowParked]       = useState(false);
+  const [mobileTab,        setMobileTab]        = useState<'products' | 'cart' | 'aria'>('products');
+
+  /* ── Product grid layout prefs ────────────────────────────────── */
+  const [productGridOrder, setProductGridOrder] = useState<Record<string, string[]> | null>(null);
+  const [gridCustomising,  setGridCustomising]  = useState(false);
 
   /* ── Aria chat ────────────────────────────────────────────────── */
   const [ariaOpen,       setAriaOpen]       = useState(false);
@@ -846,6 +850,21 @@ export default function TerminalPage() {
     return () => clearTimeout(timer);
   }, [cart.map(i => i.product.id).join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  /* ─── Product grid order prefs (loaded by POSSidebar, broadcast via event) ── */
+  useEffect(() => {
+    const cached = (window as Window & { __posProductGridOrder?: Record<string, string[]> | null }).__posProductGridOrder
+    if (cached !== undefined) setProductGridOrder(cached)
+    const handler = (e: Event) => setProductGridOrder((e as CustomEvent<Record<string, string[]> | null>).detail)
+    window.addEventListener('pos-product-grid-order', handler)
+    return () => window.removeEventListener('pos-product-grid-order', handler)
+  }, []);
+
+  useEffect(() => {
+    const handler = () => setGridCustomising(v => !v)
+    window.addEventListener('pos-customise-layout', handler)
+    return () => window.removeEventListener('pos-customise-layout', handler)
+  }, []);
+
   /* ─── Derived values ─────────────────────────────────────────── */
   const categories = useMemo(() => {
     const m = new Map<string, string>();
@@ -889,7 +908,21 @@ export default function TerminalPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [displayedProducts, recentProductIds, cart.map(i => i.product.id).join(',')]);
 
-  const layoutProducts = useMemo<ProductForTerminal[]>(() => displayedProducts.map(p => ({
+  const activeCategoryId = useMemo(
+    () => activeCategory ? (displayedProducts[0]?.category_id ?? null) : null,
+    [activeCategory, displayedProducts]
+  );
+
+  const orderedProducts = useMemo(() => {
+    const savedOrder = activeCategoryId ? productGridOrder?.[activeCategoryId] : undefined;
+    if (!savedOrder) return displayedProducts;
+    const map = new Map(displayedProducts.map(p => [p.id, p]));
+    const sorted = savedOrder.map(id => map.get(id)).filter((p): p is typeof displayedProducts[0] => p !== undefined);
+    const unsaved = displayedProducts.filter(p => !savedOrder.includes(p.id));
+    return [...sorted, ...unsaved];
+  }, [displayedProducts, activeCategoryId, productGridOrder]);
+
+  const layoutProducts = useMemo<ProductForTerminal[]>(() => orderedProducts.map(p => ({
     id: p.id,
     name: p.name,
     sku: p.sku ?? '',
@@ -904,7 +937,7 @@ export default function TerminalPage() {
     description: (p as any).description ?? null,
     track_inventory: p.track_stock,
     active: p.is_active,
-  })), [displayedProducts]);
+  })), [orderedProducts]);
 
   const cartForAria = useMemo(
     () => cart.map(c => ({ name: c.label ?? c.product.name, category: c.product.pos_categories?.name ?? null })),
@@ -2499,6 +2532,7 @@ export default function TerminalPage() {
             ) : (() => {
               // Shared handler for layout components — additive
               const handleLayoutClick = (lp: ProductForTerminal) => {
+                if (gridCustomising) return;
                 const p = products.find(prod => prod.id === lp.id);
                 if (!p) return;
                 if (priceCheckMode) { setPriceCheckProd(p); return; }
@@ -2508,44 +2542,106 @@ export default function TerminalPage() {
               const effectiveLayout: TerminalLayout =
                 search.trim().length >= 2 ? 'grid' : currentLayout;
 
+              const handleGridReorder = (newIds: string[]) => {
+                if (!activeCategoryId) return;
+                const prevOrder = productGridOrder;
+                const newMap = { ...(productGridOrder ?? {}), [activeCategoryId]: newIds };
+                setProductGridOrder(newMap);
+                fetch('/api/pos/layout-preferences', {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ product_grid_order: { [activeCategoryId]: newIds } }),
+                }).then(undefined, () => {
+                  setProductGridOrder(prevOrder);
+                  console.warn('[POS] Failed to save product order');
+                });
+              };
+
+              const handleResetCategoryOrder = () => {
+                if (!activeCategoryId) return;
+                setProductGridOrder(prev => {
+                  if (!prev) return null;
+                  const next = { ...prev };
+                  delete next[activeCategoryId];
+                  return Object.keys(next).length ? next : null;
+                });
+                fetch('/api/pos/layout-preferences', {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ product_grid_order: { [activeCategoryId]: null } }),
+                }).then(undefined, () => console.warn('[POS] Failed to reset product order'));
+              };
+
+              const handleResetAllOrders = () => {
+                setProductGridOrder(null);
+                fetch('/api/pos/layout-preferences', {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ product_grid_order: null }),
+                }).then(undefined, () => console.warn('[POS] Failed to reset all product orders'));
+              };
+
               return (
-                <LayoutWrapper layout={effectiveLayout}>
-                  {effectiveLayout === 'shelf' && (
-                    <ShelfLayout
-                      products={layoutProducts}
-                      onProductClick={handleLayoutClick}
-                      selectedCategory={activeCategory}
-                    />
+                <>
+                  {gridCustomising && effectiveLayout === 'grid' && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', background: 'rgba(45,82,64,0.6)', borderBottom: '1px solid rgba(127,184,151,0.2)', flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: 11, color: '#7FB897', fontWeight: 600, flex: 1, minWidth: 120 }}>Drag to reorder products</span>
+                      {activeCategoryId && (
+                        <button onClick={handleResetCategoryOrder}
+                          style={{ fontSize: 11, padding: '4px 10px', borderRadius: 6, border: '1px solid rgba(127,184,151,0.3)', background: 'transparent', color: 'rgba(127,184,151,0.7)', cursor: 'pointer', fontFamily: 'inherit' }}>
+                          Reset product order
+                        </button>
+                      )}
+                      <button onClick={handleResetAllOrders}
+                        style={{ fontSize: 11, padding: '4px 10px', borderRadius: 6, border: '1px solid rgba(127,184,151,0.3)', background: 'transparent', color: 'rgba(127,184,151,0.7)', cursor: 'pointer', fontFamily: 'inherit' }}>
+                        Reset ALL orders
+                      </button>
+                      <button onClick={() => setGridCustomising(false)}
+                        style={{ fontSize: 11, padding: '4px 10px', borderRadius: 6, border: 'none', background: '#2D5240', color: '#7FB897', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600 }}>
+                        Done
+                      </button>
+                    </div>
                   )}
-                  {effectiveLayout === 'carousel' && (
-                    <CarouselLayout
-                      products={layoutProducts}
-                      onProductClick={handleLayoutClick}
-                      selectedCategory={activeCategory}
-                    />
-                  )}
-                  {effectiveLayout === 'masonry' && (
-                    <MasonryLayout
-                      products={layoutProducts}
-                      onProductClick={handleLayoutClick}
-                    />
-                  )}
-                  {effectiveLayout === 'search-first' && (
-                    <SearchFirstLayout
-                      products={layoutProducts}
-                      onProductClick={handleLayoutClick}
-                      recentProductIds={recentProductIds}
-                      suggestedProductIds={ariaSuggestedIds}
-                    />
-                  )}
-                  {effectiveLayout === 'grid' && (
-                    <FastGridLayout
-                      products={layoutProducts}
-                      onProductClick={handleLayoutClick}
-                      showStock={true}
-                    />
-                  )}
-                </LayoutWrapper>
+                  <LayoutWrapper layout={effectiveLayout}>
+                    {effectiveLayout === 'shelf' && (
+                      <ShelfLayout
+                        products={layoutProducts}
+                        onProductClick={handleLayoutClick}
+                        selectedCategory={activeCategory}
+                      />
+                    )}
+                    {effectiveLayout === 'carousel' && (
+                      <CarouselLayout
+                        products={layoutProducts}
+                        onProductClick={handleLayoutClick}
+                        selectedCategory={activeCategory}
+                      />
+                    )}
+                    {effectiveLayout === 'masonry' && (
+                      <MasonryLayout
+                        products={layoutProducts}
+                        onProductClick={handleLayoutClick}
+                      />
+                    )}
+                    {effectiveLayout === 'search-first' && (
+                      <SearchFirstLayout
+                        products={layoutProducts}
+                        onProductClick={handleLayoutClick}
+                        recentProductIds={recentProductIds}
+                        suggestedProductIds={ariaSuggestedIds}
+                      />
+                    )}
+                    {effectiveLayout === 'grid' && (
+                      <FastGridLayout
+                        products={layoutProducts}
+                        onProductClick={handleLayoutClick}
+                        showStock={true}
+                        customising={gridCustomising}
+                        onReorder={handleGridReorder}
+                      />
+                    )}
+                  </LayoutWrapper>
+                </>
               );
 
               // unreachable — kept for fallback reference

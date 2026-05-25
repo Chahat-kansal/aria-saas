@@ -86,9 +86,12 @@ export default function POSSidebar({
   useEffect(() => {
     fetch('/api/pos/layout-preferences')
       .then(r => r.json())
-      .then((d: { nav_order?: string[] | null; nav_groups?: NavGroup[] | null }) => {
+      .then((d: { nav_order?: string[] | null; nav_groups?: NavGroup[] | null; product_grid_order?: Record<string, string[]> | null }) => {
         setNavOrder(d.nav_order ?? null)
         setNavGroups(d.nav_groups ?? [])
+        const pgOrder = d.product_grid_order ?? null
+        ;(window as Window & { __posProductGridOrder?: Record<string, string[]> | null }).__posProductGridOrder = pgOrder
+        window.dispatchEvent(new CustomEvent('pos-product-grid-order', { detail: pgOrder }))
       })
       .catch(() => {})
       .finally(() => setLoadingPrefs(false))

@@ -48,7 +48,29 @@ async function _PATCH(req: Request) {
   }
   if ('nav_order' in body) patch.nav_order = body.nav_order
   if ('nav_groups' in body) patch.nav_groups = body.nav_groups
-  if ('product_grid_order' in body) patch.product_grid_order = body.product_grid_order
+  if ('product_grid_order' in body) {
+    if (body.product_grid_order === null) {
+      patch.product_grid_order = null
+    } else {
+      // Server-side deep-merge: preserve untouched category keys
+      const { data: existing } = await supabaseAdmin
+        .from('pos_layout_preferences')
+        .select('product_grid_order')
+        .eq('business_id', bid)
+        .maybeSingle()
+      const existingMap = (existing?.product_grid_order ?? {}) as Record<string, string[] | null>
+      const incoming = body.product_grid_order as Record<string, string[] | null>
+      const merged: Record<string, string[]> = { ...existingMap } as Record<string, string[]>
+      for (const [catId, order] of Object.entries(incoming)) {
+        if (order === null) {
+          delete merged[catId]
+        } else {
+          merged[catId] = order
+        }
+      }
+      patch.product_grid_order = merged
+    }
+  }
   const { data, error } = await supabaseAdmin
     .from('pos_layout_preferences')
     .upsert(patch, { onConflict: 'business_id' })
