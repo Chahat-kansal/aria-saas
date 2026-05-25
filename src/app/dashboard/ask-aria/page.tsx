@@ -226,7 +226,7 @@ function AriaSpeechBubble({ business }: { business: { name?: string; trading_nam
   const name = business?.trading_name ?? business?.name ?? null
 
   useEffect(() => {
-    const t = setTimeout(() => setVisible(false), 5000)
+    const t = setTimeout(() => setVisible(false), 30000)
     return () => clearTimeout(t)
   }, [])
 
@@ -235,9 +235,9 @@ function AriaSpeechBubble({ business }: { business: { name?: string; trading_nam
   return (
     <div style={{
       position: 'absolute',
-      top: 16,
-      right: 216,
-      maxWidth: 180,
+      bottom: 245,
+      right: 0,
+      maxWidth: 200,
       background: 'rgba(20,20,30,0.96)',
       border: '1px solid rgba(127,184,151,0.35)',
       borderRadius: '14px 14px 4px 14px',
@@ -250,8 +250,8 @@ function AriaSpeechBubble({ business }: { business: { name?: string; trading_nam
       animation: 'ariaPopIn 0.3s cubic-bezier(0.34,1.56,0.64,1)',
       zIndex: 21,
     }}>
-      <span style={{ color: '#7FB897', fontWeight: 700 }}>Hi{name ? ` — ${name}` : ''}!</span>
-      {' '}I&apos;m Aria, your business co-operator. Ask me anything.
+      <span style={{ color: '#7FB897', fontWeight: 700 }}>Hi{name ? `, ${name}` : ''}! 👋</span>
+      {' '}I&apos;m Aria — your AI business co-operator. I&apos;ve checked your data. What can I help you with today?
       {/* Tail pointing right toward avatar */}
       <div style={{
         position: 'absolute', right: -7, bottom: 10,
@@ -660,9 +660,9 @@ export default function AskAriaPage() {
         <div style={{
           position: 'absolute',
           bottom: 0,
-          right: 0,
-          width: 220,
-          height: 380,
+          right: 16,
+          width: 140,
+          height: 240,
           zIndex: 20,
           pointerEvents: 'none',
         }}>
