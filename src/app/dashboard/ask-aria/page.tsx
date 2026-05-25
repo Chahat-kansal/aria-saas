@@ -220,6 +220,51 @@ function AriaGreeting({ business }: { business: { name?: string; trading_name?: 
   )
 }
 
+
+function AriaSpeechBubble({ business }: { business: { name?: string; trading_name?: string } | null }) {
+  const [visible, setVisible] = useState(true)
+  const name = business?.trading_name ?? business?.name ?? null
+
+  useEffect(() => {
+    const t = setTimeout(() => setVisible(false), 5000)
+    return () => clearTimeout(t)
+  }, [])
+
+  if (!visible) return null
+
+  return (
+    <div style={{
+      position: 'absolute',
+      top: 16,
+      right: 216,
+      maxWidth: 180,
+      background: 'rgba(20,20,30,0.96)',
+      border: '1px solid rgba(127,184,151,0.35)',
+      borderRadius: '14px 14px 4px 14px',
+      padding: '10px 13px',
+      fontSize: 12,
+      color: 'rgba(255,255,255,0.9)',
+      lineHeight: 1.5,
+      pointerEvents: 'none',
+      boxShadow: '0 4px 20px rgba(0,0,0,0.4)',
+      animation: 'ariaPopIn 0.3s cubic-bezier(0.34,1.56,0.64,1)',
+      zIndex: 21,
+    }}>
+      <span style={{ color: '#7FB897', fontWeight: 700 }}>Hi{name ? ` — ${name}` : ''}!</span>
+      {' '}I&apos;m Aria, your business co-operator. Ask me anything.
+      {/* Tail pointing right toward avatar */}
+      <div style={{
+        position: 'absolute', right: -7, bottom: 10,
+        width: 0, height: 0,
+        borderTop: '6px solid transparent',
+        borderBottom: '6px solid transparent',
+        borderLeft: '7px solid rgba(127,184,151,0.35)',
+      }} />
+      <style>{`@keyframes ariaPopIn{from{opacity:0;transform:scale(0.85) translateY(6px)}to{opacity:1;transform:scale(1) translateY(0)}}`}</style>
+    </div>
+  )
+}
+
 export default function AskAriaPage() {
   const { business, loading } = useBusinessContext()
   const [messages, setMessages] = useState<Message[]>([])
@@ -611,7 +656,7 @@ export default function AskAriaPage() {
 
       {/* Main chat — subtle mood tint based on time of day */}
       <div className="flex-1 flex flex-col overflow-hidden" style={{ position: 'relative', background: (() => { const h = new Date().getHours(); if (h < 6) return '#0a0a12'; if (h < 12) return '#0d0f14'; if (h < 17) return '#0d0d14'; if (h < 20) return '#0e0c13'; return '#0b0b14'; })() }}>
-        {/* Aria 3D avatar — silent visual animation while she responds */}
+        {/* Aria 3D avatar + greeting bubble */}
         <div style={{
           position: 'absolute',
           bottom: 0,
@@ -620,9 +665,9 @@ export default function AskAriaPage() {
           height: 380,
           zIndex: 20,
           pointerEvents: 'none',
-          opacity: 1,
-          transition: 'opacity 0.4s ease',
         }}>
+          {/* Greeting speech bubble — shows for 4s on mount, top-left of avatar */}
+          <AriaSpeechBubble business={business} />
           <AriaTalkingHead
             isActive={isAriaActive}
             responseText={ariaResponseText}
