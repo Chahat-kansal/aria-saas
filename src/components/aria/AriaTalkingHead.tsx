@@ -27,31 +27,32 @@ function AriaMonogram({ isActive }: { isActive: boolean }) {
   )
 }
 
-// VRoid bone → Mixamo bone name mapping
-// TalkingHead requires Mixamo naming ("Armature" as root + mixamorig: prefix)
+// VRoid bone → short bone name mapping
+// TalkingHead strips 'mixamorig' prefix itself (talkinghead.mjs:1254)
+// so we use bare names: 'Hips', 'Spine', 'LeftArm' etc.
 const VROID_TO_MIXAMO: Record<string, string> = {
-  'J_Bip_C_Hips':          'mixamorig:Hips',
-  'J_Bip_C_Spine':         'mixamorig:Spine',
-  'J_Bip_C_Chest':         'mixamorig:Spine1',
-  'J_Bip_C_UpperChest':    'mixamorig:Spine2',
-  'J_Bip_C_Neck':          'mixamorig:Neck',
-  'J_Bip_C_Head':          'mixamorig:Head',
-  'J_Bip_L_Shoulder':      'mixamorig:LeftShoulder',
-  'J_Bip_L_UpperArm':      'mixamorig:LeftArm',
-  'J_Bip_L_LowerArm':      'mixamorig:LeftForeArm',
-  'J_Bip_L_Hand':          'mixamorig:LeftHand',
-  'J_Bip_R_Shoulder':      'mixamorig:RightShoulder',
-  'J_Bip_R_UpperArm':      'mixamorig:RightArm',
-  'J_Bip_R_LowerArm':      'mixamorig:RightForeArm',
-  'J_Bip_R_Hand':          'mixamorig:RightHand',
-  'J_Bip_L_UpperLeg':      'mixamorig:LeftUpLeg',
-  'J_Bip_L_LowerLeg':      'mixamorig:LeftLeg',
-  'J_Bip_L_Foot':          'mixamorig:LeftFoot',
-  'J_Bip_L_ToeBase':       'mixamorig:LeftToeBase',
-  'J_Bip_R_UpperLeg':      'mixamorig:RightUpLeg',
-  'J_Bip_R_LowerLeg':      'mixamorig:RightLeg',
-  'J_Bip_R_Foot':          'mixamorig:RightFoot',
-  'J_Bip_R_ToeBase':       'mixamorig:RightToeBase',
+  'J_Bip_C_Hips':          'Hips',
+  'J_Bip_C_Spine':         'Spine',
+  'J_Bip_C_Chest':         'Spine1',
+  'J_Bip_C_UpperChest':    'Spine2',
+  'J_Bip_C_Neck':          'Neck',
+  'J_Bip_C_Head':          'Head',
+  'J_Bip_L_Shoulder':      'LeftShoulder',
+  'J_Bip_L_UpperArm':      'LeftArm',
+  'J_Bip_L_LowerArm':      'LeftForeArm',
+  'J_Bip_L_Hand':          'LeftHand',
+  'J_Bip_R_Shoulder':      'RightShoulder',
+  'J_Bip_R_UpperArm':      'RightArm',
+  'J_Bip_R_LowerArm':      'RightForeArm',
+  'J_Bip_R_Hand':          'RightHand',
+  'J_Bip_L_UpperLeg':      'LeftUpLeg',
+  'J_Bip_L_LowerLeg':      'LeftLeg',
+  'J_Bip_L_Foot':          'LeftFoot',
+  'J_Bip_L_ToeBase':       'LeftToeBase',
+  'J_Bip_R_UpperLeg':      'RightUpLeg',
+  'J_Bip_R_LowerLeg':      'RightLeg',
+  'J_Bip_R_Foot':          'RightFoot',
+  'J_Bip_R_ToeBase':       'RightToeBase',
 }
 
 // Rename VRoid bones in a GLB binary so TalkingHead can read them
@@ -85,7 +86,7 @@ async function patchVroidGlb(arrayBuffer: ArrayBuffer): Promise<string> {
   // VRoid uses the model name or "Armature" — add it if missing
   // Find the node that contains mixamorig:Hips as a child and rename it Armature
   const gltf = JSON.parse(jsonStr)
-  const hipsIdx = gltf.nodes?.findIndex((n: {name: string}) => n.name === 'mixamorig:Hips')
+  const hipsIdx = gltf.nodes?.findIndex((n: {name: string}) => n.name === 'Hips')
   if (hipsIdx >= 0) {
     // Find parent of Hips — that should be Armature
     const parentIdx = gltf.nodes?.findIndex((n: {children?: number[]}) =>
