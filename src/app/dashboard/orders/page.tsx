@@ -283,7 +283,8 @@ export default function OrdersPage() {
           </div>
         </section>
       )}
-        </div>}
+        </div>
+      )}
     </div>
   );
 }
