@@ -575,7 +575,7 @@ export default function AskAriaPage() {
             height: 130,
             zIndex: 20,
             pointerEvents: 'none',
-            opacity: isAriaActive ? 1 : 0,
+            opacity: isAriaActive ? 1 : 0.35,
             transition: 'opacity 0.25s ease',
             WebkitMaskImage: 'radial-gradient(ellipse 75% 78% at 50% 42%, black 20%, transparent 68%)',
             maskImage: 'radial-gradient(ellipse 75% 78% at 50% 42%, black 20%, transparent 68%)',
