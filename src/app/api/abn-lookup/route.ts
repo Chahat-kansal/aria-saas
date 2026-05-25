@@ -141,7 +141,6 @@ export async function POST(req: Request) {
       if (business) {
         await supabase.from('businesses').update({
           abn: cleanABN,
-          abn_status: result.abn_status,
           abn_verified: true,
           abn_verified_at: new Date().toISOString(),
           abn_verification_method: 'abr_api',
