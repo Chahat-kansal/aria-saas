@@ -114,6 +114,10 @@
     {
       "path": "/api/cron/price-schedules",
       "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/seo-keyword-check",
+      "schedule": "0 3 * * *"
     }
   ]
 }

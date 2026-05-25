@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabase'
 
 interface SeoAudit { id: string; status: string; pages_crawled: number; issues_found: number; issues_fixed: number; health_score: number; started_at: string; finished_at: string | null }
 interface SeoIssue { id: string; page_url: string; issue_type: string; severity: string; title: string; detail: string; suggested_fix: string | null; fix_format: string | null; state: string }
-interface SeoLocal { gbp_completeness: number | null; map_pack_rank: number | null; citations_total: number | null; citations_consistent: number | null; review_velocity_30d: number | null; checklist: Array<{ item: string; ok: boolean }> | null }
+interface SeoLocal { gbp_completeness: number | null; gbp_listed?: boolean | null; review_count?: number | null; review_avg?: number | null; map_pack_rank: number | null; citations_total: number | null; citations_consistent: number | null; review_velocity_30d: number | null; checklist: Array<{ item: string; ok: boolean }> | null }
 interface SeoKeyword { id: string; keyword: string; current_rank: number | null; previous_rank: number | null; search_volume: number | null }
 interface SeoPage { url: string; title: string | null }
 
@@ -46,6 +46,9 @@ function SiteHealthTab({ businessId }: { businessId: string }) {
   const [applying, setApplying] = useState<string | null>(null)
   const [crawling, setCrawling] = useState(false)
   const [fixingId, setFixingId] = useState<string | null>(null)
+  const [history, setHistory] = useState<Array<{ health_score: number; finished_at: string }>>([])
+  const [insights, setInsights] = useState<Array<{ title: string; fix: string }>>([])
+  const [insightLoading, setInsightLoading] = useState(false)
 
   async function load() {
     setLoading(true)
@@ -58,6 +61,8 @@ function SiteHealthTab({ businessId }: { businessId: string }) {
       setIssues(sorted)
       const { data: pg } = await supabase.from('seo_pages').select('url, title').eq('business_id', businessId).eq('audit_id', a.id).limit(20)
       setPages(pg ?? [])
+      const { data: hist } = await supabase.from('seo_audits').select('health_score, finished_at').eq('business_id', businessId).eq('status', 'complete').order('finished_at', { ascending: true }).limit(10)
+      setHistory((hist ?? []) as Array<{ health_score: number; finished_at: string }>)
     }
     setLoading(false)
   }
@@ -117,6 +122,22 @@ function SiteHealthTab({ businessId }: { businessId: string }) {
   }
 
   function toggleExpand(id: string) { setExpanded(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n }) }
+
+  async function loadInsights() {
+    const topHigh = issues.filter(iss => iss.severity === 'high' && !iss.suggested_fix).slice(0, 3)
+    if (!topHigh.length) return
+    setInsightLoading(true)
+    const next: Array<{ title: string; fix: string }> = []
+    for (const iss of topHigh) {
+      try {
+        const res = await fetch('/api/seo/generate-fix', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ issue_id: iss.id }) })
+        const d = await res.json()
+        if (d.suggested_fix) next.push({ title: iss.title, fix: d.suggested_fix })
+      } catch { /* skip */ }
+    }
+    setInsights(next)
+    setInsightLoading(false)
+  }
 
   const SEV: Record<string, string> = { high: '#ef4444', medium: '#f59e0b', low: '#6b7280' }
   const cell: React.CSSProperties = { padding: '16px 20px', background: 'rgba(255,255,255,0.04)', borderRadius: 12, minWidth: 90 }
@@ -223,6 +244,48 @@ function SiteHealthTab({ businessId }: { businessId: string }) {
           </div>
         </div>
       )}
+      {history.length > 1 && (
+        <div style={{ marginTop: 32 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: 'rgba(255,255,255,0.6)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Score history</div>
+          <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 10, border: '1px solid rgba(255,255,255,0.07)', padding: '16px 20px' }}>
+            <svg width="100%" height={72} viewBox={`0 0 ${history.length * 36} 72`} preserveAspectRatio="none">
+              {history.map((h, i) => {
+                const barH = Math.max(4, Math.round((h.health_score / 100) * 52))
+                const col = h.health_score >= 80 ? '#7FB897' : h.health_score >= 50 ? '#f59e0b' : '#ef4444'
+                return <rect key={i} x={i * 36 + 4} y={52 - barH} width={28} height={barH} rx={3} fill={col} fillOpacity={0.8} />
+              })}
+            </svg>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
+              <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>{new Date(history[0].finished_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}</span>
+              <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>{new Date(history[history.length - 1].finished_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}</span>
+            </div>
+          </div>
+        </div>
+      )}
+      {audit && (
+        <div style={{ marginTop: 32 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Aria&apos;s SEO read</div>
+            <button onClick={loadInsights} disabled={insightLoading || !issues.some(iss => iss.severity === 'high' && !iss.suggested_fix)}
+              style={{ padding: '6px 14px', borderRadius: 8, border: 'none', background: '#7FB897', color: '#0E1411', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', opacity: insightLoading ? 0.6 : 1 }}>
+              {insightLoading ? 'Reading...' : "Get Aria's read"}
+            </button>
+          </div>
+          {insights.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {insights.map((ins, i) => (
+                <div key={i} style={{ background: 'rgba(127,184,151,0.06)', borderRadius: 12, border: '1px solid rgba(127,184,151,0.15)', padding: '14px 16px' }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: '#7FB897', marginBottom: 8 }}>{ins.title}</div>
+                  <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                    <pre style={{ flex: 1, margin: 0, fontSize: 12, color: 'rgba(255,255,255,0.8)', fontFamily: 'monospace', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{ins.fix}</pre>
+                    <CopyBtn text={ins.fix} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -232,20 +295,45 @@ function SiteHealthTab({ businessId }: { businessId: string }) {
 function LocalSeoTab({ businessId }: { businessId: string }) {
   const [local, setLocal] = useState<SeoLocal | null>(null)
   const [loading, setLoading] = useState(true)
-  useEffect(() => {
-    supabase.from('seo_local').select('*').eq('business_id', businessId).maybeSingle().then(({ data }: { data: SeoLocal | null; error: unknown }) => { setLocal(data); setLoading(false) })
-  }, [businessId])
+  const [scanning, setScanning] = useState(false)
+
+  async function loadLocal() {
+    const { data } = await supabase.from('seo_local').select('*').eq('business_id', businessId).maybeSingle()
+    setLocal(data as SeoLocal | null)
+    setLoading(false)
+  }
+
+  useEffect(() => { loadLocal() }, [businessId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function scanNow() {
+    setScanning(true)
+    try {
+      await fetch('/api/seo/local/scan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ business_id: businessId }) })
+      await loadLocal()
+    } catch { /* ignore */ }
+    setScanning(false)
+  }
+
   if (loading) return <p style={{ color: 'rgba(255,255,255,0.4)', textAlign: 'center', padding: 40 }}>Loading...</p>
-  if (!local) return (
-    <div style={{ textAlign: 'center', padding: 60 }}>
-      <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 14, marginBottom: 6 }}>No local SEO data yet.</p>
-      <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: 12 }}>Local SEO data will appear after your first audit sync.</p>
-    </div>
-  )
-  const pct = Math.max(0, Math.min(100, local.gbp_completeness ?? 0))
-  const checklist = Array.isArray(local.checklist) ? local.checklist : []
+
+  const pct = Math.max(0, Math.min(100, local?.gbp_completeness ?? 0))
+  const checklist: Array<{ item: string; ok: boolean }> = Array.isArray(local?.checklist) ? (local!.checklist as Array<{ item: string; ok: boolean }>) : []
+  const stats: [string, string | number][] = [
+    ['Google listed', local?.gbp_listed == null ? '—' : local.gbp_listed ? 'Yes' : 'No'],
+    ['Review avg', local?.review_avg != null ? (Number(local.review_avg)).toFixed(1) + ' ★' : '—'],
+    ['Review count', local?.review_count ?? '—'],
+    ['Map pack rank', local?.map_pack_rank ?? '—'],
+    ['Citations', local?.citations_total ?? '—'],
+    ['Reviews (30d)', local?.review_velocity_30d ?? '—'],
+  ]
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button onClick={scanNow} disabled={scanning} style={{ padding: '7px 18px', borderRadius: 8, border: 'none', background: '#2D5240', color: '#7FB897', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', opacity: scanning ? 0.6 : 1 }}>
+          {scanning ? 'Scanning...' : 'Scan now'}
+        </button>
+      </div>
       <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 12, padding: '20px 24px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
           <span style={{ color: '#fff', fontSize: 14, fontWeight: 600 }}>Google Business Profile completeness</span>
@@ -255,10 +343,10 @@ function LocalSeoTab({ businessId }: { businessId: string }) {
           <div style={{ height: '100%', width: pct + '%', background: '#7FB897', borderRadius: 4 }} />
         </div>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12 }}>
-        {([['Map pack rank', local.map_pack_rank], ['Citations', local.citations_total], ['Consistent citations', local.citations_consistent], ['Reviews (30d)', local.review_velocity_30d]] as [string, number | null][]).map(([label, value]) => (
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12 }}>
+        {stats.map(([label, value]) => (
           <div key={label} style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 12, padding: '16px 20px' }}>
-            <div style={{ fontSize: 22, fontWeight: 700, color: '#fff' }}>{value ?? '—'}</div>
+            <div style={{ fontSize: 20, fontWeight: 700, color: '#fff' }}>{value}</div>
             <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 2, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</div>
           </div>
         ))}
@@ -301,7 +389,9 @@ function KeywordsTab({ businessId }: { businessId: string }) {
   async function addKeyword() {
     if (!newKw.trim() || adding) return
     setAdding(true)
-    await supabase.from('seo_keywords').insert({ business_id: businessId, keyword: newKw.trim() })
+    try {
+      await fetch('/api/seo/keywords', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ business_id: businessId, keyword: newKw.trim() }) })
+    } catch { /* ignore */ }
     setNewKw('')
     await load()
     setAdding(false)
