@@ -92,17 +92,15 @@ const VROID_TO_MIXAMO: Record<string, string> = {
 }
 
 // Patch VRoid GLB — rename bones to names TalkingHead expects
-// Carefully preserves the full binary structure including morph targets
 async function patchVroidGlb(arrayBuffer: ArrayBuffer): Promise<string> {
   const view = new DataView(arrayBuffer)
-  const magic = view.getUint32(0, true)
-  if (magic !== 0x46546C67) {
+  if (view.getUint32(0, true) !== 0x46546C67) {
     return URL.createObjectURL(new Blob([arrayBuffer], { type: 'model/gltf-binary' }))
   }
 
-  const jsonChunkLength = view.getUint32(12, true)
-  const jsonBytes = new Uint8Array(arrayBuffer, 20, jsonChunkLength)
-  const jsonStr = new TextDecoder().decode(jsonBytes)
+  // Read JSON chunk
+  const jsonChunkLen = view.getUint32(12, true)
+  const jsonStr = new TextDecoder().decode(new Uint8Array(arrayBuffer, 20, jsonChunkLen))
 
   if (!jsonStr.includes('J_Bip_')) {
     return URL.createObjectURL(new Blob([arrayBuffer], { type: 'model/gltf-binary' }))
@@ -110,76 +108,45 @@ async function patchVroidGlb(arrayBuffer: ArrayBuffer): Promise<string> {
 
   console.log('[Avatar] VRoid detected — remapping bones to Mixamo naming')
 
-  // Parse JSON and only rename bone nodes — leave everything else untouched
+  // Rename only skin joint nodes (bones), not mesh nodes (morph targets live there)
   const gltf = JSON.parse(jsonStr)
-
-  if (Array.isArray(gltf.nodes)) {
-    // Build set of bone node indices (referenced by skins)
-    const boneIndices = new Set<number>()
-    if (Array.isArray(gltf.skins)) {
-      for (const skin of gltf.skins) {
-        if (Array.isArray(skin.joints)) {
-          for (const j of skin.joints) boneIndices.add(j)
-        }
-      }
-    }
-
-    // Rename only bone nodes
-    for (const idx of boneIndices) {
-      const node = gltf.nodes[idx]
-      if (!node) continue
-      const mapped = VROID_TO_MIXAMO[node.name]
-      if (mapped) node.name = mapped
-    }
-
-    // Do NOT rename the VRoid root to 'Armature'.
-    // TalkingHead falls back to gltf.scene when modelRoot not found,
-    // and gltf.scene contains BOTH bones and meshes (with morph targets).
-    // If we name anything 'Armature', traverse is scoped to that subtree
-    // which only contains bones — morph targets live on sibling mesh nodes.
+  const boneIdxs = new Set<number>()
+  for (const skin of (gltf.skins ?? [])) {
+    for (const j of (skin.joints ?? [])) boneIdxs.add(j)
+  }
+  for (const idx of boneIdxs) {
+    const node = gltf.nodes?.[idx]
+    if (node && VROID_TO_MIXAMO[node.name]) node.name = VROID_TO_MIXAMO[node.name]
   }
 
-  // Rebuild GLB with corrected JSON chunk
-  const patchedJsonBytes = new TextEncoder().encode(JSON.stringify(gltf))
-  const paddedLen = Math.ceil(patchedJsonBytes.length / 4) * 4
-  const paddedJson = new Uint8Array(paddedLen).fill(0x20) // space-padded per GLB spec
-  paddedJson.set(patchedJsonBytes)
+  // Build new JSON chunk (padded to 4-byte alignment with spaces)
+  const newJsonBytes = new TextEncoder().encode(JSON.stringify(gltf))
+  const newJsonPadded = Math.ceil(newJsonBytes.length / 4) * 4
+  const jsonChunk = new Uint8Array(newJsonPadded).fill(0x20)
+  jsonChunk.set(newJsonBytes)
 
-  // BIN chunk starts after: header(12) + json chunk header(8) + json chunk data
-  const binChunkOffset = 12 + 8 + jsonChunkLength
-  const hasBin = arrayBuffer.byteLength > binChunkOffset + 8
-  let binHeader: Uint8Array | null = null
-  let binData: Uint8Array | null = null
-  if (hasBin) {
-    binHeader = new Uint8Array(arrayBuffer, binChunkOffset, 8)
-    const binLen = new DataView(arrayBuffer, binChunkOffset).getUint32(0, true)
-    binData = new Uint8Array(arrayBuffer, binChunkOffset + 8, binLen)
-  }
+  // Read BIN chunk verbatim — do NOT recalculate offset from jsonChunkLen
+  // Use the actual bytes starting after the original JSON chunk
+  const binOffset = 20 + jsonChunkLen  // original JSON chunk end
+  const binBytes = binOffset < arrayBuffer.byteLength
+    ? new Uint8Array(arrayBuffer, binOffset)
+    : new Uint8Array(0)
 
-  const totalLen = 12 + 8 + paddedLen + (hasBin && binHeader && binData ? 8 + binData.length : 0)
-  const out = new ArrayBuffer(totalLen)
-  const outView = new DataView(out)
-  const outBytes = new Uint8Array(out)
+  // Assemble: GLB header (12) + JSON chunk header (8) + JSON data + BIN chunk (verbatim)
+  const total = 12 + 8 + newJsonPadded + binBytes.length
+  const out = new Uint8Array(total)
+  const dv = new DataView(out.buffer)
 
-  // Header
-  outView.setUint32(0, 0x46546C67, true) // GLB magic
-  outView.setUint32(4, 2, true)           // version
-  outView.setUint32(8, totalLen, true)    // total file length
+  dv.setUint32(0, 0x46546C67, true)   // magic
+  dv.setUint32(4, 2, true)            // version
+  dv.setUint32(8, total, true)        // total length
+  dv.setUint32(12, newJsonPadded, true) // JSON chunk length
+  dv.setUint32(16, 0x4E4F534A, true)  // JSON chunk type
+  out.set(jsonChunk, 20)
+  out.set(binBytes, 20 + newJsonPadded) // BIN chunk verbatim (includes its own 8-byte header)
 
-  // JSON chunk
-  outView.setUint32(12, paddedLen, true)
-  outView.setUint32(16, 0x4E4F534A, true) // JSON
-  outBytes.set(paddedJson, 20)
-
-  // BIN chunk (exact copy, no modification)
-  if (hasBin && binHeader && binData) {
-    outBytes.set(binHeader, 20 + paddedLen)
-    outBytes.set(binData, 20 + paddedLen + 8)
-  }
-
-  const url = URL.createObjectURL(new Blob([out], { type: 'model/gltf-binary' }))
   console.log('[Avatar] VRoid bones patched — blob URL created')
-  return url
+  return URL.createObjectURL(new Blob([out.buffer], { type: 'model/gltf-binary' }))
 }
 
 interface Props { isActive: boolean; responseText: string }
