@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 
-interface Customer { id: string; name: string; email: string | null; phone: string | null; loyalty_points: number; group_name?: string | null; created_at: string; }
+interface Customer { id: string; name: string; email: string | null; phone: string | null; loyalty_points: number; total_spend?: number | null; visit_count?: number | null; last_visit?: string | null; group_name?: string | null; created_at: string; }
 interface Group { id: string; name: string; }
 
 function Sparkline({ values }: { values: number[] }) {
@@ -122,6 +122,7 @@ export default function CustomersPage() {
               <th style={hdr}>Customer</th>
               <th style={hdr}>Group</th>
               <th style={hdr}>Contact</th>
+              <th style={hdr}>Spend / Loyalty</th>
               <th style={hdr}>Performance</th>
               <th style={hdr}>Actions</th>
             </tr>
@@ -145,6 +146,11 @@ export default function CustomersPage() {
                 </td>
                 <td style={{ ...cell, color: 'var(--text-primary)' }}>{c.group_name || '—'}</td>
                 <td style={{ ...cell, color: 'var(--text-secondary)' }}>{c.phone || c.email || '—'}</td>
+                <td style={cell}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>${(Number(c.total_spend ?? 0)).toFixed(2)}</div>
+                  <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>{c.visit_count ?? 0} visits</div>
+                  {(c.loyalty_points ?? 0) > 0 && <div style={{ fontSize: 10, color: '#F59E0B', marginTop: 2 }}>⭐ {c.loyalty_points} pts</div>}
+                </td>
                 <td style={{ ...cell, padding: '8px 14px' }}>
                   <Sparkline values={performances[c.id] || []} />
                 </td>
