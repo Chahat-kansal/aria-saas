@@ -125,6 +125,22 @@ export default function SettingsPage() {
             </div>
           </div>
 
+          {/* Layout customisation */}
+          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '18px 22px', marginBottom: 14 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+              <div>
+                <p style={{ fontSize: 13, fontWeight: 600, color: C.text, marginBottom: 3 }}>Customise layout</p>
+                <p style={{ fontSize: 11, color: C.muted }}>Drag and drop nav items and create groups. Changes save automatically.</p>
+              </div>
+              <button
+                onClick={() => window.dispatchEvent(new CustomEvent('pos-customise-layout'))}
+                style={{ padding: '9px 20px', borderRadius: 9, border: 'none', background: '#2D5240', color: '#7FB897', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}
+              >
+                Customise layout
+              </button>
+            </div>
+          </div>
+
           {/* Sub-sections */}
           <p style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12 }}>More Settings</p>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 10 }}>

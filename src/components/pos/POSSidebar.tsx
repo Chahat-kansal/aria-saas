@@ -13,6 +13,7 @@ import { NAV_STRUCTURE, findActiveSection, findActiveItem, filterNavByIndustry, 
 import { useBusiness } from '@/components/providers/BusinessProvider'
 import { springs } from '@/lib/motion'
 import { supabase } from '@/lib/supabase'
+import POSLayoutCustomiser, { type NavGroup } from './POSLayoutCustomiser'
 
 // ── Props — backwards-compatible with existing POSShell wiring ───────
 interface Props {
@@ -70,8 +71,35 @@ export default function POSSidebar({
   const userMenuRef   = useRef<HTMLDivElement>(null)
   const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  // Layout preferences
+  const [customising,   setCustomising]   = useState(false)
+  const [loadingPrefs,  setLoadingPrefs]  = useState(true)
+  const [navOrder,      setNavOrder]      = useState<string[] | null>(null)
+  const [navGroups,     setNavGroups]     = useState<NavGroup[]>([])
+  const [customiserKey, setCustomiserKey] = useState(0)
+  const [openCustomGroups, setOpenCustomGroups] = useState<Record<string, boolean>>({})
+
   // ── Hydration guard
   useEffect(() => { setMounted(true) }, [])
+
+  // ── Load layout preferences from DB on every mount ───────────────
+  useEffect(() => {
+    fetch('/api/pos/layout-preferences')
+      .then(r => r.json())
+      .then((d: { nav_order?: string[] | null; nav_groups?: NavGroup[] | null }) => {
+        setNavOrder(d.nav_order ?? null)
+        setNavGroups(d.nav_groups ?? [])
+      })
+      .catch(() => {})
+      .finally(() => setLoadingPrefs(false))
+  }, [])
+
+  // ── Listen for customise-layout trigger from settings page ────────
+  useEffect(() => {
+    const handler = () => setCustomising(true)
+    window.addEventListener('pos-customise-layout', handler)
+    return () => window.removeEventListener('pos-customise-layout', handler)
+  }, [])
 
   // ── Load persisted state from localStorage ──────────────────────
   useEffect(() => {
@@ -199,6 +227,18 @@ export default function POSSidebar({
 
   const activeItemHref = mounted ? (findActiveItem(pathname)?.href ?? '') : ''
 
+  // All nav items flattened — used for layout customiser
+  const flatAllItems = useMemo(
+    () => visibleNav.flatMap(s => s.items),
+    [visibleNav],
+  )
+
+  // Build an item map for custom nav rendering
+  const itemHrefMap = useMemo(
+    () => new Map(flatAllItems.map(i => [i.href, i])),
+    [flatAllItems],
+  )
+
   // Derive display name for bottom user menu
   const displayUser = currentUser ?? posUser
   const displayName = displayUser?.name ?? businessName ?? 'Aria POS'
@@ -221,6 +261,8 @@ export default function POSSidebar({
           flexShrink: 0,
           overflow: 'hidden',
           zIndex: 50,
+          outline: customising ? '2px solid #f59e0b' : 'none',
+          outlineOffset: -2,
         }}
       >
         {/* ── TOP: branding ──────────────────────────────────────── */}
@@ -293,6 +335,128 @@ export default function POSSidebar({
 
         {/* ── NAV SECTIONS ─────────────────────────────────────── */}
         <nav style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: collapsed ? '0 4px' : '0 6px' }}>
+          {loadingPrefs ? (
+            /* Loading skeleton — resolves in < 200ms */
+            <div style={{ padding: '4px 4px' }}>
+              {[28, 28, 28, 28, 28].map((h, i) => (
+                <div key={i} style={{ height: h, borderRadius: 6, background: 'rgba(255,255,255,0.05)', marginBottom: 4, animation: 'pulse 1.5s ease-in-out infinite', animationDelay: (i * 0.08) + 's' }} />
+              ))}
+            </div>
+          ) : customising ? (
+            <POSLayoutCustomiser
+              key={customiserKey}
+              allItems={flatAllItems}
+              initialOrder={navOrder}
+              initialGroups={navGroups}
+              collapsed={collapsed}
+              onDone={() => setCustomising(false)}
+              onUpdate={(order, gs) => { setNavOrder(order); setNavGroups(gs) }}
+              onReset={() => { setNavOrder(null); setNavGroups([]); setCustomiserKey(k => k + 1) }}
+            />
+          ) : navOrder !== null ? (
+            /* Custom ordered flat nav */
+            <>
+              {navOrder.map(href => {
+                const item = itemHrefMap.get(href)
+                if (!item) return null
+                const Icon = item.icon
+                const isActive = mounted && (
+                  item.href === '/pos' ? pathname === '/pos'
+                    : item.href === '/pos/display' ? false
+                    : activeItemHref === item.href
+                )
+                return (
+                  <div key={href} style={{ position: 'relative' }}
+                    onMouseEnter={() => {
+                      if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current)
+                      hoverTimerRef.current = setTimeout(() => setHoveredItem(href), 200)
+                    }}
+                    onMouseLeave={() => {
+                      if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current)
+                      setHoveredItem(null)
+                    }}
+                  >
+                    <Link href={href} style={{
+                      display: 'flex', alignItems: 'center', gap: 9,
+                      padding: collapsed ? '9px' : '7px 8px', marginLeft: collapsed ? 0 : 4,
+                      borderRadius: 7, textDecoration: 'none',
+                      color: isActive ? 'var(--text-primary)' : 'var(--text-secondary)',
+                      background: isActive ? 'var(--violet-soft)' : 'transparent',
+                      fontSize: 13, fontWeight: isActive ? 500 : 400,
+                      transition: 'background 150ms, color 150ms',
+                      justifyContent: collapsed ? 'center' : 'flex-start',
+                    }}
+                      onMouseEnter={e => { if (!isActive) { e.currentTarget.style.background = 'var(--bg-hover)'; e.currentTarget.style.color = 'var(--text-primary)' } }}
+                      onMouseLeave={e => { if (!isActive) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-secondary)' } }}
+                    >
+                      {isActive && !collapsed && (
+                        <motion.div layoutId="active-border" style={{ position: 'absolute', left: -4, top: 5, bottom: 5, width: 3, background: 'var(--violet)', borderRadius: 2, boxShadow: '0 0 8px var(--violet-glow)' }} />
+                      )}
+                      <Icon size={15} style={{ flexShrink: 0, color: isActive ? 'var(--violet)' : 'currentColor' }} />
+                      {!collapsed && <span style={{ flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.label}</span>}
+                    </Link>
+                    <AnimatePresence>
+                      {collapsed && hoveredItem === href && (
+                        <motion.div initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -4 }} transition={{ duration: 0.12 }}
+                          style={{ position: 'absolute', left: 'calc(100% + 8px)', top: '50%', transform: 'translateY(-50%)', background: 'var(--bg-elevated)', color: 'var(--text-primary)', padding: '5px 10px', borderRadius: 7, fontSize: 12, whiteSpace: 'nowrap', boxShadow: 'var(--shadow-md)', pointerEvents: 'none', zIndex: 100 }}>
+                          {item.label}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                )
+              })}
+              {/* Custom groups in view mode */}
+              {navGroups.filter(g => g.keys.length > 0).map((group) => {
+                const isOpen = openCustomGroups[group.label] !== false
+                return (
+                  <div key={group.label} style={{ marginTop: 4 }}>
+                    <button
+                      onClick={() => setOpenCustomGroups(s => ({ ...s, [group.label]: s[group.label] === false ? true : false }))}
+                      style={{
+                        width: '100%', display: 'flex', alignItems: 'center', gap: 6,
+                        padding: collapsed ? '7px' : '6px 8px', borderRadius: 7,
+                        background: 'transparent', border: 'none', cursor: 'pointer',
+                        color: 'var(--text-secondary)', fontSize: 13,
+                        justifyContent: collapsed ? 'center' : 'flex-start',
+                        fontFamily: 'inherit',
+                      }}
+                      onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-hover)' }}
+                      onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
+                    >
+                      <motion.span animate={{ rotate: isOpen ? 90 : 0 }} transition={springs.snappy} style={{ display: 'flex', alignItems: 'center' }}>
+                        <ChevronRight size={12} />
+                      </motion.span>
+                      {!collapsed && <span style={{ flex: 1, textAlign: 'left', fontWeight: 500 }}>{group.label}</span>}
+                    </button>
+                    <AnimatePresence initial={false}>
+                      {(collapsed || isOpen) && (
+                        <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={springs.smooth} style={{ overflow: 'hidden', paddingLeft: collapsed ? 0 : 8 }}>
+                          {group.keys.map(href => {
+                            const item = itemHrefMap.get(href)
+                            if (!item) return null
+                            const Icon = item.icon
+                            const isActive = mounted && activeItemHref === item.href
+                            return (
+                              <Link key={href} href={href} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: collapsed ? '9px' : '6px 8px', borderRadius: 7, textDecoration: 'none', color: isActive ? 'var(--text-primary)' : 'var(--text-secondary)', background: isActive ? 'var(--violet-soft)' : 'transparent', fontSize: 13, transition: 'background 150ms', justifyContent: collapsed ? 'center' : 'flex-start' }}
+                                onMouseEnter={e => { if (!isActive) { e.currentTarget.style.background = 'var(--bg-hover)'; e.currentTarget.style.color = 'var(--text-primary)' } }}
+                                onMouseLeave={e => { if (!isActive) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-secondary)' } }}
+                              >
+                                <Icon size={15} style={{ flexShrink: 0 }} />
+                                {!collapsed && <span style={{ flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.label}</span>}
+                              </Link>
+                            )
+                          })}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                )
+              })}
+            </>
+          ) : (
+          /* Default section-based rendering */
+          <>
           {visibleNav.map(section => {
             const isOpen = openSections[section.id] ?? (section.defaultOpen ?? true)
             const SectionIcon = section.icon
@@ -521,6 +685,8 @@ export default function POSSidebar({
               <span style={{ fontSize: 15 }}>✦</span>
               {!collapsed && <span>Ask Aria</span>}
             </button>
+          )}
+          </>
           )}
         </nav>
 
