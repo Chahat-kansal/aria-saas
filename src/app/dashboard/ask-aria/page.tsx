@@ -727,6 +727,13 @@ export default function AskAriaPage() {
                     : m.blocks && m.blocks.length > 0
                       ? (
                         <div>
+                          {/* Narrative text first — what Aria says/speaks */}
+                          {m.content && (
+                            <div className="mb-3 text-sm leading-relaxed opacity-90 whitespace-pre-line">
+                              {m.content}
+                            </div>
+                          )}
+                          {/* Visual blocks below the narrative */}
                           {m.blocks.map((block, bi) => (
                             <BlockRenderer key={bi} block={block} onChoice={(prompt) => { send(prompt) }} />
                           ))}

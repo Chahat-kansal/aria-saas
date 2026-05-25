@@ -240,10 +240,15 @@ MANDATORY STRUCTURE for every response:
 6. text (0-1 blocks, max 2 sentences)
 7. action_list (1 block, always)
 
-CRITICAL: final_briefing = one sentence only. All content goes in ask_blocks.
+final_briefing is what Aria SPEAKS — 2-3 short paragraphs (80-150 words). Written in Aria's voice.
+Para 1: The headline finding with the actual number. Direct, no padding.
+Para 2: Why it matters for the business right now. Specific.
+Para 3: The single most important action and why. Not a menu — one thing.
+Australian English. Never start with "I". Use real figures from the data. Warm but direct.
+The ask_blocks are the VISUAL layer (charts, metric cards, action buttons). final_briefing is the NARRATIVE that Aria reads alongside them.
 
 Return ONLY valid JSON:
-{"final_briefing":"One sentence.","ask_blocks":[...all blocks here...],"ask_followups":["specific question 1?","specific question 2?","specific question 3?"]}`
+{"final_briefing":"Revenue collapsed 78% — $209 this week vs $968 last month. That's structural, not seasonal.\n\nZero customers are tracked. Every sale left as a stranger. Without names you have no retention strategy — just hope they walk past again.\n\nCapture customer names at the till today. Start with a notebook. That one change gives you something to build on.","ask_blocks":[...all blocks here...],"ask_followups":["specific question 1?","specific question 2?","specific question 3?"]}`
 
 // ── Main Export ────────────────────────────────────────────────────
 export async function runAriaCouncil(
