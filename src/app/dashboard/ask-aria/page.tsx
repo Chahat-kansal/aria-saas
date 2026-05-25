@@ -10,6 +10,8 @@ import AuditLogCard from '@/components/aria/AuditLogCard'
 import { AriaArtifact } from '@/components/aria/AriaArtifact'
 import type { PlannedAction } from '@/lib/aria/ask/action-planner'
 import type { DocumentReadResult } from '@/lib/aria/intelligence/document-vision'
+import { BlockRenderer } from '@/components/dashboard/BlockRenderer'
+import type { AskBlock } from '@/lib/aria/ask-types'
 
 const ChartBlock = dynamic(() => import('@/components/dashboard/ChartBlock'), { ssr: false })
 
@@ -30,6 +32,9 @@ interface Message {
   timestamp: Date
   downloads?: Array<{ filename: string; download_url: string; rows: number; format: string }>
   tool_calls?: Array<{ name: string; ms: number }>
+  blocks?: AskBlock[]
+  followups?: string[]
+  used_council?: boolean
 }
 
 interface ConvSummary {
@@ -202,6 +207,7 @@ export default function AskAriaPage() {
   const [confirmingAction, setConfirmingAction] = useState(false)
   const [showAudit, setShowAudit] = useState(false)
   const [uploading, setUploading] = useState(false)
+  const [councilThinking, setCouncilThinking] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -282,6 +288,8 @@ export default function AskAriaPage() {
     const userMsg: Message = { role: 'user', content: userContent, timestamp: new Date() }
     setMessages(prev => [...prev.slice(-20), userMsg, { role: 'assistant', content: '', streaming: true, timestamp: new Date() }])
     setSending(true)
+    const isStrategicMsg = /should|recommend|best|strategy|improve|why|how can|what would|advice|suggest|analyse|analyze|compare|forecast|plan|opportunity|risk|growth|optimise|optimize|revenue|crisis|urgent|help|fix|problem|doing|perform|week|today/i.test(msg)
+    setCouncilThinking(isStrategicMsg)
 
     try {
       let res: Response
@@ -310,6 +318,9 @@ export default function AskAriaPage() {
         cost_usd_cents?: number
         downloads?: Array<{ filename: string; download_url: string; rows: number; format: string }>
         tool_calls?: Array<{ name: string; ms: number }>
+        blocks?: AskBlock[] | null
+        followups?: string[]
+        used_council?: boolean
       }
 
       if (data.conversation_id) setConversationId(data.conversation_id)
@@ -343,6 +354,9 @@ export default function AskAriaPage() {
             intent: data.intent,
             downloads: data.downloads ?? undefined,
             tool_calls: data.tool_calls ?? undefined,
+            blocks: data.blocks ?? undefined,
+            followups: data.followups ?? undefined,
+            used_council: data.used_council ?? false,
           }
         }
         return updated
@@ -361,6 +375,7 @@ export default function AskAriaPage() {
       })
     } finally {
       setSending(false)
+      setCouncilThinking(false)
       inputRef.current?.focus()
     }
   }, [input, sending, conversationId, loadHistory])
@@ -590,7 +605,36 @@ export default function AskAriaPage() {
                     ? { background: '#2D5240', color: '#fff', borderRadius: '18px 18px 4px 18px' }
                     : { background: 'rgba(255,255,255,0.05)', color: '#e5e7eb', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '18px 18px 18px 4px' }}>
                   {m.streaming && !m.content
-                    ? <span className="inline-flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-[#7FB897] animate-pulse" /><span className="opacity-60">Thinking…</span></span>
+                    ? councilThinking
+                      ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 5, padding: '4px 0' }}>
+                          {['Growth brain reading...', 'Risk brain checking...', 'Strategy brain weighing...', 'Synthesising...'].map((step, si) => (
+                            <div key={si} style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 10.5, color: 'rgba(255,255,255,0.4)' }}>
+                              <div style={{ width: 12, height: 12, borderRadius: '50%', border: '1.5px solid #7FB897', borderTopColor: 'transparent', animation: 'spin 0.8s linear infinite', flexShrink: 0 }} />
+                              {step}
+                            </div>
+                          ))}
+                        </div>
+                      )
+                      : <span className="inline-flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-[#7FB897] animate-pulse" /><span className="opacity-60">Thinking…</span></span>
+                    : m.used_council && m.blocks && m.blocks.length > 0
+                      ? (
+                        <div>
+                          {m.blocks.map((block, bi) => (
+                            <BlockRenderer key={bi} block={block} onChoice={(prompt) => { send(prompt) }} />
+                          ))}
+                          {(m.followups ?? []).length > 0 && (
+                            <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 8 }}>
+                              {(m.followups ?? []).map((fup, fi) => (
+                                <button key={fi} onClick={() => { send(fup) }}
+                                  style={{ padding: '4px 10px', borderRadius: 14, border: '0.5px solid rgba(127,184,151,0.2)', background: 'rgba(127,184,151,0.05)', color: '#7FB897', fontSize: 10.5, cursor: 'pointer', fontFamily: 'inherit' }}>
+                                  {fup}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )
                     : m.role === 'assistant' && m.content
                       ? parseAriaResponse(
                           // Always strip raw supabase storage URLs and markdown links pointing to them

@@ -283,7 +283,7 @@ async function _POST(req: Request) {
   const ctx = await buildAskAriaContext(bid, conversationId ?? undefined)
 
   // 2b. Strategic council path — multi-brain analysis for advisory questions
-  const isStrategic = /should|recommend|best|strategy|improve|why|how can|what would|advice|suggest/i.test(message)
+  const isStrategic = /should|recommend|best|strategy|improve|why|how can|what would|advice|suggest|analyse|analyze|compare|forecast|plan|opportunity|risk|growth|optimise|optimize/i.test(message)
   if (isStrategic) {
     try {
       const bizCtx = await getBusinessContext(bid)
@@ -296,6 +296,9 @@ async function _POST(req: Request) {
           console.error('[aria/ask] upsertConversation failed (council):', (e as Error).message)
         }
         return NextResponse.json({
+          blocks: council.ask_blocks ?? [{ type: 'lead', content: council.final_briefing }],
+          followups: council.ask_followups ?? [],
+          used_council: true,
           response: council.final_briefing,
           conversation_id: savedConvId ?? conversationId,
           intent: intent.type,

@@ -28,6 +28,8 @@ export type CouncilOutput = {
   final_briefing: string
   confidence_map: Record<string, 'high' | 'medium' | 'low'>
   layout?: BriefingLayout
+  ask_blocks?: import('./ask-types').AskBlock[]
+  ask_followups?: string[]
   raw_brain_outputs: BrainOutput[]
   context_brain_output?: ContextBrainOutput
   meta: {
@@ -165,8 +167,13 @@ highlight_metrics: array of 3-6 specific numbers/stats pulled from the data to s
 
 section_order: array deciding display order from ["lead", "briefing", "consensus", "debate", "confidence", "actions"] — put the most important first
 
+For ask_aria mode ONLY, also produce:
+- "ask_blocks": rich UI blocks array. Types: {"type":"lead","content":"..."} (exactly one, most important statement), {"type":"text","content":"..."} (supporting paragraph), {"type":"chart","chartType":"bar","labels":[...],"values":[...],"metrics":[{"label":"...","value":"...","color":"green"}]} (only if numeric data supports it), {"type":"brain_readouts","items":[{"role":"growth","icon":"📈","text":"..."},{"role":"risk","icon":"⚠️","text":"..."},{"role":"strategy","icon":"🎯","text":"..."}]}, {"type":"council_split","question":"...","growth":"...","risk":"...","strategy":"...","choices":[{"icon":"🔀","title":"...","sub":"...","prompt":"Tell me more about ..."}]} (only if brains genuinely disagree), {"type":"action_list","items":[{"icon":"✅","title":"...","sub":"...","colorVariant":"default","prompt":"..."}]}, {"type":"action_single","icon":"🎯","title":"...","sub":"...","prompt":"..."}. Always end with 1-2 action blocks.
+- "ask_followups": exactly 3 natural follow-up questions the owner might ask next.
+For briefing and weekly_report modes, omit ask_blocks and ask_followups entirely.
+
 Return ONLY valid JSON, no preamble, no markdown, no code fences:
-{"consensus":["things all agreed on"],"contested":[{"topic":"...","optimist_view":"...","critic_view":"...","strategist_view":"..."}],"final_briefing":"the complete briefing text shown to the owner","confidence_map":{"insight key":"high|medium|low"},"layout":{"mood":"urgent|positive|strategic|split|external","lead_type":"metric|alert|question|debate|context","lead_value":"the key value to show large","lead_label":"short label","accent":"red|green|amber|violet|blue","show_debate_first":false,"highlight_metrics":["$x","y%"],"section_order":["lead","briefing","consensus","debate","confidence"]}}`
+{"consensus":["things all agreed on"],"contested":[{"topic":"...","optimist_view":"...","critic_view":"...","strategist_view":"..."}],"final_briefing":"the complete briefing text shown to the owner","confidence_map":{"insight key":"high|medium|low"},"layout":{"mood":"urgent|positive|strategic|split|external","lead_type":"metric|alert|question|debate|context","lead_value":"the key value to show large","lead_label":"short label","accent":"red|green|amber|violet|blue","show_debate_first":false,"highlight_metrics":["$x","y%"],"section_order":["lead","briefing","consensus","debate","confidence"]},"ask_blocks":[{"type":"lead","content":"..."}],"ask_followups":["question 1?","question 2?","question 3?"]}`
 
 async function callBrain(
   client: Anthropic,
@@ -352,6 +359,8 @@ export async function runAriaCouncil(
     final_briefing: synthesis.final_briefing ?? '',
     confidence_map: synthesis.confidence_map ?? {},
     layout: synthesis.layout ?? undefined,
+    ask_blocks: Array.isArray(synthesis.ask_blocks) ? synthesis.ask_blocks : undefined,
+    ask_followups: Array.isArray(synthesis.ask_followups) ? synthesis.ask_followups : undefined,
     raw_brain_outputs: outputs,
     context_brain_output: contextBrain,
     meta: {
