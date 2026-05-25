@@ -20,7 +20,7 @@ export default async function TimedPricesPage() {
     <TimedPricesApp
       business={biz}
       products={(products ?? []) as Array<{ id: string; name: string; price: number | null }>}
-      activeSchedules={(activeSchedules ?? []) as Array<{ id: string; product_id: string; new_price: number; effective_date: string; ends_at: string | null; label: string | null; status: string; pos_products: { name: string } | null }>}
+      activeSchedules={(activeSchedules ?? []) as unknown as Array<{ id: string; product_id: string; new_price: number; effective_date: string; ends_at: string | null; label: string | null; status: string; pos_products: { name: string } | null }>}
     />
   )
 }

@@ -21,6 +21,7 @@ import { planAction, isConfirmation } from '@/lib/aria/ask/action-planner'
 import { executeAction } from '@/lib/aria/ask/action-executor'
 import type { PlannedAction } from '@/lib/aria/ask/action-planner'
 import { runAriaCouncil } from '@/lib/aria/council'
+import type { CouncilOutput } from '@/lib/aria/council'
 import { getBusinessContext } from '@/lib/aria/get-business-context'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
@@ -214,7 +215,8 @@ async function _POST(req: Request) {
         const execSummary = `${(convPending.pending_action as PlannedAction).title} — ${result.affected_count} item${result.affected_count !== 1 ? 's' : ''} updated.${result.rollback_available ? ' Reversible within 1 hour.' : ''}`
         let postCouncil: CouncilOutput | null = null
         try {
-          postCouncil = await runAriaCouncil({ ...bizCtx, recent_action: execSummary }, bid, 'ask_aria')
+          const bizCtxForAction = await getBusinessContext(bid)
+          postCouncil = await runAriaCouncil(bizCtxForAction + '\n\nRECENT_ACTION: ' + execSummary, bid, 'ask_aria')
         } catch (e) {
           console.error('[aria/ask] post-action council failed, using summary:', (e as Error).message)
         }
