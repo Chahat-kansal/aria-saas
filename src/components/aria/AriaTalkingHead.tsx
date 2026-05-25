@@ -29,7 +29,8 @@ export function AriaTalkingHead({ isActive, responseText }: AriaTalkingHeadProps
 
     const load = async () => {
       try {
-        // importmap in <head> maps bare 'three' → CDN before this executes
+        // webpackIgnore: true prevents Next.js bundler from trying to resolve this
+        // @ts-expect-error — CDN ES module, no local types
         const mod = await import(/* webpackIgnore: true */ 'https://cdn.jsdelivr.net/gh/met4citizen/TalkingHead@1.3/modules/talkinghead.mjs')
         window.TalkingHead = mod.TalkingHead ?? mod.default
         setScriptReady(true)
