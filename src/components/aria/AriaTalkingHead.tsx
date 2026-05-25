@@ -91,25 +91,26 @@ const VROID_TO_MIXAMO: Record<string, string> = {
   'J_Bip_R_ToeBase':            'RightToeBase',
 }
 
-// Patch VRoid GLB — rename bones to names TalkingHead expects
+// Patch VRoid GLB for TalkingHead v1.3 compatibility:
+// 1. Rename skin joint bones (J_Bip_* → short Mixamo names)
+// 2. Create an "Armature" node that parents BOTH the skeleton root AND all mesh nodes
+//    (TalkingHead v1.3 requires "Armature" to exist AND traverses it for morph targets)
 async function patchVroidGlb(arrayBuffer: ArrayBuffer): Promise<string> {
   const view = new DataView(arrayBuffer)
   if (view.getUint32(0, true) !== 0x46546C67) {
     return URL.createObjectURL(new Blob([arrayBuffer], { type: 'model/gltf-binary' }))
   }
 
-  // Read JSON chunk
   const jsonChunkLen = view.getUint32(12, true)
   const jsonStr = new TextDecoder().decode(new Uint8Array(arrayBuffer, 20, jsonChunkLen))
-
   if (!jsonStr.includes('J_Bip_')) {
     return URL.createObjectURL(new Blob([arrayBuffer], { type: 'model/gltf-binary' }))
   }
 
   console.log('[Avatar] VRoid detected — remapping bones to Mixamo naming')
-
-  // Rename only skin joint nodes (bones), not mesh nodes (morph targets live there)
   const gltf = JSON.parse(jsonStr)
+
+  // Step 1: Rename skin joint nodes only
   const boneIdxs = new Set<number>()
   for (const skin of (gltf.skins ?? [])) {
     for (const j of (skin.joints ?? [])) boneIdxs.add(j)
@@ -119,31 +120,41 @@ async function patchVroidGlb(arrayBuffer: ArrayBuffer): Promise<string> {
     if (node && VROID_TO_MIXAMO[node.name]) node.name = VROID_TO_MIXAMO[node.name]
   }
 
-  // Build new JSON chunk (padded to 4-byte alignment with spaces)
+  // Step 2: Create a new "Armature" node that owns ALL top-level scene children
+  // VRoid scene structure: scene.nodes = [skeletonRootIdx, meshIdx1, meshIdx2, ...]
+  // We need: Armature → [skeletonRoot, mesh1, mesh2, ...]
+  // So TalkingHead's armature.traverse() finds both bones AND mesh morph targets
+  const sceneNodes = gltf.scenes?.[0]?.nodes ?? []
+  if (sceneNodes.length > 0) {
+    // Add new Armature node at end of nodes array
+    const armatureIdx = gltf.nodes.length
+    gltf.nodes.push({ name: 'Armature', children: [...sceneNodes] })
+    // Replace scene children with just the Armature node
+    gltf.scenes[0].nodes = [armatureIdx]
+    console.log('[Avatar] Created Armature node wrapping', sceneNodes.length, 'children')
+  }
+
+  // Rebuild GLB
   const newJsonBytes = new TextEncoder().encode(JSON.stringify(gltf))
   const newJsonPadded = Math.ceil(newJsonBytes.length / 4) * 4
   const jsonChunk = new Uint8Array(newJsonPadded).fill(0x20)
   jsonChunk.set(newJsonBytes)
 
-  // Read BIN chunk verbatim — do NOT recalculate offset from jsonChunkLen
-  // Use the actual bytes starting after the original JSON chunk
-  const binOffset = 20 + jsonChunkLen  // original JSON chunk end
+  const binOffset = 20 + jsonChunkLen
   const binBytes = binOffset < arrayBuffer.byteLength
     ? new Uint8Array(arrayBuffer, binOffset)
     : new Uint8Array(0)
 
-  // Assemble: GLB header (12) + JSON chunk header (8) + JSON data + BIN chunk (verbatim)
   const total = 12 + 8 + newJsonPadded + binBytes.length
   const out = new Uint8Array(total)
   const dv = new DataView(out.buffer)
-
-  dv.setUint32(0, 0x46546C67, true)   // magic
-  dv.setUint32(4, 2, true)            // version
-  dv.setUint32(8, total, true)        // total length
-  dv.setUint32(12, newJsonPadded, true) // JSON chunk length
-  dv.setUint32(16, 0x4E4F534A, true)  // JSON chunk type
+  dv.setUint32(0, 0x46546C67, true)
+  dv.setUint32(4, 2, true)
+  dv.setUint32(8, total, true)
+  dv.setUint32(12, newJsonPadded, true)
+  dv.setUint32(16, 0x4E4F534A, true)
   out.set(jsonChunk, 20)
-  out.set(binBytes, 20 + newJsonPadded) // BIN chunk verbatim (includes its own 8-byte header)
+  out.set(binBytes, 20 + newJsonPadded)
 
   console.log('[Avatar] VRoid bones patched — blob URL created')
   return URL.createObjectURL(new Blob([out.buffer], { type: 'model/gltf-binary' }))
