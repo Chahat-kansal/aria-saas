@@ -195,20 +195,44 @@ async function _POST(req: Request) {
         await supabase.from('aria_conversations').update({
           pending_action: null, pending_action_expires_at: null,
         }).eq('id', conversationId)
-        const responseText = result.ok
-          ? `Done — ${result.affected_count} item${result.affected_count !== 1 ? 's' : ''} updated.${result.rollback_available ? ' You can undo within 1 hour.' : ''}`
-          : `Action failed: ${result.error}`
+
+        // If action failed — return plain error, no council
+        if (!result.ok) {
+          const errText = `Action failed: ${result.error ?? 'Unknown error'}`
+          let failConvId = conversationId
+          try { failConvId = await upsertConversation(bid, user.id, conversationId, message, errText, 'action_executed') } catch {}
+          return NextResponse.json({
+            response: errText,
+            conversation_id: failConvId ?? conversationId,
+            intent: 'action_executed',
+            action: { type: 'execution_result', ...result },
+            cost_usd_cents: 0,
+          })
+        }
+
+        // Action succeeded — run council so Aria reflects on what changed
+        const execSummary = `${(convPending.pending_action as PlannedAction).title} — ${result.affected_count} item${result.affected_count !== 1 ? 's' : ''} updated.${result.rollback_available ? ' Reversible within 1 hour.' : ''}`
+        let postCouncil: CouncilOutput | null = null
+        try {
+          postCouncil = await runAriaCouncil({ ...bizCtx, recent_action: execSummary }, bid, 'ask_aria')
+        } catch (e) {
+          console.error('[aria/ask] post-action council failed, using summary:', (e as Error).message)
+        }
+        const responseText = postCouncil?.final_briefing ?? execSummary
         let savedConvId = conversationId
         try {
           savedConvId = await upsertConversation(bid, user.id, conversationId, message, responseText, 'action_executed')
         } catch (e) {
-          console.error('[aria/ask] upsertConversation failed (action_executed):', (e as Error).message, 'conv_id:', conversationId)
+          console.error('[aria/ask] upsertConversation failed (action_executed):', (e as Error).message)
         }
         return NextResponse.json({
           response: responseText,
           conversation_id: savedConvId ?? conversationId,
           intent: 'action_executed',
           action: { type: 'execution_result', ...result },
+          blocks: postCouncil?.ask_blocks ?? [{ type: 'lead', content: responseText }],
+          followups: postCouncil?.ask_followups ?? [],
+          used_council: !!postCouncil,
           cost_usd_cents: 0,
         })
       }
