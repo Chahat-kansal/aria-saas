@@ -2,6 +2,7 @@ import { supabaseAdmin } from '@/lib/supabase-admin'
 import { gatherWeeklyData, computeWeekStart } from './weekly-data'
 import { generateWeeklyNarrative, type BusinessRow } from './weekly-ai'
 import { generateWeeklyPDF } from './weekly-pdf'
+import { sendWeeklyReportEmail, saveWeeklyReportRecord } from './weekly-email'
 
 export async function runWeeklyReport(businessId: string): Promise<void> {
   const { data: biz } = await supabaseAdmin
@@ -42,6 +43,8 @@ export async function runWeeklyReport(businessId: string): Promise<void> {
     }
   }
 
-  // Sprint 3 (Prompt 15) will add email delivery here
-  console.log(`[weekly-report] ${bizName}: done — pdf_url=${pdfUrl ?? 'no storage configured'}`)
+  const emailSent = await sendWeeklyReportEmail(business, narrative, data, weekStart, pdfBuffer, pdfUrl)
+  await saveWeeklyReportRecord(businessId, weekStart, data, pdfUrl, emailSent)
+
+  console.log(`[weekly-report] ${bizName}: done — pdf_url=${pdfUrl ?? 'none'} email_sent=${emailSent}`)
 }

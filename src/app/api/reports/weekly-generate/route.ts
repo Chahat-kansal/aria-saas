@@ -7,6 +7,7 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { gatherWeeklyData, computeWeekStart } from '@/lib/reports/weekly-data'
 import { generateWeeklyNarrative, type BusinessRow } from '@/lib/reports/weekly-ai'
 import { generateWeeklyPDF } from '@/lib/reports/weekly-pdf'
+import { sendWeeklyReportEmail, saveWeeklyReportRecord } from '@/lib/reports/weekly-email'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 async function _POST(req: Request) {
@@ -28,15 +29,9 @@ async function _POST(req: Request) {
 
   const business = biz as BusinessRow
   const tz = business.timezone ?? 'Australia/Melbourne'
+  const weekStart = week_start ? new Date(week_start) : computeWeekStart(tz)
 
-  const weekStart = week_start
-    ? new Date(week_start)
-    : computeWeekStart(tz)
-
-  const [data] = await Promise.all([
-    gatherWeeklyData(business_id, weekStart, tz),
-  ])
-
+  const data = await gatherWeeklyData(business_id, weekStart, tz)
   const narrative = await generateWeeklyNarrative(data, business)
   const pdfBuffer = await generateWeeklyPDF(data, narrative, business, weekStart)
 
@@ -46,15 +41,18 @@ async function _POST(req: Request) {
 
   const { put } = await import('@vercel/blob')
   const filename = `aria-reports/weekly-${business_id}-${weekStart.toISOString().slice(0, 10)}.pdf`
-  const blob = await put(filename, pdfBuffer, {
-    access: 'public',
-    contentType: 'application/pdf',
-  })
+  const blob = await put(filename, pdfBuffer, { access: 'public', contentType: 'application/pdf' })
+  const pdfUrl = blob.url
+
+  const emailSent = await sendWeeklyReportEmail(business, narrative, data, weekStart, pdfBuffer, pdfUrl)
+  await saveWeeklyReportRecord(business_id, weekStart, data, pdfUrl, emailSent)
 
   return NextResponse.json({
-    pdf_url: blob.url,
+    pdf_url: pdfUrl,
     executive_summary: narrative.executive_summary,
     suspicious_count: data.suspiciousTransactions.length,
+    email_sent: emailSent,
+    email: business.email ?? null,
   })
 }
 
