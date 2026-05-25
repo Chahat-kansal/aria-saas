@@ -217,9 +217,9 @@ function Inner({ isActive }: Props) {
         cameraY: 0.07,
         backgroundColor: 'transparent',
         modelPixelRatio: Math.min(window.devicePixelRatio || 1, 2),
-        // modelRoot not set → TalkingHead falls back to gltf.scene
-        // which contains both bones AND mesh nodes with morph targets
-        modelRoot: '__scene__',
+        // modelRoot left as default "Armature" — not found in VRoid GLB
+        // → TalkingHead falls back to gltf.scene (L1294-1295 in talkinghead.mjs)
+        // → traverse finds ALL nodes including mesh nodes with morph targets
       })
 
       // Fetch the avatar, patch VRoid bones if needed, then show
