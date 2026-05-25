@@ -667,7 +667,7 @@ export default function AskAriaPage() {
           {/* Greeting speech bubble sits above avatar naturally */}
           <AriaSpeechBubble business={business} />
           {/* Avatar canvas */}
-          <div style={{ width: 160, height: 220, flexShrink: 0 }}>
+          <div style={{ width: 160, height: 260, flexShrink: 0 }}>
             <AriaTalkingHead
               isActive={isAriaActive}
               responseText={ariaResponseText}
