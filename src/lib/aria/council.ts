@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { createClient } from '@supabase/supabase-js'
 import type { AskBlock } from './ask-types'
+import { runContextBrain, type ContextBrainOutput } from './context-brain'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -24,6 +25,7 @@ export interface CouncilResult {
   ask_blocks?: AskBlock[]
   ask_followups?: string[]
   raw_brain_outputs: BrainOutput[]
+  context_brain_output?: ContextBrainOutput | null
   meta: {
     brains_succeeded: number
     brains_failed: number
@@ -255,6 +257,8 @@ Para 3: The single most important action and why. Not a menu — one thing.
 Australian English. Never start with "I". Use real figures from the data. Warm but direct.
 The ask_blocks are the VISUAL layer (charts, metric cards, action buttons). final_briefing is the NARRATIVE that Aria reads alongside them.
 
+When external context is provided, use it to enrich the briefing (e.g. mention a public holiday, local event, or weather impact) but always label it as external context and never treat it as more reliable than the internal business data.
+
 Return ONLY valid JSON:
 {"final_briefing":"Revenue collapsed 78% — $209 this week vs $968 last month. That's structural, not seasonal.\n\nZero customers are tracked. Every sale left as a stranger. Without names you have no retention strategy — just hope they walk past again.\n\nCapture customer names at the till today. Start with a notebook. That one change gives you something to build on.","ask_blocks":[...all blocks here...],"ask_followups":["specific question 1?","specific question 2?","specific question 3?"]}`
 
@@ -272,12 +276,39 @@ export async function runAriaCouncil(
 
   const userPrompt = `Business data:\n${businessContext}`
 
-  // Run all 4 brains in parallel — 18s timeout each
-  const [growth, risk, strategy, context] = await Promise.all([
+  // Fetch business info for Gemini context brain — optional, non-blocking
+  let bizInfo: { trading_name: string; industry: string; city: string; state: string } | null = null
+  try {
+    const { data: bd } = await supabaseAdmin.from('businesses')
+      .select('trading_name, name, industry, city, suburb, state')
+      .eq('id', businessId).single()
+    if (bd) {
+      const d = bd as Record<string, string | null>
+      bizInfo = {
+        trading_name: d.trading_name ?? d.name ?? 'this business',
+        industry: d.industry ?? 'retail',
+        city: d.city ?? d.suburb ?? 'Australia',
+        state: d.state ?? 'AU',
+      }
+    }
+  } catch { /* non-fatal — context brain is optional */ }
+
+  const now = new Date()
+  const weekStart = new Date(now)
+  weekStart.setDate(now.getDate() - ((now.getDay() + 6) % 7)) // Monday
+  weekStart.setHours(0, 0, 0, 0)
+
+  const geminiPromise: Promise<ContextBrainOutput | null> = bizInfo
+    ? runContextBrain(bizInfo, weekStart, businessId).catch(() => null)
+    : Promise.resolve(null)
+
+  // Run all 5 in parallel — 4 internal Claude brains + optional Gemini context brain
+  const [growth, risk, strategy, context, ctxOutput] = await Promise.all([
     callBrain(client, HAIKU, GROWTH_PROMPT,   userPrompt, 'growth',   businessId, 18000),
     callBrain(client, HAIKU, RISK_PROMPT,     userPrompt, 'risk',     businessId, 18000),
     callBrain(client, HAIKU, STRATEGY_PROMPT, userPrompt, 'strategy', businessId, 18000),
     callBrain(client, HAIKU, CONTEXT_PROMPT,  userPrompt, 'context',  businessId, 18000),
+    geminiPromise,
   ])
 
   const brains = [growth, risk, strategy, context]
@@ -306,7 +337,12 @@ Primary lever: ${(strategy.raw && safeParseJSON(strategy.raw)?.primary_lever) ??
 CONTEXT BRAIN (confidence: ${context.confidence}):
 Observations: ${context.observations.join(' | ')}
 Recommendations: ${context.recommendations.join(' | ')}
-
+${ctxOutput && !ctxOutput.failed ? `
+EXTERNAL CONTEXT (from web search — treat as lower confidence than internal data):
+Factors: ${ctxOutput.external_factors.join(', ') || 'none found'}
+Risks: ${ctxOutput.risk_flags.join(', ') || 'none'}
+Opportunities: ${ctxOutput.opportunities.join(', ') || 'none'}
+Note: this is real-time web data — verify if acting on it.` : ''}
 MODE: ${mode}
 `.trim()
 
@@ -335,6 +371,7 @@ MODE: ${mode}
       return {
         final_briefing: text.slice(0, 500),
         raw_brain_outputs: brains,
+        context_brain_output: ctxOutput ?? null,
         meta: { brains_succeeded: succeeded.length, brains_failed: 4 - succeeded.length, synthesis_succeeded: false, fell_back: true, duration_ms: Date.now() - start },
       }
     }
@@ -344,6 +381,7 @@ MODE: ${mode}
       ask_blocks: mode === 'ask_aria' && Array.isArray(parsed.ask_blocks) ? parsed.ask_blocks as AskBlock[] : undefined,
       ask_followups: mode === 'ask_aria' && Array.isArray(parsed.ask_followups) ? parsed.ask_followups as string[] : undefined,
       raw_brain_outputs: brains,
+      context_brain_output: ctxOutput ?? null,
       meta: { brains_succeeded: succeeded.length, brains_failed: 4 - succeeded.length, synthesis_succeeded: true, fell_back: false, duration_ms: Date.now() - start },
     }
   } catch (e) {
@@ -357,6 +395,7 @@ MODE: ${mode}
     return {
       final_briefing: fallbackBriefing || 'Council completed with partial data.',
       raw_brain_outputs: brains,
+      context_brain_output: ctxOutput ?? null,
       meta: { brains_succeeded: succeeded.length, brains_failed: 4 - succeeded.length, synthesis_succeeded: false, fell_back: true, duration_ms: Date.now() - start },
     }
   }
@@ -378,6 +417,7 @@ export async function insertCouncilRun(
       contested: council?.contested ?? null,
       confidence_map: council?.confidence_map ?? null,
       raw_brain_outputs: council?.raw_brain_outputs ?? null,
+      context_brain_output: council?.context_brain_output ?? null,
       brains_succeeded: council?.meta?.brains_succeeded ?? 0,
       brains_failed: council?.meta?.brains_failed ?? 0,
       synthesis_succeeded: council?.meta?.synthesis_succeeded ?? false,

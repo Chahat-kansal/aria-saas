@@ -34,7 +34,7 @@ async function logCall(params: {
       business_id: params.business_id,
       agent_key: 'council_context',
       provider: 'gemini',
-      model_id: 'gemini-2.5-flash-preview-05-20',
+      model_id: 'gemini-2.5-flash',
       role: 'council',
       input_tokens: params.input_tokens,
       output_tokens: params.output_tokens,
@@ -45,8 +45,9 @@ async function logCall(params: {
 }
 
 export async function runContextBrain(
-  business: { trading_name: string; industry: string; city: string; state: string; business_id?: string },
+  business: { trading_name: string; industry: string; city: string; state: string },
   weekStart: Date,
+  businessId: string,
 ): Promise<ContextBrainOutput> {
   const apiKey = process.env.GEMINI_API_KEY
   if (!apiKey) {
@@ -78,17 +79,16 @@ If you find nothing relevant, return external_factors: [], risk_flags: [], oppor
 
   const body = {
     contents: [{ parts: [{ text: query }] }],
-    tools: [{ google_search: {} }],
+    tools: [{ googleSearch: {} }],
     generationConfig: { maxOutputTokens: 1500, temperature: 0.1 },
   }
 
-  const t0 = Date.now()
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), 45000)
 
   try {
     const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -97,7 +97,6 @@ If you find nothing relevant, return external_factors: [], risk_flags: [], oppor
       },
     )
     clearTimeout(timer)
-    void t0
 
     if (!res.ok) {
       const errText = await res.text()
@@ -114,9 +113,7 @@ If you find nothing relevant, return external_factors: [], risk_flags: [], oppor
     const inputTokens = usage.promptTokenCount ?? Math.round(query.length / 4)
     const outputTokens = usage.candidatesTokenCount ?? Math.round(raw.length / 4)
 
-    if (business.business_id) {
-      await logCall({ business_id: business.business_id, success: true, input_tokens: inputTokens, output_tokens: outputTokens })
-    }
+    await logCall({ business_id: businessId, success: true, input_tokens: inputTokens, output_tokens: outputTokens })
 
     const parsed = safeParseJSON(raw)
     if (!parsed) return { ...FAILED }
@@ -134,15 +131,13 @@ If you find nothing relevant, return external_factors: [], risk_flags: [], oppor
     clearTimeout(timer)
     const msg = (e as Error).message
     console.error('[context-brain] failed:', msg)
-    if (business.business_id) {
-      await logCall({
-        business_id: business.business_id,
-        success: false,
-        input_tokens: Math.round(query.length / 4),
-        output_tokens: 0,
-        error_message: msg,
-      })
-    }
+    await logCall({
+      business_id: businessId,
+      success: false,
+      input_tokens: Math.round(query.length / 4),
+      output_tokens: 0,
+      error_message: msg,
+    })
     return { ...FAILED }
   }
 }
