@@ -12,7 +12,7 @@ import type { PlannedAction } from '@/lib/aria/ask/action-planner'
 import type { DocumentReadResult } from '@/lib/aria/intelligence/document-vision'
 import { BlockRenderer } from '@/components/dashboard/BlockRenderer'
 import type { AskBlock } from '@/lib/aria/ask-types'
-import { AriaTalkingHead } from '@/components/aria/AriaTalkingHead'
+const AriaTalkingHead = dynamic(() => import('@/components/aria/AriaTalkingHead').then(m => ({ default: m.AriaTalkingHead })), { ssr: false })
 
 const ChartBlock = dynamic(() => import('@/components/dashboard/ChartBlock'), { ssr: false })
 
