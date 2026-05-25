@@ -1,18 +1,17 @@
 'use client'
-
 import { useEffect, useRef, useState, useCallback } from 'react'
 
 interface AriaTalkingHeadProps {
-  isActive: boolean       // true while Aria's text is streaming
-  responseText: string    // the text being streamed (triggers silent lip animation)
+  isActive: boolean
+  responseText: string
 }
 
-// TalkingHead loaded via script tag — declare global type
+// TalkingHead is an ES module loaded from CDN at runtime
+// It does NOT go through webpack — uses dynamic import with webpackIgnore
+// This means zero build-time dependencies, zero peer conflicts
 declare global {
-  interface Window {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    TalkingHead: any
-  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  interface Window { TalkingHead: any }
 }
 
 export function AriaTalkingHead({ isActive, responseText }: AriaTalkingHeadProps) {
@@ -21,96 +20,66 @@ export function AriaTalkingHead({ isActive, responseText }: AriaTalkingHeadProps
   const headRef = useRef<any>(null)
   const [loaded, setLoaded] = useState(false)
   const [scriptReady, setScriptReady] = useState(false)
-  const lastTextRef = useRef<string>('')
+  const lastTextRef = useRef('')
 
   const avatarUrl = process.env.NEXT_PUBLIC_ARIA_AVATAR_URL ?? ''
 
-  // Step 1 — Load TalkingHead from jsDelivr CDN as ES module
+  // Load TalkingHead from CDN as ES module — completely bypasses webpack
   useEffect(() => {
     if (typeof window === 'undefined' || !avatarUrl) return
     if (window.TalkingHead) { setScriptReady(true); return }
 
     const load = async () => {
       try {
-        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-        // @ts-expect-error — CDN ES module, no local types
+        // webpackIgnore: true prevents Next.js bundler from trying to resolve this
         const mod = await import(/* webpackIgnore: true */ 'https://cdn.jsdelivr.net/gh/met4citizen/TalkingHead@1.3/modules/talkinghead.mjs')
         window.TalkingHead = mod.TalkingHead ?? mod.default
         setScriptReady(true)
-      } catch (err) {
-        console.error('[AriaTalkingHead] CDN load failed:', err)
+      } catch (e) {
+        console.error('[AriaTalkingHead] CDN load failed:', e)
       }
     }
     load()
   }, [avatarUrl])
 
-  // Step 2 — Initialise avatar once script is ready and container mounted
+  // Initialise once script + container ready
   useEffect(() => {
     if (!scriptReady || !containerRef.current || headRef.current || !avatarUrl) return
-
     try {
       headRef.current = new window.TalkingHead(containerRef.current, {
         ttsEndpoint: null,
         ttsApikey: null,
         cameraView: 'upper',
         cameraRotateX: 6,
-        cameraRotateY: 0,
         cameraDistance: 0.7,
-        cameraX: 0,
         cameraY: 0.07,
         backgroundColor: 'transparent',
         modelPixelRatio: Math.min(window.devicePixelRatio || 1, 2),
       })
-
       headRef.current.showAvatar(
-        {
-          url: avatarUrl,
-          body: 'F',
-          avatarMood: 'neutral',
-          lipsyncLang: 'en',
-        },
-        () => {
-          setLoaded(true)
-          console.log('[AriaTalkingHead] Aria loaded')
-        },
-        (err: Error) => {
-          console.error('[AriaTalkingHead] Load error:', err)
-        }
+        { url: avatarUrl, body: 'F', avatarMood: 'neutral', lipsyncLang: 'en' },
+        () => { setLoaded(true); console.log('[AriaTalkingHead] Loaded') },
+        (e: Error) => { console.error('[AriaTalkingHead] Load error:', e) }
       )
-    } catch (err) {
-      console.error('[AriaTalkingHead] Init error:', err)
-    }
+    } catch (e) { console.error('[AriaTalkingHead] Init error:', e) }
   }, [scriptReady, avatarUrl])
 
-  // Step 3 — Drive silent lip animation from response text while streaming
-  // speakText with volumeAudio: 0 = visual lip sync only, completely silent
+  // Silent lip animation — speakText with volume 0 drives mouth shapes visually
   const animateSpeaking = useCallback((text: string) => {
-    if (!headRef.current || !loaded || !text) return
-    if (text === lastTextRef.current) return
+    if (!headRef.current || !loaded || !text || text === lastTextRef.current) return
     lastTextRef.current = text
-
     try {
-      headRef.current.speakText(text, {
-        volumeAudio: 0,
-        volumeBackground: 0,
-        avatarMood: 'happy',
-      })
-    } catch (err) {
-      console.warn('[AriaTalkingHead] speakText error:', err)
-    }
+      headRef.current.speakText(text, { volumeAudio: 0, volumeBackground: 0, avatarMood: 'happy' })
+    } catch (e) { console.warn('[AriaTalkingHead] speakText error:', e) }
   }, [loaded])
 
-  // Step 4 — When active and text is streaming, animate
   useEffect(() => {
     if (!loaded) return
     if (isActive && responseText) {
       animateSpeaking(responseText)
     } else if (!isActive) {
       lastTextRef.current = ''
-      try {
-        headRef.current?.stopSpeaking?.()
-        headRef.current?.setMood?.('neutral')
-      } catch { /* non-fatal */ }
+      try { headRef.current?.stopSpeaking?.(); headRef.current?.setMood?.('neutral') } catch { /* ok */ }
     }
   }, [isActive, responseText, loaded, animateSpeaking])
 
@@ -118,39 +87,26 @@ export function AriaTalkingHead({ isActive, responseText }: AriaTalkingHeadProps
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
-      <div
-        ref={containerRef}
-        style={{ width: '100%', height: '100%', background: 'transparent' }}
-      />
-
+      <div ref={containerRef} style={{ width: '100%', height: '100%', background: 'transparent' }} />
       {!loaded && (
-        <div style={{
-          position: 'absolute', inset: 0,
-          display: 'flex', flexDirection: 'column',
-          alignItems: 'center', justifyContent: 'center', gap: 8,
-        }}>
-          <div style={{
-            width: 24, height: 24, borderRadius: '50%',
-            border: '2px solid rgba(127,184,151,0.4)',
-            borderTopColor: '#7FB897',
-            animation: 'ariaSpin 0.8s linear infinite',
-          }} />
-          <span style={{ fontSize: 10, color: 'rgba(127,184,151,0.5)' }}>Aria</span>
+        <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+          <div style={{ width: 22, height: 22, borderRadius: '50%', border: '2px solid rgba(127,184,151,0.4)', borderTopColor: '#7FB897', animation: 'ariaSpin 0.8s linear infinite' }} />
+          <span style={{ fontSize: 9, color: 'rgba(127,184,151,0.5)' }}>Aria</span>
         </div>
       )}
-
       {isActive && loaded && (
-        <div style={{
-          position: 'absolute', bottom: 0, left: '20%', right: '20%', height: 2,
-          background: 'linear-gradient(to right, transparent, #7FB897, transparent)',
-          borderRadius: 1, opacity: 0.6,
-          animation: 'ariaPulseBar 1s ease-in-out infinite alternate',
-        }} />
+        <div style={{ position: 'absolute', bottom: 10, left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: 2, alignItems: 'flex-end', height: 10, pointerEvents: 'none' }}>
+          {[0,1,2,3].map(i => (
+            <div key={i} style={{ width: 2, borderRadius: 2, background: '#7FB897', height: [5,9,7,8][i], animation: `ariaBar${i} 0.5s ease-in-out infinite alternate`, animationDelay: `${i * 0.12}s` }} />
+          ))}
+        </div>
       )}
-
       <style>{`
         @keyframes ariaSpin { to { transform: rotate(360deg); } }
-        @keyframes ariaPulseBar { from { opacity: 0.3; } to { opacity: 0.8; } }
+        @keyframes ariaBar0 { from { height: 4px; } to { height: 8px; } }
+        @keyframes ariaBar1 { from { height: 9px; } to { height: 3px; } }
+        @keyframes ariaBar2 { from { height: 5px; } to { height: 9px; } }
+        @keyframes ariaBar3 { from { height: 7px; } to { height: 4px; } }
       `}</style>
     </div>
   )

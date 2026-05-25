@@ -373,20 +373,21 @@ export default function AskAriaPage() {
       })()
 
       // Typewriter effect — reveal response word by word so avatar lip-sync
-      // matches the text appearing on screen
+      // matches the text appearing on screen.
+      // Metadata (blocks, followups, used_council) attached from word 1 so
+      // graphs/cards render immediately and type in alongside the text.
       const fullText = data.response ?? ''
       const words = fullText.split(' ')
       let wordIdx = 0
-      // Clear any previous typewriter interval
       if (typewriterRef.current) clearInterval(typewriterRef.current)
 
-      // Start avatar animation immediately — feeds full text for lip timing
+      // Feed full text to avatar immediately for accurate lip timing
       setAriaResponseText(fullText)
 
-      // Reveal words progressively — ~60ms per word feels natural
       typewriterRef.current = setInterval(() => {
         wordIdx++
         const revealed = words.slice(0, wordIdx).join(' ')
+        const done = wordIdx >= words.length
         setMessages(prev => {
           const updated = [...prev]
           const last = updated[updated.length - 1]
@@ -394,28 +395,25 @@ export default function AskAriaPage() {
             updated[updated.length - 1] = {
               ...last,
               content: revealed,
-              // Keep streaming:true until last word so avatar keeps animating
-              streaming: wordIdx < words.length,
-              // Only attach metadata on the final word
-              ...(wordIdx >= words.length ? {
-                action: msgAction,
-                intent: data.intent,
-                downloads: data.downloads ?? undefined,
-                tool_calls: data.tool_calls ?? undefined,
-                blocks: data.blocks ?? undefined,
-                followups: data.followups ?? undefined,
-                used_council: data.used_council ?? false,
-              } : {}),
+              streaming: !done,
+              // Attach all metadata from the very first word so blocks render immediately
+              action: msgAction,
+              intent: data.intent,
+              downloads: data.downloads ?? undefined,
+              tool_calls: data.tool_calls ?? undefined,
+              blocks: data.blocks ?? undefined,
+              followups: data.followups ?? undefined,
+              used_council: data.used_council ?? false,
             }
           }
           return updated
         })
-        if (wordIdx >= words.length) {
+        if (done) {
           if (typewriterRef.current) clearInterval(typewriterRef.current)
-          setAriaResponseText('')   // Stop avatar animation
+          setAriaResponseText('')
           loadHistory()
         }
-      }, 55)  // 55ms per word ≈ natural reading/speaking pace
+      }, 55)
     } catch (err: unknown) {
       const errMsg = err instanceof Error ? err.message : 'Unknown error'
       setMessages(prev => {
