@@ -32,22 +32,6 @@
       "schedule": "0 16 * * *"
     },
     {
-      "path": "/api/cron/reorder-daily",
-      "schedule": "0 19 * * *"
-    },
-    {
-      "path": "/api/cron/pricing-daily",
-      "schedule": "0 20 * * *"
-    },
-    {
-      "path": "/api/cron/schedule-weekly",
-      "schedule": "0 21 * * 0"
-    },
-    {
-      "path": "/api/cron/promo-cleanup",
-      "schedule": "0 14 * * *"
-    },
-    {
       "path": "/api/cron/daily-briefing-submit",
       "schedule": "0 16 * * *"
     },
