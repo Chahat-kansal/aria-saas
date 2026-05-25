@@ -67,10 +67,21 @@ function SiteHealthTab({ businessId }: { businessId: string }) {
   async function runAudit() {
     setCrawling(true)
     try {
-      await fetch('/api/seo/crawl', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ business_id: businessId }) })
-      await load()
-    } catch { /* ignore */ }
-    setCrawling(false)
+      const res = await fetch('/api/seo/crawl', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ business_id: businessId }) })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) { alert(data.error ?? 'Crawl failed — check your website URL is publicly accessible'); setCrawling(false); return }
+      // Poll for completion — crawl is async, DB writes happen server-side
+      let attempts = 0
+      const poll = setInterval(async () => {
+        attempts++
+        await load()
+        if (attempts >= 12) { clearInterval(poll); setCrawling(false) }  // max 60s
+      }, 5000)
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Network error'
+      alert(`Crawl failed: ${msg}. Check your website URL is publicly accessible.`)
+      setCrawling(false)
+    }
   }
 
   async function markFixed(issueId: string) {
@@ -78,8 +89,9 @@ function SiteHealthTab({ businessId }: { businessId: string }) {
     try {
       await fetch(`/api/seo/issues/${issueId}`, { method: 'PATCH' })
       setIssues(prev => prev.filter(i => i.id !== issueId))
-    } catch { /* ignore */ }
+    } catch (e: unknown) { console.error('markFixed error:', e) }
     setFixingId(null)
+    await load()
   }
 
   async function generateFix(issueId: string) {
