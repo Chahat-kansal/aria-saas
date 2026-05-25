@@ -212,7 +212,7 @@ export default function AskAriaPage() {
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
-  const [ariaVideoUrl] = useState<string>(process.env.NEXT_PUBLIC_ARIA_VIDEO_URL ?? '')
+  const [ariaVideoUrl] = useState<string>(process.env.NEXT_PUBLIC_ARIA_VIDEO_URL ?? 'https://tcowd5vdie4rwa2o.public.blob.vercel-storage.com/50071.mp4')
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
 
@@ -496,22 +496,21 @@ export default function AskAriaPage() {
 
   return (
     <div style={{ display: 'flex', height: '100dvh', background: '#0d0d14', overflow: 'hidden' }}>
-      {/* Aria floating avatar — bottom-left, opposite to Briefing button (top-right) */}
+      {/* Aria floating avatar — fixed bottom-left, blended */}
       {ariaVideoUrl && (
         <div style={{
           position: 'fixed',
-          bottom: 24,
-          left: 24,
+          bottom: 0,
+          left: 0,
           zIndex: 50,
-          width: 160,
-          height: 220,
-          borderRadius: 20,
-          overflow: 'hidden',
+          width: 220,
+          height: 320,
           pointerEvents: 'none',
-          transition: 'opacity 0.3s ease',
-          opacity: isAriaActive ? 1 : 0.72,
+          WebkitMaskImage: 'radial-gradient(ellipse 85% 85% at 35% 40%, black 30%, transparent 75%)',
+          maskImage: 'radial-gradient(ellipse 85% 85% at 35% 40%, black 30%, transparent 75%)',
+          transition: 'opacity 0.4s ease',
+          opacity: isAriaActive ? 1 : 0.55,
         }}>
-          {/* Video */}
           <video
             ref={videoRef}
             src={ariaVideoUrl}
@@ -522,75 +521,35 @@ export default function AskAriaPage() {
               width: '100%',
               height: '100%',
               objectFit: 'cover',
-              objectPosition: 'top center',
+              objectPosition: 'center top',
               display: 'block',
             }}
           />
-          {/* Bottom fade — blends into page */}
-          <div style={{
-            position: 'absolute',
-            bottom: 0,
-            left: 0,
-            right: 0,
-            height: 90,
-            background: 'linear-gradient(to bottom, transparent, #0d0d14)',
-            pointerEvents: 'none',
-          }} />
-          {/* Top fade */}
-          <div style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            height: 40,
-            background: 'linear-gradient(to top, transparent, #0d0d14)',
-            pointerEvents: 'none',
-          }} />
-          {/* Left fade */}
-          <div style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            bottom: 0,
-            width: 30,
-            background: 'linear-gradient(to left, transparent, #0d0d14)',
-            pointerEvents: 'none',
-          }} />
-          {/* Right fade */}
-          <div style={{
-            position: 'absolute',
-            top: 0,
-            right: 0,
-            bottom: 0,
-            width: 30,
-            background: 'linear-gradient(to right, transparent, #0d0d14)',
-            pointerEvents: 'none',
-          }} />
-          {/* Sound bars — only when speaking */}
-          {isAriaActive && (
-            <div style={{
-              position: 'absolute',
-              bottom: 12,
-              left: '50%',
-              transform: 'translateX(-50%)',
-              display: 'flex',
-              gap: 3,
-              alignItems: 'flex-end',
-              height: 14,
-              zIndex: 5,
-            }}>
-              {[0,1,2,3].map(i => (
-                <div key={i} style={{
-                  width: 3,
-                  borderRadius: 2,
-                  background: '#7FB897',
-                  height: [8,14,10,12][i],
-                  animation: `ariaBar${i} 0.5s ease-in-out infinite alternate`,
-                  animationDelay: `${i * 0.12}s`,
-                }} />
-              ))}
-            </div>
-          )}
+        </div>
+      )}
+      {/* Sound bars — outside mask so always visible when speaking */}
+      {ariaVideoUrl && isAriaActive && (
+        <div style={{
+          position: 'fixed',
+          bottom: 18,
+          left: 28,
+          zIndex: 51,
+          display: 'flex',
+          gap: 3,
+          alignItems: 'flex-end',
+          height: 14,
+          pointerEvents: 'none',
+        }}>
+          {[0,1,2,3].map(i => (
+            <div key={i} style={{
+              width: 3,
+              borderRadius: 2,
+              background: '#7FB897',
+              height: [8,14,10,12][i],
+              animation: `ariaBar${i} 0.5s ease-in-out infinite alternate`,
+              animationDelay: `${i * 0.12}s`,
+            }} />
+          ))}
         </div>
       )}
       {/* Avatar keyframes */}
