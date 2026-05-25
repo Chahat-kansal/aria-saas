@@ -724,7 +724,7 @@ export default function AskAriaPage() {
                         </div>
                       )
                       : <span className="inline-flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-[#7FB897] animate-pulse" /><span className="opacity-60">Thinking…</span></span>
-                    : m.used_council && m.blocks && m.blocks.length > 0
+                    : m.blocks && m.blocks.length > 0
                       ? (
                         <div>
                           {m.blocks.map((block, bi) => (
