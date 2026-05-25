@@ -132,17 +132,11 @@ async function patchVroidGlb(arrayBuffer: ArrayBuffer): Promise<string> {
       if (mapped) node.name = mapped
     }
 
-    // Find Hips node and rename its parent to Armature
-    const hipsIdx = gltf.nodes.findIndex((n: {name: string}) => n.name === 'Hips')
-    if (hipsIdx >= 0) {
-      const parentIdx = gltf.nodes.findIndex((n: {children?: number[]}) =>
-        Array.isArray(n.children) && n.children.includes(hipsIdx)
-      )
-      if (parentIdx >= 0 && gltf.nodes[parentIdx].name !== 'Armature') {
-        console.log('[Avatar] Renaming root bone to Armature:', gltf.nodes[parentIdx].name)
-        gltf.nodes[parentIdx].name = 'Armature'
-      }
-    }
+    // Do NOT rename the VRoid root to 'Armature'.
+    // TalkingHead falls back to gltf.scene when modelRoot not found,
+    // and gltf.scene contains BOTH bones and meshes (with morph targets).
+    // If we name anything 'Armature', traverse is scoped to that subtree
+    // which only contains bones — morph targets live on sibling mesh nodes.
   }
 
   // Rebuild GLB with corrected JSON chunk
@@ -223,6 +217,9 @@ function Inner({ isActive }: Props) {
         cameraY: 0.07,
         backgroundColor: 'transparent',
         modelPixelRatio: Math.min(window.devicePixelRatio || 1, 2),
+        // modelRoot not set → TalkingHead falls back to gltf.scene
+        // which contains both bones AND mesh nodes with morph targets
+        modelRoot: '__scene__',
       })
 
       // Fetch the avatar, patch VRoid bones if needed, then show
