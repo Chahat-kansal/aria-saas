@@ -1,10 +1,12 @@
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { gatherWeeklyData, computeWeekStart } from './weekly-data'
+import { generateWeeklyNarrative, type BusinessRow } from './weekly-ai'
+import { generateWeeklyPDF } from './weekly-pdf'
 
 export async function runWeeklyReport(businessId: string): Promise<void> {
   const { data: biz } = await supabaseAdmin
     .from('businesses')
-    .select('name, trading_name, email, timezone, industry')
+    .select('id, name, trading_name, email, timezone, industry, city')
     .eq('id', businessId)
     .single()
 
@@ -13,8 +15,9 @@ export async function runWeeklyReport(businessId: string): Promise<void> {
     return
   }
 
-  const tz = (biz.timezone as string | null) ?? 'Australia/Melbourne'
-  const bizName = (biz.trading_name as string | null) ?? (biz.name as string | null) ?? businessId
+  const business = biz as BusinessRow
+  const tz = business.timezone ?? 'Australia/Melbourne'
+  const bizName = business.trading_name ?? business.name ?? businessId
   const weekStart = computeWeekStart(tz)
 
   const data = await gatherWeeklyData(businessId, weekStart, tz)
@@ -24,6 +27,21 @@ export async function runWeeklyReport(businessId: string): Promise<void> {
     return
   }
 
-  // Sprint 2 (Prompt 14) replaces this placeholder with council summary + email
-  console.log(`[weekly-report] ${bizName}: would generate report — Sprint 2 will complete this`)
+  const narrative = await generateWeeklyNarrative(data, business)
+  const pdfBuffer = await generateWeeklyPDF(data, narrative, business, weekStart)
+
+  let pdfUrl: string | null = null
+  if (process.env.BLOB_READ_WRITE_TOKEN) {
+    try {
+      const { put } = await import('@vercel/blob')
+      const filename = `aria-reports/weekly-${businessId}-${weekStart.toISOString().slice(0, 10)}.pdf`
+      const blob = await put(filename, pdfBuffer, { access: 'public', contentType: 'application/pdf' })
+      pdfUrl = blob.url
+    } catch (e) {
+      console.error(`[weekly-report] ${bizName}: blob upload failed:`, (e as Error).message)
+    }
+  }
+
+  // Sprint 3 (Prompt 15) will add email delivery here
+  console.log(`[weekly-report] ${bizName}: done — pdf_url=${pdfUrl ?? 'no storage configured'}`)
 }
