@@ -89,6 +89,13 @@ const VROID_TO_MIXAMO: Record<string, string> = {
   'J_Bip_R_LowerLeg':           'RightLeg',
   'J_Bip_R_Foot':               'RightFoot',
   'J_Bip_R_ToeBase':            'RightToeBase',
+  // Eyes — TalkingHead requires LeftEye/RightEye for height calculation (L1445)
+  // VRoid uses J_Adj_L_FaceEye / J_Adj_R_FaceEye
+  'J_Adj_L_FaceEye':            'LeftEye',
+  'J_Adj_R_FaceEye':            'RightEye',
+  // Alternate VRoid eye bone names (older exports)
+  'J_Bip_L_Eye':                'LeftEye',
+  'J_Bip_R_Eye':                'RightEye',
 }
 
 // Patch VRoid GLB for TalkingHead v1.3 compatibility:
@@ -118,6 +125,21 @@ async function patchVroidGlb(arrayBuffer: ArrayBuffer): Promise<string> {
   for (const idx of boneIdxs) {
     const node = gltf.nodes?.[idx]
     if (node && VROID_TO_MIXAMO[node.name]) node.name = VROID_TO_MIXAMO[node.name]
+  }
+
+  // Step 1b: If eye bones not found via bone map, find them by common VRoid names
+  // and add them as named nodes so TalkingHead's getObjectByName succeeds
+  const eyeNames = new Set(gltf.nodes?.map((n: {name:string}) => n.name) ?? [])
+  if (!eyeNames.has('LeftEye') && !eyeNames.has('RightEye')) {
+    // Try to find eye nodes under any name containing 'Eye' or 'eye'
+    const leftEyeNode = gltf.nodes?.find((n: {name:string}) =>
+      /eye/i.test(n.name) && /left|_l_|_l$/i.test(n.name)
+    )
+    const rightEyeNode = gltf.nodes?.find((n: {name:string}) =>
+      /eye/i.test(n.name) && /right|_r_|_r$/i.test(n.name)
+    )
+    if (leftEyeNode) { leftEyeNode.name = 'LeftEye'; console.log('[Avatar] Mapped eye:', leftEyeNode.name, '→ LeftEye') }
+    if (rightEyeNode) { rightEyeNode.name = 'RightEye'; console.log('[Avatar] Mapped eye:', rightEyeNode.name, '→ RightEye') }
   }
 
   // Step 2: Create a new "Armature" node that owns ALL top-level scene children
