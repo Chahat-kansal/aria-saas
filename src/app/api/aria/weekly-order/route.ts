@@ -27,6 +27,7 @@ async function _POST(req: Request) {
     { data: products },
     { data: salesItems },
     { data: suppliers },
+    { data: reorderSettings },
     weather,
   ] = await Promise.all([
     supabaseAdmin.from('pos_products')
@@ -38,10 +39,18 @@ async function _POST(req: Request) {
       .eq('business_id', business_id)
       .gte('created_at', new Date(Date.now() - 30 * 86400000).toISOString()),
     supabaseAdmin.from('pos_suppliers').select('id,name,email').eq('business_id', business_id).order('name'),
+    supabaseAdmin.from('reorder_settings').select('*').eq('business_id', business_id).maybeSingle(),
     getWeatherForecast(biz.city || 'Melbourne').catch(() => []),
   ]);
 
   const holidays = getUpcomingHolidays(14, 'VIC');
+
+  // Business reorder settings (or defaults)
+  const defaultReorderQty = reorderSettings?.default_reorder_qty ?? 12;
+  const bufferWeeks = reorderSettings?.buffer_weeks ?? 2;
+  const minVelocityPerDay = reorderSettings?.min_velocity_per_day ?? 0;
+  const maxStockTrigger = reorderSettings?.max_stock_trigger ?? 0;
+  const velocityPeriod = reorderSettings?.velocity_period ?? 'day';
   const hotWeekend = (weather as any[]).slice(0, 7).some((d: any) => d.is_hot);
 
   // Calculate daily velocity per product (last 30 days)
@@ -63,12 +72,26 @@ async function _POST(req: Request) {
     const nextHolidayImpact = holidays[0]?.days_away <= 7 ? (holidays[0] as any).impact ?? 1.2 : 1.0;
     const combinedUplift = weatherUplift * (daysOfStock < 7 ? nextHolidayImpact : 1.0);
 
+    // Velocity threshold check — skip if below user's minimum velocity
+    const velocityForCheck = velocityPeriod === 'week' ? dailyVelocity * 7 : dailyVelocity;
+    if (minVelocityPerDay > 0 && velocityForCheck < minVelocityPerDay && stock > (maxStockTrigger || 5)) continue;
+
+    // Stock trigger check — only reorder if stock < user-defined threshold
+    const stockTrigger = (product as any).reorder_point ?? (maxStockTrigger > 0 ? maxStockTrigger : null);
+    if (stockTrigger && stock >= stockTrigger && dailyVelocity > 0) continue;
+
     const weeklyDemand = dailyVelocity * 7 * combinedUplift;
-    const targetStock  = weeklyDemand * 2; // 2-week buffer
-    // For zero-velocity low stock: suggest a minimum replenishment of 6 units
+    const targetStock = (product as any).target_stock
+      ?? weeklyDemand * bufferWeeks;
+
+    // Per-product reorder qty override, else use business default or calculated
+    const calcQty = Math.max(0, Math.ceil(targetStock - stock));
+    const productReorderQty = (product as any).reorder_qty;
     const suggestedQty = dailyVelocity === 0 && stock <= 5
-      ? Math.max(6, Math.ceil(6 - stock))
-      : Math.max(0, Math.ceil(targetStock - stock));
+      ? productReorderQty ?? Math.max(defaultReorderQty, Math.ceil(defaultReorderQty - stock))
+      : productReorderQty
+        ? Math.max(productReorderQty, calcQty)  // at least the override qty
+        : calcQty || defaultReorderQty;
 
     if (suggestedQty <= 0) continue;  // skip anything with no reorder needed
 
