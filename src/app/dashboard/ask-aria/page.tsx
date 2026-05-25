@@ -216,16 +216,17 @@ export default function AskAriaPage() {
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
 
-  // Video avatar: play while sending OR while any message is streaming
-  // This keeps Aria "alive" through the full response cycle including streaming
-  const isAriaActive = sending || messages.some(m => m.streaming)
+  // Video avatar: ONLY active when streaming message has actual content (not during brain thinking)
+  const isAriaActive = messages.some(m => m.streaming && m.content && m.content.length > 0)
   useEffect(() => {
     const vid = videoRef.current
     if (!vid || !ariaVideoUrl) return
     if (isAriaActive) {
+      vid.loop = true
       vid.currentTime = 0
       vid.play().catch(() => {})
     } else {
+      vid.loop = false
       vid.pause()
       vid.currentTime = 0
     }
@@ -496,68 +497,12 @@ export default function AskAriaPage() {
 
   return (
     <div style={{ display: 'flex', height: '100dvh', background: '#0d0d14', overflow: 'hidden' }}>
-      {/* Aria floating avatar — fixed bottom-left, blended */}
-      {ariaVideoUrl && (
-        <div style={{
-          position: 'fixed',
-          bottom: 0,
-          left: 0,
-          zIndex: 50,
-          width: 220,
-          height: 320,
-          pointerEvents: 'none',
-          WebkitMaskImage: 'radial-gradient(ellipse 85% 85% at 35% 40%, black 30%, transparent 75%)',
-          maskImage: 'radial-gradient(ellipse 85% 85% at 35% 40%, black 30%, transparent 75%)',
-          transition: 'opacity 0.4s ease',
-          opacity: isAriaActive ? 1 : 0.55,
-        }}>
-          <video
-            ref={videoRef}
-            src={ariaVideoUrl}
-            muted
-            playsInline
-            loop={false}
-            style={{
-              width: '100%',
-              height: '100%',
-              objectFit: 'cover',
-              objectPosition: 'center top',
-              display: 'block',
-            }}
-          />
-        </div>
-      )}
-      {/* Sound bars — outside mask so always visible when speaking */}
-      {ariaVideoUrl && isAriaActive && (
-        <div style={{
-          position: 'fixed',
-          bottom: 18,
-          left: 28,
-          zIndex: 51,
-          display: 'flex',
-          gap: 3,
-          alignItems: 'flex-end',
-          height: 14,
-          pointerEvents: 'none',
-        }}>
-          {[0,1,2,3].map(i => (
-            <div key={i} style={{
-              width: 3,
-              borderRadius: 2,
-              background: '#7FB897',
-              height: [8,14,10,12][i],
-              animation: `ariaBar${i} 0.5s ease-in-out infinite alternate`,
-              animationDelay: `${i * 0.12}s`,
-            }} />
-          ))}
-        </div>
-      )}
-      {/* Avatar keyframes */}
+      {/* Avatar keyframes only — avatar is inside chat col below */}
       <style>{`
-        @keyframes ariaBar0 { from { height: 5px; opacity: 0.4; } to { height: 10px; opacity: 1; } }
-        @keyframes ariaBar1 { from { height: 14px; opacity: 1; } to { height: 4px; opacity: 0.3; } }
-        @keyframes ariaBar2 { from { height: 6px; opacity: 0.5; } to { height: 12px; opacity: 0.9; } }
-        @keyframes ariaBar3 { from { height: 10px; opacity: 0.7; } to { height: 5px; opacity: 0.4; } }
+        @keyframes ariaBar0 { from { height: 4px; opacity: 0.4; } to { height: 9px; opacity: 1; } }
+        @keyframes ariaBar1 { from { height: 9px; opacity: 1; } to { height: 3px; opacity: 0.3; } }
+        @keyframes ariaBar2 { from { height: 5px; opacity: 0.5; } to { height: 8px; opacity: 0.9; } }
+        @keyframes ariaBar3 { from { height: 7px; opacity: 0.6; } to { height: 4px; opacity: 0.4; } }
       `}</style>
       {/* Mobile backdrop */}
       {showHistory && (
@@ -617,7 +562,59 @@ export default function AskAriaPage() {
       )}
 
       {/* Main chat */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 flex flex-col overflow-hidden" style={{ position: 'relative' }}>
+        {/* Aria floating avatar — absolute inside chat col, bottom-right corner
+            Opposite side from Briefing button (top-right in header).
+            Hidden when idle (opacity 0), visible + looping only while text streams. */}
+        {ariaVideoUrl && (
+          <div style={{
+            position: 'absolute',
+            bottom: 80,
+            right: 20,
+            width: 96,
+            height: 130,
+            zIndex: 20,
+            pointerEvents: 'none',
+            opacity: isAriaActive ? 1 : 0,
+            transition: 'opacity 0.25s ease',
+            WebkitMaskImage: 'radial-gradient(ellipse 75% 78% at 50% 42%, black 20%, transparent 68%)',
+            maskImage: 'radial-gradient(ellipse 75% 78% at 50% 42%, black 20%, transparent 68%)',
+          }}>
+            <video
+              ref={videoRef}
+              src={ariaVideoUrl}
+              muted
+              playsInline
+              loop
+              style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center top', display: 'block' }}
+            />
+          </div>
+        )}
+        {/* Sound bars above avatar, only while speaking */}
+        {ariaVideoUrl && isAriaActive && (
+          <div style={{
+            position: 'absolute',
+            bottom: 68,
+            right: 36,
+            zIndex: 21,
+            display: 'flex',
+            gap: 2,
+            alignItems: 'flex-end',
+            height: 10,
+            pointerEvents: 'none',
+          }}>
+            {[0,1,2,3].map(i => (
+              <div key={i} style={{
+                width: 2,
+                borderRadius: 2,
+                background: '#7FB897',
+                height: [5,9,7,8][i],
+                animation: `ariaBar${i} 0.5s ease-in-out infinite alternate`,
+                animationDelay: `${i * 0.12}s`,
+              }} />
+            ))}
+          </div>
+        )}
         {/* Header */}
         <div className="border-b px-6 py-4 flex items-center justify-between flex-shrink-0"
           style={{ borderColor: 'rgba(255,255,255,0.06)', background: '#13131a' }}>
