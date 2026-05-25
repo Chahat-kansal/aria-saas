@@ -123,7 +123,7 @@ export default function DetailsPage() {
     router.push('/onboarding/plan');
   }
 
-  const inputCls = 'w-full bg-[#faf9f6] border border-[#eceae3] rounded-xl px-4 py-3 text-sm outline-none focus:border-[#1D9E75] focus:shadow-[0_0_0_3px_rgba(29,158,117,0.08)] transition-all placeholder:text-[rgba(26,26,22,0.3)]';
+  const inputCls = 'w-full bg-white border border-[#d1d0c9] rounded-xl px-4 py-3 text-sm text-[#1a1a16] outline-none focus:border-[#1D9E75] focus:shadow-[0_0_0_3px_rgba(29,158,117,0.08)] transition-all placeholder:text-[rgba(26,26,22,0.4)]';
   const selectCls = inputCls + ' appearance-none cursor-pointer';
 
   return (
@@ -177,7 +177,7 @@ export default function DetailsPage() {
             <div>
               <label className="text-xs text-[rgba(26,26,22,0.5)] mb-1.5 block">Phone</label>
               <div className="flex gap-2">
-                <div className="bg-[#faf9f6] border border-[#eceae3] rounded-xl px-3 py-3 text-sm text-[rgba(26,26,22,0.5)] flex-shrink-0">+61</div>
+                <div className="bg-white border border-[#d1d0c9] rounded-xl px-3 py-3 text-sm text-[rgba(26,26,22,0.5)] flex-shrink-0">+61</div>
                 <input value={form.phone} onChange={set('phone')} placeholder="412 345 678" className={inputCls} />
               </div>
             </div>
