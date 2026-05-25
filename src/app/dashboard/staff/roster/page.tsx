@@ -8,6 +8,7 @@ import WageSummary from '@/components/staff/WageSummary'
 
 interface StaffMember { id: string; first_name: string; last_name: string; position: string; color: string; employment_type: string }
 interface AreaOption { id: string; name: string }
+interface LeaveRecord { staff_member_id: string; start_date: string; end_date: string; leave_type: string }
 
 function getMondayOfWeek(d: Date): string {
   const day = d.getDay()
@@ -39,6 +40,7 @@ export default function RosterPage() {
   const [modal, setModal] = useState<{ day: string; shift?: Partial<ShiftEntry> } | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const [availability, setAvailability] = useState<Array<{ staff_member_id: string; day_of_week: number; available: boolean; start_time: string | null; end_time: string | null; staff_name: string | null }>>([])
+  const [leave, setLeave] = useState<LeaveRecord[]>([])
   const [templates, setTemplates] = useState<Array<{ id: string; name: string; shifts: ShiftEntry[] }>>([])
   const [showAvailability, setShowAvailability] = useState(false)
   const [showTemplates, setShowTemplates] = useState(false)
@@ -72,10 +74,19 @@ export default function RosterPage() {
       setAreas(areasData.areas ?? [])
     } catch { /* keep empty state */ }
     setLoading(false)
-    // Load availability and templates in parallel (non-blocking)
+    // Load availability, leave, and templates in parallel (non-blocking)
+    const weekEnd = new Date(weekStart + 'T12:00:00Z')
+    weekEnd.setDate(weekEnd.getDate() + 6)
+    const weekEndStr = weekEnd.toISOString().slice(0, 10)
     Promise.all([
       fetch('/api/staff/availability').then(r => r.json()).then(d => setAvailability(d.availability ?? [])),
       fetch('/api/staff/roster/templates').then(r => r.json()).then(d => setTemplates(d.templates ?? [])),
+      fetch('/api/staff/leave?status=approved').then(r => r.json()).then(d => {
+        const filtered = (d.leave ?? [] as LeaveRecord[]).filter(
+          (l: LeaveRecord) => l.start_date <= weekEndStr && l.end_date >= weekStart
+        )
+        setLeave(filtered)
+      }),
     ]).catch(() => {})
   }, [weekStart])
 
@@ -127,9 +138,14 @@ export default function RosterPage() {
       if (avail && !avail.available) {
         issues.push(`⚠ ${s.staff_name} is unavailable on ${new Date(s.start_time).toLocaleDateString('en-AU', { weekday: 'long' })}`)
       }
+      const shiftDate = s.start_time.slice(0, 10)
+      const onLeave = leave.find(l => l.staff_member_id === s.staff_member_id && shiftDate >= l.start_date && shiftDate <= l.end_date)
+      if (onLeave) {
+        issues.push(`⚠ ${s.staff_name} is on ${onLeave.leave_type.replace(/_/g, ' ')} leave on ${new Date(s.start_time).toLocaleDateString('en-AU', { weekday: 'long' })}`)
+      }
     })
     setConflicts([...new Set(issues)])
-  }, [availability])
+  }, [availability, leave])
 
   const handleShiftSave = (newShift: Omit<ShiftEntry, 'cost_cents' | 'hours'>) => {
     const withDefaults: ShiftEntry = { ...newShift, hours: 0, cost_cents: 0 }
@@ -211,10 +227,11 @@ export default function RosterPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ week_start: weekStart }),
       })
-      const data = await res.json() as { shifts?: ShiftEntry[]; reasoning?: string }
+      const data = await res.json() as { shifts?: ShiftEntry[]; reasoning?: string; conflicts?: string[] }
       if (data.shifts && data.shifts.length > 0) {
         setShifts(data.shifts)
         setAiReasoning(data.reasoning ?? null)
+        if (data.conflicts?.length) setConflicts(data.conflicts)
         setIsDirty(false)
         showToast(`Aria drafted ${data.shifts.length} shifts — review and edit before publishing`)
         // Auto-save so shifts appear in the grid immediately and persist
@@ -381,6 +398,8 @@ export default function RosterPage() {
             weekDays={weekDays}
             staff={staff.map(m => ({ id: m.id, name: `${m.first_name} ${m.last_name}`, position: m.position, color: m.color }))}
             shifts={shifts}
+            leave={leave}
+            availability={availability}
             onCellClick={handleCellClick}
             onShiftEdit={handleShiftEdit}
             onShiftDelete={handleShiftDelete}

@@ -28,7 +28,7 @@ async function _POST(req: Request) {
 
   const draft = await generateRosterDraft(bid, weekStart, body.outlet_id ? String(body.outlet_id) : null)
   const shifts = await hydrateShiftCosts(draft.shifts, bid)
-  return NextResponse.json({ shifts, reasoning: draft.reasoning, cost_cents: draft.cost_cents })
+  return NextResponse.json({ shifts, reasoning: draft.reasoning, cost_cents: draft.cost_cents, conflicts: draft.conflicts })
 }
 
 export const POST = withErrorCapture('staff/roster/ai-draft', _POST)

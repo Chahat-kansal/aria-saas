@@ -24,9 +24,26 @@ async function _PATCH(req: Request, { params }: Params) {
     .update({ ...body, updated_at: new Date().toISOString() })
     .eq('id', id)
     .eq('business_id', biz.id)
-    .select('*, staff_members(first_name, last_name)')
+    .select('*, staff_members(first_name, last_name, mobile)')
     .single()
   if (e) return NextResponse.json({ error: e.message }, { status: 500 })
+
+  if (body.status === 'approved') {
+    const row = data as Record<string, unknown>
+    const sm = row.staff_members as { first_name: string; mobile: string | null } | null
+    const sid = process.env.TWILIO_ACCOUNT_SID ?? ''
+    const token = process.env.TWILIO_AUTH_TOKEN ?? ''
+    const from = process.env.TWILIO_PHONE_NUMBER ?? ''
+    if (sid && token && from && sm?.mobile) {
+      const leaveType = String(row.leave_type ?? 'leave').replace(/_/g, ' ')
+      const msg = `Hi ${sm.first_name}, your ${leaveType} request from ${row.start_date} to ${row.end_date} has been approved.`
+      fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
+        method: 'POST',
+        headers: { Authorization: `Basic ${Buffer.from(`${sid}:${token}`).toString('base64')}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ To: sm.mobile, From: from, Body: msg }).toString(),
+      }).catch(() => { /* non-fatal */ })
+    }
+  }
 
   return NextResponse.json({ leave: data })
 }
