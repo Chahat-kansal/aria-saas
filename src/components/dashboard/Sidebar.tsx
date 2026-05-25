@@ -63,6 +63,7 @@ const ALL_ITEMS: Record<string, NavItemDef> = {
   'competitors':                { href: '/dashboard/competitors',              label: 'Competitor watch',  icon: SearchIcon,         section: 'Reputation'   },
   'suppliers':                  { href: '/dashboard/suppliers',                label: 'Supplier prices',   icon: SearchIcon,         section: 'Inventory'    },
   'churn':                      { href: '/dashboard/churn',                    label: 'Churn prevention',  icon: TrendingDownIcon,   section: 'Intelligence' },
+  'invoices':                   { href: '/dashboard/invoices',                 label: 'Invoices',          icon: FileTextIcon,       badge: 'AI', section: 'Revenue' },
   'bookings':                   { href: '/dashboard/bookings',                 label: 'Bookings + sales',  icon: CalendarIcon,       section: 'Revenue'      },
   'quote-builder':              { href: '/dashboard/quote-builder',            label: 'Quote builder',     icon: FileTextIcon,       section: 'Pro tools'    },
   'compliance':                 { href: '/dashboard/compliance',               label: 'Compliance',        icon: CheckSquareIcon,    section: 'Pro tools'    },
@@ -186,6 +187,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
   sections['Overview'] = [
     ALL_ITEMS['dashboard'],
     ALL_ITEMS['customers'],
+    ALL_ITEMS['invoices'],
     { href: '/dashboard/ask-aria', label: 'Ask Aria', icon: ChatIcon, badge: 'AI', section: 'Overview' },
     { href: '/dashboard/integrations', label: 'Integrations', icon: PlugIcon, badge: business?.square_connected ? '●' : undefined, section: 'Overview' },
   ];
