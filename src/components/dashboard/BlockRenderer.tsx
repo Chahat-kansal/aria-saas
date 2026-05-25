@@ -11,6 +11,8 @@ const trendIcon = (t?: string) => t === 'up' ? '↑' : t === 'down' ? '↓' : '�
 const trendColor = (t?: string, c?: string) => c ?? (t === 'up' ? G : t === 'down' ? R : 'rgba(255,255,255,0.35)')
 
 export function BlockRenderer({ block, onChoice }: Props) {
+  if (!block || !block.type) return null
+
 
   if (block.type === 'lead') return (
     <div style={{ fontSize: 14, fontWeight: 500, color: 'rgba(255,255,255,0.94)', lineHeight: 1.65, marginBottom: 10 }}>
@@ -20,7 +22,7 @@ export function BlockRenderer({ block, onChoice }: Props) {
 
   if (block.type === 'text') return (
     <div style={{ fontSize: 13, lineHeight: 1.72, color: 'rgba(255,255,255,0.78)', marginBottom: 10 }}>
-      {block.content.split('\n').map((line, i) => <p key={i} style={{ margin: '0 0 6px' }}>{line}</p>)}
+      {(block.content ?? '').split('\n').map((line, i) => <p key={i} style={{ margin: '0 0 6px' }}>{line}</p>)}
     </div>
   )
 
@@ -34,7 +36,7 @@ export function BlockRenderer({ block, onChoice }: Props) {
         </div>
         <div style={{ padding: 14 }}>
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: 80, marginBottom: 6 }}>
-            {block.values.map((v, i) => (
+            {(block.values ?? []).map((v, i) => (
               <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', height: '100%', justifyContent: 'flex-end', gap: 2 }}>
                 <span style={{ fontSize: 8, color: v === max ? G : 'rgba(255,255,255,0.2)' }}>
                   {u}{v >= 1000 ? `${(v/1000).toFixed(1)}k` : v}
@@ -44,13 +46,13 @@ export function BlockRenderer({ block, onChoice }: Props) {
             ))}
           </div>
           <div style={{ display: 'flex', gap: 3, marginBottom: block.metrics.length ? 12 : 0 }}>
-            {block.labels.map((l, i) => (
+            {(block.labels ?? []).map((l, i) => (
               <div key={i} style={{ flex: 1, textAlign: 'center', fontSize: 9, color: 'rgba(255,255,255,0.22)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l}</div>
             ))}
           </div>
           {block.metrics.length > 0 && (
             <div style={{ display: 'flex', gap: 6 }}>
-              {block.metrics.map((m, i) => (
+              {(block.metrics ?? []).map((m, i) => (
                 <div key={i} style={{ flex: 1, background: 'rgba(255,255,255,0.04)', borderRadius: 8, padding: '7px 10px' }}>
                   <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.3)', marginBottom: 3 }}>{m.label}</div>
                   <div style={{ fontSize: 15, fontWeight: 600, color: m.color ?? G }}>{m.value}</div>
@@ -65,7 +67,7 @@ export function BlockRenderer({ block, onChoice }: Props) {
 
   if (block.type === 'metric_row') return (
     <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
-      {block.items.map((item, i) => (
+      {(block.items ?? []).map((item, i) => (
         <div key={i} style={{ flex: '1 1 100px', background: 'rgba(255,255,255,0.04)', border: '0.5px solid rgba(255,255,255,0.08)', borderRadius: 10, padding: '10px 12px' }}>
           <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.32)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{item.label}</div>
           <div style={{ fontSize: 18, fontWeight: 700, color: trendColor(item.trend, item.color), lineHeight: 1 }}>{item.value}</div>
@@ -85,7 +87,7 @@ export function BlockRenderer({ block, onChoice }: Props) {
         Council read
       </div>
       <div style={{ padding: 12 }}>
-        {block.items.map((item, i) => {
+        {(block.items ?? []).map((item, i) => {
           const c = item.role === 'growth' ? G : item.role === 'risk' ? R : item.role === 'context' ? B : V
           return (
             <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '8px 0', borderBottom: i < block.items.length - 1 ? '0.5px solid rgba(255,255,255,0.05)' : 'none' }}>
@@ -121,7 +123,7 @@ export function BlockRenderer({ block, onChoice }: Props) {
           <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.6)', lineHeight: 1.5 }}>{block.strategy}</div>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-          {block.choices.map((c, i) => (
+          {(block.choices ?? []).map((c, i) => (
             <button key={i} onClick={() => onChoice?.(c.prompt)}
               style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 11px', borderRadius: 8, border: '0.5px solid rgba(255,255,255,0.09)', background: 'rgba(255,255,255,0.03)', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', width: '100%' }}>
               <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.85)', flex: 1 }}>{c.title}</div>
@@ -140,7 +142,7 @@ export function BlockRenderer({ block, onChoice }: Props) {
         Priority actions
       </div>
       <div style={{ padding: 12 }}>
-        {block.items.map((item, i) => {
+        {(block.items ?? []).map((item, i) => {
           const c = item.colorVariant === 'danger' ? R : item.colorVariant === 'warning' ? A : G
           return (
             <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: i < block.items.length-1 ? 10 : 0 }}>
