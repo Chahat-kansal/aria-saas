@@ -1,30 +1,47 @@
-# Prompt 22 — Ask Aria: Council-Mode Chat Redesign + Rich Block Output
+# Prompt 22 — Ask Aria: Council-Mode Rich Block Output + Chat UI Upgrade
 
-## MANDATORY PRE-EDIT CHECKLIST — do every step before writing a single line of code
+## MANDATORY PRE-EDIT CHECKLIST — do every step, stop if anything fails
 
 ```
 1. pwd → must print C:\Users\kansa\aria-saas-audit — STOP if wrong
 2. git pull origin main
-3. Read src/app/dashboard/ask-aria/page.tsx — understand full current structure
-4. Read src/app/api/aria/ask/route.ts — understand current request/response shape
-5. Read src/lib/aria/council.ts — understand CouncilOutput, BriefingLayout, runCouncil() signature
-6. Read src/lib/aria/get-business-context.ts — understand what getBusinessContext() returns
-7. Read src/components/dashboard/AriaBriefingCard.tsx — use as reference for card styling patterns
-8. npx tsc --noEmit — must be ZERO errors before touching anything
-9. npm run build — must succeed before touching anything
+3. Read EVERY file listed below before writing a single line of code:
+   - src/app/dashboard/ask-aria/page.tsx         (762 lines — client component, full chat UI)
+   - src/app/api/aria/ask/route.ts               (741 lines — DO NOT REWRITE, additive only)
+   - src/lib/aria/council.ts                     (392 lines — understand CouncilOutput type)
+   - src/lib/aria/get-business-context.ts        (166 lines — returns Promise<string>)
+   - src/lib/aria/ask/business-context.ts        (buildAskAriaContext)
+   - src/components/dashboard/AriaBriefingCard.tsx (304 lines — reference for card patterns)
+4. npx tsc --noEmit — must be ZERO errors before touching anything
+5. npm run build — must succeed before touching anything
 ```
+
+---
+
+## CRITICAL RULE — DO NOT REWRITE ask/route.ts
+
+`src/app/api/aria/ask/route.ts` is 741 lines of complex, working logic including:
+- Agentic tool execution (query_business_data, generate_report, web_search)
+- Intent classification, action planning, cost guard
+- Strategic council path already at L285-L311
+- Conversation persistence, voice input support
+
+**This file must NOT be rewritten.** Only make the MINIMUM changes described below.
 
 ---
 
 ## WHAT THIS PROMPT BUILDS
 
-Redesign Ask Aria from a basic chat into a premium council-driven intelligence chat. Every question the owner asks runs through the 3-brain council and returns a structured multi-block response — deep analysis + visual cards — not flat text.
+1. New `AskBlock` type system for structured UI responses
+2. Extend the existing council path in ask/route.ts to ALSO return structured blocks (additive, 8 lines of change)
+3. Extend CouncilOutput to carry ask_blocks and ask_followups
+4. Extend the synthesis prompt in council.ts to generate structured block output
+5. New `BlockRenderer` component to render blocks visually
+6. New `AskAriaChat` wrapper that uses BlockRenderer for council responses — the existing ask-aria/page.tsx uses both old and new rendering
 
 ---
 
-## STEP 1 — New type file
-
-Create `src/lib/aria/ask-types.ts`:
+## STEP 1 — Create src/lib/aria/ask-types.ts
 
 ```typescript
 export type AskBlock =
@@ -39,11 +56,7 @@ export type AskBlock =
     }
   | {
       type: 'brain_readouts'
-      items: Array<{
-        role: 'growth' | 'risk' | 'strategy'
-        icon: string
-        text: string
-      }>
+      items: Array<{ role: 'growth' | 'risk' | 'strategy'; icon: string; text: string }>
     }
   | {
       type: 'council_split'
@@ -56,9 +69,7 @@ export type AskBlock =
   | {
       type: 'action_list'
       items: Array<{
-        icon: string
-        title: string
-        sub: string
+        icon: string; title: string; sub: string
         colorVariant?: 'danger' | 'warning' | 'default'
         prompt: string
       }>
@@ -68,349 +79,402 @@ export type AskBlock =
 export interface AskResponse {
   blocks: AskBlock[]
   followups: string[]
-  council_run_id?: string
   used_council: boolean
+  // Existing fields from route (kept for backwards compat with page.tsx)
+  response?: string
+  conversation_id?: string | null
+  intent?: string
+  action?: unknown
+  cost_usd_cents?: number
+  downloads?: unknown
+  tool_calls?: unknown[]
 }
 ```
 
 ---
 
-## STEP 2 — Update /api/aria/ask/route.ts
+## STEP 2 — Extend council.ts CouncilOutput type
 
-**Full rewrite of the route. Preserve the import of `runCouncil` already there. Do not break any other imports.**
+In `src/lib/aria/council.ts`, add to the existing `CouncilOutput` type (L25 onwards). Only ADD these fields — do not remove or rename any existing field:
 
 ```typescript
-// src/app/api/aria/ask/route.ts
-export const maxDuration = 300
-
-// GET handler — unchanged, keep existing
-// POST handler — full replacement:
-
-export async function POST(req: Request) {
-  // 1. Auth check — keep existing pattern (supabase auth, get user, get business)
-  // 2. Extract { message, businessId } from body
-  // 3. Call getBusinessContext(businessId) — already imported
-  // 4. Run council via runCouncil(businessContext, { mode: 'ask', question: message })
-  //    - runCouncil is already imported from '@/lib/aria/council'
-  //    - Pass the user question as part of the context prompt
-  // 5. Parse council output into AskBlock[] using the rules below
-  // 6. Return AskResponse JSON
-}
-```
-
-### Synthesis prompt addition
-
-In `src/lib/aria/council.ts`, extend the existing synthesis prompt to include this ADDITIONAL instruction at the end (do NOT replace the existing synthesis prompt — append to it):
-
-```
-ADDITIONAL OUTPUT FOR ASK ARIA:
-When responding to a direct owner question (mode=ask), you must ALSO return a "ask_blocks" array in your JSON alongside the existing fields. This array defines the structured UI output.
-
-Block rules — choose which blocks to include based on what was asked:
-- ALWAYS include a "lead" block (1-2 sentences, the most important finding)
-- Include "text" blocks for analytical prose
-- Include "chart" block ONLY if there is actual numeric data to show (revenue figures, counts from the business context). Labels must match real data. Never fabricate chart data.
-- Include "brain_readouts" block when all 3 brains have distinct views worth showing
-- Include "council_split" block ONLY when brains genuinely disagree — include 2-3 tappable choices the owner can select to direct Aria
-- Include "action_list" or "action_single" when there is a concrete thing to do
-- Include "followups" array: 3 short follow-up questions the owner might want to ask next
-
-Block ordering logic:
-- Simple factual question → lead + text + action_single
-- Question about data/revenue → lead + chart + brain_readouts + text + action_single  
-- Question where brains disagree → lead + text + council_split
-- Question about priorities/urgency → lead + action_list + text
-
-Return the ask_blocks and followups as part of your existing JSON output:
-{
-  ...existing fields (consensus, contested, final_briefing, confidence_map, layout)...,
-  "ask_blocks": [...],
-  "ask_followups": ["question 1", "question 2", "question 3"]
-}
-```
-
-### In council.ts — update CouncilOutput type
-
-Add to the existing `CouncilOutput` type (do not remove existing fields):
-```typescript
-ask_blocks?: AskBlock[]
+// Add these two fields to the existing CouncilOutput type:
+ask_blocks?: import('./ask-types').AskBlock[]
 ask_followups?: string[]
 ```
 
-Add import at top of council.ts:
+Add the import at the top of council.ts if not already there:
 ```typescript
-import type { AskBlock } from './ask-types'
+// No additional import needed — use dynamic import in the type annotation above
+// OR add: import type { AskBlock } from './ask-types'
+// and change the type annotation to: ask_blocks?: AskBlock[]
 ```
 
-### In the synthesis parsing (where council.ts parses the synthesis JSON response)
+---
 
-After parsing `synthesis`, add:
+## STEP 3 — Extend synthesis prompt in council.ts
+
+The synthesis prompt is a template string inside `runAriaCouncil`. Find where the synthesis Anthropic call is made (around L240-L270). The current JSON schema returns:
+`{consensus, contested, final_briefing, confidence_map, layout}`
+
+Extend it by APPENDING this to the synthesis prompt template string (do not replace the existing prompt):
+
+```
+When mode is 'ask_aria', ALSO include in your JSON response:
+"ask_blocks": [array of block objects that define the visual UI],
+"ask_followups": ["follow-up question 1", "follow-up question 2", "follow-up question 3"]
+
+Block rules (choose based on what was asked):
+- ALWAYS include: {"type":"lead","content":"1-2 sentence key finding"}
+- Include {"type":"text","content":"analysis prose"} for analytical content
+- Include {"type":"chart","chartType":"bar","labels":[...],"values":[...],"metrics":[...]} ONLY if real numeric data exists in the context — never fabricate chart data
+- Include {"type":"brain_readouts","items":[{"role":"growth","icon":"🌱","text":"..."},{"role":"risk","icon":"⚠️","text":"..."},{"role":"strategy","icon":"🎯","text":"..."}]} when all 3 brains have distinct views
+- Include {"type":"council_split","question":"...","growth":"...","risk":"...","strategy":"...","choices":[{"icon":"ti-trending-up","title":"...","sub":"...","prompt":"..."}]} ONLY when brains genuinely disagree — include 2-3 tappable choices
+- Include {"type":"action_list","items":[...]} or {"type":"action_single",...} for concrete actions
+- "ask_followups": exactly 3 short follow-up questions
+
+Block ordering: simple question → lead+text+action_single | data question → lead+chart+brain_readouts+text | disagreement → lead+text+council_split | urgency → lead+action_list
+```
+
+Then in the synthesis parsing section (where `synthesis.consensus` etc are extracted), also extract:
 ```typescript
 ask_blocks: synthesis.ask_blocks ?? undefined,
 ask_followups: synthesis.ask_followups ?? undefined,
 ```
 
-### POST route implementation
+---
 
+## STEP 4 — Minimal change to ask/route.ts
+
+Find the existing strategic council return at **L298-L306**:
 ```typescript
-export async function POST(req: Request) {
-  const supabase = createClient()
-  const { data: { user }, error: authError } = await supabase.auth.getUser()
-  if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+return NextResponse.json({
+  response: council.final_briefing,
+  conversation_id: savedConvId ?? conversationId,
+  intent: intent.type,
+  action: null,
+  cost_usd_cents: 0,
+  downloads: null,
+  tool_calls: [],
+})
+```
 
-  const { message, businessId } = await req.json()
-  if (!message || !businessId) return NextResponse.json({ error: 'message and businessId required' }, { status: 400 })
+Replace ONLY this return statement (not anything else in the file) with:
+```typescript
+return NextResponse.json({
+  response: council.final_briefing,
+  blocks: council.ask_blocks ?? null,
+  followups: council.ask_followups ?? [],
+  used_council: true,
+  conversation_id: savedConvId ?? conversationId,
+  intent: intent.type,
+  action: null,
+  cost_usd_cents: 0,
+  downloads: null,
+  tool_calls: [],
+})
+```
 
-  // Verify business ownership
-  const { data: business } = await supabase
-    .from('businesses')
-    .select('id, trading_name, industry')
-    .eq('id', businessId)
-    .eq('user_id', user.id)
-    .single()
-  if (!business) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+That is the ONLY change to ask/route.ts. Eight characters added. Nothing else.
 
-  try {
-    const businessContext = await getBusinessContext(businessId)
-    
-    // Prepend the owner's question to the business context so the council answers it
-    const contextWithQuestion = `OWNER QUESTION: ${message}\n\n${businessContext}`
-    
-    const council = await runCouncil(contextWithQuestion, { mode: 'ask' })
-
-    // Build blocks from council output
-    const blocks: AskBlock[] = council.ask_blocks ?? buildFallbackBlocks(council, message)
-    const followups: string[] = council.ask_followups ?? []
-
-    // Log to aria_ai_calls
-    try {
-      await supabase.from('aria_ai_calls').insert({
-        business_id: businessId,
-        agent_key: 'ask_aria_council',
-        provider: 'anthropic',
-        model_id: 'claude-haiku-4-5-20251001',
-        role: 'ask',
-        input_tokens: 0,
-        output_tokens: 0,
-        success: true,
-        request_summary: message.slice(0, 100),
-      })
-    } catch { /* non-fatal */ }
-
-    return NextResponse.json({
-      blocks,
-      followups,
-      council_run_id: undefined,
-      used_council: true,
-    } satisfies AskResponse)
-
-  } catch (err) {
-    console.error('[ask] council failed:', err)
-    // Graceful fallback — single text block
-    return NextResponse.json({
-      blocks: [{ type: 'text', content: 'Aria is thinking — please try again in a moment.' }],
-      followups: [],
-      used_council: false,
-    } satisfies AskResponse)
-  }
-}
-
-function buildFallbackBlocks(council: CouncilOutput, question: string): AskBlock[] {
-  const blocks: AskBlock[] = []
-  if (council.final_briefing) {
-    blocks.push({ type: 'lead', content: council.final_briefing.split('\n')[0] ?? '' })
-    const rest = council.final_briefing.split('\n').slice(1).join('\n').trim()
-    if (rest) blocks.push({ type: 'text', content: rest })
-  }
-  if (council.contested?.length) {
-    const c = council.contested[0]
-    blocks.push({
-      type: 'council_split',
-      question: c.topic,
-      growth: c.optimist_view,
-      risk: c.critic_view,
-      strategy: c.strategist_view,
-      choices: [
-        { icon: 'ti-trending-up', title: 'Follow the growth approach', sub: '', prompt: `Follow the growth brain view on: ${c.topic}` },
-        { icon: 'ti-shield', title: 'Take the cautious approach', sub: '', prompt: `Follow the risk brain view on: ${c.topic}` },
-      ],
-    })
-  }
-  return blocks
-}
+Also widen the `isStrategic` regex to catch more questions (replace L286):
+```typescript
+const isStrategic = /should|recommend|best|strategy|improve|why|how can|what would|advice|suggest|revenue|crisis|urgent|help|fix|problem|doing|perform|week|today/i.test(message)
 ```
 
 ---
 
-## STEP 3 — New component: BlockRenderer
+## STEP 5 — Create src/components/dashboard/BlockRenderer.tsx
 
-Create `src/components/dashboard/BlockRenderer.tsx`:
+Pure visual renderer. No data fetching, no API calls.
 
 ```typescript
 'use client'
-// Renders a single AskBlock as a visual card
-// Import AskBlock from '@/lib/aria/ask-types'
-// Uses ONLY inline styles — no Tailwind classes (for puppeteer PDF compat later)
-// Design: matches Aria OS design system — forest green #2D5240/#7FB897, Inter body
+import type { AskBlock } from '@/lib/aria/ask-types'
 
-// Renders:
-// lead → large semi-bold sentence, color rgba(255,255,255,0.94) on dark, #111827 on light
-// text → standard prose, line-height 1.7
-// chart → CSS bar chart (NO external lib, NO canvas, pure divs)
-//   - bars: flex, align-items:flex-end, each bar is a div with height as % of max value
-//   - highlight the tallest bar in #7FB897, others in rgba(127,184,151,0.3)
-//   - x-axis labels below
-//   - metric tiles grid below chart
-// brain_readouts → 3 rows, each: small icon circle + coloured label + body text
-//   growth → color #7FB897
-//   risk → color #F87171  
-//   strategy → color #A78BFA
-// council_split → amber header "Council split · your call", question bold, 
-//   two-col Growth+Risk pills side by side, full-width Strategy pill below,
-//   then choice buttons (each sends its .prompt as a message via onChoice callback)
-// action_list → each item: coloured icon box + title + subtitle + button
-// action_single → single action row with button
-```
-
-The component signature:
-```typescript
-interface BlockRendererProps {
+interface Props {
   block: AskBlock
-  onChoice?: (prompt: string) => void  // called when user taps a council_split choice or action button
+  onChoice?: (prompt: string) => void
 }
-export function BlockRenderer({ block, onChoice }: BlockRendererProps) { ... }
-```
 
----
+export function BlockRenderer({ block, onChoice }: Props) {
+  // Design tokens (match Aria OS — dark backgrounds, green accent)
+  const accent = '#7FB897'
+  const accentDim = 'rgba(127,184,151,0.1)'
+  const accentBorder = 'rgba(127,184,151,0.2)'
 
-## STEP 4 — New component: AskAriaChat
+  if (block.type === 'lead') return (
+    <div style={{ fontSize: 14, fontWeight: 500, color: 'rgba(255,255,255,0.94)', lineHeight: 1.6, marginBottom: 10 }}>
+      {block.content}
+    </div>
+  )
 
-Create `src/components/dashboard/AskAriaChat.tsx`:
+  if (block.type === 'text') return (
+    <div style={{ fontSize: 13, lineHeight: 1.72, color: 'rgba(255,255,255,0.82)', marginBottom: 10 }}>
+      {block.content.split('\n').map((line, i) => <p key={i} style={{ margin: '0 0 6px' }}>{line}</p>)}
+    </div>
+  )
 
-This is a full client-side chat component. It replaces the existing ask-aria UI.
-
-**UI structure:**
-
-```
-┌─────────────────────────────────────────────────────┐
-│ Header: "Aria" · "Council active · 3 brains"        │
-├─────────────────────────────────────────────────────┤
-│ Feed: scrollable message list                        │
-│   • Aria messages: left, small "A" avatar           │
-│   • User messages: right, "C" avatar                │
-│   • Aria message body = <BlockRenderer> for each block │
-│   • Follow-up chips below each Aria message         │
-│   • Thinking state: 4 animated steps with tick icons│
-│     ("Growth brain reading...", "Risk brain...",    │
-│      "Strategy brain...", "Synthesising...")        │
-├─────────────────────────────────────────────────────┤
-│ Composer: full-width input + send button             │
-│ Hint: "Council runs on every question · connected   │
-│       records only, no invented data"               │
-└─────────────────────────────────────────────────────┘
-```
-
-**State:**
-```typescript
-const [messages, setMessages] = useState<ChatMessage[]>([])
-const [input, setInput] = useState('')
-const [loading, setLoading] = useState(false)
-
-type ChatMessage = 
-  | { role: 'user'; content: string; id: string }
-  | { role: 'aria'; blocks: AskBlock[]; followups: string[]; id: string }
-  | { role: 'thinking'; id: string }
-```
-
-**sendMessage function:**
-```typescript
-async function sendMessage(text: string) {
-  if (!text.trim() || loading) return
-  setInput('')
-  setLoading(true)
-  const userMsg: ChatMessage = { role: 'user', content: text, id: Date.now().toString() }
-  const thinkingMsg: ChatMessage = { role: 'thinking', id: 'thinking' }
-  setMessages(prev => [...prev, userMsg, thinkingMsg])
-  
-  try {
-    const res = await fetch('/api/aria/ask', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: text, businessId }),
-    })
-    const data: AskResponse = await res.json()
-    setMessages(prev => [
-      ...prev.filter(m => m.id !== 'thinking'),
-      { role: 'aria', blocks: data.blocks, followups: data.followups, id: Date.now().toString() }
-    ])
-  } catch {
-    setMessages(prev => prev.filter(m => m.id !== 'thinking'))
-  } finally {
-    setLoading(false)
+  if (block.type === 'chart') {
+    const max = Math.max(...block.values, 1)
+    return (
+      <div style={{ borderRadius: 10, border: '0.5px solid rgba(255,255,255,0.09)', marginBottom: 10, overflow: 'hidden' }}>
+        <div style={{ padding: '6px 10px', background: 'rgba(55,138,221,0.07)', borderBottom: '0.5px solid rgba(255,255,255,0.06)', fontSize: 9, fontWeight: 500, color: '#60A5FA', textTransform: 'uppercase', letterSpacing: '0.07em' }}>
+          Revenue chart
+        </div>
+        <div style={{ padding: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, height: 56, marginBottom: 5 }}>
+            {block.values.map((v, i) => (
+              <div key={i} style={{ flex: 1, borderRadius: '2px 2px 0 0', height: `${(v / max) * 100}%`, background: v === max ? accent : 'rgba(127,184,151,0.25)' }} />
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: 4, marginBottom: 10 }}>
+            {block.labels.map((l, i) => (
+              <div key={i} style={{ flex: 1, textAlign: 'center', fontSize: 9, color: 'rgba(255,255,255,0.25)' }}>{l}</div>
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: 7 }}>
+            {block.metrics.map((m, i) => (
+              <div key={i} style={{ flex: 1, background: 'rgba(255,255,255,0.04)', borderRadius: 7, padding: '6px 8px' }}>
+                <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.35)', marginBottom: 2 }}>{m.label}</div>
+                <div style={{ fontSize: 15, fontWeight: 500, color: m.color ?? accent }}>{m.value}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    )
   }
+
+  if (block.type === 'brain_readouts') return (
+    <div style={{ borderRadius: 10, border: '0.5px solid rgba(255,255,255,0.09)', marginBottom: 10, overflow: 'hidden' }}>
+      <div style={{ padding: '6px 10px', background: 'rgba(167,139,250,0.07)', borderBottom: '0.5px solid rgba(255,255,255,0.06)', fontSize: 9, fontWeight: 500, color: '#A78BFA', textTransform: 'uppercase', letterSpacing: '0.07em' }}>
+        What the 3 brains see
+      </div>
+      <div style={{ padding: 10 }}>
+        {block.items.map((item, i) => {
+          const color = item.role === 'growth' ? '#7FB897' : item.role === 'risk' ? '#F87171' : '#A78BFA'
+          return (
+            <div key={i} style={{ display: 'flex', gap: 7, alignItems: 'flex-start', padding: '7px 0', borderBottom: i < block.items.length - 1 ? '0.5px solid rgba(255,255,255,0.05)' : 'none' }}>
+              <div style={{ width: 22, height: 22, borderRadius: 6, background: `${color}20`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, flexShrink: 0 }}>{item.icon}</div>
+              <div>
+                <div style={{ fontSize: 9, fontWeight: 500, color, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>{item.role}</div>
+                <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.65)', lineHeight: 1.55 }}>{item.text}</div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+
+  if (block.type === 'council_split') return (
+    <div style={{ borderRadius: 10, border: '0.5px solid rgba(245,158,11,0.25)', marginBottom: 10, overflow: 'hidden' }}>
+      <div style={{ padding: '6px 10px', background: 'rgba(245,158,11,0.07)', borderBottom: '0.5px solid rgba(245,158,11,0.15)', fontSize: 9, fontWeight: 500, color: '#F59E0B', textTransform: 'uppercase', letterSpacing: '0.07em' }}>
+        ⚡ Council split — your call
+      </div>
+      <div style={{ padding: 11 }}>
+        <div style={{ fontSize: 12, fontWeight: 500, color: 'rgba(255,255,255,0.9)', marginBottom: 9 }}>{block.question}</div>
+        <div style={{ display: 'flex', gap: 5, marginBottom: 6 }}>
+          {[
+            { label: 'Growth', text: block.growth, color: '#7FB897' },
+            { label: 'Risk', text: block.risk, color: '#F87171' },
+          ].map((b, i) => (
+            <div key={i} style={{ flex: 1, padding: '7px 9px', borderRadius: 7, background: `${b.color}08`, border: `0.5px solid ${b.color}28` }}>
+              <div style={{ fontSize: 8, fontWeight: 500, color: b.color, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>{b.label}</div>
+              <div style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.6)', lineHeight: 1.5 }}>{b.text}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{ padding: '7px 9px', borderRadius: 7, background: 'rgba(167,139,250,0.06)', border: '0.5px solid rgba(167,139,250,0.18)', marginBottom: 9 }}>
+          <div style={{ fontSize: 8, fontWeight: 500, color: '#A78BFA', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>Strategy</div>
+          <div style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.6)', lineHeight: 1.5 }}>{block.strategy}</div>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {block.choices.map((c, i) => (
+            <button key={i} onClick={() => onChoice?.(c.prompt)}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderRadius: 7, border: '0.5px solid rgba(255,255,255,0.09)', background: 'rgba(255,255,255,0.03)', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', width: '100%' }}>
+              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.85)', flex: 1 }}>{c.title}</div>
+              <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.35)' }}>{c.sub}</div>
+              <span style={{ color: 'rgba(255,255,255,0.25)', fontSize: 11 }}>↗</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+
+  if (block.type === 'action_list') return (
+    <div style={{ borderRadius: 10, border: '0.5px solid rgba(255,255,255,0.09)', marginBottom: 10, overflow: 'hidden' }}>
+      <div style={{ padding: '6px 10px', background: accentDim, borderBottom: '0.5px solid rgba(255,255,255,0.06)', fontSize: 9, fontWeight: 500, color: accent, textTransform: 'uppercase', letterSpacing: '0.07em' }}>
+        Priority list
+      </div>
+      <div style={{ padding: 10 }}>
+        {block.items.map((item, i) => {
+          const iconBg = item.colorVariant === 'danger' ? 'rgba(248,113,113,0.12)' : item.colorVariant === 'warning' ? 'rgba(245,158,11,0.12)' : accentDim
+          const iconColor = item.colorVariant === 'danger' ? '#F87171' : item.colorVariant === 'warning' ? '#F59E0B' : accent
+          return (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: i < block.items.length - 1 ? 8 : 0 }}>
+              <div style={{ width: 28, height: 28, borderRadius: 7, background: iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: iconColor, fontSize: 13, flexShrink: 0 }}>{item.icon}</div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 11.5, fontWeight: 500, color: 'rgba(255,255,255,0.88)' }}>{item.title}</div>
+                <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.38)', marginTop: 1 }}>{item.sub}</div>
+              </div>
+              <button onClick={() => onChoice?.(item.prompt)}
+                style={{ padding: '5px 11px', borderRadius: 7, background: accent, color: '#0b100d', border: 'none', fontSize: 10, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}>
+                Do it ↗
+              </button>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+
+  if (block.type === 'action_single') return (
+    <div style={{ borderRadius: 10, border: `0.5px solid ${accentBorder}`, overflow: 'hidden', marginBottom: 10 }}>
+      <div style={{ padding: '6px 10px', background: accentDim, borderBottom: `0.5px solid ${accentBorder}`, fontSize: 9, fontWeight: 500, color: accent, textTransform: 'uppercase', letterSpacing: '0.07em' }}>
+        Aria suggests
+      </div>
+      <div style={{ padding: 10, display: 'flex', alignItems: 'center', gap: 9 }}>
+        <div style={{ width: 28, height: 28, borderRadius: 7, background: accentDim, display: 'flex', alignItems: 'center', justifyContent: 'center', color: accent, fontSize: 13, flexShrink: 0 }}>{block.icon}</div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 11.5, fontWeight: 500, color: 'rgba(255,255,255,0.88)' }}>{block.title}</div>
+          <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.38)', marginTop: 1 }}>{block.sub}</div>
+        </div>
+        <button onClick={() => onChoice?.(block.prompt)}
+          style={{ padding: '5px 11px', borderRadius: 7, background: accent, color: '#0b100d', border: 'none', fontSize: 10, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}>
+          Do it ↗
+        </button>
+      </div>
+    </div>
+  )
+
+  return null
 }
 ```
 
-**Thinking animation:** 4 steps, each step ticks after 500ms, tick icon appears, next step starts spinning. Pure CSS/setTimeout — no library.
+---
 
-**Props:**
+## STEP 6 — Modify ask-aria/page.tsx (ADDITIVE ONLY)
+
+The current page.tsx is a 762-line client component. **Do not rewrite it.** Make only these additive changes:
+
+### A. Add import at top of page.tsx
 ```typescript
-interface AskAriaChatProps {
-  businessId: string
-  businessName: string
-}
+import { BlockRenderer } from '@/components/dashboard/BlockRenderer'
+import type { AskBlock } from '@/lib/aria/ask-types'
 ```
 
+### B. Extend the Message interface (add fields)
+In the existing `Message` interface, add:
+```typescript
+blocks?: AskBlock[]
+followups?: string[]
+used_council?: boolean
+```
+
+### C. Extend the fetch response parsing
+Find where the response from `/api/aria/ask` is parsed (look for `data.response`). When `data.blocks` exists, also store it on the message:
+```typescript
+// When setting the assistant message, also set:
+blocks: data.blocks ?? undefined,
+followups: data.followups ?? [],
+used_council: data.used_council ?? false,
+```
+
+### D. Extend the message rendering
+Find where assistant messages are rendered (look for `message.content` or `msg.content` in the JSX). When `message.blocks` exists, render the blocks INSTEAD of the plain text:
+
+```typescript
+{/* If council returned structured blocks, render them visually */}
+{message.used_council && message.blocks && message.blocks.length > 0 ? (
+  <div>
+    {message.blocks.map((block, i) => (
+      <BlockRenderer
+        key={i}
+        block={block}
+        onChoice={(prompt) => {
+          // sendMessage equivalent — find the existing send function name in page.tsx
+          handleSend(prompt)  // use whatever the existing send function is called
+        }}
+      />
+    ))}
+    {/* Follow-up chips */}
+    {(message.followups ?? []).length > 0 && (
+      <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 8 }}>
+        {(message.followups ?? []).map((fup, i) => (
+          <button key={i}
+            onClick={() => handleSend(fup)}
+            style={{ padding: '4px 10px', borderRadius: 14, border: '0.5px solid rgba(127,184,151,0.2)', background: 'rgba(127,184,151,0.05)', color: '#7FB897', fontSize: 10.5, cursor: 'pointer', fontFamily: 'inherit' }}>
+            {fup}
+          </button>
+        ))}
+      </div>
+    )}
+  </div>
+) : (
+  /* Original plain text rendering — keep 100% unchanged */
+  <existing_message_rendering_jsx />
+)}
+```
+
+**IMPORTANT:** Find the exact name of the send function in page.tsx (it will be something like `handleSend`, `sendMessage`, `onSend` etc — read the file to find it) and use that name.
+
 ---
 
-## STEP 5 — Wire into the page
+## STEP 7 — Add thinking animation for council
 
-In `src/app/dashboard/ask-aria/page.tsx`:
+When `used_council` is true and a response is loading, show a 4-step thinking indicator INSTEAD of a generic spinner. Find the loading/streaming state in page.tsx and add:
 
-- Keep the server component structure
-- Replace whatever currently renders the chat with `<AskAriaChat businessId={business.id} businessName={business.trading_name ?? business.name} />`
-- Import: `import { AskAriaChat } from '@/components/dashboard/AskAriaChat'`
-
----
-
-## STEP 6 — Sidebar nav
-
-Check if "Ask Aria" is already in the sidebar (it likely is). If not, add it. Do not change existing nav items.
+```typescript
+{/* Council thinking state — shown while isStrategic question is loading */}
+{isLoading && councilThinking && (
+  <div style={{ display: 'flex', flexDirection: 'column', gap: 5, padding: '4px 0' }}>
+    {['Growth brain reading...','Risk brain checking...','Strategy brain weighing...','Synthesising...'].map((step, i) => (
+      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 10.5, color: 'rgba(255,255,255,0.4)' }}>
+        <div style={{ width: 12, height: 12, borderRadius: '50%', border: '1.5px solid #7FB897', borderTopColor: 'transparent', animation: 'spin 0.8s linear infinite', flexShrink: 0 }} />
+        {step}
+      </div>
+    ))}
+  </div>
+)}
+```
 
 ---
 
 ## CRITICAL RULES
 
-### TypeScript
-- `npx tsc --noEmit` must be ZERO errors after your changes
-- No `any` types anywhere in new files
-- The `AskResponse` return must use `satisfies AskResponse` 
+### What NOT to touch
+- `src/lib/aria/council.ts` `runAriaCouncil()` function signature — 3 params: (context: string, businessId: string, mode: 'briefing' | 'weekly_report' | 'ask_aria')
+- Any existing logic in ask/route.ts other than L298-L306 and L286
+- AnimatedBg, FlyToCart, CursorGlow, pos-sfx.ts, aria-voice-guide.ts
+- vercel.json
 
-### Data integrity
-- The chart block must ONLY show data that actually exists in the business context string
-- If no revenue data exists, do NOT include a chart block — include a text block instead
-- Never fabricate numbers, product names, or customer counts
+### Supabase client patterns (EXACT — copy these)
+```typescript
+// In API routes (server-side, uses auth session):
+import { createServerSupabaseClient } from '@/lib/supabase-server'
+const supabase = createServerSupabaseClient()
 
-### Existing code
-- Do NOT modify: AnimatedBg, FlyToCart, CursorGlow, pos-sfx.ts, aria-voice-guide.ts
-- Do NOT modify: vercel.json
-- Do NOT modify: council.ts runCouncil() function signature — only extend CouncilOutput type and add to synthesis prompt
-
-### DB amounts
-- All amounts are stored as dollars (numeric), NOT cents
-- Always render: `(Number(x) || 0).toFixed(2)`
-
-### Model IDs (hardcoded, never change)
-- claude-haiku-4-5-20251001
-- claude-sonnet-4-5-20250929
-- claude-opus-4-5-20251101
-
-### Build gate — MANDATORY before commit
+// For background writes bypassing RLS:
+import { supabaseAdmin } from '@/lib/supabase-admin'
+// supabaseAdmin is a pre-created client, NOT a function call
 ```
-npx tsc --noEmit   ← must be zero errors
+
+### TypeScript
+- `npx tsc --noEmit` must be ZERO errors after all changes
+- No `any` in new files
+- All types imported from `@/lib/aria/ask-types`
+
+### Build gate — MANDATORY
+```
+npx tsc --noEmit   ← zero errors
 npm run build      ← must succeed
 ```
-Single commit. All files in one push. Commit message: "feat(ask-aria): council-driven chat redesign — premium UI, structured block responses, brain readouts, split-decision cards, chart blocks, timed thinking animation"
+
+Single commit. All files in one push.
+Commit message: "feat(ask-aria): council block responses — extend ask/route.ts to return structured AskBlock[] alongside plain text, add BlockRenderer with chart/brain/split/action cards, extend page.tsx to render blocks for council responses with follow-up chips"
 
 ---
 
@@ -419,9 +483,8 @@ Single commit. All files in one push. Commit message: "feat(ask-aria): council-d
 Created:
 - src/lib/aria/ask-types.ts
 - src/components/dashboard/BlockRenderer.tsx
-- src/components/dashboard/AskAriaChat.tsx
 
-Modified:
-- src/app/api/aria/ask/route.ts
-- src/lib/aria/council.ts (extend CouncilOutput type + synthesis prompt only)
-- src/app/dashboard/ask-aria/page.tsx
+Modified (additive only):
+- src/lib/aria/council.ts (add 2 fields to CouncilOutput type + append to synthesis prompt + extract in parsing)
+- src/app/api/aria/ask/route.ts (change 1 return statement at L298-L306, widen isStrategic regex at L286)
+- src/app/dashboard/ask-aria/page.tsx (add imports, extend Message type, extend response parsing, extend message rendering)
