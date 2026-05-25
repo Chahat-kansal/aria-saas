@@ -118,6 +118,10 @@
     {
       "path": "/api/cron/seo-keyword-check",
       "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/cron/xero-sync",
+      "schedule": "0 2 * * *"
     }
   ]
 }

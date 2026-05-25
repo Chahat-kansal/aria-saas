@@ -122,7 +122,7 @@ export default function IntegrationsPage() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
-    if (params.get('connected')) setSuccessMsg('Connected successfully')
+    if (params.get('connected') || params.get('xero') === 'connected') setSuccessMsg('Connected successfully')
     if (params.get('error')) {
       const e = params.get('error')
       setErrorMsg(e === 'oauth_failed' ? 'OAuth connection failed. Check credentials.' : e === 'invalid_state' ? 'Invalid state token. Please try again.' : 'Connection failed.')
@@ -139,6 +139,7 @@ export default function IntegrationsPage() {
   async function handleConnect(key: IntegrationKey) {
     setConnectingKey(key); setErrorMsg(null)
     try {
+      if (key === 'xero') { window.location.href = '/api/xero/connect'; return }
       const res = await fetch('/api/pos/integrations?action=start', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ integration_key: key }),
@@ -152,6 +153,11 @@ export default function IntegrationsPage() {
 
   async function handleRevoke(key: IntegrationKey) {
     if (!confirm(`Disconnect ${key}? This will stop syncing.`)) return
+    if (key === 'xero') {
+      await fetch('/api/xero/disconnect', { method: 'POST' })
+      setConnected(prev => prev.filter(c => c.integration_key !== key))
+      return
+    }
     await fetch('/api/pos/integrations?action=revoke', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ integration_key: key }),
