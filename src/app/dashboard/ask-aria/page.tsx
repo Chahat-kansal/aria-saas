@@ -216,17 +216,20 @@ export default function AskAriaPage() {
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
 
-  // Video avatar: play only while Aria is responding, pause when idle
+  // Video avatar: play while sending OR while any message is streaming
+  // This keeps Aria "alive" through the full response cycle including streaming
+  const isAriaActive = sending || messages.some(m => m.streaming)
   useEffect(() => {
     const vid = videoRef.current
     if (!vid || !ariaVideoUrl) return
-    if (sending) {
+    if (isAriaActive) {
+      vid.currentTime = 0
       vid.play().catch(() => {})
     } else {
       vid.pause()
       vid.currentTime = 0
     }
-  }, [sending, ariaVideoUrl])
+  }, [isAriaActive, ariaVideoUrl])
 
   useEffect(() => {
     const q = new URLSearchParams(window.location.search).get('q')
@@ -495,32 +498,94 @@ export default function AskAriaPage() {
     <div style={{ display: 'flex', height: '100dvh', background: '#0d0d14', overflow: 'hidden' }}>
       {/* Aria video avatar panel — side panel layout */}
       {ariaVideoUrl && (
-        <div style={{ width: 220, flexShrink: 0, display: 'flex', flexDirection: 'column', borderRight: '1px solid rgba(255,255,255,0.07)', background: '#070c09' }}>
-          {/* Video frame */}
-          <div style={{ flex: 1, position: 'relative', overflow: 'hidden', background: '#050a06' }}>
-            <video
-              ref={videoRef}
-              src={ariaVideoUrl}
-              muted
-              playsInline
-              loop={false}
-              style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'top center' }}
-            />
-            {/* Speaking / idle status pill */}
-            <div style={{ position: 'absolute', top: 9, left: '50%', transform: 'translateX(-50%)', background: 'rgba(0,0,0,0.55)', borderRadius: 20, padding: '3px 10px', fontSize: 9, color: '#7FB897', display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap', zIndex: 5 }}>
-              <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#7FB897', flexShrink: 0, animation: sending ? 'ariaPulse 0.5s ease-in-out infinite alternate' : 'none' }} />
-              {sending ? 'Speaking' : 'Idle'}
+        <div style={{
+          width: 210,
+          flexShrink: 0,
+          position: 'relative',
+          background: '#0d0d14',
+          overflow: 'hidden',
+        }}>
+          {/* Video — mix-blend-mode darkens white bg to match dark UI */}
+          <video
+            ref={videoRef}
+            src={ariaVideoUrl}
+            muted
+            playsInline
+            loop={false}
+            style={{
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+              objectPosition: 'top center',
+              mixBlendMode: 'multiply',
+              filter: 'brightness(0.95) contrast(1.05)',
+              display: 'block',
+            }}
+          />
+          {/* Bottom gradient fade — blends into page bg */}
+          <div style={{
+            position: 'absolute',
+            bottom: 0,
+            left: 0,
+            right: 0,
+            height: 140,
+            background: 'linear-gradient(to bottom, transparent, #0d0d14)',
+            pointerEvents: 'none',
+          }} />
+          {/* Top gradient fade */}
+          <div style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            height: 60,
+            background: 'linear-gradient(to top, transparent, #0d0d14)',
+            pointerEvents: 'none',
+          }} />
+          {/* Right edge fade — blends into chat panel */}
+          <div style={{
+            position: 'absolute',
+            top: 0,
+            right: 0,
+            bottom: 0,
+            width: 60,
+            background: 'linear-gradient(to right, transparent, #0d0d14)',
+            pointerEvents: 'none',
+          }} />
+          {/* Speaking indicator — subtle, bottom-left */}
+          {isAriaActive && (
+            <div style={{
+              position: 'absolute',
+              bottom: 16,
+              left: 14,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 5,
+              zIndex: 5,
+            }}>
+              <div style={{ display: 'flex', gap: 2, alignItems: 'flex-end', height: 12 }}>
+                {[0,1,2].map(i => (
+                  <div key={i} style={{
+                    width: 3,
+                    borderRadius: 2,
+                    background: '#7FB897',
+                    height: i === 1 ? 12 : 7,
+                    animation: `ariaBar${i} 0.6s ease-in-out infinite alternate`,
+                    animationDelay: `${i * 0.15}s`,
+                  }} />
+                ))}
+              </div>
+              <span style={{ fontSize: 10, color: 'rgba(127,184,151,0.8)', letterSpacing: '0.04em' }}>Aria</span>
             </div>
-          </div>
-          {/* Name tag */}
-          <div style={{ padding: '10px 12px', borderTop: '1px solid rgba(255,255,255,0.07)' }}>
-            <div style={{ fontSize: 11, fontWeight: 500, color: 'rgba(255,255,255,0.85)' }}>Aria</div>
-            <div style={{ fontSize: 9, color: '#7FB897', marginTop: 1 }}>Your AI business co-operator</div>
-          </div>
+          )}
         </div>
       )}
-      {/* Pulse animation keyframe */}
-      <style>{`@keyframes ariaPulse { from { opacity: 0.3; transform: scale(0.7); } to { opacity: 1; transform: scale(1.3); } }`}</style>
+      {/* Avatar animations */}
+      <style>{`
+        @keyframes ariaBar0 { from { height: 7px; opacity: 0.5; } to { height: 12px; opacity: 1; } }
+        @keyframes ariaBar1 { from { height: 12px; opacity: 1; } to { height: 5px; opacity: 0.4; } }
+        @keyframes ariaBar2 { from { height: 7px; opacity: 0.5; } to { height: 10px; opacity: 0.9; } }
+      `}</style>
       {/* Mobile backdrop */}
       {showHistory && (
         <div className="fixed inset-0 bg-black/60 z-10 md:hidden" onClick={() => setShowHistory(false)} />
