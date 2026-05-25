@@ -1,10 +1,9 @@
 'use client'
 import { Suspense, useEffect, useRef, useState, Component } from 'react'
 import type { ReactNode } from 'react'
-import { Canvas, useFrame, useGraph } from '@react-three/fiber'
-import { useAnimations, useFBX, useGLTF } from '@react-three/drei'
+import { Canvas, useFrame } from '@react-three/fiber'
+import { useAnimations, useGLTF } from '@react-three/drei'
 import * as THREE from 'three'
-import type { SkinnedMesh } from 'three'
 
 // ─── Error boundary ───────────────────────────────────────────────────────────
 class AvatarErrorBoundary extends Component<{children: ReactNode},{error: boolean}> {
@@ -33,44 +32,33 @@ function AriaMonogram({ isActive }: { isActive: boolean }) {
   )
 }
 
-// ─── ARKit blend shape → viseme mapping (Rhubarb phonemes) ───────────────────
-const VISEME_MAP: Record<string, string> = {
-  A: 'viseme_PP', B: 'viseme_kk', C: 'viseme_I',
-  D: 'viseme_AA', E: 'viseme_O',  F: 'viseme_U',
-  G: 'viseme_FF', H: 'viseme_TH', X: 'viseme_PP',
-}
+// Animations GLB from IAcine repo (Idle, Talking_1, Talking_2, etc.)
+const ANIM_GLB = 'https://raw.githubusercontent.com/Yacine-Mekideche/IAcine-Virtual-Avatar/main/front/public/models/animations.glb'
 
-// ─── GLB URLs (RPM avatar + animations from IAcine-Virtual-Avatar repo) ───────
-const AVATAR_GLB = 'https://raw.githubusercontent.com/Yacine-Mekideche/IAcine-Virtual-Avatar/main/front/public/models/test4.glb'
-const ANIM_GLB   = 'https://raw.githubusercontent.com/Yacine-Mekideche/IAcine-Virtual-Avatar/main/front/public/models/animations.glb'
-
-// ─── Avatar mesh component ────────────────────────────────────────────────────
-interface AvatarMeshProps { isActive: boolean }
-
-function AvatarMesh({ isActive }: AvatarMeshProps) {
+// ─── Avatar mesh — renders whatever GLB is in your Blob store ────────────────
+function AvatarMesh({ isActive, avatarUrl }: { isActive: boolean; avatarUrl: string }) {
   const group = useRef<THREE.Group>(null!)
-  const { scene } = useGLTF(AVATAR_GLB)
+
+  // Load your custom Blob GLB
+  const { scene } = useGLTF(avatarUrl)
+  // Load animations from IAcine repo
   const { animations } = useGLTF(ANIM_GLB)
-  const { actions } = useAnimations(animations, group)
+  const { actions, mixer } = useAnimations(animations, group)
 
-  // Clone scene so we can use it independently
-  const { nodes, materials } = useGraph(scene)
-
-  // Pick animation based on isActive
-  const animName = isActive ? 'Talking_1' : 'Idle'
-  const prevAnim = useRef<string>('Idle')
+  const prevAnim = useRef('Idle')
 
   useEffect(() => {
     if (!actions) return
+    const animName = isActive ? 'Talking_1' : 'Idle'
     const next = actions[animName]
     const prev = actions[prevAnim.current]
     if (!next) return
     next.reset().fadeIn(prevAnim.current === animName ? 0 : 0.5).play()
     if (prev && prevAnim.current !== animName) prev.fadeOut(0.5)
     prevAnim.current = animName
-  }, [isActive, actions, animName])
+  }, [isActive, actions])
 
-  // Blink
+  // Blink via morph targets (works if avatar has ARKit blend shapes)
   const [blink, setBlink] = useState(false)
   useEffect(() => {
     let t: ReturnType<typeof setTimeout>
@@ -84,92 +72,68 @@ function AvatarMesh({ isActive }: AvatarMeshProps) {
     return () => clearTimeout(t)
   }, [])
 
-  // Lerp morph targets smoothly
-  const lerpMorph = (target: string, value: number, speed = 0.1) => {
-    scene.traverse((child) => {
-      const mesh = child as SkinnedMesh
-      if (!mesh.isSkinnedMesh || !mesh.morphTargetDictionary) return
-      const idx = mesh.morphTargetDictionary[target]
-      if (idx === undefined || !mesh.morphTargetInfluences) return
-      mesh.morphTargetInfluences[idx] = THREE.MathUtils.lerp(
-        mesh.morphTargetInfluences[idx], value, speed
-      )
-    })
-  }
-
   useFrame(() => {
-    lerpMorph('eyeBlinkLeft',  blink ? 1 : 0, 0.5)
-    lerpMorph('eyeBlinkRight', blink ? 1 : 0, 0.5)
+    scene.traverse((child) => {
+      const mesh = child as THREE.SkinnedMesh
+      if (!mesh.isSkinnedMesh || !mesh.morphTargetDictionary || !mesh.morphTargetInfluences) return
+      const lerpMorph = (name: string, target: number) => {
+        const idx = mesh.morphTargetDictionary![name]
+        if (idx === undefined) return
+        mesh.morphTargetInfluences![idx] = THREE.MathUtils.lerp(
+          mesh.morphTargetInfluences![idx], target, 0.5
+        )
+      }
+      lerpMorph('eyeBlinkLeft',  blink ? 1 : 0)
+      lerpMorph('eyeBlinkRight', blink ? 1 : 0)
+    })
   })
 
-  // Cast nodes to typed meshes
-  const n = nodes as Record<string, THREE.SkinnedMesh & { skeleton: THREE.Skeleton }>
-  const m = materials as Record<string, THREE.Material>
+  // Frustum culling off (prevents meshes disappearing at edges)
+  useEffect(() => {
+    scene.traverse(obj => { obj.frustumCulled = false })
+  }, [scene])
 
   return (
     <group ref={group} dispose={null}>
-      <primitive object={n.Hips} />
-      <skinnedMesh geometry={n.Wolf3D_Body.geometry}           material={m.Wolf3D_Body}           skeleton={n.Wolf3D_Body.skeleton} />
-      <skinnedMesh geometry={n.Wolf3D_Outfit_Bottom.geometry}  material={m.Wolf3D_Outfit_Bottom}  skeleton={n.Wolf3D_Outfit_Bottom.skeleton} />
-      <skinnedMesh geometry={n.Wolf3D_Outfit_Footwear.geometry} material={m.Wolf3D_Outfit_Footwear} skeleton={n.Wolf3D_Outfit_Footwear.skeleton} />
-      <skinnedMesh geometry={n.Wolf3D_Outfit_Top.geometry}     material={m.Wolf3D_Outfit_Top}     skeleton={n.Wolf3D_Outfit_Top.skeleton} />
-      <skinnedMesh geometry={n.Wolf3D_Hair.geometry}           material={m.Wolf3D_Hair}           skeleton={n.Wolf3D_Hair.skeleton} />
-      <skinnedMesh
-        geometry={n.EyeLeft.geometry} material={m.Wolf3D_Eye}
-        skeleton={n.EyeLeft.skeleton}
-        morphTargetDictionary={n.EyeLeft.morphTargetDictionary}
-        morphTargetInfluences={n.EyeLeft.morphTargetInfluences}
-      />
-      <skinnedMesh
-        geometry={n.EyeRight.geometry} material={m.Wolf3D_Eye}
-        skeleton={n.EyeRight.skeleton}
-        morphTargetDictionary={n.EyeRight.morphTargetDictionary}
-        morphTargetInfluences={n.EyeRight.morphTargetInfluences}
-      />
-      <skinnedMesh
-        geometry={n.Wolf3D_Head.geometry} material={m.Wolf3D_Skin}
-        skeleton={n.Wolf3D_Head.skeleton}
-        morphTargetDictionary={n.Wolf3D_Head.morphTargetDictionary}
-        morphTargetInfluences={n.Wolf3D_Head.morphTargetInfluences}
-      />
-      <skinnedMesh
-        geometry={n.Wolf3D_Teeth.geometry} material={m.Wolf3D_Teeth}
-        skeleton={n.Wolf3D_Teeth.skeleton}
-        morphTargetDictionary={n.Wolf3D_Teeth.morphTargetDictionary}
-        morphTargetInfluences={n.Wolf3D_Teeth.morphTargetInfluences}
-      />
+      <primitive object={scene} />
     </group>
   )
 }
 
-// Preload both GLBs
-// Use unpkg for Draco decoder (already in CSP connect-src + script-src)
-useGLTF.setDecoderPath('https://unpkg.com/three@0.167.0/examples/jsm/libs/draco/')
-useGLTF.preload(AVATAR_GLB)
+// Preload animations
 useGLTF.preload(ANIM_GLB)
+useGLTF.setDecoderPath('https://unpkg.com/three@0.167.0/examples/jsm/libs/draco/')
 
-// ─── Public props ─────────────────────────────────────────────────────────────
+// ─── Public component ─────────────────────────────────────────────────────────
 interface Props { isActive: boolean; responseText: string }
 
 function Inner({ isActive }: Props) {
+  // Fetch the avatar URL from our proxy (serves Blob GLB or brunette fallback)
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
+
+  useEffect(() => {
+    // Use the proxy route — it serves your Blob GLB server-side (no CORS)
+    setAvatarUrl('/api/aria/avatar')
+  }, [])
+
+  if (!avatarUrl) return null
+
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
       <Canvas
         shadows
-        camera={{ position: [0, 0, 1], fov: 30 }}
+        camera={{ position: [0, 1.5, 3], fov: 30 }}
         style={{ background: 'transparent' }}
         gl={{ alpha: true, antialias: true }}
       >
-        {/* Lighting */}
         <ambientLight intensity={0.8} />
         <directionalLight position={[5, 5, 5]} intensity={1} castShadow />
 
         <Suspense fallback={null}>
-          <AvatarMesh isActive={isActive} />
+          <AvatarMesh isActive={isActive} avatarUrl={avatarUrl} />
         </Suspense>
       </Canvas>
 
-      {/* Aria speaking indicator */}
       {isActive && (
         <div style={{ position: 'absolute', bottom: 8, left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: 2, alignItems: 'flex-end', height: 12, pointerEvents: 'none' }}>
           {[5,9,7,8].map((h,i) => (
