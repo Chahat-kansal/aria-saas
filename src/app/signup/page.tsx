@@ -83,7 +83,7 @@ export default function SignupPage() {
               value={name}
               onChange={e => setName(e.target.value)}
               required
-              className="w-full bg-[#faf9f6] border border-[#eceae3] rounded-xl px-4 py-3 text-sm outline-none focus:border-[#1D9E75] focus:shadow-[0_0_0_3px_rgba(29,158,117,0.08)] transition-all placeholder:text-[rgba(26,26,22,0.3)]"
+              className="w-full bg-white border border-[#d1d0c9] rounded-xl px-4 py-3 text-sm text-[#1a1a16] outline-none focus:border-[#1D9E75] focus:shadow-[0_0_0_3px_rgba(29,158,117,0.08)] transition-all placeholder:text-[rgba(26,26,22,0.4)]"
             />
             <input
               type="email"
@@ -91,7 +91,7 @@ export default function SignupPage() {
               value={email}
               onChange={e => setEmail(e.target.value)}
               required
-              className="w-full bg-[#faf9f6] border border-[#eceae3] rounded-xl px-4 py-3 text-sm outline-none focus:border-[#1D9E75] focus:shadow-[0_0_0_3px_rgba(29,158,117,0.08)] transition-all placeholder:text-[rgba(26,26,22,0.3)]"
+              className="w-full bg-white border border-[#d1d0c9] rounded-xl px-4 py-3 text-sm text-[#1a1a16] outline-none focus:border-[#1D9E75] focus:shadow-[0_0_0_3px_rgba(29,158,117,0.08)] transition-all placeholder:text-[rgba(26,26,22,0.4)]"
             />
             <input
               type="password"
@@ -99,7 +99,7 @@ export default function SignupPage() {
               value={password}
               onChange={e => setPassword(e.target.value)}
               required
-              className="w-full bg-[#faf9f6] border border-[#eceae3] rounded-xl px-4 py-3 text-sm outline-none focus:border-[#1D9E75] focus:shadow-[0_0_0_3px_rgba(29,158,117,0.08)] transition-all placeholder:text-[rgba(26,26,22,0.3)]"
+              className="w-full bg-white border border-[#d1d0c9] rounded-xl px-4 py-3 text-sm text-[#1a1a16] outline-none focus:border-[#1D9E75] focus:shadow-[0_0_0_3px_rgba(29,158,117,0.08)] transition-all placeholder:text-[rgba(26,26,22,0.4)]"
             />
 
             {error && (
