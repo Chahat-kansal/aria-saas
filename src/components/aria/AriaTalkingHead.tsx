@@ -143,6 +143,8 @@ function AvatarMesh({ isActive }: AvatarMeshProps) {
 }
 
 // Preload both GLBs
+// Use unpkg for Draco decoder (already in CSP connect-src + script-src)
+useGLTF.setDecoderPath('https://unpkg.com/three@0.167.0/examples/jsm/libs/draco/')
 useGLTF.preload(AVATAR_GLB)
 useGLTF.preload(ANIM_GLB)
 
