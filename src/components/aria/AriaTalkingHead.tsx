@@ -16,10 +16,15 @@ class AvatarErrorBoundary extends Component<{children: ReactNode},{error: boolea
 
 function AriaMonogram({ isActive }: { isActive: boolean }) {
   return (
-    <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+    <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'rgba(127,184,151,0.12)', border: '1.5px solid rgba(127,184,151,0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <span style={{ fontFamily: 'Georgia,serif', fontStyle: 'italic', color: '#7FB897', fontSize: 24 }}>A</span>
       </div>
+      {isActive && (
+        <div style={{ position: 'absolute', bottom: 8, display: 'flex', gap: 2, alignItems: 'flex-end', height: 10 }}>
+          {[5,9,7,8].map((h,i) => <div key={i} style={{ width: 2, height: h, borderRadius: 2, background: '#7FB897', animation: `ariaB${i} 0.5s ease-in-out infinite alternate`, animationDelay: `${i*0.12}s` }} />)}
+        </div>
+      )}
       <style>{`@keyframes ariaB0{from{height:4px}to{height:8px}}@keyframes ariaB1{from{height:9px}to{height:3px}}@keyframes ariaB2{from{height:5px}to{height:9px}}@keyframes ariaB3{from{height:7px}to{height:4px}}`}</style>
     </div>
   )
@@ -28,14 +33,14 @@ function AriaMonogram({ isActive }: { isActive: boolean }) {
 const ARIA_GLB = '/models/Aria.glb'
 const ANIM_GLB = 'https://raw.githubusercontent.com/Yacine-Mekideche/IAcine-Virtual-Avatar/main/front/public/models/animations.glb'
 
-// Available animations in the GLB:
-// Angry, Crying, Idle, Laughing, Rumba, Talking_0, Talking_1, Talking_2, Terrified
+// Talking_0/1/2 all have natural upper body movement without crazy arm swings
 const TALKING_ANIMS = ['Talking_0', 'Talking_1', 'Talking_2']
 
 function CameraRig() {
   const { camera } = useThree()
   useEffect(() => {
-    camera.lookAt(0, 1.35, 0)
+    // Tight face+neck crop — keeps arms OUT of frame entirely
+    camera.lookAt(0, 1.52, 0)
   }, [camera])
   return null
 }
@@ -45,7 +50,6 @@ function AvatarMesh({ isActive }: { isActive: boolean }) {
   const { scene } = useGLTF(ARIA_GLB)
   const { animations } = useGLTF(ANIM_GLB)
   const { actions } = useAnimations(animations, group)
-
   const currentAnim = useRef('Idle')
   const hasGreeted = useRef(false)
   const talkingTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -59,26 +63,21 @@ function AvatarMesh({ isActive }: { isActive: boolean }) {
     currentAnim.current = name
   }
 
-  // Greeting sequence on mount: Rumba for 2.5s → Idle
+  // Greeting on mount: Talking_0 (natural, no crazy arms) for 2s → Idle
   useEffect(() => {
-    if (hasGreeted.current || !actions['Rumba'] || !actions['Idle']) return
+    if (hasGreeted.current || !actions['Talking_0'] || !actions['Idle']) return
     hasGreeted.current = true
-
-    // Start with Idle briefly, then burst into Rumba greeting
     actions['Idle']!.reset().fadeIn(0).play()
     currentAnim.current = 'Idle'
-
     setTimeout(() => {
-      playAnim('Rumba', 0.3)
-      // After 2.5s settle back to Idle
-      setTimeout(() => playAnim('Idle', 0.5), 2500)
-    }, 600)
+      playAnim('Talking_0', 0.4)
+      setTimeout(() => playAnim('Idle', 0.6), 2200)
+    }, 800)
   }, [actions]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // When isActive changes — pick a random Talking anim, cycle every ~4s
+  // Cycle talking anims when responding
   useEffect(() => {
     if (talkingTimeout.current) clearTimeout(talkingTimeout.current)
-
     if (isActive) {
       const pickTalking = () => {
         const anim = TALKING_ANIMS[Math.floor(Math.random() * TALKING_ANIMS.length)]
@@ -89,7 +88,6 @@ function AvatarMesh({ isActive }: { isActive: boolean }) {
     } else {
       playAnim('Idle', 0.5)
     }
-
     return () => { if (talkingTimeout.current) clearTimeout(talkingTimeout.current) }
   }, [isActive, actions]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -97,7 +95,6 @@ function AvatarMesh({ isActive }: { isActive: boolean }) {
     scene.traverse(o => { o.frustumCulled = false })
   }, [scene])
 
-  // Blink
   const blinkTarget = useRef(0)
   useEffect(() => {
     let t: ReturnType<typeof setTimeout>
@@ -147,10 +144,16 @@ function Inner({ isActive }: Props) {
       <Canvas
         gl={{ alpha: true, antialias: true }}
         style={{ background: 'transparent' }}
-        camera={{ position: [0, 1.35, 1.6], fov: 30, near: 0.01, far: 100 }}
+        camera={{
+          // Tight head crop — zoomed in so arms are completely out of frame
+          position: [0, 1.52, 1.1],
+          fov: 18,
+          near: 0.01,
+          far: 100,
+        }}
       >
         <CameraRig />
-        <ambientLight intensity={1.5} />
+        <ambientLight intensity={1.6} />
         <directionalLight position={[2, 4, 3]} intensity={1.2} />
         <directionalLight position={[-2, 2, 1]} intensity={0.5} />
         <Suspense fallback={null}>
