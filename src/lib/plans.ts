@@ -10,7 +10,7 @@ export const PLANS = {
   pro: {
     name: 'Pro',
     messagesPerMonth: Infinity,
-    models: ['claude-haiku-4-5-20251001', 'claude-sonnet-4-20250514', 'claude-opus-4-20250514'],
+    models: ['claude-haiku-4-5-20251001', 'claude-sonnet-4-5-20250929'],
     maxFileSize: 20 * 1024 * 1024, // 20MB
     webSearch: true,
     price: 20,
