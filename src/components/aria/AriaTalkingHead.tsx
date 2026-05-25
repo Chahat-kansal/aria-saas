@@ -1,7 +1,7 @@
 'use client'
-import { Suspense, useEffect, useRef, useState, Component } from 'react'
+import { Suspense, useEffect, useRef, Component } from 'react'
 import type { ReactNode } from 'react'
-import { Canvas, useFrame } from '@react-three/fiber'
+import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { useAnimations, useGLTF } from '@react-three/drei'
 import * as THREE from 'three'
 
@@ -33,13 +33,14 @@ function AriaMonogram({ isActive }: { isActive: boolean }) {
 const ARIA_GLB = '/models/Aria.glb'
 const ANIM_GLB = 'https://raw.githubusercontent.com/Yacine-Mekideche/IAcine-Virtual-Avatar/main/front/public/models/animations.glb'
 
-const VROID_BLINK_L = 'Fcl_EYE_Close_L'
-const VROID_BLINK_R = 'Fcl_EYE_Close_R'
-const VROID_BLINK   = 'Fcl_EYE_Close'
-
-const MOOD_MORPHS: Record<string, Record<string, number>> = {
-  happy:   { Fcl_ALL_Joy: 0.5 },
-  neutral: { Fcl_ALL_Neutral: 0.2 },
+// Point the camera's lookAt at head height after mount
+function CameraRig() {
+  const { camera } = useThree()
+  useEffect(() => {
+    // VRoid head is at world y≈1.55 (model origin at feet)
+    camera.lookAt(0, 1.55, 0)
+  }, [camera])
+  return null
 }
 
 function AvatarMesh({ isActive }: { isActive: boolean }) {
@@ -51,17 +52,17 @@ function AvatarMesh({ isActive }: { isActive: boolean }) {
 
   useEffect(() => {
     if (!actions) return
-    const animName = isActive ? 'Talking_1' : 'Idle'
-    const next = actions[animName]
+    const name = isActive ? 'Talking_1' : 'Idle'
+    const next = actions[name]
     const prev = actions[prevAnim.current]
     if (!next) return
-    next.reset().fadeIn(prevAnim.current === animName ? 0 : 0.5).play()
-    if (prev && prevAnim.current !== animName) prev.fadeOut(0.5)
-    prevAnim.current = animName
+    next.reset().fadeIn(prevAnim.current === name ? 0 : 0.5).play()
+    if (prev && prevAnim.current !== name) prev.fadeOut(0.5)
+    prevAnim.current = name
   }, [isActive, actions])
 
   useEffect(() => {
-    scene.traverse(obj => { obj.frustumCulled = false })
+    scene.traverse(o => { o.frustumCulled = false })
   }, [scene])
 
   const blinkTarget = useRef(0)
@@ -77,35 +78,26 @@ function AvatarMesh({ isActive }: { isActive: boolean }) {
     return () => clearTimeout(t)
   }, [])
 
-  const lerpMorph = (mesh: THREE.SkinnedMesh, name: string, target: number, speed = 0.15) => {
-    const dict = mesh.morphTargetDictionary
-    const infl = mesh.morphTargetInfluences
-    if (!dict || !infl) return
-    const idx = dict[name]
-    if (idx === undefined) return
-    infl[idx] = THREE.MathUtils.lerp(infl[idx], target, speed)
-  }
-
   useFrame(() => {
-    scene.traverse((child) => {
-      const mesh = child as THREE.SkinnedMesh
-      if (!mesh.isSkinnedMesh) return
-      lerpMorph(mesh, VROID_BLINK,   blinkTarget.current, 0.5)
-      lerpMorph(mesh, VROID_BLINK_L, blinkTarget.current, 0.5)
-      lerpMorph(mesh, VROID_BLINK_R, blinkTarget.current, 0.5)
-      const mood = isActive ? MOOD_MORPHS.happy : MOOD_MORPHS.neutral
-      for (const [k, v] of Object.entries(mood)) lerpMorph(mesh, k, v, 0.05)
-      const inactive = isActive ? MOOD_MORPHS.neutral : MOOD_MORPHS.happy
-      for (const k of Object.keys(inactive)) lerpMorph(mesh, k, 0, 0.05)
+    scene.traverse(child => {
+      const m = child as THREE.SkinnedMesh
+      if (!m.isSkinnedMesh || !m.morphTargetDictionary || !m.morphTargetInfluences) return
+      const lerp = (name: string, target: number, speed = 0.15) => {
+        const idx = m.morphTargetDictionary![name]
+        if (idx === undefined) return
+        m.morphTargetInfluences![idx] = THREE.MathUtils.lerp(m.morphTargetInfluences![idx], target, speed)
+      }
+      lerp('Fcl_EYE_Close',   blinkTarget.current, 0.5)
+      lerp('Fcl_EYE_Close_L', blinkTarget.current, 0.5)
+      lerp('Fcl_EYE_Close_R', blinkTarget.current, 0.5)
+      lerp('Fcl_ALL_Joy',     isActive ? 0.5 : 0,   0.05)
+      lerp('Fcl_ALL_Neutral', isActive ? 0 : 0.2,   0.05)
     })
   })
 
   return (
     <group ref={group} dispose={null}>
-      {/* VRoid avatars are ~1.6m tall, origin at feet.
-          Shift down so head+shoulders fill the upper frame.
-          position-y=-1.35 puts the waist at camera center → upper body visible */}
-      <primitive object={scene} position={[0, -1.35, 0]} />
+      <primitive object={scene} />
     </group>
   )
 }
@@ -120,22 +112,21 @@ function Inner({ isActive }: Props) {
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
       <Canvas
-        shadows
         gl={{ alpha: true, antialias: true }}
         style={{ background: 'transparent' }}
         camera={{
-          // Camera at eye level, looking straight at the avatar's face
-          // VRoid head is at ~1.55m, so look at y=1.4 from z=1.8
-          position: [0, 0.2, 1.8],
-          fov: 28,
-          near: 0.1,
+          // Camera sits at head level and slightly in front
+          // VRoid head y≈1.55, we look AT y=1.55 from z=2.0
+          position: [0, 1.55, 2.0],
+          fov: 22,
+          near: 0.01,
           far: 100,
         }}
       >
-        <ambientLight intensity={1.2} />
-        <directionalLight position={[2, 3, 3]} intensity={1.2} castShadow />
-        <directionalLight position={[-2, 1, 1]} intensity={0.4} />
-
+        <CameraRig />
+        <ambientLight intensity={1.5} />
+        <directionalLight position={[2, 4, 3]} intensity={1.2} />
+        <directionalLight position={[-2, 2, 1]} intensity={0.5} />
         <Suspense fallback={null}>
           <AvatarMesh isActive={isActive} />
         </Suspense>
@@ -159,9 +150,5 @@ function Inner({ isActive }: Props) {
 }
 
 export function AriaTalkingHead(props: Props) {
-  return (
-    <AvatarErrorBoundary>
-      <Inner {...props} />
-    </AvatarErrorBoundary>
-  )
+  return <AvatarErrorBoundary><Inner {...props} /></AvatarErrorBoundary>
 }
