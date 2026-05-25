@@ -381,24 +381,123 @@ const TABS: Array<{ id: TabId; label: string }> = [
 export default function SeoPage() {
   const { business } = useBusinessContext()
   const [tab, setTab] = useState<TabId>('health')
+  const [websiteUrl, setWebsiteUrl] = useState('')
+  const [urlInput, setUrlInput] = useState('')
+  const [connecting, setConnecting] = useState(false)
+  const [connectError, setConnectError] = useState<string | null>(null)
+  const [crawlTriggered, setCrawlTriggered] = useState(false)
+
+  // Load website URL from business record
+  useEffect(() => {
+    if (!business) return
+    const fetchWebsite = async () => {
+      const { data } = await supabase.from('businesses').select('website').eq('id', business.id).single()
+      if (data?.website) { setWebsiteUrl(data.website); setUrlInput(data.website) }
+    }
+    fetchWebsite()
+  }, [business])
+
+  async function connectWebsite() {
+    if (!business) return
+    let url = urlInput.trim()
+    if (!url) return
+    if (!url.startsWith('http')) url = 'https://' + url
+    try { new URL(url) } catch { setConnectError('Please enter a valid URL'); return }
+    setConnecting(true); setConnectError(null)
+    try {
+      const res = await fetch('/api/seo/connect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ businessId: business.id, websiteUrl: url }),
+      })
+      const data = await res.json()
+      if (!res.ok) { setConnectError(data.error ?? 'Failed to connect'); return }
+      setWebsiteUrl(url)
+      setCrawlTriggered(true)
+      setTimeout(() => setCrawlTriggered(false), 5000)
+    } catch { setConnectError('Network error — please try again') }
+    finally { setConnecting(false) }
+  }
+
   if (!business) return null
+
+  const isConnected = !!websiteUrl
+  const hostname = isConnected ? (() => { try { return new URL(websiteUrl).hostname } catch { return websiteUrl } })() : null
+
   return (
     <div style={{ minHeight: '100vh', background: '#0E1411', padding: '32px 24px' }}>
       <div style={{ maxWidth: 900, margin: '0 auto' }}>
         <h1 style={{ fontSize: 28, fontWeight: 700, color: '#fff', marginBottom: 6, fontFamily: 'Fraunces, serif', fontStyle: 'italic' }}>SEO</h1>
-        <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.4)', marginBottom: 28 }}>Analyse your site, track rankings, and copy AI-generated fixes directly into your CMS.</p>
-        <div style={{ display: 'flex', gap: 4, marginBottom: 28, borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
-          {TABS.map(t => (
-            <button key={t.id} onClick={() => setTab(t.id)}
-              style={{ padding: '8px 18px', borderRadius: '8px 8px 0 0', border: 'none', background: tab === t.id ? 'rgba(127,184,151,0.12)' : 'transparent', color: tab === t.id ? '#7FB897' : 'rgba(255,255,255,0.4)', fontSize: 13, fontWeight: tab === t.id ? 700 : 400, cursor: 'pointer', fontFamily: 'inherit', borderBottom: tab === t.id ? '2px solid #7FB897' : '2px solid transparent' }}>
-              {t.label}
+        <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.4)', marginBottom: 24 }}>Analyse your site, track rankings, and copy AI-generated fixes directly into your CMS.</p>
+
+        {/* Website connection panel */}
+        {!isConnected ? (
+          <div style={{ marginBottom: 28, padding: '20px 24px', borderRadius: 14, border: '1px solid rgba(127,184,151,0.25)', background: 'rgba(127,184,151,0.06)' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+              <div style={{ width: 40, height: 40, borderRadius: 10, background: 'rgba(127,184,151,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>🌐</div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 15, fontWeight: 700, color: '#fff', marginBottom: 4 }}>Connect your website to start SEO tracking</div>
+                <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', lineHeight: 1.55, marginBottom: 14 }}>
+                  Paste your website URL below. Aria will crawl it like Google does — no plugin, no code changes, no access to your CMS needed. Read-only, external audit only.
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <input
+                    type="url"
+                    value={urlInput}
+                    onChange={e => { setUrlInput(e.target.value); setConnectError(null) }}
+                    onKeyDown={e => e.key === 'Enter' && connectWebsite()}
+                    placeholder="https://yourcafe.com.au"
+                    style={{ flex: 1, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, padding: '9px 13px', color: '#fff', fontSize: 13, fontFamily: 'inherit', outline: 'none' }}
+                  />
+                  <button onClick={connectWebsite} disabled={connecting || !urlInput.trim()}
+                    style={{ padding: '9px 20px', borderRadius: 8, background: '#2D5240', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', opacity: connecting || !urlInput.trim() ? 0.5 : 1, whiteSpace: 'nowrap' }}>
+                    {connecting ? 'Connecting…' : 'Connect & crawl'}
+                  </button>
+                </div>
+                {connectError && <p style={{ fontSize: 12, color: '#F87171', marginTop: 6 }}>✗ {connectError}</p>}
+                <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', marginTop: 8 }}>
+                  Aria never writes to your website. Read-only crawl, same as Google.
+                </p>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div style={{ marginBottom: 24, padding: '12px 16px', borderRadius: 10, border: '1px solid rgba(127,184,151,0.2)', background: 'rgba(127,184,151,0.05)', display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#7FB897', flexShrink: 0 }} />
+            <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)' }}>Tracking <strong style={{ color: '#7FB897' }}>{hostname}</strong></span>
+            {crawlTriggered && <span style={{ fontSize: 12, color: '#7FB897', marginLeft: 4 }}>— crawl queued ✓</span>}
+            <button onClick={() => { setWebsiteUrl(''); setUrlInput('') }}
+              style={{ marginLeft: 'auto', fontSize: 11, color: 'rgba(255,255,255,0.35)', background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: '2px 6px', borderRadius: 4 }}>
+              Change URL
             </button>
-          ))}
-        </div>
-        {tab === 'health' && <SiteHealthTab businessId={business.id} />}
-        {tab === 'local' && <LocalSeoTab businessId={business.id} />}
-        {tab === 'keywords' && <KeywordsTab businessId={business.id} />}
-        {tab === 'optimizer' && <AiOptimizerTab businessId={business.id} />}
+            <button onClick={() => {
+              if (!business) return
+              fetch('/api/seo/connect', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ businessId: business.id, websiteUrl, triggerCrawl: true }) })
+              setCrawlTriggered(true); setTimeout(() => setCrawlTriggered(false), 5000)
+            }}
+              style={{ fontSize: 11, color: '#7FB897', background: 'rgba(127,184,151,0.1)', border: '1px solid rgba(127,184,151,0.2)', cursor: 'pointer', fontFamily: 'inherit', padding: '4px 10px', borderRadius: 6 }}>
+              Run crawl now
+            </button>
+          </div>
+        )}
+
+        {/* Only show tabs when connected */}
+        {isConnected && (
+          <>
+            <div style={{ display: 'flex', gap: 4, marginBottom: 28, borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+              {TABS.map(t => (
+                <button key={t.id} onClick={() => setTab(t.id)}
+                  style={{ padding: '8px 18px', borderRadius: '8px 8px 0 0', border: 'none', background: tab === t.id ? 'rgba(127,184,151,0.12)' : 'transparent', color: tab === t.id ? '#7FB897' : 'rgba(255,255,255,0.4)', fontSize: 13, fontWeight: tab === t.id ? 700 : 400, cursor: 'pointer', fontFamily: 'inherit', borderBottom: tab === t.id ? '2px solid #7FB897' : '2px solid transparent' }}>
+                  {t.label}
+                </button>
+              ))}
+            </div>
+            {tab === 'health' && <SiteHealthTab businessId={business.id} />}
+            {tab === 'local' && <LocalSeoTab businessId={business.id} />}
+            {tab === 'keywords' && <KeywordsTab businessId={business.id} />}
+            {tab === 'optimizer' && <AiOptimizerTab businessId={business.id} />}
+          </>
+        )}
       </div>
     </div>
   )
