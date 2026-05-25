@@ -496,16 +496,22 @@ export default function AskAriaPage() {
 
   return (
     <div style={{ display: 'flex', height: '100dvh', background: '#0d0d14', overflow: 'hidden' }}>
-      {/* Aria video avatar panel — side panel layout */}
+      {/* Aria floating avatar — bottom-left, opposite to Briefing button (top-right) */}
       {ariaVideoUrl && (
         <div style={{
-          width: 210,
-          flexShrink: 0,
-          position: 'relative',
-          background: '#0d0d14',
+          position: 'fixed',
+          bottom: 24,
+          left: 24,
+          zIndex: 50,
+          width: 160,
+          height: 220,
+          borderRadius: 20,
           overflow: 'hidden',
+          pointerEvents: 'none',
+          transition: 'opacity 0.3s ease',
+          opacity: isAriaActive ? 1 : 0.72,
         }}>
-          {/* Video — no blend mode, gradient overlays blend edges into dark bg */}
+          {/* Video */}
           <video
             ref={videoRef}
             src={ariaVideoUrl}
@@ -520,83 +526,79 @@ export default function AskAriaPage() {
               display: 'block',
             }}
           />
-          {/* Bottom gradient — strong fade into page bg */}
+          {/* Bottom fade — blends into page */}
           <div style={{
             position: 'absolute',
             bottom: 0,
             left: 0,
             right: 0,
-            height: 180,
-            background: 'linear-gradient(to bottom, transparent 0%, #0d0d14 100%)',
+            height: 90,
+            background: 'linear-gradient(to bottom, transparent, #0d0d14)',
             pointerEvents: 'none',
-            zIndex: 2,
           }} />
-          {/* Top gradient */}
+          {/* Top fade */}
           <div style={{
             position: 'absolute',
             top: 0,
             left: 0,
             right: 0,
-            height: 80,
-            background: 'linear-gradient(to top, transparent 0%, #0d0d14 100%)',
+            height: 40,
+            background: 'linear-gradient(to top, transparent, #0d0d14)',
             pointerEvents: 'none',
-            zIndex: 2,
           }} />
-          {/* Right edge — blends into chat */}
-          <div style={{
-            position: 'absolute',
-            top: 0,
-            right: 0,
-            bottom: 0,
-            width: 80,
-            background: 'linear-gradient(to right, transparent 0%, #0d0d14 100%)',
-            pointerEvents: 'none',
-            zIndex: 2,
-          }} />
-          {/* Left edge */}
+          {/* Left fade */}
           <div style={{
             position: 'absolute',
             top: 0,
             left: 0,
             bottom: 0,
-            width: 20,
-            background: 'linear-gradient(to left, transparent 0%, #0d0d14 100%)',
+            width: 30,
+            background: 'linear-gradient(to left, transparent, #0d0d14)',
             pointerEvents: 'none',
-            zIndex: 2,
           }} />
-          {/* Speaking indicator — above gradients */}
+          {/* Right fade */}
+          <div style={{
+            position: 'absolute',
+            top: 0,
+            right: 0,
+            bottom: 0,
+            width: 30,
+            background: 'linear-gradient(to right, transparent, #0d0d14)',
+            pointerEvents: 'none',
+          }} />
+          {/* Sound bars — only when speaking */}
           {isAriaActive && (
             <div style={{
               position: 'absolute',
-              bottom: 16,
-              left: 14,
+              bottom: 12,
+              left: '50%',
+              transform: 'translateX(-50%)',
               display: 'flex',
-              alignItems: 'center',
-              gap: 5,
-              zIndex: 10,
+              gap: 3,
+              alignItems: 'flex-end',
+              height: 14,
+              zIndex: 5,
             }}>
-              <div style={{ display: 'flex', gap: 2, alignItems: 'flex-end', height: 12 }}>
-                {[0,1,2].map(i => (
-                  <div key={i} style={{
-                    width: 3,
-                    borderRadius: 2,
-                    background: '#7FB897',
-                    height: i === 1 ? 12 : 7,
-                    animation: `ariaBar${i} 0.6s ease-in-out infinite alternate`,
-                    animationDelay: `${i * 0.15}s`,
-                  }} />
-                ))}
-              </div>
-              <span style={{ fontSize: 10, color: 'rgba(127,184,151,0.8)', letterSpacing: '0.04em' }}>Aria</span>
+              {[0,1,2,3].map(i => (
+                <div key={i} style={{
+                  width: 3,
+                  borderRadius: 2,
+                  background: '#7FB897',
+                  height: [8,14,10,12][i],
+                  animation: `ariaBar${i} 0.5s ease-in-out infinite alternate`,
+                  animationDelay: `${i * 0.12}s`,
+                }} />
+              ))}
             </div>
           )}
         </div>
       )}
-      {/* Avatar animations */}
+      {/* Avatar keyframes */}
       <style>{`
-        @keyframes ariaBar0 { from { height: 7px; opacity: 0.5; } to { height: 12px; opacity: 1; } }
-        @keyframes ariaBar1 { from { height: 12px; opacity: 1; } to { height: 5px; opacity: 0.4; } }
-        @keyframes ariaBar2 { from { height: 7px; opacity: 0.5; } to { height: 10px; opacity: 0.9; } }
+        @keyframes ariaBar0 { from { height: 5px; opacity: 0.4; } to { height: 10px; opacity: 1; } }
+        @keyframes ariaBar1 { from { height: 14px; opacity: 1; } to { height: 4px; opacity: 0.3; } }
+        @keyframes ariaBar2 { from { height: 6px; opacity: 0.5; } to { height: 12px; opacity: 0.9; } }
+        @keyframes ariaBar3 { from { height: 10px; opacity: 0.7; } to { height: 5px; opacity: 0.4; } }
       `}</style>
       {/* Mobile backdrop */}
       {showHistory && (
