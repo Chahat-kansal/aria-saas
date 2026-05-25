@@ -131,7 +131,9 @@ async function _POST(req: Request) {
       method: 'POST',
       headers: { Authorization: `Bearer ${resendKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        from: `${biz.name} <aria@${process.env.RESEND_FROM_DOMAIN ?? 'resend.dev'}>`,
+        from: process.env.RESEND_FROM_DOMAIN
+        ? `${biz.name} <invoices@${process.env.RESEND_FROM_DOMAIN}>`
+        : `${biz.name} <onboarding@resend.dev>`,  // resend sandbox — works without domain verification
         to: toEmail,
         subject: `Tax Invoice ${inv.invoice_number} from ${biz.name} — $${(Number(inv.total) || 0).toFixed(2)} AUD`,
         html,
