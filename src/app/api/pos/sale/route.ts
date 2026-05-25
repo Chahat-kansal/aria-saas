@@ -283,23 +283,18 @@ async function _POST(req: Request) {
     }).eq('id', openSession.id));
   }
 
-  // Update customer loyalty + stats
+  // Update customer loyalty + stats (fire-and-forget — ~100-200ms saved off critical path)
   if (customer_id) {
-    const { data: customer } = await supabase
-      .from('pos_customers')
-      .select('loyalty_points, total_spent, visit_count')
-      .eq('id', customer_id)
-      .maybeSingle();
-
-    if (customer) {
-      const pointsEarned = Math.floor(total_amount);
+    ;(async () => {
+      const { data: cust } = await supabase.from('pos_customers').select('loyalty_points, total_spent, visit_count').eq('id', customer_id).maybeSingle();
+      if (!cust) return;
       await supabase.from('pos_customers').update({
-        loyalty_points: (customer.loyalty_points ?? 0) + pointsEarned,
-        total_spent: (customer.total_spent ?? 0) + total_amount,
-        visit_count: (customer.visit_count ?? 0) + 1,
+        loyalty_points: (cust.loyalty_points ?? 0) + Math.floor(total_amount),
+        total_spent: (cust.total_spent ?? 0) + total_amount,
+        visit_count: (cust.visit_count ?? 0) + 1,
         last_visit: new Date().toISOString(),
       }).eq('id', customer_id);
-    }
+    })();
   }
 
   // Cafe KDS + ingredient deduction (non-blocking)

@@ -1,5 +1,6 @@
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+export const revalidate = 60;
 
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
@@ -58,7 +59,7 @@ async function _GET(req: Request) {
   const [{ data: products }, { data: categories }, { data: saleKeys }] = await Promise.all([
 supabase
       .from('pos_products')
-      .select('id,name,sku,barcode,description,price,cost_price,tax_rate,tax_code_id,additional_tax_code_ids,stock_quantity,low_stock_threshold,track_stock,is_active,show_online,image_url,builder_type,category_id,supplier_id,pos_categories(name,color)')
+      .select('id,name,sku,barcode,price,cost_price,tax_rate,tax_code_id,additional_tax_code_ids,stock_quantity,low_stock_threshold,track_stock,is_active,image_url,builder_type,category_id,alcohol_percentage,is_age_restricted,is_weight_based,price_per_kg,serial_tracked,is_schedule_drug,schedule_level,requires_script,pos_categories(name,color)')
       .eq('business_id', bid)
       .order('name')
       .limit(5000),

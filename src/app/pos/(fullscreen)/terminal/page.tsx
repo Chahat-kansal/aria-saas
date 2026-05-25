@@ -150,6 +150,15 @@ type PayMethod = 'card' | 'cash' | 'split' | 'gift_card' | 'direct_deposit';
 export default function TerminalPage() {
   /* ── Data ─────────────────────────────────────────────────────── */
   const [products,       setProducts]       = useState<Product[]>([]);
+  // O(1) barcode/SKU lookup — rebuilt whenever products list changes
+  const barcodeMap = useMemo(() => {
+    const m = new Map<string, Product>();
+    for (const p of products) {
+      if (p.barcode) m.set(p.barcode, p);
+      if (p.sku) m.set(p.sku, p);
+    }
+    return m;
+  }, [products]);
   // Pre-loaded modifier cache — eliminates 4-5s API calls on every product tap
   const modifierCache = useRef<Record<string, { hasModifiers: boolean; hasVariants: boolean }>>({});
   const [parkedSales,    setParkedSales]    = useState<ParkedSale[]>([]);
@@ -546,11 +555,13 @@ export default function TerminalPage() {
     let onlineOrderInterval: ReturnType<typeof setInterval> | null = null;
     let kdsChannel: BroadcastChannel | null = null;
 
+    const t0Prods = performance.now();
     Promise.all([
       fetch('/api/pos/products').then(r => r.json()),
       fetch('/api/pos/park').then(r => r.json()),
       fetch('/api/pos/receipt-templates').then(r => r.json()).catch(() => ({ templates: [] })),
     ]).then(([prod, park, tmplData]) => {
+      console.log('[POS perf] products:', (performance.now() - t0Prods).toFixed(2), 'ms');
       // ALWAYS run these — no early returns until after setLoading(false)
       if (prod.business_id) setBusinessId(prod.business_id);
       if (prod.business_name) setBusinessName(prod.business_name);
@@ -752,7 +763,9 @@ export default function TerminalPage() {
         const code = barcodeBuffer.current.trim();
         barcodeBuffer.current = '';
         if (code.length >= 4) {
-          const hit = products.find(p => p.barcode === code || p.sku === code);
+          const t0Bc = performance.now();
+          const hit = barcodeMap.get(code);
+          console.log('[POS perf] barcode:', (performance.now() - t0Bc).toFixed(2), 'ms');
           if (hit && hit.is_active) {
             SFX.scan();
             checkAndAddToCart(hit);
@@ -803,7 +816,7 @@ export default function TerminalPage() {
   }, []);
   useScanner(
     (code) => {
-      const hit = products.find(p => p.barcode === code || p.sku === code);
+      const hit = barcodeMap.get(code);
       if (hit && hit.is_active) { SFX.scan(); checkAndAddToCart(hit); }
     },
     { minLength: 4, maxGapMs: 50 },
@@ -1393,165 +1406,177 @@ export default function TerminalPage() {
       return;
     }
 
+    // Capture all ephemeral values before clearSale zeros them
+    const t0Sale = performance.now();
+    const cartSnapshot = [...cart];
+    const customerSnapshot = customer;
+    const capturedTotal = roundedTotal;
+    const capturedChange = change;
+    const capturedSplitCash = parseFloat(splitCash) || 0;
+    const capturedSplitCardAmt = splitCardAmt;
+    const capturedPayMethod = payMethod;
+    const capturedSubtotal = subtotal;
+    const capturedTaxAmount = taxAmount;
+    const capturedTendered = tendered;
+    const capturedAppliedDiscounts = appliedDiscounts ?? [];
+    const capturedAgeVerified = ageVerified;
+    const capturedServedBy = servedBy || null;
+    const capturedPosUserId = posUserId;
+    const capturedGiftCardCode = giftCardCode;
+    const capturedGiftCardBalance = giftCardBalance;
+    const capturedDirectDepositRef = directDepositRef;
+    const capturedActiveOutletId = activeOutletId;
+    const capturedBusinessId = businessId;
+    const capturedBusinessName = businessName;
+    const capturedCustomerDetails = customerDetails;
+    const capturedSessionId = registerSession?.id ?? null;
+    const capturedOutletId = typeof window !== 'undefined' ? localStorage.getItem('pos_outlet_id') || null : null;
+    const saleBody = JSON.stringify({
+      items: cartSnapshot.map(i => ({
+        product_id: i.product.id, product_name: i.label ?? i.product.name, product_sku: i.product.sku,
+        quantity: i.qty, unit_price: i.unitPrice, tax_rate: i.product.tax_rate ?? 10,
+        tax_code_id: i.product.tax_code_id ?? null,
+        additional_tax_code_ids: i.product.additional_tax_code_ids ?? [],
+        category_id: i.product.category_id ?? null,
+        discount_percent: i.discount_percent ?? 0,
+        line_total: +(i.unitPrice * i.qty * (1 - (i.discount_percent ?? 0) / 100)).toFixed(2),
+        variant_label: i.variantLabel ?? null,
+        modifiers: i.modifierDetails?.map(m => ({ id: m.id, name: m.name, price_cents: Math.round(m.price_adjustment * 100) })) ?? [],
+      })),
+      customer_id: customerSnapshot?.id ?? null, payment_method: capturedPayMethod,
+      served_by: capturedServedBy,
+      pos_user_id: capturedPosUserId,
+      applied_discounts: capturedAppliedDiscounts,
+      subtotal: +capturedSubtotal.toFixed(2), tax_amount: +capturedTaxAmount.toFixed(2),
+      discount_amount: 0, total_amount: +capturedTotal.toFixed(2),
+      cash_tendered: capturedPayMethod === 'cash' ? capturedTendered : null,
+      change_given: capturedPayMethod === 'cash' ? +capturedChange.toFixed(2) : null,
+      split_cash: capturedPayMethod === 'split' ? capturedSplitCash : null,
+      split_card: capturedPayMethod === 'split' ? +capturedSplitCardAmt.toFixed(2) : null,
+      outlet_id: capturedOutletId, session_id: capturedSessionId,
+      age_verified: capturedAgeVerified,
+      ...(capturedPayMethod === 'gift_card' ? { gift_card_code: capturedGiftCardCode, gift_card_amount: Math.min(capturedGiftCardBalance ?? 0, capturedTotal) } : {}),
+      ...(capturedPayMethod === 'direct_deposit' ? { direct_deposit_ref: capturedDirectDepositRef } : {}),
+    });
+
     try {
-      const outletId = typeof window !== 'undefined' ? localStorage.getItem('pos_outlet_id') || null : null;
-      const r = await fetch('/api/pos/sale', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          items: cart.map(i => ({
-            product_id: i.product.id, product_name: i.label ?? i.product.name, product_sku: i.product.sku,
-            quantity: i.qty, unit_price: i.unitPrice, tax_rate: i.product.tax_rate ?? 10,
-            tax_code_id: i.product.tax_code_id ?? null,
-            additional_tax_code_ids: i.product.additional_tax_code_ids ?? [],
-            category_id: i.product.category_id ?? null,
-            discount_percent: i.discount_percent ?? 0,
-            line_total: +(i.unitPrice * i.qty * (1 - (i.discount_percent ?? 0) / 100)).toFixed(2),
-            variant_label: i.variantLabel ?? null,
-            modifiers: i.modifierDetails?.map(m => ({ id: m.id, name: m.name, price_cents: Math.round(m.price_adjustment * 100) })) ?? [],
-          })),
-          customer_id: customer?.id ?? null, payment_method: payMethod,
-          served_by: servedBy || null,
-          pos_user_id: posUserId,
-          applied_discounts: appliedDiscounts ?? [],
-          subtotal: +subtotal.toFixed(2), tax_amount: +taxAmount.toFixed(2),
-          discount_amount: 0, total_amount: +roundedTotal.toFixed(2),
-          cash_tendered: payMethod === 'cash' ? tendered : null,
-          change_given: payMethod === 'cash' ? +change.toFixed(2) : null,
-          split_cash: payMethod === 'split' ? parseFloat(splitCash) || 0 : null,
-          split_card: payMethod === 'split' ? +splitCardAmt.toFixed(2) : null,
-          outlet_id: outletId, session_id: registerSession?.id ?? null,
-          age_verified: ageVerified,
-          ...(payMethod === 'gift_card' ? { gift_card_code: giftCardCode, gift_card_amount: Math.min(giftCardBalance ?? 0, roundedTotal) } : {}),
-          ...(payMethod === 'direct_deposit' ? { direct_deposit_ref: directDepositRef } : {}),
-        }),
-      });
-      const d = await r.json();
-      if (d.error) { alert(d.error); return; }
-      // Sprint J: auto-fire KDS tickets (non-blocking)
-      if (d.sale?.id) {
-        fetch('/api/pos/kds/auto-fire', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            sale_id: d.sale.id,
-            outlet_id: outletId ?? null,
-            table_label: customerDetails?.name ?? null,
-            items: cart.map(i => ({
-              id: i.product.id, // sale_item_id resolved server-side from product_id + sale_id
-              product_id: i.product.id,
-              quantity: i.qty,
-              notes: null,
-              seat_number: null,
-              course: null,
-            })),
-          }),
-        }).catch(() => {})
-      }
-      // Loyalty earn — additive, non-blocking
-      if (d.sale?.id && customer?.id && businessId) {
-        fetch('/api/loyalty/earn', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sale_id: d.sale.id, customer_id: customer.id, business_id: businessId, sale_total: roundedTotal }),
-        }).catch(() => {})
-      }
+      // Optimistic stock decrement — local state only, instant
       setProducts(ps => ps.map(p => {
-        const item = cart.find(i => i.product.id === p.id);
+        const item = cartSnapshot.find(i => i.product.id === p.id);
         if (!item || !p.track_stock) return p;
         return { ...p, stock_quantity: Math.max(0, p.stock_quantity - item.qty) };
       }));
-      // Decrement outlet inventory via Supabase RPC — additive, non-blocking
-      if (activeOutletId && businessId) {
-        import('@/lib/supabase').then(({ supabase: sb }) => {
-          if (!sb) return;
-          cart.forEach(i => {
-            if (!i.product.track_stock) return;
-            Promise.resolve(sb.rpc('decrement_outlet_inventory', {
-              p_business_id: businessId,
-              p_product_id: i.product.id,
-              p_outlet_id: activeOutletId,
-              p_qty: i.qty,
-            })).catch(() => {}); // non-blocking — local state already updated above
-          });
-        });
-      }
-      const cartSnapshot = [...cart];
-      const customerSnapshot = customer;
-      setRecentSales(prev => [{
-        id: d.sale?.id ?? String(Date.now()),
-        total: roundedTotal,
-        items: cartSnapshot.reduce((s, i) => s + i.qty, 0),
-        time: new Date(),
-      }, ...prev].slice(0, 5));
-      // Split payment — record both tenders in pos_sale_payments (non-blocking)
-      if (payMethod === 'split' && d.sale?.id) {
-        const cashAmt = parseFloat(splitCash) || 0;
-        const cardAmt = +splitCardAmt.toFixed(2);
-        Promise.all([
-          cashAmt > 0 && fetch('/api/pos/sale-payments', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sale_id: d.sale.id, method: 'cash', amount_cents: Math.round(cashAmt * 100) }) }),
-          cardAmt > 0 && fetch('/api/pos/sale-payments', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sale_id: d.sale.id, method: 'card', amount_cents: Math.round(cardAmt * 100) }) }),
-        ]).catch(() => {});
-      }
-      // Calculate commission (non-blocking)
-      if (servedBy && businessId) {
-        fetch('/api/pos/commission-rules?business_id=' + businessId).then(r => r.json()).then(async data => {
-          const rules = data.rules ?? [];
-          const activeRule = rules[0]; // Use first active rule
-          if (!activeRule) return;
-          const saleCents = Math.round(roundedTotal * 100);
-          if (saleCents < (activeRule.min_sale_cents ?? 0)) return;
-          const commissionCents = Math.round(saleCents * (activeRule.rate / 100));
-          await fetch('/api/pos/commissions', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              business_id: businessId, sale_id: d.sale?.id, pos_user_name: servedBy,
-              rule_id: activeRule.id, sale_total_cents: saleCents,
-              commission_rate: activeRule.rate, commission_cents: commissionCents,
-            }),
-          }).catch(() => null);
-        }).catch(() => null);
-      }
-
-      // Signal customer display: complete state + sound
-      try {
-        const changeCents = payMethod === 'cash' ? Math.round(change * 100) : 0;
-        const completePayload = JSON.stringify({
-          status: 'complete',
-          business_name: businessName,
-          change_cents: changeCents,
-          customer_name: customerSnapshot?.name ?? null,
-          loyalty_earned: Math.floor(roundedTotal),
-          timestamp: Date.now(),
-        });
-        localStorage.setItem('aria_display_state', completePayload);
-        localStorage.setItem('aria_pos_display_state', completePayload);
-        // Broadcast to customer display for SaleCelebration — additive
-        try {
-          const bc = new BroadcastChannel('aria-pos-display');
-          bc.postMessage({
-            type: 'sale_completed',
-            items: (cartSnapshot ?? []).map((i: any) => ({ name: i.product?.name ?? i.label ?? '', category: i.product?.category ?? '', price: i.unitPrice ?? i.unit_price ?? 0, quantity: i.qty ?? i.quantity ?? 1 })),
-            customer_name: customerSnapshot?.name ?? null,
-            total: roundedTotal,
-            points_earned: Math.floor(roundedTotal),
-          });
-          bc.close();
-        } catch { /* BroadcastChannel not available */ }
-        SFX.ching();
-        // Reset display to idle after 4.5 seconds
-        setTimeout(() => {
-          try {
-            const idlePayload = JSON.stringify({ status: 'idle', business_name: businessName, timestamp: Date.now() });
-            localStorage.setItem('aria_display_state', idlePayload);
-            localStorage.setItem('aria_pos_display_state', idlePayload);
-          } catch { /* ignore */ }
-        }, 4500);
-      } catch { /* ignore */ }
-
-      setShowReceipt({ ...d.sale, cartSnapshot, customerSnapshot, businessName });
+      // Show optimistic receipt immediately — UI unblocked before API call
+      setShowReceipt({
+        id: 'TEMP-' + Date.now(),
+        total_amount: capturedTotal,
+        payment_method: capturedPayMethod,
+        sale_number: '…',
+        cartSnapshot,
+        customerSnapshot,
+        businessName: capturedBusinessName,
+      });
       setTerminalView('confirm');
       clearSale();
     } finally { setProcessing(false); }
+    SFX.ching();
+
+    // Customer display signal — immediate
+    try {
+      const changeCents = capturedPayMethod === 'cash' ? Math.round(capturedChange * 100) : 0;
+      const completePayload = JSON.stringify({
+        status: 'complete', business_name: capturedBusinessName, change_cents: changeCents,
+        customer_name: customerSnapshot?.name ?? null,
+        loyalty_earned: Math.floor(capturedTotal), timestamp: Date.now(),
+      });
+      localStorage.setItem('aria_display_state', completePayload);
+      localStorage.setItem('aria_pos_display_state', completePayload);
+      try {
+        const bc = new BroadcastChannel('aria-pos-display');
+        bc.postMessage({
+          type: 'sale_completed',
+          items: cartSnapshot.map((i: any) => ({ name: i.product?.name ?? i.label ?? '', category: i.product?.category ?? '', price: i.unitPrice ?? i.unit_price ?? 0, quantity: i.qty ?? i.quantity ?? 1 })),
+          customer_name: customerSnapshot?.name ?? null,
+          total: capturedTotal, points_earned: Math.floor(capturedTotal),
+        });
+        bc.close();
+      } catch { /* BroadcastChannel not available */ }
+      setTimeout(() => {
+        try {
+          const idlePayload = JSON.stringify({ status: 'idle', business_name: capturedBusinessName, timestamp: Date.now() });
+          localStorage.setItem('aria_display_state', idlePayload);
+          localStorage.setItem('aria_pos_display_state', idlePayload);
+        } catch { /* ignore */ }
+      }, 4500);
+    } catch { /* ignore */ }
+
+    // Background sync — API call after UI is already shown
+    ;(async () => {
+      try {
+        const r = await fetch('/api/pos/sale', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: saleBody });
+        const d = await r.json();
+        console.log('[POS perf] sale:', (performance.now() - t0Sale).toFixed(2), 'ms');
+        if (d.error || !d.sale) return;
+        setShowReceipt(prev => prev ? { ...d.sale, cartSnapshot, customerSnapshot, businessName: capturedBusinessName } : prev);
+        setRecentSales(prev => [{
+          id: d.sale.id, total: capturedTotal,
+          items: cartSnapshot.reduce((s: number, i: { qty: number }) => s + i.qty, 0), time: new Date(),
+        }, ...prev].slice(0, 5));
+        if (!d.sale.id) return;
+        // KDS auto-fire (non-blocking)
+        fetch('/api/pos/kds/auto-fire', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sale_id: d.sale.id, outlet_id: capturedOutletId ?? null,
+            table_label: capturedCustomerDetails?.name ?? null,
+            items: cartSnapshot.map(i => ({ id: i.product.id, product_id: i.product.id, quantity: i.qty, notes: null, seat_number: null, course: null })),
+          }),
+        }).catch(() => {});
+        // Loyalty earn (non-blocking)
+        if (customerSnapshot?.id && capturedBusinessId) {
+          fetch('/api/loyalty/earn', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sale_id: d.sale.id, customer_id: customerSnapshot.id, business_id: capturedBusinessId, sale_total: capturedTotal }),
+          }).catch(() => {});
+        }
+        // Split payments (non-blocking)
+        if (capturedPayMethod === 'split') {
+          Promise.all([
+            capturedSplitCash > 0 && fetch('/api/pos/sale-payments', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sale_id: d.sale.id, method: 'cash', amount_cents: Math.round(capturedSplitCash * 100) }) }),
+            capturedSplitCardAmt > 0 && fetch('/api/pos/sale-payments', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sale_id: d.sale.id, method: 'card', amount_cents: Math.round(capturedSplitCardAmt * 100) }) }),
+          ]).catch(() => {});
+        }
+        // Commission (non-blocking)
+        if (capturedServedBy && capturedBusinessId) {
+          fetch('/api/pos/commission-rules?business_id=' + capturedBusinessId).then(r => r.json()).then(async data => {
+            const rules = data.rules ?? [];
+            const activeRule = rules[0];
+            if (!activeRule) return;
+            const saleCents = Math.round(capturedTotal * 100);
+            if (saleCents < (activeRule.min_sale_cents ?? 0)) return;
+            const commissionCents = Math.round(saleCents * (activeRule.rate / 100));
+            await fetch('/api/pos/commissions', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ business_id: capturedBusinessId, sale_id: d.sale.id, pos_user_name: capturedServedBy, rule_id: activeRule.id, sale_total_cents: saleCents, commission_rate: activeRule.rate, commission_cents: commissionCents }),
+            }).catch(() => null);
+          }).catch(() => null);
+        }
+        // Outlet inventory decrement (non-blocking)
+        if (capturedActiveOutletId && capturedBusinessId) {
+          import('@/lib/supabase').then(({ supabase: sb }) => {
+            if (!sb) return;
+            cartSnapshot.forEach(i => {
+              if (!i.product.track_stock) return;
+              Promise.resolve(sb.rpc('decrement_outlet_inventory', {
+                p_business_id: capturedBusinessId,
+                p_product_id: i.product.id,
+                p_outlet_id: capturedActiveOutletId,
+                p_qty: i.qty,
+              })).catch(() => {});
+            });
+          });
+        }
+      } catch { /* background sync failed — receipt already shown */ }
+    })();
   }
 
   const registerIsOpen = !!registerSession;
