@@ -12,6 +12,7 @@ import type { PlannedAction } from '@/lib/aria/ask/action-planner'
 import type { DocumentReadResult } from '@/lib/aria/intelligence/document-vision'
 import { BlockRenderer } from '@/components/dashboard/BlockRenderer'
 import type { AskBlock } from '@/lib/aria/ask-types'
+import { AriaTalkingHead } from '@/components/aria/AriaTalkingHead'
 
 const ChartBlock = dynamic(() => import('@/components/dashboard/ChartBlock'), { ssr: false })
 
@@ -233,29 +234,14 @@ export default function AskAriaPage() {
   const [showAudit, setShowAudit] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [councilThinking, setCouncilThinking] = useState(false)
+  const [ariaResponseText, setAriaResponseText] = useState<string>('')
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const videoRef = useRef<HTMLVideoElement>(null)
-  const [ariaVideoUrl] = useState<string>(process.env.NEXT_PUBLIC_ARIA_VIDEO_URL ?? 'https://tcowd5vdie4rwa2o.public.blob.vercel-storage.com/50071.mp4')
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
 
-  // Video avatar: ONLY active when streaming message has actual content (not during brain thinking)
   const isAriaActive = messages.some(m => m.streaming && m.content && m.content.length > 0)
-  useEffect(() => {
-    const vid = videoRef.current
-    if (!vid || !ariaVideoUrl) return
-    if (isAriaActive) {
-      vid.loop = true
-      vid.currentTime = 0
-      vid.play().catch(() => {})
-    } else {
-      vid.loop = false
-      vid.pause()
-      vid.currentTime = 0
-    }
-  }, [isAriaActive, ariaVideoUrl])
 
   useEffect(() => {
     const q = new URLSearchParams(window.location.search).get('q')
@@ -405,6 +391,7 @@ export default function AskAriaPage() {
         return updated
       })
 
+      setAriaResponseText(data.response ?? '')
       loadHistory()
     } catch (err: unknown) {
       const errMsg = err instanceof Error ? err.message : 'Unknown error'
@@ -419,6 +406,7 @@ export default function AskAriaPage() {
     } finally {
       setSending(false)
       setCouncilThinking(false)
+      setTimeout(() => setAriaResponseText(''), 500)
       inputRef.current?.focus()
     }
   }, [input, sending, conversationId, loadHistory])
@@ -543,13 +531,6 @@ export default function AskAriaPage() {
 
   return (
     <div style={{ display: 'flex', height: '100dvh', background: '#0d0d14', overflow: 'hidden' }}>
-      {/* Avatar keyframes only — avatar is inside chat col below */}
-      <style>{`
-        @keyframes ariaBar0 { from { height: 4px; opacity: 0.4; } to { height: 9px; opacity: 1; } }
-        @keyframes ariaBar1 { from { height: 9px; opacity: 1; } to { height: 3px; opacity: 0.3; } }
-        @keyframes ariaBar2 { from { height: 5px; opacity: 0.5; } to { height: 8px; opacity: 0.9; } }
-        @keyframes ariaBar3 { from { height: 7px; opacity: 0.6; } to { height: 4px; opacity: 0.4; } }
-      `}</style>
       {/* Mobile backdrop */}
       {showHistory && (
         <div className="fixed inset-0 bg-black/60 z-10 md:hidden" onClick={() => setShowHistory(false)} />
@@ -609,58 +590,25 @@ export default function AskAriaPage() {
 
       {/* Main chat — subtle mood tint based on time of day */}
       <div className="flex-1 flex flex-col overflow-hidden" style={{ position: 'relative', background: (() => { const h = new Date().getHours(); if (h < 6) return '#0a0a12'; if (h < 12) return '#0d0f14'; if (h < 17) return '#0d0d14'; if (h < 20) return '#0e0c13'; return '#0b0b14'; })() }}>
-        {/* Aria floating avatar — absolute inside chat col, bottom-right corner
-            Opposite side from Briefing button (top-right in header).
-            Hidden when idle (opacity 0), visible + looping only while text streams. */}
-        {ariaVideoUrl && (
-          <div style={{
-            position: 'absolute',
-            bottom: 80,
-            right: 20,
-            width: 96,
-            height: 130,
-            zIndex: 20,
-            pointerEvents: 'none',
-            opacity: isAriaActive ? 1 : 0.35,
-            transition: 'opacity 0.25s ease',
-            WebkitMaskImage: 'radial-gradient(ellipse 75% 78% at 50% 42%, black 20%, transparent 68%)',
-            maskImage: 'radial-gradient(ellipse 75% 78% at 50% 42%, black 20%, transparent 68%)',
-          }}>
-            <video
-              ref={videoRef}
-              src={ariaVideoUrl}
-              muted
-              playsInline
-              loop
-              style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center top', display: 'block' }}
-            />
-          </div>
-        )}
-        {/* Sound bars above avatar, only while speaking */}
-        {ariaVideoUrl && isAriaActive && (
-          <div style={{
-            position: 'absolute',
-            bottom: 68,
-            right: 36,
-            zIndex: 21,
-            display: 'flex',
-            gap: 2,
-            alignItems: 'flex-end',
-            height: 10,
-            pointerEvents: 'none',
-          }}>
-            {[0,1,2,3].map(i => (
-              <div key={i} style={{
-                width: 2,
-                borderRadius: 2,
-                background: '#7FB897',
-                height: [5,9,7,8][i],
-                animation: `ariaBar${i} 0.5s ease-in-out infinite alternate`,
-                animationDelay: `${i * 0.12}s`,
-              }} />
-            ))}
-          </div>
-        )}
+        {/* Aria 3D avatar — silent visual animation while she responds */}
+        <div style={{
+          position: 'absolute',
+          bottom: 80,
+          right: 16,
+          width: 110,
+          height: 160,
+          zIndex: 20,
+          pointerEvents: 'none',
+          opacity: isAriaActive ? 1 : 0.4,
+          transition: 'opacity 0.4s ease',
+          WebkitMaskImage: 'radial-gradient(ellipse 78% 82% at 50% 42%, black 22%, transparent 68%)',
+          maskImage: 'radial-gradient(ellipse 78% 82% at 50% 42%, black 22%, transparent 68%)',
+        }}>
+          <AriaTalkingHead
+            isActive={isAriaActive}
+            responseText={ariaResponseText}
+          />
+        </div>
         {/* Header */}
         <div className="border-b px-6 py-4 flex items-center justify-between flex-shrink-0"
           style={{ borderColor: 'rgba(255,255,255,0.06)', background: '#13131a' }}>
