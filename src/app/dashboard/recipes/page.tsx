@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import { useBusinessContext } from '@/components/providers/BusinessProvider';
+import RecipeImportTab from '@/components/dashboard/RecipeImportTab';
 
 interface Ingredient { id?: string; ingredient_name: string; quantity: number; unit: string; cost_cents?: number | null; notes?: string | null; }
 interface Recipe { id: string; name: string; description: string | null; category: string | null; serves: number; prep_time_minutes: number | null; sell_price_cents: number | null; cost_cents: number | null; notes: string | null; is_active: boolean; recipe_ingredients: Ingredient[]; }
@@ -23,7 +24,7 @@ export default function RecipesPage() {
   const [saving, setSaving] = useState(false);
   const [suggesting, setSuggesting] = useState(false);
   const [suggestions, setSuggestions] = useState<any[]>([]);
-  const [activeTab, setActiveTab] = useState<'recipes' | 'training'>('recipes');
+  const [activeTab, setActiveTab] = useState<'recipes' | 'training' | 'import'>('recipes');
 
   const load = useCallback(async () => {
     if (!business?.id) return;
@@ -136,6 +137,21 @@ export default function RecipesPage() {
     );
   }
 
+  if (business && business.industry !== 'cafe') {
+    return (
+      <div className="p-6 max-w-5xl mx-auto">
+        <div className="rounded-2xl p-10 text-center" style={{ background: '#13131a', border: '1px solid rgba(255,255,255,0.07)' }}>
+          <div className="text-4xl mb-4">☕</div>
+          <h2 className="text-white font-semibold text-xl mb-2">Recipes is a café feature</h2>
+          <p className="text-sm max-w-sm mx-auto" style={{ color: '#6b7280' }}>
+            This module is built for cafés — tracking drink and food recipes, ingredient costs, and staff training.
+            If your business is a café, update your industry in Settings.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="p-6 max-w-5xl mx-auto">
       <div className="mb-6 flex items-start justify-between gap-4">
@@ -159,11 +175,11 @@ export default function RecipesPage() {
 
       {/* Tabs */}
       <div className="flex gap-2 mb-5">
-        {(['recipes', 'training'] as const).map(tab => (
+        {(['recipes', 'import', 'training'] as const).map(tab => (
           <button key={tab} onClick={() => setActiveTab(tab)}
             className={`px-4 py-2 rounded-xl text-xs font-medium capitalize ${activeTab === tab ? 'bg-[#1D9E75] text-white' : 'text-gray-400'}`}
             style={activeTab !== tab ? { background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' } : {}}>
-            {tab === 'training' ? 'Staff training' : tab}
+            {tab === 'training' ? 'Staff training' : tab === 'import' ? 'Import' : tab}
           </button>
         ))}
       </div>
@@ -254,6 +270,10 @@ export default function RecipesPage() {
             ))}
           </div>
         )
+      )}
+
+      {activeTab === 'import' && business?.id && (
+        <RecipeImportTab businessId={business.id} existingRecipes={recipes.map(r => ({ id: r.id, name: r.name }))} />
       )}
 
       {activeTab === 'training' && business?.id && (
