@@ -112,6 +112,7 @@ const ALL_ITEMS: Record<string, NavItemDef> = {
   'audit-checks':    { href: '/dashboard/audit-checks',   label: 'Audit Checks',     icon: CheckSquareIcon, section: 'Operations' },
   'weekly-reports':  { href: '/dashboard/weekly-reports', label: 'Weekly Reports',   icon: TrendingUpIcon, badge: 'AI',  section: 'Operations' },
   'price-tickets':   { href: '/dashboard/price-tickets',  label: 'Price Tickets',    icon: TagIcon,        badge: 'AI',  section: 'Operations' },
+'timed-prices':   { href: '/dashboard/timed-prices',  label: 'Timed Prices',     icon: TagIcon,        section: 'Operations' },
 };
 
 const SECTION_ORDER = ['Overview', 'Marketing', 'Operations', 'Warehouse', 'Revenue', 'Reputation', 'Intelligence', 'Pro tools', 'VisaAI', 'Modules'];
