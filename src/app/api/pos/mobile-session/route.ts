@@ -20,7 +20,15 @@ async function _GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const business_id = searchParams.get('business_id');
   const session_type = searchParams.get('type');
-  const bid = business_id || await getBid(supabase, user.id);
+  let bid: string | null = null
+  if (business_id) {
+    // SECURITY: ownership verified
+    const { data: biz } = await supabase.from('businesses').select('id').eq('id', business_id).eq('user_id', user.id).single()
+    if (!biz) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    bid = biz.id
+  } else {
+    bid = await getBid(supabase, user.id)
+  }
   if (!bid) return NextResponse.json({ sessions: [] });
 
   let query = supabase.from('mobile_inventory_sessions')
@@ -41,7 +49,15 @@ async function _POST(req: Request) {
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { business_id, session_type, notes } = await req.json();
-  const bid = business_id || await getBid(supabase, user.id);
+  let bid: string | null = null
+  if (business_id) {
+    // SECURITY: ownership verified
+    const { data: biz } = await supabase.from('businesses').select('id').eq('id', business_id).eq('user_id', user.id).single()
+    if (!biz) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    bid = biz.id
+  } else {
+    bid = await getBid(supabase, user.id)
+  }
   if (!bid) return NextResponse.json({ error: 'No business found' }, { status: 400 });
 
   const { data: session, error } = await supabase.from('mobile_inventory_sessions').insert({

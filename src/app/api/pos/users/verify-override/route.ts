@@ -16,6 +16,10 @@ async function _POST(req: Request) {
     return NextResponse.json({ error: 'pin and business_id required' }, { status: 400 });
   }
 
+  // SECURITY: ownership verified
+  const { data: biz } = await supabase.from('businesses').select('id').eq('id', business_id).eq('user_id', user.id).single()
+  if (!biz) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
   // Find a manager/owner/admin with this PIN (plain PIN comparison — table uses plain PIN)
   const { data: manager } = await supabase
     .from('pos_users')

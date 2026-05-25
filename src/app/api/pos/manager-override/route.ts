@@ -2,15 +2,24 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 import { NextResponse } from 'next/server'
+import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 async function _POST(req: Request) {
+  const supabase = createServerSupabaseClient()
+  const { data: { user }, error: authError } = await supabase.auth.getUser()
+  if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
   const body = await req.json().catch(() => ({}))
   const { business_id, manager_pin, action, context } = body
   if (!business_id || !manager_pin || !action) {
     return NextResponse.json({ error: 'business_id, manager_pin, and action required' }, { status: 400 })
   }
+
+  // SECURITY: ownership verified
+  const { data: biz } = await supabase.from('businesses').select('id').eq('id', business_id).eq('user_id', user.id).single()
+  if (!biz) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   // Find active manager/admin with matching manager_pin
   const { data: managers } = await supabaseAdmin

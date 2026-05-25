@@ -102,9 +102,10 @@ async function detectIntelligenceEvents(businessId: string): Promise<Intelligenc
 }
 
 async function _GET(req: Request) {
-  // Vercel Cron authenticates via Authorization header
-  const authHeader = req.headers.get('authorization');
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  // SECURITY: canonical Vercel cron check — x-vercel-cron-signature or Authorization Bearer
+  const secret = req.headers.get('x-vercel-cron-signature')
+    ?? req.headers.get('authorization')?.replace('Bearer ', '')
+  if (secret !== process.env.CRON_SECRET) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -133,7 +134,7 @@ async function _GET(req: Request) {
       if ((biz as any).square_connected) {
         const res = await fetch(`${appUrl}/api/integrations/square/sync`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.CRON_SECRET}` },
           body: JSON.stringify({ business_id: biz.id, _cron: true }),
         });
         if (!res.ok) {
