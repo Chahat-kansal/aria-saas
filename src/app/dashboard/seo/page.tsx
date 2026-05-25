@@ -39,26 +39,48 @@ function CopyBtn({ text }: { text: string }) {
 function SiteHealthTab({ businessId }: { businessId: string }) {
   const [audit, setAudit] = useState<SeoAudit | null>(null)
   const [issues, setIssues] = useState<SeoIssue[]>([])
+  const [pages, setPages] = useState<SeoPage[]>([])
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState<string | null>(null)
   const [applying, setApplying] = useState<string | null>(null)
+  const [crawling, setCrawling] = useState(false)
+  const [fixingId, setFixingId] = useState<string | null>(null)
 
-  useEffect(() => {
-    async function load() {
-      setLoading(true)
-      const { data: a } = await supabase.from('seo_audits').select('*').eq('business_id', businessId).eq('status', 'complete').order('finished_at', { ascending: false }).limit(1).maybeSingle()
-      setAudit(a)
-      if (a) {
-        const sevOrder = { high: 0, medium: 1, low: 2 }
-        const { data: iss } = await supabase.from('seo_issues').select('*').eq('business_id', businessId).eq('audit_id', a.id).neq('state', 'verified')
-        const sorted = ((iss ?? []) as SeoIssue[]).sort((x, y) => (sevOrder[x.severity as keyof typeof sevOrder] ?? 9) - (sevOrder[y.severity as keyof typeof sevOrder] ?? 9))
-        setIssues(sorted)
-      }
-      setLoading(false)
+  async function load() {
+    setLoading(true)
+    const { data: a } = await supabase.from('seo_audits').select('*').eq('business_id', businessId).eq('status', 'complete').order('finished_at', { ascending: false }).limit(1).maybeSingle()
+    setAudit(a)
+    if (a) {
+      const sevOrder = { high: 0, medium: 1, low: 2 }
+      const { data: iss } = await supabase.from('seo_issues').select('*').eq('business_id', businessId).eq('audit_id', a.id).neq('state', 'verified')
+      const sorted = ((iss ?? []) as SeoIssue[]).sort((x, y) => (sevOrder[x.severity as keyof typeof sevOrder] ?? 9) - (sevOrder[y.severity as keyof typeof sevOrder] ?? 9))
+      setIssues(sorted)
+      const { data: pg } = await supabase.from('seo_pages').select('url, title').eq('business_id', businessId).eq('audit_id', a.id).limit(20)
+      setPages(pg ?? [])
     }
-    load()
-  }, [businessId])
+    setLoading(false)
+  }
+
+  useEffect(() => { load() }, [businessId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function runAudit() {
+    setCrawling(true)
+    try {
+      await fetch('/api/seo/crawl', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ business_id: businessId }) })
+      await load()
+    } catch { /* ignore */ }
+    setCrawling(false)
+  }
+
+  async function markFixed(issueId: string) {
+    setFixingId(issueId)
+    try {
+      await fetch(`/api/seo/issues/${issueId}`, { method: 'PATCH' })
+      setIssues(prev => prev.filter(i => i.id !== issueId))
+    } catch { /* ignore */ }
+    setFixingId(null)
+  }
 
   async function generateFix(issueId: string) {
     setGenerating(issueId)
@@ -88,21 +110,35 @@ function SiteHealthTab({ businessId }: { businessId: string }) {
   const cell: React.CSSProperties = { padding: '16px 20px', background: 'rgba(255,255,255,0.04)', borderRadius: 12, minWidth: 90 }
 
   if (loading) return <p style={{ color: 'rgba(255,255,255,0.4)', textAlign: 'center', padding: 40 }}>Loading...</p>
+  if (crawling) return <p style={{ color: '#7FB897', textAlign: 'center', padding: 40, fontSize: 14 }}>Crawling your website...</p>
   if (!audit) return (
     <div style={{ textAlign: 'center', padding: 60 }}>
-      <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 14, marginBottom: 6 }}>No crawl data yet.</p>
-      <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: 12 }}>The SEO crawler runs daily at 7 AM AEDT.</p>
+      <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 14, marginBottom: 12 }}>No crawl data yet.</p>
+      <button onClick={runAudit} style={{ padding: '10px 24px', borderRadius: 8, border: 'none', background: '#7FB897', color: '#0E1411', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+        Run Audit Now
+      </button>
     </div>
   )
 
   const lastCrawl = audit.finished_at ? new Date(audit.finished_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'
 
+  const scoreCol = audit.health_score >= 80 ? '#7FB897' : audit.health_score >= 50 ? '#f59e0b' : '#ef4444'
+
   return (
     <div>
+      <div style={{ display: 'flex', gap: 12, marginBottom: 16, alignItems: 'center', flexWrap: 'wrap' }}>
+        <button onClick={runAudit} style={{ padding: '7px 18px', borderRadius: 8, border: 'none', background: '#2D5240', color: '#7FB897', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+          Run Audit
+        </button>
+      </div>
       <div style={{ display: 'flex', gap: 20, alignItems: 'center', marginBottom: 32, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
           <RingChart score={audit.health_score} />
           <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Health</span>
+        </div>
+        <div style={{ ...cell, minWidth: 80 }}>
+          <div style={{ fontSize: 32, fontWeight: 800, color: scoreCol, lineHeight: 1 }}>{audit.health_score}</div>
+          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 2, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Score</div>
         </div>
         {([['Pages crawled', audit.pages_crawled], ['Issues found', audit.issues_found], ['Fixed', audit.issues_fixed], ['Last crawl', lastCrawl]] as [string, string | number][]).map(([label, value]) => (
           <div key={label} style={cell}>
@@ -136,9 +172,14 @@ function SiteHealthTab({ businessId }: { businessId: string }) {
                       </button>
                     </>
                   ) : (
-                    <button onClick={() => generateFix(issue.id)} disabled={generating === issue.id} style={{ padding: '5px 14px', borderRadius: 8, border: 'none', background: '#7FB897', color: '#0E1411', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', opacity: generating === issue.id ? 0.6 : 1 }}>
-                      {generating === issue.id ? 'Generating...' : 'Generate fix'}
-                    </button>
+                    <>
+                      <button onClick={() => generateFix(issue.id)} disabled={generating === issue.id} style={{ padding: '5px 14px', borderRadius: 8, border: 'none', background: '#7FB897', color: '#0E1411', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', opacity: generating === issue.id ? 0.6 : 1 }}>
+                        {generating === issue.id ? 'Generating...' : 'Generate fix'}
+                      </button>
+                      <button onClick={() => markFixed(issue.id)} disabled={fixingId === issue.id} style={{ padding: '5px 12px', borderRadius: 8, border: '1px solid rgba(127,184,151,0.3)', background: 'transparent', color: '#7FB897', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit', opacity: fixingId === issue.id ? 0.6 : 1 }}>
+                        {fixingId === issue.id ? '...' : 'Mark fixed'}
+                      </button>
+                    </>
                   )}
                 </div>
               </div>
@@ -153,6 +194,21 @@ function SiteHealthTab({ businessId }: { businessId: string }) {
               )}
             </div>
           ))}
+        </div>
+      )}
+      {pages.length > 0 && (
+        <div style={{ marginTop: 32 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: 'rgba(255,255,255,0.6)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            Pages crawled ({pages.length})
+          </div>
+          <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 10, border: '1px solid rgba(255,255,255,0.07)', overflow: 'hidden' }}>
+            {pages.map((p, i) => (
+              <div key={p.url} style={{ display: 'flex', gap: 12, padding: '9px 14px', borderBottom: i < pages.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none', alignItems: 'center' }}>
+                <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.title ?? p.url}</span>
+                <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', flexShrink: 0, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.url}</span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>
