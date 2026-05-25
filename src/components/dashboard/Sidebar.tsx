@@ -111,6 +111,7 @@ const ALL_ITEMS: Record<string, NavItemDef> = {
   'shift-reports':   { href: '/dashboard/shift-reports',  label: 'Shift Reports',    icon: FileTextIcon,   section: 'Operations'  },
   'audit-checks':    { href: '/dashboard/audit-checks',   label: 'Audit Checks',     icon: CheckSquareIcon, section: 'Operations' },
   'weekly-reports':  { href: '/dashboard/weekly-reports', label: 'Weekly Reports',   icon: TrendingUpIcon, badge: 'AI',  section: 'Operations' },
+  'price-tickets':   { href: '/dashboard/price-tickets',  label: 'Price Tickets',    icon: TagIcon,        badge: 'AI',  section: 'Operations' },
 };
 
 const SECTION_ORDER = ['Overview', 'Marketing', 'Operations', 'Warehouse', 'Revenue', 'Reputation', 'Intelligence', 'Pro tools', 'VisaAI', 'Modules'];
