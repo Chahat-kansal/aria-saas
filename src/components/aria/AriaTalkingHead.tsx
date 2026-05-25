@@ -11,17 +11,19 @@ declare global {
   interface Window { TalkingHead: any }
 }
 
+// Public RPM avatar with ARKit + Oculus visemes — works out of the box with TalkingHead
+// Use Aria's Blob GLB if available, otherwise this public fallback
+const FALLBACK_AVATAR = 'https://models.readyplayer.me/64bfa15f0e72c63d7c3934a6.glb?morphTargets=ARKit,Oculus+Visemes'
+
 export function AriaTalkingHead({ isActive, responseText }: AriaTalkingHeadProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const headRef = useRef<any>(null)
   const [loaded, setLoaded] = useState(false)
   const [scriptReady, setScriptReady] = useState(false)
-  const lastTextRef = useRef('')
-  const speakIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const speakingRef = useRef(false)
 
-  const avatarUrl = process.env.NEXT_PUBLIC_ARIA_AVATAR_URL
-    ?? 'https://tcowd5vdie4rwa2o.public.blob.vercel-storage.com/Aria.glb'
+  const avatarUrl = process.env.NEXT_PUBLIC_ARIA_AVATAR_URL ?? FALLBACK_AVATAR
 
   // Load TalkingHead — importmap in layout.tsx resolves bare 'three' specifier
   useEffect(() => {
@@ -30,27 +32,25 @@ export function AriaTalkingHead({ isActive, responseText }: AriaTalkingHeadProps
 
     const load = async () => {
       try {
-        const mod = await import(/* webpackIgnore: true */ 'https://cdn.jsdelivr.net/gh/met4citizen/TalkingHead@main/modules/talkinghead.mjs')
+        const mod = await import(/* webpackIgnore: true */ 'https://cdn.jsdelivr.net/gh/met4citizen/TalkingHead@1.3/modules/talkinghead.mjs')
         window.TalkingHead = mod.TalkingHead ?? mod.default
         setScriptReady(true)
-        console.log('[AriaTalkingHead] TalkingHead loaded')
+        console.log('[AriaTalkingHead] loaded')
       } catch (e) {
-        console.error('[AriaTalkingHead] Load failed:', e)
+        console.error('[AriaTalkingHead] load failed:', e)
       }
     }
     load()
   }, [])
 
-  // Init — pass dummy ttsEndpoint to satisfy constructor validation
-  // We never actually call TTS; we drive animations via speakAudio() with silence
+  // Init — use our own /api/aria/tts as the endpoint (satisfies URL validation)
+  // We never call speakText(), so this endpoint is never actually used for TTS
   useEffect(() => {
     if (!scriptReady || !containerRef.current || headRef.current) return
     try {
       headRef.current = new window.TalkingHead(containerRef.current, {
-        // TalkingHead v1.3 requires a ttsEndpoint string — pass a dummy that satisfies
-        // the URL check. We never call speakText() so no actual TTS requests are made.
-        ttsEndpoint: 'https://texttospeech.googleapis.com/v1/text:synthesize',
-        ttsApikey: null,
+        ttsEndpoint: '/api/aria/tts',   // our route — satisfies validation, never called
+        ttsApikey: '',
         cameraView: 'upper',
         cameraRotateX: 6,
         cameraDistance: 0.7,
@@ -60,66 +60,47 @@ export function AriaTalkingHead({ isActive, responseText }: AriaTalkingHeadProps
       })
       headRef.current.showAvatar(
         { url: avatarUrl, body: 'F', avatarMood: 'neutral', lipsyncLang: 'en' },
-        () => {
-          setLoaded(true)
-          console.log('[AriaTalkingHead] Avatar loaded')
-        },
-        (e: Error) => {
-          console.error('[AriaTalkingHead] Avatar load error:', e)
-        }
+        () => { setLoaded(true); console.log('[AriaTalkingHead] avatar loaded') },
+        (e: Error) => { console.error('[AriaTalkingHead] avatar load error:', e) }
       )
     } catch (e) {
-      console.error('[AriaTalkingHead] Init error:', e)
+      console.error('[AriaTalkingHead] init error:', e)
     }
   }, [scriptReady, avatarUrl])
 
-  // Drive speaking animation with a silent AudioBuffer
-  // speakAudio() animates the avatar from audio without calling TTS
+  // Drive speaking animation via speakAudio() with a silent AudioBuffer
+  // This animates the mouth without any TTS call
   const startSpeaking = useCallback(() => {
-    if (!headRef.current || !loaded) return
+    if (!headRef.current || !loaded || speakingRef.current) return
+    speakingRef.current = true
     try {
       headRef.current.setMood('happy')
-
-      // Create a short silent audio buffer — just long enough to start animation loop
-      const audioCtx = new AudioContext()
-      const duration = 1.5 // seconds — we'll loop it while isActive
-      const buffer = audioCtx.createBuffer(1, audioCtx.sampleRate * duration, audioCtx.sampleRate)
-
-      // speakAudio drives mouth/expression animation from audio timing
-      // with a silent buffer it shows speaking pose without sound
+      const actx = new AudioContext()
+      const buf = actx.createBuffer(1, Math.floor(actx.sampleRate * 2), actx.sampleRate)
       headRef.current.speakAudio(
-        { audio: buffer, words: ['speaking'], wtimes: [0], wdurations: [duration * 1000] },
-        () => { /* onstart */ },
+        { audio: buf, words: ['...'], wtimes: [0], wdurations: [2000] },
+        undefined,
         () => {
-          // onend — if still active, loop
-          if (speakIntervalRef.current !== null) startSpeaking()
+          speakingRef.current = false
+          if (isActive) startSpeaking() // loop while active
         }
       )
-      audioCtx.close()
+      actx.close()
     } catch (e) {
+      speakingRef.current = false
       console.warn('[AriaTalkingHead] speakAudio error:', e)
     }
-  }, [loaded])
-
-  const stopSpeaking = useCallback(() => {
-    if (!headRef.current || !loaded) return
-    try {
-      headRef.current.stopSpeaking()
-      headRef.current.setMood('neutral')
-    } catch { /**/ }
-  }, [loaded])
+  }, [loaded, isActive])
 
   useEffect(() => {
     if (!loaded) return
     if (isActive) {
-      speakIntervalRef.current = 1 as unknown as ReturnType<typeof setInterval> // sentinel
       startSpeaking()
     } else {
-      speakIntervalRef.current = null
-      stopSpeaking()
+      speakingRef.current = false
+      try { headRef.current?.stopSpeaking?.(); headRef.current?.setMood?.('neutral') } catch { /**/ }
     }
-    return () => { speakIntervalRef.current = null }
-  }, [isActive, loaded, startSpeaking, stopSpeaking])
+  }, [isActive, loaded, startSpeaking])
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
