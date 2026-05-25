@@ -38,7 +38,7 @@ function CameraRig() {
   const { camera } = useThree()
   useEffect(() => {
     // VRoid head is at world y≈1.55 (model origin at feet)
-    camera.lookAt(0, 1.55, 0)
+    camera.lookAt(0, 1.35, 0)
   }, [camera])
   return null
 }
@@ -115,10 +115,10 @@ function Inner({ isActive }: Props) {
         gl={{ alpha: true, antialias: true }}
         style={{ background: 'transparent' }}
         camera={{
-          // Camera sits at head level and slightly in front
-          // VRoid head y≈1.55, we look AT y=1.55 from z=2.0
-          position: [0, 1.55, 2.0],
-          fov: 22,
+          // Upper body: chest to top of head, no hands
+          // VRoid chest≈1.2m, head≈1.55m — look at midpoint y=1.35
+          position: [0, 1.35, 1.6],
+          fov: 30,
           near: 0.01,
           far: 100,
         }}
