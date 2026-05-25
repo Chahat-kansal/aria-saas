@@ -505,7 +505,7 @@ export default function AskAriaPage() {
           background: '#0d0d14',
           overflow: 'hidden',
         }}>
-          {/* Video — mix-blend-mode darkens white bg to match dark UI */}
+          {/* Video — no blend mode, gradient overlays blend edges into dark bg */}
           <video
             ref={videoRef}
             src={ariaVideoUrl}
@@ -517,42 +517,54 @@ export default function AskAriaPage() {
               height: '100%',
               objectFit: 'cover',
               objectPosition: 'top center',
-              mixBlendMode: 'multiply',
-              filter: 'brightness(0.95) contrast(1.05)',
               display: 'block',
             }}
           />
-          {/* Bottom gradient fade — blends into page bg */}
+          {/* Bottom gradient — strong fade into page bg */}
           <div style={{
             position: 'absolute',
             bottom: 0,
             left: 0,
             right: 0,
-            height: 140,
-            background: 'linear-gradient(to bottom, transparent, #0d0d14)',
+            height: 180,
+            background: 'linear-gradient(to bottom, transparent 0%, #0d0d14 100%)',
             pointerEvents: 'none',
+            zIndex: 2,
           }} />
-          {/* Top gradient fade */}
+          {/* Top gradient */}
           <div style={{
             position: 'absolute',
             top: 0,
             left: 0,
             right: 0,
-            height: 60,
-            background: 'linear-gradient(to top, transparent, #0d0d14)',
+            height: 80,
+            background: 'linear-gradient(to top, transparent 0%, #0d0d14 100%)',
             pointerEvents: 'none',
+            zIndex: 2,
           }} />
-          {/* Right edge fade — blends into chat panel */}
+          {/* Right edge — blends into chat */}
           <div style={{
             position: 'absolute',
             top: 0,
             right: 0,
             bottom: 0,
-            width: 60,
-            background: 'linear-gradient(to right, transparent, #0d0d14)',
+            width: 80,
+            background: 'linear-gradient(to right, transparent 0%, #0d0d14 100%)',
             pointerEvents: 'none',
+            zIndex: 2,
           }} />
-          {/* Speaking indicator — subtle, bottom-left */}
+          {/* Left edge */}
+          <div style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            bottom: 0,
+            width: 20,
+            background: 'linear-gradient(to left, transparent 0%, #0d0d14 100%)',
+            pointerEvents: 'none',
+            zIndex: 2,
+          }} />
+          {/* Speaking indicator — above gradients */}
           {isAriaActive && (
             <div style={{
               position: 'absolute',
@@ -561,7 +573,7 @@ export default function AskAriaPage() {
               display: 'flex',
               alignItems: 'center',
               gap: 5,
-              zIndex: 5,
+              zIndex: 10,
             }}>
               <div style={{ display: 'flex', gap: 2, alignItems: 'flex-end', height: 12 }}>
                 {[0,1,2].map(i => (
