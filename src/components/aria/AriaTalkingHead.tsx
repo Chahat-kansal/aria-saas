@@ -40,7 +40,7 @@ function CameraRig() {
   const { camera } = useThree()
   useEffect(() => {
     // Tight face+neck crop — keeps arms OUT of frame entirely
-    camera.lookAt(0, 1.53, 0)
+    camera.lookAt(0, 1.48, 0)
   }, [camera])
   return null
 }
