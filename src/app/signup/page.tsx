@@ -35,7 +35,7 @@ export default function SignupPage() {
         },
       });
       if (err) { setError(err.message); return; }
-      router.push('/onboarding/industry');
+      router.push('/onboarding');
     } catch (e: any) {
       setError(e?.message ?? 'An unexpected error occurred. Please try again.');
     } finally {
