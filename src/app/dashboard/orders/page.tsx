@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 
 const C = { bg: 'var(--bg-base)', card: 'var(--bg-surface)', border: 'transparent', text: '#F0F4FF', muted: 'var(--text-secondary)', dim: 'var(--text-tertiary)', violet: '#8B5CF6', green: '#22C55E', red: '#EF4444', amber: '#F59E0B' };
@@ -19,6 +19,15 @@ export default function OrdersPage() {
   const [editItems, setEditItems]   = useState<OrderItem[]>([]);
   const [approving, setApproving]   = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [tab, setTab] = useState<'orders' | 'settings'>('orders');
+  const [settings, setSettings] = useState({ default_reorder_qty: 12, buffer_weeks: 2, min_velocity_per_day: 0, max_stock_trigger: 0, velocity_period: 'day' });
+  const [productOverrides, setProductOverrides] = useState<Record<string, { reorder_qty: string; reorder_point: string; target_stock: string; reorder_notes: string }>>({});
+  const [settingsProducts, setSettingsProducts] = useState<{id:string;name:string;sku:string|null;stock_quantity:number|null;reorder_qty:number|null;reorder_point:number|null;target_stock:number|null;reorder_notes:string|null;pos_categories?:{name:string}|null}[]>([]);
+  const [settingsLoading, setSettingsLoading] = useState(false);
+  const [settingsSaving, setSettingsSaving] = useState(false);
+  const [settingsSaved, setSettingsSaved] = useState(false);
+
+  useEffect(() => { if (tab === 'settings') loadSettings(); }, [tab, loadSettings]);
 
   useEffect(() => {
     fetch('/api/pos/products').then(r => r.json()).then(d => {
@@ -36,6 +45,42 @@ export default function OrdersPage() {
     const pending = all.find((dr: Draft) => dr.status === 'pending_approval');
     if (pending) { setActiveDraft(pending); setEditItems(pending.items ?? []); }
     setLoading(false);
+  }
+
+  const loadSettings = useCallback(async () => {
+    setSettingsLoading(true);
+    const res = await fetch('/api/aria/reorder-settings').then(r => r.json()).catch(() => ({}));
+    if (res.settings) setSettings(s => ({ ...s, ...res.settings }));
+    const prods = res.products ?? [];
+    setSettingsProducts(prods);
+    const overrides: Record<string, { reorder_qty: string; reorder_point: string; target_stock: string; reorder_notes: string }> = {};
+    prods.forEach((p: {id:string;reorder_qty:number|null;reorder_point:number|null;target_stock:number|null;reorder_notes:string|null}) => {
+      overrides[p.id] = {
+        reorder_qty: p.reorder_qty != null ? String(p.reorder_qty) : '',
+        reorder_point: p.reorder_point != null ? String(p.reorder_point) : '',
+        target_stock: p.target_stock != null ? String(p.target_stock) : '',
+        reorder_notes: p.reorder_notes ?? '',
+      };
+    });
+    setProductOverrides(overrides);
+    setSettingsLoading(false);
+  }, []);
+
+  async function saveSettings() {
+    setSettingsSaving(true);
+    const product_overrides = settingsProducts.map(p => ({
+      id: p.id,
+      reorder_qty: productOverrides[p.id]?.reorder_qty ? parseInt(productOverrides[p.id].reorder_qty) : null,
+      reorder_point: productOverrides[p.id]?.reorder_point ? parseInt(productOverrides[p.id].reorder_point) : null,
+      target_stock: productOverrides[p.id]?.target_stock ? parseInt(productOverrides[p.id].target_stock) : null,
+      reorder_notes: productOverrides[p.id]?.reorder_notes || null,
+    }));
+    await fetch('/api/aria/reorder-settings', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ settings, product_overrides }),
+    });
+    setSettingsSaving(false); setSettingsSaved(true);
+    setTimeout(() => setSettingsSaved(false), 2500);
   }
 
   async function generate() {
@@ -238,6 +283,7 @@ export default function OrdersPage() {
           </div>
         </section>
       )}
+        </div>}
     </div>
   );
 }
