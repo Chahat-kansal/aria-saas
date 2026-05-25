@@ -57,37 +57,18 @@ export default function RecipeImportTab({ businessId, existingRecipes }: { busin
   }
 
   async function addAsProduct() {
-    if (!extracted || !businessId) return;
+    if (!extracted || !businessId || !importId) return;
     setAddingProduct(true);
     setAddedMsg(null);
     try {
-      const payload = {
-        business_id: businessId,
-        name: extracted.title,
-        category: 'food',
-        serves: 1,
-        notes: `Imported from ${url}`,
-        ingredients: extracted.ingredients.map(i => ({
-          ingredient_name: i.item,
-          quantity: parseFloat(i.quantity) || 1,
-          unit: i.unit || 'each',
-        })),
-      };
-      const res = await fetch('/api/recipes', {
+      const res = await fetch('/api/recipes/add-to-products', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ recipe_import_id: importId, businessId }),
       }).then(r => r.json());
       if (res.error) { setAddedMsg('Error: ' + res.error); return; }
-      if (importId) {
-        await fetch('/api/recipes/import', {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ importId, status: 'added_as_product', linkedProductId: res.recipe?.id ?? undefined }),
-        }).catch(() => {});
-      }
-      setAddedMsg(`"${extracted.title}" added to your recipes.`);
-    } catch { setAddedMsg('Error saving recipe.'); }
+      setAddedMsg(`"${extracted.title}" added to your products.`);
+    } catch { setAddedMsg('Error saving product.'); }
     finally { setAddingProduct(false); }
   }
 
@@ -157,10 +138,10 @@ export default function RecipeImportTab({ businessId, existingRecipes }: { busin
             ) : (
               <button
                 onClick={addAsProduct}
-                disabled={addingProduct}
+                disabled={addingProduct || !importId}
                 className="px-3 py-1.5 rounded-xl text-xs font-medium text-white disabled:opacity-40 shrink-0"
                 style={{ background: accentGreen }}>
-                {addingProduct ? 'Adding…' : '+ Add as recipe'}
+                {addingProduct ? 'Adding…' : '+ Add as product'}
               </button>
             )}
           </div>
