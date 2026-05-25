@@ -54,7 +54,7 @@ export default function IndustryPage() {
               className={`text-left p-4 rounded-xl border transition-all ${
                 selected === ind.id
                   ? 'border-[1.5px] border-[#1D9E75] bg-[#f0faf6]'
-                  : 'border border-[#eceae3] bg-[#faf9f6] hover:border-[#b8d9cc] hover:bg-[#f2faf6]'
+                  : 'border border-[#d1d0c9] bg-[#faf9f6] hover:border-[#b8d9cc] hover:bg-[#f2faf6]'
               }`}
             >
               <div className={`text-sm font-medium mb-0.5 ${selected === ind.id ? 'text-[#1D9E75]' : 'text-[#1a1a16]'}`}>
