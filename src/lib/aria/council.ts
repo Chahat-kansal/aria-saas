@@ -167,9 +167,27 @@ highlight_metrics: array of 3-6 specific numbers/stats pulled from the data to s
 
 section_order: array deciding display order from ["lead", "briefing", "consensus", "debate", "confidence", "actions"] — put the most important first
 
-For ask_aria mode ONLY, also produce:
-- "ask_blocks": rich UI blocks array. Types: {"type":"lead","content":"..."} (exactly one, most important statement), {"type":"text","content":"..."} (supporting paragraph), {"type":"chart","chartType":"bar","labels":[...],"values":[...],"metrics":[{"label":"...","value":"...","color":"green"}]} (only if numeric data supports it), {"type":"brain_readouts","items":[{"role":"growth","icon":"📈","text":"..."},{"role":"risk","icon":"⚠️","text":"..."},{"role":"strategy","icon":"🎯","text":"..."}]}, {"type":"council_split","question":"...","growth":"...","risk":"...","strategy":"...","choices":[{"icon":"🔀","title":"...","sub":"...","prompt":"Tell me more about ..."}]} (only if brains genuinely disagree), {"type":"action_list","items":[{"icon":"✅","title":"...","sub":"...","colorVariant":"default","prompt":"..."}]}, {"type":"action_single","icon":"🎯","title":"...","sub":"...","prompt":"..."}. Always end with 1-2 action blocks.
-- "ask_followups": exactly 3 natural follow-up questions the owner might ask next.
+For ask_aria mode ONLY, produce "ask_blocks" and "ask_followups".
+
+MANDATORY RULES FOR ask_blocks — Aria must respond like a data dashboard, not a chatbot:
+- ALWAYS start with exactly ONE "lead" block — punchy headline stat or insight
+- ALWAYS include "metric_row" with 3-4 key numbers (revenue, transactions, avg ticket, top product)
+- ALWAYS include "chart" when time-series data exists (daily/weekly revenue bars)
+- ALWAYS include "brain_readouts" showing what each brain found — this is the core differentiator
+- Include "council_split" only when brains genuinely disagree on direction
+- ALWAYS end with "action_list" of 2-3 specific actions with "Do it" buttons
+- Use "html" for heatmaps, comparison tables, or any data needing custom layout
+- Minimum 4 blocks, maximum 8. Never just lead+text. Always data-rich.
+
+BLOCK TYPE EXAMPLES:
+{"type":"lead","content":"Wednesday carried your whole week — $100 of your $221 in one day"}
+{"type":"metric_row","items":[{"label":"Revenue this week","value":"$221.97","sub":"vs $187 last week","trend":"up"},{"label":"Transactions","value":"16","sub":"avg $13.87 each","trend":"flat"},{"label":"Best day","value":"Wednesday","sub":"$100.40","trend":"up"}]}
+{"type":"chart","chartType":"bar","title":"Daily revenue this week","labels":["Mon","Tue","Wed","Thu","Fri","Sat","Sun"],"values":[12,8,100,15,22,45,20],"unit":"$","metrics":[{"label":"Peak","value":"$100 Wed","color":"#7FB897"},{"label":"Low","value":"$8 Tue","color":"#F87171"},{"label":"Weekly","value":"$221.97"}]}
+{"type":"brain_readouts","items":[{"role":"growth","icon":"📈","text":"Wednesday spike is 45% of weekly revenue — one day is carrying the business"},{"role":"risk","icon":"⚠️","text":"16 sales, zero customer names captured — you cannot bring any of them back"},{"role":"strategy","icon":"🎯","text":"Fix customer capture before analysing the Wednesday pattern — you need identity behind the spike"}]}
+{"type":"action_list","items":[{"icon":"👤","title":"Turn on customer capture in POS now","sub":"Every anonymous sale is a lost repeat customer","colorVariant":"danger","prompt":"How do I enable customer capture in the POS?"},{"icon":"📦","title":"Reorder Avocado Smoothie","sub":"9 units left — out by Thursday at current pace","colorVariant":"warning","prompt":"Create a reorder for Avocado Smoothie"}]}
+{"type":"html","title":"Sales by hour","content":"<div style='display:flex;gap:3px;align-items:flex-end;height:40px'><div style='flex:1;background:rgba(127,184,151,0.15);border-radius:2px 2px 0 0;height:20%'></div><div style='flex:1;background:#7FB897;border-radius:2px 2px 0 0;height:100%'></div></div>"}
+
+- "ask_followups": exactly 3 specific follow-up questions surfaced by the data, e.g. ["Why was Wednesday so strong?", "Which products should I reorder?", "How do I improve customer capture?"]
 For briefing and weekly_report modes, omit ask_blocks and ask_followups entirely.
 
 Return ONLY valid JSON, no preamble, no markdown, no code fences:

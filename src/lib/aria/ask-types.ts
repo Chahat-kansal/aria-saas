@@ -4,9 +4,21 @@ export type AskBlock =
   | {
       type: 'chart'
       chartType: 'bar'
+      title?: string
       labels: string[]
       values: number[]
+      unit?: string
       metrics: Array<{ label: string; value: string; color?: string }>
+    }
+  | {
+      type: 'metric_row'
+      items: Array<{
+        label: string
+        value: string
+        sub?: string
+        color?: string
+        trend?: 'up' | 'down' | 'flat'
+      }>
     }
   | {
       type: 'brain_readouts'
@@ -29,12 +41,12 @@ export type AskBlock =
       }>
     }
   | { type: 'action_single'; icon: string; title: string; sub: string; prompt: string }
+  | { type: 'html'; content: string; title?: string }
 
 export interface AskResponse {
   blocks: AskBlock[]
   followups: string[]
   used_council: boolean
-  // Existing fields from route (kept for backwards compat with page.tsx)
   response?: string
   conversation_id?: string | null
   intent?: string
