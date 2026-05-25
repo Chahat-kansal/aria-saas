@@ -67,7 +67,7 @@ export default function AriaBrainPanel({ businessId }: { businessId?: string }) 
         onClick={() => setOpen(o => !o)}
         title="Aria Brain Insights"
         style={{
-          position: 'fixed', bottom: 24, right: 24, zIndex: 1200,
+          position: 'fixed', bottom: 24, left: 24, zIndex: 1200,
           width: 48, height: 48, borderRadius: '50%',
           background: 'var(--violet)', border: 'none',
           boxShadow: '0 4px 20px rgba(139,92,246,0.4)',
@@ -92,7 +92,7 @@ export default function AriaBrainPanel({ businessId }: { businessId?: string }) 
       {/* Drawer */}
       {open && (
         <div style={{
-          position: 'fixed', bottom: 84, right: 24, zIndex: 1200,
+          position: 'fixed', bottom: 84, left: 24, zIndex: 1200,
           width: 360, maxHeight: '70vh',
           background: 'var(--bg-surface)', border: '1px solid var(--divider)',
           borderRadius: 16, boxShadow: '0 8px 40px rgba(0,0,0,0.3)',
