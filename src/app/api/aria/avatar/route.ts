@@ -1,31 +1,30 @@
 import { NextResponse } from 'next/server'
-import { list } from '@vercel/blob'
+
+const BRUNETTE = 'https://raw.githubusercontent.com/met4citizen/TalkingHead/main/avatars/brunette.glb'
 
 export async function GET() {
-  try {
-    // List all blobs with Aria prefix — finds the file regardless of hash suffix
-    const { blobs } = await list({ prefix: 'Aria' })
-    const glb = blobs.find(b => b.pathname.toLowerCase().endsWith('.glb'))
-
-    const sourceUrl = glb?.url
-      ?? 'https://raw.githubusercontent.com/met4citizen/TalkingHead/main/avatars/brunette.glb'
-
-    const res = await fetch(sourceUrl)
-    if (!res.ok) throw new Error(`fetch ${sourceUrl} → ${res.status}`)
-
-    const buffer = await res.arrayBuffer()
-    return new NextResponse(buffer, {
-      headers: {
-        'Content-Type': 'model/gltf-binary',
-        'Cache-Control': 'public, max-age=86400',
-        'Access-Control-Allow-Origin': '*',
-      },
-    })
-  } catch (e) {
-    console.error('[api/aria/avatar]', e)
-    // Hard fallback redirect
-    return NextResponse.redirect(
-      'https://raw.githubusercontent.com/met4citizen/TalkingHead/main/avatars/brunette.glb'
-    )
+  // 1. Explicit env var — fastest path, use if set
+  const explicit = process.env.NEXT_PUBLIC_ARIA_AVATAR_URL
+  if (explicit && explicit.startsWith('http') && !explicit.includes('403')) {
+    return NextResponse.redirect(explicit)
   }
+
+  // 2. Try listing Blob store if token available
+  if (process.env.BLOB_READ_WRITE_TOKEN) {
+    try {
+      const { list } = await import('@vercel/blob')
+      const { blobs } = await list({ prefix: 'Aria' })
+      const glb = blobs.find(b => b.pathname.toLowerCase().endsWith('.glb'))
+      if (glb?.url) {
+        console.log('[avatar] found blob:', glb.pathname, glb.url)
+        return NextResponse.redirect(glb.url)
+      }
+    } catch (e) {
+      console.error('[avatar] blob list failed:', e)
+    }
+  }
+
+  // 3. Fallback — redirect to TalkingHead sample avatar
+  console.log('[avatar] using brunette fallback')
+  return NextResponse.redirect(BRUNETTE)
 }
