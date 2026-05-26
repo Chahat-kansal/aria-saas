@@ -25,14 +25,39 @@ async function _GET(req: Request) {
   const { data: watches } = await supabaseAdmin.from('aria_competitor_watches')
     .select('id,competitor_name,competitor_url,is_active')
     .eq('business_id', business_id).order('created_at', { ascending: true })
-  // Auto-seed industry defaults if no watches exist yet
+  // Auto-seed if no watches exist yet
   if ((watches ?? []).length === 0) {
     const { data: biz } = await supabaseAdmin
-      .from('businesses').select('industry').eq('id', business_id).maybeSingle()
+      .from('businesses').select('industry,lat,lng,suburb,city').eq('id', business_id).maybeSingle()
     const industry = (biz?.industry as string ?? 'default').toLowerCase()
-    const defaults = INDUSTRY_DEFAULTS[industry] ?? INDUSTRY_DEFAULTS['retail'] ?? []
-    if (defaults.length > 0) {
-      const rows = defaults.map(name => ({
+    const toInsert: string[] = []
+
+    // 1. Nearby search via Google Places if lat/lng available
+    const placesKey = process.env.GOOGLE_PLACES_API_KEY
+    if (placesKey && biz?.lat && biz?.lng) {
+      try {
+        const industryType: Record<string, string> = {
+          cafe: 'cafe', restaurant: 'restaurant', liquor: 'liquor_store',
+          retail: 'store', pharmacy: 'pharmacy', bakery: 'bakery', supermarket: 'supermarket',
+        }
+        const placeType = industryType[industry] ?? 'store'
+        const url = `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${biz.lat},${biz.lng}&radius=3000&type=${placeType}&key=${placesKey}`
+        const res = await fetch(url)
+        const data = await res.json() as { results?: Array<{ name: string; vicinity: string; website?: string }> }
+        for (const place of (data.results ?? []).slice(0, 8)) {
+          if (!toInsert.includes(place.name)) toInsert.push(place.name)
+        }
+      } catch { /* fall through to chain defaults */ }
+    }
+
+    // 2. Always add national chain defaults for this industry
+    const chains = INDUSTRY_DEFAULTS[industry] ?? []
+    for (const chain of chains) {
+      if (!toInsert.includes(chain)) toInsert.push(chain)
+    }
+
+    if (toInsert.length > 0) {
+      const rows = toInsert.map(name => ({
         business_id, competitor_name: name, is_active: true,
         created_at: new Date().toISOString(),
       }))
@@ -40,7 +65,11 @@ async function _GET(req: Request) {
         .from('aria_competitor_watches')
         .insert(rows)
         .select('id,competitor_name,competitor_url,is_active')
-      return NextResponse.json({ watches: seeded ?? [], auto_seeded: true })
+      return NextResponse.json({ 
+        watches: seeded ?? [], 
+        auto_seeded: true,
+        source: placesKey && biz?.lat ? 'google_places+chains' : 'chains_only'
+      })
     }
   }
   return NextResponse.json({ watches: watches ?? [] })
