@@ -12,8 +12,8 @@ import type { PlannedAction } from '@/lib/aria/ask/action-planner'
 import type { DocumentReadResult } from '@/lib/aria/intelligence/document-vision'
 import { BlockRenderer } from '@/components/dashboard/BlockRenderer'
 import type { AskBlock } from '@/lib/aria/ask-types'
-const AriaTalkingHead = dynamic(() => import('@/components/aria/AriaTalkingHead'), { ssr: false })
 
+const AriaTalkingHead = dynamic(() => import('@/components/aria/AriaTalkingHead'), { ssr: false })
 const ChartBlock = dynamic(() => import('@/components/dashboard/ChartBlock'), { ssr: false })
 
 interface ExportAction { type: 'export'; url: string; filename: string; format: string; row_count: number }
@@ -195,6 +195,27 @@ function parseAriaResponse(text: string): Segment[] {
   return segments
 }
 
+function AriaSpeechBubble({ business }: { business: { name?: string; trading_name?: string } | null }) {
+  const [visible, setVisible] = useState(true)
+  const name = business?.trading_name ?? business?.name ?? null
+  useEffect(() => {
+    const t = setTimeout(() => setVisible(false), 30000)
+    return () => clearTimeout(t)
+  }, [])
+  if (!visible) return null
+  return (
+    <div style={{
+      maxWidth: 180, background: 'rgba(20,20,30,0.96)',
+      border: '1px solid rgba(127,184,151,0.35)', borderRadius: '14px 14px 4px 14px',
+      padding: '10px 13px', fontSize: 12, color: 'rgba(255,255,255,0.9)',
+      lineHeight: 1.5, boxShadow: '0 4px 20px rgba(0,0,0,0.4)',
+    }}>
+      <span style={{ color: '#7FB897', fontWeight: 700 }}>Hi{name ? `, ${name}` : ''}! 👋</span>
+      {' '}I&apos;m Aria — your AI business co-operator. What can I help you with today?
+    </div>
+  )
+}
+
 // Aria's voice before the first message — personalised by time and business
 function AriaGreeting({ business }: { business: { name?: string; trading_name?: string; industry?: string | null } | null }) {
   const hour = new Date().getHours()
@@ -220,30 +241,6 @@ function AriaGreeting({ business }: { business: { name?: string; trading_name?: 
   )
 }
 
-
-
-
-function AriaSpeechBubble({ business }: { business: { name?: string; trading_name?: string } | null }) {
-  const [visible, setVisible] = useState(true)
-  const name = business?.trading_name ?? business?.name ?? null
-  useEffect(() => {
-    const t = setTimeout(() => setVisible(false), 30000)
-    return () => clearTimeout(t)
-  }, [])
-  if (!visible) return null
-  return (
-    <div style={{
-      maxWidth: 180, background: 'rgba(20,20,30,0.96)',
-      border: '1px solid rgba(127,184,151,0.35)', borderRadius: '14px 14px 4px 14px',
-      padding: '10px 13px', fontSize: 12, color: 'rgba(255,255,255,0.9)',
-      lineHeight: 1.5, boxShadow: '0 4px 20px rgba(0,0,0,0.4)',
-    }}>
-      <span style={{ color: '#7FB897', fontWeight: 700 }}>Hi{name ? `, ${name}` : ''}! 👋</span>
-      {' '}I&apos;m Aria — your AI business co-operator. What can I help you with today?
-    </div>
-  )
-}
-
 export default function AskAriaPage() {
   const { business, loading } = useBusinessContext()
   const [messages, setMessages] = useState<Message[]>([])
@@ -262,11 +259,26 @@ export default function AskAriaPage() {
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const typewriterRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const [ariaVideoUrl] = useState<string>(process.env.NEXT_PUBLIC_ARIA_VIDEO_URL ?? 'https://tcowd5vdie4rwa2o.public.blob.vercel-storage.com/50071.mp4')
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
 
+  // Video avatar: ONLY active when streaming message has actual content (not during brain thinking)
   const isAriaActive = messages.some(m => m.streaming && m.content && m.content.length > 0)
+  useEffect(() => {
+    const vid = videoRef.current
+    if (!vid || !ariaVideoUrl) return
+    if (isAriaActive) {
+      vid.loop = true
+      vid.currentTime = 0
+      vid.play().catch(() => {})
+    } else {
+      vid.loop = false
+      vid.pause()
+      vid.currentTime = 0
+    }
+  }, [isAriaActive, ariaVideoUrl])
 
   useEffect(() => {
     const q = new URLSearchParams(window.location.search).get('q')
@@ -396,48 +408,27 @@ export default function AskAriaPage() {
         return null
       })()
 
-      // Typewriter effect — reveal response word by word so avatar lip-sync
-      // matches the text appearing on screen.
-      // Metadata (blocks, followups, used_council) attached from word 1 so
-      // graphs/cards render immediately and type in alongside the text.
-      const fullText = data.response ?? ''
-      const words = fullText.split(' ')
-      let wordIdx = 0
-      if (typewriterRef.current) clearInterval(typewriterRef.current)
-
-      // Feed full text to avatar immediately for accurate lip timing
-      setAriaResponseText(fullText)
-
-      typewriterRef.current = setInterval(() => {
-        wordIdx++
-        const revealed = words.slice(0, wordIdx).join(' ')
-        const done = wordIdx >= words.length
-        setMessages(prev => {
-          const updated = [...prev]
-          const last = updated[updated.length - 1]
-          if (last?.role === 'assistant') {
-            updated[updated.length - 1] = {
-              ...last,
-              content: revealed,
-              streaming: !done,
-              // Attach all metadata from the very first word so blocks render immediately
-              action: msgAction,
-              intent: data.intent,
-              downloads: data.downloads ?? undefined,
-              tool_calls: data.tool_calls ?? undefined,
-              blocks: data.blocks ?? undefined,
-              followups: data.followups ?? undefined,
-              used_council: data.used_council ?? false,
-            }
+      setMessages(prev => {
+        const updated = [...prev]
+        const last = updated[updated.length - 1]
+        if (last?.role === 'assistant') {
+          updated[updated.length - 1] = {
+            ...last,
+            content: data.response ?? '',
+            streaming: false,
+            action: msgAction,
+            intent: data.intent,
+            downloads: data.downloads ?? undefined,
+            tool_calls: data.tool_calls ?? undefined,
+            blocks: data.blocks ?? undefined,
+            followups: data.followups ?? undefined,
+            used_council: data.used_council ?? false,
           }
-          return updated
-        })
-        if (done) {
-          if (typewriterRef.current) clearInterval(typewriterRef.current)
-          setAriaResponseText('')
-          loadHistory()
         }
-      }, 55)
+        return updated
+      })
+
+      loadHistory()
     } catch (err: unknown) {
       const errMsg = err instanceof Error ? err.message : 'Unknown error'
       setMessages(prev => {
@@ -451,7 +442,6 @@ export default function AskAriaPage() {
     } finally {
       setSending(false)
       setCouncilThinking(false)
-      setTimeout(() => setAriaResponseText(''), 500)
       inputRef.current?.focus()
     }
   }, [input, sending, conversationId, loadHistory])
@@ -576,6 +566,13 @@ export default function AskAriaPage() {
 
   return (
     <div style={{ display: 'flex', height: '100dvh', background: '#0d0d14', overflow: 'hidden' }}>
+      {/* Avatar keyframes only — avatar is inside chat col below */}
+      <style>{`
+        @keyframes ariaBar0 { from { height: 4px; opacity: 0.4; } to { height: 9px; opacity: 1; } }
+        @keyframes ariaBar1 { from { height: 9px; opacity: 1; } to { height: 3px; opacity: 0.3; } }
+        @keyframes ariaBar2 { from { height: 5px; opacity: 0.5; } to { height: 8px; opacity: 0.9; } }
+        @keyframes ariaBar3 { from { height: 7px; opacity: 0.6; } to { height: 4px; opacity: 0.4; } }
+      `}</style>
       {/* Mobile backdrop */}
       {showHistory && (
         <div className="fixed inset-0 bg-black/60 z-10 md:hidden" onClick={() => setShowHistory(false)} />
@@ -635,6 +632,99 @@ export default function AskAriaPage() {
 
       {/* Main chat — subtle mood tint based on time of day */}
       <div className="flex-1 flex flex-col overflow-hidden" style={{ position: 'relative', background: (() => { const h = new Date().getHours(); if (h < 6) return '#0a0a12'; if (h < 12) return '#0d0f14'; if (h < 17) return '#0d0d14'; if (h < 20) return '#0e0c13'; return '#0b0b14'; })() }}>
+        {/* Aria floating avatar — absolute inside chat col, bottom-right corner
+            Opposite side from Briefing button (top-right in header).
+            Hidden when idle (opacity 0), visible + looping only while text streams. */}
+        {ariaVideoUrl && (
+          <div style={{
+            position: 'absolute',
+            bottom: 80,
+            right: 20,
+            width: 96,
+            height: 130,
+            zIndex: 20,
+            pointerEvents: 'none',
+            opacity: isAriaActive ? 1 : 0.35,
+            transition: 'opacity 0.25s ease',
+            WebkitMaskImage: 'radial-gradient(ellipse 75% 78% at 50% 42%, black 20%, transparent 68%)',
+            maskImage: 'radial-gradient(ellipse 75% 78% at 50% 42%, black 20%, transparent 68%)',
+          }}>
+            <video
+              ref={videoRef}
+              src={ariaVideoUrl}
+              muted
+              playsInline
+              loop
+              style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center top', display: 'block' }}
+            />
+          </div>
+        )}
+        {/* Sound bars above avatar, only while speaking */}
+        {ariaVideoUrl && isAriaActive && (
+          <div style={{
+            position: 'absolute',
+            bottom: 68,
+            right: 36,
+            zIndex: 21,
+            display: 'flex',
+            gap: 2,
+            alignItems: 'flex-end',
+            height: 10,
+            pointerEvents: 'none',
+          }}>
+            {[0,1,2,3].map(i => (
+              <div key={i} style={{
+                width: 2,
+                borderRadius: 2,
+                background: '#7FB897',
+                height: [5,9,7,8][i],
+                animation: `ariaBar${i} 0.5s ease-in-out infinite alternate`,
+                animationDelay: `${i * 0.12}s`,
+              }} />
+            ))}
+          </div>
+        )}
+        {/* Header */}
+        <div className="border-b px-6 py-4 flex items-center justify-between flex-shrink-0"
+          style={{ borderColor: 'rgba(255,255,255,0.06)', background: '#13131a' }}>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setShowHistory(v => !v)}
+              title="Chat history"
+              className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors"
+              style={{ background: showHistory ? 'rgba(127,184,151,0.15)' : 'rgba(255,255,255,0.05)', color: showHistory ? '#7FB897' : 'rgba(255,255,255,0.5)' }}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-4 h-4">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h7" />
+              </svg>
+            </button>
+            <div>
+              <h1 className="font-semibold text-lg leading-tight" style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#fff' }}>
+            <span style={{ width: 28, height: 28, borderRadius: 9, background: 'rgba(127,184,151,0.13)', border: '1px solid rgba(127,184,151,0.28)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Fraunces, serif', fontStyle: 'italic', fontSize: 15, color: '#7FB897', flexShrink: 0 }}>A</span>
+            Aria
+          </h1>
+              <p className="text-xs mt-0.5" style={{ color: '#6b7280' }}>
+                AI advisor for {business?.name ?? 'your business'}
+                {' · '}
+                <span className="text-[#7FB897]">{business?.data_source === 'square' ? 'Square data' : 'Aria POS data'}</span>
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Link href="/dashboard/ask-aria/intelligence"
+              className="text-xs px-3 py-1.5 rounded-lg transition-colors"
+              style={{ color: 'rgba(255,255,255,0.35)', background: 'rgba(255,255,255,0.05)' }}
+              title="Intelligence settings">
+              ✦ Intel
+            </Link>
+            {messages.length > 0 && (
+              <button onClick={newConversation}
+                className="text-xs px-3 py-1.5 rounded-lg transition-colors"
+                style={{ color: 'rgba(255,255,255,0.35)', background: 'rgba(255,255,255,0.05)' }}>
+                New chat
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Messages */}
@@ -688,16 +778,9 @@ export default function AskAriaPage() {
                         </div>
                       )
                       : <span className="inline-flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-[#7FB897] animate-pulse" /><span className="opacity-60">Thinking…</span></span>
-                    : m.blocks && m.blocks.length > 0
+                    : m.used_council && m.blocks && m.blocks.length > 0
                       ? (
                         <div>
-                          {/* Narrative text first — what Aria says/speaks */}
-                          {m.content && (
-                            <div className="mb-3 text-sm leading-relaxed opacity-90 whitespace-pre-line">
-                              {m.content}
-                            </div>
-                          )}
-                          {/* Visual blocks below the narrative */}
                           {m.blocks.map((block, bi) => (
                             <BlockRenderer key={bi} block={block} onChoice={(prompt) => { send(prompt) }} />
                           ))}
@@ -822,6 +905,14 @@ export default function AskAriaPage() {
               if (files.length > 0) setAttachedFiles(prev => [...prev, ...files].slice(0, 5))
               if (e.target) e.target.value = ''
             }}
+
+        {/* Aria avatar */}
+        <div style={{ position: 'absolute', bottom: 0, right: 20, width: 120, zIndex: 20, pointerEvents: 'none', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
+          <AriaSpeechBubble business={business} />
+          <div style={{ width: 120, height: 160 }}>
+            <AriaTalkingHead mode={isAriaActive ? 'talking' : 'idle'} replyText={ariaResponseText ?? ''} />
+          </div>
+        </div>
           />
           {attachedFiles.length > 0 && (
             <div className="max-w-3xl mx-auto mb-2 flex flex-wrap gap-2">
@@ -877,21 +968,6 @@ export default function AskAriaPage() {
           <p className="text-center text-[10px] mt-2" style={{ color: 'rgba(255,255,255,0.2)' }}>
             Aria uses connected records only. It will not invent missing sales, stock, customer, supplier or margin data.
           </p>
-
-        {/* Aria avatar — bottom right corner */}
-        <div style={{
-          position: 'absolute', bottom: 0, right: 20,
-          width: 120, zIndex: 20, pointerEvents: 'none',
-          display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6,
-        }}>
-          <AriaSpeechBubble business={business} />
-          <div style={{ width: 120, height: 160 }}>
-            <AriaTalkingHead
-              mode={isAriaActive ? 'talking' : 'idle'}
-              replyText={ariaResponseText ?? ''}
-            />
-          </div>
-        </div>
         </div>
       </div>
     </div>
