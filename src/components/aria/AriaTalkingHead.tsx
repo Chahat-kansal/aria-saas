@@ -88,10 +88,10 @@ function AvatarScene({ mode, replyText }: { mode: string; replyText: string }) {
 export default function AriaTalkingHead({ mode = 'idle', replyText = '' }: { mode?: string; replyText?: string }) {
   return (
     <Canvas
-      camera={{ position: [0, 1.4, 4.5], fov: 15 }}
+      camera={{ position: [0, 1.55, 3.8], fov: 13 }}
       style={{ width: '100%', height: '100%', background: 'transparent' }}
       gl={{ alpha: true, antialias: true }}
-      onCreated={({ camera }) => camera.lookAt(0, 1.4, 0)}
+      onCreated={({ camera }) => camera.lookAt(0, 1.55, 0)}
     >
       <ambientLight intensity={1.2} />
       <directionalLight position={[1, 2, 2]} intensity={1.0} />
