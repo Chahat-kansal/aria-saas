@@ -39,6 +39,7 @@ export interface AskAriaContext {
   memories: Array<{ id: string; kind: string; content: string; topic: string | null; importance: number }>
   // Per-category advice confidence weights from outcome learning
   advice_weights: Record<string, number>
+  competitor_intelligence: Array<{ name: string; last_checked: string | null; data: unknown }>
   prediction: { today_predicted: number; tomorrow_predicted: number; today_dow: string; tomorrow_dow: string; pattern: Record<string, number> }
 }
 
@@ -51,7 +52,16 @@ export async function buildAskAriaContext(
   const weekStart = new Date(now); weekStart.setDate(now.getDate() - 7)
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1) // first of current month
 
-  const [bizRes, salesTodayRes, salesWeekRes, salesMonthRes, lowStockRes, staffRes, ticketsRes, actionsRes, convHistRes, recentConvsRes] = await Promise.all([
+  const competitorRes = supabaseAdmin
+    .from('aria_competitor_watches')
+    .select('competitor_name, last_checked_at, competitor_data')
+    .eq('business_id', businessId)
+    .eq('is_active', true)
+    .order('last_checked_at', { ascending: false })
+    .limit(3)
+
+  const [bizRes, salesTodayRes, salesWeekRes, salesMonthRes, lowStockRes, staffRes, ticketsRes, actionsRes, convHistRes, recentConvsRes, competitorsRes] = await Promise.all([
+    competitorRes,
     supabaseAdmin.from('businesses').select('name,industry,owner_name,city,address,phone,abn,google_average_rating,google_total_reviews').eq('id', businessId).maybeSingle(),
     supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', businessId).gte('created_at', todayStart.toISOString()),
     supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', businessId).gte('created_at', weekStart.toISOString()),
