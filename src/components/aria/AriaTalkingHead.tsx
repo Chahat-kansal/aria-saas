@@ -88,15 +88,14 @@ function AvatarScene({ mode, replyText }: { mode: string; replyText: string }) {
           const clip = createVRMAnimationClip(vrmaGreet, vrm);
           const action = mixer.clipAction(clip);
           action.setLoop(THREE.LoopOnce, 1);
-          action.clampWhenFinished = true;
           action.play();
-          mixer.addEventListener('finished', () => {
+          // Use timeout — 'finished' event unreliable with LoopOnce
+          setTimeout(() => {
             greetingDone.current = true;
             mixerRef.current = null;
-            // Reset arms after greeting
             if (bones.lUpperArm) bones.lUpperArm.rotation.z = -1.2;
             if (bones.rUpperArm) bones.rUpperArm.rotation.z = 1.2;
-          });
+          }, 7267);
         } else {
           greetingDone.current = true;
         }
