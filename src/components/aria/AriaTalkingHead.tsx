@@ -153,6 +153,9 @@ function AvatarScene({ mode, replyText }: { mode: string; replyText: string }) {
       }
     }
 
+    // Soft smile always on
+    vrm.expressionManager?.setValue(VRMExpressionPresetName.Happy, 0.25);
+
     // ── Blink ────────────────────────────────────────────────────────────────
     blinkTimer.current -= delta;
     if (blinkTimer.current <= 0 && !blinking.current) {
