@@ -50,30 +50,14 @@ function AvatarScene({ mode, replyText }: { mode: string; replyText: string }) {
       mixerRef.current = mixer;
 
       try {
-        const [a01, a02] = await Promise.all([
-          loader.loadAsync('/models/VRMA_01.vrma'),
-          loader.loadAsync('/models/VRMA_02.vrma'),
-        ]);
+        const a02 = await loader.loadAsync('/models/VRMA_02.vrma');
         if (cancelled) return;
 
-        const vrma01 = a01.userData.vrmAnimations?.[0];
         const vrma02 = a02.userData.vrmAnimations?.[0];
-
-        if (vrma01) idleClipRef.current = createVRMAnimationClip(vrma01, vrm);
-
-        if (vrma02 && idleClipRef.current) {
+        if (vrma02) {
           const greetClip = createVRMAnimationClip(vrma02, vrm);
-          const greetAction = mixer.clipAction(greetClip);
-          greetAction.setLoop(THREE.LoopOnce, 1);
-          greetAction.clampWhenFinished = true;
-          greetAction.play();
-
-          mixer.addEventListener('finished', () => {
-            greetAction.fadeOut(0.5);
-            mixer.clipAction(idleClipRef.current!).reset().fadeIn(0.5).play();
-          });
-        } else if (idleClipRef.current) {
-          mixer.clipAction(idleClipRef.current).play();
+          // Play greeting on loop — it's the most natural animation in the pack
+          mixer.clipAction(greetClip).play();
         }
       } catch (e) {
         console.warn('VRMA load error:', e);
