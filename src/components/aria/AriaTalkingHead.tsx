@@ -36,7 +36,7 @@ function AvatarScene({ mode, replyText }: { mode: string; replyText: string }) {
       const loadedVrm = gltf.userData.vrm as VRM;
       VRMUtils.removeUnnecessaryVertices(gltf.scene);
       VRMUtils.combineSkeletons(gltf.scene);
-      loadedVrm.scene.rotation.y = Math.PI;
+      // Don't set rotation — VRMA animation controls orientation
       setVrm(loadedVrm);
 
       // Load idle VRMA
