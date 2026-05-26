@@ -74,6 +74,34 @@ function PriceComparisonTable({ competitorNames }: { competitorNames: string[] }
           </tbody>
         </table>
       )}
+      {/* Competitor Watch Setup */}
+      <div style={{ marginTop: 32, background: 'rgba(255,255,255,0.03)', borderRadius: 14, border: '1px solid rgba(255,255,255,0.08)', padding: '20px 24px' }}>
+        <h2 style={{ fontSize: 15, fontWeight: 700, color: '#fff', marginBottom: 4 }}>Competitor watches</h2>
+        <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginBottom: 16 }}>Aria monitors these competitors daily and alerts you to price changes.</p>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+          <input
+            value={newCompetitor} onChange={e => setNewCompetitor(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && addWatch()}
+            placeholder="e.g. Dan Murphy's, BWS, Cellars East"
+            style={{ flex: 1, padding: '9px 12px', borderRadius: 9, border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.05)', color: '#fff', fontSize: 13, outline: 'none' }}
+          />
+          <button onClick={addWatch} disabled={addingWatch || !newCompetitor.trim()}
+            style={{ padding: '9px 20px', borderRadius: 9, border: 'none', background: '#7FB897', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', opacity: addingWatch ? 0.6 : 1 }}>
+            {addingWatch ? 'Adding…' : '+ Add'}
+          </button>
+        </div>
+        {watches.length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {watches.map(w => (
+              <div key={w.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', borderRadius: 99, background: 'rgba(127,184,151,0.1)', border: '1px solid rgba(127,184,151,0.25)' }}>
+                <span style={{ fontSize: 12, color: '#7FB897' }}>👁 {w.competitor_name}</span>
+                <button onClick={() => removeWatch(w.id)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', cursor: 'pointer', fontSize: 14, lineHeight: 1 }}>×</button>
+              </div>
+            ))}
+          </div>
+        )}
+        {watches.length === 0 && <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)' }}>No competitors being watched yet. Add one above.</p>}
+      </div>
     </div>
   )
 }
@@ -99,6 +127,31 @@ export default function CompetitorsPage() {
     }
     setLoading(false)
   }, [business?.id])
+
+  useEffect(() => {
+    if (!business?.id) return
+    fetch(`/api/aria/competitor-watches?business_id=${business.id}`)
+      .then(r => r.json()).then(d => setWatches(d.watches ?? [])).catch(() => {})
+  }, [business?.id])
+
+  async function addWatch() {
+    if (!newCompetitor.trim() || !business?.id) return
+    setAddingWatch(true)
+    try {
+      await fetch('/api/aria/competitor-watches', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ business_id: business.id, competitor_name: newCompetitor.trim() }),
+      })
+      setWatches(w => [...w, { id: Date.now().toString(), competitor_name: newCompetitor.trim(), competitor_url: null, is_active: true }])
+      setNewCompetitor('')
+    } catch { /* ignore */ }
+    setAddingWatch(false)
+  }
+
+  async function removeWatch(id: string) {
+    await fetch(`/api/aria/competitor-watches?id=${id}`, { method: 'DELETE' })
+    setWatches(w => w.filter(x => x.id !== id))
+  }
 
   useEffect(() => { load() }, [load])
 
@@ -237,6 +290,34 @@ export default function CompetitorsPage() {
           )}
         </>
       )}
+      {/* Competitor Watch Setup */}
+      <div style={{ marginTop: 32, background: 'rgba(255,255,255,0.03)', borderRadius: 14, border: '1px solid rgba(255,255,255,0.08)', padding: '20px 24px' }}>
+        <h2 style={{ fontSize: 15, fontWeight: 700, color: '#fff', marginBottom: 4 }}>Competitor watches</h2>
+        <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginBottom: 16 }}>Aria monitors these competitors daily and alerts you to price changes.</p>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+          <input
+            value={newCompetitor} onChange={e => setNewCompetitor(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && addWatch()}
+            placeholder="e.g. Dan Murphy's, BWS, Cellars East"
+            style={{ flex: 1, padding: '9px 12px', borderRadius: 9, border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.05)', color: '#fff', fontSize: 13, outline: 'none' }}
+          />
+          <button onClick={addWatch} disabled={addingWatch || !newCompetitor.trim()}
+            style={{ padding: '9px 20px', borderRadius: 9, border: 'none', background: '#7FB897', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', opacity: addingWatch ? 0.6 : 1 }}>
+            {addingWatch ? 'Adding…' : '+ Add'}
+          </button>
+        </div>
+        {watches.length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {watches.map(w => (
+              <div key={w.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', borderRadius: 99, background: 'rgba(127,184,151,0.1)', border: '1px solid rgba(127,184,151,0.25)' }}>
+                <span style={{ fontSize: 12, color: '#7FB897' }}>👁 {w.competitor_name}</span>
+                <button onClick={() => removeWatch(w.id)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', cursor: 'pointer', fontSize: 14, lineHeight: 1 }}>×</button>
+              </div>
+            ))}
+          </div>
+        )}
+        {watches.length === 0 && <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)' }}>No competitors being watched yet. Add one above.</p>}
+      </div>
     </div>
   )
 }
