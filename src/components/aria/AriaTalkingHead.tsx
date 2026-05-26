@@ -61,12 +61,14 @@ function retargetAnimation(clip: THREE.AnimationClip, ariaScene: THREE.Object3D)
 
   const newTracks: THREE.KeyframeTrack[] = [];
   for (const track of clip.tracks) {
-    // track.name is like "Head.quaternion" or "LeftArm.position"
     const dotIdx = track.name.indexOf('.');
     const iacinebone = track.name.slice(0, dotIdx);
     const prop = track.name.slice(dotIdx);
     const ariaBoneName = BONE_MAP[iacinebone];
     if (ariaBoneName && ariaBones[ariaBoneName]) {
+      // Skip position/translation tracks — they use IAcine scale and will misplace Aria
+      // Only apply rotation (quaternion) tracks which are scale-independent
+      if (prop === '.position') continue;
       const newTrack = track.clone();
       newTrack.name = ariaBoneName + prop;
       newTracks.push(newTrack);
@@ -121,8 +123,8 @@ function AvatarScene({ mode, replyText }: { mode: string; replyText: string }) {
     if (mode === prevMode.current) return;
     prevMode.current = mode;
 
-    // Only use Idle — Talking_0/1/2 are sitting animations, not suitable
-    const clip = animations.find(a => a.name === 'Idle') ?? animations[0];
+    const clipName = mode === 'talking' ? 'Talking_0' : 'Idle';
+    const clip = animations.find(a => a.name === clipName) ?? animations.find(a => a.name === 'Idle') ?? animations[0];
     const retargeted = retargetAnimation(clip, scene);
     const newAction = mixer.current.clipAction(retargeted);
 
