@@ -45,14 +45,14 @@ export async function getBusinessContext(businessId: string): Promise<string> {
         ).data?.map((s: any) => s.id) ?? []
       ),
     db.from('customers').select('id, name, total_spent, last_visit, visit_count')
-      .eq('business_id', businessId).order('total_spent', { ascending: false }).limit(50),
+      .eq('business_id', businessId).order('total_spent', { ascending: false }).limit(5),
     db.from('reviews').select('rating, text, created_at')
-      .eq('business_id', businessId).order('created_at', { ascending: false }).limit(10),
+      .eq('business_id', businessId).order('created_at', { ascending: false }).limit(5),
     db.from('aria_outcomes').select('recommendation_type, recommendation_detail, recommended_at')
       .eq('business_id', businessId).order('recommended_at', { ascending: false }).limit(5),
     db.from('pos_products').select('name, stock_quantity, reorder_point')
       .eq('business_id', businessId).eq('is_active', true)
-      .filter('stock_quantity', 'lte', 10).limit(10),
+      .filter('stock_quantity', 'lte', 10).limit(5),
   ])
 
   // SKU aggregation from sale_items
@@ -66,8 +66,8 @@ export async function getBusinessContext(businessId: string): Promise<string> {
     }
   }
   const skus     = Object.values(skuMap).sort((a, b) => b.revenue - a.revenue)
-  const top20    = skus.slice(0, 20)
-  const bottom20 = skus.length > 5 ? skus.slice(-20).reverse() : []
+  const top20    = skus.slice(0, 10)
+  const bottom20 = skus.length > 5 ? skus.slice(-10).reverse() : []
 
   const sum = (r: any) => r.status === 'fulfilled'
     ? (r.value.data ?? []).reduce((s: number, x: any) => s + (x.total_amount ?? 0), 0)
