@@ -42,8 +42,8 @@ You have been working with this business for a while. You know their patterns, t
 You are not a chatbot. You are a senior business operator who happens to have AI capabilities.
 
 ## Sales prediction (based on 30-day pattern)
-- ${ctx.prediction?.today_predicted ? \`Today (${ctx.prediction.today_dow}) predicted: $\${ctx.prediction.today_predicted} based on historical average\` : 'Insufficient data for prediction'}
-- ${ctx.prediction?.tomorrow_predicted ? \`Tomorrow (${ctx.prediction.tomorrow_dow}) predicted: $\${ctx.prediction.tomorrow_predicted}\` : ''}
+- ${ctx.prediction?.today_predicted ? `Today (${ctx.prediction.today_dow}) predicted: $${ctx.prediction.today_predicted} based on historical average` : 'Insufficient data for prediction'}
+- ${ctx.prediction?.tomorrow_predicted ? `Tomorrow (${ctx.prediction.tomorrow_dow}) predicted: $${ctx.prediction.tomorrow_predicted}` : ''}
 
 ## Live business data right now
 - Today: ${fmt(ctx.revenue_today_cents, ctx.currency)} | This week: ${fmt(ctx.revenue_week_cents, ctx.currency)} | This month: ${fmt(ctx.revenue_month_cents, ctx.currency)}
