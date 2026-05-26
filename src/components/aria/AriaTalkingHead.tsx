@@ -139,7 +139,7 @@ function AvatarScene({ mode, replyText }: { mode: string; replyText: string }) {
     // Head sway
     if (bones.head) {
       bones.head.rotation.y = Math.sin(t * 0.3) * 0.06;
-      bones.head.rotation.x = -0.05 + Math.sin(t * 0.25) * 0.02;
+      bones.head.rotation.x = 0.05 + Math.sin(t * 0.25) * 0.02; // positive = looks up/forward
     }
     if (bones.neck) bones.neck.rotation.y = Math.sin(t * 0.3) * 0.03;
 
@@ -183,10 +183,10 @@ function AvatarScene({ mode, replyText }: { mode: string; replyText: string }) {
 export default function AriaTalkingHead({ mode = 'idle', replyText = '' }: { mode?: string; replyText?: string }) {
   return (
     <Canvas
-      camera={{ position: [0, 1.38, 2.2], fov: 20 }}
+      camera={{ position: [0, 1.52, 2.2], fov: 20 }}
       style={{ width: '100%', height: '100%', background: 'transparent' }}
       gl={{ alpha: true, antialias: true }}
-      onCreated={({ camera }) => camera.lookAt(0, 1.38, 0)}
+      onCreated={({ camera }) => camera.lookAt(0, 1.52, 0)}
     >
       <ambientLight intensity={1.4} />
       <directionalLight position={[1, 2, 2]} intensity={1.0} />
