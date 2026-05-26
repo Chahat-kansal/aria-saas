@@ -28,7 +28,7 @@ async function _GET(req: Request) {
   const status = searchParams.get('status') ?? ''
   let query = supabaseAdmin
     .from('invoices')
-    .select('id, invoice_number, status, bill_to_name, bill_to_email, subtotal, gst_total, total, currency, issue_date, due_date, sent_at, paid_at, send_method, pdf_url, ai_generated, created_at, customer_id')
+    .select('id, invoice_number, status, bill_to_name, bill_to_email, subtotal, gst_total, total, currency, issue_date, due_date, sent_at, paid_at, send_method, pdf_url, ai_generated, created_at, customer_id, viewed_at, auto_reminders')
     .eq('business_id', business_id)
     .order('created_at', { ascending: false })
 

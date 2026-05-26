@@ -37,7 +37,7 @@ async function _PATCH(req: Request, { params }: Params) {
   if (!biz) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   const body = await req.json().catch(() => ({}))
-  const allowed = ['status', 'sent_at', 'paid_at', 'send_method', 'pdf_url', 'notes', 'due_date']
+  const allowed = ['status', 'sent_at', 'paid_at', 'send_method', 'pdf_url', 'notes', 'due_date', 'auto_reminders']
   const update: Record<string, unknown> = { updated_at: new Date().toISOString() }
   for (const k of allowed) if (k in body) update[k] = body[k]
 

@@ -104,7 +104,9 @@ async function _POST(req: Request) {
   const { data: lineRows } = await supabaseAdmin
     .from('invoice_line_items').select('*').eq('invoice_id', invoiceId).order('position')
 
-  const html = buildInvoiceHtml(biz, inv, lineRows ?? [])
+  const rawHtml = buildInvoiceHtml(biz, inv, lineRows ?? [])
+  const pixelUrl = `${process.env.NEXT_PUBLIC_APP_URL ?? ''}/api/invoices/track/${invoiceId}`
+  const html = rawHtml.replace('</body>', `<img src="${pixelUrl}" width="1" height="1" style="display:none;"><br></body>`)
 
   // Upload HTML to Vercel Blob
   let pdfUrl = inv.pdf_url as string | null

@@ -5,7 +5,7 @@ import { useBusinessContext } from '@/components/providers/BusinessProvider'
 interface Service { id: string; name: string; description: string | null; unit_price: number; gst_applicable: boolean; recurring: boolean; active: boolean }
 interface BLine { description: string; quantity: number; unit_price: number; gst_applicable: boolean }
 interface ILine extends BLine { id?: string; line_subtotal?: number; line_gst?: number; line_total?: number; position?: number }
-interface Invoice { id: string; invoice_number: string; status: string; bill_to_name: string; bill_to_email: string | null; subtotal: number; gst_total: number; total: number; issue_date: string; due_date: string | null; sent_at: string | null; paid_at: string | null; send_method: string | null; pdf_url: string | null; ai_generated: boolean; created_at: string; notes: string | null }
+interface Invoice { id: string; invoice_number: string; status: string; bill_to_name: string; bill_to_email: string | null; subtotal: number; gst_total: number; total: number; issue_date: string; due_date: string | null; sent_at: string | null; paid_at: string | null; send_method: string | null; pdf_url: string | null; ai_generated: boolean; created_at: string; notes: string | null; viewed_at: string | null; auto_reminders: boolean }
 
 const C = {
   bg: 'var(--bg-base)', card: 'var(--bg-surface)', elevated: 'var(--bg-elevated)',
@@ -64,6 +64,10 @@ export default function InvoicesPage() {
   const [reminderSending, setReminderSending] = useState(false)
   const [sendMethod, setSendMethod] = useState<'email' | 'sms'>('email')
   const [sending, setSending] = useState(false)
+  const [viewMode, setViewMode] = useState<'list' | 'pipeline'>('list')
+  const [recurringModal, setRecurringModal] = useState(false)
+  const [recurringFreq, setRecurringFreq] = useState<'weekly' | 'monthly' | 'quarterly'>('monthly')
+  const [recurringSaving, setRecurringSaving] = useState(false)
   const notified = useRef(false)
 
   const fetchInvoices = useCallback(async () => {
@@ -114,6 +118,19 @@ export default function InvoicesPage() {
     setReminderDraft(r.draft ?? '')
   }
 
+  async function toggleAutoReminders() {
+    if (!selected) return
+    const r = await fetch('/api/invoices/' + selected.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ auto_reminders: !selected.auto_reminders }) }).then(x => x.json())
+    if (r.invoice) { setSelected(r.invoice); fetchInvoices() }
+  }
+
+  async function saveRecurring() {
+    if (!selected) return
+    setRecurringSaving(true)
+    await fetch('/api/invoices/recurring', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ invoiceId: selected.id, frequency: recurringFreq }) })
+    setRecurringSaving(false); setRecurringModal(false)
+  }
+
   async function sendReminder() {
     if (!selected || !reminderDraft.trim()) return
     setReminderSending(true)
@@ -158,6 +175,10 @@ export default function InvoicesPage() {
 
   const tots = calcTotals(bLines)
   const filtered = filter === 'all' ? invoices : invoices.filter(i => i.status === filter)
+  const thisMonth = new Date().toISOString().slice(0, 7)
+  const revOutstanding = invoices.filter(i => i.status === 'sent').reduce((s, i) => s + Number(i.total), 0)
+  const revOverdue = invoices.filter(i => i.status === 'overdue').reduce((s, i) => s + Number(i.total), 0)
+  const revPaidMonth = invoices.filter(i => i.status === 'paid' && i.paid_at?.slice(0, 7) === thisMonth).reduce((s, i) => s + Number(i.total), 0)
 
   if (building) return (
     <div style={{ padding: 24, maxWidth: 760, margin: '0 auto' }}>
@@ -235,14 +256,44 @@ export default function InvoicesPage() {
       </div>
 
       {tab === 'invoices' && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 20 }}>
+          {[{ label: 'Outstanding', val: revOutstanding, color: '#f59e0b' }, { label: 'Overdue', val: revOverdue, color: '#ef4444' }, { label: 'Paid this month', val: revPaidMonth, color: C.green }].map(({ label, val, color }) => (
+            <div key={label} style={{ background: C.card, borderRadius: 10, padding: '12px 16px', border: '1px solid ' + C.border }}>
+              <div style={{ fontSize: 11, color: C.muted, marginBottom: 4 }}>{label}</div>
+              <div style={{ fontSize: 18, fontWeight: 700, color }}>${val.toLocaleString('en-AU', { maximumFractionDigits: 0 })}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {tab === 'invoices' && (
         <div style={{ display: 'flex', gap: 20 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
               {['all', 'draft', 'sent', 'overdue', 'paid'].map(f => (
                 <button key={f} style={{ ...BTN(filter === f ? 'p' : 'g'), textTransform: 'capitalize' }} onClick={() => setFilter(f)}>{f}</button>
               ))}
+              <button style={{ ...BTN(viewMode === 'pipeline' ? 'p' : 'g'), marginLeft: 'auto' }} onClick={() => setViewMode(v => v === 'list' ? 'pipeline' : 'list')}>{viewMode === 'pipeline' ? '≡ List' : '⋮⋮ Pipeline'}</button>
             </div>
-            {loading ? <p style={{ color: C.muted, fontSize: 13 }}>Loading…</p> : filtered.length === 0 ? (
+            {viewMode === 'pipeline' ? (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 10, overflowX: 'auto' }}>
+                {[{ key: 'draft', label: 'Draft', color: '#9ca3af' }, { key: 'sent', label: 'Sent', color: '#3b82f6' }, { key: 'viewed', label: 'Viewed', color: '#a855f7' }, { key: 'paid', label: 'Paid', color: C.green }, { key: 'overdue', label: 'Overdue', color: '#ef4444' }].map(({ key, label, color }) => {
+                  const col = invoices.filter(i => key === 'viewed' ? !!i.viewed_at : i.status === key)
+                  return (
+                    <div key={key} style={{ background: C.card, borderRadius: 10, padding: 12, border: '1px solid ' + C.border, minHeight: 120 }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color, textTransform: 'uppercase', marginBottom: 8 }}>{label} <span style={{ opacity: 0.6 }}>{col.length}</span></div>
+                      {col.map(inv => (
+                        <div key={inv.id} onClick={() => openInvoice(inv)} style={{ background: C.elevated, borderRadius: 8, padding: '8px 10px', marginBottom: 6, cursor: 'pointer' }}>
+                          <div style={{ fontSize: 12, fontWeight: 600, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{inv.bill_to_name}</div>
+                          <div style={{ fontSize: 11, color: C.muted }}>${(Number(inv.total) || 0).toFixed(0)}</div>
+                          {inv.due_date && <div style={{ fontSize: 10, color: C.muted }}>{new Date(inv.due_date).toLocaleDateString('en-AU')}</div>}
+                        </div>
+                      ))}
+                    </div>
+                  )
+                })}
+              </div>
+            ) : loading ? <p style={{ color: C.muted, fontSize: 13 }}>Loading…</p> : filtered.length === 0 ? (
               <div style={{ textAlign: 'center', padding: 48, color: C.muted }}>
                 <p style={{ fontSize: 14 }}>No invoices yet.</p>
                 <button style={BTN('p')} onClick={() => setBuilding(true)}>Create your first invoice</button>
@@ -255,6 +306,7 @@ export default function InvoicesPage() {
                 </div>
                 <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
                   <span style={{ fontSize: 14, fontWeight: 700, color: C.dark }}>${(Number(inv.total) || 0).toFixed(2)}</span>
+                  {inv.viewed_at && <span style={{ fontSize: 9, padding: '1px 6px', borderRadius: 8, background: 'rgba(168,85,247,0.12)', color: '#a855f7' }}>Viewed {Math.floor((Date.now() - new Date(inv.viewed_at).getTime()) / 60000)}m ago</span>}
                   <SBadge s={inv.status} />
                 </div>
               </div>
@@ -309,6 +361,11 @@ export default function InvoicesPage() {
                 {selected.status === 'paid' && selected.paid_at && (
                   <p style={{ fontSize: 12, color: C.muted, textAlign: 'center', margin: 0 }}>Paid {new Date(selected.paid_at).toLocaleDateString('en-AU')}</p>
                 )}
+                {selected.viewed_at && <p style={{ fontSize: 11, color: '#a855f7', margin: 0 }}>Opened {Math.floor((Date.now() - new Date(selected.viewed_at).getTime()) / 60000)}m ago</p>}
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <button onClick={toggleAutoReminders} style={{ ...BTN(selected.auto_reminders ? 'p' : 'g'), fontSize: 11 }}>Auto reminders: {selected.auto_reminders ? 'ON' : 'OFF'}</button>
+                  <button style={{ ...BTN('g'), fontSize: 11 }} onClick={() => setRecurringModal(true)}>↻ Recurring</button>
+                </div>
               </div>
             </div>
           )}
@@ -377,6 +434,26 @@ export default function InvoicesPage() {
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
               <button style={BTN('g')} onClick={() => setReminderModal(false)}>Cancel</button>
               <button style={BTN('p')} onClick={sendReminder} disabled={reminderSending || !reminderDraft.trim()}>{reminderSending ? 'Sending…' : 'Confirm & Send'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {recurringModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: C.card, borderRadius: 16, padding: 24, width: 360, maxWidth: '90vw' }}>
+            <h2 style={{ margin: '0 0 16px', fontSize: 16, color: C.dark }}>Make Recurring</h2>
+            <div style={{ marginBottom: 12 }}>
+              <select style={INP} value={recurringFreq} onChange={e => setRecurringFreq(e.target.value as typeof recurringFreq)}>
+                <option value="weekly">Weekly</option>
+                <option value="monthly">Monthly</option>
+                <option value="quarterly">Quarterly</option>
+              </select>
+            </div>
+            <p style={{ fontSize: 12, color: C.muted, marginBottom: 16 }}>A new invoice will be auto-generated on each {recurringFreq} cycle.</p>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <button style={BTN('g')} onClick={() => setRecurringModal(false)}>Cancel</button>
+              <button style={BTN('p')} onClick={saveRecurring} disabled={recurringSaving}>{recurringSaving ? 'Saving…' : 'Confirm'}</button>
             </div>
           </div>
         </div>
