@@ -1,89 +1,342 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
+import { useBusiness } from '@/components/providers/BusinessProvider'
+import { supabase } from '@/lib/supabase'
 
-interface Briefing { id: string; created_at: string; content?: string; summary?: string; sections?: Record<string, string>; business_id: string }
+interface Rec {
+  id: string
+  priority: 'high' | 'medium' | 'low'
+  category: string
+  title: string
+  description: string
+  action_label: string
+  action_type: string
+  metric: string
+  metric_label: string
+  trend: 'up' | 'down' | 'flat' | null
+}
+
+interface Snap {
+  sales_yesterday_aud?: string
+  sales_today_aud?: string
+  revenue_last_7_days_aud?: string
+  revenue_prev_7_days_aud?: string
+  revenue_trend_pct?: number
+  sales_count_7_days?: number
+  low_stock_items?: number
+  low_stock_names?: string[]
+  lapsed_customers?: number
+  total_customers?: number
+  unanswered_reviews?: number
+  external_context?: {
+    weather_next_3_days?: Array<{ date: string; weather: string; temp_max: number }>
+    upcoming_holidays?: Array<{ name: string; days_away: number }>
+  }
+}
+
+interface BriefingResponse {
+  recommendations: Rec[]
+  generated_at: string
+  data_snapshot: Snap
+  cached: boolean
+  no_data?: boolean
+  no_data_message?: string
+}
+
+interface HistoryEntry {
+  id: string
+  date: string
+  generated_at: string
+  recommendations: Rec[]
+  data_snapshot: Snap
+}
+
+const G = '#7FB897'
+const DG = '#2D5240'
+const CARD = 'rgba(255,255,255,0.04)'
+const BORDER = '1px solid rgba(255,255,255,0.08)'
+const BR = '16px'
+
+function fmtCurrency(val: string | undefined) {
+  if (!val) return '—'
+  const n = parseFloat(val)
+  if (isNaN(n)) return '—'
+  return new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD', maximumFractionDigits: 0 }).format(n)
+}
+
+function fmtDate(d: string) {
+  return new Date(d + 'T00:00:00').toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })
+}
+
+function Skel({ w = '100%', h = 18 }: { w?: string; h?: number }) {
+  return <div style={{ width: w, height: h, background: 'rgba(255,255,255,0.07)', borderRadius: 6 }} />
+}
+
+function MetricCard({ label, value, sub, trend, loading }: { label: string; value: string; sub?: string; trend?: 'up' | 'down' | null; loading?: boolean }) {
+  return (
+    <div style={{ flex: 1, minWidth: 150, background: CARD, border: BORDER, borderRadius: BR, padding: '18px 20px' }}>
+      <div style={{ fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 10 }}>{label}</div>
+      {loading ? <Skel h={28} /> : <div style={{ fontSize: 24, fontWeight: 700, color: '#fff', lineHeight: 1 }}>{value}</div>}
+      {sub && !loading && (
+        <div style={{ fontSize: 12, marginTop: 6, color: trend === 'up' ? G : trend === 'down' ? '#f87171' : 'rgba(255,255,255,0.4)' }}>{sub}</div>
+      )}
+    </div>
+  )
+}
 
 export default function DailyBriefingPage() {
-  const [briefings, setBriefings] = useState<Briefing[]>([])
-  const [loading, setLoading]     = useState(true)
-  const [selected, setSelected]   = useState<Briefing | null>(null)
-  const [businessId, setBusinessId] = useState<string | null>(null)
+  const business = useBusiness()
+  const [briefing, setBriefing] = useState<BriefingResponse | null>(null)
+  const [history, setHistory] = useState<HistoryEntry[]>([])
+  const [historyView, setHistoryView] = useState<HistoryEntry | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+  const [dismissed, setDismissed] = useState<Set<string>>(new Set())
+
+  const fetchBriefing = useCallback(async (force = false) => {
+    if (!business?.id) return
+    if (force) setRefreshing(true)
+    try {
+      const res = await fetch('/api/aria/daily-briefing', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ business_id: business.id, force_refresh: force }),
+      })
+      if (res.ok) setBriefing(await res.json())
+    } finally {
+      setRefreshing(false)
+      setLoading(false)
+    }
+  }, [business?.id])
 
   useEffect(() => {
-    // Get business ID then fetch briefings
-    fetch('/api/pos/products')
-      .then(r => r.json())
-      .then(d => {
-        const bid = d.business_id ?? d.products?.[0]?.business_id ?? null
-        setBusinessId(bid)
-        if (!bid) { setLoading(false); return }
-        return fetch(`/api/aria/daily-briefing?business_id=${bid}`)
-          .then(r => r.json())
-          .then(data => {
-            const list: Briefing[] = data.briefings ?? (data.briefing ? [data.briefing] : [])
-            setBriefings(list)
-            if (list.length > 0) setSelected(list[0])
-            setLoading(false)
-          })
-      })
-      .catch(() => setLoading(false))
-  }, [])
+    if (!business?.id) return
+    fetchBriefing()
+    supabase
+      .from('daily_briefings')
+      .select('id, date, generated_at, recommendations, data_snapshot')
+      .eq('business_id', business.id)
+      .order('date', { ascending: false })
+      .limit(7)
+      .then(({ data }: { data: HistoryEntry[] | null }) => { if (data) setHistory(data) })
+  }, [business?.id, fetchBriefing])
 
-  const fmt = (d: string) => new Date(d).toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long' })
+  const snap: Snap = historyView?.data_snapshot ?? briefing?.data_snapshot ?? {}
+  const recs: Rec[] = (historyView?.recommendations ?? briefing?.recommendations ?? []).filter(r => !dismissed.has(r.id))
+  const now = new Date()
+  const hr = now.getHours()
+  const greeting = hr < 12 ? 'Good morning' : hr < 17 ? 'Good afternoon' : 'Good evening'
+  const firstName = (business?.owner_name ?? '').split(' ')[0]
+  const todayStr = now.toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
 
-  if (loading) return (
-    <div style={{ padding: '40px 32px', color: 'var(--text-tertiary)', fontFamily: "'Manrope',sans-serif", fontSize: 13 }}>Loading briefings…</div>
-  )
+  const trendPct = snap.revenue_trend_pct ?? 0
+  const revWeek = parseFloat(snap.revenue_last_7_days_aud ?? '0')
+  const revPrev = parseFloat(snap.revenue_prev_7_days_aud ?? '0')
+  const progressPct = revPrev > 0 ? Math.min(100, Math.round((revWeek / revPrev) * 100)) : 0
+
+  const bullets = [
+    snap.revenue_last_7_days_aud
+      ? `Revenue this week: ${fmtCurrency(snap.revenue_last_7_days_aud)}${trendPct !== 0 ? ` (${trendPct > 0 ? '+' : ''}${trendPct}% vs last week)` : ''}`
+      : null,
+    (snap.low_stock_items ?? 0) > 0
+      ? `${snap.low_stock_items} item${snap.low_stock_items! > 1 ? 's' : ''} running low on stock${snap.low_stock_names?.length ? `: ${snap.low_stock_names.slice(0, 2).join(', ')}` : ''}`
+      : snap.low_stock_items === 0 ? 'All items well-stocked' : null,
+    (snap.lapsed_customers ?? 0) > 0
+      ? `${snap.lapsed_customers} customer${snap.lapsed_customers! > 1 ? 's' : ''} haven't visited in 60+ days`
+      : snap.total_customers ? `${snap.total_customers} active customers on your list` : null,
+  ].filter((b): b is string => Boolean(b))
+
+  const weather = snap.external_context?.weather_next_3_days ?? []
+  const holidays = snap.external_context?.upcoming_holidays ?? []
+
+  const prioColor = (p: string) => ({ high: '#f87171', medium: '#fbbf24', low: G }[p] ?? G)
+  const catIcon = (c: string) => ({ customers: '👥', revenue: '💰', stock: '📦', reviews: '⭐', marketing: '📣', compliance: '⚠️' }[c] ?? '💡')
 
   return (
-    <div style={{ display: 'flex', height: '100%', fontFamily: "'Manrope',sans-serif", background: 'var(--bg-base)', color: 'var(--text-primary)' }}>
-      {/* Sidebar: list of briefings */}
-      <div style={{ width: 240, borderRight: '1px solid var(--divider)', display: 'flex', flexDirection: 'column', overflowY: 'auto', flexShrink: 0 }}>
-        <div style={{ padding: '20px 16px 10px', fontSize: 12, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-          Daily Briefings
-        </div>
-        {briefings.length === 0 ? (
-          <div style={{ padding: '16px', fontSize: 13, color: 'var(--text-tertiary)' }}>
-            Your first briefing will appear tomorrow morning.
+    <div style={{ display: 'flex', minHeight: '100%', background: '#0d0d14', color: '#fff', fontFamily: "'Inter', sans-serif" }}>
+      <style>{`@keyframes shimmer{0%,100%{opacity:1}50%{opacity:.4}}`}</style>
+
+      {/* Main */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '32px 40px 60px' }}>
+
+        {/* Header */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 28 }}>
+          <div>
+            <h1 style={{ fontFamily: "'Fraunces', Georgia, serif", fontStyle: 'italic', fontSize: 28, fontWeight: 700, margin: 0 }}>
+              {greeting}{firstName ? `, ${firstName}` : ''}.
+            </h1>
+            <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', marginTop: 4 }}>
+              {historyView ? `Viewing briefing for ${fmtDate(historyView.date)}` : todayStr}
+            </div>
           </div>
-        ) : (
-          briefings.map(b => (
-            <button key={b.id} onClick={() => setSelected(b)}
-              style={{ padding: '12px 16px', textAlign: 'left', border: 'none', borderBottom: '1px solid var(--divider)', background: selected?.id === b.id ? 'var(--bg-elevated)' : 'transparent', cursor: 'pointer', fontFamily: 'inherit' }}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{fmt(b.created_at)}</div>
+          <div style={{ display: 'flex', gap: 10 }}>
+            {historyView && (
+              <button onClick={() => setHistoryView(null)} style={{ padding: '8px 16px', borderRadius: 10, border: BORDER, background: CARD, color: 'rgba(255,255,255,0.7)', fontSize: 13, cursor: 'pointer' }}>
+                ← Today
+              </button>
+            )}
+            <button onClick={() => fetchBriefing(true)} disabled={refreshing || loading}
+              style={{ padding: '8px 16px', borderRadius: 10, border: `1px solid ${G}`, background: 'transparent', color: G, fontSize: 13, cursor: refreshing ? 'wait' : 'pointer', opacity: refreshing ? 0.6 : 1 }}>
+              {refreshing ? 'Refreshing…' : 'Refresh'}
             </button>
-          ))
+          </div>
+        </div>
+
+        {/* Executive Summary */}
+        <div style={{ background: CARD, border: BORDER, borderLeft: `4px solid ${G}`, borderRadius: BR, padding: '22px 24px', marginBottom: 28 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+            <div style={{ width: 28, height: 28, borderRadius: '50%', background: `${G}22`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14 }}>✦</div>
+            <span style={{ fontSize: 12, fontWeight: 700, color: G, letterSpacing: '0.06em' }}>ARIA'S EXECUTIVE SUMMARY</span>
+          </div>
+          {loading ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <Skel /><Skel w="80%" /><Skel w="60%" />
+            </div>
+          ) : bullets.length > 0 ? (
+            <ul style={{ margin: 0, padding: '0 0 0 18px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {bullets.map((b, i) => <li key={i} style={{ fontSize: 14, lineHeight: 1.65, color: 'rgba(255,255,255,0.85)' }}>{b}</li>)}
+            </ul>
+          ) : (
+            <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.4)', margin: 0 }}>
+              {briefing?.no_data ? briefing.no_data_message : 'No briefing data yet — check back tomorrow.'}
+            </p>
+          )}
+          {briefing?.generated_at && !loading && (
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.22)', marginTop: 12 }}>
+              Generated {new Date(briefing.generated_at).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}
+              {briefing.cached ? ' · cached' : ''}
+            </div>
+          )}
+        </div>
+
+        {/* Metric cards */}
+        <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 24 }}>
+          <MetricCard label="Yesterday Revenue" value={fmtCurrency(snap.sales_yesterday_aud)} loading={loading} />
+          <MetricCard
+            label="This Week" value={fmtCurrency(snap.revenue_last_7_days_aud)}
+            sub={trendPct !== 0 ? `${trendPct > 0 ? '▲' : '▼'} ${Math.abs(trendPct)}% vs last week` : undefined}
+            trend={trendPct > 0 ? 'up' : trendPct < 0 ? 'down' : null}
+            loading={loading}
+          />
+          <MetricCard
+            label="Low Stock Items" value={loading ? '—' : String(snap.low_stock_items ?? 0)}
+            sub={snap.low_stock_names?.[0]}
+            loading={loading}
+          />
+          <MetricCard
+            label="Lapsed Customers" value={loading ? '—' : String(snap.lapsed_customers ?? 0)}
+            sub={snap.total_customers != null ? `of ${snap.total_customers} total` : undefined}
+            loading={loading}
+          />
+        </div>
+
+        {/* Revenue vs previous week bar */}
+        {!loading && revPrev > 0 && (
+          <div style={{ background: CARD, border: BORDER, borderRadius: BR, padding: '18px 22px', marginBottom: 28 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.65)' }}>Revenue vs Previous Week</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: trendPct >= 0 ? G : '#f87171' }}>{progressPct}%</span>
+            </div>
+            <div style={{ height: 8, background: 'rgba(255,255,255,0.08)', borderRadius: 99, overflow: 'hidden' }}>
+              <div style={{ height: '100%', width: `${progressPct}%`, background: `linear-gradient(90deg,${DG},${G})`, borderRadius: 99 }} />
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8 }}>
+              <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.25)' }}>A$0</span>
+              <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.25)' }}>Previous: {fmtCurrency(snap.revenue_prev_7_days_aud)}</span>
+            </div>
+          </div>
+        )}
+
+        {/* Predictions */}
+        {!historyView && (weather.length > 0 || holidays.length > 0) && (
+          <div style={{ marginBottom: 28 }}>
+            <h2 style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 14px' }}>Upcoming Conditions</h2>
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+              {weather.slice(0, 3).map((w, i) => (
+                <div key={i} style={{ flex: 1, minWidth: 130, background: CARD, border: BORDER, borderRadius: BR, padding: '16px 18px' }}>
+                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', marginBottom: 6 }}>{i === 0 ? 'Tomorrow' : i === 1 ? 'In 2 days' : fmtDate(w.date)}</div>
+                  <div style={{ fontSize: 15, fontWeight: 700 }}>{w.weather}</div>
+                  <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)', marginTop: 4 }}>{w.temp_max}°C</div>
+                </div>
+              ))}
+              {holidays.map((h, i) => (
+                <div key={i} style={{ flex: 1, minWidth: 160, background: CARD, border: BORDER, borderRadius: BR, padding: '16px 18px' }}>
+                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', marginBottom: 6 }}>
+                    {h.days_away === 0 ? 'Today' : h.days_away === 1 ? 'Tomorrow' : `In ${h.days_away} days`}
+                  </div>
+                  <div style={{ fontSize: 15, fontWeight: 700 }}>🎉 {h.name}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Action items */}
+        {recs.length > 0 && (
+          <div style={{ marginBottom: 28 }}>
+            <h2 style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 14px' }}>Action Items</h2>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {recs.map(r => (
+                <div key={r.id} style={{ background: CARD, border: BORDER, borderRadius: BR, padding: '18px 22px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                        <span style={{ fontSize: 14 }}>{catIcon(r.category)}</span>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: prioColor(r.priority), textTransform: 'uppercase', letterSpacing: '0.05em' }}>{r.priority}</span>
+                        <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.28)' }}>{r.category}</span>
+                      </div>
+                      <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>{r.title}</div>
+                      <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)', lineHeight: 1.6 }}>{r.description}</div>
+                      {r.metric && (
+                        <div style={{ marginTop: 10, display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.05)', borderRadius: 8, padding: '4px 10px' }}>
+                          <span style={{ fontSize: 15, fontWeight: 700, color: r.trend === 'up' ? G : r.trend === 'down' ? '#f87171' : '#fff' }}>{r.metric}</span>
+                          <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.38)' }}>{r.metric_label}</span>
+                          {r.trend === 'up' && <span style={{ color: G, fontSize: 11 }}>▲</span>}
+                          {r.trend === 'down' && <span style={{ color: '#f87171', fontSize: 11 }}>▼</span>}
+                        </div>
+                      )}
+                    </div>
+                    <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                      <a href={`/dashboard/ask-aria?q=${encodeURIComponent(r.title + ': ' + r.description)}`}
+                        style={{ padding: '7px 14px', borderRadius: 10, background: `${G}18`, border: `1px solid ${G}44`, color: G, fontSize: 12, fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>
+                        Ask Aria
+                      </a>
+                      <button onClick={() => setDismissed(d => new Set([...d, r.id]))}
+                        style={{ padding: '7px 10px', borderRadius: 10, background: 'transparent', border: BORDER, color: 'rgba(255,255,255,0.3)', fontSize: 13, cursor: 'pointer' }}>
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* No data */}
+        {!loading && briefing?.no_data && recs.length === 0 && (
+          <div style={{ textAlign: 'center', padding: '48px 24px', background: CARD, border: BORDER, borderRadius: BR }}>
+            <div style={{ fontSize: 40, marginBottom: 14 }}>📊</div>
+            <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 8 }}>No data yet</div>
+            <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.45)' }}>{briefing.no_data_message}</div>
+          </div>
         )}
       </div>
 
-      {/* Main content */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '28px 32px' }}>
-        {selected ? (
-          <>
-            <h1 style={{ fontSize: 20, fontWeight: 700, margin: '0 0 4px' }}>{fmt(selected.created_at)}</h1>
-            <p style={{ fontSize: 12, color: 'var(--text-tertiary)', margin: '0 0 24px' }}>Daily business briefing from Aria</p>
-            {selected.sections ? (
-              Object.entries(selected.sections).map(([title, body]) => (
-                <div key={title} style={{ marginBottom: 24 }}>
-                  <h2 style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 8px' }}>{title}</h2>
-                  <p style={{ fontSize: 14, lineHeight: 1.7, color: 'var(--text-primary)', margin: 0, whiteSpace: 'pre-wrap' }}>{body}</p>
-                </div>
-              ))
-            ) : (
-              <div style={{ fontSize: 14, lineHeight: 1.75, whiteSpace: 'pre-wrap', color: 'var(--text-primary)' }}>
-                {selected.content ?? selected.summary ?? 'No content available.'}
-              </div>
-            )}
-          </>
-        ) : (
-          <div style={{ textAlign: 'center', padding: '60px 20px' }}>
-            <div style={{ fontSize: 48, marginBottom: 16 }}>📰</div>
-            <h3 style={{ fontSize: 16, fontWeight: 700, margin: '0 0 8px' }}>No briefings yet</h3>
-            <p style={{ fontSize: 14, color: 'var(--text-secondary)', maxWidth: 320, margin: '0 auto' }}>
-              Aria generates your daily briefing each morning with insights about your sales, stock, and upcoming tasks.
-            </p>
-          </div>
-        )}
+      {/* History sidebar */}
+      <div style={{ width: 210, borderLeft: BORDER, padding: '32px 14px', flexShrink: 0, overflowY: 'auto' }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.28)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 14 }}>History</div>
+        {history.length === 0 ? (
+          <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.28)', lineHeight: 1.6 }}>No previous briefings.</div>
+        ) : history.map(h => (
+          <button key={h.id} onClick={() => setHistoryView(prev => prev?.id === h.id ? null : h)}
+            style={{ width: '100%', textAlign: 'left', padding: '10px 12px', borderRadius: 10, border: historyView?.id === h.id ? `1px solid ${G}55` : BORDER, background: historyView?.id === h.id ? `${G}12` : CARD, cursor: 'pointer', marginBottom: 8, display: 'block', fontFamily: 'inherit' }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: '#fff' }}>{fmtDate(h.date)}</div>
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.32)', marginTop: 3 }}>
+              {Array.isArray(h.recommendations) ? `${h.recommendations.length} item${h.recommendations.length !== 1 ? 's' : ''}` : '—'}
+            </div>
+          </button>
+        ))}
       </div>
     </div>
   )
