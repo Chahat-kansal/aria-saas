@@ -1,63 +1,64 @@
 'use client';
-import { useRef, useEffect, Suspense } from 'react';
-import { Canvas, useFrame, useLoader } from '@react-three/fiber';
+import { useRef, useEffect, useState, Suspense } from 'react';
+import { Canvas, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
 import { createVRMAnimationClip, VRMAnimationLoaderPlugin } from '@pixiv/three-vrm-animation';
+import type { VRM } from '@pixiv/three-vrm';
 import { buildVisemes, Viseme } from './textToVisemes';
 
 const MOUTH_MORPHS = ['aa','ih','ou','ee','oh'];
-
-function setExpr(vrm: import('@pixiv/three-vrm').VRM, name: string, value: number) {
-  vrm.expressionManager?.setValue(name, value);
-}
+const EXPR_MAP: Record<string, string> = {
+  'Fcl_MTH_A': 'aa', 'Fcl_MTH_I': 'ih', 'Fcl_MTH_U': 'ou',
+  'Fcl_MTH_E': 'ee', 'Fcl_MTH_O': 'oh',
+};
 
 function AvatarScene({ mode, replyText }: { mode: string; replyText: string }) {
-  const vrmRef = useRef<import('@pixiv/three-vrm').VRM | null>(null);
+  const [vrm, setVrm] = useState<VRM | null>(null);
   const mixerRef = useRef<THREE.AnimationMixer | null>(null);
-  const idleActionRef = useRef<THREE.AnimationAction | null>(null);
   const visemes = useRef<Viseme[]>([]);
   const talkStart = useRef<number | null>(null);
   const blinkTimer = useRef(3 + Math.random() * 2);
   const blinking = useRef(false);
-  const prevMode = useRef('');
 
+  // Load VRM + VRMA on mount
   useEffect(() => {
     let cancelled = false;
-
     async function load() {
-      // Load VRM
       const loader = new GLTFLoader();
-      loader.register(parser => new VRMLoaderPlugin(parser));
-      loader.register(parser => new VRMAnimationLoaderPlugin(parser));
+      loader.register(p => new VRMLoaderPlugin(p));
+      loader.register(p => new VRMAnimationLoaderPlugin(p));
 
       const gltf = await loader.loadAsync('/models/Aria.glb');
       if (cancelled) return;
-      const vrm = gltf.userData.vrm as import('@pixiv/three-vrm').VRM;
+
+      const loadedVrm = gltf.userData.vrm as VRM;
       VRMUtils.removeUnnecessaryVertices(gltf.scene);
       VRMUtils.combineSkeletons(gltf.scene);
-      vrm.scene.rotation.y = Math.PI; // face camera
-      vrmRef.current = vrm;
+      loadedVrm.scene.rotation.y = Math.PI;
+      setVrm(loadedVrm);
 
       // Load idle VRMA
-      const animGltf = await loader.loadAsync('/models/idle.vrma');
-      if (cancelled) return;
-      const vrmAnim = animGltf.userData.vrmAnimations?.[0];
-      if (vrmAnim) {
-        const mixer = new THREE.AnimationMixer(vrm.scene);
-        mixerRef.current = mixer;
-        const clip = createVRMAnimationClip(vrmAnim, vrm);
-        const action = mixer.clipAction(clip);
-        action.play();
-        idleActionRef.current = action;
+      try {
+        const animGltf = await loader.loadAsync('/models/idle.vrma');
+        if (cancelled) return;
+        const vrmAnim = animGltf.userData.vrmAnimations?.[0];
+        if (vrmAnim) {
+          const mixer = new THREE.AnimationMixer(loadedVrm.scene);
+          const clip = createVRMAnimationClip(vrmAnim, loadedVrm);
+          mixer.clipAction(clip).play();
+          mixerRef.current = mixer;
+        }
+      } catch (e) {
+        console.warn('VRMA load failed:', e);
       }
     }
-
     load().catch(console.error);
     return () => { cancelled = true; };
   }, []);
 
+  // Visemes on reply
   useEffect(() => {
     if (mode === 'talking' && replyText) {
       visemes.current = buildVisemes(replyText);
@@ -68,10 +69,8 @@ function AvatarScene({ mode, replyText }: { mode: string; replyText: string }) {
     }
   }, [mode, replyText]);
 
-  useFrame((state, delta) => {
-    const vrm = vrmRef.current;
+  useFrame((_, delta) => {
     if (!vrm) return;
-
     mixerRef.current?.update(delta);
     vrm.update(delta);
 
@@ -79,8 +78,8 @@ function AvatarScene({ mode, replyText }: { mode: string; replyText: string }) {
     blinkTimer.current -= delta;
     if (blinkTimer.current <= 0 && !blinking.current) {
       blinking.current = true;
-      setExpr(vrm, 'blink', 1);
-      setTimeout(() => { setExpr(vrm, 'blink', 0); blinking.current = false; }, 120);
+      vrm.expressionManager?.setValue('blink', 1);
+      setTimeout(() => { vrm.expressionManager?.setValue('blink', 0); blinking.current = false; }, 120);
       blinkTimer.current = 2.5 + Math.random() * 2.5;
     }
 
@@ -88,34 +87,24 @@ function AvatarScene({ mode, replyText }: { mode: string; replyText: string }) {
     if (mode === 'talking' && talkStart.current !== null) {
       const elapsed = (performance.now() - talkStart.current) / 1000;
       const cur = visemes.current.find(v => elapsed >= v.start && elapsed < v.end);
-      MOUTH_MORPHS.forEach(m => setExpr(vrm, m, 0));
+      MOUTH_MORPHS.forEach(m => vrm.expressionManager?.setValue(m, 0));
       if (cur && cur.morph !== 'Fcl_MTH_Close') {
-        // Map Fcl names to VRM expression names
-        const exprMap: Record<string, string> = {
-          'Fcl_MTH_A': 'aa', 'Fcl_MTH_I': 'ih', 'Fcl_MTH_U': 'ou',
-          'Fcl_MTH_E': 'ee', 'Fcl_MTH_O': 'oh'
-        };
-        const expr = exprMap[cur.morph];
-        if (expr) setExpr(vrm, expr, cur.value);
+        const expr = EXPR_MAP[cur.morph];
+        if (expr) vrm.expressionManager?.setValue(expr, cur.value);
       }
       return;
     }
-    MOUTH_MORPHS.forEach(m => setExpr(vrm, m, 0));
+    MOUTH_MORPHS.forEach(m => vrm.expressionManager?.setValue(m, 0));
   });
 
-  if (!vrmRef.current) return null;
-
-  return <primitive object={vrmRef.current.scene} />;
-}
-
-function AvatarWithScene({ mode, replyText }: { mode: string; replyText: string }) {
-  return <AvatarScene mode={mode} replyText={replyText} />;
+  if (!vrm) return null;
+  return <primitive object={vrm.scene} />;
 }
 
 export default function AriaTalkingHead({ mode = 'idle', replyText = '' }: { mode?: string; replyText?: string }) {
   return (
     <Canvas
-      camera={{ position: [0, 1.4, 1.8], fov: 18 }}
+      camera={{ position: [0, 1.4, 2.5], fov: 20 }}
       style={{ width: '100%', height: '100%', background: 'transparent' }}
       gl={{ alpha: true, antialias: true }}
       onCreated={({ camera }) => camera.lookAt(0, 1.4, 0)}
@@ -123,7 +112,7 @@ export default function AriaTalkingHead({ mode = 'idle', replyText = '' }: { mod
       <ambientLight intensity={1.4} />
       <directionalLight position={[1, 2, 2]} intensity={1.0} />
       <Suspense fallback={null}>
-        <AvatarWithScene mode={mode} replyText={replyText} />
+        <AvatarScene mode={mode} replyText={replyText} />
       </Suspense>
     </Canvas>
   );
