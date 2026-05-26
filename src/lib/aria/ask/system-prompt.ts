@@ -53,6 +53,11 @@ You are not a chatbot. You are a senior business operator who happens to have AI
 ## Stock alerts
 ${lowStock}
 ${memoryBlock}
+
+\${ctx.competitor_intelligence && ctx.competitor_intelligence.length > 0 ? \`
+## Competitor intelligence
+\${ctx.competitor_intelligence.map(c => \`- \${c.name}: \${JSON.stringify(c.data).slice(0, 200)}\`).join('\\n')}\` : ''}
+
 ${signalsBlock}
 ${weightsBlock}
 
