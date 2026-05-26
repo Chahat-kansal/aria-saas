@@ -1,6 +1,39 @@
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 
+export async function checkComplianceExpiry(businessId: string): Promise<number> {
+  const now = new Date()
+  let created = 0
+  for (const days of [90, 60, 30]) {
+    const target = new Date(now)
+    target.setDate(target.getDate() + days)
+    const dateStr = target.toISOString().slice(0, 10)
+    const { data: expiring } = await supabaseAdmin
+      .from('compliance_items')
+      .select('id, title')
+      .eq('business_id', businessId)
+      .eq('reminder_enabled', true)
+      .eq('expiry_date', dateStr)
+      .neq('status', 'done')
+    for (const item of expiring ?? []) {
+      await supabaseAdmin.from('aria_actions').insert({
+        business_id: businessId,
+        category: 'compliance',
+        title: `Compliance expiry: ${item.title}`,
+        recommendation: `"${item.title}" expires in ${days} days. Renew now to stay compliant.`,
+        expected_impact: '0.00',
+        confidence: 'high',
+        status: 'pending',
+        source: 'aria_intelligence:compliance_expiry',
+        priority: days <= 30 ? 'high' : 'medium',
+        payload: { compliance_item_id: item.id, days_until_expiry: days },
+      })
+      created++
+    }
+  }
+  return created
+}
+
 export interface AlertConditionConfig {
   type: 'stock_below' | 'revenue_below' | 'no_sales'
   product_id?: string
