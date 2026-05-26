@@ -316,7 +316,7 @@ export async function runAriaCouncil(
 
   if (succeeded.length === 0) return null
 
-  // Build synthesis input
+  // Build synthesis input — use Haiku for synthesis too (cost reduction)
   const synthesisInput = `
 BUSINESS DATA:
 ${businessContext}
@@ -349,7 +349,7 @@ MODE: ${mode}
   try {
     const res = await callWithTimeout(
       () => withBackoff(() => client.messages.create({
-        model: SONNET,
+        model: HAIKU,
         max_tokens: 4000,
         temperature: 0.2,
         system: SYNTHESIS_PROMPT,
