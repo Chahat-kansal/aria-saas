@@ -1,12 +1,50 @@
 'use client';
 import { useRef, useEffect, Suspense } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
-import { useGLTF, useAnimations } from '@react-three/drei';
+import { useGLTF } from '@react-three/drei';
 import * as THREE from 'three';
 import { buildVisemes, Viseme } from './textToVisemes';
 
 const ANIMATIONS_URL = 'https://raw.githubusercontent.com/Yacine-Mekideche/IAcine-Virtual-Avatar/main/front/public/models/animations.glb';
 const MOUTH_MORPHS = ['Fcl_MTH_A','Fcl_MTH_I','Fcl_MTH_U','Fcl_MTH_E','Fcl_MTH_O','Fcl_MTH_Close'];
+
+// Maps IAcine bone names → VRoid J_Bip bone names
+const BONE_MAP: Record<string, string> = {
+  'Hips':             'J_Bip_C_Hips',
+  'Spine':            'J_Bip_C_Spine',
+  'Spine1':           'J_Bip_C_Chest',
+  'Spine2':           'J_Bip_C_UpperChest',
+  'Neck':             'J_Bip_C_Neck',
+  'Head':             'J_Bip_C_Head',
+  'LeftShoulder':     'J_Bip_L_Shoulder',
+  'LeftArm':          'J_Bip_L_UpperArm',
+  'LeftForeArm':      'J_Bip_L_LowerArm',
+  'LeftHand':         'J_Bip_L_Hand',
+  'RightShoulder':    'J_Bip_R_Shoulder',
+  'RightArm':         'J_Bip_R_UpperArm',
+  'RightForeArm':     'J_Bip_R_LowerArm',
+  'RightHand':        'J_Bip_R_Hand',
+  'LeftUpLeg':        'J_Bip_L_UpperLeg',
+  'LeftLeg':          'J_Bip_L_LowerLeg',
+  'LeftFoot':         'J_Bip_L_Foot',
+  'LeftToeBase':      'J_Bip_L_ToeBase',
+  'RightUpLeg':       'J_Bip_R_UpperLeg',
+  'RightLeg':         'J_Bip_R_LowerLeg',
+  'RightFoot':        'J_Bip_R_Foot',
+  'RightToeBase':     'J_Bip_R_ToeBase',
+  'LeftHandIndex1':   'J_Bip_L_Index1',
+  'LeftHandIndex2':   'J_Bip_L_Index2',
+  'LeftHandIndex3':   'J_Bip_L_Index3',
+  'RightHandIndex1':  'J_Bip_R_Index1',
+  'RightHandIndex2':  'J_Bip_R_Index2',
+  'RightHandIndex3':  'J_Bip_R_Index3',
+  'LeftHandThumb1':   'J_Bip_L_Thumb1',
+  'LeftHandThumb2':   'J_Bip_L_Thumb2',
+  'LeftHandThumb3':   'J_Bip_L_Thumb3',
+  'RightHandThumb1':  'J_Bip_R_Thumb1',
+  'RightHandThumb2':  'J_Bip_R_Thumb2',
+  'RightHandThumb3':  'J_Bip_R_Thumb3',
+};
 
 function setMorph(meshes: THREE.Mesh[], name: string, value: number) {
   for (const m of meshes) {
@@ -16,20 +54,41 @@ function setMorph(meshes: THREE.Mesh[], name: string, value: number) {
   }
 }
 
+function retargetAnimation(clip: THREE.AnimationClip, ariaScene: THREE.Object3D): THREE.AnimationClip {
+  // Build a map of Aria bone name → bone object
+  const ariaBones: Record<string, THREE.Object3D> = {};
+  ariaScene.traverse(obj => { ariaBones[obj.name] = obj; });
+
+  const newTracks: THREE.KeyframeTrack[] = [];
+  for (const track of clip.tracks) {
+    // track.name is like "Head.quaternion" or "LeftArm.position"
+    const dotIdx = track.name.indexOf('.');
+    const iacinebone = track.name.slice(0, dotIdx);
+    const prop = track.name.slice(dotIdx);
+    const ariaBoneName = BONE_MAP[iacinebone];
+    if (ariaBoneName && ariaBones[ariaBoneName]) {
+      const newTrack = track.clone();
+      newTrack.name = ariaBoneName + prop;
+      newTracks.push(newTrack);
+    }
+  }
+  return new THREE.AnimationClip(clip.name, clip.duration, newTracks);
+}
+
 function AvatarScene({ mode, replyText }: { mode: string; replyText: string }) {
   const { scene } = useGLTF('/models/Aria.glb');
   const { animations } = useGLTF(ANIMATIONS_URL);
-  const { actions, mixer } = useAnimations(animations, scene);
 
+  const mixer = useRef<THREE.AnimationMixer | null>(null);
+  const currentAction = useRef<THREE.AnimationAction | null>(null);
   const faceMeshes = useRef<THREE.Mesh[]>([]);
   const visemes = useRef<Viseme[]>([]);
   const talkStart = useRef<number | null>(null);
   const blinkTimer = useRef(3 + Math.random() * 2);
   const blinking = useRef(false);
   const ready = useRef(false);
-  const currentAnim = useRef<string>('');
+  const prevMode = useRef('');
 
-  // Extract face meshes
   useEffect(() => {
     const meshes: THREE.Mesh[] = [];
     scene.traverse(obj => {
@@ -40,35 +99,39 @@ function AvatarScene({ mode, replyText }: { mode: string; replyText: string }) {
     });
     faceMeshes.current = meshes;
     ready.current = meshes.length > 0;
-  }, [scene]);
 
-  // Play idle animation on mount
-  useEffect(() => {
-    if (!actions || !animations.length) return;
-    const idle = actions['Idle'] ?? actions[Object.keys(actions)[0]];
-    if (idle) {
-      idle.reset().fadeIn(0.5).play();
-      currentAnim.current = 'Idle';
+    // Set up mixer and play Idle
+    const m = new THREE.AnimationMixer(scene);
+    mixer.current = m;
+
+    if (animations.length > 0) {
+      const idleClip = animations.find(a => a.name === 'Idle') ?? animations[0];
+      const retargeted = retargetAnimation(idleClip, scene);
+      const action = m.clipAction(retargeted);
+      action.reset().fadeIn(0.3).play();
+      currentAction.current = action;
     }
-  }, [actions, animations]);
 
-  // Switch animation based on mode
+    return () => { m.stopAllAction(); };
+  }, [scene, animations]);
+
+  // Switch animation on mode change
   useEffect(() => {
-    if (!actions) return;
-    const target = mode === 'talking'
-      ? (actions['Talking_0'] ?? actions['Talking_1'] ?? actions['Idle'])
-      : mode === 'thinking'
-      ? (actions['Idle'])
-      : actions['Idle'];
+    if (!mixer.current || !animations.length) return;
+    if (mode === prevMode.current) return;
+    prevMode.current = mode;
 
-    const animName = mode === 'talking' ? 'Talking_0' : 'Idle';
-    if (animName === currentAnim.current) return;
+    const clipName = mode === 'talking' ? 'Talking_0' : 'Idle';
+    const clip = animations.find(a => a.name === clipName) ?? animations.find(a => a.name === 'Idle') ?? animations[0];
+    const retargeted = retargetAnimation(clip, scene);
+    const newAction = mixer.current.clipAction(retargeted);
 
-    const prev = actions[currentAnim.current];
-    if (prev) prev.fadeOut(0.4);
-    if (target) { target.reset().fadeIn(0.4).play(); }
-    currentAnim.current = animName;
-  }, [mode, actions]);
+    if (currentAction.current && currentAction.current !== newAction) {
+      currentAction.current.fadeOut(0.4);
+    }
+    newAction.reset().fadeIn(0.4).play();
+    currentAction.current = newAction;
+  }, [mode, animations, scene]);
 
   // Visemes
   useEffect(() => {
@@ -83,7 +146,7 @@ function AvatarScene({ mode, replyText }: { mode: string; replyText: string }) {
 
   useFrame((_, delta) => {
     if (!ready.current) return;
-    mixer.update(delta);
+    mixer.current?.update(delta);
     const meshes = faceMeshes.current;
 
     // Blink
@@ -95,7 +158,7 @@ function AvatarScene({ mode, replyText }: { mode: string; replyText: string }) {
       blinkTimer.current = 2.5 + Math.random() * 2.5;
     }
 
-    // Talking lip sync
+    // Lip sync
     if (mode === 'talking' && talkStart.current !== null) {
       const elapsed = (performance.now() - talkStart.current) / 1000;
       const cur = visemes.current.find(v => elapsed >= v.start && elapsed < v.end);
@@ -104,7 +167,6 @@ function AvatarScene({ mode, replyText }: { mode: string; replyText: string }) {
       return;
     }
 
-    // Idle — mouth closed
     MOUTH_MORPHS.forEach(m => setMorph(meshes, m, 0));
   });
 
