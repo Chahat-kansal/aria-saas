@@ -92,18 +92,20 @@ export async function checkConditionAlerts(businessId: string): Promise<number> 
     // Send SMS via Twilio if owner has phone + alerts enabled
     try {
       const { data: biz } = await supabaseAdmin.from('businesses')
-        .select('owner_phone,alert_sms_enabled,name').eq('id', businessId).maybeSingle()
-      if (biz?.owner_phone && biz?.alert_sms_enabled) {
+        .select('phone,owner_phone,alert_sms_enabled,name').eq('id', businessId).maybeSingle()
+      const phone = biz?.owner_phone ?? biz?.phone
+        if (phone && biz?.alert_sms_enabled) {
         const twilioSid = process.env.TWILIO_ACCOUNT_SID
         const twilioAuth = process.env.TWILIO_AUTH_TOKEN
         const twilioFrom = process.env.TWILIO_PHONE_NUMBER
         if (twilioSid && twilioAuth && twilioFrom) {
           const body = `Aria alert for ${biz.name}: ${message}`
+            const to = phone as string
           const auth = Buffer.from(`${twilioSid}:${twilioAuth}`).toString('base64')
           await fetch(`https://api.twilio.com/2010-04-01/Accounts/${twilioSid}/Messages.json`, {
             method: 'POST',
             headers: { 'Authorization': `Basic ${auth}`, 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: new URLSearchParams({ To: biz.owner_phone, From: twilioFrom, Body: body }).toString(),
+            body: new URLSearchParams({ To: to, From: twilioFrom, Body: body }).toString(),
           })
         }
       }
