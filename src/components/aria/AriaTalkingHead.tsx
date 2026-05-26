@@ -4,6 +4,7 @@ import { Canvas, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { VRMLoaderPlugin, VRMUtils, VRMExpressionPresetName } from '@pixiv/three-vrm';
+import { createVRMAnimationClip, VRMAnimationLoaderPlugin } from '@pixiv/three-vrm-animation';
 import type { VRM } from '@pixiv/three-vrm';
 import { buildVisemes, Viseme } from './textToVisemes';
 
@@ -40,6 +41,8 @@ function AvatarScene({ mode, replyText }: { mode: string; replyText: string }) {
   const blinkTimer = useRef(3 + Math.random() * 2);
   const blinking = useRef(false);
   const clock = useRef(0);
+  const mixerRef = useRef<THREE.AnimationMixer | null>(null);
+  const greetingDone = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -96,7 +99,10 @@ function AvatarScene({ mode, replyText }: { mode: string; replyText: string }) {
     const t = clock.current;
     const bones = bonesRef.current;
 
-    // ── Procedural idle animation ────────────────────────────────────────────
+    // Run greeting animation if still playing
+    if (mixerRef.current) { mixerRef.current.update(delta); return; }
+
+    // ── Procedural idle animation (after greeting) ───────────────────────────
     // Breathing — chest rises and falls
     if (bones.chest) {
       bones.chest.rotation.x = Math.sin(t * 0.8) * 0.012;
