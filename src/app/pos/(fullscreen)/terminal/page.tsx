@@ -2121,6 +2121,26 @@ export default function TerminalPage() {
                 style={{ height: 40, width: 40, borderRadius: 10, border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.05)', color: 'rgba(220,240,255,0.7)', fontFamily: 'inherit', fontSize: 16, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 ⚡
               </button>
+              <button
+                onClick={async () => {
+                  if (!showReceipt || !customer?.email) {
+                    alert('No customer email on file. Attach a customer first.');
+                    return;
+                  }
+                  try {
+                    await fetch('/api/pos/email-receipt', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ sale_id: showReceipt.id, email: customer.email }),
+                    });
+                    alert(`Receipt sent to ${customer.email}`);
+                  } catch { alert('Failed to send email'); }
+                }}
+                title="Email receipt to customer"
+                style={{ height: 40, padding: '0 20px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.05)', color: 'rgba(220,240,255,0.7)', fontFamily: 'inherit', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 7 }}
+              >
+                📧 Email
+              </button>
             </div>
             {/* New Sale button */}
             <button onClick={() => { setShowReceipt(null); setTerminalView('pos'); setShowReceiptModal(false); if (window.innerWidth < 768) setMobileTab('products'); }}
