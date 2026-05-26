@@ -95,8 +95,11 @@ function AvatarScene({ mode, replyText }: { mode: string; replyText: string }) {
           setTimeout(() => {
             greetingDone.current = true;
             mixerRef.current = null;
-            if (bones.head) bones.head.rotation.x = 0.12; // chin up on load
-      if (bones.lUpperArm) bones.lUpperArm.rotation.z = -1.2;
+            if (bones.head) { bones.head.rotation.set(0, 0, 0); }
+            if (bones.neck) { bones.neck.rotation.set(-0.08, 0, 0); }
+            if (bones.chest) { bones.chest.rotation.set(-0.05, 0, 0); }
+            if (bones.spine) { bones.spine.rotation.set(-0.03, 0, 0); }
+            if (bones.lUpperArm) bones.lUpperArm.rotation.z = -1.2;
             if (bones.rUpperArm) bones.rUpperArm.rotation.z = 1.2;
           }, 7267);
         } else {
@@ -142,9 +145,12 @@ function AvatarScene({ mode, replyText }: { mode: string; replyText: string }) {
     // Head sway
     if (bones.head) {
       bones.head.rotation.y = Math.sin(t * 0.3) * 0.06;
-      bones.head.rotation.x = 0.12 + Math.sin(t * 0.25) * 0.02; // chin up, looking forward
+      bones.head.rotation.x = 0 + Math.sin(t * 0.25) * 0.02;
     }
-    if (bones.neck) bones.neck.rotation.y = Math.sin(t * 0.3) * 0.03;
+    if (bones.neck) {
+      bones.neck.rotation.y = Math.sin(t * 0.3) * 0.03;
+      bones.neck.rotation.x = -0.08;
+    }
 
     // Arms breathing
     if (bones.lUpperArm) bones.lUpperArm.rotation.z = -1.2 + Math.sin(t * 0.8) * 0.015;
