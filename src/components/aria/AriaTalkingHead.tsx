@@ -4,7 +4,6 @@ import { Canvas, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { VRMLoaderPlugin, VRMUtils, VRMExpressionPresetName } from '@pixiv/three-vrm';
-import { createVRMAnimationClip, VRMAnimationLoaderPlugin } from '@pixiv/three-vrm-animation';
 import type { VRM } from '@pixiv/three-vrm';
 import { buildVisemes, Viseme } from './textToVisemes';
 
@@ -17,56 +16,62 @@ const EXPR_MAP: Record<string, string> = {
 };
 const MOUTH_EXPRS = Object.values(EXPR_MAP);
 
+// VRoid J_Bip bone names for procedural animation
+const BONES = {
+  chest:      'J_Bip_C_Chest',
+  upperChest: 'J_Bip_C_UpperChest',
+  neck:       'J_Bip_C_Neck',
+  head:       'J_Bip_C_Head',
+  lShoulder:  'J_Bip_L_Shoulder',
+  rShoulder:  'J_Bip_R_Shoulder',
+  lUpperArm:  'J_Bip_L_UpperArm',
+  rUpperArm:  'J_Bip_R_UpperArm',
+  lLowerArm:  'J_Bip_L_LowerArm',
+  rLowerArm:  'J_Bip_R_LowerArm',
+  spine:      'J_Bip_C_Spine',
+};
+
 function AvatarScene({ mode, replyText }: { mode: string; replyText: string }) {
+  const groupRef = useRef(new THREE.Group());
   const vrmRef = useRef<VRM | null>(null);
-  const groupRef = useRef<THREE.Group>(new THREE.Group());
-  const mixerRef = useRef<THREE.AnimationMixer | null>(null);
-  const idleClipRef = useRef<THREE.AnimationClip | null>(null);
+  const bonesRef = useRef<Record<string, THREE.Object3D>>({});
   const visemes = useRef<Viseme[]>([]);
   const talkStart = useRef<number | null>(null);
   const blinkTimer = useRef(3 + Math.random() * 2);
   const blinking = useRef(false);
-  const loaded = useRef(false);
+  const clock = useRef(0);
 
   useEffect(() => {
     let cancelled = false;
     async function load() {
       const loader = new GLTFLoader();
-      loader.register(p => new VRMLoaderPlugin(p, { autoUpdateHumanBones: true }));
-      loader.register(p => new VRMAnimationLoaderPlugin(p));
-
+      loader.register(p => new VRMLoaderPlugin(p));
       const gltf = await loader.loadAsync('/models/Aria.glb');
       if (cancelled) return;
 
       const vrm = gltf.userData.vrm as VRM;
       VRMUtils.removeUnnecessaryVertices(gltf.scene);
       VRMUtils.combineSkeletons(gltf.scene);
-
-      // Add to persistent group — never unmount
       groupRef.current.add(vrm.scene);
       vrmRef.current = vrm;
 
-      const mixer = new THREE.AnimationMixer(vrm.scene);
-      mixerRef.current = mixer;
+      // Cache bone references
+      const bones: Record<string, THREE.Object3D> = {};
+      vrm.scene.traverse(obj => {
+        Object.entries(BONES).forEach(([key, name]) => {
+          if (obj.name === name) bones[key] = obj;
+        });
+      });
+      bonesRef.current = bones;
 
-      try {
-        const a02 = await loader.loadAsync('/models/VRMA_02.vrma');
-        if (cancelled) return;
-
-        const vrma02 = a02.userData.vrmAnimations?.[0];
-        if (vrma02) {
-          const greetClip = createVRMAnimationClip(vrma02, vrm);
-          // Play greeting on loop — it's the most natural animation in the pack
-          mixer.clipAction(greetClip).play();
-        }
-      } catch (e) {
-        console.warn('VRMA load error:', e);
-        // Just stay in T-pose if animations fail
-      }
-
-      loaded.current = true;
+      // Set arms down naturally — T-pose has arms at 90deg, bring them to ~30deg
+      if (bones.lUpperArm) bones.lUpperArm.rotation.z = 1.2;   // bring left arm down
+      if (bones.rUpperArm) bones.rUpperArm.rotation.z = -1.2;  // bring right arm down
+      if (bones.lLowerArm) bones.lLowerArm.rotation.z = 0.3;
+      if (bones.rLowerArm) bones.rLowerArm.rotation.z = -0.3;
+      if (bones.lShoulder)  bones.lShoulder.rotation.z = 0.1;
+      if (bones.rShoulder)  bones.rShoulder.rotation.z = -0.1;
     }
-
     load().catch(console.error);
     return () => { cancelled = true; };
   }, []);
@@ -84,11 +89,63 @@ function AvatarScene({ mode, replyText }: { mode: string; replyText: string }) {
   useFrame((_, delta) => {
     const vrm = vrmRef.current;
     if (!vrm) return;
-
-    mixerRef.current?.update(delta);
     vrm.update(delta);
+    clock.current += delta;
+    const t = clock.current;
+    const bones = bonesRef.current;
 
-    // Blink
+    // ── Procedural idle animation ────────────────────────────────────────────
+    // Breathing — chest rises and falls
+    if (bones.chest) {
+      bones.chest.rotation.x = Math.sin(t * 0.8) * 0.012;
+    }
+    if (bones.upperChest) {
+      bones.upperChest.rotation.x = Math.sin(t * 0.8 + 0.2) * 0.010;
+    }
+    if (bones.spine) {
+      bones.spine.rotation.x = Math.sin(t * 0.8) * 0.008;
+    }
+
+    // Subtle body sway
+    if (bones.chest) {
+      bones.chest.rotation.z = Math.sin(t * 0.4) * 0.008;
+    }
+
+    // Head gentle look-around
+    if (bones.head) {
+      bones.head.rotation.y = Math.sin(t * 0.3) * 0.06;
+      bones.head.rotation.x = -0.05 + Math.sin(t * 0.25) * 0.02;
+      bones.head.rotation.z = Math.sin(t * 0.35) * 0.015;
+    }
+    if (bones.neck) {
+      bones.neck.rotation.y = Math.sin(t * 0.3) * 0.03;
+    }
+
+    // Arms gentle swing with breathing
+    if (bones.lUpperArm) {
+      bones.lUpperArm.rotation.z = 1.2 + Math.sin(t * 0.8) * 0.015;
+      bones.lUpperArm.rotation.x = Math.sin(t * 0.4) * 0.01;
+    }
+    if (bones.rUpperArm) {
+      bones.rUpperArm.rotation.z = -1.2 - Math.sin(t * 0.8) * 0.015;
+      bones.rUpperArm.rotation.x = Math.sin(t * 0.4 + 0.3) * 0.01;
+    }
+
+    // Talking — more expressive head movement
+    if (mode === 'talking') {
+      if (bones.head) {
+        bones.head.rotation.y += Math.sin(t * 2.5) * 0.025;
+        bones.head.rotation.x += Math.sin(t * 1.8) * 0.015;
+      }
+      if (bones.lUpperArm) {
+        bones.lUpperArm.rotation.x += Math.sin(t * 1.5) * 0.04;
+      }
+      if (bones.rUpperArm) {
+        bones.rUpperArm.rotation.x += Math.sin(t * 1.5 + 1) * 0.04;
+      }
+    }
+
+    // ── Blink ────────────────────────────────────────────────────────────────
     blinkTimer.current -= delta;
     if (blinkTimer.current <= 0 && !blinking.current) {
       blinking.current = true;
@@ -100,7 +157,7 @@ function AvatarScene({ mode, replyText }: { mode: string; replyText: string }) {
       blinkTimer.current = 2.5 + Math.random() * 2.5;
     }
 
-    // Lip sync
+    // ── Lip sync ─────────────────────────────────────────────────────────────
     MOUTH_EXPRS.forEach(e => vrm.expressionManager?.setValue(e, 0));
     if (mode === 'talking' && talkStart.current !== null) {
       const elapsed = (performance.now() - talkStart.current) / 1000;
@@ -112,17 +169,16 @@ function AvatarScene({ mode, replyText }: { mode: string; replyText: string }) {
     }
   });
 
-  // Always render the group — VRM gets added to it when loaded
   return <primitive object={groupRef.current} />;
 }
 
 export default function AriaTalkingHead({ mode = 'idle', replyText = '' }: { mode?: string; replyText?: string }) {
   return (
     <Canvas
-      camera={{ position: [0, 1.35, 2.2], fov: 22 }}
+      camera={{ position: [0, 1.38, 2.2], fov: 20 }}
       style={{ width: '100%', height: '100%', background: 'transparent' }}
       gl={{ alpha: true, antialias: true }}
-      onCreated={({ camera }) => camera.lookAt(0, 1.35, 0)}
+      onCreated={({ camera }) => camera.lookAt(0, 1.38, 0)}
     >
       <ambientLight intensity={1.4} />
       <directionalLight position={[1, 2, 2]} intensity={1.0} />
