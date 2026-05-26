@@ -669,8 +669,8 @@ export default function AskAriaPage() {
           {/* Avatar canvas */}
           <div style={{ width: 120, height: 160, flexShrink: 0 }}>
             <AriaTalkingHead
-              isActive={isAriaActive}
-              responseText={ariaResponseText}
+              mode={isAriaActive ? 'talking' : 'idle'}
+              replyText={ariaResponseText ?? ''}
             />
           </div>
         </div>
