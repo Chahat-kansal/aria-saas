@@ -1,183 +1,127 @@
-'use client'
-import { Suspense, useEffect, useRef, Component } from 'react'
-import type { ReactNode } from 'react'
-import { Canvas, useFrame, useThree } from '@react-three/fiber'
-import { useAnimations, useGLTF } from '@react-three/drei'
-import * as THREE from 'three'
+'use client';
+import { useRef, useEffect, useState } from 'react';
+import { Canvas, useFrame } from '@react-three/fiber';
+import { useGLTF } from '@react-three/drei';
+import * as THREE from 'three';
+import { buildVisemes, Viseme, MorphName } from './textToVisemes';
 
-class AvatarErrorBoundary extends Component<{children: ReactNode},{error: boolean}> {
-  constructor(props: {children: ReactNode}) { super(props); this.state = { error: false } }
-  static getDerivedStateFromError() { return { error: true } }
-  render() {
-    if (this.state.error) return <AriaMonogram isActive={false} />
-    return this.props.children
+// ── Morph helper — sets a named morph target on all face primitives ──────────
+function setMorph(faceMeshes: THREE.Mesh[], name: MorphName | 'Fcl_EYE_Close' | 'Fcl_ALL_Joy' | 'Fcl_ALL_Sorrow', value: number) {
+  for (const mesh of faceMeshes) {
+    const dict = mesh.morphTargetDictionary;
+    const inf = mesh.morphTargetInfluences;
+    if (!dict || !inf) continue;
+    const idx = dict[name];
+    if (idx !== undefined) inf[idx] = value;
   }
 }
 
-function AriaMonogram({ isActive }: { isActive: boolean }) {
-  return (
-    <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'rgba(127,184,151,0.12)', border: '1.5px solid rgba(127,184,151,0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <span style={{ fontFamily: 'Georgia,serif', fontStyle: 'italic', color: '#7FB897', fontSize: 24 }}>A</span>
-      </div>
-      {isActive && (
-        <div style={{ position: 'absolute', bottom: 8, display: 'flex', gap: 2, alignItems: 'flex-end', height: 10 }}>
-          {[5,9,7,8].map((h,i) => <div key={i} style={{ width: 2, height: h, borderRadius: 2, background: '#7FB897', animation: `ariaB${i} 0.5s ease-in-out infinite alternate`, animationDelay: `${i*0.12}s` }} />)}
-        </div>
-      )}
-      <style>{`@keyframes ariaB0{from{height:4px}to{height:8px}}@keyframes ariaB1{from{height:9px}to{height:3px}}@keyframes ariaB2{from{height:5px}to{height:9px}}@keyframes ariaB3{from{height:7px}to{height:4px}}`}</style>
-    </div>
-  )
-}
+// ── Inner scene — runs inside <Canvas> ───────────────────────────────────────
+function AvatarScene({ mode, replyText }: { mode: 'idle' | 'thinking' | 'talking'; replyText: string }) {
+  const { scene } = useGLTF('/models/Aria.glb');
+  const faceMeshes = useRef<THREE.Mesh[]>([]);
+  const visemes = useRef<Viseme[]>([]);
+  const talkStart = useRef<number | null>(null);
+  const blinkTimer = useRef(2 + Math.random() * 2);
+  const blinking = useRef(false);
+  const headBone = useRef<THREE.Object3D | null>(null);
 
-const ARIA_GLB = '/models/Aria.glb'
-const ANIM_GLB = 'https://raw.githubusercontent.com/Yacine-Mekideche/IAcine-Virtual-Avatar/main/front/public/models/animations.glb'
-
-// Talking_0/1/2 all have natural upper body movement without crazy arm swings
-const TALKING_ANIMS = ['Talking_0', 'Talking_1', 'Talking_2']
-
-function CameraRig() {
-  const { camera } = useThree()
+  // Extract face meshes + head bone once on load
   useEffect(() => {
-    // Tight face+neck crop — keeps arms OUT of frame entirely
-    camera.lookAt(0, 1.4, 0)
-  }, [camera])
-  return null
-}
-
-function AvatarMesh({ isActive }: { isActive: boolean }) {
-  const group = useRef<THREE.Group>(null!)
-  const { scene } = useGLTF(ARIA_GLB)
-  const { animations } = useGLTF(ANIM_GLB)
-  const { actions } = useAnimations(animations, group)
-  const currentAnim = useRef('Idle')
-  const hasGreeted = useRef(false)
-  const talkingTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  const playAnim = (name: string, fadeIn = 0.4) => {
-    const next = actions[name]
-    const prev = actions[currentAnim.current]
-    if (!next || currentAnim.current === name) return
-    next.reset().fadeIn(fadeIn).play()
-    prev?.fadeOut(fadeIn)
-    currentAnim.current = name
-  }
-
-  // Greeting on mount: Talking_0 (natural, no crazy arms) for 2s → Idle
-  useEffect(() => {
-    if (hasGreeted.current || !actions['Talking_0'] || !actions['Idle']) return
-    hasGreeted.current = true
-    actions['Idle']!.reset().fadeIn(0).play()
-    currentAnim.current = 'Idle'
-    setTimeout(() => {
-      playAnim('Talking_0', 0.4)
-      setTimeout(() => playAnim('Idle', 0.6), 2200)
-    }, 800)
-  }, [actions]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Cycle talking anims when responding
-  useEffect(() => {
-    if (talkingTimeout.current) clearTimeout(talkingTimeout.current)
-    if (isActive) {
-      const pickTalking = () => {
-        const anim = TALKING_ANIMS[Math.floor(Math.random() * TALKING_ANIMS.length)]
-        playAnim(anim, 0.4)
-        talkingTimeout.current = setTimeout(pickTalking, 3500 + Math.random() * 1500)
+    const meshes: THREE.Mesh[] = [];
+    scene.traverse(obj => {
+      if ((obj as THREE.Mesh).isMesh && obj.name.includes('Face')) {
+        meshes.push(obj as THREE.Mesh);
       }
-      pickTalking()
+      if (obj.name === 'Head' || obj.name === 'head' || obj.name === 'J_Bip_C_Head') {
+        headBone.current = obj;
+      }
+    });
+    faceMeshes.current = meshes;
+    // Start in neutral
+    setMorph(meshes, 'Fcl_MTH_Close', 0);
+  }, [scene]);
+
+  // When reply text arrives, build visemes
+  useEffect(() => {
+    if (mode === 'talking' && replyText) {
+      visemes.current = buildVisemes(replyText);
+      talkStart.current = performance.now();
     } else {
-      playAnim('Idle', 0.5)
+      talkStart.current = null;
+      visemes.current = [];
     }
-    return () => { if (talkingTimeout.current) clearTimeout(talkingTimeout.current) }
-  }, [isActive, actions]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [mode, replyText]);
 
-  useEffect(() => {
-    scene.traverse(o => { o.frustumCulled = false })
-  }, [scene])
+  useFrame((_, delta) => {
+    const meshes = faceMeshes.current;
+    if (!meshes.length) return;
 
-  const blinkTarget = useRef(0)
-  useEffect(() => {
-    let t: ReturnType<typeof setTimeout>
-    const next = () => {
-      t = setTimeout(() => {
-        blinkTarget.current = 1
-        setTimeout(() => { blinkTarget.current = 0; next() }, 150)
-      }, Math.random() * 4000 + 1500)
+    // ── Natural blink ──────────────────────────────────────────────────────
+    blinkTimer.current -= delta;
+    if (blinkTimer.current <= 0 && !blinking.current) {
+      blinking.current = true;
+      setMorph(meshes, 'Fcl_EYE_Close', 1);
+      setTimeout(() => {
+        setMorph(meshes, 'Fcl_EYE_Close', 0);
+        blinking.current = false;
+      }, 120);
+      blinkTimer.current = 2.5 + Math.random() * 2.5;
     }
-    next()
-    return () => clearTimeout(t)
-  }, [])
 
-  useFrame(() => {
-    scene.traverse(child => {
-      const m = child as THREE.SkinnedMesh
-      if (!m.isSkinnedMesh || !m.morphTargetDictionary || !m.morphTargetInfluences) return
-      const lerp = (name: string, target: number, speed = 0.15) => {
-        const idx = m.morphTargetDictionary![name]
-        if (idx === undefined) return
-        m.morphTargetInfluences![idx] = THREE.MathUtils.lerp(m.morphTargetInfluences![idx], target, speed)
+    // ── Thinking: gentle head sway, mouth closed ───────────────────────────
+    if (mode === 'thinking') {
+      MOUTH_MORPHS.forEach(m => setMorph(meshes, m, 0));
+      if (headBone.current) {
+        headBone.current.rotation.y = Math.sin(Date.now() * 0.0012) * 0.06;
+        headBone.current.rotation.x = -0.05 + Math.sin(Date.now() * 0.0008) * 0.02;
       }
-      lerp('Fcl_EYE_Close',   blinkTarget.current, 0.5)
-      lerp('Fcl_EYE_Close_L', blinkTarget.current, 0.5)
-      lerp('Fcl_EYE_Close_R', blinkTarget.current, 0.5)
-      lerp('Fcl_ALL_Joy',     isActive ? 0.5 : 0,   0.05)
-      lerp('Fcl_ALL_Neutral', isActive ? 0 : 0.2,   0.05)
-    })
-  })
+      return;
+    }
 
+    // ── Talking: drive mouth from visemes ─────────────────────────────────
+    if (mode === 'talking' && talkStart.current !== null) {
+      const elapsed = (performance.now() - talkStart.current) / 1000;
+      const current = visemes.current.find(v => elapsed >= v.start && elapsed < v.end);
+      MOUTH_MORPHS.forEach(m => setMorph(meshes, m, 0));
+      if (current && current.morph !== 'Fcl_MTH_Close') {
+        setMorph(meshes, current.morph, current.value);
+      }
+      return;
+    }
+
+    // ── Idle: mouth closed, head neutral ──────────────────────────────────
+    MOUTH_MORPHS.forEach(m => setMorph(meshes, m, 0));
+    if (headBone.current) {
+      headBone.current.rotation.y += (-headBone.current.rotation.y) * 0.05;
+      headBone.current.rotation.x += (-headBone.current.rotation.x) * 0.05;
+    }
+  });
+
+  return <primitive object={scene} />;
+}
+
+const MOUTH_MORPHS: MorphName[] = ['Fcl_MTH_A','Fcl_MTH_I','Fcl_MTH_U','Fcl_MTH_E','Fcl_MTH_O','Fcl_MTH_Close'];
+
+// ── Public component ─────────────────────────────────────────────────────────
+interface Props {
+  mode?: 'idle' | 'thinking' | 'talking';
+  replyText?: string;
+}
+
+export default function AriaTalkingHead({ mode = 'idle', replyText = '' }: Props) {
   return (
-    <group ref={group} dispose={null}>
-      <primitive object={scene} />
-    </group>
-  )
+    <Canvas
+      camera={{ position: [0, 1.4, 4.5], fov: 15 }}
+      style={{ width: '100%', height: '100%', background: 'transparent' }}
+      gl={{ alpha: true, antialias: true }}
+      onCreated={({ camera }) => { camera.lookAt(0, 1.4, 0); }}
+    >
+      <ambientLight intensity={1.2} />
+      <directionalLight position={[1, 2, 2]} intensity={1.0} />
+      <AvatarScene mode={mode} replyText={replyText} />
+    </Canvas>
+  );
 }
 
-useGLTF.preload(ARIA_GLB)
-useGLTF.preload(ANIM_GLB)
-useGLTF.setDecoderPath('https://unpkg.com/three@0.167.0/examples/jsm/libs/draco/')
-
-interface Props { isActive: boolean; responseText: string }
-
-function Inner({ isActive }: Props) {
-  return (
-    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
-      <Canvas
-        gl={{ alpha: true, antialias: true }}
-        style={{ background: 'transparent' }}
-        camera={{
-          // Tight head crop — zoomed in so arms are completely out of frame
-          position: [0, 1.52, 1.1],
-          fov: 18,
-          near: 0.01,
-          far: 100,
-        }}
-      >
-        <CameraRig />
-        <ambientLight intensity={1.6} />
-        <directionalLight position={[2, 4, 3]} intensity={1.2} />
-        <directionalLight position={[-2, 2, 1]} intensity={0.5} />
-        <Suspense fallback={null}>
-          <AvatarMesh isActive={isActive} />
-        </Suspense>
-      </Canvas>
-
-      {isActive && (
-        <div style={{ position: 'absolute', bottom: 8, left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: 2, alignItems: 'flex-end', height: 12, pointerEvents: 'none' }}>
-          {[5,9,7,8].map((h,i) => (
-            <div key={i} style={{ width: 2, borderRadius: 2, background: '#7FB897', height: h, animation: `ariaB${i} 0.5s ease-in-out infinite alternate`, animationDelay: `${i*0.12}s` }} />
-          ))}
-        </div>
-      )}
-      <style>{`
-        @keyframes ariaB0{from{height:4px}to{height:8px}}
-        @keyframes ariaB1{from{height:9px}to{height:3px}}
-        @keyframes ariaB2{from{height:5px}to{height:9px}}
-        @keyframes ariaB3{from{height:7px}to{height:4px}}
-      `}</style>
-    </div>
-  )
-}
-
-export function AriaTalkingHead(props: Props) {
-  return <AvatarErrorBoundary><Inner {...props} /></AvatarErrorBoundary>
-}
+useGLTF.preload('/models/Aria.glb');
