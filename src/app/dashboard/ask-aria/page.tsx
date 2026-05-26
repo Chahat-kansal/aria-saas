@@ -921,7 +921,7 @@ export default function AskAriaPage() {
         {/* Aria avatar */}
         <div style={{ position: 'absolute', bottom: 0, right: 20, width: 120, zIndex: 20, pointerEvents: 'none', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
           <AriaSpeechBubble business={business} />
-          <div style={{ width: 120, height: 160 }}>
+          <div style={{ width: 120, height: 160, opacity: greetingReady ? 1 : 0, transition: 'opacity 1.2s ease' }}>
             <AriaTalkingHead mode={isAriaActive ? 'talking' : 'idle'} replyText={ariaResponseText ?? ''} />
           </div>
         </div>
