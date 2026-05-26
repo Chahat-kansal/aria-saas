@@ -39,6 +39,7 @@ export interface AskAriaContext {
   memories: Array<{ id: string; kind: string; content: string; topic: string | null; importance: number }>
   // Per-category advice confidence weights from outcome learning
   advice_weights: Record<string, number>
+  prediction: { today_predicted: number; tomorrow_predicted: number; today_dow: string; tomorrow_dow: string; pattern: Record<string, number> }
 }
 
 export async function buildAskAriaContext(
@@ -142,6 +143,40 @@ export async function buildAskAriaContext(
           .in('id', ids)
       } catch { /* non-fatal */ }
     })()
+  }
+
+
+  // Sales prediction — last 30 days pattern by day of week
+  const thirtyDaysAgo = new Date(now); thirtyDaysAgo.setDate(now.getDate() - 30)
+  const { data: salesPattern } = await supabaseAdmin
+    .from('pos_sales')
+    .select('total_amount, created_at')
+    .eq('business_id', businessId)
+    .gte('created_at', thirtyDaysAgo.toISOString())
+    .order('created_at', { ascending: false })
+    .limit(200)
+
+  // Group by day of week, calculate average
+  const dayTotals: Record<number, number[]> = {}
+  for (const s of salesPattern ?? []) {
+    const day = new Date(String(s.created_at)).getDay()
+    if (!dayTotals[day]) dayTotals[day] = []
+    dayTotals[day].push(Number(s.total_amount) || 0)
+  }
+  const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
+  const todayDow = now.getDay()
+  const tomorrowDow = (todayDow + 1) % 7
+  const todayAvg = dayTotals[todayDow] ? dayTotals[todayDow].reduce((a,b) => a+b,0) / dayTotals[todayDow].length : 0
+  const tomorrowAvg = dayTotals[tomorrowDow] ? dayTotals[tomorrowDow].reduce((a,b) => a+b,0) / dayTotals[tomorrowDow].length : 0
+  const prediction = {
+    today_predicted: Math.round(todayAvg),
+    tomorrow_predicted: Math.round(tomorrowAvg),
+    today_dow: dayNames[todayDow],
+    tomorrow_dow: dayNames[tomorrowDow],
+    pattern: Object.fromEntries(Object.entries(dayTotals).map(([day, amounts]) => [
+      dayNames[Number(day)],
+      Math.round(amounts.reduce((a,b) => a+b,0) / amounts.length)
+    ]))
   }
 
   return {
