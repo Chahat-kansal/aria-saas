@@ -255,8 +255,15 @@ export default function AskAriaPage() {
   const [showAudit, setShowAudit] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [councilThinking, setCouncilThinking] = useState(false)
+  const [greetingReady, setGreetingReady] = useState(false)
   const [ariaResponseText, setAriaResponseText] = useState<string>('')
   const bottomRef = useRef<HTMLDivElement>(null)
+
+  // Delay greeting text until avatar finishes waving (7.27s greeting animation)
+  useEffect(() => {
+    const t = setTimeout(() => setGreetingReady(true), 7500)
+    return () => clearTimeout(t)
+  }, [])
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -735,12 +742,14 @@ export default function AskAriaPage() {
                 <div className="w-12 h-12 rounded-full bg-[rgba(127,184,151,0.15)] flex items-center justify-center mx-auto mb-3">
                   <span className="text-[#7FB897] font-bold text-lg">A</span>
                 </div>
+                <div style={{ opacity: greetingReady ? 1 : 0, transition: 'opacity 0.8s ease', transform: greetingReady ? 'translateY(0)' : 'translateY(8px)', transitionProperty: 'opacity, transform' }}>
                 <p className="text-white font-medium mb-1">
                   Hi {business?.owner_name?.split(' ')[0] ?? 'there'} — what can I help you with?
                 </p>
                 <p className="text-sm" style={{ color: 'rgba(255,255,255,0.35)' }}>
                   I use connected business data when it exists, and I will say exactly what is missing when it does not.
                 </p>
+                </div>
               </div>
               {messages.length === 0 && (
             <div style={{ paddingBottom: 24 }}>
@@ -751,7 +760,9 @@ export default function AskAriaPage() {
                   <div style={{ fontSize: 11, color: 'rgba(127,184,151,0.75)', marginTop: 1 }}>Your business co-operator · always on</div>
                 </div>
               </div>
-              <AriaGreeting business={business} />
+              <div style={{ opacity: greetingReady ? 1 : 0, transition: 'opacity 0.8s ease', transform: greetingReady ? 'translateY(0)' : 'translateY(8px)', transitionProperty: 'opacity, transform' }}>
+                <AriaGreeting business={business} />
+              </div>
             </div>
           )}
           <ChatSuggestions onSelect={send} disabled={sending} />
