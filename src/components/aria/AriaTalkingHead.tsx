@@ -64,13 +64,15 @@ function AvatarScene({ mode, replyText }: { mode: string; replyText: string }) {
       });
       bonesRef.current = bones;
 
-      // Set arms down naturally — T-pose has arms at 90deg, bring them to ~30deg
-      if (bones.lUpperArm) bones.lUpperArm.rotation.z = 1.2;   // bring left arm down
-      if (bones.rUpperArm) bones.rUpperArm.rotation.z = -1.2;  // bring right arm down
-      if (bones.lLowerArm) bones.lLowerArm.rotation.z = 0.3;
-      if (bones.rLowerArm) bones.rLowerArm.rotation.z = -0.3;
-      if (bones.lShoulder)  bones.lShoulder.rotation.z = 0.1;
-      if (bones.rShoulder)  bones.rShoulder.rotation.z = -0.1;
+      // VRoid T-pose: arms horizontal at z=0. Bring arms DOWN:
+      // Left arm: z goes negative to drop down
+      // Right arm: z goes positive to drop down
+      if (bones.lUpperArm) bones.lUpperArm.rotation.z = -1.2;
+      if (bones.rUpperArm) bones.rUpperArm.rotation.z = 1.2;
+      if (bones.lLowerArm) bones.lLowerArm.rotation.z = -0.2;
+      if (bones.rLowerArm) bones.rLowerArm.rotation.z = 0.2;
+      if (bones.lShoulder)  bones.lShoulder.rotation.z = -0.05;
+      if (bones.rShoulder)  bones.rShoulder.rotation.z = 0.05;
     }
     load().catch(console.error);
     return () => { cancelled = true; };
@@ -123,11 +125,11 @@ function AvatarScene({ mode, replyText }: { mode: string; replyText: string }) {
 
     // Arms gentle swing with breathing
     if (bones.lUpperArm) {
-      bones.lUpperArm.rotation.z = 1.2 + Math.sin(t * 0.8) * 0.015;
+      bones.lUpperArm.rotation.z = -1.2 + Math.sin(t * 0.8) * 0.015;
       bones.lUpperArm.rotation.x = Math.sin(t * 0.4) * 0.01;
     }
     if (bones.rUpperArm) {
-      bones.rUpperArm.rotation.z = -1.2 - Math.sin(t * 0.8) * 0.015;
+      bones.rUpperArm.rotation.z = 1.2 - Math.sin(t * 0.8) * 0.015;
       bones.rUpperArm.rotation.x = Math.sin(t * 0.4 + 0.3) * 0.01;
     }
 
@@ -138,10 +140,10 @@ function AvatarScene({ mode, replyText }: { mode: string; replyText: string }) {
         bones.head.rotation.x += Math.sin(t * 1.8) * 0.015;
       }
       if (bones.lUpperArm) {
-        bones.lUpperArm.rotation.x += Math.sin(t * 1.5) * 0.04;
+        bones.lUpperArm.rotation.x += Math.sin(t * 1.5) * 0.03;
       }
       if (bones.rUpperArm) {
-        bones.rUpperArm.rotation.x += Math.sin(t * 1.5 + 1) * 0.04;
+        bones.rUpperArm.rotation.x += Math.sin(t * 1.5 + 1) * 0.03;
       }
     }
 
