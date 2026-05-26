@@ -331,6 +331,8 @@ async function _POST(req: Request) {
         let savedConvId = conversationId
         try {
           savedConvId = await upsertConversation(bid, user.id, conversationId, message, council.final_briefing, intent.type)
+        // Extract and store memory tags from response
+        extractAndStoreMemories(council.final_briefing, bid).catch(() => {})
         } catch (e) {
           console.error('[aria/ask] upsertConversation failed (council):', (e as Error).message)
         }
