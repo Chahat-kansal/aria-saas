@@ -97,7 +97,7 @@ export async function judge(
     score?: number; severity?: 'pass' | 'soft_fail' | 'hard_fail';
     reasons?: string[]; rewrite?: Recommendation | null;
   }>({
-    model: 'opus', systemPrompt: JUDGE_SYSTEM, userPrompt, maxTokens: 800,
+    model: 'haiku', systemPrompt: JUDGE_SYSTEM, userPrompt, maxTokens: 800,
     businessId: context.business_id, agentKey: recommendation.agent, role: 'judge',
   }, { score: 0, severity: 'hard_fail', reasons: ['Parse failed'], rewrite: null })
   totalCost += opusResult.cost_cents
