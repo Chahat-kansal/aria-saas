@@ -224,13 +224,13 @@ function AriaGreeting({ business }: { business: { name?: string; trading_name?: 
 
 
 function AriaSpeechBubble({ business }: { business: { name?: string; trading_name?: string } | null }) {
-  const [visible, setVisible] = useState(true);
-  const name = business?.trading_name ?? business?.name ?? null;
+  const [visible, setVisible] = useState(true)
+  const name = business?.trading_name ?? business?.name ?? null
   useEffect(() => {
-    const t = setTimeout(() => setVisible(false), 30000);
-    return () => clearTimeout(t);
-  }, []);
-  if (!visible) return null;
+    const t = setTimeout(() => setVisible(false), 30000)
+    return () => clearTimeout(t)
+  }, [])
+  if (!visible) return null
   return (
     <div style={{
       maxWidth: 180, background: 'rgba(20,20,30,0.96)',
@@ -241,7 +241,7 @@ function AriaSpeechBubble({ business }: { business: { name?: string; trading_nam
       <span style={{ color: '#7FB897', fontWeight: 700 }}>Hi{name ? `, ${name}` : ''}! 👋</span>
       {' '}I&apos;m Aria — your AI business co-operator. What can I help you with today?
     </div>
-  );
+  )
 }
 
 export default function AskAriaPage() {
@@ -877,6 +877,21 @@ export default function AskAriaPage() {
           <p className="text-center text-[10px] mt-2" style={{ color: 'rgba(255,255,255,0.2)' }}>
             Aria uses connected records only. It will not invent missing sales, stock, customer, supplier or margin data.
           </p>
+
+        {/* Aria avatar — bottom right corner */}
+        <div style={{
+          position: 'absolute', bottom: 0, right: 20,
+          width: 120, zIndex: 20, pointerEvents: 'none',
+          display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6,
+        }}>
+          <AriaSpeechBubble business={business} />
+          <div style={{ width: 120, height: 160 }}>
+            <AriaTalkingHead
+              mode={isAriaActive ? 'talking' : 'idle'}
+              replyText={ariaResponseText ?? ''}
+            />
+          </div>
+        </div>
         </div>
       </div>
     </div>
