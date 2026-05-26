@@ -256,12 +256,19 @@ export default function AskAriaPage() {
   const [uploading, setUploading] = useState(false)
   const [councilThinking, setCouncilThinking] = useState(false)
   const [greetingReady, setGreetingReady] = useState(false)
+  const [avatarMounted, setAvatarMounted] = useState(false)
   const [ariaResponseText, setAriaResponseText] = useState<string>('')
   const bottomRef = useRef<HTMLDivElement>(null)
 
   // Delay greeting text until avatar finishes waving (7.27s greeting animation)
   useEffect(() => {
     const t = setTimeout(() => setGreetingReady(true), 7500)
+    return () => clearTimeout(t)
+  }, [])
+
+  // Tiny delay to avoid 1-frame flash on dynamic import
+  useEffect(() => {
+    const t = setTimeout(() => setAvatarMounted(true), 150)
     return () => clearTimeout(t)
   }, [])
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -921,7 +928,7 @@ export default function AskAriaPage() {
         {/* Aria avatar */}
         <div style={{ position: 'absolute', bottom: 0, right: 20, width: 120, zIndex: 20, pointerEvents: 'none', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
           <AriaSpeechBubble business={business} />
-          <div style={{ width: 120, height: 160, opacity: greetingReady ? 1 : 0, transition: 'opacity 1.2s ease' }}>
+          <div style={{ width: 120, height: 160, opacity: avatarMounted ? 1 : 0, transition: 'opacity 0.4s ease' }}>
             <AriaTalkingHead mode={isAriaActive ? 'talking' : 'idle'} replyText={ariaResponseText ?? ''} />
           </div>
         </div>
