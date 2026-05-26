@@ -3,7 +3,7 @@ import { defineConfig, devices } from '@playwright/test'
 const BASE_URL = process.env.BASE_URL ?? 'https://www.ariaos.site'
 
 export default defineConfig({
-  testDir: './tests/e2e',
+  testDir: './e2e',
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
