@@ -17,12 +17,12 @@ const EXPR_MAP: Record<string, string> = {
 function AvatarScene({ mode, replyText }: { mode: string; replyText: string }) {
   const [vrm, setVrm] = useState<VRM | null>(null);
   const mixerRef = useRef<THREE.AnimationMixer | null>(null);
+  const idleClipRef = useRef<THREE.AnimationClip | null>(null);
   const visemes = useRef<Viseme[]>([]);
   const talkStart = useRef<number | null>(null);
   const blinkTimer = useRef(3 + Math.random() * 2);
   const blinking = useRef(false);
 
-  // Load VRM + VRMA on mount
   useEffect(() => {
     let cancelled = false;
     async function load() {
@@ -30,35 +30,59 @@ function AvatarScene({ mode, replyText }: { mode: string; replyText: string }) {
       loader.register(p => new VRMLoaderPlugin(p));
       loader.register(p => new VRMAnimationLoaderPlugin(p));
 
+      // Load VRM model
       const gltf = await loader.loadAsync('/models/Aria.glb');
       if (cancelled) return;
-
       const loadedVrm = gltf.userData.vrm as VRM;
       VRMUtils.removeUnnecessaryVertices(gltf.scene);
       VRMUtils.combineSkeletons(gltf.scene);
-      // Don't set rotation — VRMA animation controls orientation
       setVrm(loadedVrm);
 
-      // Load idle VRMA
+      const mixer = new THREE.AnimationMixer(loadedVrm.scene);
+      mixerRef.current = mixer;
+
+      // Load VRMA_01 (loop) and VRMA_02 (greeting once)
       try {
-        const animGltf = await loader.loadAsync('/models/idle.vrma');
+        const [anim01, anim02] = await Promise.all([
+          loader.loadAsync('/models/VRMA_01.vrma'),
+          loader.loadAsync('/models/VRMA_02.vrma'),
+        ]);
         if (cancelled) return;
-        const vrmAnim = animGltf.userData.vrmAnimations?.[0];
-        if (vrmAnim) {
-          const mixer = new THREE.AnimationMixer(loadedVrm.scene);
-          const clip = createVRMAnimationClip(vrmAnim, loadedVrm);
-          mixer.clipAction(clip).play();
-          mixerRef.current = mixer;
+
+        const vrmaIdle = anim01.userData.vrmAnimations?.[0];
+        const vrmaGreet = anim02.userData.vrmAnimations?.[0];
+
+        if (vrmaIdle) {
+          idleClipRef.current = createVRMAnimationClip(vrmaIdle, loadedVrm);
+        }
+
+        if (vrmaGreet && idleClipRef.current) {
+          // Play greeting ONCE
+          const greetClip = createVRMAnimationClip(vrmaGreet, loadedVrm);
+          const greetAction = mixer.clipAction(greetClip);
+          greetAction.setLoop(THREE.LoopOnce, 1);
+          greetAction.clampWhenFinished = true;
+          greetAction.play();
+
+          // When greeting finishes, crossfade to idle loop
+          mixer.addEventListener('finished', () => {
+            greetAction.fadeOut(0.5);
+            const idleAction = mixer.clipAction(idleClipRef.current!);
+            idleAction.reset().fadeIn(0.5).play();
+          });
+        } else if (idleClipRef.current) {
+          // No greeting — just play idle loop immediately
+          mixer.clipAction(idleClipRef.current).play();
         }
       } catch (e) {
         console.warn('VRMA load failed:', e);
       }
     }
+
     load().catch(console.error);
-    return () => { cancelled = true; };
+    return () => { cancelled = true; mixerRef.current?.stopAllAction(); };
   }, []);
 
-  // Visemes on reply
   useEffect(() => {
     if (mode === 'talking' && replyText) {
       visemes.current = buildVisemes(replyText);
