@@ -905,6 +905,7 @@ export default function AskAriaPage() {
               if (files.length > 0) setAttachedFiles(prev => [...prev, ...files].slice(0, 5))
               if (e.target) e.target.value = ''
             }}
+          />
 
         {/* Aria avatar */}
         <div style={{ position: 'absolute', bottom: 0, right: 20, width: 120, zIndex: 20, pointerEvents: 'none', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
@@ -913,7 +914,6 @@ export default function AskAriaPage() {
             <AriaTalkingHead mode={isAriaActive ? 'talking' : 'idle'} replyText={ariaResponseText ?? ''} />
           </div>
         </div>
-          />
           {attachedFiles.length > 0 && (
             <div className="max-w-3xl mx-auto mb-2 flex flex-wrap gap-2">
               {attachedFiles.map((f, i) => (
