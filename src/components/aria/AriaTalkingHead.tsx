@@ -91,6 +91,7 @@ function AvatarScene({ mode, replyText }: { mode: string; replyText: string }) {
           action.setLoop(THREE.LoopOnce, 1);
           action.play();
           // Use timeout — 'finished' event unreliable with LoopOnce
+          // Start fading at 5.5s (before animation ends at 7.27s) over 3s
           setTimeout(() => {
             greetingDone.current = true;
             mixerRef.current = null;
@@ -185,10 +186,10 @@ function AvatarScene({ mode, replyText }: { mode: string; replyText: string }) {
 export default function AriaTalkingHead({ mode = 'idle', replyText = '' }: { mode?: string; replyText?: string }) {
   return (
     <Canvas
-      camera={{ position: [0, 1.45, 2.5], fov: 22 }}
+      camera={{ position: [0, 1.5, 2.5], fov: 22 }}
       style={{ width: '100%', height: '100%', background: 'transparent' }}
       gl={{ alpha: true, antialias: true }}
-      onCreated={({ camera }) => camera.lookAt(0, 1.45, 0)}
+      onCreated={({ camera }) => camera.lookAt(0, 1.5, 0)}
     >
       <ambientLight intensity={1.4} />
       <directionalLight position={[1, 2, 2]} intensity={1.0} />
