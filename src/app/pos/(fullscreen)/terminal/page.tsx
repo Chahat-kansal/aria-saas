@@ -52,6 +52,7 @@ import type { DiscountBarCartItem } from '@/components/pos/DiscountBar';
 import { useScanner } from '@/lib/hardware/scanner';
 import type { AppliedDiscount } from '@/lib/pos/discount-engine';
 import CartLineMenu from '@/components/pos/CartLineMenu';
+import { POSAriaInsight } from '@/components/pos/POSAriaInsight';
 
 /* ─── Types ─────────────────────────────────────────────────────── */
 interface Product {
@@ -702,6 +703,24 @@ export default function TerminalPage() {
   // Only re-run when businessId resolves — intentionally exclude activeOutletId
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [businessId]);
+
+  // Sync offline queue when connection restored
+  useEffect(() => {
+    function handleOnline() {
+      const queue = JSON.parse(localStorage.getItem('aria_offline_queue') || '[]')
+      if (queue.length === 0) return
+      fetch('/api/pos/sync-offline', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sales: queue, business_id: businessId }),
+      }).then(r => r.json()).then(d => {
+        if (d.synced > 0) localStorage.removeItem('aria_offline_queue')
+      }).catch(() => {})
+    }
+    window.addEventListener('online', handleOnline)
+    handleOnline() // also try on mount
+    return () => window.removeEventListener('online', handleOnline)
+  }, [businessId])
 
   /* ── Mobile detection ────────────────────────────────────────── */
   useEffect(() => {
@@ -1628,6 +1647,7 @@ export default function TerminalPage() {
 
   return (
     <div className="flex flex-col overflow-hidden" style={{ height: '100dvh', background: 'var(--terminal-bg-canvas)', position: 'relative' }}>
+      <POSAriaInsight page="terminal" businessId={businessId} />
       {showCafeSetup && (
         <CafeSetupModal
           businessName={businessName}
