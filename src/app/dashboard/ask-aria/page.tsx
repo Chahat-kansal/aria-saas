@@ -221,44 +221,6 @@ function AriaGreeting({ business }: { business: { name?: string; trading_name?: 
 }
 
 
-function AriaSpeechBubble({ business }: { business: { name?: string; trading_name?: string } | null }) {
-  const [visible, setVisible] = useState(true)
-  const name = business?.trading_name ?? business?.name ?? null
-
-  useEffect(() => {
-    const t = setTimeout(() => setVisible(false), 30000)
-    return () => clearTimeout(t)
-  }, [])
-
-  if (!visible) return null
-
-  return (
-    <div style={{
-      maxWidth: 160,
-      background: 'rgba(20,20,30,0.96)',
-      border: '1px solid rgba(127,184,151,0.35)',
-      borderRadius: '14px 14px 4px 14px',
-      padding: '10px 13px',
-      fontSize: 12,
-      color: 'rgba(255,255,255,0.9)',
-      lineHeight: 1.5,
-      boxShadow: '0 4px 20px rgba(0,0,0,0.4)',
-      animation: 'ariaPopIn 0.3s cubic-bezier(0.34,1.56,0.64,1)',
-    }}>
-      <span style={{ color: '#7FB897', fontWeight: 700 }}>Hi{name ? `, ${name}` : ''}! 👋</span>
-      {' '}I&apos;m Aria — your AI business co-operator. I&apos;ve checked your data. What can I help you with today?
-      {/* Tail pointing right toward avatar */}
-      <div style={{
-        position: 'absolute', right: -7, bottom: 10,
-        width: 0, height: 0,
-        borderTop: '6px solid transparent',
-        borderBottom: '6px solid transparent',
-        borderLeft: '7px solid rgba(127,184,151,0.35)',
-      }} />
-      <style>{`@keyframes ariaPopIn{from{opacity:0;transform:scale(0.85) translateY(6px)}to{opacity:1;transform:scale(1) translateY(0)}}`}</style>
-    </div>
-  )
-}
 
 export default function AskAriaPage() {
   const { business, loading } = useBusinessContext()
@@ -651,70 +613,6 @@ export default function AskAriaPage() {
 
       {/* Main chat — subtle mood tint based on time of day */}
       <div className="flex-1 flex flex-col overflow-hidden" style={{ position: 'relative', background: (() => { const h = new Date().getHours(); if (h < 6) return '#0a0a12'; if (h < 12) return '#0d0f14'; if (h < 17) return '#0d0d14'; if (h < 20) return '#0e0c13'; return '#0b0b14'; })() }}>
-        {/* Aria 3D avatar + greeting bubble — stacked vertically, bubble on top */}
-        <div style={{
-          position: 'absolute',
-          bottom: 0,
-          right: 20,
-          width: 120,
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'flex-end',
-          gap: 6,
-          zIndex: 20,
-          pointerEvents: 'none',
-        }}>
-          {/* Greeting speech bubble sits above avatar naturally */}
-          <AriaSpeechBubble business={business} />
-          {/* Avatar canvas */}
-          <div style={{ width: 120, height: 160, flexShrink: 0 }}>
-            <AriaTalkingHead
-              mode={isAriaActive ? 'talking' : 'idle'}
-              replyText={ariaResponseText ?? ''}
-            />
-          </div>
-        </div>
-        {/* Header */}
-        <div className="border-b px-6 py-4 flex items-center justify-between flex-shrink-0"
-          style={{ borderColor: 'rgba(255,255,255,0.06)', background: '#13131a' }}>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setShowHistory(v => !v)}
-              title="Chat history"
-              className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors"
-              style={{ background: showHistory ? 'rgba(127,184,151,0.15)' : 'rgba(255,255,255,0.05)', color: showHistory ? '#7FB897' : 'rgba(255,255,255,0.5)' }}
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-4 h-4">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h7" />
-              </svg>
-            </button>
-            <div>
-              <h1 className="font-semibold text-lg leading-tight" style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#fff' }}>
-            <span style={{ width: 28, height: 28, borderRadius: 9, background: 'rgba(127,184,151,0.13)', border: '1px solid rgba(127,184,151,0.28)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Fraunces, serif', fontStyle: 'italic', fontSize: 15, color: '#7FB897', flexShrink: 0 }}>A</span>
-            Aria
-          </h1>
-              <p className="text-xs mt-0.5" style={{ color: '#6b7280' }}>
-                AI advisor for {business?.name ?? 'your business'}
-                {' · '}
-                <span className="text-[#7FB897]">{business?.data_source === 'square' ? 'Square data' : 'Aria POS data'}</span>
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <Link href="/dashboard/ask-aria/intelligence"
-              className="text-xs px-3 py-1.5 rounded-lg transition-colors"
-              style={{ color: 'rgba(255,255,255,0.35)', background: 'rgba(255,255,255,0.05)' }}
-              title="Intelligence settings">
-              ✦ Intel
-            </Link>
-            {messages.length > 0 && (
-              <button onClick={newConversation}
-                className="text-xs px-3 py-1.5 rounded-lg transition-colors"
-                style={{ color: 'rgba(255,255,255,0.35)', background: 'rgba(255,255,255,0.05)' }}>
-                New chat
-              </button>
-            )}
-          </div>
         </div>
 
         {/* Messages */}
