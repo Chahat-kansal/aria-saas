@@ -4,7 +4,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { MorningCommandCentre } from '@/components/dashboard/MorningCommandCentre';
 import { AriaBriefingCard } from '@/components/dashboard/AriaBriefingCard';
-import { PendingActionsCard } from '@/components/dashboard/PendingActionsCard';
+import { PendingActionsCard } from '@/components/dashboard/PendingActionsCard'
+import { LiveRevenueTicker, ThreeWayRevenue, HourlyHeatmap, StaffOnShift, AIActionStrip, WeatherWidget } from './ProWidgets';
 
 interface Business { id: string; name: string; owner_name?: string; industry?: string; pos_enabled?: boolean | null; }
 interface DailySale { total_amount: number; }
@@ -305,6 +306,8 @@ export function RetailDashboard({ business }: { business: Business }) {
         </div>
       </div>
 
+      <LiveRevenueTicker businessId={business.id} />
+
       {/* ─── Section 2: Live Business Pulse ──────────────────── */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {pulseLoading ? (
@@ -375,9 +378,14 @@ export function RetailDashboard({ business }: { business: Business }) {
         )}
       </div>
 
-      
+
+      <ThreeWayRevenue businessId={business.id} />
+      <AIActionStrip businessId={business.id} />
+
       {/* ─── Revenue Chart ───────────────────────────────── */}
       <RevenueChart businessId={business.id} />
+
+<HourlyHeatmap businessId={business.id} />
 
 {/* ─── Section 3: MorningCommandCentre (AI decisions) ── */}
       {councilBriefing
@@ -446,6 +454,8 @@ export function RetailDashboard({ business }: { business: Business }) {
             <p className="text-xs text-[rgba(255,255,255,0.4)]">Run analysis to detect profit leaks</p>
           )}
         </div>
+        <StaffOnShift businessId={business.id} />
+        <WeatherWidget />
       </div>
 
       {/* ─── Section 5: Activity Feed ────────────────────────── */}
