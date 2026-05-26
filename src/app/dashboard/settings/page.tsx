@@ -27,6 +27,7 @@ export default function DashboardSettingsPage() {
   const [syncResult, setSyncResult] = useState('')
   const [notifEmail, setNotifEmail] = useState(true)
   const [notifSMS,   setNotifSMS]   = useState(false)
+  const [ownerPhone, setOwnerPhone] = useState('')
   const [downloading,   setDownloading]   = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState('')
   const [deleting,      setDeleting]      = useState(false)
@@ -51,7 +52,7 @@ export default function DashboardSettingsPage() {
     setSaving(true)
     await fetch('/api/settings/business', {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, abn, city, address, phone, google_place_id: googlePlaceId || null }),
+      body: JSON.stringify({ name, abn, city, address, phone, google_place_id: googlePlaceId || null, owner_phone: ownerPhone || null, alert_sms_enabled: notifSMS }),
     }).catch(() => {})
     setSaving(false); setSaved(true)
     setTimeout(() => setSaved(false), 2500)
@@ -250,7 +251,12 @@ export default function DashboardSettingsPage() {
               </button>
             </div>
           ))}
-          <p style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>Notification preferences are saved automatically.</p>
+          <p style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>SMS alerts require your mobile number below.</p>
+      <div style={{ marginTop: 12 }}>
+        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Mobile for SMS alerts</label>
+        <input type="tel" value={ownerPhone} onChange={e => setOwnerPhone(e.target.value)}
+          placeholder="+61400000000" style={{ width: '100%', padding: '9px 12px', borderRadius: 9, border: '1px solid rgba(255,255,255,0.1)', background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: 13, outline: 'none' }} />
+      </div>
         </div>
       )}
     </div>
