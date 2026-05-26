@@ -41,7 +41,7 @@ function normalizeUrl(href: string, base: string): string | null {
 
 async function crawlPage(url: string): Promise<{ html: string; statusCode: number; loadTimeMs: number } | null> {
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), 10000)
+  const timer = setTimeout(() => controller.abort(), 6000)
   const t0 = Date.now()
   try {
     const res = await fetch(url, {
@@ -97,8 +97,10 @@ async function _POST(req: Request) {
       .from('seo_audits').select('id').eq('business_id', business_id)
       .in('status', ['pending', 'crawling']).order('created_at', { ascending: false }).limit(1).maybeSingle()
     if (existing?.id) {
-      auditId = existing.id
-    } else {
+      // Reset stuck audits — mark as failed so we start fresh
+      await supabaseAdmin.from('seo_audits').update({ status: 'failed' }).eq('id', existing.id)
+    }
+    {
       const { data: created, error: createErr } = await supabaseAdmin.from('seo_audits').insert({
         business_id, website_url: biz.website, status: 'pending', health_score: 0,
         pages_crawled: 0, issues_found: 0, issues_fixed: 0, created_at: new Date().toISOString(),
@@ -118,7 +120,7 @@ async function _POST(req: Request) {
   const queue: string[] = [startUrl]
   const crawled: CrawledPage[] = []
 
-  while (queue.length > 0 && crawled.length < 20) {
+  while (queue.length > 0 && crawled.length < 8) {
     const url = queue.shift()!
     const norm = normalizeUrl(url, startUrl)
     if (!norm || visited.has(norm)) continue
