@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { ariaInvoke } from '@/lib/aria/invoke'
+import { supabaseAdmin } from '@/lib/supabase-admin'
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -22,7 +23,34 @@ async function _POST(req: NextRequest) {
   const bid = await getBid(supabase, user.id)
   if (!bid) return NextResponse.json({ narrative: null, reason: 'No business' })
 
+  // Cache in Supabase for 1 hour — avoid calling Sonnet on every dashboard load
+  const cacheKey = `live_intel_${bid}`
+  const { data: cached } = await supabaseAdmin
+    .from('aria_signal_cache')
+    .select('payload, updated_at')
+    .eq('business_id', bid)
+    .eq('signal_type', cacheKey)
+    .maybeSingle()
+
+  if (cached?.payload && cached?.updated_at) {
+    const ageMs = Date.now() - new Date(cached.updated_at).getTime()
+    if (ageMs < 60 * 60 * 1000) { // 1 hour cache
+      const p = cached.payload as Record<string, unknown>
+      return NextResponse.json({ narrative: p.narrative, title: p.title, action: p.action, insight: p.narrative, cached: true })
+    }
+  }
+
   const result = await ariaInvoke('ops_narrative', bid, { includeWeather: true })
+  // Save to cache
+  const narrative = result.recommendation?.description ?? null
+  const title = result.recommendation?.title ?? null
+  const action = (result.recommendation?.payload as Record<string, unknown> | undefined)?.action ?? null
+  await supabaseAdmin.from('aria_signal_cache').upsert({
+    business_id: bid, signal_type: cacheKey,
+    payload: { narrative, title, action },
+    updated_at: new Date().toISOString(),
+  }, { onConflict: 'business_id,signal_type' }).catch(() => {})
+
   return NextResponse.json({
     narrative: result.recommendation?.description ?? null,
     title: result.recommendation?.title ?? null,
