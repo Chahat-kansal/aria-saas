@@ -121,8 +121,8 @@ function AvatarScene({ mode, replyText }: { mode: string; replyText: string }) {
     if (mode === prevMode.current) return;
     prevMode.current = mode;
 
-    const clipName = mode === 'talking' ? 'Talking_0' : 'Idle';
-    const clip = animations.find(a => a.name === clipName) ?? animations.find(a => a.name === 'Idle') ?? animations[0];
+    // Only use Idle — Talking_0/1/2 are sitting animations, not suitable
+    const clip = animations.find(a => a.name === 'Idle') ?? animations[0];
     const retargeted = retargetAnimation(clip, scene);
     const newAction = mixer.current.clipAction(retargeted);
 
