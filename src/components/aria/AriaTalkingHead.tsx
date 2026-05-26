@@ -189,7 +189,7 @@ export default function AriaTalkingHead({ mode = 'idle', replyText = '' }: { mod
       camera={{ position: [0, 1.41, 2.0], fov: 24 }}
       style={{ width: '100%', height: '100%', background: 'transparent' }}
       gl={{ alpha: true, antialias: true }}
-      onCreated={{ ({ camera }) => camera.lookAt(0, 1.41, 0) }}
+      onCreated={({ camera }) => camera.lookAt(0, 1.41, 0)}
     >
       <ambientLight intensity={1.4} />
       <directionalLight position={[1, 2, 2]} intensity={1.0} />
