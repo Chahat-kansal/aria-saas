@@ -12,7 +12,7 @@ import type { PlannedAction } from '@/lib/aria/ask/action-planner'
 import type { DocumentReadResult } from '@/lib/aria/intelligence/document-vision'
 import { BlockRenderer } from '@/components/dashboard/BlockRenderer'
 import type { AskBlock } from '@/lib/aria/ask-types'
-const AriaTalkingHead = dynamic(() => import('@/components/aria/AriaTalkingHead').then(m => ({ default: m.AriaTalkingHead })), { ssr: false })
+const AriaTalkingHead = dynamic(() => import('@/components/aria/AriaTalkingHead'), { ssr: false })
 
 const ChartBlock = dynamic(() => import('@/components/dashboard/ChartBlock'), { ssr: false })
 
@@ -221,6 +221,28 @@ function AriaGreeting({ business }: { business: { name?: string; trading_name?: 
 }
 
 
+
+
+function AriaSpeechBubble({ business }: { business: { name?: string; trading_name?: string } | null }) {
+  const [visible, setVisible] = useState(true);
+  const name = business?.trading_name ?? business?.name ?? null;
+  useEffect(() => {
+    const t = setTimeout(() => setVisible(false), 30000);
+    return () => clearTimeout(t);
+  }, []);
+  if (!visible) return null;
+  return (
+    <div style={{
+      maxWidth: 180, background: 'rgba(20,20,30,0.96)',
+      border: '1px solid rgba(127,184,151,0.35)', borderRadius: '14px 14px 4px 14px',
+      padding: '10px 13px', fontSize: 12, color: 'rgba(255,255,255,0.9)',
+      lineHeight: 1.5, boxShadow: '0 4px 20px rgba(0,0,0,0.4)',
+    }}>
+      <span style={{ color: '#7FB897', fontWeight: 700 }}>Hi{name ? `, ${name}` : ''}! 👋</span>
+      {' '}I&apos;m Aria — your AI business co-operator. What can I help you with today?
+    </div>
+  );
+}
 
 export default function AskAriaPage() {
   const { business, loading } = useBusinessContext()
