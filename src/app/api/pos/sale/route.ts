@@ -154,7 +154,7 @@ async function _POST(req: Request) {
       session_id: openSession?.id || null,
       payment_method: payment_method ?? 'cash',
       subtotal: +subtotal.toFixed(2),
-      tax_amount: +(computedTaxTotal || tax_amount).toFixed(2),
+      tax_amount: +(computedTaxTotal || Number(tax_amount) || Math.round(Number(subtotal) * 0.1 * 100) / 100).toFixed(2),
       tax_breakdown: computedTaxBreakdown,
       discount_amount: +(discount_amount ?? 0).toFixed(2),
       pos_user_id: pos_user_id ?? null,
