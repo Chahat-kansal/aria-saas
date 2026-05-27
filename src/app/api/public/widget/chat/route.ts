@@ -12,12 +12,10 @@ interface Message { role: 'user' | 'assistant'; content: string }
 
 // ── Send SMS via Twilio ───────────────────────────────────────────────
 async function sendSMS(to: string, body: string): Promise<void> {
-  const sid = process.env.TWILIO_ACCOUNT_SID
   const token = process.env.TWILIO_AUTH_TOKEN
-  const from = process.env.TWILIO_PHONE_NUMBER
   if (!sid || !token || !from || !to) return
   try {
-    await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
+        await sendSMS(to, body)
       method: 'POST',
       headers: {
         Authorization: 'Basic ' + Buffer.from(sid + ':' + token).toString('base64'),
