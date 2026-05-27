@@ -5,10 +5,13 @@ import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { runWeeklyReport } from '@/lib/reports/weekly-cron'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { withRetry } from '@/lib/api/retry'
 
 const CRON_SECRET = process.env.CRON_SECRET ?? ''
 
 async function _GET(req: Request) {
+  // Retry wrapper — 3 attempts with exponential backoff
+  return withRetry(async () => {
   const auth = req.headers.get('authorization') ?? ''
   if (!CRON_SECRET || auth !== `Bearer ${CRON_SECRET}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -40,6 +43,9 @@ async function _GET(req: Request) {
   }
 
   return NextResponse.json({ ok: true, processed: businesses.length, results })
+}
+
+  }, { attempts: 3, delayMs: 3000 })
 }
 
 export const GET = withErrorCapture('cron/weekly-report', _GET)
