@@ -37,6 +37,19 @@ export default function SaleDetailDrawer({ saleId, onClose, onVoided }: Props) {
   const [editValue, setEditValue] = useState('')
   const [editReason, setEditReason] = useState('')
   const [saving, setSaving] = useState(false)
+  const [insight, setInsight] = useState<string>('')
+  const [insightLoading, setInsightLoading] = useState(false)
+
+  async function fetchInsight() {
+    setInsightLoading(true)
+    const r = await fetch('/api/aria/sale-insight', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sale_id: saleId }),
+    }).then(r => r.json()).catch(() => null)
+    setInsight(r?.insight ?? 'Could not generate insight.')
+    setInsightLoading(false)
+  }
+
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -114,6 +127,21 @@ export default function SaleDetailDrawer({ saleId, onClose, onVoided }: Props) {
                   <div className="font-medium" style={{ color: 'var(--text-primary, #E8EDE7)' }}>{v}</div>
                 </div>
               ))}
+            </div>
+
+            {/* Aria sale insight */}
+            <div className="rounded-xl p-4" style={{ background: 'rgba(127,184,151,0.06)', border: '1px solid rgba(127,184,151,0.25)' }}>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: '#7FB897' }}>✦ Aria insight</span>
+                <button onClick={fetchInsight} disabled={insightLoading} className="text-xs px-3 py-1 rounded-lg" style={{ background: 'rgba(45,82,64,0.4)', color: '#7FB897', border: '1px solid rgba(127,184,151,0.3)' }}>
+                  {insightLoading ? 'Thinking…' : insight ? 'Re-run' : 'Get insight'}
+                </button>
+              </div>
+              {insight ? (
+                <p className="text-sm leading-relaxed" style={{ color: 'var(--text-primary, #E8EDE7)' }}>{insight}</p>
+              ) : (
+                <p className="text-xs" style={{ color: 'var(--text-secondary, #A8B5A8)' }}>Click to ask Aria what is notable about this sale.</p>
+              )}
             </div>
 
             {/* Items */}
