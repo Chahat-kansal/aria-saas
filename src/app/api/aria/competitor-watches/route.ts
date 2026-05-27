@@ -3,6 +3,8 @@ import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { geminiFlash } from '@/lib/gemini'
+import { checkGeminiRateLimit } from '@/lib/gemini-rate-limiter'
 
 const INDUSTRY_DEFAULTS: Record<string, string[]> = {
   liquor:      ['Dan Murphy\'s', 'BWS', 'Liquorland', 'First Choice Liquor', 'Vintage Cellars'],
@@ -13,6 +15,47 @@ const INDUSTRY_DEFAULTS: Record<string, string[]> = {
   supermarket: ['Woolworths', 'Coles', 'IGA', 'Aldi'],
   bakery:      ['Bakers Delight', 'Brumby\'s Bakery'],
   convenience: ['7-Eleven', 'Night Owl', 'IGA Express'],
+}
+
+async function checkCompetitorPrices(
+  competitorName: string, suburb: string, industry: string, businessId: string
+) {
+  try {
+    const prompt = `Search the web for current prices at "${competitorName}" in ${suburb}, Australia.
+For a ${industry} business, what are their current prices for their most popular products?
+Are they running any current promotions or specials?
+Return ONLY valid JSON:
+{
+  "found": true,
+  "sample_prices": [{"product": "string", "price": number}],
+  "current_promotions": "description or null",
+  "price_level": "budget|mid|premium"
+}`
+    const result = await geminiFlash.generateContent(prompt)
+    const text = result.response.text().replace(/```json|```/g, '').trim()
+    const data = JSON.parse(text)
+
+    // Persist sample prices into competitor_price_cache
+    if (data.found && Array.isArray(data.sample_prices)) {
+      const expiresAt = new Date(Date.now() + 7 * 86400_000).toISOString()
+      const rows = (data.sample_prices as Array<{ product: string; price: number }>)
+        .slice(0, 5)
+        .map(sp => ({
+          business_id: businessId,
+          competitor_name: competitorName,
+          product_name: sp.product,
+          competitor_price_cents: Math.round((sp.price ?? 0) * 100),
+          source: 'gemini',
+          confidence: 'ai_grounded',
+          searched_at: new Date().toISOString(),
+          expires_at: expiresAt,
+        }))
+      if (rows.length > 0) await supabaseAdmin.from('competitor_price_cache').insert(rows)
+    }
+    return data
+  } catch {
+    return null
+  }
 }
 
 async function _GET(req: Request) {
@@ -72,6 +115,32 @@ async function _GET(req: Request) {
       })
     }
   }
+  const activeWatches = (watches ?? []).filter((w: any) => w.is_active)
+  if (activeWatches.length > 0) {
+    const allowed = await checkGeminiRateLimit().catch(() => false)
+    if (allowed) {
+      const { data: biz } = await supabaseAdmin
+        .from('businesses').select('industry, suburb, city').eq('id', business_id).maybeSingle()
+      const suburb = (biz?.suburb as string | null) ?? (biz?.city as string | null) ?? 'Melbourne'
+      const industry = (biz?.industry as string | null) ?? 'retail'
+      const sevenDaysAgo = new Date(Date.now() - 7 * 86400_000).toISOString()
+
+      let checked = 0
+      for (const w of activeWatches.slice(0, 3)) {
+        if (checked >= 3) break
+        // Skip if checked recently
+        const { count } = await supabaseAdmin.from('competitor_price_cache')
+          .select('id', { count: 'exact', head: true })
+          .eq('business_id', business_id)
+          .eq('competitor_name', w.competitor_name)
+          .gte('searched_at', sevenDaysAgo)
+        if ((count ?? 0) > 0) continue
+        await checkCompetitorPrices(w.competitor_name as string, suburb, industry, business_id)
+        checked++
+      }
+    }
+  }
+
   return NextResponse.json({ watches: watches ?? [] })
 }
 

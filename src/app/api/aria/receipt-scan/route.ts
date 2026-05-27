@@ -4,6 +4,7 @@
 // call itself still works on the in-memory buffer.
 import Anthropic from '@anthropic-ai/sdk';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
+import { supabaseAdmin } from '@/lib/supabase-admin';
 import { getBusinessItems } from '@/lib/business-data';
 import { NextResponse } from 'next/server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
@@ -11,6 +12,7 @@ import { trackAICall } from '@/lib/aria/ai-telemetry'
 import { getBusinessContext, hasEnoughData } from '@/lib/aria/get-business-context'
 import { getSystemPrompt } from '@/lib/aria/get-system-prompt'
 import { writeAriaOutcome } from '@/lib/aria/write-outcome'
+import { geminiVision } from '@/lib/gemini'
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -108,8 +110,39 @@ async function _POST(req: Request) {
   let supplierName: string | null = null;
   let invoiceDate: string | null = null;
   let invoiceTotal: number | null = null;
+  let scanSource = 'claude';
 
+  // Try Gemini Vision first — better OCR, cheaper
   try {
+    const geminiPrompt = `Extract all information from this supplier receipt/invoice. Return ONLY valid JSON, no markdown:
+{
+  "supplier_name": "string or null",
+  "invoice_date": "YYYY-MM-DD or null",
+  "invoice_number": "string or null",
+  "lines": [{"description": "string", "quantity": number, "unit": "each|carton|kg|litre or as shown", "unit_price_aud": number or null, "total_price_aud": number or null}],
+  "invoice_total_aud": number or null,
+  "gst_amount": number or null
+}
+All amounts in dollars. If unclear, use null. If not an invoice, return empty lines array.`
+
+    const geminiResult = await geminiVision.generateContent([
+      geminiPrompt,
+      { inlineData: { data: base64, mimeType: mediaType } },
+    ])
+    const geminiText = geminiResult.response.text()
+    const geminiParsed = extractJson(geminiText)
+    if (geminiParsed && Array.isArray(geminiParsed.lines) && geminiParsed.lines.length > 0) {
+      extractedLines = geminiParsed.lines
+      supplierName = geminiParsed.supplier_name ?? null
+      invoiceDate = geminiParsed.invoice_date ?? null
+      invoiceTotal = geminiParsed.invoice_total_aud ?? null
+      scanSource = 'gemini'
+    }
+  } catch (geminiErr: any) {
+    console.warn('[receipt-scan] Gemini Vision failed, falling back to Claude:', geminiErr.message?.slice(0, 120))
+  }
+
+  if (extractedLines.length === 0) try {
     const response = await trackAICall({ route: 'aria/receipt-scan', model: 'claude-sonnet-4-5-20250929', businessId: business_id, purpose: 'receipt-scan-vision' }, () => anthropic.messages.create({
       model: 'claude-sonnet-4-5-20250929',
       max_tokens: 4096,
@@ -245,12 +278,25 @@ Be precise — these numbers update real inventory.`,
     };
   });
 
+  // Log scan to pos_receipt_scans (non-fatal)
+  try {
+    await supabaseAdmin.from('pos_receipt_scans').insert({
+      business_id,
+      scan_source: scanSource,
+      supplier_name: supplierName,
+      invoice_date: invoiceDate ?? null,
+      grand_total: invoiceTotal,
+      line_items: result,
+    })
+  } catch { /* non-fatal */ }
+
   return NextResponse.json({
     extracted_lines: result,
     supplier_name: supplierName,
     invoice_date: invoiceDate,
     invoice_total_aud: invoiceTotal,
     line_count: result.length,
+    scan_source: scanSource,
   });
 }
 

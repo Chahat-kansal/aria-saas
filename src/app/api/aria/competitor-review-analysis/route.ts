@@ -8,8 +8,31 @@ import Anthropic from '@anthropic-ai/sdk'
 import { NextResponse } from 'next/server'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { trackAICall } from '@/lib/aria/ai-telemetry'
+import { geminiFlash } from '@/lib/gemini'
+import { checkGeminiRateLimit } from '@/lib/gemini-rate-limiter'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+
+async function fetchCompetitorReviews(competitorName: string, suburb: string) {
+  try {
+    const prompt = `Search Google Maps and review sites for recent customer reviews of "${competitorName}" in ${suburb}, Australia.
+What are customers saying? What do they complain about? What do they praise?
+Return ONLY valid JSON:
+{
+  "average_rating": number,
+  "review_count_estimate": number,
+  "top_complaints": ["string"],
+  "top_praises": ["string"],
+  "recent_sentiment": "improving|declining|stable",
+  "opportunity_for_competitor": "what a competing business could do better based on these complaints"
+}`
+    const result = await geminiFlash.generateContent(prompt)
+    const text = result.response.text().replace(/```json|```/g, '').trim()
+    return JSON.parse(text)
+  } catch {
+    return null
+  }
+}
 
 async function fetchPlaceRating(name: string, city: string): Promise<{ rating: number | null; review_count: number | null }> {
   const key = process.env.GOOGLE_PLACES_API_KEY
@@ -37,15 +60,35 @@ async function _POST(req: Request) {
   if (!biz) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   const { data: watches } = await supabaseAdmin.from('aria_competitor_watches')
-    .select('competitor_name, last_result').eq('business_id', business_id).eq('is_active', true).limit(5)
+    .select('id, competitor_name, last_result').eq('business_id', business_id).eq('is_active', true).limit(5)
+
+  const suburb = (biz.city as string | null) ?? 'Melbourne'
+  const geminiAllowed = await checkGeminiRateLimit().catch(() => false)
+  const oneWeekAgo = new Date(Date.now() - 7 * 86400_000).toISOString()
 
   const competitors = await Promise.all((watches ?? []).map(async w => {
-    const lr = w.last_result as Record<string, unknown> | null
-    const placeData = await fetchPlaceRating(w.competitor_name as string, (biz.city as string) ?? '')
+    const lr = (w.last_result as Record<string, unknown> | null) ?? {}
+    const placeData = await fetchPlaceRating(w.competitor_name as string, suburb)
+
+    // Gemini review sentiment — cache per competitor per week
+    let reviewSentiment: Record<string, unknown> | null = null
+    const cached = lr.review_sentiment as { fetched_at?: string } | null
+    if (cached?.fetched_at && cached.fetched_at > oneWeekAgo) {
+      reviewSentiment = cached
+    } else if (geminiAllowed) {
+      reviewSentiment = await fetchCompetitorReviews(w.competitor_name as string, suburb)
+      if (reviewSentiment) {
+        const updated = { ...lr, review_sentiment: { ...reviewSentiment, fetched_at: new Date().toISOString() } }
+        await supabaseAdmin.from('aria_competitor_watches')
+          .update({ last_result: updated }).eq('id', (w as any).id)
+      }
+    }
+
     return {
       name: w.competitor_name as string,
       rating: placeData.rating ?? (lr?.rating as number | null) ?? null,
       review_count: placeData.review_count ?? (lr?.review_count as number | null) ?? null,
+      review_sentiment: reviewSentiment,
     }
   }))
 
@@ -56,7 +99,7 @@ async function _POST(req: Request) {
   const positiveKeywords = (ourReviews ?? []).filter(r => Number(r.rating ?? 0) >= 4)
     .flatMap(r => (r.keyword_tags as string[] | null) ?? []).slice(0, 10)
 
-  const context = `Our business: ${biz.name} (${biz.industry}, ${biz.city ?? 'Australia'})
+  const context = `Our business: ${biz.name} (${biz.industry}, ${suburb})
 Our rating: ${biz.google_average_rating ?? '?'}★ (${biz.google_total_reviews ?? 0} reviews)
 Our positive keywords: ${positiveKeywords.join(', ') || 'not available'}
 

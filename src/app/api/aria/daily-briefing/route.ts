@@ -6,6 +6,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getWeatherForecast, getUpcomingHolidays, getABSRetailBenchmarks, getRBAData } from '@/lib/external-apis';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { trackAICall } from '@/lib/aria/ai-telemetry'
+import { geminiFlash } from '@/lib/gemini'
+import { checkGeminiRateLimit } from '@/lib/gemini-rate-limiter'
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -24,6 +26,28 @@ function checkRateLimit(ip: string): boolean {
   if (bucket.count >= 6) return false;
   bucket.count++;
   return true;
+}
+
+async function fetchGeminiExternalContext(business: { city?: string | null; industry?: string | null }) {
+  const location = (business.city as string | null) ?? 'Melbourne'
+  const industry = (business.industry as string | null) ?? 'retail'
+  try {
+    const allowed = await checkGeminiRateLimit()
+    if (!allowed) return null
+    const prompt = `You are a business intelligence assistant. Search the web and provide a brief JSON summary for a ${industry} business in ${location}, Australia. Return ONLY valid JSON, no preamble:
+{
+  "local_news": "1-2 sentences of relevant local news or events in ${location} today",
+  "industry_news": "1-2 sentences of Australian ${industry} industry news today",
+  "weather_tomorrow": "brief weather description for ${location} tomorrow",
+  "competitor_promos": "any detected promotions from major ${industry} competitors in Australia today, or null"
+}`
+    const result = await geminiFlash.generateContent(prompt)
+    const text = result.response.text()
+    const clean = text.replace(/```json|```/g, '').trim()
+    return JSON.parse(clean)
+  } catch {
+    return null
+  }
 }
 
 async function _POST(req: NextRequest) {
@@ -101,11 +125,13 @@ async function _POST(req: NextRequest) {
     upcomingHolidays,
     absData,
     rbaData,
+    geminiContext,
   ] = await Promise.all([
     getWeatherForecast(city).catch(() => []),
     Promise.resolve(getUpcomingHolidays(60, 'VIC')),
     getABSRetailBenchmarks().catch(() => null),
     getRBAData().catch(() => null),
+    fetchGeminiExternalContext(business).catch(() => null),
   ]);
 
   const [
@@ -257,6 +283,7 @@ async function _POST(req: NextRequest) {
       abs_cpi_pct: absData?.cpi_annual_pct ?? null,
       rba_cash_rate_pct: rbaData?.cash_rate_pct ?? null,
       rba_outlook: rbaData?.economic_outlook ?? null,
+      gemini_context: geminiContext ?? null,
     },
   };
 
