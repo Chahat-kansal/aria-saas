@@ -1,5 +1,7 @@
 'use client'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { BlockRenderer } from '@/components/dashboard/BlockRenderer'
+import type { AskBlock } from '@/lib/aria/ask-types'
 
 /* ─── Types ─────────────────────────────────────────────────── */
 interface BriefingLayout {
@@ -15,6 +17,7 @@ interface BriefingLayout {
 interface Contested { topic: string; optimist_view: string; critic_view: string; strategist_view: string }
 interface BriefingResponse {
   briefing: string; council_mode: boolean
+  ask_blocks?: AskBlock[]
   consensus?: string[]; contested?: Contested[]
   confidence_map?: Record<string, string>
   layout?: BriefingLayout
@@ -215,18 +218,32 @@ function LoadingSkeleton() {
 
 /* ─── Main component ─────────────────────────────────────────── */
 export function AriaBriefingCard({ businessId }: { businessId: string }) {
-  const [data, setData]       = useState<BriefingResponse | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [expanded, setExpanded] = useState(false)
+  const [data, setData]           = useState<BriefingResponse | null>(null)
+  const [blocks, setBlocks]       = useState<AskBlock[]>([])
+  const [loading, setLoading]     = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+  const [expanded, setExpanded]   = useState(false)
+
+  const loadBriefing = useCallback(async (force = false) => {
+    if (!businessId) return
+    try {
+      const url = '/api/aria/briefing?businessId=' + businessId + (force ? '&force=true' : '')
+      const r = await fetch(url)
+      const d: BriefingResponse | null = r.ok ? await r.json() : null
+      if (d) { setData(d); setBlocks(d.ask_blocks ?? []) }
+    } catch { /* silent */ }
+  }, [businessId])
 
   useEffect(() => {
-    if (!businessId) return
-    fetch('/api/aria/briefing?businessId=' + businessId)
-      .then(r => r.ok ? r.json() : null)
-      .then(d => { if (d) setData(d) })
-      .catch(() => null)
-      .finally(() => setLoading(false))
-  }, [businessId])
+    setLoading(true)
+    loadBriefing().finally(() => setLoading(false))
+  }, [loadBriefing])
+
+  const refresh = async () => {
+    setRefreshing(true)
+    await loadBriefing(true)
+    setRefreshing(false)
+  }
 
   if (loading) return <LoadingSkeleton />
   if (!data?.briefing) return null
@@ -274,6 +291,26 @@ export function AriaBriefingCard({ businessId }: { businessId: string }) {
 
       {/* Body — sections rendered in council's chosen order */}
       <div style={{ padding: '16px 20px 4px' }}>
+        {/* Council ask_blocks — council decides what visuals appear */}
+        {blocks.length > 0 && (
+          <div style={{ marginBottom: 20 }}>
+            {blocks.map((block, i) => (
+              <BlockRenderer key={i} block={block} />
+            ))}
+          </div>
+        )}
+
+        {/* Refresh button when council ran but returned no blocks */}
+        {blocks.length === 0 && data?.council_mode && !refreshing && (
+          <button onClick={refresh}
+            style={{ display: 'block', width: '100%', marginBottom: 14, padding: '8px 0', borderRadius: 8, background: 'rgba(127,184,151,0.06)', border: '1px solid rgba(127,184,151,0.15)', color: 'rgba(127,184,151,0.7)', fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' }}>
+            ↺ Refresh briefing to load visual summary
+          </button>
+        )}
+        {refreshing && (
+          <div style={{ marginBottom: 14, textAlign: 'center', fontSize: 11, color: 'rgba(255,255,255,0.25)' }}>Refreshing…</div>
+        )}
+
         {/* Always show metrics chips first if available */}
         {(layout.highlight_metrics?.length ?? 0) > 0 && sections.metrics}
 

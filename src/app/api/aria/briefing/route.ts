@@ -108,6 +108,7 @@ Audit checks (last 48h): ${(() => { const aa = (recentAudits || []) as Array<{fa
     }
     return NextResponse.json({
       briefing: council.final_briefing,
+      ask_blocks: council.ask_blocks ?? [],
       consensus: council.consensus,
       contested: council.contested,
       confidence_map: council.confidence_map,
