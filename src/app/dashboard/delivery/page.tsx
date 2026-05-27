@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { AriaSays } from '@/components/dashboard/AriaSays'
 
 const C = { bg: 'var(--bg-base)', card: 'var(--bg-surface)', text: '#F0F4F0', muted: '#A8B5A8', green: '#7FB897', darkGreen: '#2D5240', red: '#ef4444', amber: '#f59e0b', border: 'rgba(127,184,151,0.15)' }
 const PLATFORMS = [
@@ -140,6 +141,8 @@ export default function DeliveryPage() {
   return (
     <div style={{ minHeight: '100vh', background: C.bg, color: C.text, fontFamily: 'Inter, sans-serif', display: 'flex' }}>
       <div style={{ flex: 1, maxWidth: 580, padding: 24, overflowY: 'auto', borderRight: `1px solid ${C.border}` }}>
+
+        <AriaSays businessId={null} page="delivery" />
 
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>

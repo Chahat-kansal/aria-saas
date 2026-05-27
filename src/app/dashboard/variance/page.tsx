@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useBusinessContext } from '@/components/providers/BusinessProvider'
 import { VarianceExtensions } from '@/components/dashboard/Prompt55Extensions'
+import { AriaSays } from '@/components/dashboard/AriaSays'
 
 interface VItem {
   item_id: string
@@ -136,6 +137,7 @@ export default function VariancePage() {
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
+      <AriaSays businessId={business?.id ?? null} page="variance" />
       <div className="flex items-start justify-between mb-6 flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-semibold text-white mb-1">Variance &amp; Shrinkage</h1>

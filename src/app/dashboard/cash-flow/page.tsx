@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useBusinessContext } from '@/components/providers/BusinessProvider'
+import { AriaSays } from '@/components/dashboard/AriaSays'
 
 interface BankAccount { id: string; account_name: string | null; institution_name: string | null; balance: number | null; last_synced_at: string | null }
 interface BankStatus { connected: boolean; accounts: BankAccount[]; total_balance: number }
@@ -180,8 +181,12 @@ export default function CashFlowPage() {
     setBankSyncing(false)
   }
 
+  // First forecast day where cumulative dips negative — pass to Aria for context
+  const negativeDip = days.find(d => !d.is_past && d.cumulative < 0) ?? null
+
   return (
     <div style={{ minHeight: '100%', background: C.bg, color: C.text, fontFamily: "'Inter',sans-serif", padding: '24px 28px' }}>
+      <AriaSays businessId={business?.id ?? null} page="cash-flow" pageData={negativeDip ? { negative_day: negativeDip.date, cumulative_at_dip: negativeDip.cumulative } : undefined} />
       {bank?.connected && (
         <div style={{ marginBottom: 18, padding: 16, borderRadius: 12, background: 'rgba(127,184,151,0.06)', border: '1px solid rgba(127,184,151,0.25)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10, gap: 12, flexWrap: 'wrap' }}>

@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useBusinessContext } from '@/components/providers/BusinessProvider'
 import { SuppliersExtensions } from '@/components/dashboard/Prompt55Extensions'
+import { AriaSays } from '@/components/dashboard/AriaSays'
 
 interface SupplierRow {
   product_name: string; category: string | null; brand: string | null
@@ -79,6 +80,9 @@ export default function SuppliersPage() {
 
   return (
     <div style={{ minHeight: '100vh', background: '#0d0d14', color: '#e5e7eb', fontFamily: 'Inter, sans-serif' }}>
+      <div style={{ padding: '16px 28px 0' }}>
+        <AriaSays businessId={business?.id ?? null} page="suppliers" />
+      </div>
       {/* Header */}
       <div style={{ padding: '24px 28px 0', borderBottom: '1px solid rgba(255,255,255,0.06)', background: '#13131a' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>

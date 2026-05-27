@@ -30,12 +30,12 @@ export function AriaSays({ businessId, page, pageData, dismissable = true }: Pro
   const [error, setError] = useState(false)
 
   useEffect(() => {
-    if (!businessId) { setLoading(false); return }
     let cancelled = false
+    const cacheBid = businessId ?? 'self'
 
     // Cache hit?
     try {
-      const raw = sessionStorage.getItem(CACHE_KEY(businessId, page))
+      const raw = sessionStorage.getItem(CACHE_KEY(cacheBid, page))
       if (raw) {
         const cached = JSON.parse(raw) as { at: number; data: InsightResult }
         if (Date.now() - cached.at < CACHE_TTL_MS) {
@@ -48,13 +48,14 @@ export function AriaSays({ businessId, page, pageData, dismissable = true }: Pro
     fetch('/api/aria/page-insight', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ business_id: businessId, page, page_data: pageData ?? null }),
+      // When businessId is omitted, the endpoint resolves it from the authenticated user
+      body: JSON.stringify({ business_id: businessId ?? undefined, page, page_data: pageData ?? null }),
     })
       .then(r => r.ok ? r.json() : Promise.reject(r.status))
       .then((d: InsightResult) => {
         if (cancelled) return
         setResult(d)
-        try { sessionStorage.setItem(CACHE_KEY(businessId, page), JSON.stringify({ at: Date.now(), data: d })) } catch { /* non-fatal */ }
+        try { sessionStorage.setItem(CACHE_KEY(cacheBid, page), JSON.stringify({ at: Date.now(), data: d })) } catch { /* non-fatal */ }
       })
       .catch(() => { if (!cancelled) setError(true) })
       .finally(() => { if (!cancelled) setLoading(false) })
