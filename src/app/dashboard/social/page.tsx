@@ -52,7 +52,21 @@ export default function SocialPage() {
   const [voiceText, setVoiceText] = useState('');
   const [voiceGenerating, setVoiceGenerating] = useState(false);
   const [voiceUrls, setVoiceUrls] = useState<Record<string, string>>({});
-  const [activeTab, setActiveTab] = useState<'posts' | 'library' | 'calendar'>('posts');
+  const [activeTab, setActiveTab] = useState<'posts' | 'library' | 'calendar' | 'inbox' | 'analytics'>('posts');
+  // Inbox state
+  const [inboxItems, setInboxItems] = useState<Array<{ id: string; platform: string | null; message_type: string | null; author_name: string | null; author_handle: string | null; content: string; post_url: string | null; received_at: string; is_read: boolean | null; replied_at: string | null }>>([])
+  const [inboxFilter, setInboxFilter] = useState<'all' | 'unread' | 'replied'>('unread')
+  const [inboxLoading, setInboxLoading] = useState(false)
+  // Analytics state
+  const [analytics, setAnalytics] = useState<{ posts: Array<{ id: string; platform: string; caption: string | null; impressions?: number | null; likes?: number | null; comments?: number | null; shares?: number | null; created_at: string }>; summary: { totals: { impressions: number; reach: number; likes: number; comments: number; shares: number }; engagement_rate: number; top_post: { caption: string | null; engagement: number } | null; by_type: { image: number; text: number }; count: number } | null } | null>(null)
+  // Library upload form
+  const [libCaption, setLibCaption] = useState('')
+  const [libHashtags, setLibHashtags] = useState('')
+  const [savingLibAsset, setSavingLibAsset] = useState(false)
+  const [savedAssets, setSavedAssets] = useState<Array<{ id: string; asset_type: string; name: string | null; content: string | null }>>([])
+  // Bulk upload
+  const [bulkCsv, setBulkCsv] = useState('')
+  const [bulkResult, setBulkResult] = useState<string>('')
   const [mediaLibrary, setMediaLibrary] = useState<Array<{ id: string; url: string; filename: string; aria_description: string | null; tags: string[]; used_in_posts: number; uploaded_at: string }>>([]);
   const [uploadingMedia, setUploadingMedia] = useState(false);
   const [generatingCalendar, setGeneratingCalendar] = useState(false);
@@ -106,6 +120,71 @@ export default function SocialPage() {
   }
 
   useEffect(() => { if (bid && activeTab === 'library') loadMedia(); }, [bid, activeTab]);
+
+  // Inbox loader + 60s poll
+  useEffect(() => {
+    if (!bid) return
+    async function loadInbox() {
+      setInboxLoading(true)
+      const r = await fetch(`/api/social/inbox?filter=${inboxFilter}`).then(r => r.json()).catch(() => ({ messages: [] }))
+      setInboxItems(r.messages ?? [])
+      setInboxLoading(false)
+    }
+    loadInbox()
+    if (activeTab === 'inbox') {
+      const id = setInterval(loadInbox, 60000)
+      return () => clearInterval(id)
+    }
+  }, [bid, activeTab, inboxFilter])
+
+  // Analytics loader
+  useEffect(() => {
+    if (!bid || activeTab !== 'analytics') return
+    fetch('/api/social/analytics').then(r => r.json()).then(d => setAnalytics(d)).catch(() => {})
+  }, [bid, activeTab])
+
+  // Library assets loader (saved captions/hashtag sets)
+  useEffect(() => {
+    if (!bid || activeTab !== 'library') return
+    fetch('/api/social/library').then(r => r.json()).then(d => setSavedAssets(d.assets ?? [])).catch(() => {})
+  }, [bid, activeTab])
+
+  async function markInboxRead(id: string) {
+    await fetch(`/api/social/inbox?id=${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ is_read: true }) })
+    setInboxItems(items => items.map(m => m.id === id ? { ...m, is_read: true } : m))
+  }
+
+  async function saveLibAsset(asset_type: 'caption' | 'hashtag_set') {
+    if (asset_type === 'caption' && !libCaption.trim()) return
+    if (asset_type === 'hashtag_set' && !libHashtags.trim()) return
+    setSavingLibAsset(true)
+    const content = asset_type === 'caption' ? libCaption.trim() : libHashtags.trim()
+    const res = await fetch('/api/social/library', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ asset_type, name: content.slice(0, 40), content }),
+    }).then(r => r.json()).catch(() => ({}))
+    if (res.asset) {
+      setSavedAssets(a => [res.asset, ...a])
+      if (asset_type === 'caption') setLibCaption('')
+      else setLibHashtags('')
+    }
+    setSavingLibAsset(false)
+  }
+
+  async function runBulkSchedule() {
+    if (!bulkCsv.trim()) return
+    const lines = bulkCsv.trim().split('\n').slice(1) // skip header
+    const rows = lines.map(l => {
+      const [date, time, platform, caption, image_url] = l.split(',').map(s => s.replace(/^"|"$/g, '').trim())
+      return { date, time, platform, caption, image_url }
+    }).filter(r => r.date && r.caption && r.platform)
+    if (rows.length === 0) { setBulkResult('No valid rows found'); return }
+    const res = await fetch('/api/social/bulk-schedule', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rows }),
+    }).then(r => r.json()).catch(() => ({ error: 'Network error' }))
+    if (res.error) setBulkResult(`Error: ${res.error}`)
+    else setBulkResult(`✓ ${res.scheduled} posts scheduled across ${(res.platforms ?? []).length} platform${(res.platforms ?? []).length === 1 ? '' : 's'}`)
+  }
 
   async function uploadMedia(files: FileList | null) {
     if (!files || !bid) return;
@@ -297,12 +376,16 @@ export default function SocialPage() {
 
       {/* Main tabs */}
       <div style={{ display: 'flex', gap: 4, marginBottom: 24, borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: 0 }}>
-        {([['posts', '📝 Posts'], ['library', '🖼️ Photo Library'], ['calendar', '📅 Monthly Calendar']] as const).map(([t, label]) => (
-          <button key={t} onClick={() => setActiveTab(t as any)}
-            style={{ padding: '10px 18px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: activeTab === t ? 700 : 400, color: activeTab === t ? '#8B5CF6' : C.muted, borderBottom: ('2px solid ' + activeTab === t ? '#8B5CF6' : 'transparent'), marginBottom: -1 }}>
-            {label}
-          </button>
-        ))}
+        {([['posts', '📝 Posts'], ['inbox', '💬 Inbox'], ['library', '🖼️ Library'], ['calendar', '📅 Calendar'], ['analytics', '📊 Analytics']] as const).map(([t, label]) => {
+          const unread = t === 'inbox' ? inboxItems.filter(m => !m.is_read).length : 0
+          return (
+            <button key={t} onClick={() => setActiveTab(t)}
+              style={{ padding: '10px 18px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: activeTab === t ? 700 : 400, color: activeTab === t ? '#8B5CF6' : C.muted, borderBottom: activeTab === t ? '2px solid #8B5CF6' : '2px solid transparent', marginBottom: -1 }}>
+              {label}
+              {unread > 0 && <span style={{ marginLeft: 6, fontSize: 10, padding: '1px 6px', borderRadius: 99, background: '#EF4444', color: '#fff', fontWeight: 700 }}>{unread}</span>}
+            </button>
+          )
+        })}
       </div>
 
       {/* PHOTO LIBRARY TAB */}
@@ -317,6 +400,48 @@ export default function SocialPage() {
               {uploadingMedia ? '⏳ Uploading & analysing…' : '+ Upload photos / videos'}
             </button>
             <span style={{ fontSize: 12, color: C.dim, marginLeft: 12 }}>JPG, PNG, MP4 — up to 20MB each</span>
+          </div>
+
+          {/* Saved captions + hashtag sets */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
+            <div style={{ padding: '14px 16px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 12 }}>
+              <p style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>📝 Caption templates</p>
+              <textarea value={libCaption} onChange={e => setLibCaption(e.target.value)} rows={2} placeholder="Save a reusable caption…"
+                style={{ width: '100%', padding: '8px 10px', borderRadius: 8, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', color: '#fff', fontSize: 12, fontFamily: 'inherit', resize: 'vertical', marginBottom: 8 }} />
+              <button onClick={() => saveLibAsset('caption')} disabled={savingLibAsset || !libCaption.trim()}
+                style={{ padding: '6px 14px', borderRadius: 8, border: 'none', background: '#8B5CF6', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: savingLibAsset || !libCaption.trim() ? 0.5 : 1, marginBottom: 8 }}>+ Save caption</button>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {savedAssets.filter(a => a.asset_type === 'caption').slice(0, 4).map(a => (
+                  <p key={a.id} style={{ fontSize: 11, color: C.muted, padding: '4px 0' }}>· {a.content?.slice(0, 80)}</p>
+                ))}
+              </div>
+            </div>
+            <div style={{ padding: '14px 16px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 12 }}>
+              <p style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}># Hashtag sets</p>
+              <input value={libHashtags} onChange={e => setLibHashtags(e.target.value)} placeholder="#cafe #melbourne #coffee"
+                style={{ width: '100%', padding: '8px 10px', borderRadius: 8, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', color: '#fff', fontSize: 12, fontFamily: 'inherit', marginBottom: 8 }} />
+              <button onClick={() => saveLibAsset('hashtag_set')} disabled={savingLibAsset || !libHashtags.trim()}
+                style={{ padding: '6px 14px', borderRadius: 8, border: 'none', background: '#8B5CF6', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: savingLibAsset || !libHashtags.trim() ? 0.5 : 1, marginBottom: 8 }}>+ Save set</button>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {savedAssets.filter(a => a.asset_type === 'hashtag_set').slice(0, 4).map(a => (
+                  <p key={a.id} style={{ fontSize: 11, color: C.muted, padding: '4px 0' }}>· {a.content}</p>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Bulk scheduling */}
+          <div style={{ marginBottom: 20, padding: '14px 16px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 12 }}>
+            <p style={{ fontSize: 12, fontWeight: 700, marginBottom: 4 }}>📦 Bulk schedule</p>
+            <p style={{ fontSize: 11, color: C.muted, marginBottom: 8 }}>CSV columns: date, time, platform, caption, image_url</p>
+            <textarea value={bulkCsv} onChange={e => setBulkCsv(e.target.value)} rows={4}
+              placeholder="date,time,platform,caption,image_url&#10;2026-06-01,09:00,instagram,Morning coffee call,https://…"
+              style={{ width: '100%', padding: '8px 10px', borderRadius: 8, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', color: '#fff', fontSize: 11, fontFamily: 'monospace', resize: 'vertical', marginBottom: 8 }} />
+            <button onClick={runBulkSchedule} disabled={!bulkCsv.trim()}
+              style={{ padding: '7px 16px', borderRadius: 8, border: 'none', background: '#7FB897', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', opacity: bulkCsv.trim() ? 1 : 0.5 }}>
+              Schedule batch
+            </button>
+            {bulkResult && <p style={{ fontSize: 12, color: bulkResult.startsWith('✓') ? '#7FB897' : C.red, marginTop: 8 }}>{bulkResult}</p>}
           </div>
 
           {mediaLibrary.length === 0 ? (
@@ -408,6 +533,101 @@ export default function SocialPage() {
       )}
 
       {/* POSTS TAB */}
+      {/* INBOX TAB */}
+      {activeTab === 'inbox' && (
+        <div>
+          <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
+            {(['unread','all','replied'] as const).map(f => (
+              <button key={f} onClick={() => setInboxFilter(f)}
+                style={{ padding: '6px 14px', borderRadius: 8, border: 'none', background: inboxFilter === f ? 'rgba(139,92,246,0.15)' : 'rgba(255,255,255,0.04)', color: inboxFilter === f ? '#A78BFA' : C.muted, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', textTransform: 'capitalize' }}>
+                {f}
+              </button>
+            ))}
+          </div>
+          {inboxLoading ? <p style={{ fontSize: 13, color: C.muted, textAlign: 'center', padding: 24 }}>Loading…</p>
+            : inboxItems.length === 0 ? (
+              <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 14, padding: '40px 24px', textAlign: 'center' }}>
+                <p style={{ fontSize: 32, marginBottom: 8 }}>💬</p>
+                <p style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>Inbox is quiet</p>
+                <p style={{ fontSize: 12, color: C.muted }}>Comments, DMs, and mentions across your connected platforms will appear here.</p>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {inboxItems.map(m => (
+                  <div key={m.id} style={{ padding: '12px 16px', borderRadius: 10, background: m.is_read ? 'rgba(255,255,255,0.02)' : 'rgba(139,92,246,0.05)', border: '1px solid ' + (m.is_read ? 'rgba(255,255,255,0.05)' : 'rgba(139,92,246,0.2)'), display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                    <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'rgba(139,92,246,0.18)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 14 }}>
+                      {m.platform === 'instagram' ? '📷' : m.platform === 'facebook' ? '📘' : m.platform === 'linkedin' ? '💼' : '💬'}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ fontSize: 12, marginBottom: 2 }}><strong style={{ color: '#fff' }}>{m.author_name ?? m.author_handle ?? 'Anonymous'}</strong> <span style={{ color: C.muted }}>· {m.message_type ?? 'comment'} · {new Date(m.received_at).toLocaleString()}</span></p>
+                      <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.85)', lineHeight: 1.5 }}>{m.content}</p>
+                      {m.replied_at && <p style={{ fontSize: 11, color: '#7FB897', marginTop: 4 }}>✓ Replied</p>}
+                    </div>
+                    {!m.is_read && (
+                      <button onClick={() => markInboxRead(m.id)}
+                        style={{ fontSize: 11, padding: '4px 10px', borderRadius: 6, border: 'none', background: 'rgba(255,255,255,0.06)', color: C.muted, cursor: 'pointer', fontFamily: 'inherit' }}>
+                        Mark read
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+        </div>
+      )}
+
+      {/* ANALYTICS TAB */}
+      {activeTab === 'analytics' && (
+        <div>
+          {!analytics?.summary ? <p style={{ fontSize: 13, color: C.muted, padding: 24, textAlign: 'center' }}>Loading analytics…</p> : (
+            <>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10, marginBottom: 20 }}>
+                {[
+                  { label: 'Posts (30d)', value: analytics.summary.count, color: '#A78BFA' },
+                  { label: 'Impressions', value: analytics.summary.totals.impressions.toLocaleString(), color: '#60A5FA' },
+                  { label: 'Reach', value: analytics.summary.totals.reach.toLocaleString(), color: '#7FB897' },
+                  { label: 'Engagement %', value: analytics.summary.engagement_rate.toFixed(1) + '%', color: '#F59E0B' },
+                ].map(s => (
+                  <div key={s.label} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 12, padding: '14px 16px' }}>
+                    <p style={{ fontSize: 10, color: C.muted, marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{s.label}</p>
+                    <p style={{ fontSize: 20, fontWeight: 700, color: s.color, fontVariantNumeric: 'tabular-nums' }}>{s.value}</p>
+                  </div>
+                ))}
+              </div>
+              {analytics.summary.top_post && (
+                <div style={{ background: 'rgba(127,184,151,0.06)', border: '1px solid rgba(127,184,151,0.25)', borderRadius: 12, padding: '14px 18px', marginBottom: 20 }}>
+                  <p style={{ fontSize: 10, fontWeight: 700, color: '#7FB897', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>⭐ Top performing post</p>
+                  <p style={{ fontSize: 13, color: '#fff', lineHeight: 1.5 }}>{analytics.summary.top_post.caption ?? '(no caption)'}</p>
+                  <p style={{ fontSize: 11, color: C.muted, marginTop: 6 }}>{analytics.summary.top_post.engagement} total engagements</p>
+                </div>
+              )}
+              <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 12, padding: '14px 18px', marginBottom: 20 }}>
+                <p style={{ fontSize: 12, fontWeight: 700, marginBottom: 8 }}>Engagement by content type</p>
+                <div style={{ display: 'flex', gap: 16 }}>
+                  <div style={{ flex: 1 }}>
+                    <p style={{ fontSize: 10, color: C.muted }}>With image</p>
+                    <p style={{ fontSize: 16, fontWeight: 700, color: '#7FB897' }}>{analytics.summary.by_type.image}</p>
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <p style={{ fontSize: 10, color: C.muted }}>Text only</p>
+                    <p style={{ fontSize: 16, fontWeight: 700, color: '#A78BFA' }}>{analytics.summary.by_type.text}</p>
+                  </div>
+                </div>
+              </div>
+              {bid && socialTab !== 'best-times' && (
+                <div style={{ marginTop: 20 }}>
+                  <p style={{ fontSize: 11, color: C.muted, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Best times to post</p>
+                  <button onClick={() => { setActiveTab('posts'); setSocialTab('best-times') }}
+                    style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid rgba(139,92,246,0.3)', background: 'rgba(139,92,246,0.08)', color: '#A78BFA', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+                    Open best-times analysis →
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
       {activeTab === 'posts' && (
       <div>
 
