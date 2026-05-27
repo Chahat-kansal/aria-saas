@@ -93,8 +93,18 @@ async function _PATCH(req: Request) {
   const bid = await getBid(supabase, user.id);
   if (!bid) return NextResponse.json({ error: 'No business found' }, { status: 400 });
 
-  const { session_id, break_minutes } = await req.json();
+  const body = await req.json();
+  const { session_id, break_minutes } = body;
   if (!session_id) return NextResponse.json({ error: 'session_id required' }, { status: 400 });
+
+  // Approval: manager approves a completed timesheet
+  if (body.approve) {
+    const { error } = await supabase.from('pos_timesheets')
+      .update({ approved: true, approved_at: new Date().toISOString(), status: 'approved' })
+      .eq('id', session_id).eq('business_id', bid);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ ok: true });
+  }
 
   // Fetch session to verify it's open
   const { data: session, error: fetchError } = await supabase

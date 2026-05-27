@@ -1,452 +1,502 @@
 'use client'
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useCallback } from 'react'
 import Link from 'next/link'
+import { ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import type { StaffMember } from '@/types/staff'
 import { useBusinessContext } from '@/components/providers/BusinessProvider'
 
-interface MemberRow extends StaffMember {
+const G = '#7FB897', G2 = '#1D9E75'
+const card: React.CSSProperties = { background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 10, padding: 16 }
+const tabBtnStyle = (a: boolean): React.CSSProperties => ({ padding: '6px 16px', borderRadius: 7, border: `1px solid ${a ? 'rgba(127,184,151,0.4)' : 'rgba(255,255,255,0.08)'}`, background: a ? 'rgba(127,184,151,0.1)' : 'transparent', color: a ? G : 'rgba(255,255,255,0.5)', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' })
+const smBtn = (c = G2): React.CSSProperties => ({ padding: '4px 12px', borderRadius: 6, border: `1px solid ${c}44`, background: `${c}15`, color: c, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' })
+const inp: React.CSSProperties = { padding: '6px 10px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, color: '#e8ede7', fontSize: 12, fontFamily: 'inherit' }
+
+type Tab = 'schedule' | 'timesheets' | 'performance' | 'leave' | 'team'
+
+interface MR extends StaffMember {
   staff_member_skills?: Array<{ staff_skills: { name: string; color: string } | null }>
 }
+interface TS { id: string; staff_name: string; clock_in: string; clock_out: string | null; total_minutes: number | null; pay_rate_cents?: number; approved: boolean; status: string }
+interface Shift { id: string; staff_name: string | null; shift_date: string; start_time: string; end_time: string; role: string; ai_generated: boolean }
+interface LR { id: string; staff_name: string | null; leave_type: string; start_date: string; end_date: string; notes: string | null; status: string }
+interface FD { day: string; date: string; predicted_revenue: number; recommended_staff: number }
+interface PerfRow { name: string; revenue: number; count: number; hours: number }
 
-function statusBadge(status: string) {
-  const map: Record<string, string> = {
-    active: 'bg-emerald-500/20 text-emerald-400',
-    inactive: 'bg-yellow-500/20 text-yellow-400',
-    terminated: 'bg-red-500/20 text-red-400',
-  }
-  return map[status] ?? 'bg-[rgba(255,255,255,0.06)] text-[var(--text-secondary)]'
+const COLORS = ['#6366f1','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4']
+const ini = (n: string) => n.split(' ').map(x => x[0]).join('').toUpperCase().slice(0, 2)
+const avatarBg = (n: string) => COLORS[(n.charCodeAt(0) ?? 0) % COLORS.length]
+const fmtTime = (ts: string) => ts?.includes('T') ? ts.slice(11, 16) : (ts?.slice(0, 5) ?? '--:--')
+const fmtHrs = (m: number | null) => m == null ? '—' : `${Math.floor(m / 60)}h ${m % 60}m`
+const monOfWeek = () => { const d = new Date(); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return d.toISOString().slice(0, 10) }
+
+function Avatar({ name, size = 28 }: { name: string; size?: number }) {
+  return <div style={{ width: size, height: size, borderRadius: '50%', background: avatarBg(name), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: size * 0.36, fontWeight: 700, color: '#fff', flexShrink: 0 }}>{ini(name)}</div>
 }
 
-function PortalBadge({ member }: { member: MemberRow }) {
-  const [resending, setResending] = useState(false)
-  const [msg, setMsg] = useState('')
-
-  const resend = async () => {
-    if (!member.business_id) return
-    setResending(true)
-    setMsg('')
-    const r = await fetch('/api/staff/invite/resend', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ staff_member_id: member.id, business_id: member.business_id }),
-    })
-    const j = await r.json()
-    setMsg(r.ok ? `Resent to ${j.email}` : (j.error ?? 'Failed'))
-    setResending(false)
-  }
-
-  // Active: portal explicitly enabled, OR user has linked their account (user_id set after accepting invite)
-  if (member.portal_enabled || (member.user_id && member.invite_sent_at)) {
-    return <span className="text-xs px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400">Active</span>
-  }
-  if (member.invite_sent_at) {
-    return (
-      <div className="space-y-1">
-        <span className="text-xs px-2 py-0.5 rounded bg-yellow-500/20 text-yellow-400">Invited</span>
-        <button onClick={resend} disabled={resending} className="block text-xs hover:underline" style={{ color: '#7FB897' }}>
-          {resending ? 'Sending…' : 'Resend'}
-        </button>
-        {msg && <span className="block text-xs" style={{ color: msg.startsWith('Resent') ? '#7FB897' : '#ef4444' }}>{msg}</span>}
-      </div>
-    )
-  }
-  return <span className="text-xs px-2 py-0.5 rounded bg-[rgba(255,255,255,0.06)]" style={{ color: 'var(--text-secondary, #A8B5A8)' }}>Not invited</span>
-}
-
-
-interface StaffSale { served_by: string; total: number; count: number }
-
-function Leaderboard({ businessId }: { businessId: string }) {
-  const [data, setData] = React.useState<StaffSale[]>([])
-  const [loading, setLoading] = React.useState(true)
-  const [period, setPeriod] = React.useState(30)
-
-  React.useEffect(() => {
-    if (!businessId) return
-    setLoading(true)
-    const since = new Date(Date.now() - period * 86400000).toISOString()
-    fetch('/api/pos/sales?business_id=' + businessId + '&limit=2000&since=' + since)
-      .then(r => r.json())
-      .then(d => {
-        const sales = (d.sales ?? []).filter((s: { status?: string; served_by?: string }) => s.status !== 'voided' && s.served_by)
-        const byStaff: Record<string, { total: number; count: number }> = {}
-        for (const s of sales) {
-          const name = (s as { served_by?: string }).served_by ?? 'Unknown'
-          if (!byStaff[name]) byStaff[name] = { total: 0, count: 0 }
-          byStaff[name].total += Number((s as { total_amount?: number }).total_amount ?? 0)
-          byStaff[name].count++
-        }
-        const sorted = Object.entries(byStaff).map(([served_by, v]) => ({ served_by, ...v })).sort((a, b) => b.total - a.total)
-        setData(sorted)
-        setLoading(false)
-      })
-      .catch(() => setLoading(false))
-  }, [businessId, period])
-
-  const best = data[0]?.total ?? 1
-  const MEDALS = ['🥇', '🥈', '🥉']
-
+function LiveWidget({ bid }: { bid: string }) {
+  const [active, setActive] = useState<TS[]>([])
+  useEffect(() => {
+    if (!bid) return
+    const load = () => { const t = new Date().toISOString().slice(0, 10); fetch(`/api/pos/timesheets?from=${t}T00:00:00&to=${t}T23:59:59`).then(r => r.json()).then(d => setActive((d.sessions ?? []).filter((s: TS) => !s.clock_out))).catch(() => {}) }
+    load(); const iv = setInterval(load, 120000); return () => clearInterval(iv)
+  }, [bid])
   return (
-    <div style={{ background: 'var(--bg-elevated, #1A2620)', border: '1px solid rgba(232,237,231,0.04)', borderRadius: 12, padding: '20px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-        <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary, #E8EDE7)', margin: 0 }}>Sales Leaderboard</h2>
-        <div style={{ display: 'flex', gap: 6 }}>
-          {[7, 30, 90].map(p => (
-            <button key={p} onClick={() => setPeriod(p)}
-              style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid ' + (period === p ? 'rgba(127,184,151,0.5)' : 'rgba(232,237,231,0.08)'), background: period === p ? 'rgba(127,184,151,0.1)' : 'transparent', color: period === p ? '#7FB897' : 'var(--text-secondary, #A8B5A8)', fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
-              {p}d
-            </button>
-          ))}
-        </div>
-      </div>
-      {loading ? (
-        <div style={{ textAlign: 'center', padding: '24px 0', color: 'var(--text-secondary, #A8B5A8)', fontSize: 13 }}>Loading...</div>
-      ) : data.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '24px 0', color: 'var(--text-secondary, #A8B5A8)', fontSize: 13 }}>
-          No sales data with staff attribution yet. Make sure served_by is recorded in sales.
-        </div>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {data.map((staff, i) => (
-            <div key={staff.served_by} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <span style={{ fontSize: 18, width: 28, textAlign: 'center', flexShrink: 0 }}>{MEDALS[i] ?? (i + 1)}</span>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary, #E8EDE7)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{staff.served_by}</span>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: '#7FB897', flexShrink: 0, marginLeft: 8 }}>A${Math.round(staff.total).toLocaleString('en-AU')}</span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <div style={{ flex: 1, height: 4, background: 'rgba(255,255,255,0.06)', borderRadius: 2 }}>
-                    <div style={{ height: 4, width: (staff.total / best * 100) + '%', background: i === 0 ? '#1D9E75' : i === 1 ? '#7FB897' : 'rgba(127,184,151,0.4)', borderRadius: 2, transition: 'width 0.5s' }} />
-                  </div>
-                  <span style={{ fontSize: 11, color: 'var(--text-secondary, #A8B5A8)', flexShrink: 0 }}>{staff.count} sales · A${Math.round(staff.total / staff.count).toLocaleString('en-AU')} avg</span>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+    <div style={{ background: 'rgba(29,158,117,0.05)', border: '1px solid rgba(29,158,117,0.15)', borderRadius: 10, padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
+      <span style={{ fontSize: 11, color: G, fontWeight: 700, letterSpacing: '0.06em' }}>ON SHIFT</span>
+      {active.length === 0
+        ? <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)' }}>No staff currently clocked in</span>
+        : active.map(t => { const m = Math.floor((Date.now() - new Date(t.clock_in).getTime()) / 60000); return (<div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Avatar name={t.staff_name} size={24} /><span style={{ fontSize: 12 }}>{t.staff_name}</span><span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)' }}>{Math.floor(m / 60)}h {m % 60}m</span></div>) })}
     </div>
   )
 }
 
-function SalesLeaderboard({ businessId }: { businessId: string }) {
-  const [period, setPeriod] = React.useState<'today'|'week'|'month'>('week')
-  const [data, setData] = React.useState<Array<{name: string; total: number; count: number}>>([])
-  const [loading, setLoading] = React.useState(false)
-
-  React.useEffect(() => {
-    if (!businessId) return
-    setLoading(true)
-    const days = period === 'today' ? 1 : period === 'week' ? 7 : 30
-    const since = new Date(Date.now() - days * 86400000).toISOString()
-    fetch('/api/pos/sales?business_id=' + businessId + '&limit=1000&since=' + since)
-      .then(r => r.json())
-      .then((d: { sales?: Array<{served_by?: string; total_amount?: number}> }) => {
-        const map: Record<string, {total: number; count: number}> = {}
-        for (const s of d.sales ?? []) {
-          const name = s.served_by || 'Unknown'
-          if (!map[name]) map[name] = { total: 0, count: 0 }
-          map[name].total += Number(s.total_amount ?? 0)
-          map[name].count += 1
-        }
-        const sorted = Object.entries(map)
-          .map(([name, v]) => ({ name, ...v }))
-          .sort((a, b) => b.total - a.total)
-          .slice(0, 10)
-        setData(sorted)
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false))
-  }, [businessId, period])
-
-  const max = data[0]?.total || 1
-
+function LabourMetrics({ bid }: { bid: string }) {
+  const [d, setD] = useState({ labour: 0, revenue: 0, hours: 0 })
+  useEffect(() => {
+    if (!bid) return
+    const mon = monOfWeek(); const sun = new Date(mon + 'T00:00:00'); sun.setDate(sun.getDate() + 6); const sunStr = sun.toISOString().slice(0, 10)
+    Promise.all([
+      fetch(`/api/pos/timesheets?from=${mon}T00:00:00&to=${sunStr}T23:59:59`).then(r => r.json()),
+      fetch(`/api/pos/sales?business_id=${bid}&since=${mon}T00:00:00&limit=1000`).then(r => r.json()),
+    ]).then(([ts, sl]) => {
+      const done: TS[] = (ts.sessions ?? []).filter((s: TS) => s.clock_out)
+      const labour = done.reduce((s, t) => s + ((t.total_minutes ?? 0) / 60) * ((t.pay_rate_cents ?? 2500) / 100), 0)
+      const hours = done.reduce((s, t) => s + (t.total_minutes ?? 0) / 60, 0)
+      const revenue = (sl.sales ?? []).reduce((s: number, x: Record<string, unknown>) => s + Number(x.total_amount ?? 0), 0)
+      setD({ labour, revenue, hours })
+    }).catch(() => {})
+  }, [bid])
+  const ratio = d.revenue > 0 ? (d.labour / d.revenue) * 100 : 0
+  const rc = ratio < 30 ? '#10b981' : ratio < 40 ? '#f59e0b' : '#ef4444'
+  const metrics: [string, string, string][] = [['Labour cost (wk)', `$${d.labour.toFixed(0)}`, G], ['Revenue (wk)', `$${d.revenue.toFixed(0)}`, G], ['Hours worked', `${d.hours.toFixed(1)}h`, G], ['Labour ratio', `${ratio.toFixed(1)}%`, rc]]
   return (
-    <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 14, border: '1px solid rgba(255,255,255,0.07)', padding: '20px', marginTop: 20 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-        <h3 style={{ fontSize: 14, fontWeight: 700, color: '#fff' }}>Sales leaderboard</h3>
-        <div style={{ display: 'flex', gap: 6 }}>
-          {(['today', 'week', 'month'] as const).map(p => (
-            <button key={p} onClick={() => setPeriod(p)}
-              style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid ' + (period === p ? '#1D9E75' : 'rgba(255,255,255,0.1)'), background: period === p ? 'rgba(29,158,117,0.2)' : 'transparent', color: period === p ? '#1D9E75' : 'rgba(255,255,255,0.4)', fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', textTransform: 'capitalize' }}>
-              {p}
-            </button>
-          ))}
-        </div>
-      </div>
-      {loading && <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: 12 }}>Loading...</p>}
-      {!loading && data.length === 0 && <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: 12 }}>No sales data for this period.</p>}
-      {data.map((row, i) => (
-        <div key={row.name} style={{ marginBottom: 12 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-            <span style={{ fontSize: 13, color: i === 0 ? '#F59E0B' : '#fff', fontWeight: i === 0 ? 700 : 400 }}>
-              {i === 0 ? '🥇 ' : i === 1 ? '🥈 ' : i === 2 ? '🥉 ' : (i + 1) + '. '}{row.name}
-            </span>
-            <span style={{ fontSize: 13, color: '#1D9E75', fontWeight: 600 }}>A${Math.round(row.total).toLocaleString()}</span>
-          </div>
-          <div style={{ height: 4, background: 'rgba(255,255,255,0.06)', borderRadius: 2 }}>
-            <div style={{ height: 4, width: Math.round((row.total / max) * 100) + '%', background: 'linear-gradient(90deg,#1D9E75,#7FB897)', borderRadius: 2, transition: 'width 0.4s ease' }} />
-          </div>
-          <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', marginTop: 2 }}>{row.count} transactions</p>
+    <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
+      {metrics.map(([label, val, color]) => (
+        <div key={label} style={{ flex: 1, minWidth: 110, ...card, padding: '12px 14px' }}>
+          <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</p>
+          <p style={{ fontSize: 18, fontWeight: 700, color }}>{val}</p>
+          {label === 'Labour ratio' && <p style={{ fontSize: 9, color: 'rgba(255,255,255,0.3)' }}>Benchmark 25–35%</p>}
         </div>
       ))}
     </div>
   )
 }
 
-interface Timesheet { id: string; staff_name: string; clock_in: string; clock_out: string | null; total_minutes: number | null; total_pay_cents?: number }
+function ScheduleTab({ bid }: { bid: string }) {
+  const [ws, setWs] = useState(monOfWeek)
+  const [shifts, setShifts] = useState<Shift[]>([])
+  const [forecast, setForecast] = useState<FD[]>([])
+  const [suggested, setSuggested] = useState<Array<Record<string, string>>>([])
+  const [aiLoading, setAiLoading] = useState(false)
+  const [msg, setMsg] = useState('')
+  const [addForm, setAddForm] = useState<{ date: string; staff_name: string; start_time: string; end_time: string; role: string } | null>(null)
 
-function ClockWidget({ businessId }: { businessId: string }) {
-  const [timesheets, setTimesheets] = React.useState<Timesheet[]>([])
-  const [staffId, setStaffId] = React.useState('')
-  const [staffName, setStaffName] = React.useState('')
-  const [msg, setMsg] = React.useState('')
-  const [clockingIn, setClockingIn] = React.useState(false)
-  const [loading, setLoading] = React.useState(false)
+  const weekDates = Array.from({ length: 7 }, (_, i) => { const d = new Date(ws + 'T00:00:00'); d.setDate(d.getDate() + i); return d.toISOString().slice(0, 10) })
+  const DS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
-  async function load() {
-    setLoading(true)
-    const today = new Date().toISOString().split('T')[0]
-    const res = await fetch('/api/pos/timesheets?from=' + today + 'T00:00:00&to=' + today + 'T23:59:59')
-    const d = await res.json()
-    setTimesheets(d.sessions ?? [])
-    setLoading(false)
+  const load = useCallback(() => {
+    fetch(`/api/pos/staff-shifts?from=${weekDates[0]}&to=${weekDates[6]}`).then(r => r.json()).then(d => setShifts(d.shifts ?? [])).catch(() => {})
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [weekDates[0], weekDates[6]])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { if (bid) load() }, [bid, ws])
+
+  const navWeek = (n: number) => { const d = new Date(ws + 'T00:00:00'); d.setDate(d.getDate() + n * 7); setWs(d.toISOString().slice(0, 10)) }
+
+  async function autoSchedule() {
+    setAiLoading(true); setMsg('')
+    const r = await fetch('/api/aria/staff-schedule', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ business_id: bid }) })
+    const data = await r.json()
+    setForecast(data.forecast ?? []); setSuggested(data.suggested_shifts ?? [])
+    setMsg(data.suggested_shifts?.length ? `AI suggests ${data.suggested_shifts.length} shifts — confirm to save.` : 'No suggestions generated.')
+    setAiLoading(false)
   }
 
-  React.useEffect(() => { if (businessId) load() }, [businessId])
-
-  async function clockIn() {
-    if (!staffId.trim()) { setMsg('Enter a staff ID'); return }
-    setClockingIn(true); setMsg('')
-    const res = await fetch('/api/pos/timesheets', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ staff_id: staffId.trim(), staff_name: staffName.trim() || staffId.trim() }),
-    })
-    const d = await res.json()
-    if (d.error) setMsg('Error: ' + d.error)
-    else { setMsg('Clocked in!'); setStaffId(''); setStaffName(''); load() }
-    setClockingIn(false)
+  async function confirmSchedule() {
+    await fetch('/api/pos/staff-shifts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(suggested.map(s => ({ ...s, ai_generated: true }))) })
+    setSuggested([]); setMsg('Schedule saved!'); load()
   }
 
-  async function clockOut(sessionId: string) {
-    await fetch('/api/pos/timesheets', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ session_id: sessionId }),
-    })
-    load()
+  async function saveShift() {
+    if (!addForm?.date || !addForm.start_time || !addForm.end_time || !addForm.staff_name) return
+    await fetch('/api/pos/staff-shifts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ staff_name: addForm.staff_name, shift_date: addForm.date, start_time: addForm.start_time, end_time: addForm.end_time, role: addForm.role || 'staff' }) })
+    setAddForm(null); load()
   }
 
-  const active = timesheets.filter(t => !t.clock_out)
-  const done = timesheets.filter(t => t.clock_out)
-  const todayMins = done.reduce((s, t) => s + (t.total_minutes ?? 0), 0)
-  const todayPay = done.reduce((s, t) => s + (t.total_pay_cents ?? 0), 0)
+  const byDate = weekDates.reduce((a, date) => { a[date] = shifts.filter(s => s.shift_date === date); return a }, {} as Record<string, Shift[]>)
 
   return (
-    <div style={{ background: 'var(--bg-elevated, #1A2620)', border: '1px solid rgba(232,237,231,0.04)', borderRadius: 12, padding: '20px', marginTop: 20 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-        <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary, #E8EDE7)', margin: 0 }}>Clock In / Out</h2>
-        <div style={{ display: 'flex', gap: 12, fontSize: 11, color: 'var(--text-secondary, #A8B5A8)' }}>
-          <span style={{ color: active.length > 0 ? '#1D9E75' : undefined }}>{active.length} active</span>
-          <span>{(todayMins / 60).toFixed(1)}h today</span>
-          <span>A${(todayPay / 100).toFixed(2)} wages</span>
-        </div>
+    <div>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 14, flexWrap: 'wrap' }}>
+        <button onClick={() => navWeek(-1)} style={smBtn()}>‹ Prev</button>
+        <span style={{ fontSize: 13, fontWeight: 600 }}>{weekDates[0]} – {weekDates[6]}</span>
+        <button onClick={() => navWeek(1)} style={smBtn()}>Next ›</button>
+        <button onClick={autoSchedule} disabled={aiLoading} style={{ ...smBtn(G2), padding: '6px 14px', fontSize: 12 }}>{aiLoading ? 'Generating…' : '✦ Auto-schedule this week'}</button>
+        {suggested.length > 0 && <button onClick={confirmSchedule} style={{ ...smBtn(G), padding: '6px 14px', fontSize: 12 }}>Confirm {suggested.length} shifts</button>}
       </div>
-      {active.map(t => {
-        const mins = Math.floor((Date.now() - new Date(t.clock_in).getTime()) / 60000)
-        return (
-          <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', background: 'rgba(29,158,117,0.08)', border: '1px solid rgba(29,158,117,0.2)', borderRadius: 8, marginBottom: 6 }}>
-            <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#1D9E75', display: 'inline-block', flexShrink: 0 }} />
-            <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: 'var(--text-primary, #E8EDE7)' }}>{t.staff_name}</span>
-            <span style={{ fontSize: 11, color: 'var(--text-secondary, #A8B5A8)' }}>{(mins / 60).toFixed(1)}h</span>
-            <button onClick={() => clockOut(t.id)}
-              style={{ padding: '3px 10px', borderRadius: 6, border: 'none', background: 'rgba(239,68,68,0.15)', color: '#EF4444', fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
-              Clock out
-            </button>
+      {msg && <p style={{ fontSize: 12, color: G, marginBottom: 10 }}>{msg}</p>}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 6, marginBottom: 20 }}>
+        {weekDates.map((date, i) => (
+          <div key={date} style={{ ...card, padding: 8, minHeight: 90 }}>
+            <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', marginBottom: 4 }}>{DS[i]}<br /><strong style={{ color: '#e8ede7', fontSize: 13 }}>{date.slice(8)}</strong></p>
+            {(byDate[date] ?? []).map(s => (
+              <div key={s.id} style={{ background: s.ai_generated ? 'rgba(127,184,151,0.08)' : 'rgba(99,102,241,0.08)', borderLeft: `2px solid ${s.ai_generated ? G : '#6366f1'}`, borderRadius: 4, padding: '3px 6px', marginBottom: 3 }}>
+                <p style={{ fontSize: 10, fontWeight: 600, color: '#e8ede7', margin: 0 }}>{s.staff_name ?? '?'}</p>
+                <p style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)', margin: 0 }}>{fmtTime(s.start_time)}–{fmtTime(s.end_time)}</p>
+                <button onClick={() => fetch(`/api/pos/staff-shifts?id=${s.id}`, { method: 'DELETE' }).then(load)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.25)', cursor: 'pointer', fontSize: 10, padding: 0 }}>✕</button>
+              </div>
+            ))}
+            {suggested.filter(s => s.shift_date === date).map((s, j) => (
+              <div key={j} style={{ background: 'rgba(245,158,11,0.08)', borderLeft: '2px dashed #f59e0b', borderRadius: 4, padding: '3px 6px', marginBottom: 3 }}>
+                <p style={{ fontSize: 10, fontWeight: 600, color: '#f59e0b', margin: 0 }}>{s.staff_name} (AI)</p>
+                <p style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)', margin: 0 }}>{s.start_time}–{s.end_time}</p>
+              </div>
+            ))}
+            <button onClick={() => setAddForm({ date, staff_name: '', start_time: '09:00', end_time: '17:00', role: 'staff' })} style={{ fontSize: 9, color: 'rgba(255,255,255,0.2)', background: 'none', border: 'none', cursor: 'pointer', marginTop: 4 }}>+ add</button>
           </div>
-        )
-      })}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
-        <input type="text" placeholder="Staff ID" value={staffId} onChange={e => setStaffId(e.target.value)}
-          style={{ flex: 1, padding: '7px 10px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(232,237,231,0.08)', borderRadius: 7, color: 'var(--text-primary, #E8EDE7)', fontSize: 12, fontFamily: 'inherit', outline: 'none' }} />
-        <input type="text" placeholder="Name (optional)" value={staffName} onChange={e => setStaffName(e.target.value)}
-          style={{ flex: 1, padding: '7px 10px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(232,237,231,0.08)', borderRadius: 7, color: 'var(--text-primary, #E8EDE7)', fontSize: 12, fontFamily: 'inherit', outline: 'none' }} />
-        <button onClick={clockIn} disabled={clockingIn}
-          style={{ padding: '7px 14px', borderRadius: 7, border: 'none', background: '#1D9E75', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', opacity: clockingIn ? 0.6 : 1 }}>
-          Clock in
-        </button>
+        ))}
       </div>
-      {msg && <p style={{ fontSize: 11, color: msg.startsWith('Error') ? '#EF4444' : '#1D9E75', margin: '2px 0' }}>{msg}</p>}
-      {done.length > 0 && (
-        <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-          <p style={{ fontSize: 10, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 5 }}>Completed today</p>
-          {done.slice(0, 5).map(t => (
-            <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--text-secondary, #A8B5A8)', marginBottom: 2 }}>
-              <span>{t.staff_name}</span>
-              <span>{((t.total_minutes ?? 0) / 60).toFixed(1)}h · A${((t.total_pay_cents ?? 0) / 100).toFixed(2)}</span>
-            </div>
-          ))}
-          <a href="/dashboard/staff/timesheets" style={{ fontSize: 11, color: '#7FB897', marginTop: 5, display: 'block' }}>View all timesheets →</a>
+      {addForm && (
+        <div style={{ ...card, marginBottom: 16 }}>
+          <p style={{ fontSize: 12, fontWeight: 600, marginBottom: 8 }}>Add shift for {addForm.date}</p>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+            {(['staff_name:Name', 'start_time:Start (HH:MM)', 'end_time:End (HH:MM)', 'role:Role'] as const).map(f => {
+              const [key, label] = f.split(':')
+              return <input key={key} placeholder={label} value={(addForm as Record<string, string>)[key] ?? ''} onChange={e => setAddForm({ ...addForm, [key]: e.target.value })} style={{ ...inp, width: 130 }} />
+            })}
+            <button onClick={saveShift} style={smBtn(G2)}>Save</button>
+            <button onClick={() => setAddForm(null)} style={smBtn()}>Cancel</button>
+          </div>
         </div>
       )}
+      {forecast.length > 0 && (
+        <div style={{ ...card }}>
+          <p style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>Next week demand forecast</p>
+          <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 12 }}>Based on last 4 weeks of sales data</p>
+          <ResponsiveContainer width="100%" height={180}>
+            <ComposedChart data={forecast}>
+              <XAxis dataKey="day" tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 10 }} axisLine={false} tickLine={false} />
+              <YAxis yAxisId="l" tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 9 }} axisLine={false} tickLine={false} tickFormatter={(v: number) => `$${v}`} />
+              <YAxis yAxisId="r" orientation="right" tick={{ fill: G, fontSize: 9 }} axisLine={false} tickLine={false} domain={[0, 8]} />
+              <Tooltip contentStyle={{ background: '#1a2620', border: '1px solid rgba(255,255,255,0.1)', fontSize: 11 }} />
+              <Bar yAxisId="l" dataKey="predicted_revenue" fill="rgba(127,184,151,0.35)" radius={[3, 3, 0, 0]} name="Predicted Revenue ($)" />
+              <Line yAxisId="r" dataKey="recommended_staff" stroke={G} strokeWidth={2} dot={{ r: 3, fill: G }} name="Staff needed" />
+            </ComposedChart>
+          </ResponsiveContainer>
+          <div style={{ marginTop: 8 }}>{forecast.map(f => <p key={f.day} style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', margin: '2px 0' }}>{f.day}: ${f.predicted_revenue} predicted → {f.recommended_staff} staff</p>)}</div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function TimesheetTab({ bid }: { bid: string }) {
+  const [sessions, setSessions] = useState<TS[]>([])
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [week, setWeek] = useState(monOfWeek)
+
+  const load = useCallback(() => {
+    const sun = new Date(week + 'T00:00:00'); sun.setDate(sun.getDate() + 6)
+    fetch(`/api/pos/timesheets?from=${week}T00:00:00&to=${sun.toISOString().slice(0, 10)}T23:59:59`).then(r => r.json()).then(d => setSessions(d.sessions ?? [])).catch(() => {})
+  }, [week])
+  useEffect(() => { if (bid) load() }, [bid, week, load])
+
+  const approve = async (id: string) => { await fetch('/api/pos/timesheets', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ session_id: id, approve: true }) }); load() }
+  const approveAll = async () => { await Promise.all([...selected].map(id => approve(id))); setSelected(new Set()) }
+  const csvExport = () => {
+    const rows = [['Staff', 'Clock In', 'Clock Out', 'Hours', 'Rate ($/hr)', 'Cost', 'Status'],
+      ...sessions.map(s => { const h = (s.total_minutes ?? 0) / 60; const r = (s.pay_rate_cents ?? 0) / 100; return [s.staff_name, s.clock_in, s.clock_out ?? '', h.toFixed(2), r.toFixed(2), (h * r).toFixed(2), s.approved ? 'Approved' : 'Pending'] })]
+    const a = document.createElement('a'); a.href = 'data:text/csv,' + encodeURIComponent(rows.map(r => r.join(',')).join('\n')); a.download = `timesheets-${week}.csv`; a.click()
+  }
+
+  const done = sessions.filter(s => s.clock_out)
+  const totals: Record<string, { hrs: number; cost: number }> = {}
+  done.forEach(s => { totals[s.staff_name] = totals[s.staff_name] ?? { hrs: 0, cost: 0 }; const h = (s.total_minutes ?? 0) / 60; const r = (s.pay_rate_cents ?? 0) / 100; totals[s.staff_name].hrs += h; totals[s.staff_name].cost += h * r })
+
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 14, alignItems: 'center', flexWrap: 'wrap' }}>
+        <button onClick={() => { const d = new Date(week + 'T00:00:00'); d.setDate(d.getDate() - 7); setWeek(d.toISOString().slice(0, 10)) }} style={smBtn()}>‹ Prev</button>
+        <span style={{ fontSize: 13, fontWeight: 600 }}>Week of {week}</span>
+        <button onClick={() => { const d = new Date(week + 'T00:00:00'); d.setDate(d.getDate() + 7); setWeek(d.toISOString().slice(0, 10)) }} style={smBtn()}>Next ›</button>
+        {selected.size > 0 && <button onClick={approveAll} style={smBtn(G2)}>Approve {selected.size}</button>}
+        <button onClick={csvExport} style={smBtn()}>Export CSV</button>
+      </div>
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
+          <thead><tr style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+            {['', 'Staff', 'Date', 'Clock In', 'Clock Out', 'Hours', 'Cost', 'Status', ''].map((h, i) => <th key={i} style={{ padding: '6px 10px', textAlign: 'left', fontSize: 10, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</th>)}
+          </tr></thead>
+          <tbody>{sessions.map(s => {
+            const hrs = (s.total_minutes ?? 0) / 60; const rate = (s.pay_rate_cents ?? 0) / 100
+            return (
+              <tr key={s.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                <td style={{ padding: '6px 10px' }}><input type="checkbox" checked={selected.has(s.id)} onChange={e => { const ns = new Set(selected); e.target.checked ? ns.add(s.id) : ns.delete(s.id); setSelected(ns) }} /></td>
+                <td style={{ padding: '6px 10px', fontWeight: 600 }}>{s.staff_name}</td>
+                <td style={{ padding: '6px 10px', color: 'rgba(255,255,255,0.5)' }}>{s.clock_in.slice(0, 10)}</td>
+                <td style={{ padding: '6px 10px' }}>{s.clock_in.slice(11, 16)}</td>
+                <td style={{ padding: '6px 10px' }}>{s.clock_out ? s.clock_out.slice(11, 16) : <span style={{ color: G }}>Active</span>}</td>
+                <td style={{ padding: '6px 10px' }}>{fmtHrs(s.total_minutes)}</td>
+                <td style={{ padding: '6px 10px', color: G }}>${(hrs * rate).toFixed(2)}</td>
+                <td style={{ padding: '6px 10px' }}><span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: s.approved ? 'rgba(16,185,129,0.15)' : 'rgba(255,255,255,0.06)', color: s.approved ? '#10b981' : 'rgba(255,255,255,0.4)' }}>{s.approved ? 'Approved' : 'Pending'}</span></td>
+                <td style={{ padding: '6px 10px' }}>{!s.approved && s.clock_out && <button onClick={() => approve(s.id)} style={smBtn(G2)}>Approve</button>}</td>
+              </tr>
+            )
+          })}</tbody>
+        </table>
+      </div>
+      {Object.keys(totals).length > 0 && (
+        <div style={{ ...card, marginTop: 14 }}>
+          <p style={{ fontSize: 11, fontWeight: 700, marginBottom: 8 }}>Weekly totals per staff</p>
+          {Object.entries(totals).map(([name, v]) => (
+            <div key={name} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, padding: '4px 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+              <span>{name}</span><span style={{ color: G }}>{v.hrs.toFixed(1)}h · ${v.cost.toFixed(2)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function PerformanceTab({ bid }: { bid: string }) {
+  const [rows, setRows] = useState<PerfRow[]>([])
+  const [period, setPeriod] = useState(30)
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    if (!bid) return
+    setLoading(true)
+    const since = new Date(Date.now() - period * 86400000).toISOString()
+    const sinceWk = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10)
+    Promise.all([
+      fetch(`/api/pos/sales?business_id=${bid}&limit=2000&since=${since}`).then(r => r.json()),
+      fetch(`/api/pos/timesheets?from=${sinceWk}T00:00:00&to=${new Date().toISOString().slice(0, 10)}T23:59:59`).then(r => r.json()),
+    ]).then(([sl, ts]) => {
+      const sm: Record<string, { revenue: number; count: number }> = {}
+      ;(sl.sales ?? []).filter((s: Record<string, unknown>) => s.status !== 'voided' && s.served_by).forEach((s: Record<string, unknown>) => {
+        const k = s.served_by as string; sm[k] = sm[k] ?? { revenue: 0, count: 0 }; sm[k].revenue += Number(s.total_amount ?? 0); sm[k].count++
+      })
+      const hm: Record<string, number> = {}
+      ;(ts.sessions ?? []).filter((s: TS) => s.clock_out).forEach((s: TS) => { hm[s.staff_name] = (hm[s.staff_name] ?? 0) + (s.total_minutes ?? 0) / 60 })
+      const all = new Set([...Object.keys(sm), ...Object.keys(hm)])
+      const data: PerfRow[] = [...all].map(name => ({ name, revenue: sm[name]?.revenue ?? 0, count: sm[name]?.count ?? 0, hours: hm[name] ?? 0 }))
+      data.sort((a, b) => (b.hours > 0 ? b.revenue / b.hours : 0) - (a.hours > 0 ? a.revenue / a.hours : 0))
+      setRows(data); setLoading(false)
+    }).catch(() => setLoading(false))
+  }, [bid, period])
+
+  const MEDALS = ['🥇', '🥈', '🥉']
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+        {[7, 30, 90].map(p => <button key={p} onClick={() => setPeriod(p)} style={tabBtnStyle(period === p)}>{p}d</button>)}
+      </div>
+      {loading ? <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)' }}>Loading…</p>
+        : rows.length === 0 ? <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)' }}>No data. Ensure sales have served_by set.</p>
+        : rows.map((r, i) => {
+          const rph = r.hours > 0 ? r.revenue / r.hours : 0
+          const best = (() => { const b = rows[0]; return b.hours > 0 ? b.revenue / b.hours : 1 })()
+          return (
+            <div key={r.name} style={{ ...card, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 12 }}>
+              <span style={{ fontSize: 20, width: 28, textAlign: 'center' }}>{MEDALS[i] ?? i + 1}</span>
+              <Avatar name={r.name} size={34} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                  <span style={{ fontSize: 13, fontWeight: 600 }}>{r.name}</span>
+                  <span style={{ fontSize: 12, color: G, fontWeight: 700 }}>${Math.round(r.revenue).toLocaleString()}</span>
+                </div>
+                <div style={{ height: 4, background: 'rgba(255,255,255,0.06)', borderRadius: 2, marginBottom: 4 }}>
+                  <div style={{ height: 4, width: `${Math.round((rph / (best || 1)) * 100)}%`, background: 'linear-gradient(90deg,#1D9E75,#7FB897)', borderRadius: 2 }} />
+                </div>
+                <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', margin: 0 }}>{r.count} sales · ${r.count > 0 ? Math.round(r.revenue / r.count) : 0} avg · {r.hours.toFixed(1)}h worked · <strong style={{ color: G }}>${rph.toFixed(0)}/hr</strong></p>
+              </div>
+            </div>
+          )
+        })}
+    </div>
+  )
+}
+
+function LeaveTab({ bid }: { bid: string }) {
+  const [leave, setLeave] = useState<LR[]>([])
+  const [form, setForm] = useState({ staff_name: '', leave_type: 'annual', start_date: '', end_date: '', notes: '' })
+  const [adding, setAdding] = useState(false)
+  const [saving, setSaving] = useState(false)
+
+  const load = useCallback(() => { fetch('/api/pos/staff-leave').then(r => r.json()).then(d => setLeave(d.leave ?? [])).catch(() => {}) }, [])
+  useEffect(() => { if (bid) load() }, [bid, load])
+
+  const update = (id: string, status: string) => fetch(`/api/pos/staff-leave?id=${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) }).then(load)
+  const save = async () => {
+    if (!form.start_date || !form.end_date) return
+    setSaving(true)
+    await fetch('/api/pos/staff-leave', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...form }) })
+    setSaving(false); setAdding(false); setForm({ staff_name: '', leave_type: 'annual', start_date: '', end_date: '', notes: '' }); load()
+  }
+
+  const SC: Record<string, string> = { pending: '#f59e0b', approved: '#10b981', declined: '#ef4444' }
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 14, alignItems: 'center' }}>
+        <span style={{ fontSize: 13, fontWeight: 600 }}>{leave.length} requests</span>
+        <button onClick={() => setAdding(!adding)} style={smBtn(G2)}>+ New request</button>
+      </div>
+      {adding && (
+        <div style={{ ...card, marginBottom: 14 }}>
+          <p style={{ fontSize: 12, fontWeight: 600, marginBottom: 8 }}>New leave request</p>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+            <input placeholder="Staff name" value={form.staff_name} onChange={e => setForm({ ...form, staff_name: e.target.value })} style={inp} />
+            <select value={form.leave_type} onChange={e => setForm({ ...form, leave_type: e.target.value })} style={{ ...inp, background: '#1a2420' }}>
+              {['annual', 'sick', 'personal', 'unpaid'].map(t => <option key={t} value={t} style={{ background: '#1a2420' }}>{t}</option>)}
+            </select>
+            <input type="date" value={form.start_date} onChange={e => setForm({ ...form, start_date: e.target.value })} style={inp} />
+            <input type="date" value={form.end_date} onChange={e => setForm({ ...form, end_date: e.target.value })} style={inp} />
+            <input placeholder="Notes (optional)" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} style={{ ...inp, minWidth: 150 }} />
+            <button onClick={save} disabled={saving} style={smBtn(G2)}>{saving ? 'Saving…' : 'Submit'}</button>
+          </div>
+        </div>
+      )}
+      {leave.length === 0
+        ? <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)' }}>No leave requests.</p>
+        : leave.map(l => (
+          <div key={l.id} style={{ ...card, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            {l.staff_name && <Avatar name={l.staff_name} size={32} />}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <p style={{ fontSize: 13, fontWeight: 600, margin: 0 }}>{l.staff_name ?? 'Staff'} · <span style={{ fontWeight: 400, color: 'rgba(255,255,255,0.5)', textTransform: 'capitalize' }}>{l.leave_type}</span></p>
+              <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', margin: 0 }}>{l.start_date} → {l.end_date}{l.notes ? ` · ${l.notes}` : ''}</p>
+            </div>
+            <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 4, background: `${SC[l.status] ?? '#fff'}20`, color: SC[l.status] ?? 'rgba(255,255,255,0.5)', textTransform: 'capitalize' }}>{l.status}</span>
+            {l.status === 'pending' && (
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button onClick={() => update(l.id, 'approved')} style={smBtn(G2)}>Approve</button>
+                <button onClick={() => update(l.id, 'declined')} style={smBtn('#ef4444')}>Decline</button>
+              </div>
+            )}
+          </div>
+        ))}
+    </div>
+  )
+}
+
+function PortalBadge({ member }: { member: MR }) {
+  const [resending, setResending] = useState(false)
+  const [msg, setMsg] = useState('')
+  const resend = async () => {
+    if (!member.business_id) return; setResending(true)
+    const r = await fetch('/api/staff/invite/resend', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ staff_member_id: member.id, business_id: member.business_id }) })
+    const j = await r.json(); setMsg(r.ok ? `Resent to ${j.email}` : (j.error ?? 'Failed')); setResending(false)
+  }
+  if (member.portal_enabled || (member.user_id && member.invite_sent_at)) return <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: 'rgba(16,185,129,0.2)', color: '#10b981' }}>Active</span>
+  if (member.invite_sent_at) return (
+    <div>
+      <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: 'rgba(245,158,11,0.2)', color: '#f59e0b' }}>Invited</span>
+      <button onClick={resend} disabled={resending} style={{ display: 'block', fontSize: 10, color: G, background: 'none', border: 'none', cursor: 'pointer' }}>{resending ? '…' : 'Resend'}</button>
+      {msg && <span style={{ fontSize: 10, color: msg.startsWith('Resent') ? G : '#ef4444' }}>{msg}</span>}
+    </div>
+  )
+  return <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>Not invited</span>
+}
+
+function TeamTab({ bid }: { bid: string }) {
+  const [members, setMembers] = useState<MR[]>([])
+  const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState('active')
+
+  const load = useCallback((q: string, s: string) => {
+    setLoading(true)
+    const p = new URLSearchParams({ status: s }); if (q) p.set('q', q)
+    fetch(`/api/staff/members?${p}`).then(r => r.json()).then(d => setMembers(d.members ?? [])).finally(() => setLoading(false))
+  }, [])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { load(search, statusFilter) }, [statusFilter])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { const t = setTimeout(() => load(search, statusFilter), 350); return () => clearTimeout(t) }, [search])
+
+  const dn = (m: MR) => m.preferred_name ?? `${m.first_name} ${m.last_name}`
+  const pay = (m: MR) => m.pay_rate_cents ? `$${(m.pay_rate_cents / 100).toFixed(2)}/hr` : '—'
+  const SC: Record<string, [string, string]> = { active: ['rgba(16,185,129,0.2)', '#10b981'], inactive: ['rgba(245,158,11,0.2)', '#f59e0b'], terminated: ['rgba(239,68,68,0.2)', '#ef4444'] }
+
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap', alignItems: 'center' }}>
+        <input type="text" placeholder="Search name or position…" value={search} onChange={e => setSearch(e.target.value)} style={{ ...inp, width: 220 }} />
+        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={{ ...inp, background: '#1a2420' }}>
+          {['active', 'inactive', 'terminated', 'all'].map(s => <option key={s} value={s} style={{ background: '#1a2420' }}>{s[0].toUpperCase() + s.slice(1)}</option>)}
+        </select>
+        <Link href="/dashboard/staff/new" style={{ padding: '7px 14px', borderRadius: 8, background: '#2D5240', color: G, fontSize: 12, fontWeight: 600, textDecoration: 'none' }}>+ Add staff</Link>
+      </div>
+      {loading
+        ? <p style={{ textAlign: 'center', padding: '32px 0', fontSize: 12, color: 'rgba(255,255,255,0.3)' }}>Loading…</p>
+        : members.length === 0
+          ? <div style={{ textAlign: 'center', padding: '48px 0', color: 'rgba(255,255,255,0.3)' }}><p>No staff found.</p><Link href="/dashboard/staff/new" style={{ color: G, fontSize: 12 }}>Add first member →</Link></div>
+          : <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
+              <thead><tr style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                {['Name', 'Position', 'Type', 'Pay', 'Skills', 'Portal', 'Status', ''].map((h, i) => <th key={i} style={{ padding: '6px 10px', textAlign: 'left', fontSize: 10, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</th>)}
+              </tr></thead>
+              <tbody>{members.map(m => (
+                <tr key={m.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                  <td style={{ padding: '8px 10px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div style={{ width: 30, height: 30, borderRadius: '50%', background: m.color ?? '#6366f1', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#fff' }}>{m.first_name[0]}{m.last_name[0]}</div>
+                      <div><p style={{ fontWeight: 600, margin: 0 }}>{dn(m)}</p><p style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', margin: 0 }}>{m.work_email ?? m.personal_email ?? ''}</p></div>
+                    </div>
+                  </td>
+                  <td style={{ padding: '8px 10px', color: 'rgba(255,255,255,0.5)' }}>{m.position}</td>
+                  <td style={{ padding: '8px 10px', color: 'rgba(255,255,255,0.5)', textTransform: 'capitalize' }}>{(m.employment_type ?? '').replace('_', ' ')}</td>
+                  <td style={{ padding: '8px 10px', color: 'rgba(255,255,255,0.5)' }}>{pay(m)}</td>
+                  <td style={{ padding: '8px 10px' }}><div style={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>{(m.staff_member_skills ?? []).slice(0, 2).map((s, j) => s.staff_skills && <span key={j} style={{ fontSize: 9, padding: '1px 5px', borderRadius: 3, background: (s.staff_skills.color ?? '#6366f1') + '33', color: s.staff_skills.color ?? '#6366f1' }}>{s.staff_skills.name}</span>)}</div></td>
+                  <td style={{ padding: '8px 10px' }}><PortalBadge member={m} /></td>
+                  <td style={{ padding: '8px 10px' }}><span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: SC[m.status]?.[0] ?? 'rgba(255,255,255,0.06)', color: SC[m.status]?.[1] ?? 'rgba(255,255,255,0.5)', textTransform: 'capitalize' }}>{m.status}</span></td>
+                  <td style={{ padding: '8px 10px' }}><Link href={`/dashboard/staff/${m.id}`} style={{ fontSize: 11, color: G }}>View →</Link></td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </div>}
+      <div style={{ marginTop: 16, padding: '12px 16px', background: 'rgba(59,130,246,0.05)', border: '1px solid rgba(59,130,246,0.15)', borderRadius: 10 }}>
+        <p style={{ fontSize: 12, fontWeight: 600, color: '#3B82F6', marginBottom: 4 }}>Payroll & Xero integration</p>
+        <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 8 }}>Aria tracks hours and wages. Transfer payroll via your accounting software.</p>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <a href="https://www.xero.com/au/accounting-software/payroll/" target="_blank" rel="noopener noreferrer" style={{ padding: '5px 12px', borderRadius: 6, border: '1px solid rgba(59,130,246,0.3)', color: '#3B82F6', fontSize: 11, fontWeight: 600, textDecoration: 'none' }}>Connect Xero</a>
+          <a href="https://www.myob.com/au" target="_blank" rel="noopener noreferrer" style={{ padding: '5px 12px', borderRadius: 6, border: '1px solid rgba(59,130,246,0.3)', color: '#3B82F6', fontSize: 11, fontWeight: 600, textDecoration: 'none' }}>Connect MYOB</a>
+        </div>
+      </div>
     </div>
   )
 }
 
 export default function StaffPage() {
   const { business } = useBusinessContext()
-  const [members, setMembers] = useState<MemberRow[]>([])
-  const [loading, setLoading] = useState(true)
-  const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState('active')
-
-  const load = async (q: string, s: string) => {
-    setLoading(true)
-    const params = new URLSearchParams({ status: s })
-    if (q) params.set('q', q)
-    const r = await fetch(`/api/staff/members?${params}`)
-    const j = await r.json()
-    setMembers(j.members ?? [])
-    setLoading(false)
-  }
-
-  useEffect(() => { load(search, statusFilter) }, [statusFilter]) // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => {
-    const t = setTimeout(() => load(search, statusFilter), 350)
-    return () => clearTimeout(t)
-  }, [search]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  const displayName = (m: MemberRow) => m.preferred_name ?? `${m.first_name} ${m.last_name}`
-  const payDisplay = (m: MemberRow) => m.pay_rate_cents ? `$${(Number(m.pay_rate_cents) / 100).toFixed(2)}/hr` : '—'
-
+  const bid = business?.id ?? ''
+  const [tab, setTab] = useState<Tab>('schedule')
+  const TABS: { id: Tab; label: string }[] = [
+    { id: 'schedule', label: 'Schedule' },
+    { id: 'timesheets', label: 'Timesheets' },
+    { id: 'performance', label: 'Performance' },
+    { id: 'leave', label: 'Leave' },
+    { id: 'team', label: 'Team' },
+  ]
   return (
-    <div className="p-6 max-w-7xl space-y-6" style={{ color: 'var(--text-primary, #E8EDE7)' }}>
-      <header className="flex justify-between items-baseline flex-wrap gap-4">
+    <div style={{ padding: 24, maxWidth: 1280, color: '#e8ede7' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
         <div>
-          <h1 className="text-2xl font-medium">Staff</h1>
-          <p className="text-sm mt-1" style={{ color: 'var(--text-secondary, #A8B5A8)' }}>
-            {members.length} {statusFilter !== 'all' ? statusFilter : ''} staff member{members.length !== 1 ? 's' : ''}
-          </p>
+          <h1 style={{ fontSize: 22, fontWeight: 700, margin: 0 }}>Staff</h1>
+          <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', marginTop: 4 }}>Deputy-level scheduling, timesheets &amp; analytics</p>
         </div>
-        <div className="flex gap-2 flex-wrap">
-          <Link href="/dashboard/staff/timesheets" className="px-4 py-2 rounded-lg text-sm font-medium" style={{ background: 'rgba(45,82,64,0.3)', border: '1px solid rgba(45,82,64,0.5)', color: '#7FB897' }}>
-            Timesheets
-          </Link>
-          <Link href="/dashboard/staff/leave" className="px-4 py-2 rounded-lg text-sm font-medium" style={{ background: 'rgba(45,82,64,0.3)', border: '1px solid rgba(45,82,64,0.5)', color: '#7FB897' }}>
-            Leave
-          </Link>
-          <Link href="/dashboard/staff/roster" className="px-4 py-2 rounded-lg text-sm font-medium" style={{ background: 'rgba(45,82,64,0.3)', border: '1px solid rgba(45,82,64,0.5)', color: '#7FB897' }}>
-            Roster Builder
-          </Link>
-          <Link href="/dashboard/staff/payroll" className="px-4 py-2 rounded-lg text-sm font-medium" style={{ background: 'rgba(45,82,64,0.3)', border: '1px solid rgba(45,82,64,0.5)', color: '#7FB897' }}>
-            Payroll
-          </Link>
-          <Link href="/dashboard/staff/messages" className="px-4 py-2 rounded-lg text-sm font-medium" style={{ background: 'rgba(45,82,64,0.3)', border: '1px solid rgba(45,82,64,0.5)', color: '#7FB897' }}>
-            Messages
-          </Link>
-          <Link href="/dashboard/staff/announcements" className="px-4 py-2 rounded-lg text-sm font-medium" style={{ background: 'rgba(45,82,64,0.3)', border: '1px solid rgba(45,82,64,0.5)', color: '#7FB897' }}>
-            Announcements
-          </Link>
-          <Link href="/dashboard/staff/new" className="px-4 py-2 rounded-lg text-sm font-semibold" style={{ background: '#2D5240', color: '#7FB897' }}>
-            + Add staff member
-          </Link>
-        </div>
-      </header>
-
-      <div className="flex gap-3 flex-wrap">
-        <input type="text" placeholder="Search name or position…" value={search} onChange={e => setSearch(e.target.value)}
-          className="px-3 py-2 rounded-lg text-sm w-64"
-          style={{ background: 'var(--bg-elevated, #1A2620)', border: '1px solid var(--divider, rgba(232,237,231,0.04))', color: 'var(--text-primary, #E8EDE7)' }} />
-        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="px-3 py-2 rounded-lg text-sm"
-          style={{ background: 'var(--bg-elevated, #1A2620)', border: '1px solid var(--divider, rgba(232,237,231,0.04))', color: 'var(--text-primary, #E8EDE7)' }}>
-          <option value="active" style={{ background: '#1a2420', color: '#e8ede7' }}>Active</option>
-          <option value="inactive" style={{ background: '#1a2420', color: '#e8ede7' }}>Inactive</option>
-          <option value="terminated" style={{ background: '#1a2420', color: '#e8ede7' }}>Terminated</option>
-          <option value="all" style={{ background: '#1a2420', color: '#e8ede7' }}>All</option>
-        </select>
+        <Link href="/dashboard/staff/new" style={{ padding: '8px 16px', borderRadius: 8, background: '#2D5240', color: G, fontSize: 13, fontWeight: 600, textDecoration: 'none' }}>+ Add staff</Link>
       </div>
-
-      {loading ? (
-        <div className="py-8 text-center text-sm" style={{ color: 'var(--text-secondary, #A8B5A8)' }}>Loading…</div>
-      ) : members.length === 0 ? (
-        <div className="text-center py-16" style={{ color: 'var(--text-secondary, #A8B5A8)' }}>
-          <p className="text-lg mb-2">No staff members found.</p>
-          <Link href="/dashboard/staff/new" className="text-sm hover:underline" style={{ color: '#7FB897' }}>Add your first staff member →</Link>
-        </div>
-      ) : (
-        <div className="overflow-x-auto rounded-lg" style={{ border: '1px solid var(--divider, rgba(232,237,231,0.04))' }}>
-          <table className="w-full text-sm">
-            <thead>
-              <tr style={{ background: 'var(--bg-elevated, #1A2620)', borderBottom: '1px solid var(--divider, rgba(232,237,231,0.04))' }}>
-                {['Name','Position','Employment','Pay rate','Skills','Portal','Status',''].map(h => (
-                  <th key={h} className="text-left px-4 py-3 text-xs uppercase tracking-wide font-medium" style={{ color: 'var(--text-secondary, #A8B5A8)' }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {members.map(m => (
-                <tr key={m.id} style={{ borderBottom: '1px solid var(--divider, rgba(232,237,231,0.04))' }}>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-medium shrink-0"
-                        style={{ background: m.color ?? '#6366f1' }}>
-                        {m.first_name[0]}{m.last_name[0]}
-                      </div>
-                      <div>
-                        <div className="font-medium">{displayName(m)}</div>
-                        <div className="text-xs" style={{ color: 'var(--text-secondary, #A8B5A8)' }}>{m.work_email ?? m.personal_email ?? ''}</div>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3" style={{ color: 'var(--text-secondary, #A8B5A8)' }}>{m.position}</td>
-                  <td className="px-4 py-3 capitalize" style={{ color: 'var(--text-secondary, #A8B5A8)' }}>{(m.employment_type ?? '').replace('_', ' ')}</td>
-                  <td className="px-4 py-3" style={{ color: 'var(--text-secondary, #A8B5A8)' }}>{payDisplay(m)}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex gap-1 flex-wrap">
-                      {(m.staff_member_skills ?? []).slice(0, 3).map((s, i) => s.staff_skills && (
-                        <span key={i} className="text-xs px-2 py-0.5 rounded"
-                          style={{ background: (s.staff_skills.color ?? '#6366f1') + '33', color: s.staff_skills.color ?? '#6366f1' }}>
-                          {s.staff_skills.name}
-                        </span>
-                      ))}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3"><PortalBadge member={m} /></td>
-                  <td className="px-4 py-3">
-                    <span className={`text-xs px-2 py-0.5 rounded capitalize ${statusBadge(m.status)}`}>{m.status}</span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <Link href={`/dashboard/staff/${m.id}`} className="text-xs hover:underline" style={{ color: '#7FB897' }}>View →</Link>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-      <SalesLeaderboard businessId={business?.id ?? ''} />
-
-      <div style={{ marginTop: 20, padding: '14px 18px', background: 'rgba(59,130,246,0.06)', border: '1px solid rgba(59,130,246,0.2)', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-        <div>
-          <p style={{ fontSize: 13, fontWeight: 600, color: '#3B82F6', marginBottom: 2 }}>Payroll, TFN &amp; bank details</p>
-          <p style={{ fontSize: 12, color: 'var(--text-secondary, #A8B5A8)' }}>Aria tracks hours and wages. For compliance, payroll transfers are handled by your accounting software.</p>
-        </div>
-        <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-          <a href="https://www.xero.com/au/accounting-software/payroll/" target="_blank" rel="noopener noreferrer"
-            style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid rgba(59,130,246,0.3)', color: '#3B82F6', fontSize: 12, fontWeight: 600, textDecoration: 'none' }}>
-            Connect Xero
-          </a>
-          <a href="https://www.myob.com/au" target="_blank" rel="noopener noreferrer"
-            style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid rgba(59,130,246,0.3)', color: '#3B82F6', fontSize: 12, fontWeight: 600, textDecoration: 'none' }}>
-            Connect MYOB
-          </a>
-        </div>
+      {bid && <LiveWidget bid={bid} />}
+      {bid && (tab === 'schedule' || tab === 'timesheets') && <LabourMetrics bid={bid} />}
+      <div style={{ display: 'flex', gap: 6, marginBottom: 20, borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: 12 }}>
+        {TABS.map(t => <button key={t.id} onClick={() => setTab(t.id)} style={tabBtnStyle(tab === t.id)}>{t.label}</button>)}
       </div>
-
-      {members[0]?.business_id && <ClockWidget businessId={members[0].business_id} />}
+      {tab === 'schedule' && bid && <ScheduleTab bid={bid} />}
+      {tab === 'timesheets' && bid && <TimesheetTab bid={bid} />}
+      {tab === 'performance' && bid && <PerformanceTab bid={bid} />}
+      {tab === 'leave' && bid && <LeaveTab bid={bid} />}
+      {tab === 'team' && <TeamTab bid={bid} />}
     </div>
   )
 }
-
