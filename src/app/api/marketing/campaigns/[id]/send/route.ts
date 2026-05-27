@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
 import { NextResponse } from 'next/server'
+import { sendSMS } from '@/lib/clicksend'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
@@ -38,10 +39,7 @@ async function _POST(_req: Request, { params }: { params: { id: string } }) {
 
   const { data: customers } = await customerQuery.limit(500)
   if (!customers?.length) return NextResponse.json({ error: 'No eligible customers found', sent: 0 })
-
-  const twilioSid   = process.env.TWILIO_ACCOUNT_SID
   const twilioToken = process.env.TWILIO_AUTH_TOKEN
-  const twilioFrom  = process.env.TWILIO_PHONE_NUMBER
   const smsEnabled  = !!(twilioSid && twilioToken && twilioFrom)
 
   let sent = 0, failed = 0, noPhone = 0
@@ -87,7 +85,7 @@ async function _POST(_req: Request, { params }: { params: { id: string } }) {
         continue
       }
       try {
-        const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${twilioSid}/Messages.json`, {
+        await sendSMS(cu.phone as string, messageText)
           method: 'POST',
           headers: {
             'Authorization': `Basic ${Buffer.from(`${twilioSid}:${twilioToken}`).toString('base64')}`,
