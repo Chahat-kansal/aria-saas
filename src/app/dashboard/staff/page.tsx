@@ -21,6 +21,8 @@ interface Shift { id: string; staff_name: string | null; shift_date: string; sta
 interface LR { id: string; staff_name: string | null; leave_type: string; start_date: string; end_date: string; notes: string | null; status: string }
 interface FD { day: string; date: string; predicted_revenue: number; recommended_staff: number }
 interface PerfRow { name: string; revenue: number; count: number; hours: number }
+interface RosterShift { staff_id: string; staff_name: string; date: string; start_time: string; end_time: string; break_minutes?: number; role?: string; hours?: number; cost_cents?: number }
+interface Roster { id: string; week_starting: string; status: string; shifts: RosterShift[]; total_hours: number; total_cost_cents: number; aria_reasoning?: string }
 
 const COLORS = ['#6366f1','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4']
 const ini = (n: string) => n.split(' ').map(x => x[0]).join('').toUpperCase().slice(0, 2)
@@ -169,6 +171,7 @@ function ScheduleTab({ bid }: { bid: string }) {
           </div>
         </div>
       )}
+      <RosterBuilder bid={bid} weekStart={ws} forecast={forecast} />
       {forecast.length > 0 && (
         <div style={{ ...card }}>
           <p style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>Next week demand forecast</p>
@@ -185,6 +188,155 @@ function ScheduleTab({ bid }: { bid: string }) {
           </ResponsiveContainer>
           <div style={{ marginTop: 8 }}>{forecast.map(f => <p key={f.day} style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', margin: '2px 0' }}>{f.day}: ${f.predicted_revenue} predicted → {f.recommended_staff} staff</p>)}</div>
         </div>
+      )}
+    </div>
+  )
+}
+
+function RosterBuilder({ bid, weekStart, forecast }: { bid: string; weekStart: string; forecast: FD[] }) {
+  const [roster, setRoster] = useState<Roster | null>(null)
+  const [generating, setGenerating] = useState(false)
+  const [publishing, setPublishing] = useState(false)
+  const [msg, setMsg] = useState('')
+  const [err, setErr] = useState('')
+
+  const weekDates = Array.from({ length: 7 }, (_, i) => { const d = new Date(weekStart + 'T00:00:00'); d.setDate(d.getDate() + i); return d.toISOString().slice(0, 10) })
+  const DS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+
+  const load = useCallback(async () => {
+    setMsg(''); setErr('')
+    try {
+      const r = await fetch('/api/aria/roster').then(r => r.json())
+      const match = ((r.rosters ?? []) as Roster[]).find(x => x.week_starting === weekStart)
+      setRoster(match ?? null)
+    } catch { /* silent */ }
+  }, [weekStart])
+  useEffect(() => { if (bid) load() }, [bid, weekStart, load])
+
+  async function generate() {
+    setGenerating(true); setErr(''); setMsg('')
+    try {
+      const forecastHint = forecast.map(f => ({ day: f.day, date: f.date, predicted_revenue: f.predicted_revenue, recommended_staff: f.recommended_staff }))
+      const r = await fetch('/api/aria/roster', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ week_starting: weekStart, forecast: forecastHint }),
+      })
+      const d = await r.json()
+      if (!r.ok || d.error) { setErr(d.error ?? 'Generation failed'); return }
+      setRoster(d.roster)
+      setMsg(`Draft roster ready · ${d.roster?.shifts?.length ?? 0} shifts · ${(d.roster?.total_hours ?? 0).toFixed(1)}h`)
+    } catch (e) { setErr((e as Error).message) }
+    setGenerating(false)
+  }
+
+  async function publish() {
+    if (!roster) return
+    if (!confirm(`Publish this roster and SMS ${new Set(roster.shifts.map(s => s.staff_id)).size} staff their shifts?`)) return
+    setPublishing(true); setErr(''); setMsg('')
+    try {
+      const r1 = await fetch(`/api/aria/roster?id=${roster.id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'published' }),
+      }).then(r => r.json())
+      if (r1.error) { setErr(r1.error); setPublishing(false); return }
+      const r2 = await fetch('/api/aria/roster/notify', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: roster.id }),
+      }).then(r => r.json())
+      setRoster(r1.roster ?? roster)
+      if (r2.error) setMsg(`Published. Notify failed: ${r2.error}`)
+      else setMsg(`Published — SMS sent to ${r2.sent ?? 0} staff${r2.errors?.length ? ` (${r2.errors.length} missing phone)` : ''}.`)
+    } catch (e) { setErr((e as Error).message) }
+    setPublishing(false)
+  }
+
+  async function discard() {
+    if (!roster || !confirm('Discard this draft roster?')) return
+    await fetch(`/api/aria/roster?id=${roster.id}`, { method: 'DELETE' })
+    setRoster(null); setMsg('Discarded.')
+  }
+
+  // Group shifts by staff for the grid
+  const byStaff: Record<string, { name: string; role?: string; shifts: Record<string, RosterShift> }> = {}
+  for (const s of roster?.shifts ?? []) {
+    if (!byStaff[s.staff_id]) byStaff[s.staff_id] = { name: s.staff_name, role: s.role, shifts: {} }
+    byStaff[s.staff_id].shifts[s.date] = s
+  }
+  const staffRows = Object.entries(byStaff)
+
+  return (
+    <div style={{ ...card, marginBottom: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 8 }}>
+        <div>
+          <p style={{ fontSize: 13, fontWeight: 700, margin: 0 }}>✦ Roster generator</p>
+          <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>Uses demand forecast + staff availability + Fair Work rules → assigned weekly roster</p>
+        </div>
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button onClick={generate} disabled={generating} style={{ ...smBtn(G2), padding: '6px 14px', fontSize: 12, opacity: generating ? 0.6 : 1 }}>
+            {generating ? '✨ Generating…' : roster ? '✨ Regenerate' : '✨ Generate roster'}
+          </button>
+          {roster && roster.status === 'draft' && (
+            <>
+              <button onClick={publish} disabled={publishing} style={{ ...smBtn(G), padding: '6px 14px', fontSize: 12, opacity: publishing ? 0.6 : 1 }}>
+                {publishing ? 'Publishing…' : '✓ Publish & notify staff'}
+              </button>
+              <button onClick={discard} style={{ ...smBtn('#ef4444'), padding: '6px 14px', fontSize: 12 }}>Discard</button>
+            </>
+          )}
+        </div>
+      </div>
+      {msg && <p style={{ fontSize: 11, color: G, margin: '6px 0' }}>{msg}</p>}
+      {err && <p style={{ fontSize: 11, color: '#ef4444', margin: '6px 0' }}>⚠ {err}</p>}
+      {roster?.aria_reasoning && (
+        <div style={{ background: 'rgba(99,102,241,0.06)', borderLeft: '3px solid #6366f1', borderRadius: '0 8px 8px 0', padding: '8px 12px', margin: '8px 0', fontSize: 12, color: 'rgba(255,255,255,0.7)', lineHeight: 1.5 }}>
+          {roster.aria_reasoning}
+        </div>
+      )}
+      {roster && staffRows.length > 0 && (
+        <div style={{ overflowX: 'auto', marginTop: 8 }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11, minWidth: 700 }}>
+            <thead>
+              <tr style={{ background: 'rgba(255,255,255,0.03)' }}>
+                <th style={{ textAlign: 'left', padding: '6px 10px', fontSize: 10, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Staff</th>
+                {weekDates.map((d, i) => (
+                  <th key={d} style={{ padding: '6px 8px', fontSize: 10, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', textAlign: 'center' }}>{DS[i]}<br /><span style={{ fontSize: 9 }}>{d.slice(8)}</span></th>
+                ))}
+                <th style={{ padding: '6px 8px', fontSize: 10, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', textAlign: 'center' }}>Hrs</th>
+              </tr>
+            </thead>
+            <tbody>
+              {staffRows.map(([staffId, info]) => {
+                const totalHrs = Object.values(info.shifts).reduce((a, s) => a + Number(s.hours ?? 0), 0)
+                return (
+                  <tr key={staffId} style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
+                    <td style={{ padding: '6px 10px', fontWeight: 600 }}>{info.name}{info.role ? <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)', marginLeft: 6 }}>{info.role}</span> : null}</td>
+                    {weekDates.map(d => {
+                      const s = info.shifts[d]
+                      const over = s && Number(s.hours ?? 0) > 10
+                      return (
+                        <td key={d} style={{ padding: 4, textAlign: 'center' }}>
+                          {s ? (
+                            <div style={{ padding: '3px 5px', borderRadius: 5, background: over ? 'rgba(239,68,68,0.1)' : 'rgba(127,184,151,0.1)', border: '1px solid ' + (over ? 'rgba(239,68,68,0.3)' : 'rgba(127,184,151,0.25)') }} title={over ? '>10h shift' : undefined}>
+                              <p style={{ fontSize: 10, fontWeight: 700, color: over ? '#ef4444' : G, margin: 0 }}>{s.start_time}–{s.end_time}</p>
+                              <p style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)', margin: 0 }}>{Number(s.hours ?? 0).toFixed(1)}h</p>
+                            </div>
+                          ) : <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.2)' }}>—</span>}
+                        </td>
+                      )
+                    })}
+                    <td style={{ padding: '6px 8px', textAlign: 'center', fontWeight: 700, color: G }}>{totalHrs.toFixed(1)}</td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+          <div style={{ marginTop: 8, display: 'flex', gap: 16, fontSize: 11, color: 'rgba(255,255,255,0.5)', flexWrap: 'wrap' }}>
+            <span>Total: <strong style={{ color: '#e8ede7' }}>{roster.total_hours.toFixed(1)}h</strong></span>
+            <span>Labour cost: <strong style={{ color: '#f59e0b' }}>A${(roster.total_cost_cents / 100).toFixed(2)}</strong></span>
+            <span style={{ padding: '2px 8px', borderRadius: 99, background: roster.status === 'published' ? 'rgba(127,184,151,0.15)' : 'rgba(99,102,241,0.15)', color: roster.status === 'published' ? G : '#6366f1', fontWeight: 700, textTransform: 'uppercase', fontSize: 9 }}>{roster.status}</span>
+          </div>
+        </div>
+      )}
+      {!roster && !generating && (
+        <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)', marginTop: 6 }}>No draft roster yet. The demand forecast above will be passed to Aria when you generate one.</p>
       )}
     </div>
   )
