@@ -5,6 +5,7 @@ import LogoMark from '@/components/pos/LogoMark';
 import { CAT_META, fmt } from '@/lib/pos-utils';
 import { SaleCelebration } from '@/components/customer-display/SaleCelebration';
 import { pickCelebrationAnimation } from '@/lib/customer-display/pick-animation';
+import { AdRotator } from '@/components/ads/AdRotator';
 
 interface CartItem {
   id?: string | number;
@@ -356,6 +357,7 @@ export default function CustomerDisplayPage() {
           <div style={{ fontSize: 15, color: 'rgba(237,232,255,0.4)', fontWeight: 600, marginTop: 8 }}>
             {bizName}
           </div>
+          <AdRotator businessId={typeof window !== 'undefined' ? (localStorage.getItem('aria_active_business_id') ?? null) : null} variant="display" />
         </div>
       )}
 
