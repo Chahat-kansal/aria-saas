@@ -1,6 +1,8 @@
 'use client';
 import { useState } from 'react';
 import Link from 'next/link';
+import ScrollPinHero from '@/components/marketing/ScrollPinHero';
+import MarketingPinHero from '@/components/marketing/MarketingPinHero';
 
 const MONTHLY_PRICES = { starter: 59, growth: 129, autonomous: 249 };
 const YEARLY_PRICES  = { starter: 47, growth: 103, autonomous: 199 };
@@ -50,6 +52,19 @@ export default function PricingPage() {
 
   return (
     <div style={{ minHeight: '100vh', background: '#030510', color: 'rgba(220,240,255,0.93)', fontFamily: "'Manrope', system-ui, sans-serif" }}>
+      <ScrollPinHero
+        hero={(
+          <MarketingPinHero
+            theme="deep"
+            eyebrow="Pricing"
+            title="Built to pay for itself in week one."
+            subtitle="Flat monthly fee. Zero transaction fees. 14-day free trial — no credit card."
+            primaryCta={{ label: 'Start free trial', href: '/signup' }}
+            secondaryCta={{ label: 'Compare plans ↓', href: '#plans' }}
+          />
+        )}
+      >
+      <div id="plans" style={{ background: '#030510' }}>
       <div style={{ maxWidth: 960, margin: '0 auto', padding: '64px 24px' }}>
         <Link href="/" style={{ fontSize: 13, color: 'rgba(130,160,200,0.6)', textDecoration: 'none', display: 'inline-block', marginBottom: 48 }}>← Aria</Link>
 
@@ -157,6 +172,8 @@ export default function PricingPage() {
           </Link>
         </div>
       </div>
+      </div>
+      </ScrollPinHero>
     </div>
   );
 }

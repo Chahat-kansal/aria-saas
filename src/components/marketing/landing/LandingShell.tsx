@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
+import ScrollPinHero from '@/components/marketing/ScrollPinHero'
 
 const C = {
   bg: '#0a0a0f',
@@ -98,12 +99,16 @@ function BriefingMock() {
   )
 }
 
-function Hero() {
-  const r = useReveal()
+function PinnedHero() {
   return (
-    <section ref={r.ref} style={{ ...r.style, position: 'relative', padding: '80px 20px 60px', overflow: 'hidden' }}>
-      <div style={{ position: 'absolute', top: '20%', left: '50%', transform: 'translateX(-50%)', width: 600, height: 600, background: 'radial-gradient(circle, rgba(127,184,151,0.12), transparent 70%)', pointerEvents: 'none' }} />
-      <div className="aria-hero-grid" style={{ position: 'relative', maxWidth: 1200, margin: '0 auto', display: 'grid', gridTemplateColumns: '1.1fr 1fr', gap: 60, alignItems: 'center' }}>
+    <section style={{
+      position: 'relative', width: '100%', height: '100%',
+      padding: '80px 20px 60px', overflow: 'hidden',
+      background: C.bg,
+      display: 'flex', alignItems: 'center',
+    }}>
+      <div style={{ position: 'absolute', top: '20%', left: '50%', transform: 'translateX(-50%)', width: 600, height: 600, background: 'radial-gradient(circle, rgba(127,184,151,0.12), transparent 70%)', pointerEvents: 'none', opacity: 'calc(1 - var(--hero-progress, 0))' }} />
+      <div className="aria-hero-grid" style={{ position: 'relative', maxWidth: 1200, margin: '0 auto', display: 'grid', gridTemplateColumns: '1.1fr 1fr', gap: 60, alignItems: 'center', width: '100%' }}>
         <div>
           <h1 style={{ fontSize: 56, fontWeight: 800, lineHeight: 1.05, letterSpacing: '-0.03em', color: C.text, margin: 0, marginBottom: 18 }}>
             Your AI business co-operator.<br />
@@ -119,6 +124,14 @@ function Hero() {
           <p style={{ fontSize: 12, color: C.textMuted, margin: 0 }}>🔒 No credit card required  ·  Cancel anytime  ·  Australian-built  ·  GDPR compliant</p>
         </div>
         <BriefingMock />
+      </div>
+      <div aria-hidden="true" style={{
+        position: 'absolute', bottom: 24, left: '50%', transform: 'translateX(-50%)',
+        fontSize: 11, color: C.textMuted, letterSpacing: '0.18em', textTransform: 'uppercase',
+        opacity: 'calc(1 - var(--hero-progress, 0))',
+        transition: 'opacity 200ms',
+      }}>
+        Scroll ↓
       </div>
     </section>
   )
@@ -461,18 +474,21 @@ export default function LandingShell() {
         }
       `}</style>
       <Nav />
-      <Hero />
-      <SocialProof />
-      <Problem />
-      <Solution />
-      <HowItWorks />
-      <PosDeepDive />
-      <Industries />
-      <Pricing />
-      <Trust />
-      <Faq />
-      <FinalCta />
-      <Footer />
+      <ScrollPinHero hero={<PinnedHero />}>
+        <div style={{ background: C.bg }}>
+          <SocialProof />
+          <Problem />
+          <Solution />
+          <HowItWorks />
+          <PosDeepDive />
+          <Industries />
+          <Pricing />
+          <Trust />
+          <Faq />
+          <FinalCta />
+          <Footer />
+        </div>
+      </ScrollPinHero>
     </div>
   )
 }

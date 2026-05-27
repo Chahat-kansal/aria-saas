@@ -1,5 +1,7 @@
 import Link from 'next/link';
 import type { Metadata } from 'next';
+import ScrollPinHero from '@/components/marketing/ScrollPinHero';
+import MarketingPinHero from '@/components/marketing/MarketingPinHero';
 
 type Params = { params: Promise<{ competitor: string }> };
 
@@ -183,6 +185,19 @@ export default async function VsPage({ params }: Params) {
 
   return (
     <div style={{ background: BG, color: T, fontFamily: "'Manrope',system-ui,sans-serif", minHeight: '100vh' }}>
+      <ScrollPinHero
+        hero={(
+          <MarketingPinHero
+            theme="deep"
+            eyebrow={`Aria vs ${c.name}`}
+            title={c.tagline}
+            subtitle={c.sub}
+            primaryCta={{ label: 'Start free trial →', href: '/signup' }}
+            secondaryCta={{ label: 'See the comparison ↓', href: '#comparison' }}
+          />
+        )}
+      >
+      <div style={{ background: BG }}>
       <nav style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 48px', borderBottom: `1px solid ${BORDER}`, position: 'sticky', top: 0, background: BG, zIndex: 10 }}>
         <Link href="/" style={{ fontSize: 16, fontWeight: 800, color: T, textDecoration: 'none' }}>Aria POS</Link>
         <div style={{ display: 'flex', gap: 12 }}>
@@ -223,7 +238,7 @@ export default async function VsPage({ params }: Params) {
       </section>
 
       {/* Feature table */}
-      <section style={{ maxWidth: 960, margin: '0 auto 80px', padding: '0 24px' }}>
+      <section id="comparison" style={{ maxWidth: 960, margin: '0 auto 80px', padding: '0 24px' }}>
         <h2 style={{ fontSize: 26, fontWeight: 800, textAlign: 'center', marginBottom: 32 }}>Feature comparison</h2>
         <div style={{ borderRadius: 16, overflow: 'hidden', border: `1px solid ${BORDER}` }}>
           {/* Header */}
@@ -291,6 +306,8 @@ export default async function VsPage({ params }: Params) {
           <a href="mailto:hello@ariaos.site?subject=Demo request" style={{ background: 'rgba(139,92,246,0.10)', color: '#B49BFB', padding: '14px 32px', borderRadius: 10, fontSize: 15, fontWeight: 600, textDecoration: 'none', border: `1px solid rgba(139,92,246,0.22)` }}>Talk to founder</a>
         </div>
       </section>
+      </div>
+      </ScrollPinHero>
     </div>
   );
 }
