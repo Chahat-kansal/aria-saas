@@ -307,7 +307,6 @@ async function _POST(req: NextRequest) {
       () => _anthropic.messages.create({
         model: 'claude-haiku-4-5-20251001',
         max_tokens: 1500,
-          tools: [{ type: 'web_search_20250305' as const, name: 'web_search' }],
         system: `You are Aria, a business intelligence engine for Australian small businesses. Output ONLY a valid JSON array. No markdown. No explanation. No text before or after the array.
 
 Each item in the array must have these exact fields:
