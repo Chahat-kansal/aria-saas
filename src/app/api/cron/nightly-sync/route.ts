@@ -2,6 +2,7 @@ export const maxDuration = 300
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { withRetry } from '@/lib/api/retry'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -103,6 +104,8 @@ async function detectIntelligenceEvents(businessId: string): Promise<Intelligenc
 }
 
 async function _GET(req: Request) {
+  // Retry wrapper — 3 attempts with exponential backoff
+  return withRetry(async () => {
   // SECURITY: canonical Vercel cron check — x-vercel-cron-signature or Authorization Bearer
   const secret = req.headers.get('x-vercel-cron-signature')
     ?? req.headers.get('authorization')?.replace('Bearer ', '')
@@ -245,6 +248,9 @@ async function _GET(req: Request) {
     errors_count: errors.length,
     errors,
   });
+}
+
+  }, { attempts: 3, delayMs: 3000 })
 }
 
 export const GET = withErrorCapture('cron/nightly-sync', _GET)
