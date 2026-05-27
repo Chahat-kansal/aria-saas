@@ -1,4 +1,5 @@
 import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { sendSMS } from '@/lib/clicksend'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 
 export async function checkComplianceExpiry(businessId: string): Promise<number> {
@@ -128,7 +129,7 @@ export async function checkConditionAlerts(businessId: string): Promise<number> 
         .select('phone,owner_phone,alert_sms_enabled,name').eq('id', businessId).maybeSingle()
       const phone = biz?.owner_phone ?? biz?.phone
         if (phone && biz?.alert_sms_enabled) {
-        const twilioSid = process.env.TWILIO_ACCOUNT_SID
+        // Replaced by ClickSend
         const twilioAuth = process.env.TWILIO_AUTH_TOKEN
         const twilioFrom = process.env.TWILIO_PHONE_NUMBER
         if (twilioSid && twilioAuth && twilioFrom) {
