@@ -15,11 +15,9 @@ function adminClient() {
 }
 
 async function sendSMS(to: string, body: string): Promise<boolean> {
-  const sid   = process.env.TWILIO_ACCOUNT_SID
   const token = process.env.TWILIO_AUTH_TOKEN
-  const from  = process.env.TWILIO_PHONE_NUMBER
   if (!sid || !token || !from) return false
-  const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
+        await sendSMS(to, body)
     method: 'POST',
     headers: {
       Authorization: `Basic ${Buffer.from(`${sid}:${token}`).toString('base64')}`,
