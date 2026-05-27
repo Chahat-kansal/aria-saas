@@ -44,17 +44,11 @@ export async function GET() {
     const ch = (send.channel ?? 'both') as string
     let ok = true
 
-    if (ch !== 'email' && customer.phone && campaign.message && accountSid && authToken && twilioFrom) {
+    if (ch !== 'email' && customer.phone && campaign.message) {
       const phone = (customer.phone as string).replace(/\s/g, '').replace(/^0/, '+61')
-      const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`, {
-        method: 'POST',
-        headers: {
-          Authorization: 'Basic ' + Buffer.from(`${accountSid}:${authToken}`).toString('base64'),
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: new URLSearchParams({ To: phone, From: twilioFrom as string, Body: (campaign.message as string).replace('{name}', (customer.name as string) ?? '') }).toString(),
-      })
-      if (!res.ok) ok = false
+      const msgBody = (campaign.message as string).replace('{name}', (customer.name as string) ?? '')
+      const smsResult = await sendSMS(phone, msgBody)
+      if (!smsResult.ok) ok = false
     }
 
     if (ch !== 'sms' && customer.email && campaign.email_body && resendKey) {

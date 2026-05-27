@@ -45,18 +45,7 @@ async function _POST(req: Request) {
 
   if (!business || !customer) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-  const twilioSid   = process.env.TWILIO_ACCOUNT_SID;
-  const twilioToken = process.env.TWILIO_AUTH_TOKEN;
-  const twilioFrom  = process.env.TWILIO_PHONE_NUMBER;
 
-  if (!twilioSid || !twilioToken || !twilioFrom) {
-    return NextResponse.json({
-      error: 'SMS not configured',
-      message: 'Twilio credentials are not set. Configure SMS in Settings before sending review requests.',
-      sms_sent: false,
-      code: 'TWILIO_NOT_CONFIGURED',
-    }, { status: 503 });
-  }
 
   if (!customer.phone) {
     return NextResponse.json({
@@ -84,42 +73,25 @@ Keep it warm and personal. Ask them to share their experience. Return ONLY the S
   const messageText = response.content.filter(b => b.type === 'text').map(b => b.text).join('').trim();
 
   try {
-        await sendSMS(customer.phone, messageText)
-    const body = new URLSearchParams({ From: twilioFrom, To: customer.phone, Body: messageText });
-    const res = await fetch(twilioUrl, {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${Buffer.from(`${twilioSid}:${twilioToken}`).toString('base64')}`,
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body,
-    });
+    const smsResult = await sendSMS(customer.phone, messageText);
 
-    const twilioData = await res.json();
-
-    if (!res.ok) {
+    if (!smsResult.ok) {
       await supabase.from('campaigns').insert({
         business_id: businessId,
         customer_id: customerId,
         type: 'review_request',
         message: messageText,
         sms_sent: false,
-        error: twilioData?.message ?? 'Twilio rejected the request',
+        error: smsResult.error ?? 'SMS failed',
         failed_at: new Date().toISOString(),
       });
-
       await supabase.from('activity_log').insert({
         business_id: businessId,
         action_type: 'review',
-        description: `Review request SMS to ${customer.name} FAILED: ${twilioData?.message ?? 'Unknown error'}`,
+        description: `Review request SMS to ${customer.name} FAILED: ${smsResult.error ?? 'Unknown error'}`,
         metadata: { customerId, smsSent: false },
       });
-
-      return NextResponse.json({
-        error: 'SMS delivery failed',
-        message: twilioData?.message ?? 'Twilio rejected the request',
-        sms_sent: false,
-      }, { status: 500 });
+      return NextResponse.json({ error: 'SMS delivery failed', message: smsResult.error ?? 'SMS failed', sms_sent: false }, { status: 500 });
     }
 
     await supabase.from('reviews').insert({
@@ -135,7 +107,6 @@ Keep it warm and personal. Ask them to share their experience. Return ONLY the S
       type: 'review_request',
       message: messageText,
       sms_sent: true,
-      twilio_sid: twilioData.sid,
       sent_at: new Date().toISOString(),
     });
 
@@ -143,13 +114,12 @@ Keep it warm and personal. Ask them to share their experience. Return ONLY the S
       business_id: businessId,
       action_type: 'review',
       description: `Review request SMS sent to ${customer.name} (${customer.phone})`,
-      metadata: { customerId, smsSent: true, sid: twilioData.sid },
+      metadata: { customerId, smsSent: true },
     });
 
-    return NextResponse.json({ success: true, message: messageText, sms_sent: true, sid: twilioData.sid });
-  } catch (twilioErr) {
-    const errMsg = twilioErr instanceof Error ? twilioErr.message : 'Unknown error';
-
+    return NextResponse.json({ success: true, message: messageText, sms_sent: true });
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : 'Unknown error';
     await supabase.from('campaigns').insert({
       business_id: businessId,
       customer_id: customerId,
@@ -159,12 +129,7 @@ Keep it warm and personal. Ask them to share their experience. Return ONLY the S
       error: errMsg,
       failed_at: new Date().toISOString(),
     });
-
-    return NextResponse.json({
-      error: 'SMS delivery failed',
-      message: errMsg,
-      sms_sent: false,
-    }, { status: 500 });
+    return NextResponse.json({ error: 'SMS delivery failed', message: errMsg, sms_sent: false }, { status: 500 });
   }
 }
 

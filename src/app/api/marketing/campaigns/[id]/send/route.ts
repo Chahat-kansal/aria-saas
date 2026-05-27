@@ -39,8 +39,7 @@ async function _POST(_req: Request, { params }: { params: { id: string } }) {
 
   const { data: customers } = await customerQuery.limit(500)
   if (!customers?.length) return NextResponse.json({ error: 'No eligible customers found', sent: 0 })
-  const twilioToken = process.env.TWILIO_AUTH_TOKEN
-  const smsEnabled  = !!(twilioSid && twilioToken && twilioFrom)
+  const smsEnabled = !!(process.env.CLICKSEND_USERNAME && process.env.CLICKSEND_API_KEY)
 
   let sent = 0, failed = 0, noPhone = 0
 
