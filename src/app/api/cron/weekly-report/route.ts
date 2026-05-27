@@ -45,6 +45,4 @@ async function _GET(req: Request) {
   return NextResponse.json({ ok: true, processed: businesses.length, results })
 }
 
-}
-
 export const GET = withErrorCapture('cron/weekly-report', _GET)
