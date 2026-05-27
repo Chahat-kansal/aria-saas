@@ -21,7 +21,7 @@ async function _GET() {
 
   const { data: biz } = await supabase
     .from('businesses')
-    .select('id, name, industry, abn, city, address, phone, google_place_id, google_average_rating, google_total_reviews, google_reviews_last_synced')
+    .select('id, name, industry, abn, city, address, phone, google_place_id, google_average_rating, google_total_reviews, google_reviews_last_synced, facebook_page_id, yelp_url, auto_review_requests, google_review_link')
     .eq('id', bid)
     .maybeSingle()
 
@@ -46,7 +46,11 @@ async function _PATCH(req: Request) {
   if (body.address    !== undefined) payload.address     = body.address
   if (body.phone      !== undefined) payload.phone       = body.phone
   if (body.industry   !== undefined) payload.industry    = body.industry
-  if (body.google_place_id !== undefined) payload.google_place_id = body.google_place_id || null
+  if (body.google_place_id     !== undefined) payload.google_place_id     = body.google_place_id || null
+  if (body.facebook_page_id    !== undefined) payload.facebook_page_id    = body.facebook_page_id || null
+  if (body.yelp_url            !== undefined) payload.yelp_url            = body.yelp_url || null
+  if (body.auto_review_requests !== undefined) payload.auto_review_requests = !!body.auto_review_requests
+  if (body.google_review_link  !== undefined) payload.google_review_link  = body.google_review_link || null
 
   if (Object.keys(payload).length === 0) return NextResponse.json({ ok: true })
 

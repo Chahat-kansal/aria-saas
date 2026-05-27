@@ -41,9 +41,11 @@ async function _GET(req: Request) {
     .order('review_date', { ascending: false })
     .limit(50)
 
-  if (status === 'new')     query = query.eq('status', 'new')
-  if (status === 'replied') query = query.eq('status', 'replied')
+  const platform = searchParams.get('platform')
+  if (status === 'new')      query = query.eq('status', 'new')
+  if (status === 'replied')  query = query.eq('status', 'replied')
   if (status === 'negative') query = query.lte('rating', 2)
+  if (platform && platform !== 'all') query = query.eq('platform', platform)
 
   const { data: reviews } = await query
 
