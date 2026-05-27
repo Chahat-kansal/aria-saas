@@ -1,5 +1,6 @@
 export const dynamic = 'force-dynamic'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { sendSMS } from '@/lib/clicksend'
 import { NextResponse } from 'next/server'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 
@@ -32,13 +33,11 @@ async function _PATCH(req: Request, { params }: Params) {
     const { data: order } = await supabase.from('pos_online_orders')
       .select('customer_name, customer_phone, order_number, business_id').eq('id', id).maybeSingle()
     if (order?.customer_phone) {
-      const sid   = process.env.TWILIO_ACCOUNT_SID
       const token = process.env.TWILIO_AUTH_TOKEN
-      const from  = process.env.TWILIO_PHONE_NUMBER
       const { data: biz } = await supabase.from('businesses').select('name').eq('id', order.business_id).maybeSingle()
       if (sid && token && from) {
         const msg = `Hi ${order.customer_name?.split(' ')[0] ?? 'there'}, your order ${order.order_number} at ${biz?.name ?? 'the cafe'} is ready for collection! 🎉`
-        fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
+        await sendSMS(order.customer_phone, msg)
           method: 'POST',
           headers: { Authorization: `Basic ${Buffer.from(`${sid}:${token}`).toString('base64')}`, 'Content-Type': 'application/x-www-form-urlencoded' },
           body: new URLSearchParams({ From: from, To: order.customer_phone, Body: msg }),
