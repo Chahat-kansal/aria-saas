@@ -9,7 +9,7 @@ import { trackAICall } from '@/lib/aria/ai-telemetry'
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 // Simple in-memory rate limit — 6 req/min per IP. Resets per minute.
 // Module-level map survives across warm invocations in the same lambda instance.
