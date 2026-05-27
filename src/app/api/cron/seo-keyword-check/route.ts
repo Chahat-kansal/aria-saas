@@ -84,9 +84,11 @@ export async function GET(req: Request) {
       }).eq('id', kw.id)
 
       if (newRank !== null) {
-        await supabaseAdmin.from('seo_keyword_history').insert({
-          keyword_id: kw.id, business_id: bizId, keyword: kw.keyword, rank: newRank,
-        }).catch(() => {/* non-fatal */})
+        try {
+          await supabaseAdmin.from('seo_keyword_history').insert({
+            keyword_id: kw.id, business_id: bizId, keyword: kw.keyword, rank: newRank,
+          })
+        } catch { /* non-fatal */ }
       }
       keywords_checked++
     }

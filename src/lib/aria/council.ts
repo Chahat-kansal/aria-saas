@@ -271,7 +271,7 @@ export async function runAriaCouncil(
   businessContext: string,
   businessId: string,
   mode: 'ask_aria' | 'briefing' | 'weekly_report' = 'ask_aria'
-): Promise<CouncilResult | null> {
+): Promise<CouncilOutput | null> {
   const start = Date.now()
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 

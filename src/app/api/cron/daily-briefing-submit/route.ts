@@ -2,7 +2,7 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
 
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { withCronRetry } from '@/lib/api/retry'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { submitBatch } from '@/lib/aria-batch'
@@ -36,7 +36,7 @@ async function buildBriefingContext(businessId: string) {
   }
 }
 
-async function _GET(req: NextRequest) {
+async function _GET(req: Request) {
   if (req.headers.get('authorization') !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }

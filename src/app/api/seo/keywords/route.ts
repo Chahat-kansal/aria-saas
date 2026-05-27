@@ -87,9 +87,11 @@ async function _POST(req: Request) {
   if (insertErr || !kw) return NextResponse.json({ error: insertErr?.message ?? 'Insert failed' }, { status: 500 })
 
   if (currentRank !== null) {
-    await supabase.from('seo_keyword_history').insert({
-      keyword_id: kw.id, business_id, keyword: keyword.trim(), rank: currentRank,
-    }).catch(() => {/* non-fatal */})
+    try {
+      await supabase.from('seo_keyword_history').insert({
+        keyword_id: kw.id, business_id, keyword: keyword.trim(), rank: currentRank,
+      })
+    } catch { /* non-fatal */ }
   }
 
   return NextResponse.json({ keyword: kw })

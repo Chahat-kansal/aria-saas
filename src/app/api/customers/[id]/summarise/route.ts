@@ -38,8 +38,8 @@ Business: ${biz.name}, ${biz.industry ?? 'retail'}, ${biz.city ?? 'AU'}`
   if (isHighValue) {
     try {
       const council = await runAriaCouncil(customerContext, customer.business_id, 'ask_aria')
-      summary = council.final_briefing ?? ''
-      success = council.meta.synthesis_succeeded
+      summary = council?.final_briefing ?? ''
+      success = council?.meta.synthesis_succeeded ?? false
     } catch (e) {
       console.error('[summarise] council failed, falling back:', (e as Error).message)
     }

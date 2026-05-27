@@ -80,7 +80,7 @@ export async function runOrchestrator(
           }
         } else if (action.agent === 'automation_agent') {
           if (action.urgency === 'now') {
-            const r = await automationAgent(council.consensus, businessId)
+            const r = await automationAgent(council.consensus ?? [], businessId)
             result.agent_action_ids.push(r.action_id)
             if (r.needs_approval) {
               result.actions_suggested.push({ ...action, urgency: 'suggest' })

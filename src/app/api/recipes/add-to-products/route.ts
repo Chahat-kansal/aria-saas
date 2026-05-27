@@ -44,10 +44,11 @@ async function _POST(req: Request) {
 
   if (insErr) return NextResponse.json({ error: insErr.message }, { status: 500 })
 
-  await supabaseAdmin.from('recipe_imports')
-    .update({ status: 'added_as_product', linked_product_id: product.id })
-    .eq('id', recipe_import_id)
-    .catch(() => {/* non-fatal */})
+  try {
+    await supabaseAdmin.from('recipe_imports')
+      .update({ status: 'added_as_product', linked_product_id: product.id })
+      .eq('id', recipe_import_id)
+  } catch { /* non-fatal */ }
 
   return NextResponse.json({ product })
 }

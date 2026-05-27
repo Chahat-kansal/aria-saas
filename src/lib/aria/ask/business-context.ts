@@ -214,5 +214,7 @@ export async function buildAskAriaContext(
     fresh_signals: (signalRows ?? []) as Array<{ signal_type: string; payload: Record<string, unknown>; created_at: string }>,
     memories: (memoryRows ?? []) as Array<{ id: string; kind: string; content: string; topic: string | null; importance: number }>,
     advice_weights: adviceWeights,
+    competitor_intelligence: [],
+    prediction,
   }
 }

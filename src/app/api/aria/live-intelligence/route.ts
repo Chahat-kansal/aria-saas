@@ -45,11 +45,13 @@ async function _POST(req: NextRequest) {
   const narrative = result.recommendation?.description ?? null
   const title = result.recommendation?.title ?? null
   const action = (result.recommendation?.payload as Record<string, unknown> | undefined)?.action ?? null
-  await supabaseAdmin.from('aria_signal_cache').upsert({
-    business_id: bid, signal_type: cacheKey,
-    payload: { narrative, title, action },
-    updated_at: new Date().toISOString(),
-  }, { onConflict: 'business_id,signal_type' }).catch(() => {})
+  try {
+    await supabaseAdmin.from('aria_signal_cache').upsert({
+      business_id: bid, signal_type: cacheKey,
+      payload: { narrative, title, action },
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'business_id,signal_type' })
+  } catch { /* non-fatal */ }
 
   return NextResponse.json({
     narrative: result.recommendation?.description ?? null,

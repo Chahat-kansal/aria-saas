@@ -156,11 +156,11 @@ export async function generateWeeklyNarrative(
   }
 
   return {
-    executive_summary: council.final_briefing,
-    high_confidence_insights: council.consensus,
-    split_decisions: council.contested,
+    executive_summary: council?.final_briefing ?? '',
+    high_confidence_insights: council?.consensus ?? [],
+    split_decisions: (council?.contested ?? []) as unknown as SplitDecision[],
     promo_recommendations: promoRecs,
     suspicious_summary: suspiciousSummary,
-    council_meta: council.meta,
+    council_meta: council?.meta ?? { brains_succeeded: 0, brains_failed: 0, synthesis_succeeded: false, fell_back: true, duration_ms: 0 },
   }
 }
