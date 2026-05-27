@@ -3,9 +3,10 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 300
 
 import { NextResponse } from 'next/server'
+import { withCronRetry } from '@/lib/api/retry'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 
-export async function GET(req: Request) {
+async function _GET(req: Request) {
   if (req.headers.get('authorization') !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
@@ -157,3 +158,5 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: msg }, { status: 500 })
   }
 }
+
+export const GET = withCronRetry('marketing-automations', _GET)
