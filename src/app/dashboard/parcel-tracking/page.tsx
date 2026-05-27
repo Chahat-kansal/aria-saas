@@ -46,6 +46,13 @@ export default function ParcelTrackingPage(){
   const [adding,setAdding]=useState(false)
   const [notice,setNotice]=useState('')
   const pollRef=useRef<ReturnType<typeof setInterval>|null>(null)
+  const [view,setView]=useState<'list'|'analytics'>('list')
+  const [analytics,setAnalytics]=useState<{summary:{total:number;by_carrier:Array<{carrier:string;name:string;total:number;delivered:number;exceptions:number;exception_rate:number;avg_days:number|null}>;monthly:Array<{month:string;count:number}>;exceptions:{stuck:number;failed:number;returned:number};top_carrier:string|null}|null}|null>(null)
+  const [showBulk,setShowBulk]=useState(false)
+  const [bulkCsv,setBulkCsv]=useState('')
+  const [bulkResult,setBulkResult]=useState('')
+  const [prediction,setPrediction]=useState<{prediction:string;baseline_days:number;sample_size:number}|null>(null)
+  const [predLoading,setPredLoading]=useState(false)
 
   const load=useCallback(async(silent=false)=>{
     if(!silent)setLoading(true)
@@ -102,6 +109,33 @@ export default function ParcelTrackingPage(){
   }
 
   const activeCt=parcels.filter(p=>!['delivered','exception','cancelled','failed'].includes(p.status)).length
+  const exceptionCt=parcels.filter(p=>{
+    if(['exception','failed','returned'].includes(p.status))return true
+    if(p.status==='delivered'||p.status==='cancelled')return false
+    const last=p.last_checked_at?new Date(p.last_checked_at).getTime():new Date(p.created_at).getTime()
+    return Date.now()-last>5*86400_000
+  }).length
+
+  useEffect(()=>{
+    if(view!=='analytics')return
+    fetch('/api/parcel-tracking/analytics').then(r=>r.json()).then(setAnalytics).catch(()=>{})
+  },[view])
+
+  async function runBulk(){
+    if(!bulkCsv.trim())return
+    const lines=bulkCsv.trim().split('\n').slice(1)
+    const rows=lines.map(l=>{const[tracking_number,carrier,recipient_name,recipient_phone,order_reference]=l.split(',').map(s=>s.replace(/^"|"$/g,'').trim());return{tracking_number,carrier:carrier||'other',recipient_name,recipient_phone,order_reference}}).filter(r=>r.tracking_number)
+    if(rows.length===0){setBulkResult('No valid rows');return}
+    const res=await fetch('/api/parcel-tracking/bulk',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({rows})}).then(r=>r.json()).catch(()=>({error:'Network error'}))
+    if(res.error)setBulkResult(`Error: ${res.error}`)
+    else{setBulkResult(`✓ Imported ${res.imported} parcels`);load()}
+  }
+
+  async function predictDelivery(id:string){
+    setPredLoading(true);setPrediction(null)
+    const res=await fetch('/api/aria/delivery-prediction',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({parcel_id:id})}).then(r=>r.json()).catch(()=>null)
+    setPrediction(res);setPredLoading(false)
+  }
 
   const filterBtn=(label:string,active:boolean,onClick:()=>void)=>(
     <button onClick={onClick} style={{height:26,padding:'0 10px',borderRadius:6,border:`1px solid ${active?C.green:C.border}`,background:active?C.green+'18':'transparent',color:active?C.green:C.muted,fontSize:11,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>{label}</button>
@@ -116,11 +150,15 @@ export default function ParcelTrackingPage(){
           <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
             <div>
               <div style={{fontSize:15,fontWeight:700}}>Parcel Tracking</div>
-              <div style={{fontSize:11,color:C.dim}}>{activeCt} active · live updates every 60s</div>
+              <div style={{fontSize:11,color:C.dim}}>{activeCt} active · live updates every 60s {exceptionCt>0 && <span style={{color:C.red,fontWeight:700,marginLeft:6}}>⚠ {exceptionCt} need attention</span>}</div>
             </div>
-            <button onClick={()=>setShowAdd(v=>!v)} style={{height:32,padding:'0 14px',borderRadius:8,border:'none',background:C.sage,color:'#fff',fontSize:12,fontWeight:700,cursor:'pointer',fontFamily:'inherit'}}>
-              {showAdd?'✕ Cancel':'+ Add parcel'}
-            </button>
+            <div style={{display:'flex',gap:6}}>
+              <button onClick={()=>setView(v=>v==='analytics'?'list':'analytics')} style={{height:32,padding:'0 12px',borderRadius:8,border:'1px solid '+C.border,background:view==='analytics'?C.green+'20':'transparent',color:view==='analytics'?C.green:C.muted,fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>📊 Analytics</button>
+              <button onClick={()=>{setShowBulk(v=>!v);setShowAdd(false)}} style={{height:32,padding:'0 12px',borderRadius:8,border:'1px solid '+C.border,background:'transparent',color:C.muted,fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>📦 Bulk</button>
+              <button onClick={()=>setShowAdd(v=>!v)} style={{height:32,padding:'0 14px',borderRadius:8,border:'none',background:C.sage,color:'#fff',fontSize:12,fontWeight:700,cursor:'pointer',fontFamily:'inherit'}}>
+                {showAdd?'✕ Cancel':'+ Add parcel'}
+              </button>
+            </div>
           </div>
           <div style={{position:'relative',marginBottom:8}}>
             <span style={{position:'absolute',left:9,top:'50%',transform:'translateY(-50%)',fontSize:13,color:C.dim,pointerEvents:'none'}}>⌕</span>
@@ -179,6 +217,66 @@ export default function ParcelTrackingPage(){
           </div>
         )}
 
+        {showBulk&&(
+          <div style={{padding:'12px 14px',borderBottom:`1px solid ${C.border}`,background:'rgba(127,184,151,0.02)'}}>
+            <div style={{fontSize:12,fontWeight:700,color:C.green,marginBottom:6}}>Bulk import (CSV)</div>
+            <div style={{fontSize:11,color:C.dim,marginBottom:8}}>Columns: tracking_number, carrier, recipient_name, recipient_phone, order_reference</div>
+            <textarea value={bulkCsv} onChange={e=>setBulkCsv(e.target.value)} rows={5} placeholder="tracking_number,carrier,recipient_name,recipient_phone,order_reference&#10;EP123456789AU,auspost,Jane Doe,0400000000,ORD-001"
+              style={{...inp,height:'auto',padding:'8px 10px',fontFamily:'monospace',fontSize:11,resize:'vertical',marginBottom:8}}/>
+            <button onClick={runBulk} disabled={!bulkCsv.trim()} style={{height:32,padding:'0 14px',borderRadius:7,border:'none',background:C.sage,color:'#fff',fontSize:12,fontWeight:700,cursor:bulkCsv.trim()?'pointer':'not-allowed',opacity:bulkCsv.trim()?1:0.5,fontFamily:'inherit'}}>Import batch</button>
+            {bulkResult && <div style={{fontSize:11,color:bulkResult.startsWith('✓')?C.green:C.red,marginTop:6}}>{bulkResult}</div>}
+          </div>
+        )}
+
+        {view==='analytics'&&(
+          <div style={{padding:14,overflowY:'auto'}}>
+            {!analytics?.summary?<p style={{fontSize:12,color:C.muted,textAlign:'center',padding:20}}>Loading…</p>:(
+              <>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:12}}>
+                  <div style={{padding:10,borderRadius:8,background:C.card,border:`1px solid ${C.border}`}}>
+                    <p style={{fontSize:10,color:C.dim,textTransform:'uppercase',letterSpacing:'0.06em'}}>Total (90d)</p>
+                    <p style={{fontSize:18,fontWeight:700}}>{analytics.summary.total}</p>
+                  </div>
+                  <div style={{padding:10,borderRadius:8,background:C.card,border:`1px solid ${C.border}`}}>
+                    <p style={{fontSize:10,color:C.dim,textTransform:'uppercase',letterSpacing:'0.06em'}}>Top carrier</p>
+                    <p style={{fontSize:13,fontWeight:700,color:C.green}}>{analytics.summary.top_carrier??'—'}</p>
+                  </div>
+                </div>
+                {(analytics.summary.exceptions.stuck+analytics.summary.exceptions.failed+analytics.summary.exceptions.returned)>0&&(
+                  <div style={{padding:'8px 12px',borderRadius:8,background:'rgba(239,68,68,0.08)',border:'1px solid rgba(239,68,68,0.25)',marginBottom:12,fontSize:11,color:C.red}}>
+                    ⚠ Exceptions — Stuck: {analytics.summary.exceptions.stuck} · Failed: {analytics.summary.exceptions.failed} · Returned: {analytics.summary.exceptions.returned}
+                  </div>
+                )}
+                <p style={{fontSize:10,color:C.dim,textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:6}}>By carrier</p>
+                <div style={{display:'flex',flexDirection:'column',gap:4,marginBottom:14}}>
+                  {analytics.summary.by_carrier.map(c=>(
+                    <div key={c.carrier} style={{padding:'8px 10px',borderRadius:8,background:C.card,border:`1px solid ${C.border}`}}>
+                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                        <span style={{fontSize:12,fontWeight:600}}>{c.name}</span>
+                        <span style={{fontSize:11,color:C.muted}}>{c.total} parcels</span>
+                      </div>
+                      <div style={{display:'flex',gap:10,marginTop:4,fontSize:10,color:C.dim}}>
+                        <span>{c.avg_days?`Avg ${c.avg_days}d`:'No data'}</span>
+                        <span style={{color:c.exception_rate>10?C.red:C.dim}}>{c.exception_rate}% exceptions</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <p style={{fontSize:10,color:C.dim,textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:6}}>Monthly volume</p>
+                <div style={{display:'flex',alignItems:'flex-end',gap:4,height:60,padding:'0 4px'}}>
+                  {(() => { const max = Math.max(1, ...analytics.summary.monthly.map(m => m.count)); return analytics.summary.monthly.slice(-12).map(m=>(
+                    <div key={m.month} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:3}} title={`${m.month}: ${m.count}`}>
+                      <div style={{width:'100%',background:C.green,borderRadius:'3px 3px 0 0',height:`${(m.count/max)*100}%`,minHeight:3}}/>
+                      <span style={{fontSize:8,color:C.dim}}>{m.month.slice(5)}</span>
+                    </div>
+                  )) })()}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {view==='list'&&(
         <div style={{flex:1,overflowY:'auto'}}>
           {loading?<div style={{padding:40,textAlign:'center',color:C.dim,fontSize:13}}>Loading…</div>
           :!parcels.length?<div style={{padding:40,textAlign:'center',color:C.dim}}><div style={{fontSize:40,marginBottom:10}}>📦</div><div style={{fontSize:13,fontWeight:600,marginBottom:6}}>No parcels tracked yet</div><div style={{fontSize:11}}>Click &quot;+ Add parcel&quot; to start tracking</div></div>
@@ -205,6 +303,7 @@ export default function ParcelTrackingPage(){
             )
           })}
         </div>
+        )}
       </div>
 
       {/* RIGHT */}
@@ -224,6 +323,17 @@ export default function ParcelTrackingPage(){
                 {selected.recipient_name&&<div style={{fontSize:11,color:C.dim,marginTop:2}}>To: {selected.recipient_name}{selected.recipient_phone?` · ${selected.recipient_phone}`:''}{selected.recipient_city?` · ${selected.recipient_city} ${selected.recipient_state??''}`:''}</div>}
               </div>
               <div style={{display:'flex',gap:5,flexShrink:0}}>
+                <button onClick={()=>predictDelivery(selected.id)} disabled={predLoading} style={{height:28,padding:'0 10px',borderRadius:6,border:`1px solid ${C.border}`,background:'transparent',color:'#A78BFA',fontSize:11,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>
+                  {predLoading?'…':'✦ Predict'}
+                </button>
+                {prediction?.prediction && (
+                  <span style={{padding:'4px 10px',borderRadius:6,background:'rgba(167,139,250,0.12)',border:'1px solid rgba(167,139,250,0.3)',color:'#A78BFA',fontSize:11}}>
+                    {prediction.prediction}
+                  </span>
+                )}
+                <a href={`/track/${encodeURIComponent(selected.tracking_number)}`} target="_blank" rel="noopener noreferrer" style={{height:28,padding:'0 10px',borderRadius:6,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:11,fontWeight:600,cursor:'pointer',fontFamily:'inherit',display:'inline-flex',alignItems:'center',textDecoration:'none'}}>
+                  🔗 Share
+                </a>
                 <button onClick={()=>refresh(selected.id)} disabled={refreshing===selected.id} style={{height:28,padding:'0 10px',borderRadius:6,border:`1px solid ${C.border}`,background:'transparent',color:C.green,fontSize:11,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>
                   {refreshing===selected.id?'…':'↻ Refresh'}
                 </button>
