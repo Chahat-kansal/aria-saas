@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useBusinessContext } from '@/components/providers/BusinessProvider'
+import { VarianceExtensions } from '@/components/dashboard/Prompt55Extensions'
 
 interface VItem {
   item_id: string
@@ -322,6 +323,7 @@ export default function VariancePage() {
           </p>
         </>
       )}
+      <VarianceExtensions />
     </div>
   )
 }

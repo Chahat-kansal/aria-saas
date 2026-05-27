@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
 import { useBusinessContext } from '@/components/providers/BusinessProvider'
+import { SuppliersExtensions } from '@/components/dashboard/Prompt55Extensions'
 
 interface SupplierRow {
   product_name: string; category: string | null; brand: string | null
@@ -252,6 +253,7 @@ export default function SuppliersPage() {
           )}
         </div>
       )}
+      <SuppliersExtensions suppliers={lists.map(l => ({ id: l.id, name: l.supplier_name }))} />
     </div>
   )
 }

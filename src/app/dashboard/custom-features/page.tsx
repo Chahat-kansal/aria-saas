@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useBusinessContext } from '@/components/providers/BusinessProvider';
 import FeatureRenderer, { type BusinessFeature } from '@/components/features/FeatureRenderer';
+import { FeaturesExtensions } from '@/components/dashboard/Prompt55Extensions';
 
 type FeatureConfig = Record<string, unknown>;
 
@@ -255,6 +256,7 @@ export default function CustomFeaturesPage() {
             </div>
           )
         )}
+        <FeaturesExtensions items={features.map(f => ({ id: f.id, title: (f as unknown as { feature_title?: string }).feature_title ?? (f as unknown as { title?: string }).title ?? 'Untitled', description: (f as unknown as { description?: string | null }).description ?? null, status: (f as unknown as { status?: string | null }).status ?? 'submitted', upvotes: (f as unknown as { upvotes?: number | null }).upvotes ?? 0 }))} />
       </div>
     </div>
   );
