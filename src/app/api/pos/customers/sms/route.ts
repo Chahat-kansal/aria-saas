@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
+import { sendSMS } from '@/lib/clicksend'
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 
@@ -41,7 +42,7 @@ async function _POST(req: Request) {
   }
 
   const encoded = new URLSearchParams({ To: customer.phone, From: twilioFrom, Body: message });
-  const twilioRes = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${twilioSid}/Messages.json`, {
+        await sendSMS(customer.phone, message)
     method: 'POST',
     headers: {
       Authorization: `Basic ${Buffer.from(`${twilioSid}:${twilioToken}`).toString('base64')}`,
