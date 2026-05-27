@@ -2,6 +2,7 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 import { NextResponse } from 'next/server'
+import { sendSMS } from '@/lib/clicksend'
 import Anthropic from '@anthropic-ai/sdk'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
@@ -47,14 +48,11 @@ async function _POST(req: Request) {
         return NextResponse.json({ error: `Email failed: ${errText}` }, { status: 502 })
       }
     } else {
-      const accountSid = process.env.TWILIO_ACCOUNT_SID
-      const authToken = process.env.TWILIO_AUTH_TOKEN
-      const from = process.env.TWILIO_PHONE_NUMBER
       if (!accountSid || !authToken || !from) return NextResponse.json({ error: 'SMS not configured' }, { status: 503 })
       const rawPhone = (inv.bill_to_phone ?? '') as string
       if (!rawPhone) return NextResponse.json({ error: 'No phone on invoice' }, { status: 400 })
       const phone = rawPhone.replace(/\s/g, '').replace(/^0/, '+61')
-      const smsRes = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`, {
+        await sendSMS(phone, confirmedMessage as string)
         method: 'POST',
         headers: {
           Authorization: 'Basic ' + Buffer.from(`${accountSid}:${authToken}`).toString('base64'),
