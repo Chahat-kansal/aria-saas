@@ -81,6 +81,22 @@ export async function POST(req: Request) {
       return p.name + priceBit + catBit + stockNote
     }).join('\n')
 
+    // ── Optional member lookup if customer pasted an email ────────────
+    let memberContext = ''
+    const emailMatch = message.match(/[\w.+-]+@[\w-]+\.[\w.-]+/)
+    if (config?.loyalty_enabled !== false && emailMatch) {
+      const { data: cust } = await supabaseAdmin.from('pos_customers')
+        .select('name, loyalty_points, points_balance, stamps_count')
+        .eq('business_id', business_id)
+        .eq('email', emailMatch[0].toLowerCase().trim())
+        .maybeSingle()
+      if (cust) {
+        const pts = Number(cust.points_balance ?? cust.loyalty_points ?? 0)
+        const stamps = Number(cust.stamps_count ?? 0)
+        memberContext = `RETURNING CUSTOMER: ${cust.name ?? 'this customer'} is enrolled — ${pts} points, ${stamps} stamps. Greet them by name warmly. Never invent any numbers.`
+      }
+    }
+
     // ── Build system prompt ───────────────────────────────────────────
     const personality = config?.personality ?? 'friendly'
     const tone = PERSONALITY_TONE[personality] ?? PERSONALITY_TONE.friendly
@@ -105,6 +121,10 @@ export async function POST(req: Request) {
       'When recommending, name 1-2 specific products from the list above by their exact name so we can show product cards.',
       'UPSELL RULE: at most ONE natural pairing suggestion per topic — only if it feels genuinely helpful. Never pushy. ("A flat white? The almond croissant is the local legend with that.")',
       'If a customer asks for recipe ideas or what to cook, keep your reply brief — we render a recipe card separately, so just say something warm like "Ooh, let me find you a good one…".',
+      memberContext,
+      config?.loyalty_enabled !== false
+        ? 'LOYALTY: If the customer seems happy or wrapping up, you may warmly offer to sign them up for loyalty in ONE short sentence (e.g. "Want a free coffee on your 10th visit? Drop your email and I\'ll set you up."). Only ask once per conversation. Never push.'
+        : '',
     ].filter(Boolean).join('\n')
 
     // ── Call Claude (Haiku for speed) ─────────────────────────────────
@@ -185,6 +205,13 @@ export async function POST(req: Request) {
     // ── Recipe trigger: did the customer ask for cooking ideas? ────────
     const wantsRecipe = config?.recipe_suggestions !== false && /recipe|what (can|could) i (make|cook|do)|dinner ideas?|lunch ideas?|breakfast ideas?|cook(ing)? with/i.test(message)
 
+    // ── Loyalty signup prompt: after 2+ exchanges, if no email captured yet ──
+    const suggestLoyalty = (config?.loyalty_enabled !== false)
+      && !memberContext
+      && !emailMatch
+      && history.length >= 4
+      && !/loyalty|points|stamps|sign[- ]?up|join/i.test(history.slice(-4).map(h => h.content).join(' '))
+
     // ── Lightweight demand-signal extraction ──────────────────────────
     // Did the customer ask for a product? Check the user's message against catalogue.
     const lowerMsg = message.toLowerCase()
@@ -253,6 +280,7 @@ export async function POST(req: Request) {
       product_cards: productCards,
       upsell,
       suggest_recipe: wantsRecipe,
+      suggest_loyalty_signup: suggestLoyalty,
       visitor_id: visitor_id ?? null,
     })
   } catch (err) {
