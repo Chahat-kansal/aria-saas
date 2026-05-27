@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk'
+import { sendSMS } from '@/lib/clicksend'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 
 export type MessageDraft = {
@@ -45,12 +46,10 @@ async function draftMessage(
 }
 
 async function sendSms(phone: string, body: string): Promise<boolean> {
-  const sid = process.env.TWILIO_ACCOUNT_SID
   const token = process.env.TWILIO_AUTH_TOKEN
-  const from = process.env.TWILIO_PHONE_NUMBER
   if (!sid || !token || !from) return false
   const normalized = phone.replace(/\s/g, '').replace(/^0/, '+61')
-  const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
+        await sendSMS(normalized, body)
     method: 'POST',
     headers: { 'Authorization': 'Basic ' + Buffer.from(`${sid}:${token}`).toString('base64'), 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({ To: normalized, From: from, Body: body }).toString(),
