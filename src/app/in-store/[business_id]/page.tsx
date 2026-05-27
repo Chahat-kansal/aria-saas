@@ -125,7 +125,8 @@ export default function KioskPage() {
     setSending(true)
     setError('')
     const userMsg: Message = { role: 'user', content: text }
-    setMessages(m => [...m, userMsg])
+    // Push the user message + an empty assistant placeholder we'll stream tokens into
+    setMessages(m => [...m, userMsg, { role: 'assistant', content: '' }])
     setInput('')
     try {
       const res = await fetch('/api/public/instore/chat', {
@@ -138,12 +139,68 @@ export default function KioskPage() {
           messages: messages.map(m => ({ role: m.role, content: m.content })),
         }),
       })
-      const d = await res.json()
-      if (!res.ok) throw new Error(d.error ?? 'Failed')
-      setConversationId(d.conversation_id)
+      if (!res.ok || !res.body) {
+        const errBody = await res.json().catch(() => ({}))
+        throw new Error(errBody.error ?? ('HTTP ' + res.status))
+      }
 
+      // ── Parse SSE stream ───────────────────────────────────────────
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let buf = ''
+      let streamedReply = ''
+      let metadata: {
+        conversation_id?: string | null
+        product_cards?: ProductCard[]
+        upsell?: ProductCard | null
+        suggest_recipe?: boolean
+        suggest_loyalty_signup?: boolean
+        full_reply?: string
+      } = {}
+
+      while (true) {
+        const { value, done } = await reader.read()
+        if (done) break
+        buf += decoder.decode(value, { stream: true })
+        const lines = buf.split('\n\n')
+        buf = lines.pop() ?? ''
+        for (const block of lines) {
+          const line = block.trim()
+          if (!line.startsWith('data:')) continue
+          const payload = line.slice(5).trim()
+          if (payload === '[DONE]') continue
+          let evt: { type?: string; text?: string; message?: string;
+            conversation_id?: string | null; product_cards?: ProductCard[];
+            upsell?: ProductCard | null; suggest_recipe?: boolean;
+            suggest_loyalty_signup?: boolean; full_reply?: string } = {}
+          try { evt = JSON.parse(payload) } catch { continue }
+          if (evt.type === 'token' && evt.text) {
+            streamedReply += evt.text
+            const snapshot = streamedReply
+            setMessages(m => {
+              const next = m.slice()
+              for (let i = next.length - 1; i >= 0; i--) {
+                if (next[i].role === 'assistant') {
+                  next[i] = { ...next[i], content: snapshot }
+                  break
+                }
+              }
+              return next
+            })
+          } else if (evt.type === 'metadata') {
+            metadata = evt
+          } else if (evt.type === 'error') {
+            throw new Error(evt.message ?? 'stream_error')
+          }
+        }
+      }
+
+      const finalText = metadata.full_reply ?? streamedReply
+      setConversationId(metadata.conversation_id ?? null)
+
+      // Trigger recipe fetch if signalled
       let recipe: RecipeCard | null = null
-      if (d.suggest_recipe) {
+      if (metadata.suggest_recipe) {
         try {
           const r = await fetch('/api/public/instore/recipe', {
             method: 'POST',
@@ -154,18 +211,35 @@ export default function KioskPage() {
         } catch { /* non-fatal */ }
       }
 
-      const aiMsg: Message = {
-        role: 'assistant',
-        content: d.reply,
-        cards: d.product_cards,
-        upsell: d.upsell,
-        recipe,
-      }
-      setMessages(m => [...m, aiMsg])
+      // Finalise the assistant message with full text + cards + recipe
+      setMessages(m => {
+        const next = m.slice()
+        for (let i = next.length - 1; i >= 0; i--) {
+          if (next[i].role === 'assistant') {
+            next[i] = {
+              role: 'assistant',
+              content: finalText,
+              cards: metadata.product_cards,
+              upsell: metadata.upsell,
+              recipe,
+            }
+            break
+          }
+        }
+        return next
+      })
 
-      if (voiceEnabled) speak(d.reply)
-      if (d.suggest_loyalty_signup) setShowSignup(true)
+      if (voiceEnabled && finalText) speak(finalText)
+      if (metadata.suggest_loyalty_signup) setShowSignup(true)
     } catch (e: unknown) {
+      // Roll back the empty placeholder if the stream blew up before any tokens
+      setMessages(m => {
+        const next = m.slice()
+        if (next.length > 0 && next[next.length - 1].role === 'assistant' && !next[next.length - 1].content) {
+          next.pop()
+        }
+        return next
+      })
       setError((e as Error).message)
     }
     setSending(false)

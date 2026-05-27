@@ -23,6 +23,10 @@ function extractProductMentions(text: string, products: Array<{ name: string; id
   return products.filter(p => p.name && lower.includes(p.name.toLowerCase()))
 }
 
+function sseLine(obj: unknown): string {
+  return 'data: ' + JSON.stringify(obj) + '\n\n'
+}
+
 export async function POST(req: Request) {
   try {
     const { business_id, message, conversation_id, visitor_id, messages: history = [] } = await req.json() as {
@@ -130,161 +134,200 @@ export async function POST(req: Request) {
         : '',
     ].filter(Boolean).join('\n')
 
-    // ── Call Claude (Haiku for speed) ─────────────────────────────────
+    // ── Build message history for Claude ──────────────────────────────
     const msgs: Message[] = [
       ...history.slice(-8),
       { role: 'user', content: message },
     ]
 
-    const response = await trackAICall(
-      { route: 'public/instore/chat', model: 'claude-haiku-4-5-20251001', businessId: business_id, purpose: 'instore-kiosk' },
-      () => anthropic.messages.create({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 300,
-        system: systemPrompt,
-        messages: msgs,
-      })
-    )
+    // ── Stream the response via SSE ───────────────────────────────────
+    const encoder = new TextEncoder()
+    const startedAt = Date.now()
 
-    const replyText = response.content[0].type === 'text' ? response.content[0].text : ''
+    const stream = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        let replyText = ''
+        try {
+          const claudeStream = anthropic.messages.stream({
+            model: 'claude-haiku-4-5-20251001',
+            max_tokens: 300,
+            system: systemPrompt,
+            messages: msgs,
+          })
 
-    // ── Build product cards mentioned in the reply ─────────────────────
-    const mentioned = extractProductMentions(replyText, products.map(p => ({ name: p.name, id: p.id })))
-    const productCards: ProductCard[] = mentioned.slice(0, 4).map(m => {
-      const p = products.find(pp => pp.id === m.id)!
-      return {
-        id: p.id,
-        name: p.name,
-        price: p.price != null ? Number(p.price) : null,
-        stock: Number(p.stock_quantity ?? 0),
-        image_url: p.image_url,
-      }
-    })
-
-    // ── Upsell: find the product most frequently bought with the first card ──
-    let upsell: ProductCard | null = null
-    if (mentioned.length > 0) {
-      const seedId = mentioned[0].id
-      try {
-        const since = new Date(Date.now() - 90 * 86400_000).toISOString()
-        const { data: salesWithSeed } = await supabaseAdmin.from('pos_sale_items')
-          .select('sale_id, pos_sales!inner(business_id, created_at, status)')
-          .eq('product_id', seedId)
-          .eq('pos_sales.business_id', business_id)
-          .neq('pos_sales.status', 'voided')
-          .gte('pos_sales.created_at', since)
-          .limit(200)
-        const saleIds = (salesWithSeed ?? []).map((r: { sale_id: string }) => r.sale_id).filter(Boolean)
-        if (saleIds.length > 0) {
-          const { data: companions } = await supabaseAdmin.from('pos_sale_items')
-            .select('product_id, quantity')
-            .in('sale_id', saleIds)
-            .neq('product_id', seedId)
-            .limit(500)
-          const counts: Record<string, number> = {}
-          for (const r of (companions ?? []) as Array<{ product_id: string | null; quantity: number | null }>) {
-            if (!r.product_id) continue
-            counts[r.product_id] = (counts[r.product_id] ?? 0) + Number(r.quantity ?? 1)
-          }
-          const topId = Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0]
-          const topProduct = topId ? products.find(p => p.id === topId) : null
-          if (topProduct && !mentioned.find(m => m.id === topProduct.id)) {
-            const qty = Number(topProduct.stock_quantity ?? 0)
-            const tracked = topProduct.track_stock !== false
-            if (!tracked || qty > 0) {
-              upsell = {
-                id: topProduct.id,
-                name: topProduct.name,
-                price: topProduct.price != null ? Number(topProduct.price) : null,
-                stock: qty,
-                image_url: topProduct.image_url,
+          for await (const event of claudeStream) {
+            if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+              const token = event.delta.text
+              if (token) {
+                replyText += token
+                controller.enqueue(encoder.encode(sseLine({ type: 'token', text: token })))
               }
             }
           }
+
+          // Log the AI call for telemetry (matches the previous trackAICall instrumentation)
+          await trackAICall(
+            { route: 'public/instore/chat', model: 'claude-haiku-4-5-20251001', businessId: business_id, purpose: 'instore-kiosk' },
+            async () => ({ durationMs: Date.now() - startedAt })
+          ).catch(() => null)
+        } catch (err) {
+          console.error('[instore/chat] stream error', err)
+          controller.enqueue(encoder.encode(sseLine({ type: 'error', message: 'stream_failed' })))
+          controller.close()
+          return
         }
-      } catch { /* non-fatal */ }
-    }
 
-    // ── Recipe trigger: did the customer ask for cooking ideas? ────────
-    const wantsRecipe = config?.recipe_suggestions !== false && /recipe|what (can|could) i (make|cook|do)|dinner ideas?|lunch ideas?|breakfast ideas?|cook(ing)? with/i.test(message)
+        // ── POST-PROCESSING: cards, upsell, demand signal, conversation save ──
+        try {
+          const mentioned = extractProductMentions(replyText, products.map(p => ({ name: p.name, id: p.id })))
+          const productCards: ProductCard[] = mentioned.slice(0, 4).map(m => {
+            const p = products.find(pp => pp.id === m.id)!
+            return {
+              id: p.id,
+              name: p.name,
+              price: p.price != null ? Number(p.price) : null,
+              stock: Number(p.stock_quantity ?? 0),
+              image_url: p.image_url,
+            }
+          })
 
-    // ── Loyalty signup prompt: after 2+ exchanges, if no email captured yet ──
-    const suggestLoyalty = (config?.loyalty_enabled !== false)
-      && !memberContext
-      && !emailMatch
-      && history.length >= 4
-      && !/loyalty|points|stamps|sign[- ]?up|join/i.test(history.slice(-4).map(h => h.content).join(' '))
+          // Upsell — top co-purchase companion of the first card
+          let upsell: ProductCard | null = null
+          if (mentioned.length > 0) {
+            const seedId = mentioned[0].id
+            try {
+              const since = new Date(Date.now() - 90 * 86400_000).toISOString()
+              const { data: salesWithSeed } = await supabaseAdmin.from('pos_sale_items')
+                .select('sale_id, pos_sales!inner(business_id, created_at, status)')
+                .eq('product_id', seedId)
+                .eq('pos_sales.business_id', business_id)
+                .neq('pos_sales.status', 'voided')
+                .gte('pos_sales.created_at', since)
+                .limit(200)
+              const saleIds = (salesWithSeed ?? []).map((r: { sale_id: string }) => r.sale_id).filter(Boolean)
+              if (saleIds.length > 0) {
+                const { data: companions } = await supabaseAdmin.from('pos_sale_items')
+                  .select('product_id, quantity')
+                  .in('sale_id', saleIds)
+                  .neq('product_id', seedId)
+                  .limit(500)
+                const counts: Record<string, number> = {}
+                for (const r of (companions ?? []) as Array<{ product_id: string | null; quantity: number | null }>) {
+                  if (!r.product_id) continue
+                  counts[r.product_id] = (counts[r.product_id] ?? 0) + Number(r.quantity ?? 1)
+                }
+                const topId = Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0]
+                const topProduct = topId ? products.find(p => p.id === topId) : null
+                if (topProduct && !mentioned.find(m => m.id === topProduct.id)) {
+                  const qty = Number(topProduct.stock_quantity ?? 0)
+                  const tracked = topProduct.track_stock !== false
+                  if (!tracked || qty > 0) {
+                    upsell = {
+                      id: topProduct.id,
+                      name: topProduct.name,
+                      price: topProduct.price != null ? Number(topProduct.price) : null,
+                      stock: qty,
+                      image_url: topProduct.image_url,
+                    }
+                  }
+                }
+              }
+            } catch { /* non-fatal */ }
+          }
 
-    // ── Lightweight demand-signal extraction ──────────────────────────
-    // Did the customer ask for a product? Check the user's message against catalogue.
-    const lowerMsg = message.toLowerCase()
-    const asked = products.find(p => p.name && lowerMsg.includes(p.name.toLowerCase()))
-    let signal_type: 'answered' | 'missed_demand' | 'recommendation' | 'recipe' = 'answered'
-    let product_asked: string | null = null
-    let matched_product_id: string | null = null
-    let in_stock: boolean | null = null
+          const wantsRecipe = config?.recipe_suggestions !== false && /recipe|what (can|could) i (make|cook|do)|dinner ideas?|lunch ideas?|breakfast ideas?|cook(ing)? with/i.test(message)
 
-    if (asked) {
-      const qty = Number(asked.stock_quantity ?? 0)
-      const tracked = asked.track_stock !== false
-      in_stock = !tracked || qty > 0
-      matched_product_id = asked.id
-      product_asked = asked.name
-      signal_type = 'answered'
-    } else {
-      // Heuristic: "do you have X", "got any X", "where is your X", "looking for X"
-      const askPatterns = /(do you have|got any|looking for|where('?s| is) (the |your )?|need|sell|stock|carry)\s+([a-z0-9\s'-]{3,40})/i
-      const m = message.match(askPatterns)
-      if (m && m[6]) {
-        product_asked = m[6].trim().replace(/[?.!,]+$/, '').slice(0, 80)
-        in_stock = false
-        signal_type = 'missed_demand'
-      }
-    }
+          const suggestLoyalty = (config?.loyalty_enabled !== false)
+            && !memberContext
+            && !emailMatch
+            && history.length >= 4
+            && !/loyalty|points|stamps|sign[- ]?up|join/i.test(history.slice(-4).map(h => h.content).join(' '))
 
-    if (/recipe|how (do|to) (i )?(make|cook)|dinner|lunch|breakfast/i.test(message)) {
-      signal_type = 'recipe'
-    } else if (/recommend|suggest|what should|what would you|best|good for/i.test(message) && signal_type === 'answered') {
-      signal_type = 'recommendation'
-    }
+          // Demand signal extraction
+          const lowerMsg = message.toLowerCase()
+          const asked = products.find(p => p.name && lowerMsg.includes(p.name.toLowerCase()))
+          let signal_type: 'answered' | 'missed_demand' | 'recommendation' | 'recipe' = 'answered'
+          let product_asked: string | null = null
+          let matched_product_id: string | null = null
+          let in_stock: boolean | null = null
 
-    await supabaseAdmin.from('instore_demand_signals').insert({
-      business_id,
-      query_text: message.slice(0, 500),
-      product_asked,
-      in_stock,
-      matched_product_id,
-      signal_type,
+          if (asked) {
+            const qty = Number(asked.stock_quantity ?? 0)
+            const tracked = asked.track_stock !== false
+            in_stock = !tracked || qty > 0
+            matched_product_id = asked.id
+            product_asked = asked.name
+            signal_type = 'answered'
+          } else {
+            const askPatterns = /(do you have|got any|looking for|where('?s| is) (the |your )?|need|sell|stock|carry)\s+([a-z0-9\s'-]{3,40})/i
+            const m = message.match(askPatterns)
+            if (m && m[6]) {
+              product_asked = m[6].trim().replace(/[?.!,]+$/, '').slice(0, 80)
+              in_stock = false
+              signal_type = 'missed_demand'
+            }
+          }
+          if (/recipe|how (do|to) (i )?(make|cook)|dinner|lunch|breakfast/i.test(message)) {
+            signal_type = 'recipe'
+          } else if (/recommend|suggest|what should|what would you|best|good for/i.test(message) && signal_type === 'answered') {
+            signal_type = 'recommendation'
+          }
+
+          await supabaseAdmin.from('instore_demand_signals').insert({
+            business_id,
+            query_text: message.slice(0, 500),
+            product_asked,
+            in_stock,
+            matched_product_id,
+            signal_type,
+          })
+
+          // Save / update conversation
+          const updatedMessages = [
+            ...history,
+            { role: 'user', content: message },
+            { role: 'assistant', content: replyText },
+          ]
+          let convId = conversation_id ?? null
+          if (convId) {
+            await supabaseAdmin.from('instore_conversations').update({
+              messages: updatedMessages,
+            }).eq('id', convId)
+          } else {
+            const { data: newConv } = await supabaseAdmin.from('instore_conversations').insert({
+              business_id,
+              messages: updatedMessages,
+            }).select('id').single()
+            convId = newConv?.id ?? null
+          }
+
+          // Final metadata event — single connection, simpler client
+          controller.enqueue(encoder.encode(sseLine({
+            type: 'metadata',
+            conversation_id: convId,
+            product_cards: productCards,
+            upsell,
+            suggest_recipe: wantsRecipe,
+            suggest_loyalty_signup: suggestLoyalty,
+            visitor_id: visitor_id ?? null,
+            full_reply: replyText,
+          })))
+          controller.enqueue(encoder.encode('data: [DONE]\n\n'))
+        } catch (err) {
+          console.error('[instore/chat] post-processing error', err)
+          controller.enqueue(encoder.encode(sseLine({ type: 'error', message: 'post_failed' })))
+        }
+        controller.close()
+      },
     })
 
-    // ── Save / update conversation ────────────────────────────────────
-    const updatedMessages = [
-      ...history,
-      { role: 'user', content: message },
-      { role: 'assistant', content: replyText },
-    ]
-
-    let convId = conversation_id ?? null
-    if (convId) {
-      await supabaseAdmin.from('instore_conversations').update({
-        messages: updatedMessages,
-      }).eq('id', convId)
-    } else {
-      const { data: newConv } = await supabaseAdmin.from('instore_conversations').insert({
-        business_id,
-        messages: updatedMessages,
-      }).select('id').single()
-      convId = newConv?.id ?? null
-    }
-
-    return NextResponse.json({
-      reply: replyText,
-      conversation_id: convId,
-      product_cards: productCards,
-      upsell,
-      suggest_recipe: wantsRecipe,
-      suggest_loyalty_signup: suggestLoyalty,
-      visitor_id: visitor_id ?? null,
+    return new Response(stream, {
+      headers: {
+        'Content-Type': 'text/event-stream; charset=utf-8',
+        'Cache-Control': 'no-cache, no-transform',
+        Connection: 'keep-alive',
+        'X-Accel-Buffering': 'no',
+      },
     })
   } catch (err) {
     console.error('[instore/chat] error', err)
