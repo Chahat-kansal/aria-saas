@@ -78,10 +78,12 @@ interface GlobalProductHit {
 }
 interface Modifier { id: string; name: string; price_adjustment: number; modifier_group: string | null; }
 interface VariantGroup { id: string; name: string; values: string[]; affects_price: boolean; price_map: Record<string, number>; }
+interface SimpleVariant { id: string; name: string; price: number | null; sku: string | null; barcode: string | null; stock_quantity: number; sort_order: number; }
 interface ModifierLink { id: string; modifier_id: string; pos_modifiers: Modifier; }
 interface CartItem {
   product: Product; qty: number; discount_percent?: number;
   label?: string; variantLabel?: string; modifierDetails?: Modifier[]; unitPrice: number;
+  variant_id?: string | null; variant_name?: string | null;
 }
 interface Customer { id: string; name: string; email: string | null; phone: string | null; loyalty_points: number; total_spent: number; points_balance?: number; stamps_count?: number; tags?: string[]; visit_count?: number; last_visit_at?: string | null; }
 interface ParkedSale { id: string; label: string | null; items: CartItem[]; total: number; customer_id: string | null; created_at: string; }
@@ -307,6 +309,7 @@ export default function TerminalPage() {
   const [selectedMods,     setSelectedMods]     = useState<Record<string, boolean>>({});
   const [variantQty,       setVariantQty]       = useState(1);
   const [variantLoading,   setVariantLoading]   = useState(false);
+  const [simplePriceModal, setSimplePriceModal] = useState<{ product: Product; variants: SimpleVariant[] } | null>(null);
 
   /* ── UI ───────────────────────────────────────────────────────── */
   const [search,           setSearch]           = useState('');
@@ -1043,7 +1046,7 @@ export default function TerminalPage() {
     flyRef.current.fly(fromEl.getBoundingClientRect(), cartAnchor.current.getBoundingClientRect());
   }
 
-  function addToCartDirect(p: Product, qty: number, variantLabel?: string, label?: string, mods: Modifier[] = [], fromEl?: HTMLElement | null) {
+  function addToCartDirect(p: Product, qty: number, variantLabel?: string, label?: string, mods: Modifier[] = [], fromEl?: HTMLElement | null, variantId?: string | null, variantName?: string | null) {
     if (fromEl) triggerFly(fromEl);
     const modPrice = mods.reduce((s, m) => s + (m.price_adjustment ?? 0), 0);
     const unitPrice = p.price + modPrice;
@@ -1052,7 +1055,7 @@ export default function TerminalPage() {
       const key = `${p.id}::${fullLabel}`;
       const hit = c.find(i => `${i.product.id}::${i.label ?? i.product.name}` === key);
       if (hit) return c.map(i => `${i.product.id}::${i.label ?? i.product.name}` === key ? { ...i, qty: i.qty + qty } : i);
-      return [...c, { product: p, qty, label: fullLabel !== p.name ? fullLabel : undefined, variantLabel, modifierDetails: mods, unitPrice, discount_percent: 0 }];
+      return [...c, { product: p, qty, label: fullLabel !== p.name ? fullLabel : undefined, variantLabel, modifierDetails: mods, unitPrice, discount_percent: 0, variant_id: variantId ?? null, variant_name: variantName ?? null }];
     });
     SFX.add();
     setSelectedItem(p.id);
@@ -1142,9 +1145,16 @@ export default function TerminalPage() {
       const res = await fetch(`/api/pos/variants?product_id=${p.id}`);
       if (res.ok) {
         const d = await res.json();
-        const groups: VariantGroup[] = d.variants ?? [];
+        const rawVariants: any[] = d.variants ?? [];
         const modLinks: ModifierLink[] = d.modifiers ?? [];
-        const mods = modLinks.map(l => l.pos_modifiers).filter(Boolean);
+        const mods = modLinks.map((l: ModifierLink) => l.pos_modifiers).filter(Boolean);
+        // Simple variants have a numeric `price` field; group variants have a `values` array
+        const isSimple = rawVariants.length > 0 && !Array.isArray(rawVariants[0]?.values);
+        if (isSimple) {
+          setSimplePriceModal({ product: p, variants: rawVariants as SimpleVariant[] });
+          setVariantLoading(false); return;
+        }
+        const groups = rawVariants as VariantGroup[];
         if (groups.length > 0 || mods.length > 0) {
           setVariantModal({ product: p, variantGroups: groups, modifiers: mods });
           setSelectedVariants({}); setSelectedMods({}); setVariantQty(1);
@@ -1185,6 +1195,16 @@ export default function TerminalPage() {
     const effectivePrice = Math.max(0, p.price + priceDelta + selectedModList.reduce((s, m) => s + (m.price_adjustment ?? 0), 0));
     addToCartDirect({ ...p, price: effectivePrice }, variantQty, variantParts.join(' / ') || undefined, label, selectedModList);
     setVariantModal(null);
+  }
+
+  function addVariantToCart(product: Product, variant: SimpleVariant) {
+    const price = variant.price ?? product.price;
+    addToCartDirect(
+      { ...product, price }, 1, variant.name,
+      `${product.name} · ${variant.name}`,
+      [], null, variant.id, variant.name,
+    );
+    setSimplePriceModal(null);
   }
 
   /* ─── Aria chat ──────────────────────────────────────────────── */
@@ -1460,6 +1480,8 @@ export default function TerminalPage() {
         discount_percent: i.discount_percent ?? 0,
         line_total: +(i.unitPrice * i.qty * (1 - (i.discount_percent ?? 0) / 100)).toFixed(2),
         variant_label: i.variantLabel ?? null,
+        variant_id: i.variant_id ?? null,
+        variant_name: i.variant_name ?? null,
         modifiers: i.modifierDetails?.map(m => ({ id: m.id, name: m.name, price_cents: Math.round(m.price_adjustment * 100) })) ?? [],
       })),
       customer_id: customerSnapshot?.id ?? null, payment_method: capturedPayMethod,
@@ -1536,7 +1558,7 @@ export default function TerminalPage() {
         const d = await r.json();
         console.log('[POS perf] sale:', (performance.now() - t0Sale).toFixed(2), 'ms');
         if (d.error || !d.sale) return;
-        setShowReceipt(prev => prev ? { ...d.sale, cartSnapshot, customerSnapshot, businessName: capturedBusinessName } : prev);
+        setShowReceipt((prev: any) => prev ? { ...d.sale, cartSnapshot, customerSnapshot, businessName: capturedBusinessName } : prev);
         setRecentSales(prev => [{
           id: d.sale.id, total: capturedTotal,
           items: cartSnapshot.reduce((s: number, i: { qty: number }) => s + i.qty, 0), time: new Date(),
@@ -4110,6 +4132,36 @@ export default function TerminalPage() {
               style={{ background: clockMode === 'in' ? '#2D5240' : 'rgba(239,68,68,0.4)' }}>
               {clockLoading ? 'Processing…' : `Clock ${clockMode === 'in' ? 'In' : 'Out'}`}
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Simple price variant picker */}
+      {simplePriceModal && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center p-4" style={{ background: 'rgba(0,0,0,0.6)' }}>
+          <div className="rounded-2xl w-full max-w-sm overflow-hidden" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-default)', boxShadow: '0 24px 48px rgba(0,0,0,0.6)' }}>
+            <div className="px-5 py-4" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+              <h2 className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>{simplePriceModal.product.name}</h2>
+              <p className="text-xs mt-0.5" style={{ color: 'var(--text-tertiary)' }}>Select a size or price</p>
+            </div>
+            <div className="px-5 py-3 flex flex-col gap-2 max-h-72 overflow-y-auto">
+              {simplePriceModal.variants.map(v => (
+                <button key={v.id} onClick={() => addVariantToCart(simplePriceModal.product, v)}
+                  className="flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium transition-colors"
+                  style={{ background: 'var(--bg-input)', border: '1px solid var(--border-default)', color: 'var(--text-primary)', cursor: 'pointer' }}>
+                  <span>{v.name}</span>
+                  <span style={{ fontFamily: "'JetBrains Mono',monospace", color: 'var(--text-secondary)' }}>
+                    {v.price != null ? `A$${Number(v.price).toFixed(2)}` : `A$${Number(simplePriceModal.product.price).toFixed(2)}`}
+                  </span>
+                </button>
+              ))}
+            </div>
+            <div className="px-5 pb-4 pt-2">
+              <button onClick={() => setSimplePriceModal(null)}
+                className="w-full py-2.5 rounded-xl text-sm" style={{ border: '1px solid var(--border-default)', color: 'var(--text-secondary)', background: 'var(--bg-input)', cursor: 'pointer' }}>
+                Cancel
+              </button>
+            </div>
           </div>
         </div>
       )}

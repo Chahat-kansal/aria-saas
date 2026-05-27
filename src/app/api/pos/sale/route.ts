@@ -218,6 +218,8 @@ async function _POST(req: Request) {
     price_override_reason: i.price_override_reason ?? null,
     price_override_by: i.price_overridden ? user.id : null,
     price_override_at: i.price_overridden ? new Date().toISOString() : null,
+    variant_id: i.variant_id ?? null,
+    variant_name: i.variant_name ?? null,
   }));
 
   const { error: itemsErr } = await supabase.from('pos_sale_items').insert(saleItems);

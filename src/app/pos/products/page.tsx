@@ -26,6 +26,7 @@ const EMPTY_FORM = {
 };
 
 interface CSVRow { name: string; sku: string; barcode: string; price: string; cost_price: string; category: string; stock: string; active: string; }
+interface VariantItem { id: string; name: string; price: number | null; sku: string | null; barcode: string | null; stock_quantity: number; sort_order: number; }
 
 export default function ProductsPage() {
   const router = useRouter();
@@ -53,6 +54,12 @@ export default function ProductsPage() {
   const [bid, setBid]     = useState<string | null>(null);
   const [credits, setCredits] = useState<{ free_remaining: number; paid_credits: number; free_limit: number } | null>(null);
   const [creditModal, setCreditModal] = useState<{ productId: string; productName: string } | null>(null);
+  const [variantCounts, setVariantCounts] = useState<Record<string, number>>({});
+  const [modalVariants, setModalVariants] = useState<VariantItem[]>([]);
+  const [variantsLoading, setVariantsLoading] = useState(false);
+  const [showVariantForm, setShowVariantForm] = useState(false);
+  const [variantForm, setVariantForm] = useState({ name: '', price: '' });
+  const [variantSaving, setVariantSaving] = useState(false);
 
   useEffect(() => {
     fetch('/api/pos/products')
@@ -66,6 +73,7 @@ export default function ProductsPage() {
             .then(r => r.json()).then(c => { if (!c.error) setCredits(c); }).catch(() => {});
         }
         setLoading(false);
+        fetch('/api/pos/variants?mode=counts').then(r => r.json()).then(d => { if (d.counts) setVariantCounts(d.counts); }).catch(() => {});
       }).catch(() => setLoading(false));
   }, []);
 
@@ -105,7 +113,10 @@ export default function ProductsPage() {
       image_url: p.image_url ?? '', category_id: p.category_id ?? '', supplier_id: p.supplier_id ?? '',
     });
     setSaveError('');
+    setModalVariants([]); setShowVariantForm(false); setVariantForm({ name: '', price: '' });
     setModal({ open: true, mode: 'edit', product: p });
+    setVariantsLoading(true);
+    fetch(`/api/pos/variants?product_id=${p.id}`).then(r => r.json()).then(d => { setModalVariants(d.variants ?? []); setVariantsLoading(false); }).catch(() => setVariantsLoading(false));
   }
 
   async function saveProduct() {
@@ -135,6 +146,21 @@ export default function ProductsPage() {
       setModal({ open: false, mode: 'add' });
     }
     setSaving(false);
+  }
+
+  async function saveVariant() {
+    if (!modal.product || !variantForm.name.trim()) return;
+    setVariantSaving(true);
+    const res = await fetch('/api/pos/variants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ product_id: modal.product.id, name: variantForm.name.trim(), price: variantForm.price ? parseFloat(variantForm.price) : null }) });
+    const d = await res.json();
+    if (d.variant) { setModalVariants(vs => [...vs, d.variant]); setVariantCounts(c => ({ ...c, [modal.product!.id]: (c[modal.product!.id] ?? 0) + 1 })); setVariantForm({ name: '', price: '' }); setShowVariantForm(false); }
+    setVariantSaving(false);
+  }
+
+  async function deleteVariant(id: string, productId: string) {
+    await fetch(`/api/pos/variants?id=${id}`, { method: 'DELETE' });
+    setModalVariants(vs => vs.filter(v => v.id !== id));
+    setVariantCounts(c => ({ ...c, [productId]: Math.max(0, (c[productId] ?? 1) - 1) }));
   }
 
   async function deleteProduct(id: string) {
@@ -372,6 +398,7 @@ export default function ProductsPage() {
                     {/* Price */}
                     <td style={{ padding: '10px 12px' }}>
                       <span style={{ fontSize: 15, fontWeight: 800, color: C.text, fontFamily: "'JetBrains Mono',monospace" }}>A${Number(p.price).toFixed(2)}</span>
+                      {(variantCounts[p.id] ?? 0) > 0 && <span style={{ marginLeft: 6, fontSize: 9, padding: '2px 6px', borderRadius: 99, background: 'rgba(0,106,255,0.12)', color: C.violet, fontWeight: 700 }}>{variantCounts[p.id]} sizes</span>}
                     </td>
                     {/* Actions */}
                     <td style={{ padding: '10px 12px' }}>
@@ -393,6 +420,10 @@ export default function ProductsPage() {
                         </Link>
                           </>
                         )}
+                        <button onClick={() => openEdit(p)}
+                          style={{ padding: '5px 10px', borderRadius: 6, border: '1px solid rgba(0,176,64,0.3)', background: 'rgba(0,176,64,0.08)', color: C.green, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+                          Variants
+                        </button>
                         <button onClick={() => { if (confirm(`Delete "${p.name}"?`)) deleteProduct(p.id); }}
                           disabled={deleting === p.id}
                           style={{ padding: '5px 10px', borderRadius: 6, border: '1px solid rgba(239,68,68,0.25)', background: 'rgba(239,68,68,0.06)', color: C.red, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', opacity: deleting === p.id ? 0.5 : 1 }}>
@@ -457,6 +488,34 @@ export default function ProductsPage() {
                 <label style={lCls}>Image URL</label>
                 <input {...fld('image_url')} placeholder="https://…" style={iCls} />
               </div>
+              {modal.mode === 'edit' && modal.product && (
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                    <label style={lCls}>Variants &amp; Sizes</label>
+                    <button onClick={() => setShowVariantForm(v => !v)} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 6, border: `1px solid ${C.violet}40`, background: `${C.violet}12`, color: C.violet, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600 }}>+ Add</button>
+                  </div>
+                  {variantsLoading ? <p style={{ fontSize: 12, color: C.dim }}>Loading…</p>
+                    : modalVariants.length === 0 ? <p style={{ fontSize: 12, color: C.dim }}>No variants — single-price product.</p>
+                    : <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        {modalVariants.map(v => (
+                          <div key={v.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderRadius: 7, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                            <span style={{ flex: 1, fontSize: 13, color: C.text }}>{v.name}</span>
+                            <span style={{ fontSize: 12, fontFamily: 'monospace', color: C.muted }}>{v.price != null ? `A$${Number(v.price).toFixed(2)}` : '—'}</span>
+                            <button onClick={() => deleteVariant(v.id, modal.product!.id)} style={{ fontSize: 10, color: C.red, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: '2px 6px' }}>✕</button>
+                          </div>
+                        ))}
+                      </div>}
+                  {showVariantForm && (
+                    <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                      <input value={variantForm.name} onChange={e => setVariantForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Large / 6-Pack / Carton" style={{ ...iCls, flex: 2 }} />
+                      <input value={variantForm.price} onChange={e => setVariantForm(f => ({ ...f, price: e.target.value }))} type="number" step="0.01" min="0" placeholder="Price" style={{ ...iCls, flex: 1 }} />
+                      <button onClick={saveVariant} disabled={variantSaving || !variantForm.name.trim()} style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: C.violet, color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', opacity: variantSaving || !variantForm.name.trim() ? 0.5 : 1 }}>
+                        {variantSaving ? '…' : 'Add'}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
               <div style={{ display: 'flex', gap: 20 }}>
                 {([['is_active', 'Active'], ['show_online', 'Show Online']] as const).map(([k, label]) => (
                   <label key={k} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
