@@ -1,6 +1,7 @@
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
+import { sendSMS } from '@/lib/clicksend'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { generateSplitReceiptHTML } from '@/lib/pos/split-receipt'
@@ -38,12 +39,10 @@ async function _POST(req: Request, ctx: Ctx) {
 
   if (delivery_method === 'sms' && phone) {
     try {
-      const sid = process.env.TWILIO_ACCOUNT_SID
       const token = process.env.TWILIO_AUTH_TOKEN
-      const from = process.env.TWILIO_PHONE_NUMBER
       if (sid && token && from) {
         const msg = `Hi ${split.person_label}, your split from ${biz?.name ?? 'the restaurant'}: A$${split.total_amount.toFixed(2)}. Status: ${split.status}.`
-        await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
+        await sendSMS(phone, msg)
           method: 'POST',
           headers: { Authorization: `Basic ${Buffer.from(`${sid}:${token}`).toString('base64')}`, 'Content-Type': 'application/x-www-form-urlencoded' },
           body: new URLSearchParams({ To: phone, From: from, Body: msg }),
