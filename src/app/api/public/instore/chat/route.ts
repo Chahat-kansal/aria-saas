@@ -27,6 +27,14 @@ function sseLine(obj: unknown): string {
   return 'data: ' + JSON.stringify(obj) + '\n\n'
 }
 
+// Defensive safety net for the "never stall" rule. Conservative — matches only
+// explicit stall language to avoid false positives ("Let me know if..." stays fine).
+const STALL_REGEX = /\b(let me check|give me (a sec|just a sec|a moment|one sec)|hold on|one moment|let me grab|let me look|let me find out|just a sec|wait a sec)\b/i
+
+// First N chars buffered before flushing — long enough to catch a "Let me check..."
+// opener, short enough that the customer barely notices the buffer delay.
+const STALL_BUFFER_CHARS = 60
+
 export async function POST(req: Request) {
   try {
     const { business_id, message, conversation_id, visitor_id, messages: history = [] } = await req.json() as {
@@ -144,24 +152,90 @@ export async function POST(req: Request) {
     const encoder = new TextEncoder()
     const startedAt = Date.now()
 
+    // Stream one Claude reply into the SSE controller, buffering the first
+    // STALL_BUFFER_CHARS so we can swap to a retry before the client sees a stall.
+    async function streamOneReply(
+      controller: ReadableStreamDefaultController<Uint8Array>,
+      systemPromptToUse: string,
+    ): Promise<string> {
+      let buffered = ''
+      let flushed = false
+      let stallDetected = false
+
+      const claudeStream = anthropic.messages.stream({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 300,
+        system: systemPromptToUse,
+        messages: msgs,
+      })
+
+      for await (const event of claudeStream) {
+        if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+          const token = event.delta.text
+          if (!token) continue
+          buffered += token
+          if (!flushed) {
+            if (buffered.length >= STALL_BUFFER_CHARS) {
+              if (STALL_REGEX.test(buffered)) {
+                stallDetected = true
+                break
+              }
+              // Looks safe — flush all buffered text in one chunk, then stream live
+              controller.enqueue(encoder.encode(sseLine({ type: 'token', text: buffered })))
+              flushed = true
+            }
+          } else {
+            controller.enqueue(encoder.encode(sseLine({ type: 'token', text: token })))
+          }
+        }
+      }
+
+      if (stallDetected) {
+        // Don't leak any text to the client — signal to caller for a retry
+        return ' STALL'
+      }
+
+      // Stream ended before we hit the buffer threshold — flush whatever we have
+      if (!flushed && buffered) {
+        // Final stall check on the short reply too
+        if (STALL_REGEX.test(buffered)) return ' STALL'
+        controller.enqueue(encoder.encode(sseLine({ type: 'token', text: buffered })))
+      }
+      return buffered
+    }
+
     const stream = new ReadableStream<Uint8Array>({
       async start(controller) {
         let replyText = ''
         try {
-          const claudeStream = anthropic.messages.stream({
-            model: 'claude-haiku-4-5-20251001',
-            max_tokens: 300,
-            system: systemPrompt,
-            messages: msgs,
-          })
+          replyText = await streamOneReply(controller, systemPrompt)
 
-          for await (const event of claudeStream) {
-            if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
-              const token = event.delta.text
-              if (token) {
-                replyText += token
-                controller.enqueue(encoder.encode(sseLine({ type: 'token', text: token })))
-              }
+          if (replyText === ' STALL') {
+            // Retry with an explicit anti-stall correction in the system prompt
+            console.warn('[instore/chat] stall detected, retrying', { business_id })
+            await supabaseAdmin.from('aria_ai_calls').insert({
+              business_id,
+              route: 'public/instore/chat',
+              model: 'claude-haiku-4-5-20251001',
+              purpose: 'instore-kiosk-stall-detected',
+              status: 'retry',
+            }).then(undefined, () => null)
+
+            const correctedPrompt = systemPrompt + '\n\nYour previous reply contained a stall phrase. The product catalogue is RIGHT HERE. Answer the customer NOW using the catalogue. Never write "let me check" or "give me a sec".'
+            replyText = await streamOneReply(controller, correctedPrompt)
+
+            if (replyText === ' STALL') {
+              // Second stall — emit a hardcoded helpful fallback
+              const fallback = "Honestly, your best bet right now is asking the staff — they'll know."
+              controller.enqueue(encoder.encode(sseLine({ type: 'token', text: fallback })))
+              replyText = fallback
+              await supabaseAdmin.from('aria_ai_calls').insert({
+                business_id,
+                route: 'public/instore/chat',
+                model: 'claude-haiku-4-5-20251001',
+                purpose: 'instore-kiosk-stall-fallback',
+                status: 'fallback',
+              }).then(undefined, () => null)
             }
           }
 
