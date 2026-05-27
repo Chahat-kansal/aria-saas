@@ -2,6 +2,7 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { sendSMS } from '@/lib/clicksend'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { NextResponse } from 'next/server'
 
@@ -31,9 +32,6 @@ export async function POST(req: Request) {
   const message = `Hi ${booking.customer_name}! Just a reminder about your booking at ${bizName} tomorrow — ${date}${time ? ` at ${time}` : ''}${booking.party_size > 1 ? ` for ${booking.party_size} people` : ''}. See you then! 😊`
 
   // Send via Twilio
-  const accountSid = process.env.TWILIO_ACCOUNT_SID
-  const authToken = process.env.TWILIO_AUTH_TOKEN
-  const from = process.env.TWILIO_PHONE_NUMBER
 
   if (!accountSid || !authToken || !from) {
     return NextResponse.json({ error: 'Twilio not configured' }, { status: 500 })
@@ -41,7 +39,7 @@ export async function POST(req: Request) {
 
   const phone = booking.customer_phone.replace(/\s/g, '').replace(/^0/, '+61')
 
-  const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`, {
+        await sendSMS(phone, message)
     method: 'POST',
     headers: {
       'Authorization': 'Basic ' + Buffer.from(`${accountSid}:${authToken}`).toString('base64'),
