@@ -40,13 +40,7 @@ export async function POST(req: Request) {
   const phone = booking.customer_phone.replace(/\s/g, '').replace(/^0/, '+61')
 
         await sendSMS(phone, message)
-    method: 'POST',
-    headers: {
-      'Authorization': 'Basic ' + Buffer.from(`${accountSid}:${authToken}`).toString('base64'),
-      'Content-Type': 'application/x-www-form-urlencoded',
     },
-    body: new URLSearchParams({ To: phone, From: from, Body: message }).toString(),
-  })
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
