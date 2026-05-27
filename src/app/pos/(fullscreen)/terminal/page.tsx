@@ -845,7 +845,7 @@ export default function TerminalPage() {
   /* ── Customer search ──────────────────────────────────────────── */
   const searchCustomers = useCallback(async (q: string) => {
     if (q.length < 2) { setCustomerResults([]); return; }
-    const r = await fetch(`/api/pos/customers?q=${encodeURIComponent(q)}`);
+    const r = await fetch(`/api/pos/customers?q=${encodeURIComponent(q)}${businessId ? '&business_id=' + businessId : ''}`);
     const d = await r.json();
     setCustomerResults(d.customers || []);
   }, []);
