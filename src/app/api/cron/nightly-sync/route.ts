@@ -1,3 +1,4 @@
+export const maxDuration = 300
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
