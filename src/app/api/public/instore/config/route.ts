@@ -15,7 +15,7 @@ export async function GET(req: Request) {
         .select('kiosk_name, greeting, personality, voice_enabled, loyalty_enabled, recipe_suggestions, enabled')
         .eq('business_id', business_id)
         .maybeSingle(),
-      supabaseAdmin.from('businesses').select('name').eq('id', business_id).maybeSingle(),
+      supabaseAdmin.from('businesses').select('name, industry').eq('id', business_id).maybeSingle(),
     ])
 
     const cfg = cfgRes.data
@@ -31,6 +31,7 @@ export async function GET(req: Request) {
       voice_enabled: cfg?.voice_enabled !== false,
       loyalty_enabled: cfg?.loyalty_enabled !== false,
       recipe_suggestions: cfg?.recipe_suggestions !== false,
+      industry: (bizRes.data as { industry?: string | null } | null)?.industry ?? null,
     })
   } catch (err) {
     console.error('[instore/config] error', err)

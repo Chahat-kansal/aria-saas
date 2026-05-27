@@ -15,6 +15,22 @@ const IDLE_PROMPTS = [
   "Looking for something specific? Tell me what you're after.",
 ]
 
+const CHIPS_BY_INDUSTRY: Record<string, string[]> = {
+  cafe:        ["What's good today?", "Got oat milk?", "Best with a flat white?"],
+  coffee:      ["What's good today?", "Got oat milk?", "Best with a flat white?"],
+  restaurant:  ["What's good today?", "Gluten-free options?", "Best for a date?"],
+  liquor:      ["Wine for steak?", "Gift under $50?", "What's new in?"],
+  bottleshop:  ["Wine for steak?", "Gift under $50?", "What's new in?"],
+  bakery:      ["What's fresh today?", "Gluten-free options?", "Best with coffee?"],
+  pharmacy:    ["Got [hayfever] relief?", "Best for kids?", "What's on special?"],
+  retail:      ["What's new today?", "Gift ideas?", "Got [popular item]?"],
+}
+
+function chipsForIndustry(industry: string | null): string[] {
+  const key = (industry ?? '').toLowerCase().trim()
+  return CHIPS_BY_INDUSTRY[key] ?? CHIPS_BY_INDUSTRY.retail
+}
+
 // Web Speech API types (browser-only)
 type SpeechRecognitionEvent = { results: { 0: { transcript: string } }[] }
 type SpeechRecognition = {
@@ -86,6 +102,7 @@ export default function KioskPage() {
   const [idleIdx, setIdleIdx] = useState(0)
   const [kioskName, setKioskName] = useState('Aria')
   const [greeting, setGreeting] = useState('')
+  const [industry, setIndustry] = useState<string | null>(null)
   const [showSignup, setShowSignup] = useState(false)
   const [signupEmail, setSignupEmail] = useState('')
   const [signupName, setSignupName] = useState('')
@@ -105,6 +122,7 @@ export default function KioskPage() {
         if (d.kiosk_name) setKioskName(d.kiosk_name)
         if (d.greeting) setGreeting(d.greeting)
         if (d.voice_enabled === false) setVoiceEnabled(false)
+        if (d.industry) setIndustry(d.industry)
       })
       .catch(() => { /* non-fatal */ })
   }, [business_id])
@@ -341,6 +359,32 @@ export default function KioskPage() {
               {IDLE_PROMPTS[idleIdx]}
             </p>
             <p style={{ fontSize: 14, color: C.dim }}>Tap the mic to speak, or type below.</p>
+
+            {/* Suggested starter chips — industry aware, disappear after first send */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center', marginTop: 22, maxWidth: 520, marginLeft: 'auto', marginRight: 'auto' }}>
+              {chipsForIndustry(industry).map(chip => (
+                <button
+                  key={chip}
+                  onClick={() => sendMessage(chip)}
+                  disabled={sending}
+                  style={{
+                    padding: '10px 16px',
+                    borderRadius: 999,
+                    background: 'rgba(127,184,151,0.08)',
+                    border: '1px solid rgba(127,184,151,0.28)',
+                    color: C.green,
+                    fontSize: 13,
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    fontFamily: 'inherit',
+                    minHeight: 40,
+                    opacity: sending ? 0.5 : 1,
+                  }}>
+                  {chip}
+                </button>
+              ))}
+            </div>
+
             <BundlesShelf businessId={business_id} variant="kiosk" />
             <AdRotator businessId={business_id} variant="kiosk" />
           </div>
