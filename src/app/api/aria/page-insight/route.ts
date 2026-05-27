@@ -401,6 +401,101 @@ async function _POST(req: Request): Promise<Response> {
       return NextResponse.json({ insight, priority } satisfies PageInsightResult);
     }
 
+    if (page === 'cash-flow') {
+      const { data: sales } = await supabase.from('pos_sales')
+        .select('total_amount, created_at, status')
+        .eq('business_id', business_id).neq('status', 'voided')
+        .gte('created_at', thirtyDaysAgo).limit(2000);
+      const { data: expenses } = await supabase.from('business_expenses')
+        .select('label, amount').eq('business_id', business_id);
+      const rev = (sales ?? []).reduce((s: number, r: { total_amount: number | null }) => s + (Number(r.total_amount ?? 0)), 0);
+      const dailyRev = rev / 30;
+      const monthExp = (expenses ?? []).reduce((s: number, e: { amount: number | null }) => s + Number(e.amount ?? 0), 0);
+      const dailyExp = monthExp / 30;
+      const net = dailyRev - dailyExp;
+      const ctx = `Last 30d revenue A$${rev.toFixed(0)} (≈A$${dailyRev.toFixed(0)}/day). Monthly fixed expenses entered: A$${monthExp.toFixed(0)} (≈A$${dailyExp.toFixed(0)}/day). Net A$${net.toFixed(0)}/day.${(body.page_data && (body.page_data as { negative_day?: string }).negative_day) ? ` Forecast dips negative on ${(body.page_data as { negative_day?: string }).negative_day}.` : ''}`;
+      const insight = await callClaude(`In ONE sentence, give the most important cash-flow insight for ${bizName} from this data: ${ctx}. Be specific with the A$ numbers. If net is negative, suggest one concrete deferral.`, systemPrompt);
+      const priority: Priority = net < 0 ? 'critical' : net < dailyExp * 0.2 ? 'warning' : 'info';
+      return NextResponse.json({ insight, priority, link: '/dashboard/cash-flow' } satisfies PageInsightResult);
+    }
+
+    if (page === 'orders') {
+      const { data: pos } = await supabase.from('pos_purchase_orders')
+        .select('id, status, total_amount, created_at, supplier_id')
+        .eq('business_id', business_id).gte('created_at', thirtyDaysAgo);
+      const list = pos ?? [];
+      const totals = list.map((p: { total_amount: number | null }) => Number(p.total_amount ?? 0));
+      const avg = totals.length > 0 ? totals.reduce((a, b) => a + b, 0) / totals.length : 0;
+      const big = totals.filter(t => avg > 0 && t > avg * 2).length;
+      const open = list.filter((p: { status: string | null }) => p.status === 'open' || p.status === 'draft').length;
+      const ctx = `Last 30d: ${list.length} purchase orders, ${open} still open. Average order A$${avg.toFixed(0)}. ${big} orders >2× average.`;
+      const insight = await callClaude(`In ONE sentence, give the most important orders insight for ${bizName}: ${ctx}. Be specific with numbers.`, systemPrompt);
+      const priority: Priority = big > 0 ? 'warning' : 'info';
+      return NextResponse.json({ insight, priority, link: '/dashboard/orders' } satisfies PageInsightResult);
+    }
+
+    if (page === 'stocktake') {
+      const { data: products } = await supabase.from('pos_products')
+        .select('id, name, stock_quantity').eq('business_id', business_id).eq('track_stock', true).limit(500);
+      const { data: sales } = await supabase.from('pos_sale_items')
+        .select('product_id, quantity, pos_sales!inner(business_id, created_at)')
+        .eq('pos_sales.business_id', business_id).gte('pos_sales.created_at', thirtyDaysAgo).limit(5000);
+      type SI = { product_id: string | null; quantity: number | null };
+      const sold: Record<string, number> = {};
+      for (const r of (sales ?? []) as unknown as SI[]) {
+        if (!r.product_id) continue;
+        sold[r.product_id] = (sold[r.product_id] ?? 0) + Number(r.quantity ?? 0);
+      }
+      const fast = (products ?? []).map((p: { id: string; name: string; stock_quantity: number | null }) => ({ name: p.name, stock: Number(p.stock_quantity ?? 0), sold30: sold[p.id] ?? 0 }))
+        .filter(p => p.sold30 > 10)
+        .sort((a, b) => b.sold30 - a.sold30).slice(0, 5);
+      const ctx = `Top movers last 30d (name · current stock · sold): ${fast.map(p => `${p.name} · ${p.stock} · ${p.sold30}`).join('; ')}`;
+      const insight = await callClaude(`In ONE sentence, tell ${bizName} which products to count first in their stocktake and why: ${ctx}. Be specific with product names + counts.`, systemPrompt);
+      return NextResponse.json({ insight, priority: 'info', link: '/dashboard/stocktake' } satisfies PageInsightResult);
+    }
+
+    if (page === 'suppliers') {
+      const { data: pos } = await supabase.from('pos_purchase_orders')
+        .select('id, supplier_id, created_at, expected_at, received_at, total_amount, pos_suppliers(name)')
+        .eq('business_id', business_id).gte('created_at', sixtyDaysAgo).limit(500);
+      type Row = { supplier_id: string | null; created_at: string; expected_at: string | null; received_at: string | null; pos_suppliers: { name: string | null } | null };
+      const per: Record<string, { name: string; orders: number; late: number; total_cents: number }> = {};
+      for (const r of ((pos ?? []) as unknown as Row[])) {
+        const k = r.supplier_id ?? 'unknown';
+        const name = r.pos_suppliers?.name ?? 'Unknown supplier';
+        if (!per[k]) per[k] = { name, orders: 0, late: 0, total_cents: 0 };
+        per[k].orders++;
+        if (r.expected_at && r.received_at && new Date(r.received_at) > new Date(r.expected_at)) per[k].late++;
+      }
+      const ranked = Object.values(per).filter(s => s.orders >= 3).sort((a, b) => (b.late / b.orders) - (a.late / a.orders))[0];
+      const ctx = ranked ? `Worst on-time supplier last 60d: ${ranked.name} — ${ranked.late} late of ${ranked.orders} orders.` : `Not enough supplier data yet.`;
+      const insight = await callClaude(`In ONE sentence, give ${bizName} the most important supplier insight: ${ctx}. Be specific with numbers + the supplier name.`, systemPrompt);
+      const priority: Priority = ranked && (ranked.late / ranked.orders) > 0.5 ? 'warning' : 'info';
+      return NextResponse.json({ insight, priority, link: '/dashboard/suppliers' } satisfies PageInsightResult);
+    }
+
+    if (page === 'delivery') {
+      const { data: parcels } = await supabase.from('pos_parcel_tracking')
+        .select('carrier, carrier_name, status, created_at, delivered_at')
+        .eq('business_id', business_id).gte('created_at', sixtyDaysAgo).limit(500);
+      type P = { carrier: string | null; carrier_name: string | null; status: string | null; created_at: string; delivered_at: string | null };
+      const per: Record<string, { name: string; total: number; days: number[]; late: number }> = {};
+      for (const p of (parcels ?? []) as P[]) {
+        const k = p.carrier ?? 'other';
+        if (!per[k]) per[k] = { name: p.carrier_name ?? k, total: 0, days: [], late: 0 };
+        per[k].total++;
+        if (p.delivered_at) {
+          const d = (new Date(p.delivered_at).getTime() - new Date(p.created_at).getTime()) / 86400000;
+          if (d > 0 && d < 60) per[k].days.push(d);
+          if (d > 5) per[k].late++;
+        }
+      }
+      const arr = Object.values(per).filter(c => c.total >= 3).map(c => ({ ...c, avg: c.days.length ? c.days.reduce((a, b) => a + b, 0) / c.days.length : null }));
+      const ctx = arr.length === 0 ? 'No delivery data yet.' : arr.map(c => `${c.name}: avg ${c.avg ? c.avg.toFixed(1) + 'd' : 'unknown'}, ${c.late}/${c.total} late`).join('; ');
+      const insight = await callClaude(`In ONE sentence, give ${bizName} the most important delivery insight: ${ctx}. If one carrier is clearly slower than another, name them.`, systemPrompt);
+      return NextResponse.json({ insight, priority: 'info', link: '/dashboard/parcel-tracking' } satisfies PageInsightResult);
+    }
+
     // Default — no insight for unhandled pages
     return NextResponse.json({ insight: null } satisfies PageInsightResult);
   } catch (err) {
