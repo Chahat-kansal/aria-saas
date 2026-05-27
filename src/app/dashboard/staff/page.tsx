@@ -52,6 +52,71 @@ function LiveWidget({ bid }: { bid: string }) {
   )
 }
 
+function ClockWidget({ bid }: { bid: string }) {
+  const [name, setName] = useState<string>(() => (typeof window !== 'undefined' ? localStorage.getItem('aria-clock-name') ?? '' : ''))
+  const [active, setActive] = useState<{ id: string; clock_in: string } | null>(null)
+  const [working, setWorking] = useState(false)
+  const [msg, setMsg] = useState('')
+  const [todayMins, setTodayMins] = useState(0)
+
+  const load = useCallback(async () => {
+    if (!bid || !name.trim()) return
+    const today = new Date().toISOString().slice(0, 10)
+    const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10)
+    const r = await fetch(`/api/pos/timesheets?from=${today}T00:00:00&to=${tomorrow}T00:00:00`).then(r => r.json()).catch(() => ({ sessions: [] }))
+    const mine = ((r.sessions ?? []) as TS[]).filter(s => (s.staff_name ?? '').toLowerCase() === name.trim().toLowerCase())
+    const open = mine.find(s => !s.clock_out)
+    setActive(open ? { id: open.id, clock_in: open.clock_in } : null)
+    const completed = mine.filter(s => s.clock_out)
+    let mins = completed.reduce((sum, s) => sum + (s.total_minutes ?? 0), 0)
+    if (open) mins += Math.floor((Date.now() - new Date(open.clock_in).getTime()) / 60000)
+    setTodayMins(mins)
+  }, [bid, name])
+
+  useEffect(() => { load(); const id = setInterval(load, 30000); return () => clearInterval(id) }, [load])
+
+  async function clockIn() {
+    if (!name.trim()) { setMsg('Enter your name first'); return }
+    if (typeof window !== 'undefined') localStorage.setItem('aria-clock-name', name.trim())
+    setWorking(true); setMsg('')
+    const r = await fetch('/api/pos/timesheets', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ staff_name: name.trim() }) })
+    const d = await r.json().catch(() => ({}))
+    if (!r.ok) setMsg(d.error ?? 'Could not clock in')
+    else { setMsg('Clocked in'); setTimeout(() => setMsg(''), 1800) }
+    setWorking(false); load()
+  }
+  async function clockOut() {
+    if (!active) return
+    setWorking(true); setMsg('')
+    const r = await fetch('/api/pos/timesheets', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ session_id: active.id }) })
+    const d = await r.json().catch(() => ({}))
+    if (!r.ok) setMsg(d.error ?? 'Could not clock out')
+    else { setMsg('Clocked out'); setTimeout(() => setMsg(''), 1800) }
+    setWorking(false); load()
+  }
+
+  return (
+    <div style={{ background: active ? 'rgba(127,184,151,0.06)' : 'rgba(255,255,255,0.02)', border: '1px solid ' + (active ? 'rgba(127,184,151,0.25)' : 'rgba(255,255,255,0.06)'), borderRadius: 10, padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
+      <span style={{ fontSize: 11, color: active ? G : 'rgba(255,255,255,0.4)', fontWeight: 700, letterSpacing: '0.06em' }}>{active ? 'CLOCKED IN' : 'CLOCK IN/OUT'}</span>
+      <input value={name} onChange={e => setName(e.target.value)} placeholder="Your name"
+        style={{ ...inp, width: 160, height: 28, padding: '4px 10px' }} />
+      {active ? (
+        <button onClick={clockOut} disabled={working} style={{ ...smBtn('#ef4444'), opacity: working ? 0.5 : 1 }}>
+          {working ? '…' : 'Clock out'}
+        </button>
+      ) : (
+        <button onClick={clockIn} disabled={working || !name.trim()} style={{ ...smBtn(G2), opacity: (working || !name.trim()) ? 0.5 : 1 }}>
+          {working ? '…' : 'Clock in'}
+        </button>
+      )}
+      {todayMins > 0 && (
+        <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.6)' }}>Today: <strong style={{ color: '#e8ede7' }}>{Math.floor(todayMins / 60)}h {todayMins % 60}m</strong></span>
+      )}
+      {msg && <span style={{ fontSize: 11, color: msg.includes('not') || msg.includes('Could') ? '#ef4444' : G }}>{msg}</span>}
+    </div>
+  )
+}
+
 function LabourMetrics({ bid }: { bid: string }) {
   const [d, setD] = useState({ labour: 0, revenue: 0, hours: 0 })
   useEffect(() => {
@@ -640,6 +705,7 @@ export default function StaffPage() {
         <Link href="/dashboard/staff/new" style={{ padding: '8px 16px', borderRadius: 8, background: '#2D5240', color: G, fontSize: 13, fontWeight: 600, textDecoration: 'none' }}>+ Add staff</Link>
       </div>
       {bid && <LiveWidget bid={bid} />}
+      {bid && <ClockWidget bid={bid} />}
       {bid && (tab === 'schedule' || tab === 'timesheets') && <LabourMetrics bid={bid} />}
       <div style={{ display: 'flex', gap: 6, marginBottom: 20, borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: 12 }}>
         {TABS.map(t => <button key={t.id} onClick={() => setTab(t.id)} style={tabBtnStyle(tab === t.id)}>{t.label}</button>)}

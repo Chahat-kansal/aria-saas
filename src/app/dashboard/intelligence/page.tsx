@@ -93,6 +93,29 @@ export default function IntelligencePage() {
     return () => { supabase.removeChannel(channel) }
   }, [business?.id])
 
+  const [clearingAll, setClearingAll] = useState(false)
+  const [toast, setToast] = useState('')
+
+  async function clearAll() {
+    if (!business?.id) return
+    const unread = events.filter(e => !e.acknowledged)
+    if (unread.length === 0) return
+    if (!confirm(`Dismiss all ${unread.length} alert${unread.length === 1 ? '' : 's'}?`)) return
+    setClearingAll(true)
+    try {
+      await Promise.all(unread.map(e =>
+        fetch('/api/intelligence-events', {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: e.id, business_id: business.id, acknowledged: true }),
+        }).catch(() => {})
+      ))
+      setEvents(prev => prev.map(e => ({ ...e, acknowledged: true })))
+      setSelected(null); setNewCount(0)
+      setToast(`All ${unread.length} alert${unread.length === 1 ? '' : 's'} cleared`)
+      setTimeout(() => setToast(''), 2500)
+    } finally { setClearingAll(false) }
+  }
+
   async function acknowledge(id: string, resolved = true) {
     if (!business?.id) return
     setAcking(id)
@@ -159,12 +182,20 @@ export default function IntelligencePage() {
             </h1>
             <p style={{ fontSize: 11, color: C.dim, marginTop: 2 }}>{filtered.length} active signals for {business?.name ?? 'your business'}</p>
           </div>
-          {newCount > 0 && (
-            <button onClick={() => { setNewCount(0); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
-              style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid ' + C.green, background: 'rgba(127,184,151,0.15)', color: C.green, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
-              {newCount} new ↑
-            </button>
-          )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {newCount > 0 && (
+              <button onClick={() => { setNewCount(0); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
+                style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid ' + C.green, background: 'rgba(127,184,151,0.15)', color: C.green, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                {newCount} new ↑
+              </button>
+            )}
+            {events.filter(e => !e.acknowledged).length > 0 && (
+              <button onClick={clearAll} disabled={clearingAll}
+                style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid ' + C.border, background: 'rgba(255,255,255,0.04)', color: C.dim, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', opacity: clearingAll ? 0.5 : 1 }}>
+                {clearingAll ? 'Clearing…' : 'Clear all'}
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Category tabs */}
@@ -315,6 +346,11 @@ export default function IntelligencePage() {
             </div>
           </div>
         </aside>
+      )}
+      {toast && (
+        <div style={{ position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', padding: '10px 18px', borderRadius: 10, background: C.surface, border: '1px solid ' + C.green, color: C.green, fontSize: 13, fontWeight: 600, zIndex: 60, boxShadow: '0 8px 24px rgba(0,0,0,0.5)' }}>
+          ✓ {toast}
+        </div>
       )}
       <style jsx>{`
         @keyframes pulse {

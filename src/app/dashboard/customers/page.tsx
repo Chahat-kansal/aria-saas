@@ -4,6 +4,18 @@ import Papa from 'papaparse'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import { useBusinessContext } from '@/components/providers/BusinessProvider'
 import { SEGMENT_COLORS } from '@/lib/customer-segments'
+import { calcRFM, TIER_COLOR, type RfmTier } from '@/lib/rfm'
+
+const RFM_LABEL: Record<RfmTier, string> = { bronze: 'Bronze', silver: 'Silver', gold: 'Gold' }
+
+function RfmBadge({ tier, total }: { tier: RfmTier; total: number }) {
+  const color = TIER_COLOR[tier]
+  return (
+    <span title={`RFM ${total}/15 (${tier})`} style={{ fontSize: 10, padding: '1px 7px', borderRadius: 999, background: color + '22', color, border: `1px solid ${color}55`, fontWeight: 700 }}>
+      RFM · {RFM_LABEL[tier]}
+    </span>
+  )
+}
 
 const C = {
   bg: 'var(--bg-base)', card: 'var(--bg-surface)', elevated: 'var(--bg-elevated)',
@@ -86,6 +98,7 @@ export default function CustomersPage() {
   const [showArchived, setShowArchived] = useState(false)
   const [selected, setSelected] = useState<Customer | null>(null)
   const [activeSegment, setActiveSegment] = useState('all')
+  const [sortByRfm, setSortByRfm] = useState(false)
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set())
   const [aiIntel, setAiIntel] = useState<AiIntel | null>(null)
   const [aiIntelLoading, setAiIntelLoading] = useState(false)
@@ -182,7 +195,10 @@ export default function CustomersPage() {
     setCheckedIds(new Set()); load()
   }
 
-  const filtered = customers.filter(c => matchSegTab(c, activeSegment))
+  const filteredBase = customers.filter(c => matchSegTab(c, activeSegment))
+  const filtered = sortByRfm
+    ? [...filteredBase].sort((a, b) => calcRFM(tv(b), b.visit_count ?? 0, b.last_visit).total - calcRFM(tv(a), a.visit_count ?? 0, a.last_visit).total)
+    : filteredBase
   const segCounts: Record<string, number> = Object.fromEntries(SEG_TABS.map(t => [t.key, t.key === 'all' ? customers.length : customers.filter(c => matchSegTab(c, t.key)).length]))
   const cohortData = buildCohortData(customers)
 
@@ -264,12 +280,17 @@ export default function CustomersPage() {
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: 4, marginBottom: 14, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 4, marginBottom: 14, flexWrap: 'wrap', alignItems: 'center' }}>
           {SEG_TABS.map(t => (
             <button key={t.key} onClick={() => setActiveSegment(t.key)} style={{ fontSize: 12, padding: '5px 12px', borderRadius: 20, cursor: 'pointer', fontWeight: 600, background: activeSegment === t.key ? C.darkGreen : 'transparent', color: activeSegment === t.key ? C.green : C.muted, border: '1px solid ' + (activeSegment === t.key ? C.green + '44' : C.border) }}>
               {t.label} <span style={{ opacity: 0.6 }}>{segCounts[t.key]}</span>
             </button>
           ))}
+          <button onClick={() => setSortByRfm(v => !v)}
+            title="Sort by RFM score (Recency × Frequency × Monetary)"
+            style={{ marginLeft: 'auto', fontSize: 12, padding: '5px 12px', borderRadius: 20, cursor: 'pointer', fontWeight: 600, background: sortByRfm ? C.darkGreen : 'transparent', color: sortByRfm ? C.green : C.muted, border: '1px solid ' + (sortByRfm ? C.green + '44' : C.border) }}>
+            {sortByRfm ? '✓ Sorted by RFM' : 'Sort by RFM'}
+          </button>
         </div>
 
         <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -284,6 +305,7 @@ export default function CustomersPage() {
             {filtered.map(c => {
               const d = daysSince(c.last_visit)
               const arrow = d <= 30 ? '↑' : d >= 90 ? '↓' : ''
+              const rfm = calcRFM(tv(c), c.visit_count ?? 0, c.last_visit)
               return (
                 <div key={c.id} style={{ background: selected?.id === c.id ? 'rgba(127,184,151,0.08)' : C.card, borderRadius: 12, padding: '10px 16px', border: '1px solid ' + (selected?.id === c.id ? C.green + '44' : C.border), display: 'grid', gridTemplateColumns: '28px 1fr auto', gap: 10, alignItems: 'center' }}>
                   <input type="checkbox" checked={checkedIds.has(c.id)} onClick={e => { e.stopPropagation(); toggleCheck(c.id) }} onChange={() => {}} style={{ cursor: 'pointer', accentColor: C.green }} />
@@ -291,6 +313,7 @@ export default function CustomersPage() {
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                       <span style={{ fontWeight: 600, fontSize: 14 }}>{c.name}</span>
                       <SegBadge seg={c.customer_segment} />
+                      <RfmBadge tier={rfm.tier} total={rfm.total} />
                       {c.archived && <span style={{ fontSize: 10, color: C.muted }}>archived</span>}
                       {(c.tags ?? []).slice(0, 2).map(t => <span key={t} style={{ fontSize: 10, padding: '1px 6px', borderRadius: 8, background: 'rgba(127,184,151,0.1)', color: C.green }}>{t}</span>)}
                     </div>
