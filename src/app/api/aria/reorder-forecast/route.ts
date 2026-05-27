@@ -77,6 +77,9 @@ async function _POST(req: Request) {
     }
   }
 
+  // 1.0 = no holiday/event uplift applied. Real uplifts (>1) come from holiday/weather scoring later.
+  const NO_UPLIFT = 1;
+
   type ForecastItem = {
     item_id: string; item_name: string; current_stock: number;
     velocity_per_day: number; days_remaining: number; adjusted_days_remaining: number;
@@ -96,7 +99,7 @@ async function _POST(req: Request) {
           return {
             item_id: item.id, item_name: item.name, current_stock: item.currentStock,
             velocity_per_day: 0, days_remaining: 999, adjusted_days_remaining: 999,
-            holiday_uplift: 1, suggested_order: Math.max(1, item.reorderPoint ?? 6),
+            holiday_uplift: NO_UPLIFT, suggested_order: Math.max(1, item.reorderPoint ?? 6),
             recommended_order_date: new Date().toISOString().split('T')[0],
             urgency, unit: item.unit,
           };

@@ -51,13 +51,22 @@ export default function SaleDetailDrawer({ saleId, onClose, onVoided }: Props) {
   }
 
 
+  useEffect(() => {
+    const ac = new AbortController()
+    setLoading(true)
+    fetch(`/api/pos/sales-history/${saleId}`, { signal: ac.signal })
+      .then(async r => { if (r.ok) setData(await r.json()) })
+      .catch(e => { if (e?.name !== 'AbortError') console.warn('[SaleDetailDrawer]', e) })
+      .finally(() => { if (!ac.signal.aborted) setLoading(false) })
+    return () => ac.abort()
+  }, [saleId])
+
   const load = useCallback(async () => {
     setLoading(true)
     const r = await fetch(`/api/pos/sales-history/${saleId}`)
     if (r.ok) setData(await r.json())
     setLoading(false)
   }, [saleId])
-  useEffect(() => { load() }, [load])
 
   async function voidSale() {
     if (!voidReason.trim()) { alert('Reason required'); return }

@@ -188,7 +188,9 @@ export default function CustomersPage() {
   const toggleCheck = (id: string) => setCheckedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
   const exportCSV = () => {
     const rows = customers.filter(c => checkedIds.has(c.id))
-    const csv = ['Name,Email,Phone,LTV,Visits,Segment', ...rows.map(c => `"${c.name}","${c.email ?? ''}","${c.phone ?? ''}","${tv(c)}","${c.visit_count ?? 0}","${c.customer_segment ?? ''}"`)].join('\n')
+    // RFC 4180: wrap every field in quotes, double internal quotes, normalise newlines
+    const esc = (v: unknown) => '"' + String(v ?? '').replace(/"/g, '""').replace(/\r?\n/g, ' ') + '"'
+    const csv = ['Name,Email,Phone,LTV,Visits,Segment', ...rows.map(c => [c.name, c.email ?? '', c.phone ?? '', tv(c), c.visit_count ?? 0, c.customer_segment ?? ''].map(esc).join(','))].join('\n')
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); a.download = 'customers.csv'; a.click()
   }
   const markLapsed = async () => {
