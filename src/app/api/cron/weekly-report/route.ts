@@ -45,7 +45,6 @@ async function _GET(req: Request) {
   return NextResponse.json({ ok: true, processed: businesses.length, results })
 }
 
-  }, { attempts: 3, delayMs: 3000 })
 }
 
 export const GET = withErrorCapture('cron/weekly-report', _GET)
