@@ -6,7 +6,7 @@ const STATUS_COLOR: Record<string, string> = { confirmed: C.green, pending: C.am
 const STATUS_LABELS = ['confirmed','pending','cancelled','no_show','completed']
 
 interface Service { id: string; name: string; duration_minutes: number; price: number | null; max_party_size: number; color: string; description: string | null }
-interface Booking { id: string; customer_name: string; customer_phone: string | null; customer_email: string | null; booking_date: string; booking_time: string | null; party_size: number; duration_minutes: number; status: string; notes: string | null; aria_notes: string | null; reminder_sent_at: string | null; service_id: string | null; booking_services: { name: string; color: string; duration_minutes: number } | null }
+interface Booking { id: string; customer_name: string; customer_phone: string | null; customer_email: string | null; booking_date: string; booking_time: string | null; party_size: number; duration_minutes: number; status: string; notes: string | null; aria_notes: string | null; reminder_sent_at: string | null; service_id: string | null; no_show_score: number | null; booking_token: string | null; booking_services: { name: string; color: string; duration_minutes: number } | null }
 
 function dateStr(d: Date) { return d.toISOString().slice(0,10) }
 function fmtDate(s: string) { return new Date(s+'T12:00:00').toLocaleDateString('en-AU',{weekday:'short',day:'numeric',month:'short'}) }
@@ -28,6 +28,11 @@ export default function BookingsPage() {
   const [saving, setSaving]     = useState(false)
   const [form, setForm]         = useState({ customer_name:'', customer_email:'', customer_phone:'', booking_date: dateStr(new Date()), booking_time:'12:00', party_size:2, service_id:'', notes:'' })
   const [svcForm, setSvcForm]   = useState({ name:'', duration_minutes:60, price:'', max_party_size:20, description:'', color:'#7FB897' })
+  const [insight, setInsight]   = useState<string|null>(null)
+  const [insightDismissed, setInsightDismissed] = useState(false)
+  const [bizSlug, setBizSlug]   = useState('')
+  const [slugInput, setSlugInput] = useState('')
+  const [slugSaving, setSlugSaving] = useState(false)
 
   const load = useCallback(async (businessId: string) => {
     const [bkRes, svcRes] = await Promise.all([
@@ -48,8 +53,12 @@ export default function BookingsPage() {
 
   useEffect(() => {
     fetch('/api/pos/products').then(r=>r.json()).then((d:Record<string,unknown>)=>{
-      if (d.business_id) { setBid(d.business_id as string); load(d.business_id as string) }
-      else setLoading(false)
+      if (d.business_id) {
+        setBid(d.business_id as string)
+        load(d.business_id as string)
+        fetch('/api/aria/booking-insights').then(r=>r.json()).then(id=>{ if(id.insight) setInsight(id.insight) }).catch(()=>{})
+        fetch('/api/pos/business').then(r=>r.json()).then(bd=>{ if(bd.business?.booking_link_slug) { setBizSlug(bd.business.booking_link_slug); setSlugInput(bd.business.booking_link_slug) } }).catch(()=>{})
+      } else setLoading(false)
     }).catch(()=>setLoading(false))
   }, [load])
 
@@ -78,6 +87,15 @@ export default function BookingsPage() {
       setBookings(p=>p.map(b=>b.id===booking.id?{...b,reminder_sent_at:new Date().toISOString()}:b))
     } else alert(d.error || 'Could not send reminder.')
     setSending(p=>({...p,[booking.id]:false}))
+  }
+
+  async function saveSlug() {
+    if (!slugInput.trim()) return
+    setSlugSaving(true)
+    const res = await fetch('/api/pos/business', { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ booking_link_slug: slugInput }) })
+    const d = await res.json()
+    if (d.business) setBizSlug(slugInput)
+    setSlugSaving(false)
   }
 
   async function addService() {
@@ -125,6 +143,17 @@ export default function BookingsPage() {
           </div>
         ))}
       </div>
+
+      {/* AI Insight Banner */}
+      {insight && !insightDismissed && (
+        <div style={{marginBottom:16,padding:'12px 16px',background:'rgba(45,82,64,0.08)',borderRadius:10,border:'1px solid rgba(45,82,64,0.2)',display:'flex',justifyContent:'space-between',alignItems:'center',gap:12}}>
+          <div style={{flex:1}}>
+            <p style={{fontSize:11,fontWeight:600,color:C.darkGreen,marginBottom:2,textTransform:'uppercase',letterSpacing:'0.5px'}}>AI Revenue Insight</p>
+            <p style={{fontSize:13,color:C.text,margin:0}}>{insight}</p>
+          </div>
+          <button onClick={()=>setInsightDismissed(true)} style={{background:'none',border:'none',cursor:'pointer',color:C.muted,fontSize:20,padding:4,lineHeight:1}}>×</button>
+        </div>
+      )}
 
       {/* Reminder alert */}
       {needReminder.length > 0 && (
@@ -262,6 +291,20 @@ export default function BookingsPage() {
               </div>
             ))}
           </div>
+          <div style={{background:'var(--bg-surface)',borderRadius:14,padding:20,border:`1px solid ${C.border}`,marginBottom:16}}>
+            <p style={{fontWeight:700,marginBottom:4}}>Public booking link</p>
+            <p style={{fontSize:12,color:C.muted,marginBottom:12}}>Share this link so customers can book online.</p>
+            <div style={{display:'flex',gap:8,alignItems:'center'}}>
+              <span style={{fontSize:13,color:C.muted,whiteSpace:'nowrap' as const}}>/book/</span>
+              <input value={slugInput} onChange={e=>setSlugInput(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g,'-').replace(/-+/g,'-').slice(0,60))} style={iStyle} placeholder="your-business-name"/>
+              <button onClick={saveSlug} disabled={slugSaving} style={{...btnPrimary,whiteSpace:'nowrap' as const,padding:'8px 16px'}}>{slugSaving?'Saving…':'Save'}</button>
+            </div>
+            {bizSlug && (
+              <p style={{fontSize:12,color:C.muted,marginTop:8}}>
+                Share: <a href={`/book/${bizSlug}`} target="_blank" rel="noopener noreferrer" style={{color:C.green}}>/book/{bizSlug}</a>
+              </p>
+            )}
+          </div>
           <div style={{background:'var(--bg-surface)',borderRadius:14,padding:20,border:`1px solid ${C.border}`}}>
             <p style={{fontWeight:700,marginBottom:14}}>Add service</p>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
@@ -296,6 +339,7 @@ function BookingCard({ b, onStatus, onRemind, sending }: { b: Booking; onStatus:
           <p style={{fontWeight:700,fontSize:14,color:C2.text}}>{b.customer_name}</p>
           <span style={{fontSize:10,padding:'2px 8px',borderRadius:10,background:`${sc}20`,color:sc,fontWeight:600,textTransform:'capitalize'}}>{b.status}</span>
           {b.booking_services && <span style={{fontSize:10,padding:'2px 8px',borderRadius:10,background:`${b.booking_services.color}20`,color:b.booking_services.color}}>📋 {b.booking_services.name}</span>}
+          {b.no_show_score !== null && b.no_show_score !== undefined && b.no_show_score >= 70 && <span style={{fontSize:10,padding:'2px 8px',borderRadius:10,background:'rgba(239,68,68,0.08)',color:C2.red,fontWeight:600}}>⚠ No-show risk {b.no_show_score}%</span>}
           {b.reminder_sent_at && <span style={{fontSize:10,color:C2.muted}}>✉️ reminder sent</span>}
         </div>
         <div style={{display:'flex',gap:12,flexWrap:'wrap',fontSize:12,color:C2.muted}}>

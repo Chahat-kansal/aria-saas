@@ -36,7 +36,7 @@ async function _GET() {
 
   const { data: biz } = await supabase
     .from('businesses')
-    .select('id,name,created_at,industry,plan,terminal_layout')
+    .select('id,name,created_at,industry,plan,terminal_layout,booking_link_slug')
     .eq('id', bid)
     .maybeSingle()
 
@@ -65,6 +65,9 @@ async function _PATCH(request: NextRequest) {
   }
   if ('business_type' in body && typeof body.business_type === 'string') {
     updatePayload.industry = body.business_type
+  }
+  if ('booking_link_slug' in body && typeof body.booking_link_slug === 'string') {
+    updatePayload.booking_link_slug = body.booking_link_slug.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').slice(0, 60) || null
   }
 
   if (Object.keys(updatePayload).length === 0) {
