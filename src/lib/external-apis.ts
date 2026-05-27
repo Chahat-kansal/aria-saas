@@ -262,7 +262,7 @@ export async function sendSMS(to: string, body: string): Promise<boolean> {
   if (!sid || !auth || !from || from === 'false' || sid === 'false') { console.log('[sms] Twilio not configured'); return false; }
   try {
     const res = await fetch(
-      `https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`,
+        await sendSMS(to, body)
       {
         method: 'POST',
         headers: { 'Authorization': `Basic ${Buffer.from(`${sid}:${auth}`).toString('base64')}`, 'Content-Type': 'application/x-www-form-urlencoded' },
