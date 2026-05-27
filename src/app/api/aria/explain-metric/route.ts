@@ -116,7 +116,8 @@ async function _POST(req: Request): Promise<Response> {
     const salesContext = `Last 7 days: A$${recentRevenue.toFixed(2)} from ${recentTx} transactions. Previous 7 days: A$${prevRevenue.toFixed(2)} from ${prevTx} transactions. Revenue change: ${revChange}%.`;
 
     const _bizCtx = await getBusinessContext(business_id)
-  const _industry = (JSON.parse(_bizCtx))?.business?.industry ?? 'retail'
+  let _industry = 'retail'
+  try { _industry = (JSON.parse(_bizCtx))?.business?.industry ?? 'retail' } catch { /* keep default */ }
   const systemPrompt = getSystemPrompt(_industry as string, _bizCtx)
   const msg = 
 await trackAICall({ route: 'aria/explain-metric', model: 'claude-sonnet-4-5-20250929', businessId: business_id, purpose: 'metric-explanation' }, () => anthropic.messages.create({

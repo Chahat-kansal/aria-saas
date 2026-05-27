@@ -96,7 +96,7 @@ async function _POST(req: Request) {
           return {
             item_id: item.id, item_name: item.name, current_stock: item.currentStock,
             velocity_per_day: 0, days_remaining: 999, adjusted_days_remaining: 999,
-            holiday_uplift: 1, suggested_order: Math.max(6, item.reorderPoint || 6),
+            holiday_uplift: 1, suggested_order: Math.max(1, item.reorderPoint ?? 6),
             recommended_order_date: new Date().toISOString().split('T')[0],
             urgency, unit: item.unit,
           };

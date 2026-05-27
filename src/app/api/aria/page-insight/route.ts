@@ -92,7 +92,8 @@ async function _POST(req: Request): Promise<Response> {
   if (!biz) return NextResponse.json({ insight: null });
 
   const _bizCtx = await getBusinessContext(business_id)
-  const _industry = (JSON.parse(_bizCtx))?.business?.industry ?? 'retail'
+  let _industry = 'retail'
+  try { _industry = (JSON.parse(_bizCtx))?.business?.industry ?? 'retail' } catch { /* keep default */ }
   const systemPrompt = getSystemPrompt(_industry as string, _bizCtx)
 
   const page = (body.page ?? '').toLowerCase().trim();

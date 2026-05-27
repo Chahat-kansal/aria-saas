@@ -134,7 +134,7 @@ export default function OrderBuilderPage() {
     const newLine: DraftLine = {
       product_id: p.id, product_name: p.name, product_sku: p.sku,
       supplier_name: p.pos_product_suppliers?.[0]?.pos_suppliers?.name ?? null,
-      quantity_cases: inv?.cases_reorder_amount || 1, quantity_items: 0,
+      quantity_cases: inv?.cases_reorder_amount ?? 1, quantity_items: 0,
       last_purchase_price: lastPrice, confirmed_price: lastPrice,
       open_market_low: null, open_market_high: null, open_market_source: null,
       market_loading: true, sort_order: draft.length,

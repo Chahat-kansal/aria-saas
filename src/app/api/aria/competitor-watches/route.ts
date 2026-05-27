@@ -36,7 +36,7 @@ Return ONLY valid JSON:
     const data = JSON.parse(text)
 
     // Persist sample prices into competitor_price_cache
-    if (data.found && Array.isArray(data.sample_prices)) {
+    if (data && data.found && Array.isArray(data.sample_prices)) {
       const expiresAt = new Date(Date.now() + 7 * 86400_000).toISOString()
       const rows = (data.sample_prices as Array<{ product: string; price: number }>)
         .slice(0, 5)
