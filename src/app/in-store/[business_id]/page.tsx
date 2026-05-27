@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams } from 'next/navigation'
 import { AdRotator } from '@/components/ads/AdRotator'
+import { BundlesShelf } from '@/components/bundles/BundlesShelf'
 
 interface Message { role: 'user' | 'assistant'; content: string; cards?: ProductCard[]; upsell?: ProductCard | null; recipe?: RecipeCard | null }
 interface ProductCard { id: string; name: string; price: number | null; stock: number; image_url: string | null }
@@ -266,6 +267,7 @@ export default function KioskPage() {
               {IDLE_PROMPTS[idleIdx]}
             </p>
             <p style={{ fontSize: 14, color: C.dim }}>Tap the mic to speak, or type below.</p>
+            <BundlesShelf businessId={business_id} variant="kiosk" />
             <AdRotator businessId={business_id} variant="kiosk" />
           </div>
         )}
