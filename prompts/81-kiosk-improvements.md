@@ -135,50 +135,10 @@ Build in this order — most value first:
 Finish whichever phase you're in, commit it, STOP.
 
 
-## IMPROVEMENT 6 — Owner-voiced Aria (ElevenLabs)
-
-The kiosk currently uses browser SpeechSynthesis (robotic, generic). Replace this
-with ElevenLabs voice cloning so Aria sounds like the actual shop owner.
-
-### Setup steps
-1. Owner records a 1-minute voice sample in the dashboard
-2. The dashboard uploads the sample to ElevenLabs Voice Lab via API (Instant Voice Clone)
-3. ElevenLabs returns a voice_id
-4. Save voice_id to instore_kiosk_configs
-
-### Legal — explicit consent
-Before recording, show the owner this clear consent: "I consent to my voice being
-recorded, cloned, and used to speak as Aria on my in-store kiosk. I can delete
-this voice clone at any time." Save a consent record with timestamp + IP. NEVER
-clone a voice without explicit consent.
-
-### DB additions
-```sql
-ALTER TABLE instore_kiosk_configs
-  ADD COLUMN IF NOT EXISTS voice_provider text DEFAULT 'browser',
-  ADD COLUMN IF NOT EXISTS elevenlabs_voice_id text,
-  ADD COLUMN IF NOT EXISTS voice_consent_at timestamptz,
-  ADD COLUMN IF NOT EXISTS voice_sample_url text;
-```
-
-### Build
-- ENV: ELEVENLABS_API_KEY (owner adds to Vercel env vars)
-- Dashboard config page: "Voice" section
-  - Record voice button (browser MediaRecorder, 60s max)
-  - Consent checkbox (must tick before record)
-  - Preview after clone: "Hear how Aria sounds" — calls TTS with the new voice
-  - Delete voice clone option
-- /api/instore/voice/clone — POST audio blob, calls ElevenLabs /v1/voices/add,
-  stores voice_id
-- /api/public/instore/tts — POST { text, business_id } → calls ElevenLabs TTS
-  with that business's voice_id, streams MP3 back
-- Kiosk page: when voice is on AND business has elevenlabs_voice_id, use the
-  TTS endpoint instead of SpeechSynthesis. Audio element plays the MP3.
-- Fallback to SpeechSynthesis if ElevenLabs call fails (resilience)
-
-### Cost note for the owner
-ElevenLabs Starter is roughly $5/month for ~30k characters of TTS. Show usage
-in the dashboard so owners can see what they're using.
+## IMPROVEMENT 6 — Owner-voiced Aria — DEFERRED, post-launch
+Skip this improvement for now. Continue using the existing browser SpeechSynthesis
+TTS — it's free, fast, no API cost. Voice cloning will be revisited after launch
+when there's budget and real user feedback to justify it.
 
 ## IMPROVEMENT 7 — Product photos + pairing suggestions in chat
 
@@ -275,15 +235,15 @@ Haiku is natively multilingual — no detection library needed.
 - Otherwise default to English chips
 
 ## Final execution order (priority — most value first)
-1. Streaming (1)
+1. Streaming (3)
 2. Suggested chips (2)
 3. Stall safety net (1)
 4. Product photos + pairings (7)
-5. Multilingual (10) — tiny but high value for diverse stores
+5. Multilingual (10)
 6. 👍/👎 feedback (9)
 7. Talk to staff (4)
 8. Repeat memory (5)
 9. Barcode scan (8)
-10. Owner-voiced Aria (6) — biggest wow factor, biggest scope, do last
+SKIP — Owner-voiced Aria (6) — deferred to post-launch, keep free browser TTS for now
 
 If limit runs low, finish whichever you're in, commit, STOP.
