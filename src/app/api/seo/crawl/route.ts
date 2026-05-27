@@ -86,7 +86,25 @@ async function _POST(req: Request) {
   // Ownership check
   const { data: biz } = await supabase.from('businesses').select('id, website').eq('id', business_id).eq('user_id', user.id).single()
   if (!biz) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  if (!biz.website) return NextResponse.json({ error: 'No website URL configured. Connect your website first.' }, { status: 400 })
+
+  // Validate website URL — empty/whitespace, no protocol, or unparseable all fail with a clear message
+  const websiteRaw = (biz.website ?? '').toString().trim()
+  if (!websiteRaw) {
+    return NextResponse.json({
+      error: 'Website URL is missing or invalid — set it in business settings',
+      hint: 'Open Settings → Business and add your website URL (e.g. https://yourshop.com.au).',
+    }, { status: 400 })
+  }
+  let normalizedWebsite: string
+  try {
+    const candidate = /^https?:\/\//i.test(websiteRaw) ? websiteRaw : 'https://' + websiteRaw
+    normalizedWebsite = new URL(candidate).href
+  } catch {
+    return NextResponse.json({
+      error: 'Website URL is missing or invalid — set it in business settings',
+      hint: 'Open Settings → Business and add a full URL like https://yourshop.com.au.',
+    }, { status: 400 })
+  }
 
   // Find or create audit
   let auditId: string
@@ -102,10 +120,16 @@ async function _POST(req: Request) {
     }
     {
       const { data: created, error: createErr } = await supabaseAdmin.from('seo_audits').insert({
-        business_id, website_url: biz.website, status: 'pending', health_score: 0,
+        business_id, website_url: normalizedWebsite, status: 'pending', health_score: 0,
         pages_crawled: 0, issues_found: 0, issues_fixed: 0, created_at: new Date().toISOString(),
       }).select('id').single()
-      if (createErr || !created) return NextResponse.json({ error: 'Failed to create audit' }, { status: 500 })
+      if (createErr || !created) {
+        console.error('[seo/crawl] insert failed', createErr)
+        return NextResponse.json({
+          error: createErr?.message ?? 'Database insert failed',
+          hint: 'Check seo_audits table schema and RLS policies',
+        }, { status: 500 })
+      }
       auditId = created.id
     }
   }
@@ -114,7 +138,7 @@ async function _POST(req: Request) {
   await supabaseAdmin.from('seo_audits').update({ status: 'crawling', started_at: new Date().toISOString() }).eq('id', auditId)
 
   // BFS crawl — up to 20 pages
-  const startUrl = biz.website as string
+  const startUrl = normalizedWebsite
   const domain = new URL(startUrl).hostname
   const visited = new Set<string>()
   const queue: string[] = [startUrl]

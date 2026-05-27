@@ -546,9 +546,13 @@ export default function SeoPage() {
   const [connectError, setConnectError] = useState<string | null>(null)
   const [crawlTriggered, setCrawlTriggered] = useState(false)
 
-  // Load website URL from business record
+  // Load website URL from business record — always scoped to the ACTIVE business.
+  // If the active business has no website URL, the connect panel will show; we do
+  // not silently fall back to another of the user's businesses.
   useEffect(() => {
     if (!business) return
+    setWebsiteUrl('')
+    setUrlInput('')
     const fetchWebsite = async () => {
       const { data } = await supabase.from('businesses').select('website').eq('id', business.id).single()
       if (data?.website) { setWebsiteUrl(data.website); setUrlInput(data.website) }
@@ -596,9 +600,12 @@ export default function SeoPage() {
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
               <div style={{ width: 40, height: 40, borderRadius: 10, background: 'rgba(127,184,151,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>🌐</div>
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 15, fontWeight: 700, color: '#fff', marginBottom: 4 }}>Connect your website to start SEO tracking</div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: '#fff', marginBottom: 4 }}>
+                  No website URL for {business.name ?? 'this business'} yet
+                </div>
                 <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', lineHeight: 1.55, marginBottom: 14 }}>
-                  Paste your website URL below. Aria will crawl it like Google does — no plugin, no code changes, no access to your CMS needed. Read-only, external audit only.
+                  Paste this business&apos;s website URL below — Aria will crawl it like Google does. Read-only, external audit only.
+                  If you set a URL on a different business, switch to that business in the top-left picker first.
                 </div>
                 <div style={{ display: 'flex', gap: 8 }}>
                   <input
