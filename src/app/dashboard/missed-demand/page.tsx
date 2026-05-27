@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import { useBusinessContext } from '@/components/providers/BusinessProvider';
+import { AriaSays } from '@/components/dashboard/AriaSays';
 
 interface MissedItem {
   id: string;
@@ -119,6 +120,9 @@ export default function MissedDemandPage() {
 
   return (
     <div className="flex flex-col h-full overflow-y-auto" style={{ background: '#0d0d14' }}>
+      <div style={{ padding: '16px 24px 0' }}>
+        <AriaSays businessId={business?.id ?? null} page="missed-demand" />
+      </div>
       {/* Header */}
       <div className="border-b px-6 py-4 flex items-center justify-between flex-shrink-0"
         style={{ borderColor: 'rgba(255,255,255,0.06)', background: '#13131a' }}>

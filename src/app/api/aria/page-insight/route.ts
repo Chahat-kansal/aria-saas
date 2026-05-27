@@ -578,6 +578,100 @@ async function _POST(req: Request): Promise<Response> {
       return NextResponse.json({ insight, priority, link: '/dashboard/marketing' } satisfies PageInsightResult);
     }
 
+    if (page === 'weekly-reports') {
+      const { data: reps } = await supabase.from('weekly_report_records')
+        .select('week_starting, revenue, transaction_count, avg_ticket, new_customers, goal_attainment_pct')
+        .eq('business_id', business_id).order('week_starting', { ascending: false }).limit(4);
+      type R = { week_starting: string; revenue: number | null; transaction_count: number | null; avg_ticket: number | null; new_customers: number | null; goal_attainment_pct: number | null };
+      const list = (reps ?? []) as R[];
+      if (list.length === 0) return NextResponse.json({ insight: null, link: '/dashboard/weekly-reports' } satisfies PageInsightResult);
+      const latest = list[0];
+      const prior = list[1];
+      const revDelta = prior?.revenue && Number(prior.revenue) > 0 ? ((Number(latest.revenue ?? 0) - Number(prior.revenue)) / Number(prior.revenue)) * 100 : null;
+      const ctx = `Latest week (${latest.week_starting}): A$${Number(latest.revenue ?? 0).toFixed(0)} revenue, ${latest.transaction_count ?? 0} transactions${revDelta != null ? `, ${revDelta > 0 ? '+' : ''}${revDelta.toFixed(0)}% vs prior week` : ''}. Goal attainment: ${latest.goal_attainment_pct ?? 'n/a'}%.`;
+      const insight = await callClaude(`In ONE sentence, give ${bizName} the most important weekly-report narrative: ${ctx}. Plain owner language, what mattered most this week.`, systemPrompt);
+      const priority: Priority = revDelta != null && revDelta < -10 ? 'warning' : 'info';
+      return NextResponse.json({ insight, priority, link: '/dashboard/weekly-reports' } satisfies PageInsightResult);
+    }
+
+    if (page === 'shift-reports') {
+      const { data: shifts } = await supabase.from('pos_shift_reports')
+        .select('shift_start, total_revenue, variance_cents, labour_ratio_pct, revenue_per_hour')
+        .eq('business_id', business_id).gte('shift_start', thirtyDaysAgo).order('shift_start', { ascending: false }).limit(50);
+      type S = { shift_start: string; total_revenue: number | null; variance_cents: number | null; labour_ratio_pct: number | null; revenue_per_hour: number | null };
+      const list = (shifts ?? []) as S[];
+      if (list.length === 0) return NextResponse.json({ insight: null, link: '/dashboard/shift-reports' } satisfies PageInsightResult);
+      const variances = list.filter(s => Math.abs(Number(s.variance_cents ?? 0)) > 1000).length;
+      const ratios = list.map(s => Number(s.labour_ratio_pct ?? 0)).filter(r => r > 0);
+      const avgLabour = ratios.length ? ratios.reduce((a, b) => a + b, 0) / ratios.length : 0;
+      const highLabour = list.filter(s => Number(s.labour_ratio_pct ?? 0) > 40).length;
+      const ctx = `Last 30d: ${list.length} shifts. ${variances} had cash variance >A$10. Avg labour ratio ${avgLabour.toFixed(0)}%${highLabour > 0 ? `, ${highLabour} shifts above 40%` : ''}.`;
+      const insight = await callClaude(`In ONE sentence, give ${bizName} the most important shift-report insight: ${ctx}. If labour ratio or variances are concerning, name the specific issue.`, systemPrompt);
+      const priority: Priority = highLabour > 3 || variances > 5 ? 'warning' : 'info';
+      return NextResponse.json({ insight, priority, link: '/dashboard/shift-reports' } satisfies PageInsightResult);
+    }
+
+    if (page === 'seo') {
+      const { data: audits } = await supabase.from('seo_audits')
+        .select('health_score, issues_found, issues_fixed, pages_crawled, finished_at')
+        .eq('business_id', business_id).order('started_at', { ascending: false }).limit(1);
+      const { data: issues } = await supabase.from('seo_issues')
+        .select('severity, issue_type, state')
+        .eq('business_id', business_id).neq('state', 'fixed').limit(200);
+      type I = { severity: string | null; issue_type: string | null; state: string | null };
+      const list = (issues ?? []) as I[];
+      const critical = list.filter(i => i.severity === 'critical' || i.severity === 'high').length;
+      const total = list.length;
+      const score = (audits ?? [])[0]?.health_score ?? null;
+      if (total === 0 && score == null) return NextResponse.json({ insight: null, link: '/dashboard/seo' } satisfies PageInsightResult);
+      const ctx = `SEO health score: ${score ?? 'not yet measured'}. ${total} open issues (${critical} high/critical priority).`;
+      const insight = await callClaude(`In ONE sentence, give ${bizName} the most important SEO insight: ${ctx}. If critical issues exist, name the highest-impact fix.`, systemPrompt);
+      const priority: Priority = critical > 3 ? 'warning' : 'info';
+      return NextResponse.json({ insight, priority, link: '/dashboard/seo' } satisfies PageInsightResult);
+    }
+
+    if (page === 'missed-demand') {
+      const { data: items } = await supabase.from('missed_demand')
+        .select('product_name, times_requested, estimated_monthly_revenue_cents, status, last_requested_at')
+        .eq('business_id', business_id).gte('last_requested_at', thirtyDaysAgo).limit(200);
+      type M = { product_name: string; times_requested: number | null; estimated_monthly_revenue_cents: number | null; status: string | null };
+      const list = (items ?? []) as M[];
+      if (list.length === 0) return NextResponse.json({ insight: null, link: '/dashboard/missed-demand' } satisfies PageInsightResult);
+      const pending = list.filter(i => i.status === 'pending').length;
+      const top = [...list].sort((a, b) => Number(b.times_requested ?? 0) - Number(a.times_requested ?? 0))[0];
+      const revOpportunity = list.reduce((s, i) => s + Number(i.estimated_monthly_revenue_cents ?? 0), 0) / 100;
+      const ctx = `Last 30d: ${list.length} missed-demand items (${pending} pending review). Top requested: ${top?.product_name ?? 'unknown'} (${top?.times_requested ?? 0} times). Estimated monthly revenue opportunity: A$${revOpportunity.toFixed(0)}.`;
+      const insight = await callClaude(`In ONE sentence, give ${bizName} the most important missed-demand insight: ${ctx}. Recommend the one product to stock first.`, systemPrompt);
+      const priority: Priority = revOpportunity > 500 ? 'warning' : 'info';
+      return NextResponse.json({ insight, priority, link: '/dashboard/missed-demand' } satisfies PageInsightResult);
+    }
+
+    if (page === 'slow-day') {
+      const { data: sales } = await supabase.from('pos_sales')
+        .select('total_amount, created_at, status')
+        .eq('business_id', business_id).neq('status', 'voided')
+        .gte('created_at', sixtyDaysAgo).limit(3000);
+      type S = { total_amount: number | null; created_at: string };
+      const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      const byDow: Record<number, { rev: number; tx: number }> = {};
+      for (const s of (sales ?? []) as S[]) {
+        const dow = new Date(s.created_at).getDay();
+        if (!byDow[dow]) byDow[dow] = { rev: 0, tx: 0 };
+        byDow[dow].rev += Number(s.total_amount ?? 0);
+        byDow[dow].tx++;
+      }
+      const entries = Object.entries(byDow).map(([d, v]) => ({ dow: parseInt(d), avg: v.tx > 0 ? v.rev / v.tx : 0, total: v.rev }));
+      if (entries.length < 3) return NextResponse.json({ insight: null, link: '/dashboard/slow-day' } satisfies PageInsightResult);
+      const sorted = entries.sort((a, b) => a.total - b.total);
+      const slowest = sorted[0];
+      const best = sorted[sorted.length - 1];
+      const gapPct = best.total > 0 ? ((best.total - slowest.total) / best.total) * 100 : 0;
+      const ctx = `Slowest day last 60d: ${DAYS[slowest.dow]} (A$${slowest.total.toFixed(0)} total). Best day: ${DAYS[best.dow]} (A$${best.total.toFixed(0)}). Gap ${gapPct.toFixed(0)}%.`;
+      const insight = await callClaude(`In ONE sentence, give ${bizName} one specific promo idea to lift ${DAYS[slowest.dow]} sales: ${ctx}. Be concrete about the offer.`, systemPrompt);
+      const priority: Priority = gapPct > 50 ? 'warning' : 'info';
+      return NextResponse.json({ insight, priority, link: '/dashboard/slow-day' } satisfies PageInsightResult);
+    }
+
     // Default — no insight for unhandled pages
     return NextResponse.json({ insight: null } satisfies PageInsightResult);
   } catch (err) {

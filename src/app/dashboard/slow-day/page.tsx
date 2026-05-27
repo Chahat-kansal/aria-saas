@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useBusinessContext } from '@/components/providers/BusinessProvider'
+import { AriaSays } from '@/components/dashboard/AriaSays'
 
 interface PromoIdea {
   title: string
@@ -142,6 +143,7 @@ export default function SlowDayPage() {
 
   return (
     <div style={{ minHeight: '100%', background: C.bg, color: C.text, fontFamily: "'Inter',sans-serif", padding: '24px 28px' }}>
+      <AriaSays businessId={business?.id ?? null} page="slow-day" />
       <div style={{ marginBottom: 24 }}>
         <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>Slow Day Filler</h1>
         <p style={{ fontSize: 13, color: C.muted }}>AI-generated promotions to boost your quietest days.</p>

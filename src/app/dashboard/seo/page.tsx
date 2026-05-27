@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useBusinessContext } from '@/components/providers/BusinessProvider'
 import { supabase } from '@/lib/supabase'
+import { AriaSays } from '@/components/dashboard/AriaSays'
 
 interface SeoAudit { id: string; status: string; pages_crawled: number; issues_found: number; issues_fixed: number; health_score: number; started_at: string; finished_at: string | null }
 interface SeoIssue { id: string; page_url: string; issue_type: string; severity: string; title: string; detail: string; suggested_fix: string | null; fix_format: string | null; state: string }
@@ -585,6 +586,7 @@ export default function SeoPage() {
   return (
     <div style={{ minHeight: '100vh', background: '#0E1411', padding: '32px 24px' }}>
       <div style={{ maxWidth: 900, margin: '0 auto' }}>
+        <AriaSays businessId={business?.id ?? null} page="seo" />
         <h1 style={{ fontSize: 28, fontWeight: 700, color: '#fff', marginBottom: 6, fontFamily: 'Fraunces, serif', fontStyle: 'italic' }}>SEO</h1>
         <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.4)', marginBottom: 24 }}>Analyse your site, track rankings, and copy AI-generated fixes directly into your CMS.</p>
 

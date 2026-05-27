@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import type { StaffMember } from '@/types/staff'
 import { useBusinessContext } from '@/components/providers/BusinessProvider'
+import { AriaSays } from '@/components/dashboard/AriaSays'
 
 const G = '#7FB897', G2 = '#1D9E75'
 const card: React.CSSProperties = { background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 10, padding: 16 }
@@ -697,6 +698,7 @@ export default function StaffPage() {
   ]
   return (
     <div style={{ padding: 24, maxWidth: 1280, color: '#e8ede7' }}>
+      <AriaSays businessId={business?.id ?? null} page="staff" />
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 700, margin: 0 }}>Staff</h1>

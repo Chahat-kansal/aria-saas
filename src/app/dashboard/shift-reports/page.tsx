@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
+import { AriaSays } from '@/components/dashboard/AriaSays'
 
 interface ShiftReport {
   id: string; session_id: string | null; cashier_name: string | null
@@ -109,6 +110,7 @@ export default function ShiftReportsPage() {
 
   return (
     <div style={{ padding: 24, maxWidth: 1200, color: S.text, fontFamily: 'Manrope, sans-serif' }}>
+      <AriaSays businessId={null} page="shift-reports" />
       <div style={{ marginBottom: 24, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 700, margin: 0 }}>Shift Reports</h1>

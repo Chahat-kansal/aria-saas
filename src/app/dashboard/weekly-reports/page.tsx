@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
 import { useBusinessContext } from '@/components/providers/BusinessProvider'
+import { AriaSays } from '@/components/dashboard/AriaSays'
 
 interface DayData { date: string; revenue: number; transactions: number }
 interface ProductStat { name: string; revenue: number; quantitySold: number }
@@ -119,7 +120,11 @@ export default function WeeklyReportsPage() {
   const ticketDelta = selected?.avg_ticket != null && prior?.avg_ticket != null && Number(prior.avg_ticket) > 0 ? ((Number(selected.avg_ticket) - Number(prior.avg_ticket)) / Number(prior.avg_ticket)) * 100 : null
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', background: '#0E1812', color: C.text, fontFamily: 'Manrope, sans-serif' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: '#0E1812', color: C.text, fontFamily: 'Manrope, sans-serif' }}>
+      <div style={{ padding: '16px 16px 0' }}>
+        <AriaSays businessId={business?.id ?? null} page="weekly-reports" />
+      </div>
+      <div style={{ display: 'flex', flex: 1 }}>
       {/* Sidebar */}
       <aside style={{ width: 280, flexShrink: 0, borderRight: '1px solid ' + C.border, padding: 16, overflowY: 'auto' }}>
         <h2 style={{ fontSize: 14, fontWeight: 700, marginBottom: 14 }}>Reports</h2>
@@ -293,6 +298,7 @@ export default function WeeklyReportsPage() {
           </>
         )}
       </main>
+      </div>
     </div>
   )
 }
