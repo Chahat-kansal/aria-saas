@@ -2,6 +2,7 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 import { createServerSupabaseClient } from '@/lib/supabase-server';
+import { sendSMS } from '@/lib/clicksend'
 import Anthropic from '@anthropic-ai/sdk';
 import { ARIA_VOICE } from '@/lib/aria-voice-guide';
 import { NextResponse } from 'next/server';
@@ -83,7 +84,7 @@ Keep it warm and personal. Ask them to share their experience. Return ONLY the S
   const messageText = response.content.filter(b => b.type === 'text').map(b => b.text).join('').trim();
 
   try {
-    const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${twilioSid}/Messages.json`;
+        await sendSMS(customer.phone, messageText)
     const body = new URLSearchParams({ From: twilioFrom, To: customer.phone, Body: messageText });
     const res = await fetch(twilioUrl, {
       method: 'POST',
