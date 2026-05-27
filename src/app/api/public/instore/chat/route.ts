@@ -85,11 +85,16 @@ export async function POST(req: Request) {
     const personality = config?.personality ?? 'friendly'
     const tone = PERSONALITY_TONE[personality] ?? PERSONALITY_TONE.friendly
 
+    const greeting = config?.greeting ? `Greeting style: "${config.greeting}".` : ''
     const systemPrompt = [
       `You are ${config?.kiosk_name ?? 'Aria'}, the in-store assistant for ${biz?.name ?? 'this shop'}${biz?.city ? ' in ' + biz.city : ''} — an Australian ${biz?.industry ?? 'shop'}.`,
-      `Tone: ${tone}`,
+      `Tone & personality: ${tone}`,
+      greeting,
       'You are speaking to a customer who is IN the shop right now, on a tablet or their phone.',
       'Keep replies SHORT — a few sentences max. People are standing in a shop, not reading an essay.',
+      'NEVER sarcastic. NEVER make the customer feel dumb. If they ask something silly, play along kindly.',
+      'When you recommend, recommend with ENTHUSIASM — like a staff member who genuinely loves the product.',
+      'Examples of good lines: "Good pick!" / "Ooh, great question." / "Honestly the [X] is the one — I\'d recommend it even if no one was asking."',
       '',
       'PRODUCTS IN STOCK RIGHT NOW (only mention these — never invent products, prices or stock):',
       productList || 'No products loaded yet — apologise warmly and suggest asking a staff member.',
@@ -97,8 +102,9 @@ export async function POST(req: Request) {
       'If a customer asks for something not in the list above, say honestly that you don\'t have it,',
       'apologise warmly, and suggest the closest alternative you DO have.',
       'Never make up products, prices, or stock numbers.',
-      'Celebrate the customer\'s taste when they pick something good.',
-      'When recommending, name 1-2 specific products from the list above.',
+      'When recommending, name 1-2 specific products from the list above by their exact name so we can show product cards.',
+      'UPSELL RULE: at most ONE natural pairing suggestion per topic — only if it feels genuinely helpful. Never pushy. ("A flat white? The almond croissant is the local legend with that.")',
+      'If a customer asks for recipe ideas or what to cook, keep your reply brief — we render a recipe card separately, so just say something warm like "Ooh, let me find you a good one…".',
     ].filter(Boolean).join('\n')
 
     // ── Call Claude (Haiku for speed) ─────────────────────────────────
@@ -131,6 +137,53 @@ export async function POST(req: Request) {
         image_url: p.image_url,
       }
     })
+
+    // ── Upsell: find the product most frequently bought with the first card ──
+    let upsell: ProductCard | null = null
+    if (mentioned.length > 0) {
+      const seedId = mentioned[0].id
+      try {
+        const since = new Date(Date.now() - 90 * 86400_000).toISOString()
+        const { data: salesWithSeed } = await supabaseAdmin.from('pos_sale_items')
+          .select('sale_id, pos_sales!inner(business_id, created_at, status)')
+          .eq('product_id', seedId)
+          .eq('pos_sales.business_id', business_id)
+          .neq('pos_sales.status', 'voided')
+          .gte('pos_sales.created_at', since)
+          .limit(200)
+        const saleIds = (salesWithSeed ?? []).map((r: { sale_id: string }) => r.sale_id).filter(Boolean)
+        if (saleIds.length > 0) {
+          const { data: companions } = await supabaseAdmin.from('pos_sale_items')
+            .select('product_id, quantity')
+            .in('sale_id', saleIds)
+            .neq('product_id', seedId)
+            .limit(500)
+          const counts: Record<string, number> = {}
+          for (const r of (companions ?? []) as Array<{ product_id: string | null; quantity: number | null }>) {
+            if (!r.product_id) continue
+            counts[r.product_id] = (counts[r.product_id] ?? 0) + Number(r.quantity ?? 1)
+          }
+          const topId = Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0]
+          const topProduct = topId ? products.find(p => p.id === topId) : null
+          if (topProduct && !mentioned.find(m => m.id === topProduct.id)) {
+            const qty = Number(topProduct.stock_quantity ?? 0)
+            const tracked = topProduct.track_stock !== false
+            if (!tracked || qty > 0) {
+              upsell = {
+                id: topProduct.id,
+                name: topProduct.name,
+                price: topProduct.price != null ? Number(topProduct.price) : null,
+                stock: qty,
+                image_url: topProduct.image_url,
+              }
+            }
+          }
+        }
+      } catch { /* non-fatal */ }
+    }
+
+    // ── Recipe trigger: did the customer ask for cooking ideas? ────────
+    const wantsRecipe = config?.recipe_suggestions !== false && /recipe|what (can|could) i (make|cook|do)|dinner ideas?|lunch ideas?|breakfast ideas?|cook(ing)? with/i.test(message)
 
     // ── Lightweight demand-signal extraction ──────────────────────────
     // Did the customer ask for a product? Check the user's message against catalogue.
@@ -198,6 +251,8 @@ export async function POST(req: Request) {
       reply: replyText,
       conversation_id: convId,
       product_cards: productCards,
+      upsell,
+      suggest_recipe: wantsRecipe,
       visitor_id: visitor_id ?? null,
     })
   } catch (err) {
