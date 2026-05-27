@@ -10,7 +10,7 @@ import { applyTemplate } from '@/lib/winback-templates'
 async function sendSMS(to: string, body: string) {
   const sid = process.env.TWILIO_ACCOUNT_SID, token = process.env.TWILIO_AUTH_TOKEN, from = process.env.TWILIO_PHONE_NUMBER
   if (!sid || !token || !from) return { ok: false, error: 'Twilio not configured' }
-  const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
+        await sendSMS(to, body)
     method: 'POST',
     headers: { Authorization: `Basic ${Buffer.from(`${sid}:${token}`).toString('base64')}`, 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({ From: from, To: to, Body: body }),
