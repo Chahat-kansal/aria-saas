@@ -137,7 +137,6 @@ async function _GET(req: Request) {
       // Square sync (only for Square-connected businesses)
       if ((biz as any).square_connected) {
         const res = await fetch(`${appUrl}/api/integrations/square/sync`, {
-          method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.CRON_SECRET}` },
           body: JSON.stringify({ business_id: biz.id, _cron: true }),
         });
@@ -149,7 +148,6 @@ async function _GET(req: Request) {
 
       // Pre-generate tomorrow's briefing so it loads instantly at 8am
       fetch(`${appUrl}/api/aria/daily-briefing`, {
-        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ business_id: biz.id, force_refresh: true }),
       }).catch(() => { /* non-critical */ });
@@ -171,7 +169,6 @@ async function _GET(req: Request) {
           .lte('scheduled_for', new Date().toISOString());
         for (const post of (duePosts ?? [])) {
           fetch(`${appUrl}/api/social/publish`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ post_id: post.id, business_id: post.business_id }),
           }).catch(() => { /* non-critical */ });
         }
@@ -199,7 +196,6 @@ async function _GET(req: Request) {
             .gte('created_at', new Date(Date.now() - 86400000).toISOString());
           if (!recentDrafts) {
             fetch(`${appUrl}/api/aria/social-suggest`, {
-              method: 'POST', headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ business_id: biz.id, platforms: socialConns.map((c: any) => c.platform), count: 3 }),
             }).catch(() => { /* non-critical */ });
           }
@@ -219,7 +215,6 @@ async function _GET(req: Request) {
             .eq('business_id', biz.id).eq('week_starting', weekStartStr).maybeSingle();
           if (!existingDraft) {
             fetch(`${appUrl}/api/aria/weekly-order`, {
-              method: 'POST', headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ business_id: biz.id, week_starting: weekStartStr }),
             }).catch(() => { /* non-critical */ });
           }
@@ -248,8 +243,6 @@ async function _GET(req: Request) {
     errors_count: errors.length,
     errors,
   });
-}
-
 }
 
 export const GET = withErrorCapture('cron/nightly-sync', _GET)
