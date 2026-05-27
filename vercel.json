@@ -124,6 +124,10 @@
       "schedule": "0 22 * * *"
     },
     {
+      "path": "/api/cron/loyalty-expiry",
+      "schedule": "0 4 * * *"
+    },
+    {
       "path": "/api/cron/xero-sync",
       "schedule": "0 2 * * *"
     },

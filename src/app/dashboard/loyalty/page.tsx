@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useBusinessContext } from '@/components/providers/BusinessProvider'
 import { TIER_BADGE, type LoyaltyTier } from '@/lib/loyalty'
+import { TiersTab, ReferralsTab, RewardRulesTab, RevenueForecastCard, BrandingSection } from '@/components/dashboard/LoyaltyExtensions'
 
 type Config = { program_type: string; points_per_dollar: number; point_value_cents: number; stamps_to_reward: number; stamp_reward_text: string; birthday_reward_text: string | null; winback_after_days: number }
 type Stats = { enrolled: number; active_this_month: number; points_liability_dollars: number; redemptions_this_month: number; avg_points_per_customer: number }
@@ -39,6 +40,7 @@ export default function LoyaltyPage() {
   const [saveMsg, setSaveMsg] = useState('')
   const [insight, setInsight] = useState('')
   const [insightLoading, setInsightLoading] = useState(false)
+  const [tab, setTab] = useState<'overview' | 'members' | 'tiers' | 'referrals' | 'rewards' | 'config'>('overview')
 
   const load = useCallback(async () => {
     if (!business?.id) return
@@ -98,8 +100,18 @@ export default function LoyaltyPage() {
         <p className="text-sm mt-1" style={{ color: 'var(--text-secondary, #A8B5A8)' }}>Configure your points or stamps program, view performance, and manage rewards.</p>
       </header>
 
-      {/* Stats */}
-      {stats && (
+      {/* Tabs */}
+      <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid rgba(232,237,231,0.08)' }}>
+        {(['overview','members','tiers','referrals','rewards','config'] as const).map(t => (
+          <button key={t} onClick={() => setTab(t)}
+            style={{ padding: '9px 16px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: tab === t ? 700 : 400, color: tab === t ? '#7FB897' : 'var(--text-secondary, #A8B5A8)', borderBottom: tab === t ? '2px solid #7FB897' : '2px solid transparent', marginBottom: -1, textTransform: 'capitalize' }}>
+            {t}
+          </button>
+        ))}
+      </div>
+
+      {/* Stats — visible on overview */}
+      {tab === 'overview' && stats && (
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
           <StatCard label="Enrolled customers" value={String(stats.enrolled)} />
           <StatCard label="Active this month" value={String(stats.active_this_month)} sub={`${stats.enrolled > 0 ? Math.round((stats.active_this_month / stats.enrolled) * 100) : 0}% of enrolled`} />
@@ -109,7 +121,14 @@ export default function LoyaltyPage() {
         </div>
       )}
 
+      {tab === 'tiers' && <TiersTab />}
+      {tab === 'referrals' && <ReferralsTab />}
+      {tab === 'rewards' && <RewardRulesTab />}
+
+      {tab === 'overview' && <RevenueForecastCard />}
+
       {/* Program config */}
+      {tab === 'config' && (
       <div className="rounded-xl p-6 space-y-5" style={{ background: 'var(--bg-elevated, #1A2620)', border: '1px solid var(--divider, rgba(232,237,231,0.06))' }}>
         <div className="flex items-center justify-between">
           <h2 className="text-base font-medium">Program Setup</h2>
@@ -197,8 +216,12 @@ export default function LoyaltyPage() {
           )}
         </div>
       </div>
+      )}
+
+      {tab === 'config' && <BrandingSection />}
 
       {/* Top customers */}
+      {(tab === 'overview' || tab === 'members') && (
       <div className="space-y-3">
         <h2 className="text-base font-medium">Top Loyalty Customers</h2>
         {topCustomers.length === 0 ? (
@@ -228,8 +251,10 @@ export default function LoyaltyPage() {
           </div>
         )}
       </div>
+      )}
 
       {/* Recent transactions */}
+      {tab === 'overview' && (
       <div className="space-y-3">
         <h2 className="text-base font-medium">Recent Transactions</h2>
         {txns.length === 0 ? (
@@ -253,8 +278,10 @@ export default function LoyaltyPage() {
           </div>
         )}
       </div>
+      )}
 
       {/* Aria insight */}
+      {tab === 'overview' && (
       <div className="rounded-xl p-5 space-y-3" style={{ background: 'var(--bg-elevated, #1A2620)', borderLeft: '3px solid #1D9E75', border: '1px solid rgba(29,158,117,0.2)' }}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -272,6 +299,7 @@ export default function LoyaltyPage() {
           <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>Click "Get Aria insight" for AI-powered loyalty program recommendations based on your real data.</p>
         )}
       </div>
+      )}
     </div>
   )
 }
