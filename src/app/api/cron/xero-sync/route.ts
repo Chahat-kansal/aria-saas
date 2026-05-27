@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 300
 
 import { NextResponse } from 'next/server'
+import { withCronRetry } from '@/lib/api/retry'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 
 const CRON_SECRET = process.env.CRON_SECRET ?? ''
@@ -24,7 +25,7 @@ async function sendSms(to: string, body: string): Promise<void> {
   })
 }
 
-export async function GET(req: Request) {
+async function _GET(req: Request) {
   const secret = req.headers.get('x-vercel-cron-signature')
     ?? req.headers.get('authorization')?.replace('Bearer ', '')
   if (!CRON_SECRET || secret !== CRON_SECRET) {
@@ -130,3 +131,5 @@ export async function GET(req: Request) {
 
   return NextResponse.json({ ok: true, date: dateStr, processed, errors })
 }
+
+export const GET = withCronRetry('xero-sync', _GET)
