@@ -2,6 +2,7 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 import { NextResponse } from 'next/server'
+import { sendSMS } from '@/lib/clicksend'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { sendStaffMessage, getMessagesForBusiness } from '@/lib/staff/messages'
@@ -67,7 +68,7 @@ async function _POST(req: Request) {
     if (sid && token && from) {
       for (const sm of allStaff ?? []) {
         if (!sm.mobile) continue
-        fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
+        await sendSMS(String(sm.mobile), `${subject ? subject + ': ' : '')
           method: 'POST',
           headers: { 'Authorization': `Basic ${Buffer.from(`${sid}:${token}`).toString('base64')}`, 'Content-Type': 'application/x-www-form-urlencoded' },
           body: new URLSearchParams({ To: String(sm.mobile), From: from, Body: `${subject ? subject + ': ' : ''}${msgBody.slice(0, 140)}` }).toString(),
