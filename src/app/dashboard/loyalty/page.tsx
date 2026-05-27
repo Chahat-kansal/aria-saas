@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useBusinessContext } from '@/components/providers/BusinessProvider'
 import { TIER_BADGE, type LoyaltyTier } from '@/lib/loyalty'
 import { TiersTab, ReferralsTab, RewardRulesTab, RevenueForecastCard, BrandingSection } from '@/components/dashboard/LoyaltyExtensions'
+import { AriaSays } from '@/components/dashboard/AriaSays'
 
 type Config = { program_type: string; points_per_dollar: number; point_value_cents: number; stamps_to_reward: number; stamp_reward_text: string; birthday_reward_text: string | null; winback_after_days: number }
 type Stats = { enrolled: number; active_this_month: number; points_liability_dollars: number; redemptions_this_month: number; avg_points_per_customer: number }
@@ -95,6 +96,7 @@ export default function LoyaltyPage() {
 
   return (
     <div className="p-6 max-w-6xl space-y-8" style={{ color: 'var(--text-primary, #E8EDE7)' }}>
+      <AriaSays businessId={business?.id ?? null} page="loyalty" />
       <header>
         <h1 className="text-2xl font-medium">Loyalty Program</h1>
         <p className="text-sm mt-1" style={{ color: 'var(--text-secondary, #A8B5A8)' }}>Configure your points or stamps program, view performance, and manage rewards.</p>

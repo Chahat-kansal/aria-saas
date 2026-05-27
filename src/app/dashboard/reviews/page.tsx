@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
 import { useBusinessContext } from '@/components/providers/BusinessProvider'
+import { AriaSays } from '@/components/dashboard/AriaSays'
 
 interface Review { id: string; reviewer_name: string|null; reviewer_avatar: string|null; rating: number|null; comment: string|null; review_date: string|null; has_reply: boolean; reply_text: string|null; ai_drafted_reply: string|null; sentiment: string|null; status: string }
 interface Stats { google_place_id: string|null; average_rating: number|null; total_reviews: number|null; last_synced: string|null; local_count: number; distribution: Record<number, number> }
@@ -128,6 +129,7 @@ export default function ReviewsPage() {
 
   return (
     <div style={{ minHeight: '100%', background: 'var(--bg-base)', color: 'var(--text-primary)', fontFamily: "'Manrope',sans-serif", padding: '28px 32px' }}>
+      <AriaSays businessId={business?.id ?? null} page="reviews" />
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 700, margin: '0 0 4px' }}>Reviews & Reputation</h1>

@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useBusiness } from '@/components/providers/BusinessProvider'
+import { AriaSays } from '@/components/dashboard/AriaSays'
 
 interface LineItem { description: string; qty: number; rate: number; total: number }
 interface QuoteData {
@@ -223,6 +224,7 @@ export default function QuoteBuilderPage() {
 
   return (
     <div style={{ minHeight: '100%', background: C.bg, color: C.text, fontFamily: "'Inter',sans-serif", padding: '24px 28px' }}>
+      <AriaSays businessId={business?.id ?? null} page="quote-builder" />
       {showCatalogue && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setShowCatalogue(false)}>
           <div onClick={e => e.stopPropagation()} style={{ background: C.card, borderRadius: 14, padding: 24, width: 400, maxHeight: '80vh', overflow: 'auto', border: '1px solid ' + C.border }}>

@@ -5,6 +5,7 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recha
 import { useBusinessContext } from '@/components/providers/BusinessProvider'
 import { SEGMENT_COLORS } from '@/lib/customer-segments'
 import { calcRFM, TIER_COLOR, type RfmTier } from '@/lib/rfm'
+import { AriaSays } from '@/components/dashboard/AriaSays'
 
 const RFM_LABEL: Record<RfmTier, string> = { bronze: 'Bronze', silver: 'Silver', gold: 'Gold' }
 
@@ -204,6 +205,9 @@ export default function CustomersPage() {
 
   return (
     <div style={{ minHeight: '100vh', background: C.bg, color: C.text, fontFamily: 'Inter, sans-serif' }}>
+      <div style={{ padding: '16px 24px 0' }}>
+        <AriaSays businessId={business?.id ?? null} page="customers" />
+      </div>
       {importStep > 0 && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div style={{ background: C.card, borderRadius: 16, padding: 28, width: 520, maxHeight: '80vh', overflowY: 'auto' }}>

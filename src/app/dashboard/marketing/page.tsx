@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
+import { AriaSays } from '@/components/dashboard/AriaSays'
 
 interface Campaign { id: string; name: string; type: string; channel: string; status: string; sent_count: number; recipients_count: number; scheduled_at: string | null; completed_at: string | null; aria_generated: boolean; target_segment: string | null; message: string; created_at: string; unsubscribe_count?: number; revenue_attributed_cents?: number }
 interface Template { id: string; name: string; type: string; channel: string; sms_body: string; is_global: boolean }
@@ -134,6 +135,7 @@ export default function MarketingPage() {
 
   return (
     <div style={{ ...S, padding: '24px 32px', maxWidth: 900 }}>
+      <AriaSays businessId={null} page="marketing" />
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 600, marginBottom: 2 }}>Marketing</h1>

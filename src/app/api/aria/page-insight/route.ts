@@ -496,6 +496,88 @@ async function _POST(req: Request): Promise<Response> {
       return NextResponse.json({ insight, priority: 'info', link: '/dashboard/parcel-tracking' } satisfies PageInsightResult);
     }
 
+    if (page === 'bookings') {
+      const { data: bks } = await supabase.from('bookings')
+        .select('booking_date, booking_time, status, no_show_score, party_size')
+        .eq('business_id', business_id).gte('booking_date', thirtyDaysAgo).limit(500);
+      type B = { booking_date: string; booking_time: string | null; status: string | null; no_show_score: number | null; party_size: number | null };
+      const list = (bks ?? []) as B[];
+      const upcoming = list.filter(b => b.booking_date >= today && b.status !== 'cancelled');
+      const noShows = list.filter(b => b.status === 'no_show').length;
+      const cancelled = list.filter(b => b.status === 'cancelled').length;
+      const highRisk = upcoming.filter(b => (b.no_show_score ?? 0) > 0.5).length;
+      const ctx = `Last 30d: ${list.length} bookings, ${noShows} no-shows, ${cancelled} cancelled. Upcoming: ${upcoming.length}${highRisk > 0 ? `, ${highRisk} at high no-show risk` : ''}.`;
+      const insight = await callClaude(`In ONE sentence, give the most important bookings insight for ${bizName}: ${ctx}. If high no-show risk, suggest sending reminders.`, systemPrompt);
+      const priority: Priority = highRisk > 2 ? 'warning' : 'info';
+      return NextResponse.json({ insight, priority, link: '/dashboard/bookings' } satisfies PageInsightResult);
+    }
+
+    if (page === 'quotes' || page === 'quote-builder') {
+      const { data: qs } = await supabase.from('quotes')
+        .select('status, quote_amount, win_score, view_count, sent_at, created_at, last_viewed_at')
+        .eq('business_id', business_id).gte('created_at', sixtyDaysAgo).limit(500);
+      type Q = { status: string | null; quote_amount: number | null; win_score: number | null; view_count: number | null; sent_at: string | null; last_viewed_at: string | null };
+      const list = (qs ?? []) as Q[];
+      const sent = list.filter(q => q.sent_at).length;
+      const accepted = list.filter(q => q.status === 'accepted').length;
+      const winRate = sent > 0 ? (accepted / sent) * 100 : 0;
+      const viewedNotAccepted = list.filter(q => (q.view_count ?? 0) > 0 && q.status !== 'accepted' && q.status !== 'rejected').length;
+      const avgAmount = list.length ? list.reduce((s, q) => s + Number(q.quote_amount ?? 0), 0) / list.length : 0;
+      const ctx = `Last 60d: ${list.length} quotes, ${sent} sent, ${accepted} accepted (${winRate.toFixed(0)}% win rate). Avg amount A$${avgAmount.toFixed(0)}. ${viewedNotAccepted} viewed but not yet decided.`;
+      const insight = await callClaude(`In ONE sentence, give ${bizName} the most important quotes insight: ${ctx}. If there are quotes viewed but not decided, suggest a follow-up.`, systemPrompt);
+      const priority: Priority = viewedNotAccepted >= 3 ? 'warning' : 'info';
+      return NextResponse.json({ insight, priority, link: '/dashboard/quote-builder' } satisfies PageInsightResult);
+    }
+
+    if (page === 'loyalty') {
+      const { data: custs } = await supabase.from('pos_customers')
+        .select('points_balance, loyalty_points, visit_count, last_visit, total_spent, total_spend')
+        .eq('business_id', business_id).limit(2000);
+      type C = { points_balance: number | null; loyalty_points: number | null; visit_count: number | null; last_visit: string | null; total_spent: number | null; total_spend: number | null };
+      const list = (custs ?? []) as C[];
+      const enrolled = list.filter(c => (Number(c.points_balance ?? c.loyalty_points ?? 0)) > 0).length;
+      const lapsedCutoff = new Date(Date.now() - 60 * 86400000).toISOString().slice(0, 10);
+      const aboutToLapse = list.filter(c => c.last_visit && c.last_visit < lapsedCutoff && (Number(c.points_balance ?? c.loyalty_points ?? 0)) > 50).length;
+      const topPoints = list.map(c => Number(c.points_balance ?? c.loyalty_points ?? 0)).sort((a, b) => b - a).slice(0, 5).reduce((s, n) => s + n, 0);
+      const ctx = `${enrolled} customers enrolled in loyalty. ${aboutToLapse} have >50 points and haven't visited in 60+ days. Top 5 customers hold ${topPoints} points combined.`;
+      const insight = await callClaude(`In ONE sentence, give ${bizName} the most important loyalty insight: ${ctx}. If lapsing customers exist, suggest a winback reward.`, systemPrompt);
+      const priority: Priority = aboutToLapse > 5 ? 'warning' : 'info';
+      return NextResponse.json({ insight, priority, link: '/dashboard/loyalty' } satisfies PageInsightResult);
+    }
+
+    if (page === 'customers') {
+      const { data: custs } = await supabase.from('pos_customers')
+        .select('customer_segment, churn_risk, visit_count, last_visit, total_spent, total_spend')
+        .eq('business_id', business_id).limit(2000);
+      type C = { customer_segment: string | null; churn_risk: string | null; visit_count: number | null; last_visit: string | null; total_spent: number | null; total_spend: number | null };
+      const list = (custs ?? []) as C[];
+      const champions = list.filter(c => c.customer_segment === 'champions').length;
+      const atRisk = list.filter(c => c.customer_segment === 'at_risk' || c.churn_risk === 'high').length;
+      const valueAtRisk = list
+        .filter(c => c.customer_segment === 'at_risk' || c.churn_risk === 'high')
+        .reduce((s, c) => s + Number(c.total_spent ?? c.total_spend ?? 0), 0);
+      const ctx = `${list.length} customers total. ${champions} Champions, ${atRisk} At-Risk (representing A$${valueAtRisk.toFixed(0)} lifetime spend at risk).`;
+      const insight = await callClaude(`In ONE sentence, give ${bizName} the most important customers insight: ${ctx}. If lifetime value is at risk, suggest one concrete action.`, systemPrompt);
+      const priority: Priority = atRisk > 10 ? 'warning' : 'info';
+      return NextResponse.json({ insight, priority, link: '/dashboard/customers' } satisfies PageInsightResult);
+    }
+
+    if (page === 'marketing') {
+      const { data: camps } = await supabase.from('campaigns')
+        .select('type, channel, status, sent_count, recipients_count, revenue_attributed_cents, created_at')
+        .eq('business_id', business_id).gte('created_at', sixtyDaysAgo).limit(200);
+      type Camp = { type: string | null; channel: string | null; status: string | null; sent_count: number | null; recipients_count: number | null; revenue_attributed_cents: number | null };
+      const list = (camps ?? []) as Camp[];
+      const completed = list.filter(c => c.status === 'completed');
+      const totalSent = completed.reduce((s, c) => s + Number(c.sent_count ?? 0), 0);
+      const totalRev = completed.reduce((s, c) => s + Number(c.revenue_attributed_cents ?? 0), 0) / 100;
+      const drafts = list.filter(c => c.status === 'draft').length;
+      const ctx = `Last 60d: ${list.length} campaigns, ${completed.length} sent (${totalSent} messages). Attributed revenue A$${totalRev.toFixed(0)}. ${drafts} drafts waiting.`;
+      const insight = await callClaude(`In ONE sentence, give ${bizName} the most important marketing insight: ${ctx}. If there are drafts, suggest one specific send time or audience.`, systemPrompt);
+      const priority: Priority = drafts > 2 ? 'warning' : 'info';
+      return NextResponse.json({ insight, priority, link: '/dashboard/marketing' } satisfies PageInsightResult);
+    }
+
     // Default — no insight for unhandled pages
     return NextResponse.json({ insight: null } satisfies PageInsightResult);
   } catch (err) {

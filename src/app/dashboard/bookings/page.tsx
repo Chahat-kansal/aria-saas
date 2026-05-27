@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
+import { AriaSays } from '@/components/dashboard/AriaSays'
 
 const C = { bg: 'var(--bg-base)', card: 'var(--bg-surface)', text: '#F0F4F0', muted: 'var(--text-secondary,#A8B5A8)', green: '#7FB897', darkGreen: '#2D5240', red: '#ef4444', amber: '#f59e0b', blue: '#60a5fa', border: 'rgba(127,184,151,0.15)' }
 const STATUS_COLOR: Record<string, string> = { confirmed: C.green, pending: C.amber, cancelled: C.red, no_show: '#6b7280', completed: C.muted }
@@ -120,6 +121,7 @@ export default function BookingsPage() {
 
   return (
     <div style={{padding:24,maxWidth:1100,color:C.text,fontFamily:'Inter,sans-serif'}}>
+      <AriaSays businessId={bid || null} page="bookings" />
       {/* Header */}
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:20,flexWrap:'wrap',gap:10}}>
         <div>
