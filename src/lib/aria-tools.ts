@@ -1,4 +1,5 @@
 import type { Tool } from '@anthropic-ai/sdk/resources/messages';
+import { sendSMS } from '@/lib/clicksend'
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import * as XLSX from 'xlsx';
 import { randomUUID } from 'crypto';
@@ -750,7 +751,7 @@ async function sendSmsNow(input: Record<string, unknown>): Promise<unknown> {
   }
 
   const phone = to.replace(/\s/g, '').replace(/^0/, '+61');
-  const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
+        await sendSMS(phone, message)
     method: 'POST',
     headers: { 'Authorization': 'Basic ' + Buffer.from(`${sid}:${token}`).toString('base64'), 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({ To: phone, From: from, Body: message }).toString(),
