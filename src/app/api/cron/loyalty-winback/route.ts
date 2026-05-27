@@ -18,13 +18,7 @@ async function sendSMS(to: string, body: string): Promise<boolean> {
   const token = process.env.TWILIO_AUTH_TOKEN
   if (!sid || !token || !from) return false
         await sendSMS(to, body)
-    method: 'POST',
-    headers: {
-      Authorization: `Basic ${Buffer.from(`${sid}:${token}`).toString('base64')}`,
-      'Content-Type': 'application/x-www-form-urlencoded',
     },
-    body: new URLSearchParams({ From: from, To: to, Body: body }),
-  })
   return res.ok
 }
 
