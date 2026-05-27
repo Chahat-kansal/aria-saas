@@ -73,10 +73,7 @@ async function _POST(req: Request) {
         try {
           const msgText = ((campaign as any).message_template ?? '').replace('{name}', c.name.split(' ')[0])
         await sendSMS(c.phone, msgText)
-            method: 'POST',
             headers: { Authorization: 'Basic ' + Buffer.from(sid + ':' + tok).toString('base64'), 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: new URLSearchParams({ From: from, To: c.phone, Body: msgText }),
-          })
           if (res.ok) sentCount++
           await supabaseAdmin.from('pos_campaign_sends').insert({ campaign_id: body.campaign_id, business_id: bid, customer_id: c.id, customer_name: c.name, customer_phone: c.phone, message_sent: msgText, channel: 'sms', send_status: res.ok ? 'sent' : 'failed', sent_at: res.ok ? new Date().toISOString() : null })
         } catch { /* non-fatal */ }
