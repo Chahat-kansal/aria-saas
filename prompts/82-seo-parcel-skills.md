@@ -138,6 +138,22 @@ CREATE POLICY "aria_skills_owner" ON aria_skills FOR ALL TO authenticated
 - System prompt addition text length cap 1000 chars
 - Read /mnt/skills/user/ui-ux-pro-max/SKILL.md before building UI
 
+### CRITICAL — owner-only creation (prompt injection defence)
+Custom skill text gets injected directly into Aria's system prompt, so it is a
+prompt-injection surface. Staff must NOT be able to create or edit custom skills.
+- Add `created_by_user_id uuid` column to aria_skills
+- Add `role` check: only users where `businesses.user_id = auth.uid()` (the owner)
+  can create, edit, or delete custom skills. Toggling existing skills on/off is
+  fine for any authenticated user on that business.
+- RLS policies must enforce this — SELECT and UPDATE-toggle-only for staff,
+  full CRUD only for the owner.
+- The UI must hide the "Create custom skill" button + form for non-owners.
+  Check the user role before rendering — do not just rely on the API rejecting.
+- Reject any custom skill text matching obvious injection patterns:
+  /ignore (all|previous|prior) (instructions|prompts)|disregard|reveal (your )?system|admin (mode|access|override)/i
+  → return 400 "This skill text contains restricted instructions"
+- Log every custom skill creation to audit_logs with user_id, business_id, skill text
+
 ### Commit
 "feat: Ask Aria — skill picker with 6 built-in skills + custom skill creation"
 
