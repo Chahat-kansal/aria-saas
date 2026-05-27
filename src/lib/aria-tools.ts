@@ -330,8 +330,8 @@ async function querySales(
     const limited = input.limit ? productRows.slice(0, input.limit) : productRows;
     return {
       rows: limited,
-      total_revenue: rows.reduce((s, r) => s + (r.total_amount ?? 0), 0),
-      total_transactions: rows.length,
+      total_revenue: (Array.isArray(rows) ? rows : []).reduce((s: number, r: {total_amount?: number|null}) => s + (r.total_amount ?? 0), 0),
+      total_transactions: Array.isArray(rows) ? rows.length : 0,
     };
   }
 
@@ -355,8 +355,8 @@ async function querySales(
 
   return {
     rows: limited,
-    total_revenue: rows.reduce((s, r) => s + (r.total_amount ?? 0), 0),
-    total_transactions: rows.length,
+    total_revenue: (Array.isArray(rows) ? rows : []).reduce((s: number, r: {total_amount?: number|null}) => s + (r.total_amount ?? 0), 0),
+    total_transactions: Array.isArray(rows) ? rows.length : 0,
   };
 }
 
