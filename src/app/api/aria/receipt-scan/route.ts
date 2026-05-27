@@ -87,6 +87,7 @@ async function _POST(req: Request) {
   const form = await req.formData();
   const file = form.get('file') as File | null;
   const business_id = form.get('business_id') as string | null;
+  const updateCostsFlag = String(form.get('update_costs') ?? '') === 'true';
 
   if (!file) return NextResponse.json({ error: 'file required' }, { status: 400 });
   if (!business_id) return NextResponse.json({ error: 'business_id required' }, { status: 400 });
@@ -290,6 +291,23 @@ Be precise — these numbers update real inventory.`,
     })
   } catch { /* non-fatal */ }
 
+  // Feature 8: optionally auto-update product cost prices from matched lines
+  const cost_updates: Array<{ product_id: string; product_name: string; old_cost: number; new_cost: number; margin_pct: number | null }> = []
+  if (updateCostsFlag) {
+    for (const line of result as Array<{ matched_item: { id: string; name: string } | null; unit_price_aud: number | null; match_confidence: string }>) {
+      if (!line.matched_item || line.unit_price_aud == null || line.match_confidence === 'none') continue
+      const newCost = Number(line.unit_price_aud)
+      if (!(newCost > 0)) continue
+      const { data: prev } = await supabaseAdmin.from('pos_products').select('cost_price, price').eq('id', line.matched_item.id).maybeSingle()
+      const oldCost = Number(prev?.cost_price ?? 0)
+      const sellPrice = Number(prev?.price ?? 0)
+      const marginPct = sellPrice > 0 ? Math.round(((sellPrice - newCost) / sellPrice) * 1000) / 10 : null
+      await supabaseAdmin.from('pos_products').update({ cost_price: newCost }).eq('id', line.matched_item.id)
+      cost_updates.push({ product_id: line.matched_item.id, product_name: line.matched_item.name, old_cost: oldCost, new_cost: newCost, margin_pct: marginPct })
+    }
+  }
+  const low_margin = cost_updates.filter(u => u.margin_pct !== null && u.margin_pct < 20)
+
   return NextResponse.json({
     extracted_lines: result,
     supplier_name: supplierName,
@@ -297,6 +315,8 @@ Be precise — these numbers update real inventory.`,
     invoice_total_aud: invoiceTotal,
     line_count: result.length,
     scan_source: scanSource,
+    cost_updates,
+    low_margin_after_update: low_margin,
   });
 }
 

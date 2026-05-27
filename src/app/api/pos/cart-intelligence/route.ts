@@ -144,6 +144,38 @@ async function _POST(req: NextRequest) {
     }
   }
 
+  // Feature 2: smart upsell — co-purchased items from sale history
+  try {
+    const cartIds = (cart_items as Array<{ product_id?: string; product?: { id?: string } }>)
+      .map(i => i.product_id ?? i.product?.id).filter(Boolean) as string[]
+    if (cartIds.length > 0) {
+      const since = new Date(Date.now() - 60 * 86400_000).toISOString()
+      const { data: salesWithItem } = await supabase.from('pos_sale_items')
+        .select('sale_id, pos_sales!inner(business_id, created_at, status)')
+        .eq('pos_sales.business_id', business_id).neq('pos_sales.status', 'voided')
+        .gte('pos_sales.created_at', since).in('product_id', cartIds).limit(2000)
+      const saleIds = Array.from(new Set(((salesWithItem ?? []) as Array<{ sale_id: string | null }>).map(r => r.sale_id).filter(Boolean) as string[]))
+      if (saleIds.length >= 3) {
+        const { data: otherItems } = await supabase.from('pos_sale_items')
+          .select('product_id, product_name').in('sale_id', saleIds).limit(5000)
+        const counts: Record<string, { name: string; count: number }> = {}
+        for (const r of (otherItems ?? []) as Array<{ product_id: string | null; product_name: string | null }>) {
+          if (!r.product_id || cartIds.includes(r.product_id)) continue
+          if (!counts[r.product_id]) counts[r.product_id] = { name: r.product_name ?? 'item', count: 0 }
+          counts[r.product_id].count++
+        }
+        const top = Object.values(counts).sort((a, b) => b.count - a.count)[0]
+        if (top && top.count >= Math.max(3, Math.floor(saleIds.length * 0.3))) {
+          warnings.push({
+            type: 'upsell', priority: 'low',
+            message: `Often bought together: ${top.name}`,
+            staff_prompt: `Customers who buy these items often add ${top.name}. Suggest it.`,
+          })
+        }
+      }
+    }
+  } catch { /* non-fatal */ }
+
   // Sort by priority
   const order = { urgent: 0, high: 1, medium: 2, low: 3 };
   warnings.sort((a, b) => order[a.priority] - order[b.priority]);

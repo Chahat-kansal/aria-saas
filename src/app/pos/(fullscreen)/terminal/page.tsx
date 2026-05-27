@@ -46,6 +46,7 @@ import { getCurrentLayout, TerminalLayout } from '@/lib/terminal/layouts';
 import { getAriaSuggestions } from '@/lib/terminal/aria-suggestions';
 import { AuroraCanvas } from '@/components/terminal/AuroraCanvas';
 import { AriaInlineCard } from '@/components/terminal/AriaInlineCard';
+import { LiveIntelligenceBadges } from '@/components/terminal/LiveIntelligenceBadges';
 import { ProductImage } from '@/components/terminal/ProductImage';
 import CustomerLookupBar, { type LoyaltyCustomer } from '@/components/pos/CustomerLookupBar';
 import type { DiscountBarCartItem } from '@/components/pos/DiscountBar';
@@ -2898,6 +2899,13 @@ export default function TerminalPage() {
                     onAddSuggestion={(name) => console.log('[Aria] suggestion accepted:', name)}
                   />
                 )}
+
+                {/* Live POS Intelligence — low stock, win-back, staffing, slow patch */}
+                <LiveIntelligenceBadges
+                  cart={cart.map(c => ({ product: c.product, qty: c.qty }))}
+                  customer={customer ? { id: customer.id, name: customer.name ?? undefined, last_visit_at: (customer as { last_visit_at?: string | null }).last_visit_at ?? null } : null}
+                />
+
 
                 {/* Discount Bar — Sprint I, cafe-only, additive */}
                 {businessType === 'cafe' && cart.length > 0 && (
