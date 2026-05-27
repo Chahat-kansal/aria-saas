@@ -23,14 +23,61 @@ Customers browse, follow, chat, and buy — payment in person, not online.
 - Customer can leave any business or the whole network anytime
 - Push notifications require explicit per-device opt-in
 
+## CORE PRINCIPLE — anonymous browsing, identity only on the POS side
+This is the defining design rule of Aria Community. Build everything around it.
+
+- Customers browse Aria Community fully ANONYMOUSLY — no account, no signup, no
+  login to scroll the feed, watch reels, see offers, or browse the marketplace.
+- Chatting with a business uses an ANONYMOUS SESSION TOKEN — a device-based token,
+  NOT an account. No name, no email, no password. It exists only so the chat thread
+  persists (owner can reply, customer can return to the thread).
+- The customer is anonymous to the platform AND to the business owner on Community.
+- IDENTITY LIVES ONLY ON THE POS SIDE. A customer becomes a known person only when
+  they walk into the shop and buy — that is where loyalty, win-back, membership,
+  and pos_customers live. Community and POS identity are SEPARATE layers.
+- community_members therefore stores only: an anonymous device/session token, an
+  optional push_token, optional display nickname. NEVER required: real name, email,
+  phone, address. Do not collect personal data on Community.
+
+## PRIVACY GUARD — Aria blocks personal details in chat
+To protect both the customer and the platform from privacy exposure:
+- Every marketplace/business chat message passes through a privacy filter BEFORE
+  it is delivered.
+- If a message contains personal details — phone numbers, email addresses, home
+  addresses, full names, payment card numbers — Aria BLOCKS that message.
+- The sender sees a gentle notice: "To keep you safe, personal details can't be
+  shared in chat. Arrange the rest in person at the shop."
+- This protects customers (no personal data leaks to strangers) and protects the
+  platform (less personal data handled = far less privacy/legal exposure).
+- Use a combination of regex (phone/email/card patterns) + a light Haiku check for
+  addresses and full names. Block before delivery, never after.
+- Applies to BOTH directions — customer and business owner.
+
+## UI / UX — this is make-or-break
+Aria Community lives or dies on UI/UX. If it does not feel as polished as
+Instagram, TikTok, or Facebook, customers will not use it. This is non-negotiable.
+- Read /mnt/skills/user/ui-ux-pro-max/SKILL.md before building any Community UI
+- Mobile-first — most customers browse on a phone. Design for the phone first.
+- Best-in-class patterns: smooth scroll, instant feel, skeleton loaders, no jank
+- Feed: clean, image-forward, generous spacing — like Instagram
+- Reels: true full-screen vertical, swipe up/down, autoplay, tap to pause
+- Stories: circular avatars at top, tap-through, progress bars — like Instagram stories
+- Marketplace: clean product grid, big imagery, fast filtering
+- Smooth transitions, tasteful micro-animations, never cluttered
+- Financial Trust palette but warm and inviting — this faces consumers
+- Every screen must feel premium. A clunky Community is a dead Community.
+- Accessibility: readable contrast, tap targets >= 44px, works one-handed
+
 ## PHASE 1 — Identity + consent foundation
 DB:
 ```sql
 CREATE TABLE community_members (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  email text UNIQUE, name text, phone text, avatar_url text,
+  session_token text UNIQUE,        -- anonymous device-based token, NOT an account
+  nickname text,                    -- optional display name, never required
   push_token text, push_enabled boolean DEFAULT false,
   joined_at timestamptz DEFAULT now()
+  -- NO email, NO real name, NO phone, NO address. Anonymous by design.
 );
 CREATE TABLE community_follows (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -107,6 +154,7 @@ CREATE TABLE marketplace_listings (
   status text DEFAULT 'active',  -- active, sold, hidden
   created_at timestamptz DEFAULT now()
 );
+-- All chat messages pass the privacy filter before insert — see PRIVACY GUARD
 CREATE TABLE marketplace_chats (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   listing_id uuid REFERENCES marketplace_listings(id),
