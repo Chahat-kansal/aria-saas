@@ -130,13 +130,11 @@ export async function checkConditionAlerts(businessId: string): Promise<number> 
       const phone = biz?.owner_phone ?? biz?.phone
         if (phone && biz?.alert_sms_enabled) {
         // Replaced by ClickSend
-        const twilioAuth = process.env.TWILIO_AUTH_TOKEN
-        const twilioFrom = process.env.TWILIO_PHONE_NUMBER
         if (twilioSid && twilioAuth && twilioFrom) {
           const body = `Aria alert for ${biz.name}: ${message}`
             const to = phone as string
           const auth = Buffer.from(`${twilioSid}:${twilioAuth}`).toString('base64')
-          await fetch(`https://api.twilio.com/2010-04-01/Accounts/${twilioSid}/Messages.json`, {
+        await sendSMS(to, body)
             method: 'POST',
             headers: { 'Authorization': `Basic ${auth}`, 'Content-Type': 'application/x-www-form-urlencoded' },
             body: new URLSearchParams({ To: to, From: twilioFrom, Body: body }).toString(),
