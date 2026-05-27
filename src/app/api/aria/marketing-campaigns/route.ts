@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
 import { NextResponse } from 'next/server'
+import { sendSMS } from '@/lib/clicksend'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
@@ -65,13 +66,13 @@ async function _POST(req: Request) {
       customers = (data ?? []).filter((c: any) => c.phone || c.email)
     }
 
-    const sid = process.env.TWILIO_ACCOUNT_SID; const tok = process.env.TWILIO_AUTH_TOKEN; const from = process.env.TWILIO_PHONE_NUMBER
+    const sid = process.env.TWILIO_ACCOUNT_SID; const tok = process.env.TWILIO_AUTH_TOKEN;
     let sentCount = 0
     for (const c of customers) {
       if ((campaign as any).channel !== 'email' && c.phone && sid && tok && from) {
         try {
           const msgText = ((campaign as any).message_template ?? '').replace('{name}', c.name.split(' ')[0])
-          const res = await fetch('https://api.twilio.com/2010-04-01/Accounts/' + sid + '/Messages.json', {
+        await sendSMS(c.phone, msgText)
             method: 'POST',
             headers: { Authorization: 'Basic ' + Buffer.from(sid + ':' + tok).toString('base64'), 'Content-Type': 'application/x-www-form-urlencoded' },
             body: new URLSearchParams({ From: from, To: c.phone, Body: msgText }),
