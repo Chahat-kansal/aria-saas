@@ -36,7 +36,7 @@ export async function GET(req: Request) {
     response_type: 'code',
     client_id: process.env.XERO_CLIENT_ID,
     redirect_uri: `${BASE_URL}/api/integrations/xero/callback`,
-    scope: 'accounting.transactions accounting.settings offline_access',
+    scope: 'accounting.transactions.read accounting.transactions.create accounting.settings.read offline_access',
     state,
   })
   return NextResponse.redirect(`https://login.xero.com/identity/connect/authorize?${params}`)
