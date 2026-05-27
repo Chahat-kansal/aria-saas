@@ -28,12 +28,14 @@ async function _GET(req: Request) {
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const bid = await getBusinessId(supabase, user.id);
-  if (!bid) return NextResponse.json({ customers: [] });
-
   const { searchParams } = new URL(req.url);
   const q = searchParams.get('q');
   const id = searchParams.get('id');
+  const explicitBid = searchParams.get('business_id');
+
+  // Use explicit business_id from POS terminal (staff PIN mode) or fall back to auth lookup
+  const bid = explicitBid ?? await getBusinessId(supabase, user.id);
+  if (!bid) return NextResponse.json({ customers: [] });
 
   // Fetch a single customer by ID
   if (id) {
