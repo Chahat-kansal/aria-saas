@@ -58,7 +58,7 @@ export default function ProductsPage() {
   const [modalVariants, setModalVariants] = useState<VariantItem[]>([]);
   const [variantsLoading, setVariantsLoading] = useState(false);
   const [showVariantForm, setShowVariantForm] = useState(false);
-  const [variantForm, setVariantForm] = useState({ name: '', price: '' });
+  const [variantForm, setVariantForm] = useState({ name: '', price: '', barcode: '', stock_quantity: '' });
   const [variantSaving, setVariantSaving] = useState(false);
 
   useEffect(() => {
@@ -113,7 +113,7 @@ export default function ProductsPage() {
       image_url: p.image_url ?? '', category_id: p.category_id ?? '', supplier_id: p.supplier_id ?? '',
     });
     setSaveError('');
-    setModalVariants([]); setShowVariantForm(false); setVariantForm({ name: '', price: '' });
+    setModalVariants([]); setShowVariantForm(false); setVariantForm({ name: '', price: '', barcode: '', stock_quantity: '' });
     setModal({ open: true, mode: 'edit', product: p });
     setVariantsLoading(true);
     fetch(`/api/pos/variants?product_id=${p.id}`).then(r => r.json()).then(d => { setModalVariants(d.variants ?? []); setVariantsLoading(false); }).catch(() => setVariantsLoading(false));
@@ -151,9 +151,9 @@ export default function ProductsPage() {
   async function saveVariant() {
     if (!modal.product || !variantForm.name.trim()) return;
     setVariantSaving(true);
-    const res = await fetch('/api/pos/variants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ product_id: modal.product.id, name: variantForm.name.trim(), price: variantForm.price ? parseFloat(variantForm.price) : null }) });
+    const res = await fetch('/api/pos/variants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ product_id: modal.product.id, name: variantForm.name.trim(), price: variantForm.price ? parseFloat(variantForm.price) : null, barcode: variantForm.barcode || null, stock_quantity: variantForm.stock_quantity ? parseInt(variantForm.stock_quantity) : 0 }) });
     const d = await res.json();
-    if (d.variant) { setModalVariants(vs => [...vs, d.variant]); setVariantCounts(c => ({ ...c, [modal.product!.id]: (c[modal.product!.id] ?? 0) + 1 })); setVariantForm({ name: '', price: '' }); setShowVariantForm(false); }
+    if (d.variant) { setModalVariants(vs => [...vs, d.variant]); setVariantCounts(c => ({ ...c, [modal.product!.id]: (c[modal.product!.id] ?? 0) + 1 })); setVariantForm({ name: '', price: '', barcode: '', stock_quantity: '' }); setShowVariantForm(false); }
     setVariantSaving(false);
   }
 
@@ -496,22 +496,41 @@ export default function ProductsPage() {
                   </div>
                   {variantsLoading ? <p style={{ fontSize: 12, color: C.dim }}>Loading…</p>
                     : modalVariants.length === 0 ? <p style={{ fontSize: 12, color: C.dim }}>No variants — single-price product.</p>
-                    : <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                        {modalVariants.map(v => (
-                          <div key={v.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderRadius: 7, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
-                            <span style={{ flex: 1, fontSize: 13, color: C.text }}>{v.name}</span>
-                            <span style={{ fontSize: 12, fontFamily: 'monospace', color: C.muted }}>{v.price != null ? `A$${Number(v.price).toFixed(2)}` : '—'}</span>
-                            <button onClick={() => deleteVariant(v.id, modal.product!.id)} style={{ fontSize: 10, color: C.red, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: '2px 6px' }}>✕</button>
-                          </div>
-                        ))}
-                      </div>}
+                    : <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                        <thead>
+                          <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+                            {['Name','Price','Barcode','Stock',''].map(h => (
+                              <th key={h} style={{ textAlign: 'left', fontSize: 10, fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '0.06em', color: C.dim, padding: '4px 8px' }}>{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {modalVariants.map(v => (
+                            <tr key={v.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                              <td style={{ padding: '6px 8px', color: C.text }}>{v.name}</td>
+                              <td style={{ padding: '6px 8px', color: C.muted, fontFamily: 'monospace' }}>{v.price != null ? `A$${Number(v.price).toFixed(2)}` : '—'}</td>
+                              <td style={{ padding: '6px 8px', color: C.dim, fontFamily: 'monospace' }}>{v.barcode || '—'}</td>
+                              <td style={{ padding: '6px 8px', color: C.muted }}>{v.stock_quantity ?? 0}</td>
+                              <td style={{ padding: '6px 8px' }}>
+                                <button onClick={() => deleteVariant(v.id, modal.product!.id)} style={{ fontSize: 10, color: C.red, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: '2px 6px' }}>✕</button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>}
                   {showVariantForm && (
-                    <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                      <input value={variantForm.name} onChange={e => setVariantForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Large / 6-Pack / Carton" style={{ ...iCls, flex: 2 }} />
-                      <input value={variantForm.price} onChange={e => setVariantForm(f => ({ ...f, price: e.target.value }))} type="number" step="0.01" min="0" placeholder="Price" style={{ ...iCls, flex: 1 }} />
-                      <button onClick={saveVariant} disabled={variantSaving || !variantForm.name.trim()} style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: C.violet, color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', opacity: variantSaving || !variantForm.name.trim() ? 0.5 : 1 }}>
-                        {variantSaving ? '…' : 'Add'}
-                      </button>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <input value={variantForm.name} onChange={e => setVariantForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Large / 6-Pack / Carton" style={{ ...iCls, flex: 2 }} />
+                        <input value={variantForm.price} onChange={e => setVariantForm(f => ({ ...f, price: e.target.value }))} type="number" step="0.01" min="0" placeholder="Price (A$)" style={{ ...iCls, flex: 1 }} />
+                      </div>
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <input value={variantForm.barcode} onChange={e => setVariantForm(f => ({ ...f, barcode: e.target.value }))} placeholder="Barcode (optional)" style={{ ...iCls, flex: 2 }} />
+                        <input value={variantForm.stock_quantity} onChange={e => setVariantForm(f => ({ ...f, stock_quantity: e.target.value }))} type="number" min="0" placeholder="Stock qty" style={{ ...iCls, flex: 1 }} />
+                        <button onClick={saveVariant} disabled={variantSaving || !variantForm.name.trim()} style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: C.violet, color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', opacity: variantSaving || !variantForm.name.trim() ? 0.5 : 1 }}>
+                          {variantSaving ? '…' : 'Add'}
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>
