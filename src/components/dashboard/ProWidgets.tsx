@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { supabase } from '@/lib/supabase'
 
 const G = '#1D9E75'
 const CARD: React.CSSProperties = { padding: '16px 20px', borderRadius: 14, border: '1px solid rgba(255,255,255,0.07)', background: '#13131a' }
@@ -34,13 +35,36 @@ export function LiveRevenueTicker({ businessId }: { businessId: string }) {
     return () => clearInterval(id)
   }, [poll])
 
+  // Supabase Realtime: update instantly on new sale
+  useEffect(() => {
+    if (!supabase || !businessId) return
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const channel = (supabase as any)
+      .channel(`sales-${businessId}`)
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'pos_sales',
+        filter: `business_id=eq.${businessId}`,
+      }, (payload: { new: { total_amount?: number } }) => {
+        const amt = Number(payload.new?.total_amount ?? 0)
+        setRevenue(prev => prev + amt)
+        setCount(prev => prev + 1)
+        setFlash(true)
+        setTimeout(() => setFlash(false), 1500)
+      })
+      .subscribe()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return () => { (supabase as any).removeChannel(channel) }
+  }, [businessId])
+
   const avg = count > 0 ? revenue / count : 0
 
   return (
     <div style={{ ...CARD, border: `1px solid ${flash ? G : 'rgba(255,255,255,0.07)'}`, background: flash ? 'rgba(29,158,117,0.1)' : '#13131a', transition: 'all 0.4s ease' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
         <span style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'rgba(255,255,255,0.4)' }}>Live revenue today</span>
-        <span style={{ width: 6, height: 6, borderRadius: '50%', background: G, display: 'inline-block' }} />
+        <span style={{ width: 6, height: 6, borderRadius: '50%', background: G, display: 'inline-block', animation: 'pulse 2s infinite' }} />
       </div>
       <div style={{ fontSize: 28, fontWeight: 700, color: flash ? G : '#fff', transition: 'color 0.4s', lineHeight: 1 }}>
         A${revenue.toFixed(0)}
@@ -57,18 +81,14 @@ export function ThreeWayRevenue({ businessId }: { businessId: string }) {
   const [data, setData] = useState<{ today: number; yesterday: number; lastWeek: number } | null>(null)
 
   useEffect(() => {
-    const t  = new Date().toISOString().slice(0, 10)
-    const y  = new Date(Date.now() - 86400000).toISOString().slice(0, 10)
-    const lw = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10)
-    Promise.all([
-      fetch(`/api/pos/reports?from=${t}&to=${t}`).then(r => r.json()).catch(() => ({})),
-      fetch(`/api/pos/reports?from=${y}&to=${y}`).then(r => r.json()).catch(() => ({})),
-      fetch(`/api/pos/reports?from=${lw}&to=${lw}`).then(r => r.json()).catch(() => ({})),
-    ]).then(([a, b, c]) => setData({
-      today:    a.summary?.total_revenue ?? 0,
-      yesterday: b.summary?.total_revenue ?? 0,
-      lastWeek:  c.summary?.total_revenue ?? 0,
-    }))
+    fetch('/api/pos/revenue-comparison')
+      .then(r => r.json())
+      .then((d: { today?: number; yesterday?: number; lastWeek?: number }) => setData({
+        today: d.today ?? 0,
+        yesterday: d.yesterday ?? 0,
+        lastWeek: d.lastWeek ?? 0,
+      }))
+      .catch(() => {})
   }, [businessId])
 
   if (!data) return null
@@ -104,38 +124,30 @@ export function ThreeWayRevenue({ businessId }: { businessId: string }) {
 
 // ─── 3. Hourly Revenue Heatmap ────────────────────────────────────────────────
 export function HourlyHeatmap({ businessId }: { businessId: string }) {
-  const [hourly, setHourly] = useState<number[]>(Array(24).fill(0))
+  const [hourly, setHourly] = useState<Array<{ hour: number; avg: number }>>([])
   const [loaded, setLoaded] = useState(false)
 
   useEffect(() => {
-    fetch(`/api/pos/sales?business_id=${businessId}&limit=5000`)
+    fetch('/api/pos/hourly-heatmap')
       .then(r => r.json())
-      .then((d: { sales?: Array<{ status?: string; created_at?: string; total_amount?: number }> }) => {
-        const rev: number[] = Array(24).fill(0)
-        const cnt: number[] = Array(24).fill(0)
-        for (const s of (d.sales ?? []).filter(s => s.status !== 'voided')) {
-          if (!s.created_at) continue
-          const h = new Date(s.created_at).getHours()
-          rev[h] += Number(s.total_amount ?? 0)
-          cnt[h]++
-        }
-        setHourly(rev.map((r, i) => cnt[i] > 0 ? r / cnt[i] : 0))
+      .then((d: { hourly?: Array<{ hour: number; avg: number }> }) => {
+        if (d.hourly) setHourly(d.hourly)
       })
       .catch(() => {})
       .finally(() => setLoaded(true))
   }, [businessId])
 
   if (!loaded) return null
-  const max = Math.max(...hourly, 1)
+  const max = Math.max(...hourly.map(h => h.avg), 1)
 
   return (
     <div style={CARD}>
       <p style={LABEL}>Hourly revenue heatmap — peak hours (30-day avg)</p>
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: 48 }}>
-        {hourly.map((v, h) => {
-          const intensity = v / max
+        {hourly.map(({ hour, avg }) => {
+          const intensity = avg / max
           return (
-            <div key={h} title={`${h}:00 — avg A$${v.toFixed(0)}`}
+            <div key={hour} title={`${hour}:00–${hour + 1}:00 avg A$${avg}`}
               style={{ flex: 1, borderRadius: '3px 3px 0 0', height: `${Math.max(8, intensity * 100)}%`, background: `rgba(127,184,151,${(0.1 + intensity * 0.9).toFixed(2)})` }} />
           )
         })}
@@ -156,14 +168,37 @@ export function StaffOnShift({ businessId }: { businessId: string }) {
   const [staff, setStaff] = useState<Shift[]>([])
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
+  const reload = useCallback(() => {
     const today = new Date().toISOString().slice(0, 10)
     fetch(`/api/pos/timesheets?from=${today}`)
       .then(r => r.json())
       .then((d: { sessions?: Shift[] }) => setStaff((d.sessions ?? []).filter((s: Shift) => !s.clock_out)))
       .catch(() => {})
       .finally(() => setLoading(false))
-  }, [businessId])
+  }, [])
+
+  useEffect(() => {
+    reload()
+    const id = setInterval(reload, 5 * 60_000)
+    return () => clearInterval(id)
+  }, [reload])
+
+  // Supabase Realtime for clock-in/out events
+  useEffect(() => {
+    if (!supabase || !businessId) return
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const channel = (supabase as any)
+      .channel(`timesheets-${businessId}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'pos_timesheets',
+        filter: `business_id=eq.${businessId}`,
+      }, () => { reload() })
+      .subscribe()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return () => { (supabase as any).removeChannel(channel) }
+  }, [businessId, reload])
 
   const elapsed = (t: string) => {
     const m = Math.floor((Date.now() - new Date(t).getTime()) / 60000)
@@ -200,35 +235,42 @@ export function StaffOnShift({ businessId }: { businessId: string }) {
 }
 
 // ─── 5. AI Action Items Strip ─────────────────────────────────────────────────
-interface AriaAct { id: string; title: string; category: string; recommendation: string; priority: string }
+interface AriaAct { id: string; title: string; category: string; recommendation: string; priority: string; status: string }
 
 export function AIActionStrip({ businessId }: { businessId: string }) {
   const [actions, setActions] = useState<AriaAct[]>([])
-  const [dismissed, setDismissed] = useState<Set<string>>(new Set())
+  const [dismissing, setDismissing] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    try {
-      const stored: string[] = JSON.parse(localStorage.getItem('aria_dash_dismissed') ?? '[]')
-      setDismissed(new Set(stored))
-    } catch {}
     fetch(`/api/aria/actions?business_id=${businessId}`)
       .then(r => r.json())
       .then((d: { actions?: AriaAct[] }) => {
-        setActions((d.actions ?? []).slice(0, 3))
+        setActions((d.actions ?? []).filter(a => a.status === 'pending').slice(0, 3))
       })
       .catch(() => {})
       .finally(() => setLoading(false))
   }, [businessId])
 
-  const dismiss = (id: string) => {
-    const next = new Set([...dismissed, id])
-    setDismissed(next)
-    try { localStorage.setItem('aria_dash_dismissed', JSON.stringify([...next])) } catch {}
+  const dismiss = async (id: string) => {
+    setDismissing(prev => new Set([...prev, id]))
+    try {
+      await fetch(`/api/aria/actions/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'ignored' }),
+      })
+      setActions(prev => prev.filter(a => a.id !== id))
+    } finally {
+      setDismissing(prev => { const s = new Set(prev); s.delete(id); return s })
+    }
   }
 
-  const visible = actions.filter(a => !dismissed.has(a.id))
-  if (!loading && visible.length === 0) return null
+  if (!loading && actions.length === 0) return (
+    <div style={{ ...CARD, border: '1px solid rgba(29,158,117,0.15)' }}>
+      <p style={{ fontSize: 12, color: G }}>✓ All clear — Aria has no urgent actions for you today</p>
+    </div>
+  )
 
   const catIcon: Record<string, string> = { customers: '👥', revenue: '💰', stock: '📦', reviews: '⭐', marketing: '📣', compliance: '✅' }
 
@@ -238,15 +280,16 @@ export function AIActionStrip({ businessId }: { businessId: string }) {
       <div style={{ display: 'flex', gap: 12, overflowX: 'auto', paddingBottom: 4 }}>
         {loading ? [1, 2, 3].map(i => (
           <div key={i} style={{ minWidth: 220, height: 90, borderRadius: 14, background: 'rgba(255,255,255,0.04)', flexShrink: 0 }} />
-        )) : visible.map(a => (
+        )) : actions.map(a => (
           <div key={a.id} style={{ minWidth: 220, maxWidth: 280, flexShrink: 0, padding: '14px 16px', borderRadius: 14, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
               <span style={{ fontSize: 12, fontWeight: 700, color: '#fff' }}>{catIcon[a.category] ?? '💡'} {a.title}</span>
-              <button onClick={() => dismiss(a.id)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.3)', cursor: 'pointer', fontSize: 14, padding: 0, lineHeight: 1, flexShrink: 0 }}>✕</button>
+              <button onClick={() => dismiss(a.id)} disabled={dismissing.has(a.id)}
+                style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.3)', cursor: 'pointer', fontSize: 14, padding: 0, lineHeight: 1, flexShrink: 0 }}>✕</button>
             </div>
             <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', lineHeight: 1.5, marginBottom: 10 }}>{a.recommendation}</p>
             <a href={`/dashboard/ask-aria?q=${encodeURIComponent(a.title)}`}
-              style={{ fontSize: 11, fontWeight: 700, color: G, textDecoration: 'none' }}>Do it →</a>
+              style={{ fontSize: 11, fontWeight: 700, color: G, textDecoration: 'none' }}>Fix with Aria →</a>
           </div>
         ))}
       </div>
