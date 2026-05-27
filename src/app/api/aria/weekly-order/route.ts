@@ -78,7 +78,11 @@ async function _POST(req: Request) {
 
     // Stock trigger check — only reorder if stock < user-defined threshold
     const stockTrigger = (product as any).reorder_point ?? (maxStockTrigger > 0 ? maxStockTrigger : null);
-    if (stockTrigger && stock >= stockTrigger && dailyVelocity > 0) continue;
+    if (stockTrigger && stock >= stockTrigger) continue;
+
+    // Skip anything with plenty of stock — if stock covers 30+ days OR is a large absolute amount, don't reorder
+    if (daysOfStock >= 30) continue;
+    if (dailyVelocity === 0 && stock > 5) continue;
 
     const weeklyDemand = dailyVelocity * 7 * combinedUplift;
     const targetStock = (product as any).target_stock
@@ -87,11 +91,18 @@ async function _POST(req: Request) {
     // Per-product reorder qty override, else use business default or calculated
     const calcQty = Math.max(0, Math.ceil(targetStock - stock));
     const productReorderQty = (product as any).reorder_qty;
-    const suggestedQty = dailyVelocity === 0 && stock <= 5
-      ? productReorderQty ?? Math.max(defaultReorderQty, Math.ceil(defaultReorderQty - stock))
-      : productReorderQty
-        ? Math.max(productReorderQty, calcQty)  // at least the override qty
-        : calcQty || defaultReorderQty;
+    let suggestedQty: number;
+    if (dailyVelocity === 0 && stock <= 5) {
+      // Genuinely low stock, no sales data — use override or default
+      suggestedQty = productReorderQty ?? defaultReorderQty;
+    } else if (productReorderQty) {
+      // Has a per-product override — use the larger of override or calculated need
+      suggestedQty = Math.max(productReorderQty, calcQty);
+    } else {
+      // Use calculated need only — do NOT fall back to defaultReorderQty when calcQty is 0
+      // (calcQty 0 means stock already covers demand — skip below)
+      suggestedQty = calcQty;
+    }
 
     if (suggestedQty <= 0) continue;  // skip anything with no reorder needed
 
