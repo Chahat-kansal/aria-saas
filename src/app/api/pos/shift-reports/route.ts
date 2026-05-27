@@ -29,7 +29,29 @@ async function _GET(req: Request) {
   }
   const limit = Math.min(parseInt(searchParams.get('limit') ?? '20'), 100)
   const { data } = await supabase.from('pos_shift_reports').select('*').eq('business_id', bid).order('shift_end', { ascending: false }).limit(limit)
-  return NextResponse.json({ reports: data ?? [] })
+  const reports = data ?? []
+
+  // Compute labour cost + ratio from timesheets overlapping each shift window
+  const augmented = await Promise.all(reports.map(async (r: { shift_start: string; shift_end: string; total_revenue: number | null }) => {
+    const { data: ts } = await supabase.from('pos_timesheets')
+      .select('hours_worked, pay_rate_cents, total_pay_cents')
+      .eq('business_id', bid)
+      .gte('clock_in', r.shift_start)
+      .lte('clock_in', r.shift_end);
+    const totalHours = (ts ?? []).reduce((a, t: { hours_worked: number | null }) => a + Number(t.hours_worked ?? 0), 0);
+    const labourCents = (ts ?? []).reduce((a, t: { hours_worked: number | null; pay_rate_cents: number | null; total_pay_cents: number | null }) => a + Number(t.total_pay_cents ?? Number(t.pay_rate_cents ?? 0) * Number(t.hours_worked ?? 0)), 0);
+    const revenue = Number(r.total_revenue ?? 0);
+    const ratio = revenue > 0 ? (labourCents / 100) / revenue * 100 : 0;
+    return {
+      ...r,
+      labour_hours: Math.round(totalHours * 10) / 10,
+      labour_cost_dollars: Math.round(labourCents / 100 * 100) / 100,
+      labour_ratio_pct: Math.round(ratio * 10) / 10,
+      revenue_per_hour: totalHours > 0 ? Math.round((revenue / totalHours) * 100) / 100 : 0,
+    };
+  }));
+
+  return NextResponse.json({ reports: augmented })
 }
 
 async function _POST(req: Request) {
