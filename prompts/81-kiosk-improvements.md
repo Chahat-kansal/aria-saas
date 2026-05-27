@@ -133,3 +133,157 @@ Build in this order — most value first:
 4. Talk to staff (real safety valve)
 5. Repeat-visit memory (delightful but optional)
 Finish whichever phase you're in, commit it, STOP.
+
+
+## IMPROVEMENT 6 — Owner-voiced Aria (ElevenLabs)
+
+The kiosk currently uses browser SpeechSynthesis (robotic, generic). Replace this
+with ElevenLabs voice cloning so Aria sounds like the actual shop owner.
+
+### Setup steps
+1. Owner records a 1-minute voice sample in the dashboard
+2. The dashboard uploads the sample to ElevenLabs Voice Lab via API (Instant Voice Clone)
+3. ElevenLabs returns a voice_id
+4. Save voice_id to instore_kiosk_configs
+
+### Legal — explicit consent
+Before recording, show the owner this clear consent: "I consent to my voice being
+recorded, cloned, and used to speak as Aria on my in-store kiosk. I can delete
+this voice clone at any time." Save a consent record with timestamp + IP. NEVER
+clone a voice without explicit consent.
+
+### DB additions
+```sql
+ALTER TABLE instore_kiosk_configs
+  ADD COLUMN IF NOT EXISTS voice_provider text DEFAULT 'browser',
+  ADD COLUMN IF NOT EXISTS elevenlabs_voice_id text,
+  ADD COLUMN IF NOT EXISTS voice_consent_at timestamptz,
+  ADD COLUMN IF NOT EXISTS voice_sample_url text;
+```
+
+### Build
+- ENV: ELEVENLABS_API_KEY (owner adds to Vercel env vars)
+- Dashboard config page: "Voice" section
+  - Record voice button (browser MediaRecorder, 60s max)
+  - Consent checkbox (must tick before record)
+  - Preview after clone: "Hear how Aria sounds" — calls TTS with the new voice
+  - Delete voice clone option
+- /api/instore/voice/clone — POST audio blob, calls ElevenLabs /v1/voices/add,
+  stores voice_id
+- /api/public/instore/tts — POST { text, business_id } → calls ElevenLabs TTS
+  with that business's voice_id, streams MP3 back
+- Kiosk page: when voice is on AND business has elevenlabs_voice_id, use the
+  TTS endpoint instead of SpeechSynthesis. Audio element plays the MP3.
+- Fallback to SpeechSynthesis if ElevenLabs call fails (resilience)
+
+### Cost note for the owner
+ElevenLabs Starter is roughly $5/month for ~30k characters of TTS. Show usage
+in the dashboard so owners can see what they're using.
+
+## IMPROVEMENT 7 — Product photos + pairing suggestions in chat
+
+When Aria mentions a product, show its actual photo. Then add 2-3 "pairs well
+with" suggestions based on real co-purchase data.
+
+### Build
+- Kiosk page: render image_url properly on product cards (already in API response)
+- Chat route: after building the main product_cards, also compute "pairs_with"
+  for the FIRST card — top 2-3 co-purchased products (reuse the upsell logic,
+  return more results)
+- Return shape: `pairs_with: ProductCard[]` array
+- Kiosk UI: under the main product card, "Pairs well with:" + 2-3 small chips
+  with photo + name + price + "Add to recommendation" tap
+
+### Rules
+- Only show pairs that are IN STOCK
+- Cap at 3 pairings
+- If no co-purchase data, don't show the section at all (don't fake it)
+
+## IMPROVEMENT 8 — Barcode scan (not Vision-API scan)
+
+Customer points phone camera at a product barcode in the shop → Aria pulls it up.
+
+### Build — browser BarcodeDetector API
+The browser has a free, native BarcodeDetector API (supported in Chrome, Edge,
+Samsung Browser — fallback gracefully on Safari for now).
+
+- Kiosk page: "Scan a barcode" button — opens camera, runs BarcodeDetector
+- On a successful scan, send the barcode to /api/public/instore/barcode
+- Route: looks up by pos_products.barcode (or pos_product_barcodes table)
+- Returns the product card + Aria's enthusiastic one-liner about it ("Ah, the
+  2021 Shiraz — local legend. Pairs great with red meat.")
+- If barcode not found: "Hmm, don't have that one — want me to check the closest match?"
+
+### Rules
+- Use browser BarcodeDetector first — no API cost, instant
+- Safari fallback: hide the scan button (Safari doesn't support BarcodeDetector yet)
+- Never charge per scan, never use a Vision API
+
+## IMPROVEMENT 9 — 👍/👎 on Aria's recommendations (preference learning)
+
+Customer can react to a product card. Over time, Aria learns each shop's preferences.
+
+### DB
+```sql
+CREATE TABLE IF NOT EXISTS instore_recommendation_feedback (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  business_id uuid REFERENCES businesses(id),
+  visitor_id text,
+  product_id uuid REFERENCES pos_products(id),
+  reaction text CHECK (reaction IN ('up','down')),
+  context_query text,
+  created_at timestamptz DEFAULT now()
+);
+ALTER TABLE instore_recommendation_feedback ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "instore_feedback_anon_insert" ON instore_recommendation_feedback
+  FOR INSERT TO anon WITH CHECK (true);
+```
+
+### Build
+- Kiosk: each product card gets 👍 / 👎 buttons (small, subtle)
+- POST /api/public/instore/feedback { business_id, visitor_id, product_id, reaction }
+- Chat route: when building the system prompt, query the last 90 days of feedback
+  for that business — include a brief "AVOID recommending these (low customer ratings): X"
+  and "FAVOUR these (high ratings): Y" line if there's signal (more than 5 reactions)
+- Don't expose the feedback to other customers — it only tunes Aria's recommendations
+
+### Owner dashboard
+- Show "What customers rated" section: top thumbs-up products, top thumbs-down
+- Useful insight: "X gets thumbs-down 8/10 times — maybe reconsider stocking it"
+
+## IMPROVEMENT 10 — Multilingual (Haiku handles natively)
+
+Some Australian shops serve Mandarin, Vietnamese, Korean, Hindi-speaking customers.
+Make Aria reply in the customer's language.
+
+### Build — one-line system prompt addition
+In the chat route, add to the system prompt:
+"If the customer writes in a language other than English (Mandarin, Vietnamese,
+Korean, Hindi, Arabic, etc.) — reply in THAT language. Match their language exactly.
+Default to English if unclear."
+
+Haiku is natively multilingual — no detection library needed.
+
+### TTS handling
+- Browser SpeechSynthesis: pass lang parameter detected from the reply
+- ElevenLabs: Eleven Multilingual v2 model handles 29 languages natively —
+  use that model when calling TTS
+
+### Suggested-question chips (improvement 2)
+- Detect browser language on load (navigator.language)
+- Show chips in that language if it's one of: zh, vi, ko, hi, ar
+- Otherwise default to English chips
+
+## Final execution order (priority — most value first)
+1. Streaming (1)
+2. Suggested chips (2)
+3. Stall safety net (1)
+4. Product photos + pairings (7)
+5. Multilingual (10) — tiny but high value for diverse stores
+6. 👍/👎 feedback (9)
+7. Talk to staff (4)
+8. Repeat memory (5)
+9. Barcode scan (8)
+10. Owner-voiced Aria (6) — biggest wow factor, biggest scope, do last
+
+If limit runs low, finish whichever you're in, commit, STOP.
