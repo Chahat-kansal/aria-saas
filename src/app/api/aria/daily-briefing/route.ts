@@ -330,7 +330,7 @@ Return 3-5 items. Use real numbers from the data. Do not invent data.`,
 Business: ${business.name as string} (${business.industry as string ?? 'retail'}, Australia)
 
 Business data:
-${dataStr.slice(0, 5000)}
+${dataStr.slice(0, 3000)}
 
 Generate 3-5 actionable briefing items from this real data. JSON array only.`
         }]
