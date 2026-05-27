@@ -3,231 +3,312 @@ import { useState, useEffect, useCallback } from 'react'
 import { useBusinessContext } from '@/components/providers/BusinessProvider'
 
 interface LapsedCustomer { id: string; name: string; phone: string | null; email: string | null; last_visit_at: string | null; total_spend: number | null }
-interface Campaign { id: string; name: string | null; type: string; message: string | null; status: string | null; sms_sent: boolean | null; created_at: string; error: string | null }
-
-function daysAgo(date: string | null) {
-  if (!date) return null
-  return Math.floor((Date.now() - new Date(date).getTime()) / 86400000)
-}
+interface Campaign { id: string; name: string | null; message: string | null; email_subject: string | null; channel: string | null; status: string | null; created_at: string; recipients_count: number | null; returned_customers: number | null; attributed_revenue: number | null; roi_percent: number | null }
+interface Automation { id: string | null; trigger_type: string; label?: string; desc?: string; is_active: boolean; sms_message: string | null; email_subject: string | null; email_body: string | null }
+interface ComposeResult { audience_filter: { lapsed_days: number }; sms_message: string; email_subject: string; email_body: string; suggested_send_time: string; estimated_reach: number }
+interface SendResult { campaign_id: string; scheduled: boolean; will_send_sms: number; will_send_email: number; total: number }
 
 const C = {
   bg: 'var(--bg-base)', card: 'var(--bg-surface)', text: 'var(--text-primary)',
   muted: 'var(--text-secondary)', dim: 'var(--text-tertiary)',
-  green: '#22C55E', amber: '#F59E0B', violet: '#8B5CF6', red: '#EF4444',
+  green: '#22C55E', amber: '#F59E0B', violet: '#8B5CF6', red: '#EF4444', blue: '#3B82F6',
   border: 'rgba(255,255,255,0.07)',
 }
 
+function daysAgo(d: string | null) {
+  return d ? Math.floor((Date.now() - new Date(d).getTime()) / 86400000) : null
+}
+function stripHtml(s: string) { return s.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120) }
+
 export default function WinbackPage() {
   const { business } = useBusinessContext()
-  const [customers, setCustomers] = useState<LapsedCustomer[]>([])
-  const [campaigns, setCampaigns] = useState<Campaign[]>([])
-  const [loading, setLoading] = useState(true)
-  const [message, setMessage] = useState('')
-  const [generating, setGenerating] = useState(false)
-  const [selected, setSelected] = useState<Record<string, boolean>>({})
-  const [sending, setSending] = useState(false)
-  const [sendResult, setSendResult] = useState<{ sent: number; failed: number; noPhone: number } | null>(null)
-  const [activeTab, setActiveTab] = useState<'customers' | 'campaigns'>('customers')
-  // Single source of truth — lapsedDays only, no lapsedFilter
+  const [tab, setTab] = useState<'campaigns' | 'automations'>('campaigns')
   const [lapsedDays, setLapsedDays] = useState(60)
+  const [customers, setCustomers] = useState<LapsedCustomer[]>([])
+  const [selected, setSelected] = useState<Record<string, boolean>>({})
+  const [campaigns, setCampaigns] = useState<Campaign[]>([])
+  const [automations, setAutomations] = useState<Automation[]>([])
+  const [loading, setLoading] = useState(true)
+  const [composePrompt, setComposePrompt] = useState('')
+  const [composing, setComposing] = useState(false)
+  const [composed, setComposed] = useState<ComposeResult | null>(null)
+  const [channel, setChannel] = useState<'sms' | 'email' | 'both'>('both')
+  const [sending, setSending] = useState(false)
+  const [sendResult, setSendResult] = useState<SendResult | null>(null)
+  const [savingAuto, setSavingAuto] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     if (!business?.id) return
     setLoading(true)
     const cutoff = new Date(Date.now() - lapsedDays * 86400000).toISOString()
-    const [custRes, campRes] = await Promise.all([
+    const [cR, campR, autoR] = await Promise.all([
       fetch('/api/pos/customers?business_id=' + business.id + '&limit=200').then(r => r.json()).catch(() => ({ customers: [] })),
       fetch('/api/campaigns?business_id=' + business.id + '&type=winback').then(r => r.json()).catch(() => ({ campaigns: [] })),
+      fetch('/api/aria/winback-automations?business_id=' + business.id).then(r => r.json()).catch(() => ({ automations: [] })),
     ])
-    const all: LapsedCustomer[] = custRes.customers ?? custRes.data ?? []
+    const all: LapsedCustomer[] = cR.customers ?? cR.data ?? []
     const lapsed = all.filter(c => !c.last_visit_at || c.last_visit_at < cutoff)
     setCustomers(lapsed)
-    setCampaigns(campRes.campaigns ?? campRes.data ?? [])
-    const initSel: Record<string, boolean> = {}
-    lapsed.forEach((c: LapsedCustomer) => { if (c.phone) initSel[c.id] = true })
-    setSelected(initSel)
+    setCampaigns(campR.campaigns ?? campR.data ?? [])
+    setAutomations(autoR.automations ?? [])
+    const init: Record<string, boolean> = {}
+    lapsed.forEach(c => { if (c.phone || c.email) init[c.id] = true })
+    setSelected(init)
     setLoading(false)
   }, [business?.id, lapsedDays])
 
   useEffect(() => { load() }, [load])
 
-  async function generateMessage() {
-    if (!business?.id) return
-    setGenerating(true)
+  async function compose() {
+    if (!business?.id || !composePrompt.trim()) return
+    setComposing(true); setSendResult(null)
     try {
-      const res = await fetch('/api/aria/winback-message', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ business_id: business.id }),
+      const res = await fetch('/api/aria/winback-compose', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ business_id: business.id, prompt: composePrompt }),
       }).then(r => r.json())
-      if (res.message) setMessage(res.message)
-    } catch { /* keep existing */ }
-    setGenerating(false)
+      setComposed(res)
+    } catch { /* keep */ }
+    setComposing(false)
   }
 
-  useEffect(() => { if (business?.id && !message) generateMessage() }, [business?.id])
-
-  async function sendCampaign() {
-    if (!business?.id || !message.trim()) return
-    const targets = customers.filter(c => selected[c.id] && c.phone)
-    if (targets.length === 0) return
-    if (!window.confirm('Send this SMS to ' + targets.length + ' customer' + (targets.length !== 1 ? 's' : '') + '?')) return
+  async function scheduleSend() {
+    if (!business?.id || !composed) return
+    const ids = customers.filter(c => selected[c.id]).map(c => c.id)
+    if (!ids.length) return
     setSending(true)
     try {
       const res = await fetch('/api/aria/winback-send', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ business_id: business.id, customer_ids: targets.map(c => c.id), message }),
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ business_id: business.id, customer_ids: ids, sms_message: composed.sms_message, email_subject: composed.email_subject, email_body: composed.email_body, channel }),
       }).then(r => r.json())
-      setSendResult(res)
-      load()
+      setSendResult(res); load()
     } catch { /* ignore */ }
     setSending(false)
   }
 
+  async function toggleAuto(auto: Automation) {
+    if (!business?.id) return
+    setSavingAuto(auto.trigger_type)
+    await fetch('/api/aria/winback-automations', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ business_id: business.id, trigger_type: auto.trigger_type, is_active: !auto.is_active, sms_message: auto.sms_message, email_subject: auto.email_subject, email_body: auto.email_body }),
+    }).catch(() => null)
+    setAutomations(prev => prev.map(a => a.trigger_type === auto.trigger_type ? { ...a, is_active: !a.is_active } : a))
+    setSavingAuto(null)
+  }
+
   const selectedCount = Object.values(selected).filter(Boolean).length
-  const withPhone = customers.filter(c => c.phone).length
+  const reachable = customers.filter(c => c.phone || c.email)
+  const allSel = reachable.length > 0 && reachable.every(c => selected[c.id])
+  const wonBack = campaigns.reduce((s, c) => s + (c.returned_customers ?? 0), 0)
+  const totalRev = campaigns.reduce((s, c) => s + (c.attributed_revenue ?? 0), 0)
+  const roiCamps = campaigns.filter(c => (c.roi_percent ?? 0) > 0)
+  const avgRoi = roiCamps.length ? Math.round(roiCamps.reduce((s, c) => s + (c.roi_percent ?? 0), 0) / roiCamps.length) : 0
+
+  const inp = { background: 'rgba(255,255,255,0.04)', border: '1px solid ' + C.border, borderRadius: 8, padding: '10px 12px', color: C.text, fontSize: 13, fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' as const }
 
   return (
     <div style={{ minHeight: '100%', background: C.bg, color: C.text, fontFamily: "'Inter',sans-serif", padding: '24px 28px' }}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>Customer Winback</h1>
-          <p style={{ fontSize: 13, color: C.muted }}>Re-engage customers who haven't visited in a while.</p>
+          <p style={{ fontSize: 13, color: C.muted }}>Klaviyo-level AI campaigns for Australian small business.</p>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <span style={{ fontSize: 12, color: C.muted }}>Lapsed after</span>
           {[30, 60, 90].map(d => (
             <button key={d} onClick={() => setLapsedDays(d)}
-              style={{ padding: '5px 12px', borderRadius: 8, border: '1px solid ' + (lapsedDays === d ? C.violet : C.border), background: lapsedDays === d ? 'rgba(139,92,246,0.12)' : 'transparent', color: lapsedDays === d ? C.violet : C.muted, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+              style={{ padding: '5px 12px', borderRadius: 8, border: '1px solid ' + (lapsedDays === d ? C.violet : C.border), background: lapsedDays === d ? 'rgba(139,92,246,0.12)' : 'transparent', color: lapsedDays === d ? C.violet : C.muted, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.2s ease' }}>
               {d}d
             </button>
           ))}
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12, marginBottom: 24 }}>
-        {[
-          { label: 'Lapsed customers', value: customers.length, color: C.amber },
-          { label: 'Reachable by SMS', value: withPhone, color: C.green },
-          { label: 'Selected to contact', value: selectedCount, color: C.violet },
-        ].map(s => (
-          <div key={s.label} style={{ background: C.card, border: '1px solid ' + C.border, borderRadius: 12, padding: '16px 20px' }}>
-            <div style={{ fontSize: 11, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>{s.label}</div>
-            <div style={{ fontSize: 26, fontWeight: 700, color: s.color }}>{s.value}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* Tabs */}
-      <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid ' + C.border, marginBottom: 20 }}>
-        {(['customers', 'campaigns'] as const).map(t => (
-          <button key={t} onClick={() => setActiveTab(t)}
-            style={{ padding: '10px 16px', border: 'none', borderBottom: '2px solid ' + (activeTab === t ? C.violet : 'transparent'), background: 'transparent', color: activeTab === t ? C.text : C.muted, fontSize: 13, fontWeight: activeTab === t ? 600 : 400, cursor: 'pointer', fontFamily: 'inherit', textTransform: 'capitalize' }}>
-            {t === 'customers' ? 'Lapsed Customers (' + customers.length + ')' : 'Past Campaigns (' + campaigns.length + ')'}
+      <div style={{ display: 'flex', borderBottom: '1px solid ' + C.border, marginBottom: 24 }}>
+        {(['campaigns', 'automations'] as const).map(t => (
+          <button key={t} onClick={() => setTab(t)}
+            style={{ padding: '10px 18px', border: 'none', borderBottom: '2px solid ' + (tab === t ? C.violet : 'transparent'), background: 'transparent', color: tab === t ? C.text : C.muted, fontSize: 13, fontWeight: tab === t ? 600 : 400, cursor: 'pointer', fontFamily: 'inherit', textTransform: 'capitalize', transition: 'color 0.2s ease' }}>
+            {t === 'campaigns' ? `Campaigns (${campaigns.length})` : `Automations (${automations.filter(a => a.is_active).length} active)`}
           </button>
         ))}
       </div>
 
-      {activeTab === 'customers' && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 380px', gap: 20 }}>
-          {/* Customer list */}
-          <div>
-            {loading ? (
-              <div style={{ color: C.muted, textAlign: 'center', padding: '40px 0' }}>Loading...</div>
-            ) : customers.length === 0 ? (
-              <div style={{ background: C.card, border: '1px solid ' + C.border, borderRadius: 12, padding: '32px', textAlign: 'center' }}>
-                <p style={{ fontSize: 16, fontWeight: 700, marginBottom: 6 }}>No lapsed customers</p>
-                <p style={{ fontSize: 13, color: C.muted }}>All your customers have visited within the last {lapsedDays} days.</p>
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                  <button onClick={() => {
-                    const allSelected = customers.filter(c => c.phone).every(c => selected[c.id])
-                    const newSel: Record<string, boolean> = {}
-                    if (!allSelected) customers.filter(c => c.phone).forEach(c => { newSel[c.id] = true })
-                    setSelected(newSel)
-                  }}
-                    style={{ fontSize: 11, color: C.violet, background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600 }}>
-                    {customers.filter(c => c.phone).every(c => selected[c.id]) ? 'Deselect all' : 'Select all with phone'}
-                  </button>
-                  <span style={{ fontSize: 11, color: C.dim }}>{selectedCount} selected</span>
+      {tab === 'campaigns' && (
+        <>
+          {/* AI Composer */}
+          <div style={{ background: C.card, border: '1px solid ' + C.border, borderRadius: 14, padding: 20, marginBottom: 20 }}>
+            <p style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>✨ AI Campaign Composer</p>
+            <div style={{ display: 'flex', gap: 10, marginBottom: composed ? 16 : 0 }}>
+              <input value={composePrompt} onChange={e => setComposePrompt(e.target.value)} onKeyDown={e => e.key === 'Enter' && compose()}
+                placeholder={`e.g. "Winback customers who haven't visited in 60 days with a 10% discount"`}
+                style={{ ...inp, flex: 1, width: '100%' }} />
+              <button onClick={compose} disabled={composing || !composePrompt.trim()}
+                style={{ padding: '10px 18px', borderRadius: 8, border: 'none', background: composePrompt.trim() ? C.violet : 'rgba(255,255,255,0.06)', color: '#fff', fontSize: 13, fontWeight: 600, cursor: composePrompt.trim() ? 'pointer' : 'not-allowed', fontFamily: 'inherit', whiteSpace: 'nowrap', opacity: composing ? 0.6 : 1, transition: 'all 0.2s ease' }}>
+                {composing ? 'Composing...' : '✨ Compose'}
+              </button>
+            </div>
+
+            {composed && (
+              <>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
+                  <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid ' + C.border, borderRadius: 10, padding: 14 }}>
+                    <div style={{ fontSize: 11, color: C.violet, fontWeight: 700, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.06em' }}>SMS Preview</div>
+                    <div style={{ fontSize: 12, color: C.text, lineHeight: 1.6 }}>{composed.sms_message}</div>
+                    <div style={{ fontSize: 10, color: C.dim, marginTop: 8 }}>{composed.sms_message.length}/160 · Personalised send time per customer</div>
+                  </div>
+                  <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid ' + C.border, borderRadius: 10, padding: 14 }}>
+                    <div style={{ fontSize: 11, color: C.blue, fontWeight: 700, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Email Preview</div>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: C.text, marginBottom: 6 }}>{composed.email_subject}</div>
+                    <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.6 }}>{stripHtml(composed.email_body)}...</div>
+                    <div style={{ fontSize: 10, color: C.dim, marginTop: 8 }}>Est. reach: {composed.estimated_reach} customers · Best time: {composed.suggested_send_time} AEST</div>
+                  </div>
                 </div>
-                {customers.map(c => {
-                  const days = daysAgo(c.last_visit_at)
-                  const isSelected = selected[c.id]
-                  return (
-                    <div key={c.id} onClick={() => c.phone && setSelected(prev => ({ ...prev, [c.id]: !prev[c.id] }))}
-                      style={{ background: isSelected ? 'rgba(139,92,246,0.08)' : C.card, border: '1px solid ' + (isSelected ? 'rgba(139,92,246,0.3)' : C.border), borderRadius: 10, padding: '12px 14px', cursor: c.phone ? 'pointer' : 'default', display: 'flex', alignItems: 'center', gap: 12 }}>
-                      <div style={{ width: 16, height: 16, borderRadius: 4, border: '1px solid ' + (isSelected ? C.violet : C.border), background: isSelected ? C.violet : 'transparent', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        {isSelected && <span style={{ color: '#fff', fontSize: 10 }}>✓</span>}
-                      </div>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{c.name}</div>
-                        <div style={{ fontSize: 11, color: C.muted }}>{c.phone ?? 'No phone'}{c.total_spend ? ' · A$' + Number(c.total_spend).toFixed(0) + ' lifetime' : ''}</div>
-                      </div>
-                      <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                        <div style={{ fontSize: 12, fontWeight: 600, color: (days ?? 0) > 90 ? C.red : C.amber }}>{days != null ? days + 'd ago' : 'Never'}</div>
-                        {!c.phone && <div style={{ fontSize: 10, color: C.dim }}>no SMS</div>}
-                      </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    {(['sms', 'email', 'both'] as const).map(ch => (
+                      <button key={ch} onClick={() => setChannel(ch)}
+                        style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid ' + (channel === ch ? C.violet : C.border), background: channel === ch ? 'rgba(139,92,246,0.12)' : 'transparent', color: channel === ch ? C.violet : C.muted, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', textTransform: 'uppercase', transition: 'all 0.2s ease' }}>
+                        {ch === 'both' ? 'SMS + Email' : ch.toUpperCase()}
+                      </button>
+                    ))}
+                  </div>
+                  <button onClick={scheduleSend} disabled={sending || selectedCount === 0}
+                    style={{ padding: '10px 20px', borderRadius: 10, border: 'none', background: selectedCount > 0 ? C.green : 'rgba(255,255,255,0.06)', color: '#fff', fontSize: 13, fontWeight: 700, cursor: selectedCount > 0 ? 'pointer' : 'not-allowed', fontFamily: 'inherit', opacity: sending ? 0.6 : 1, transition: 'all 0.2s ease' }}>
+                    {sending ? 'Scheduling...' : `Schedule for ${selectedCount} customer${selectedCount !== 1 ? 's' : ''}`}
+                  </button>
+                  {sendResult && (
+                    <div style={{ fontSize: 12, color: C.green, padding: '8px 14px', background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.2)', borderRadius: 8 }}>
+                      ✓ Scheduled: {sendResult.will_send_sms} SMS + {sendResult.will_send_email} emails — Aria will send at each customer&apos;s best time
                     </div>
-                  )
-                })}
-              </div>
+                  )}
+                </div>
+              </>
             )}
           </div>
 
-          {/* Message + send */}
-          <div>
-            <div style={{ background: C.card, border: '1px solid ' + C.border, borderRadius: 12, padding: '18px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                <p style={{ fontSize: 13, fontWeight: 600, color: C.text }}>SMS Message</p>
-                <button onClick={generateMessage} disabled={generating}
-                  style={{ fontSize: 11, color: C.violet, background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600, opacity: generating ? 0.5 : 1 }}>
-                  {generating ? '✨ Writing...' : '✨ Regenerate'}
+          {/* Metrics strip */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 20 }}>
+            {[
+              { label: 'Total Campaigns', value: campaigns.length, color: C.violet },
+              { label: 'Customers Won Back', value: wonBack, color: C.green },
+              { label: 'Revenue Attributed', value: `A$${totalRev.toFixed(0)}`, color: C.amber },
+              { label: 'Avg ROI', value: avgRoi > 0 ? `${avgRoi}%` : '—', color: avgRoi > 0 ? C.green : C.muted },
+            ].map(m => (
+              <div key={m.label} style={{ background: C.card, border: '1px solid ' + C.border, borderRadius: 12, padding: '16px 20px' }}>
+                <div style={{ fontSize: 11, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>{m.label}</div>
+                <div style={{ fontSize: 24, fontWeight: 700, color: m.color }}>{m.value}</div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+            {/* Customer list */}
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                <p style={{ fontSize: 13, fontWeight: 600 }}>Lapsed Customers ({customers.length})</p>
+                <button onClick={() => { const n: Record<string, boolean> = {}; if (!allSel) reachable.forEach(c => { n[c.id] = true }); setSelected(n) }}
+                  style={{ fontSize: 11, color: C.violet, background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600 }}>
+                  {allSel ? 'Deselect all' : 'Select all reachable'}
                 </button>
               </div>
-              <textarea
-                value={message}
-                onChange={e => setMessage(e.target.value)}
-                rows={5}
-                style={{ width: '100%', background: 'rgba(255,255,255,0.04)', border: '1px solid ' + C.border, borderRadius: 8, padding: '10px 12px', color: C.text, fontSize: 13, fontFamily: 'inherit', resize: 'vertical', outline: 'none', boxSizing: 'border-box' }}
-                placeholder="AI-generated winback message will appear here..."
-              />
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 6, marginBottom: 16 }}>
-                <span style={{ fontSize: 11, color: C.dim }}>{message.length}/160 chars</span>
-                <span style={{ fontSize: 11, color: message.length > 160 ? C.red : C.dim }}>{message.length > 160 ? 'Too long for 1 SMS' : '1 SMS'}</span>
-              </div>
-              <button onClick={sendCampaign} disabled={sending || selectedCount === 0 || !message.trim()}
-                style={{ width: '100%', padding: '12px', borderRadius: 10, border: 'none', background: selectedCount > 0 && message.trim() ? C.green : 'rgba(255,255,255,0.06)', color: '#fff', fontSize: 14, fontWeight: 700, cursor: selectedCount > 0 ? 'pointer' : 'not-allowed', fontFamily: 'inherit', opacity: sending ? 0.6 : 1 }}>
-                {sending ? 'Sending...' : 'Send SMS to ' + selectedCount + ' customer' + (selectedCount !== 1 ? 's' : '')}
-              </button>
-              {sendResult && (
-                <div style={{ marginTop: 12, padding: '10px 14px', background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.2)', borderRadius: 8, fontSize: 12, color: C.green }}>
-                  ✓ Sent: {sendResult.sent} · Failed: {sendResult.failed} · No phone: {sendResult.noPhone}
+              {loading ? (
+                <div style={{ color: C.muted, textAlign: 'center', padding: 32 }}>Loading...</div>
+              ) : customers.length === 0 ? (
+                <div style={{ background: C.card, border: '1px solid ' + C.border, borderRadius: 12, padding: 24, textAlign: 'center' }}>
+                  <p style={{ fontWeight: 700, marginBottom: 4 }}>No lapsed customers</p>
+                  <p style={{ fontSize: 13, color: C.muted }}>All customers visited within {lapsedDays} days.</p>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 5, maxHeight: 420, overflowY: 'auto' }}>
+                  {customers.map(c => {
+                    const days = daysAgo(c.last_visit_at)
+                    const sel = selected[c.id]
+                    const reach = !!(c.phone || c.email)
+                    return (
+                      <div key={c.id} onClick={() => reach && setSelected(p => ({ ...p, [c.id]: !p[c.id] }))}
+                        style={{ background: sel ? 'rgba(139,92,246,0.08)' : C.card, border: '1px solid ' + (sel ? 'rgba(139,92,246,0.3)' : C.border), borderRadius: 10, padding: '10px 14px', cursor: reach ? 'pointer' : 'default', display: 'flex', alignItems: 'center', gap: 10, transition: 'all 0.15s ease' }}>
+                        <div style={{ width: 15, height: 15, borderRadius: 4, border: '1px solid ' + (sel ? C.violet : C.border), background: sel ? C.violet : 'transparent', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s ease' }}>
+                          {sel && <span style={{ color: '#fff', fontSize: 9 }}>✓</span>}
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 13, fontWeight: 600 }}>{c.name}</div>
+                          <div style={{ fontSize: 11, color: C.muted }}>
+                            {[c.phone ? 'SMS' : null, c.email ? 'Email' : null].filter(Boolean).join(' + ') || 'No contact'}
+                            {c.total_spend ? ' · A$' + Number(c.total_spend).toFixed(0) : ''}
+                          </div>
+                        </div>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: (days ?? 0) > 90 ? C.red : C.amber, flexShrink: 0 }}>
+                          {days != null ? days + 'd ago' : 'Never'}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Campaign history */}
+            <div>
+              <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>Campaign History</p>
+              {campaigns.length === 0 ? (
+                <div style={{ color: C.muted, fontSize: 13, textAlign: 'center', padding: 32 }}>No campaigns yet — compose your first above.</div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 420, overflowY: 'auto' }}>
+                  {campaigns.map(c => (
+                    <div key={c.id} style={{ background: C.card, border: '1px solid ' + C.border, borderRadius: 10, padding: '12px 14px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
+                        <p style={{ fontSize: 13, fontWeight: 600 }}>{c.name ?? 'Winback Campaign'}</p>
+                        <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 99, background: c.status === 'sent' ? 'rgba(34,197,94,0.15)' : 'rgba(255,255,255,0.06)', color: c.status === 'sent' ? C.green : C.muted }}>{c.status ?? 'scheduled'}</span>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 4 }}>
+                        {([['Sent to', c.recipients_count ?? 0], ['Returned', c.returned_customers ?? 0], ['Revenue', 'A$' + (c.attributed_revenue ?? 0).toFixed(0)], ['ROI', (c.roi_percent ?? 0) > 0 ? (c.roi_percent ?? 0) + '%' : '—']] as [string, string | number][]).map(([label, val]) => (
+                          <div key={label}>
+                            <div style={{ fontSize: 10, color: C.dim, marginBottom: 2 }}>{label}</div>
+                            <div style={{ fontSize: 13, fontWeight: 600 }}>{val}</div>
+                          </div>
+                        ))}
+                      </div>
+                      <div style={{ fontSize: 10, color: C.dim, marginTop: 6 }}>{new Date(c.created_at).toLocaleDateString('en-AU')} · {c.channel ?? 'sms'}</div>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
           </div>
-        </div>
+        </>
       )}
 
-      {activeTab === 'campaigns' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {campaigns.length === 0 ? (
-            <div style={{ color: C.muted, textAlign: 'center', padding: '40px 0' }}>No campaigns sent yet.</div>
-          ) : campaigns.map(c => (
-            <div key={c.id} style={{ background: C.card, border: '1px solid ' + C.border, borderRadius: 12, padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <p style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{c.name ?? 'Winback Campaign'}</p>
-                <p style={{ fontSize: 12, color: C.muted }}>{c.message?.slice(0, 80)}{(c.message?.length ?? 0) > 80 ? '...' : ''}</p>
+      {tab === 'automations' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <p style={{ fontSize: 13, color: C.muted }}>Automated sequences triggered by customer behaviour. Toggle on to activate. Use <span style={{ color: C.violet, fontFamily: 'monospace' }}>{'{name}'}</span> for personalisation.</p>
+          {automations.map(auto => (
+            <div key={auto.trigger_type} style={{ background: C.card, border: '1px solid ' + (auto.is_active ? 'rgba(34,197,94,0.3)' : C.border), borderRadius: 14, padding: 18, transition: 'border-color 0.2s ease' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
+                <div>
+                  <p style={{ fontSize: 14, fontWeight: 600, marginBottom: 2 }}>{auto.label ?? auto.trigger_type}</p>
+                  <p style={{ fontSize: 12, color: C.muted }}>{auto.desc ?? ''}</p>
+                </div>
+                <button onClick={() => toggleAuto(auto)} disabled={savingAuto === auto.trigger_type}
+                  style={{ padding: '6px 16px', borderRadius: 8, border: 'none', background: auto.is_active ? 'rgba(34,197,94,0.15)' : 'rgba(255,255,255,0.06)', color: auto.is_active ? C.green : C.muted, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.2s ease', opacity: savingAuto === auto.trigger_type ? 0.5 : 1 }}>
+                  {savingAuto === auto.trigger_type ? '...' : auto.is_active ? '● Active' : 'Off'}
+                </button>
               </div>
-              <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                <span style={{ fontSize: 11, padding: '3px 10px', borderRadius: 99, background: c.status === 'sent' ? 'rgba(34,197,94,0.15)' : 'rgba(255,255,255,0.06)', color: c.status === 'sent' ? C.green : C.muted }}>
-                  {c.status ?? 'draft'}
-                </span>
-                <p style={{ fontSize: 10, color: C.dim, marginTop: 4 }}>{new Date(c.created_at).toLocaleDateString('en-AU')}</p>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <div>
+                  <div style={{ fontSize: 11, color: C.dim, marginBottom: 4 }}>SMS Message</div>
+                  <textarea value={auto.sms_message ?? ''} rows={3}
+                    onChange={e => setAutomations(prev => prev.map(a => a.trigger_type === auto.trigger_type ? { ...a, sms_message: e.target.value } : a))}
+                    style={{ width: '100%', background: 'rgba(255,255,255,0.04)', border: '1px solid ' + C.border, borderRadius: 8, padding: '10px 12px', color: C.text, fontSize: 12, fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box', resize: 'vertical' }} />
+                </div>
+                <div>
+                  <div style={{ fontSize: 11, color: C.dim, marginBottom: 4 }}>Email Subject</div>
+                  <input value={auto.email_subject ?? ''}
+                    onChange={e => setAutomations(prev => prev.map(a => a.trigger_type === auto.trigger_type ? { ...a, email_subject: e.target.value } : a))}
+                    style={{ ...inp, width: '100%' }} />
+                </div>
               </div>
             </div>
           ))}
