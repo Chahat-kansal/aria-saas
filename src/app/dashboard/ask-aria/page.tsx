@@ -256,6 +256,7 @@ export default function AskAriaPage() {
   const [uploading, setUploading] = useState(false)
   const [councilThinking, setCouncilThinking] = useState(false)
   const [greetingReady, setGreetingReady] = useState(false)
+  const [briefingCollapsed, setBriefingCollapsed] = useState(false)
   const [avatarMounted, setAvatarMounted] = useState(false)
   const [ariaResponseText, setAriaResponseText] = useState<string>('')
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -926,7 +927,7 @@ export default function AskAriaPage() {
           />
 
         {/* Aria avatar */}
-        <div style={{ position: 'absolute', bottom: 0, right: 20, width: 120, zIndex: 20, pointerEvents: 'none', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
+        <div style={{ position: 'fixed', bottom: 0, right: 20, width: 120, zIndex: 50, pointerEvents: 'none', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
           <AriaSpeechBubble business={business} />
           <div style={{ width: 120, height: 160, opacity: avatarMounted ? 1 : 0, transition: 'opacity 0.4s ease' }}>
             <AriaTalkingHead mode={isAriaActive ? 'talking' : 'idle'} replyText={ariaResponseText ?? ''} />
