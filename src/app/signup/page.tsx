@@ -43,6 +43,11 @@ export default function SignupPage() {
     }
   }
 
+  async function handleXero() {
+    // Xero identity: sign up with email first, then connect Xero from integrations
+    window.location.href = '/api/integrations/xero/connect'
+  }
+
   async function handleGoogle() {
     await supabase.auth.signInWithOAuth({
       provider: 'google',
