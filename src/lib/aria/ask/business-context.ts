@@ -61,7 +61,6 @@ export async function buildAskAriaContext(
     .limit(3)
 
   const [bizRes, salesTodayRes, salesWeekRes, salesMonthRes, lowStockRes, staffRes, ticketsRes, actionsRes, convHistRes, recentConvsRes, competitorsRes] = await Promise.all([
-    competitorRes,
     supabaseAdmin.from('businesses').select('name,industry,owner_name,city,address,phone,abn,google_average_rating,google_total_reviews').eq('id', businessId).maybeSingle(),
     supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', businessId).gte('created_at', todayStart.toISOString()),
     supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', businessId).gte('created_at', weekStart.toISOString()),
@@ -74,6 +73,7 @@ export async function buildAskAriaContext(
       ? supabaseAdmin.from('aria_conversations').select('messages').eq('id', conversationId).eq('business_id', businessId).maybeSingle()
       : Promise.resolve({ data: null }),
     supabaseAdmin.from('aria_conversations').select('id,title,last_message_at,message_count,last_intent').eq('business_id', businessId).order('last_message_at', { ascending: false }).limit(10),
+    competitorRes,
   ])
 
   const biz = bizRes.data
