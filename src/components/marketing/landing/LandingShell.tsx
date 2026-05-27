@@ -440,7 +440,7 @@ function Footer() {
           <p style={{ fontSize: 11, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, marginBottom: 10 }}>Company</p>
           <Link href="/about" style={{ display: 'block', fontSize: 13, color: C.textDim, textDecoration: 'none', marginBottom: 6 }}>About</Link>
           <Link href="/contact" style={{ display: 'block', fontSize: 13, color: C.textDim, textDecoration: 'none', marginBottom: 6 }}>Contact</Link>
-          <Link href="/blog" style={{ display: 'block', fontSize: 13, color: C.textDim, textDecoration: 'none', marginBottom: 6 }}>Blog</Link>
+          
         </div>
         <div>
           <p style={{ fontSize: 11, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, marginBottom: 10 }}>Legal</p>
