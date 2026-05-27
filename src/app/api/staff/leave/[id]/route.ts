@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { sendSMS } from '@/lib/clicksend'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { NextResponse } from 'next/server'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
@@ -37,7 +38,7 @@ async function _PATCH(req: Request, { params }: Params) {
     if (sid && token && from && sm?.mobile) {
       const leaveType = String(row.leave_type ?? 'leave').replace(/_/g, ' ')
       const msg = `Hi ${sm.first_name}, your ${leaveType} request from ${row.start_date} to ${row.end_date} has been approved.`
-      fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
+        await sendSMS(sm.mobile, msg)
         method: 'POST',
         headers: { Authorization: `Basic ${Buffer.from(`${sid}:${token}`).toString('base64')}`, 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({ To: sm.mobile, From: from, Body: msg }).toString(),
