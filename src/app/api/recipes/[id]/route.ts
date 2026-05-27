@@ -31,6 +31,9 @@ async function _PATCH(req: NextRequest, { params }: { params: { id: string } }) 
         quantity: ing.quantity,
         unit: ing.unit ?? 'g',
         cost_cents: ing.cost_cents ?? null,
+        cost_per_unit: ing.cost_per_unit ?? null,
+        supplier_id: ing.supplier_id ?? null,
+        allergens: ing.allergens ?? [],
         notes: ing.notes ?? null,
         product_id: ing.product_id ?? null,
       }));
