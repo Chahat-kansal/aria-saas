@@ -1,3 +1,4 @@
+import { sendSMS } from '@/lib/clicksend'
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
@@ -28,9 +29,8 @@ export async function GET() {
   const campMap = Object.fromEntries((campaigns ?? []).map(c => [c.id as string, c]))
   const custMap = Object.fromEntries((customers ?? []).map(c => [c.id as string, c]))
 
-  const accountSid = process.env.TWILIO_ACCOUNT_SID
-  const authToken = process.env.TWILIO_AUTH_TOKEN
-  const twilioFrom = process.env.TWILIO_PHONE_NUMBER
+  // ClickSend SMS
+  // ClickSend — no phone number needed
   const resendKey = process.env.RESEND_API_KEY
 
   const sentIds: string[] = []
