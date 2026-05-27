@@ -189,6 +189,37 @@ Build:
 - Owner approves in bulk or lets Aria auto-post within set rules
 - Aria can draft reel/video captions, suggest what to film
 
+
+## CROSS-POSTING — Community as a channel alongside Instagram, Facebook, Google
+Aria Community must integrate into the existing dashboard `social` page as a
+posting CHANNEL — so the owner writes ONE post and pushes it everywhere.
+- In src/app/dashboard/social/page.tsx, add "Aria Community" as a channel
+  alongside Instagram, Facebook, and Google Business Profile
+- When the owner composes a post, they tick which channels to publish to —
+  Instagram, Facebook, Google, Aria Community — any combination
+- "Post everywhere" publishes the same post to all selected channels in one action
+- Aria still drafts the post; the owner picks the channels and confirms
+- Each channel keeps its own formatting (Community gets the rich post, Google gets
+  a Business Profile update, etc.) — Aria adapts the post per channel
+- The Community feed is just one more destination — but it is the only one Aria
+  fully owns, so it always works even if other channel integrations are not connected
+
+## DESIGN PRINCIPLE — borrowed patterns, ONE unified system
+Aria Community should use proven interaction patterns from the best apps, but
+draw ALL of them in a single coherent design language. Borrowed patterns, unified look.
+- Feed/main post layout — pattern inspired by Instagram (image-forward, clean)
+- Chat UI — pattern inspired by the latest WhatsApp (clean bubbles, simple)
+- Profile layout — pattern inspired by Facebook (cover, info, content tabs)
+- Owner dashboard — professional clarity inspired by LinkedIn
+- Reels — full-screen vertical pattern inspired by TikTok
+- BUT: one single colour accent, one font family, one spacing scale, one corner
+  radius system, one motion language — applied consistently across ALL of the above.
+- The goal: familiar patterns (zero learning curve) + one unified identity (feels
+  like ONE app, not five stitched together).
+- Read /mnt/skills/user/ui-ux-pro-max/SKILL.md and pick ONE style + ONE palette +
+  ONE font pairing, then apply it to every screen without exception.
+- Mobile-first. Every screen must feel like part of the same product.
+
 ## Build notes
 - Needs a real customer base to be valuable — that's why it's post-launch
 - Build phase by phase, each phase its own commit
