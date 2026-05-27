@@ -18,7 +18,7 @@ export function withErrorCapture(
         tags: { route: routeName, method: req.method },
         extra: { url: req.url, requestId },
       })
-      console.error(`[${routeName}] unhandled error:`, err?.message ?? err)
+      console.error(`[${routeName}] unhandled error:`, err?.message ?? err, '\nSTACK:', err?.stack ?? 'no stack', '\nFULL:', JSON.stringify(err, Object.getOwnPropertyNames(err)))
 
       const pgCode = err?.code
       if (pgCode === '42P01' || pgCode === '42703') {
