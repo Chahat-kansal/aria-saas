@@ -128,8 +128,12 @@ Create `src/app/dashboard/in-store/page.tsx`
 - Toggle kiosk on/off, set kiosk name + greeting
 - Personality picker: friendly / witty / professional
 - Toggles: voice, loyalty signup, recipe suggestions
-- QR code generator — owner prints it, customers scan to open the kiosk on their phone
-- Link to the tablet kiosk URL
+- QR code generator — generates a QR encoding the kiosk URL: https://ariaos.site/kiosk/{business_id}
+  - Use the `qrcode` npm package (npm install qrcode) to render the QR as an SVG/PNG in-page
+  - Owner sees the QR on screen + a "Download QR" button (saves PNG) + a "Print QR poster" button
+  - The print poster: a nice A5 layout — shop name, "Scan to ask us anything", the QR, Aria branding
+  - Also show the plain kiosk URL as text so the owner can use it on a tablet directly
+- Link to the tablet kiosk URL — owner opens https://ariaos.site/kiosk/{business_id} on any tablet, bookmarks it, done
 
 ### Demand insights — THE killer feature
 On the same in-store dashboard page, a "What customers asked for" section:
