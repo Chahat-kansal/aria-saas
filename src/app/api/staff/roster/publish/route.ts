@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 30
 
 import { NextResponse } from 'next/server'
+import { sendSMS } from '@/lib/clicksend'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
@@ -22,7 +23,7 @@ async function sendShiftSMS(to: string, message: string): Promise<boolean> {
   const from = process.env.TWILIO_PHONE_NUMBER ?? ''
   if (!sid || !token || !from) return false
   try {
-    const r = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
+        await sendSMS(to, message)
       method: 'POST',
       headers: { 'Authorization': `Basic ${Buffer.from(`${sid}:${token}`).toString('base64')}`, 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({ To: to, From: from, Body: message }).toString(),
