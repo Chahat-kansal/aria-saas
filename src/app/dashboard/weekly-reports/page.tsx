@@ -2,50 +2,85 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useBusinessContext } from '@/components/providers/BusinessProvider'
 
-interface ReportRecord {
-  id: string
-  week_start: string
-  week_end: string
-  pdf_url: string | null
-  email_sent: boolean
-  email_sent_at: string | null
-  suspicious_count: number
-  total_revenue: number | null
-  created_at: string
-}
+interface DayData { date: string; revenue: number; transactions: number }
+interface ProductStat { name: string; revenue: number; quantitySold: number }
+interface PaymentBreakdown { method: string; total: number }
+interface ReportDataJson { weekStart?: string; weekEnd?: string; revenueByDay?: DayData[]; topProductsByRevenue?: ProductStat[]; topProductsByUnits?: ProductStat[]; paymentMethods?: PaymentBreakdown[]; suspiciousTransactions?: Array<{ flagReason: string }>; priorWeekRevenue?: number; priorWeekTransactions?: number; revenueChangePercent?: number | null }
+interface NarrativeJson { executive_summary?: string; high_confidence_insights?: string[]; split_decisions?: Array<{ topic: string; optimist_view?: string; critic_view?: string; strategist_view?: string }>; promo_recommendations?: Array<{ title: string; mechanic: string; timing: string; expected_impact: string; urgency: string }>; suspicious_summary?: string | null }
+interface ReportRecord { id: string; week_starting: string; pdf_url: string | null; email_sent: boolean; email_sent_at: string | null; revenue: number | null; transaction_count: number | null; avg_ticket: number | null; new_customers: number | null; goal_attainment_pct: number | null; created_at: string }
+interface FullRecord extends ReportRecord { report_data: ReportDataJson | null; narrative: NarrativeJson | null }
 
-function fmtAud(n: number | null) {
-  if (n == null) return '—'
-  return 'A$' + (Number(n) || 0).toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-}
+const fmtAud = (n: number | null | undefined) => n == null ? '—' : 'A$' + (Number(n) || 0).toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+const fmtCompact = (n: number | null | undefined) => n == null ? '—' : 'A$' + Math.round(Number(n) || 0).toLocaleString('en-AU')
+const weekRange = (start: string) => { const s = new Date(start); const e = new Date(s.getTime() + 6 * 86400_000); return `${s.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })} – ${e.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}` }
+const fmtPct = (n: number | null) => n == null ? null : (n > 0 ? '↑' : n < 0 ? '↓' : '→') + ' ' + Math.abs(n).toFixed(0) + '%'
 
-function fmtWeek(start: string, end: string) {
-  const s = new Date(start).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })
-  const e = new Date(end).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })
-  return s + ' – ' + e
-}
-
+const C = { surface: 'rgba(255,255,255,0.03)', border: 'rgba(255,255,255,0.07)', green: '#7FB897', sage: '#2D5240', amber: '#f59e0b', red: '#ef4444', violet: '#A78BFA', text: '#E8EDE7', dim: 'rgba(255,255,255,0.4)', muted: 'rgba(255,255,255,0.2)' }
 const STEPS = ['Gathering sales data…', 'Running Aria Council analysis…', 'Generating promo recommendations…', 'Rendering PDF…', 'Uploading & sending email…']
+
+function AreaChart({ data, target }: { data: DayData[]; target?: number }) {
+  if (data.length === 0) return null
+  const max = Math.max(target ?? 0, ...data.map(d => d.revenue), 1)
+  const w = 100 / Math.max(1, data.length - 1)
+  const points = data.map((d, i) => `${i * w},${100 - (d.revenue / max) * 90}`).join(' ')
+  const area = `0,100 ${points} 100,100`
+  return (
+    <div style={{ position: 'relative', height: 140 }}>
+      <svg viewBox="0 0 100 100" preserveAspectRatio="none" style={{ width: '100%', height: '100%', overflow: 'visible' }}>
+        <defs>
+          <linearGradient id="grad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={C.green} stopOpacity="0.4" />
+            <stop offset="100%" stopColor={C.green} stopOpacity="0.02" />
+          </linearGradient>
+        </defs>
+        {target && target > 0 && <line x1="0" y1={100 - (target / max) * 90} x2="100" y2={100 - (target / max) * 90} stroke={C.amber} strokeWidth="0.4" strokeDasharray="1,1" />}
+        <polygon points={area} fill="url(#grad)" />
+        <polyline points={points} fill="none" stroke={C.green} strokeWidth="0.6" />
+      </svg>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6 }}>
+        {data.map((d, i) => (
+          <span key={i} style={{ fontSize: 9, color: C.muted }}>{new Date(d.date).toLocaleDateString('en-AU', { weekday: 'short' })}</span>
+        ))}
+      </div>
+    </div>
+  )
+}
 
 export default function WeeklyReportsPage() {
   const { business } = useBusinessContext()
   const [records, setRecords] = useState<ReportRecord[]>([])
+  const [selected, setSelected] = useState<FullRecord | null>(null)
+  const [loadingDetail, setLoadingDetail] = useState(false)
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState(false)
   const [stepIdx, setStepIdx] = useState(0)
-  const [result, setResult] = useState<{ pdf_url: string; email_sent: boolean; email: string | null } | null>(null)
   const [genError, setGenError] = useState<string | null>(null)
+  const [target, setTarget] = useState<number>(0)
+  const [targetSaving, setTargetSaving] = useState(false)
+  const [targetSaved, setTargetSaved] = useState(false)
 
   const loadRecords = useCallback(async () => {
     if (!business?.id) return
     setLoading(true)
-    const res = await fetch('/api/reports/weekly-records?business_id=' + business.id)
-      .then(r => r.json()).catch(() => ({ records: [] }))
+    const res = await fetch('/api/reports/weekly-records?business_id=' + business.id).then(r => r.json()).catch(() => ({ records: [] }))
     setRecords(res.records ?? [])
+    if (!selected && res.records?.length > 0) loadDetail(res.records[0].id)
     setLoading(false)
-  }, [business?.id])
+  }, [business?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function loadDetail(id: string) {
+    if (!business?.id) return
+    setLoadingDetail(true)
+    const r = await fetch(`/api/reports/weekly-records?business_id=${business.id}&id=${id}`).then(r => r.json()).catch(() => null)
+    if (r?.record) setSelected(r.record)
+    setLoadingDetail(false)
+  }
 
   useEffect(() => { loadRecords() }, [loadRecords])
+  useEffect(() => {
+    if (!business?.id) return
+    fetch('/api/reports/weekly-goal?business_id=' + business.id).then(r => r.json()).then(d => setTarget(Number(d.target ?? 0))).catch(() => {})
+  }, [business?.id])
 
   useEffect(() => {
     if (!generating) return
@@ -53,150 +88,211 @@ export default function WeeklyReportsPage() {
     return () => clearInterval(timer)
   }, [generating])
 
+  async function saveTarget() {
+    if (!business?.id) return
+    setTargetSaving(true)
+    await fetch('/api/reports/weekly-goal', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ business_id: business.id, target }) })
+    setTargetSaving(false); setTargetSaved(true)
+    setTimeout(() => setTargetSaved(false), 1800)
+  }
+
   async function generate() {
     if (!business?.id) return
-    setGenerating(true)
-    setStepIdx(0)
-    setResult(null)
-    setGenError(null)
+    setGenerating(true); setStepIdx(0); setGenError(null)
     try {
       const res = await fetch('/api/reports/weekly-generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ business_id: business.id }),
       }).then(r => r.json())
       if (res.error) { setGenError(res.error); return }
-      setResult({ pdf_url: res.pdf_url, email_sent: res.email_sent, email: res.email })
-      loadRecords()
+      await loadRecords()
     } catch { setGenError('Network error — please try again.') }
     finally { setGenerating(false) }
   }
 
-  const accentForest = '#2D5240'
-  const accentSage = '#7FB897'
+  // KPI deltas vs prior week (from records list)
+  const currentRev = selected?.revenue ?? null
+  const priorIdx = records.findIndex(r => r.id === selected?.id) + 1
+  const prior = records[priorIdx]
+  const revDelta = currentRev != null && prior?.revenue != null && prior.revenue > 0 ? ((currentRev - Number(prior.revenue)) / Number(prior.revenue)) * 100 : null
+  const txnDelta = selected?.transaction_count != null && prior?.transaction_count != null && prior.transaction_count > 0 ? ((selected.transaction_count - prior.transaction_count) / prior.transaction_count) * 100 : null
+  const ticketDelta = selected?.avg_ticket != null && prior?.avg_ticket != null && Number(prior.avg_ticket) > 0 ? ((Number(selected.avg_ticket) - Number(prior.avg_ticket)) / Number(prior.avg_ticket)) * 100 : null
 
   return (
-    <div className="p-6 max-w-4xl mx-auto">
-      <div className="mb-6 flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-semibold text-white mb-1" style={{ fontFamily: 'Georgia, serif', fontStyle: 'italic' }}>Weekly Reports</h1>
-          <p className="text-sm" style={{ color: '#6b7280' }}>AI-generated every Monday at 8 AM AEST. Sent directly to your email with a PDF attachment.</p>
-        </div>
-        <button
-          onClick={generate}
-          disabled={generating || !business?.id}
-          className="px-4 py-2 rounded-xl text-sm font-semibold text-white disabled:opacity-40 shrink-0"
-          style={{ background: accentForest }}>
-          {generating ? '…' : '✦ Generate this week\'s report'}
+    <div style={{ display: 'flex', minHeight: '100vh', background: '#0E1812', color: C.text, fontFamily: 'Manrope, sans-serif' }}>
+      {/* Sidebar */}
+      <aside style={{ width: 280, flexShrink: 0, borderRight: '1px solid ' + C.border, padding: 16, overflowY: 'auto' }}>
+        <h2 style={{ fontSize: 14, fontWeight: 700, marginBottom: 14 }}>Reports</h2>
+        <button onClick={generate} disabled={generating || !business?.id}
+          style={{ width: '100%', padding: '10px 14px', borderRadius: 9, border: 'none', background: C.sage, color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', marginBottom: 14, opacity: generating ? 0.6 : 1 }}>
+          {generating ? '⏳ Generating…' : '✦ Generate this week'}
         </button>
-      </div>
-
-      {/* Generation progress */}
-      {generating && (
-        <div className="rounded-2xl p-6 mb-6" style={{ background: 'rgba(45,82,64,0.12)', border: '1px solid rgba(127,184,151,0.25)' }}>
-          <div className="flex items-center gap-3 mb-4">
-            <span className="inline-block w-4 h-4 border-2 rounded-full animate-spin" style={{ borderColor: accentSage, borderTopColor: 'transparent' }} />
-            <span className="text-sm font-medium" style={{ color: accentSage }}>Aria is generating your report…</span>
-          </div>
-          <div className="space-y-2">
-            {STEPS.map((step, i) => (
-              <div key={step} className="flex items-center gap-2 text-xs" style={{ color: i <= stepIdx ? '#d1d5db' : '#4b5563' }}>
-                <span className="w-4">{i < stepIdx ? '✓' : i === stepIdx ? '›' : '○'}</span>
-                {step}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Generation result */}
-      {result && !generating && (
-        <div className="rounded-2xl p-5 mb-6" style={{ background: 'rgba(45,82,64,0.1)', border: '1px solid rgba(127,184,151,0.3)' }}>
-          <div className="flex items-start justify-between gap-4 flex-wrap">
-            <div>
-              <p className="text-sm font-semibold text-white mb-1">Report ready</p>
-              <p className="text-xs" style={{ color: '#9ca3af' }}>
-                {result.email_sent
-                  ? 'Sent to ' + (result.email ?? 'your email') + ' with PDF attached.'
-                  : 'Generated successfully. Email not configured or failed — download below.'}
-              </p>
+        {loading ? <p style={{ fontSize: 12, color: C.dim }}>Loading…</p>
+          : records.length === 0 ? <p style={{ fontSize: 12, color: C.dim }}>No reports yet.</p>
+          : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {records.map(r => (
+                <button key={r.id} onClick={() => loadDetail(r.id)}
+                  style={{ textAlign: 'left', padding: '9px 12px', borderRadius: 8, border: '1px solid ' + (selected?.id === r.id ? 'rgba(127,184,151,0.4)' : C.border), background: selected?.id === r.id ? 'rgba(127,184,151,0.08)' : 'transparent', cursor: 'pointer', fontFamily: 'inherit' }}>
+                  <p style={{ fontSize: 12, fontWeight: 700, margin: 0, color: selected?.id === r.id ? C.green : C.text }}>{weekRange(r.week_starting)}</p>
+                  <p style={{ fontSize: 10, color: C.dim, margin: '2px 0 0' }}>{fmtCompact(r.revenue)} · {r.transaction_count ?? 0} sales {r.email_sent ? ' · 📧 Sent' : ''}</p>
+                </button>
+              ))}
             </div>
-            {result.pdf_url && (
-              <a href={result.pdf_url} target="_blank" rel="noopener noreferrer"
-                className="px-4 py-2 rounded-xl text-sm font-semibold text-white shrink-0 no-underline"
-                style={{ background: accentForest }}>
-                Download PDF
-              </a>
-            )}
+          )}
+        <div style={{ marginTop: 18, padding: 12, borderRadius: 8, background: C.surface, border: '1px solid ' + C.border }}>
+          <p style={{ fontSize: 10, color: C.dim, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>Weekly revenue target</p>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <input type="number" min={0} step={100} value={target} onChange={e => setTarget(Number(e.target.value))}
+              style={{ flex: 1, padding: '6px 10px', borderRadius: 6, background: 'rgba(255,255,255,0.05)', border: '1px solid ' + C.border, color: C.text, fontSize: 12, fontFamily: 'inherit' }} />
+            <button onClick={saveTarget} disabled={targetSaving} style={{ padding: '6px 12px', borderRadius: 6, border: 'none', background: C.sage, color: C.green, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>{targetSaving ? '…' : 'Save'}</button>
           </div>
+          {targetSaved && <p style={{ fontSize: 10, color: C.green, marginTop: 4 }}>✓ Saved</p>}
         </div>
-      )}
+      </aside>
 
-      {/* Error */}
-      {genError && (
-        <div className="rounded-xl px-4 py-3 mb-6 text-sm" style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444' }}>
-          {genError}
-        </div>
-      )}
-
-      {/* History */}
-      <div>
-        <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: '#6b7280' }}>Report history</p>
-
-        {loading ? (
-          <div className="space-y-3">
-            {[1, 2, 3].map(i => (
-              <div key={i} className="h-16 rounded-xl animate-pulse" style={{ background: 'rgba(255,255,255,0.04)' }} />
-            ))}
-          </div>
-        ) : records.length === 0 ? (
-          <div className="rounded-2xl p-12 text-center" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.07)' }}>
-            <div className="text-4xl mb-4">📊</div>
-            <p className="font-semibold text-white mb-2">No reports yet</p>
-            <p className="text-sm max-w-sm mx-auto mb-6" style={{ color: '#6b7280' }}>
-              Your weekly report is generated automatically every Monday morning at 8 AM AEST and emailed to you with a PDF attached. You can also generate one manually above.
-            </p>
-            <button onClick={generate} disabled={generating}
-              className="px-5 py-2 rounded-xl text-sm font-semibold text-white disabled:opacity-40"
-              style={{ background: accentForest }}>
-              Generate first report
-            </button>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {records.map(r => (
-              <div key={r.id} className="rounded-xl px-5 py-4 flex items-center justify-between gap-4 flex-wrap"
-                style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}>
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold text-white">{fmtWeek(r.week_start, r.week_end)}</p>
-                  <div className="flex items-center gap-3 mt-1 flex-wrap">
-                    <span className="text-xs" style={{ color: accentSage }}>{fmtAud(r.total_revenue)}</span>
-                    {r.suspicious_count > 0 && (
-                      <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: 'rgba(245,158,11,0.1)', color: '#f59e0b' }}>
-                        {r.suspicious_count} flag{r.suspicious_count > 1 ? 's' : ''}
-                      </span>
-                    )}
-                    {r.email_sent ? (
-                      <span className="text-xs" style={{ color: '#4b5563' }}>
-                        Sent {r.email_sent_at ? new Date(r.email_sent_at).toLocaleDateString('en-AU') : ''}
-                      </span>
-                    ) : (
-                      <span className="text-xs" style={{ color: '#4b5563' }}>Email not sent</span>
-                    )}
-                  </div>
-                </div>
-                {r.pdf_url && (
-                  <a href={r.pdf_url} target="_blank" rel="noopener noreferrer"
-                    className="text-xs px-3 py-1.5 rounded-lg font-medium no-underline shrink-0"
-                    style={{ background: 'rgba(45,82,64,0.3)', color: accentSage, border: '1px solid rgba(127,184,151,0.2)' }}>
-                    Download PDF
-                  </a>
-                )}
-              </div>
+      {/* Main */}
+      <main style={{ flex: 1, padding: 28, overflowY: 'auto' }}>
+        {generating && (
+          <div style={{ marginBottom: 18, padding: 16, borderRadius: 12, background: 'rgba(45,82,64,0.12)', border: '1px solid rgba(127,184,151,0.25)' }}>
+            <p style={{ fontSize: 12, fontWeight: 600, color: C.green, marginBottom: 8 }}>✦ Aria is generating your report…</p>
+            {STEPS.map((step, i) => (
+              <div key={step} style={{ fontSize: 11, color: i <= stepIdx ? C.text : C.muted, padding: '3px 0' }}>{i < stepIdx ? '✓' : i === stepIdx ? '›' : '○'} {step}</div>
             ))}
           </div>
         )}
-      </div>
+        {genError && <div style={{ marginBottom: 14, padding: '10px 14px', borderRadius: 10, background: 'rgba(239,68,68,0.1)', color: C.red, fontSize: 12 }}>{genError}</div>}
+
+        {!selected && !loading && records.length === 0 && (
+          <div style={{ textAlign: 'center', padding: 60 }}>
+            <p style={{ fontSize: 36, marginBottom: 8 }}>📊</p>
+            <p style={{ fontSize: 18, fontWeight: 700, marginBottom: 6 }}>No reports yet</p>
+            <p style={{ fontSize: 13, color: C.dim, marginBottom: 16 }}>Generated Monday 8 AM AEST. Click above to generate now.</p>
+          </div>
+        )}
+
+        {loadingDetail && <p style={{ color: C.dim, padding: 24 }}>Loading…</p>}
+
+        {selected && (
+          <>
+            <div style={{ marginBottom: 22 }}>
+              <p style={{ fontSize: 11, color: C.green, textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700 }}>Week of</p>
+              <h1 style={{ fontSize: 28, fontWeight: 600, fontFamily: 'Fraunces, Georgia, serif', fontStyle: 'italic', margin: '4px 0 6px' }}>{weekRange(selected.week_starting)}</h1>
+              {selected.pdf_url && (
+                <a href={selected.pdf_url} target="_blank" rel="noopener noreferrer"
+                  style={{ display: 'inline-block', marginTop: 4, padding: '6px 14px', borderRadius: 8, background: 'rgba(45,82,64,0.3)', color: C.green, fontSize: 11, fontWeight: 700, textDecoration: 'none', border: '1px solid rgba(127,184,151,0.2)' }}>
+                  ⬇ Download PDF
+                </a>
+              )}
+              {selected.email_sent_at && (
+                <span style={{ marginLeft: 10, fontSize: 11, color: C.dim }}>📧 Sent {new Date(selected.email_sent_at).toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
+              )}
+            </div>
+
+            {/* KPI scorecards */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 22 }}>
+              {[
+                { label: 'Revenue', value: fmtAud(selected.revenue), delta: revDelta, color: C.green },
+                { label: 'Transactions', value: String(selected.transaction_count ?? 0), delta: txnDelta, color: C.violet },
+                { label: 'Avg ticket', value: fmtAud(selected.avg_ticket), delta: ticketDelta, color: C.amber },
+                { label: 'New customers', value: String(selected.new_customers ?? 0), delta: null, color: '#60a5fa' },
+              ].map(k => (
+                <div key={k.label} style={{ padding: 16, borderRadius: 12, background: C.surface, border: '1px solid ' + C.border }}>
+                  <p style={{ fontSize: 10, color: C.dim, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{k.label}</p>
+                  <p style={{ fontSize: 26, fontWeight: 600, color: k.color, fontFamily: 'Fraunces, Georgia, serif', fontStyle: 'italic', margin: '4px 0' }}>{k.value}</p>
+                  {k.delta !== null && (
+                    <p style={{ fontSize: 11, color: k.delta > 0 ? C.green : k.delta < 0 ? C.red : C.dim, fontWeight: 600 }}>{fmtPct(k.delta)} vs prior week</p>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Goal progress */}
+            {target > 0 && selected.revenue != null && (
+              <div style={{ marginBottom: 22, padding: 16, borderRadius: 12, background: C.surface, border: '1px solid ' + C.border }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                  <p style={{ fontSize: 11, color: C.dim, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Goal vs actual</p>
+                  <p style={{ fontSize: 12, color: C.green, fontWeight: 700 }}>{fmtAud(selected.revenue)} / {fmtAud(target)} · {((Number(selected.revenue) / target) * 100).toFixed(0)}%</p>
+                </div>
+                <div style={{ width: '100%', height: 8, background: 'rgba(255,255,255,0.06)', borderRadius: 4, overflow: 'hidden' }}>
+                  <div style={{ width: Math.min(100, (Number(selected.revenue) / target) * 100) + '%', height: '100%', background: C.green }} />
+                </div>
+              </div>
+            )}
+
+            {/* Revenue chart */}
+            {selected.report_data?.revenueByDay && selected.report_data.revenueByDay.length > 0 && (
+              <div style={{ marginBottom: 22, padding: 18, borderRadius: 12, background: C.surface, border: '1px solid ' + C.border }}>
+                <p style={{ fontSize: 11, color: C.dim, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 12 }}>Revenue · 7 days</p>
+                <AreaChart data={selected.report_data.revenueByDay} target={target > 0 ? target / 7 : undefined} />
+              </div>
+            )}
+
+            {/* Executive summary */}
+            {selected.narrative?.executive_summary && (
+              <div style={{ marginBottom: 22, padding: 18, borderRadius: 12, background: 'rgba(45,82,64,0.12)', border: '1px solid rgba(127,184,151,0.25)' }}>
+                <p style={{ fontSize: 11, color: C.green, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8, fontWeight: 700 }}>✦ Executive summary</p>
+                <p style={{ fontSize: 14, lineHeight: 1.65, color: C.text, whiteSpace: 'pre-wrap' }}>{selected.narrative.executive_summary}</p>
+              </div>
+            )}
+
+            {/* Two-column: Top products + Customer highlights */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 22 }}>
+              {selected.report_data?.topProductsByRevenue && selected.report_data.topProductsByRevenue.length > 0 && (
+                <div style={{ padding: 16, borderRadius: 12, background: C.surface, border: '1px solid ' + C.border }}>
+                  <p style={{ fontSize: 11, color: C.dim, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>Top products by revenue</p>
+                  {(() => { const max = Math.max(1, ...(selected.report_data?.topProductsByRevenue ?? []).map(p => p.revenue)); return (selected.report_data?.topProductsByRevenue ?? []).slice(0, 6).map((p, i) => (
+                    <div key={i} style={{ marginBottom: 8 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 2 }}>
+                        <span>{p.name}</span><span style={{ color: C.green }}>{fmtAud(p.revenue)}</span>
+                      </div>
+                      <div style={{ height: 4, background: 'rgba(255,255,255,0.05)', borderRadius: 2 }}>
+                        <div style={{ width: (p.revenue / max * 100) + '%', height: '100%', background: C.green, borderRadius: 2 }} />
+                      </div>
+                    </div>
+                  )) })()}
+                </div>
+              )}
+              {selected.report_data?.paymentMethods && selected.report_data.paymentMethods.length > 0 && (
+                <div style={{ padding: 16, borderRadius: 12, background: C.surface, border: '1px solid ' + C.border }}>
+                  <p style={{ fontSize: 11, color: C.dim, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>Payments</p>
+                  {selected.report_data.paymentMethods.map((p, i) => (
+                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, padding: '6px 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                      <span style={{ textTransform: 'capitalize' }}>{p.method}</span>
+                      <span style={{ color: C.green, fontWeight: 600 }}>{fmtAud(p.total)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Suspicious */}
+            {selected.narrative?.suspicious_summary && (
+              <div style={{ marginBottom: 22, padding: 16, borderRadius: 12, background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.25)' }}>
+                <p style={{ fontSize: 11, color: C.amber, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6, fontWeight: 700 }}>⚠ Flagged transactions</p>
+                <p style={{ fontSize: 12, color: C.text, lineHeight: 1.55 }}>{selected.narrative.suspicious_summary}</p>
+              </div>
+            )}
+
+            {/* Promo recommendations */}
+            {selected.narrative?.promo_recommendations && selected.narrative.promo_recommendations.length > 0 && (
+              <div style={{ marginBottom: 22 }}>
+                <p style={{ fontSize: 11, color: C.dim, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>✦ AI recommendations</p>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 10 }}>
+                  {selected.narrative.promo_recommendations.map((r, i) => (
+                    <div key={i} style={{ padding: 14, borderRadius: 10, background: C.surface, borderLeft: '3px solid ' + (r.urgency === 'high' ? C.red : r.urgency === 'medium' ? C.amber : C.green), border: '1px solid ' + C.border }}>
+                      <p style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>{r.title}</p>
+                      <p style={{ fontSize: 11, color: C.dim, marginBottom: 6 }}>{r.timing}</p>
+                      <p style={{ fontSize: 12, color: C.text, lineHeight: 1.5 }}>{r.mechanic}</p>
+                      <p style={{ fontSize: 11, color: C.green, marginTop: 6, fontWeight: 600 }}>{r.expected_impact}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </main>
     </div>
   )
 }

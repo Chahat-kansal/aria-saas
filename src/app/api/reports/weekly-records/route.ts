@@ -18,12 +18,25 @@ async function _GET(req: Request) {
   const { data: biz } = await supabase.from('businesses').select('id').eq('id', businessId).eq('user_id', user.id).single()
   if (!biz) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
+  const { searchParams: sp2 } = new URL(req.url)
+  const id = sp2.get('id')
+
+  if (id) {
+    const { data: row } = await supabaseAdmin
+      .from('weekly_report_records')
+      .select('id, week_starting, pdf_url, email_sent, email_sent_at, revenue, transaction_count, avg_ticket, new_customers, goal_attainment_pct, report_data, narrative, created_at')
+      .eq('id', id)
+      .eq('business_id', businessId)
+      .maybeSingle()
+    return NextResponse.json({ record: row })
+  }
+
   const { data } = await supabaseAdmin
     .from('weekly_report_records')
-    .select('id, week_start, week_end, pdf_url, email_sent, email_sent_at, suspicious_count, total_revenue, created_at')
+    .select('id, week_starting, pdf_url, email_sent, email_sent_at, revenue, transaction_count, avg_ticket, new_customers, goal_attainment_pct, created_at')
     .eq('business_id', businessId)
-    .order('week_start', { ascending: false })
-    .limit(20)
+    .order('week_starting', { ascending: false })
+    .limit(50)
 
   return NextResponse.json({ records: data ?? [] })
 }

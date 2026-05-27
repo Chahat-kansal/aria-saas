@@ -108,18 +108,37 @@ export async function saveWeeklyReportRecord(
   data: WeeklyReportData,
   pdfUrl: string | null,
   emailSent: boolean,
+  narrative?: unknown,
 ): Promise<void> {
   try {
-    const weekEnd = new Date(weekStart.getTime() + 6 * 86400_000)
+    // Lookup weekly target for goal attainment
+    const { data: biz } = await supabaseAdmin.from('businesses')
+      .select('weekly_revenue_target').eq('id', businessId).maybeSingle()
+    const target = Number((biz as { weekly_revenue_target?: number | null } | null)?.weekly_revenue_target ?? 0)
+    const goalPct = target > 0 ? (data.totalRevenue / target) * 100 : null
+
     await supabaseAdmin.from('weekly_report_records').insert({
       business_id: businessId,
-      week_start: weekStart.toISOString().slice(0, 10),
-      week_end: weekEnd.toISOString().slice(0, 10),
+      week_starting: weekStart.toISOString().slice(0, 10),
       pdf_url: pdfUrl,
       email_sent: emailSent,
       email_sent_at: emailSent ? new Date().toISOString() : null,
-      suspicious_count: data.suspiciousTransactions.length,
-      total_revenue: data.totalRevenue,
+      revenue: data.totalRevenue,
+      transaction_count: data.totalTransactions,
+      avg_ticket: data.avgBasket,
+      goal_attainment_pct: goalPct,
+      report_data: {
+        weekStart: data.weekStart, weekEnd: data.weekEnd,
+        revenueByDay: data.revenueByDay,
+        topProductsByRevenue: data.topProductsByRevenue,
+        topProductsByUnits: data.topProductsByUnits,
+        paymentMethods: data.paymentMethods,
+        suspiciousTransactions: data.suspiciousTransactions,
+        priorWeekRevenue: data.priorWeekRevenue,
+        priorWeekTransactions: data.priorWeekTransactions,
+        revenueChangePercent: data.revenueChangePercent,
+      },
+      narrative: narrative ?? null,
     })
   } catch (e) {
     console.error('[weekly-email] DB record insert failed:', (e as Error).message)

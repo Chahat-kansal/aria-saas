@@ -44,7 +44,7 @@ export async function runWeeklyReport(businessId: string): Promise<void> {
   }
 
   const emailSent = await sendWeeklyReportEmail(business, narrative, data, weekStart, pdfBuffer, pdfUrl)
-  await saveWeeklyReportRecord(businessId, weekStart, data, pdfUrl, emailSent)
+  await saveWeeklyReportRecord(businessId, weekStart, data, pdfUrl, emailSent, narrative)
 
   console.log(`[weekly-report] ${bizName}: done — pdf_url=${pdfUrl ?? 'none'} email_sent=${emailSent}`)
 }
