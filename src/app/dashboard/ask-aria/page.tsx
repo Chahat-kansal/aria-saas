@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import VoiceInput from '@/components/aria/VoiceInput'
 import ChatSuggestions from '@/components/aria/ChatSuggestions'
+import { SkillPicker } from '@/components/aria/SkillPicker'
 import ActionPreviewCard from '@/components/aria/ActionPreviewCard'
 import AuditLogCard from '@/components/aria/AuditLogCard'
 import { AriaArtifact } from '@/components/aria/AriaArtifact'
@@ -944,6 +945,10 @@ export default function AskAriaPage() {
               ))}
             </div>
           )}
+          {/* Skill picker — chip strip + modal. Active skills stack into Aria's system prompt. */}
+          <div className="w-full md:max-w-3xl md:mx-auto mb-2">
+            <SkillPicker />
+          </div>
           <div className="flex gap-2 w-full md:max-w-3xl md:mx-auto items-end">
             <VoiceInput onTranscript={t => { setInput(p => p ? `${p} ${t}` : t) }} disabled={sending} />
             <button

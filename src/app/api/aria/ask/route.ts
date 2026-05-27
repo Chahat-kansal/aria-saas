@@ -570,6 +570,20 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
     systemPrompt += buildTroubleshootAddendum(tsCtx)
   }
 
+  // 4b. Append any enabled skills (per-business, owner-curated) so Aria takes on the requested role
+  try {
+    const { supabaseAdmin } = await import('@/lib/supabase-admin')
+    const { data: skills } = await supabaseAdmin.from('aria_skills')
+      .select('name, system_prompt_addition')
+      .eq('business_id', bid).eq('enabled', true).limit(8)
+    if (skills && skills.length > 0) {
+      const block = skills
+        .map((s: { name: string; system_prompt_addition: string }) => `[${s.name}] ${s.system_prompt_addition}`)
+        .join('\n')
+      systemPrompt += '\n\nACTIVE SKILLS (the owner has asked you to take on these roles — stack their lenses across your reply):\n' + block
+    }
+  } catch { /* skills are additive — never block the response */ }
+
   // 5. Build proper multi-turn history for Claude
   // Strip prior "broken" assistant messages for image/generation requests
   // so Claude doesn't use its own hallucinated refusals as evidence
