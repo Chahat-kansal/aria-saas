@@ -1,5 +1,7 @@
 import Link from 'next/link'
 import type { Metadata } from 'next'
+import ScrollPinHero from '@/components/marketing/ScrollPinHero'
+import MarketingPinHero from '@/components/marketing/MarketingPinHero'
 
 export const metadata: Metadata = {
   title: 'About Aria OS — Built for Australian Small Business',
@@ -9,6 +11,19 @@ export const metadata: Metadata = {
 export default function AboutPage() {
   return (
     <div style={{ minHeight: '100vh', background: '#090e0b', color: '#e8f0ea', fontFamily: "'Inter',system-ui,sans-serif" }}>
+      <ScrollPinHero
+        hero={(
+          <MarketingPinHero
+            theme="dark"
+            eyebrow="About Aria"
+            title="Built for Australian small business."
+            subtitle="A small Melbourne team building the AI co-operator your shop actually deserves."
+            primaryCta={{ label: 'Start free trial', href: '/signup' }}
+            secondaryCta={{ label: 'Read our story ↓', href: '#story' }}
+          />
+        )}
+      >
+      <div id="story" style={{ background: '#090e0b' }}>
       <div style={{ maxWidth: 720, margin: '0 auto', padding: '64px 24px 96px' }}>
 
         {/* Nav */}
@@ -73,6 +88,8 @@ export default function AboutPage() {
           © {new Date().getFullYear()} Aria OS · Melbourne, Australia · hello@ariaos.site
         </p>
       </div>
+      </div>
+      </ScrollPinHero>
     </div>
   )
 }

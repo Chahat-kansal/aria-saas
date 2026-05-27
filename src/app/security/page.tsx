@@ -1,5 +1,7 @@
 import Link from 'next/link';
 import type { Metadata } from 'next';
+import ScrollPinHero from '@/components/marketing/ScrollPinHero';
+import MarketingPinHero from '@/components/marketing/MarketingPinHero';
 
 export const metadata: Metadata = {
   title: 'Security',
@@ -13,6 +15,19 @@ const P: React.CSSProperties = { fontSize: 14, color: 'rgba(130,160,200,0.75)', 
 export default function SecurityPage() {
   return (
     <div style={{ minHeight: '100vh', background: '#030510', fontFamily: "'Manrope', system-ui, sans-serif" }}>
+      <ScrollPinHero
+        hero={(
+          <MarketingPinHero
+            theme="deep"
+            eyebrow="Security"
+            title="Your business data, protected."
+            subtitle="Encryption, access control, RLS, Australian data residency. The detail is below."
+            primaryCta={{ label: 'Start free trial', href: '/signup' }}
+            secondaryCta={{ label: 'Read the detail ↓', href: '#detail' }}
+          />
+        )}
+      >
+      <div id="detail" style={{ background: '#030510' }}>
       <div style={{ maxWidth: 768, margin: '0 auto', padding: '48px 24px 80px' }}>
         <Link href="/" style={{ display: 'inline-block', fontSize: 13, color: 'rgba(130,160,200,0.6)', textDecoration: 'none', marginBottom: 40 }}>← Back to Aria</Link>
         <h1 style={{ fontSize: 32, fontWeight: 800, color: '#F0EBFF', marginBottom: 8 }}>Security</h1>
@@ -56,6 +71,8 @@ export default function SecurityPage() {
           Security questions? <a href="mailto:cnkansal1105@gmail.com" style={{ color: 'rgba(130,160,200,0.5)', textDecoration: 'none' }}>cnkansal1105@gmail.com</a>
         </p>
       </div>
+      </div>
+      </ScrollPinHero>
     </div>
   );
 }

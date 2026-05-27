@@ -1,5 +1,7 @@
 import Link from 'next/link';
 import type { Metadata } from 'next';
+import ScrollPinHero from '@/components/marketing/ScrollPinHero';
+import MarketingPinHero from '@/components/marketing/MarketingPinHero';
 
 export const metadata: Metadata = {
   title: 'Aria Demo — See AI POS in Action',
@@ -15,6 +17,19 @@ const HIGHLIGHTS = [
 export default function DemoPage() {
   return (
     <div style={{ minHeight: '100vh', background: '#030510', color: 'rgba(220,240,255,0.93)', fontFamily: "'Manrope', system-ui, sans-serif" }}>
+      <ScrollPinHero
+        hero={(
+          <MarketingPinHero
+            theme="deep"
+            eyebrow="Demo"
+            title="See Aria in action."
+            subtitle="60 seconds. Free 14-day trial — no credit card."
+            primaryCta={{ label: 'Start free trial', href: '/signup' }}
+            secondaryCta={{ label: 'Watch demo ↓', href: '#demo-video' }}
+          />
+        )}
+      >
+      <div id="demo-video" style={{ background: '#030510' }}>
       <div style={{ maxWidth: 800, margin: '0 auto', padding: '64px 24px' }}>
         <Link href="/" style={{ fontSize: 13, color: 'rgba(130,160,200,0.6)', textDecoration: 'none', display: 'inline-block', marginBottom: 48 }}>← Aria</Link>
 
@@ -48,6 +63,8 @@ export default function DemoPage() {
           ))}
         </div>
       </div>
+      </div>
+      </ScrollPinHero>
     </div>
   );
 }
