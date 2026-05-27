@@ -79,6 +79,16 @@ function PriceComparisonTable({ competitorNames }: { competitorNames: string[] }
 }
 
 interface Watch { id: string; competitor_name: string; competitor_url: string | null; is_active: boolean }
+interface AlertRow { id: string; competitor_name: string | null; alert_type: string | null; message: string; data: unknown; is_read: boolean | null; read: boolean | null; created_at: string }
+interface Opportunity { competitor: string; complaint_theme: string; advantage: string; message: string }
+interface Snapshot { competitor_name: string; rating: number | null; review_count: number | null; snapshot_date: string }
+
+function alertIcon(type: string | null) {
+  if (type === 'rating_change') return { icon: '⭐', color: '#F59E0B' }
+  if (type === 'review_spike') return { icon: '📈', color: '#3B82F6' }
+  if (type === 'promotion') return { icon: '📢', color: '#A855F7' }
+  return { icon: '📡', color: '#6B7280' }
+}
 
 export default function CompetitorsPage() {
   const { business } = useBusinessContext()
@@ -91,6 +101,13 @@ export default function CompetitorsPage() {
   const [watches, setWatches] = useState<Watch[]>([])
   const [newCompetitor, setNewCompetitor] = useState('')
   const [addingWatch, setAddingWatch] = useState(false)
+  const [activeTab, setActiveTab] = useState<'overview' | 'prices' | 'alerts' | 'watches'>('overview')
+  const [brief, setBrief] = useState<string>('')
+  const [briefLoading, setBriefLoading] = useState(true)
+  const [opps, setOpps] = useState<Opportunity[]>([])
+  const [oppsLoading, setOppsLoading] = useState(false)
+  const [alertRows, setAlertRows] = useState<AlertRow[]>([])
+  const [snapshots, setSnapshots] = useState<Snapshot[]>([])
 
   const load = useCallback(async () => {
     if (!business?.id) return
@@ -109,7 +126,30 @@ export default function CompetitorsPage() {
     if (!business?.id) return
     fetch(`/api/aria/competitor-watches?business_id=${business.id}`)
       .then(r => r.json()).then(d => setWatches(d.watches ?? [])).catch(() => {})
+    setBriefLoading(true)
+    fetch(`/api/aria/competitive-brief?business_id=${business.id}`)
+      .then(r => r.json()).then(d => { setBrief(d.brief ?? ''); setBriefLoading(false) }).catch(() => setBriefLoading(false))
+    fetch(`/api/aria/competitor-alerts?business_id=${business.id}`)
+      .then(r => r.json()).then(d => setAlertRows(d.alerts ?? [])).catch(() => {})
+    fetch(`/api/competitor-snapshots?business_id=${business.id}`)
+      .then(r => r.json()).then(d => setSnapshots(d.snapshots ?? [])).catch(() => {})
   }, [business?.id])
+
+  async function loadOpportunities() {
+    if (!business?.id) return
+    setOppsLoading(true)
+    const res = await fetch('/api/aria/competitor-opportunities', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ business_id: business.id }),
+    }).then(r => r.json()).catch(() => ({ opportunities: [] }))
+    setOpps(res.opportunities ?? [])
+    setOppsLoading(false)
+  }
+
+  async function markAlertRead(id: string) {
+    await fetch(`/api/aria/competitor-alerts?id=${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ is_read: true }) })
+    setAlertRows(rows => rows.map(r => r.id === id ? { ...r, is_read: true, read: true } : r))
+  }
 
   async function addWatch() {
     if (!newCompetitor.trim() || !business?.id) return
@@ -176,13 +216,35 @@ export default function CompetitorsPage() {
         </button>
       </div>
 
+      {/* Tabs */}
+      <div style={{ display: 'flex', gap: 6, marginBottom: 16, borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+        {(['overview','prices','alerts','watches'] as const).map(t => {
+          const active = activeTab === t
+          const unread = t === 'alerts' ? alertRows.filter(a => !(a.is_read ?? a.read)).length : 0
+          return (
+            <button key={t} onClick={() => setActiveTab(t)}
+              style={{ padding: '8px 14px', border: 'none', background: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: active ? 700 : 500, color: active ? '#fff' : 'rgba(255,255,255,0.5)', borderBottom: active ? '2px solid #8B5CF6' : '2px solid transparent', marginBottom: -1, textTransform: 'capitalize' }}>
+              {t === 'watches' ? 'Manage watches' : t}
+              {unread > 0 && <span style={{ marginLeft: 6, fontSize: 10, padding: '1px 6px', borderRadius: 99, background: '#EF4444', color: '#fff', fontWeight: 700 }}>{unread}</span>}
+            </button>
+          )
+        })}
+      </div>
+
+      {/* Daily competitive brief — always visible at top */}
+      <div style={{ marginBottom: 18, padding: '14px 18px', borderRadius: 12, background: 'rgba(139,92,246,0.06)', border: '1px solid rgba(139,92,246,0.25)' }}>
+        <p style={{ fontSize: 10, fontWeight: 700, color: '#8B5CF6', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>✦ Yesterday's competitive landscape</p>
+        {briefLoading ? <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)' }}>Aria is thinking…</p>
+          : <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.85)', lineHeight: 1.55 }}>{brief || 'No data yet — Aria starts monitoring once you add competitor watches.'}</p>}
+      </div>
+
       {error && (
         <div style={{ marginBottom: 16, padding: '12px 16px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: 10, fontSize: 13, color: '#EF4444' }}>
           {error}
         </div>
       )}
 
-      {loading ? (
+      {activeTab === 'overview' && (loading ? (
         <div style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '60px 0' }}>Loading competitor data...</div>
       ) : alerts.length === 0 ? (
         <div style={{ background: 'var(--bg-surface)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 14, padding: '48px 24px', textAlign: 'center' }}>
@@ -265,10 +327,94 @@ export default function CompetitorsPage() {
           {competitors.length > 0 && (
             <PriceComparisonTable competitorNames={competitors.map(c => c.name)} />
           )}
+
+          {/* Opportunities (AI) */}
+          <div style={{ marginTop: 28, background: 'rgba(255,255,255,0.03)', borderRadius: 14, border: '1px solid rgba(255,255,255,0.08)', padding: '20px 24px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+              <div>
+                <h2 style={{ fontSize: 15, fontWeight: 700, color: '#fff', marginBottom: 2 }}>✦ Win-back opportunities</h2>
+                <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>Aria reads competitor complaints and tells you how to win those customers.</p>
+              </div>
+              <button onClick={loadOpportunities} disabled={oppsLoading}
+                style={{ padding: '8px 16px', borderRadius: 9, border: 'none', background: '#8B5CF6', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', opacity: oppsLoading ? 0.6 : 1 }}>
+                {oppsLoading ? 'Analysing…' : opps.length > 0 ? 'Refresh' : '✦ Analyse'}
+              </button>
+            </div>
+            {opps.length > 0 && (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 12 }}>
+                {opps.map((o, i) => (
+                  <div key={i} style={{ background: 'rgba(127,184,151,0.05)', borderLeft: '3px solid #7FB897', borderRadius: '0 12px 12px 0', padding: '12px 14px' }}>
+                    <p style={{ fontSize: 10, fontWeight: 700, color: '#7FB897', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 4 }}>{o.competitor}</p>
+                    <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', marginBottom: 6 }}>{o.complaint_theme}</p>
+                    <p style={{ fontSize: 13, color: '#fff', fontWeight: 600, lineHeight: 1.5 }}>{o.message}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </>
+      ))}
+
+      {activeTab === 'prices' && (
+        <PriceComparisonTable competitorNames={watches.map(w => w.competitor_name)} />
       )}
+
+      {activeTab === 'alerts' && (
+        <div style={{ background: 'var(--bg-surface)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 14, padding: '14px 18px' }}>
+          {alertRows.length === 0 ? (
+            <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', textAlign: 'center', padding: '24px 0' }}>No competitor alerts yet — Aria will surface them as it detects changes.</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {alertRows.map(a => {
+                const meta = alertIcon(a.alert_type)
+                const isRead = a.is_read ?? a.read
+                return (
+                  <div key={a.id} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', padding: '12px 14px', borderRadius: 10, background: isRead ? 'rgba(255,255,255,0.02)' : 'rgba(139,92,246,0.05)', border: '1px solid ' + (isRead ? 'rgba(255,255,255,0.05)' : 'rgba(139,92,246,0.2)') }}>
+                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: meta.color, marginTop: 6, flexShrink: 0 }} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.9)', marginBottom: 2 }}>{meta.icon} {a.message}</p>
+                      <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)' }}>{timeAgo(a.created_at)}{a.competitor_name ? ` · ${a.competitor_name}` : ''}</p>
+                    </div>
+                    {!isRead && (
+                      <button onClick={() => markAlertRead(a.id)}
+                        style={{ fontSize: 11, padding: '4px 10px', borderRadius: 6, border: 'none', background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.6)', cursor: 'pointer', fontFamily: 'inherit' }}>
+                        Mark read
+                      </button>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Rating trend snapshot summary */}
+      {activeTab === 'overview' && snapshots.length > 0 && (
+        <div style={{ marginTop: 20, background: 'rgba(255,255,255,0.03)', borderRadius: 14, border: '1px solid rgba(255,255,255,0.08)', padding: '16px 20px' }}>
+          <h3 style={{ fontSize: 13, fontWeight: 700, color: '#fff', marginBottom: 10 }}>Rating trend (last 30 days)</h3>
+          {Array.from(new Set(snapshots.map(s => s.competitor_name))).slice(0, 6).map(name => {
+            const series = snapshots.filter(s => s.competitor_name === name).filter(s => s.rating != null)
+            if (series.length === 0) return null
+            const max = Math.max(...series.map(s => Number(s.rating)))
+            const min = Math.min(...series.map(s => Number(s.rating)))
+            const first = Number(series[0].rating)
+            const last = Number(series[series.length - 1].rating)
+            const delta = last - first
+            return (
+              <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '6px 0', borderTop: '1px solid rgba(255,255,255,0.04)' }}>
+                <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)', flex: 1 }}>{name}</span>
+                <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', fontFamily: 'monospace' }}>{min.toFixed(1)} → {max.toFixed(1)}</span>
+                <span style={{ fontSize: 12, fontWeight: 700, color: delta > 0 ? '#7FB897' : delta < 0 ? '#F87171' : 'rgba(255,255,255,0.4)', fontFamily: 'monospace', minWidth: 50, textAlign: 'right' }}>{delta > 0 ? '+' : ''}{delta.toFixed(1)}★</span>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
       {/* Competitor Watch Setup */}
-      <div style={{ marginTop: 32, background: 'rgba(255,255,255,0.03)', borderRadius: 14, border: '1px solid rgba(255,255,255,0.08)', padding: '20px 24px' }}>
+      {activeTab === 'watches' && (
+      <div style={{ marginTop: 0, background: 'rgba(255,255,255,0.03)', borderRadius: 14, border: '1px solid rgba(255,255,255,0.08)', padding: '20px 24px' }}>
         <h2 style={{ fontSize: 15, fontWeight: 700, color: '#fff', marginBottom: 4 }}>Competitor watches</h2>
         <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginBottom: 16 }}>Aria monitors these competitors daily and alerts you to price changes.</p>
         <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
@@ -295,6 +441,7 @@ export default function CompetitorsPage() {
         )}
         {watches.length === 0 && <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)' }}>No competitors being watched yet. Add one above.</p>}
       </div>
+      )}
     </div>
   )
 }

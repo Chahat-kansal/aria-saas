@@ -120,6 +120,10 @@
       "schedule": "0 3 * * *"
     },
     {
+      "path": "/api/cron/competitor-monitor",
+      "schedule": "0 22 * * *"
+    },
+    {
       "path": "/api/cron/xero-sync",
       "schedule": "0 2 * * *"
     },
