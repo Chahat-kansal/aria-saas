@@ -3,6 +3,7 @@ export const maxDuration = 60
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { sendSMS } from '@/lib/clicksend'
 
 const CRON_SECRET = process.env.CRON_SECRET ?? ''
 
@@ -12,14 +13,6 @@ function adminClient() {
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
     { auth: { persistSession: false } },
   )
-}
-
-async function sendSMS(to: string, body: string): Promise<boolean> {
-  const token = process.env.TWILIO_AUTH_TOKEN
-  if (!sid || !token || !from) return false
-        await sendSMS(to, body)
-    },
-  return res.ok
 }
 
 export async function GET(req: Request) {
@@ -65,7 +58,7 @@ export async function GET(req: Request) {
       const firstName = (c.name ?? 'there').split(' ')[0]
       const msg = `Hey ${firstName}, we miss you! ☕ ${cfg.winback_reward_text} Come back and show this message. Reply STOP to unsubscribe.`
       const ok = await sendSMS(c.phone!, msg)
-      if (ok) {
+      if (ok.ok) {
         await sb.from('pos_loyalty_transactions').insert({
           business_id: cfg.business_id,
           customer_id: c.id,

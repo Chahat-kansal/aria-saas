@@ -41,20 +41,11 @@ async function _POST(req: Request) {
     return NextResponse.json({ error: 'no_phone' }, { status: 400 });
   }
 
-  const encoded = new URLSearchParams({ To: customer.phone, From: twilioFrom, Body: message });
-        await sendSMS(customer.phone, message)
-    method: 'POST',
-    headers: {
-      Authorization: `Basic ${Buffer.from(`${twilioSid}:${twilioToken}`).toString('base64')}`,
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: encoded.toString(),
-  });
+  const smsResult = await sendSMS(customer.phone, message)
 
-  if (!twilioRes.ok) {
-    const errBody = await twilioRes.json().catch(() => ({})) as { message?: string };
-    console.error('[sms] Twilio error:', errBody);
-    return NextResponse.json({ error: 'twilio_error', detail: errBody.message }, { status: 502 });
+  if (!smsResult.ok) {
+    console.error('[sms] ClickSend error:', smsResult.error)
+    return NextResponse.json({ error: 'sms_error', detail: smsResult.error }, { status: 502 })
   }
 
   await supabase.from('pos_customer_communications').insert({

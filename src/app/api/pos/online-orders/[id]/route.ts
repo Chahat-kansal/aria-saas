@@ -33,16 +33,9 @@ async function _PATCH(req: Request, { params }: Params) {
     const { data: order } = await supabase.from('pos_online_orders')
       .select('customer_name, customer_phone, order_number, business_id').eq('id', id).maybeSingle()
     if (order?.customer_phone) {
-      const token = process.env.TWILIO_AUTH_TOKEN
       const { data: biz } = await supabase.from('businesses').select('name').eq('id', order.business_id).maybeSingle()
-      if (sid && token && from) {
-        const msg = `Hi ${order.customer_name?.split(' ')[0] ?? 'there'}, your order ${order.order_number} at ${biz?.name ?? 'the cafe'} is ready for collection! 🎉`
-        await sendSMS(order.customer_phone, msg)
-          method: 'POST',
-          headers: { Authorization: `Basic ${Buffer.from(`${sid}:${token}`).toString('base64')}`, 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: new URLSearchParams({ From: from, To: order.customer_phone, Body: msg }),
-        }).then(() => null, () => null)
-      }
+      const msg = `Hi ${order.customer_name?.split(' ')[0] ?? 'there'}, your order ${order.order_number} at ${biz?.name ?? 'the cafe'} is ready for collection! 🎉`
+      sendSMS(order.customer_phone, msg).catch(() => null)
     }
   }
 

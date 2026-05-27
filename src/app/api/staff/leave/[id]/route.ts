@@ -32,17 +32,10 @@ async function _PATCH(req: Request, { params }: Params) {
   if (body.status === 'approved') {
     const row = data as Record<string, unknown>
     const sm = row.staff_members as { first_name: string; mobile: string | null } | null
-    const sid = process.env.TWILIO_ACCOUNT_SID ?? ''
-    const token = process.env.TWILIO_AUTH_TOKEN ?? ''
-    const from = process.env.TWILIO_PHONE_NUMBER ?? ''
-    if (sid && token && from && sm?.mobile) {
+    if (sm?.mobile) {
       const leaveType = String(row.leave_type ?? 'leave').replace(/_/g, ' ')
       const msg = `Hi ${sm.first_name}, your ${leaveType} request from ${row.start_date} to ${row.end_date} has been approved.`
-        await sendSMS(sm.mobile, msg)
-        method: 'POST',
-        headers: { Authorization: `Basic ${Buffer.from(`${sid}:${token}`).toString('base64')}`, 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({ To: sm.mobile, From: from, Body: msg }).toString(),
-      }).catch(() => { /* non-fatal */ })
+      sendSMS(sm.mobile, msg).catch(() => null)
     }
   }
 

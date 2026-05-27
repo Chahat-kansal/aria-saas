@@ -46,15 +46,9 @@ async function draftMessage(
 }
 
 async function sendSms(phone: string, body: string): Promise<boolean> {
-  const token = process.env.TWILIO_AUTH_TOKEN
-  if (!sid || !token || !from) return false
   const normalized = phone.replace(/\s/g, '').replace(/^0/, '+61')
-        await sendSMS(normalized, body)
-    method: 'POST',
-    headers: { 'Authorization': 'Basic ' + Buffer.from(`${sid}:${token}`).toString('base64'), 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ To: normalized, From: from, Body: body }).toString(),
-  })
-  return res.ok
+  const result = await sendSMS(normalized, body)
+  return result.ok
 }
 
 async function sendEmail(to: string, subject: string, body: string): Promise<boolean> {

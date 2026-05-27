@@ -128,18 +128,9 @@ export async function checkConditionAlerts(businessId: string): Promise<number> 
       const { data: biz } = await supabaseAdmin.from('businesses')
         .select('phone,owner_phone,alert_sms_enabled,name').eq('id', businessId).maybeSingle()
       const phone = biz?.owner_phone ?? biz?.phone
-        if (phone && biz?.alert_sms_enabled) {
-        // Replaced by ClickSend
-        if (twilioSid && twilioAuth && twilioFrom) {
-          const body = `Aria alert for ${biz.name}: ${message}`
-            const to = phone as string
-          const auth = Buffer.from(`${twilioSid}:${twilioAuth}`).toString('base64')
-        await sendSMS(to, body)
-            method: 'POST',
-            headers: { 'Authorization': `Basic ${auth}`, 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: new URLSearchParams({ To: to, From: twilioFrom, Body: body }).toString(),
-          })
-        }
+      if (phone && biz?.alert_sms_enabled) {
+        const body = `Aria alert for ${biz.name}: ${message}`
+        await sendSMS(phone as string, body)
       }
     } catch { /* SMS failure is non-fatal */ }
 

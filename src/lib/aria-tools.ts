@@ -742,23 +742,10 @@ async function sendSmsNow(input: Record<string, unknown>): Promise<unknown> {
   const to = String(input.to ?? '');
   const message = String(input.message ?? '');
   if (!to || !message) return { error: 'to, message required' };
-  const sid = process.env.TWILIO_ACCOUNT_SID;
-  const token = process.env.TWILIO_AUTH_TOKEN;
-  const from = process.env.TWILIO_PHONE_NUMBER;
-  if (!sid || !token || !from) {
-    console.error('[aria-tool/send_sms_now] Twilio env missing — sid:', !!sid, 'token:', !!token, 'from:', !!from);
-    return { error: 'SMS requires TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER in env vars' };
-  }
-
   const phone = to.replace(/\s/g, '').replace(/^0/, '+61');
-        await sendSMS(phone, message)
-    method: 'POST',
-    headers: { 'Authorization': 'Basic ' + Buffer.from(`${sid}:${token}`).toString('base64'), 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ To: phone, From: from, Body: message }).toString(),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    return { error: (err as Record<string, unknown>).message ?? 'SMS failed' };
+  const smsResult = await sendSMS(phone, message);
+  if (!smsResult.ok) {
+    return { error: smsResult.error ?? 'SMS failed' };
   }
   return { ok: true, to: phone, message };
 }

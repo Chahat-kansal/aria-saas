@@ -39,15 +39,8 @@ async function _POST(req: Request, ctx: Ctx) {
 
   if (delivery_method === 'sms' && phone) {
     try {
-      const token = process.env.TWILIO_AUTH_TOKEN
-      if (sid && token && from) {
-        const msg = `Hi ${split.person_label}, your split from ${biz?.name ?? 'the restaurant'}: A$${split.total_amount.toFixed(2)}. Status: ${split.status}.`
-        await sendSMS(phone, msg)
-          method: 'POST',
-          headers: { Authorization: `Basic ${Buffer.from(`${sid}:${token}`).toString('base64')}`, 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: new URLSearchParams({ To: phone, From: from, Body: msg }),
-        })
-      }
+      const msg = `Hi ${split.person_label}, your split from ${biz?.name ?? 'the restaurant'}: A$${split.total_amount.toFixed(2)}. Status: ${split.status}.`
+      await sendSMS(phone, msg)
     } catch { /* non-fatal */ }
   }
 

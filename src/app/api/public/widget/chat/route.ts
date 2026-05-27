@@ -3,28 +3,13 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 45
 
 import { NextResponse } from 'next/server'
+import { sendSMS } from '@/lib/clicksend'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import Anthropic from '@anthropic-ai/sdk'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
 interface Message { role: 'user' | 'assistant'; content: string }
-
-// ── Send SMS via Twilio ───────────────────────────────────────────────
-async function sendSMS(to: string, body: string): Promise<void> {
-  const token = process.env.TWILIO_AUTH_TOKEN
-  if (!sid || !token || !from || !to) return
-  try {
-        await sendSMS(to, body)
-      method: 'POST',
-      headers: {
-        Authorization: 'Basic ' + Buffer.from(sid + ':' + token).toString('base64'),
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: new URLSearchParams({ To: to, From: from, Body: body }).toString(),
-    })
-  } catch { /* non-critical */ }
-}
 
 // ── Parse appointment details from AI response ────────────────────────
 function parseAppointmentJSON(text: string): Record<string, string> | null {

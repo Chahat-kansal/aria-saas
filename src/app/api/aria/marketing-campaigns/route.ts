@@ -66,16 +66,14 @@ async function _POST(req: Request) {
       customers = (data ?? []).filter((c: any) => c.phone || c.email)
     }
 
-    const sid = process.env.TWILIO_ACCOUNT_SID; const tok = process.env.TWILIO_AUTH_TOKEN;
     let sentCount = 0
     for (const c of customers) {
-      if ((campaign as any).channel !== 'email' && c.phone && sid && tok && from) {
+      if ((campaign as any).channel !== 'email' && c.phone) {
         try {
           const msgText = ((campaign as any).message_template ?? '').replace('{name}', c.name.split(' ')[0])
-        await sendSMS(c.phone, msgText)
-            headers: { Authorization: 'Basic ' + Buffer.from(sid + ':' + tok).toString('base64'), 'Content-Type': 'application/x-www-form-urlencoded' },
-          if (res.ok) sentCount++
-          await supabaseAdmin.from('pos_campaign_sends').insert({ campaign_id: body.campaign_id, business_id: bid, customer_id: c.id, customer_name: c.name, customer_phone: c.phone, message_sent: msgText, channel: 'sms', send_status: res.ok ? 'sent' : 'failed', sent_at: res.ok ? new Date().toISOString() : null })
+          const smsResult = await sendSMS(c.phone, msgText)
+          if (smsResult.ok) sentCount++
+          await supabaseAdmin.from('pos_campaign_sends').insert({ campaign_id: body.campaign_id, business_id: bid, customer_id: c.id, customer_name: c.name, customer_phone: c.phone, message_sent: msgText, channel: 'sms', send_status: smsResult.ok ? 'sent' : 'failed', sent_at: smsResult.ok ? new Date().toISOString() : null })
         } catch { /* non-fatal */ }
       }
     }

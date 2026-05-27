@@ -2,21 +2,10 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 import { NextResponse } from 'next/server'
+import { sendSMS } from '@/lib/clicksend'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
-
-async function sendSMS(to: string, body: string) {
-  const token = process.env.TWILIO_AUTH_TOKEN
-  if (!sid || !token || !from) return { ok: false, error: 'Twilio not configured' }
-        await sendSMS(to, body)
-    method: 'POST',
-    headers: { Authorization: `Basic ${Buffer.from(`${sid}:${token}`).toString('base64')}`, 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ From: from, To: to, Body: body }),
-  })
-  const data = await res.json()
-  return { ok: res.ok, sid: data.sid, error: data.message }
-}
 
 async function _POST(req: Request) {
   const supabase = createServerSupabaseClient()

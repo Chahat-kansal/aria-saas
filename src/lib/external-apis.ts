@@ -254,21 +254,9 @@ export async function sendEmail(params: { to: string; subject: string; html: str
   } catch { return false; }
 }
 
-// ─── 2H: Twilio SMS ───────────────────────────────────────────────────────────
+// ─── 2H: SMS ─────────────────────────────────────────────────────────────────
 export async function sendSMS(to: string, body: string): Promise<boolean> {
-  const sid  = process.env.TWILIO_ACCOUNT_SID;
-  const auth = process.env.TWILIO_AUTH_TOKEN;
-  const from = process.env.TWILIO_PHONE_NUMBER;
-  if (!sid || !auth || !from || from === 'false' || sid === 'false') { console.log('[sms] Twilio not configured'); return false; }
-  try {
-    const res = await fetch(
-        await sendSMS(to, body)
-      {
-        method: 'POST',
-        headers: { 'Authorization': `Basic ${Buffer.from(`${sid}:${auth}`).toString('base64')}`, 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({ To: to, From: from, Body: body }).toString(),
-      }
-    );
-    return res.ok;
-  } catch { return false; }
+  const { sendSMS: _send } = await import('@/lib/clicksend')
+  const result = await _send(to, body)
+  return result.ok
 }

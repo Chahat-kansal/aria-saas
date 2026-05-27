@@ -243,6 +243,7 @@ async function _GET(req: Request) {
     errors_count: errors.length,
     errors,
   });
+  }, { attempts: 3, delayMs: 3000 })
 }
 
 export const GET = withErrorCapture('cron/nightly-sync', _GET)

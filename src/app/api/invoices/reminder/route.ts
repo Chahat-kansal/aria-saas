@@ -48,21 +48,12 @@ async function _POST(req: Request) {
         return NextResponse.json({ error: `Email failed: ${errText}` }, { status: 502 })
       }
     } else {
-      if (!accountSid || !authToken || !from) return NextResponse.json({ error: 'SMS not configured' }, { status: 503 })
       const rawPhone = (inv.bill_to_phone ?? '') as string
       if (!rawPhone) return NextResponse.json({ error: 'No phone on invoice' }, { status: 400 })
       const phone = rawPhone.replace(/\s/g, '').replace(/^0/, '+61')
-        await sendSMS(phone, confirmedMessage as string)
-        method: 'POST',
-        headers: {
-          Authorization: 'Basic ' + Buffer.from(`${accountSid}:${authToken}`).toString('base64'),
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: new URLSearchParams({ To: phone, From: from, Body: confirmedMessage as string }).toString(),
-      })
-      if (!smsRes.ok) {
-        const err = await smsRes.json().catch(() => ({}))
-        return NextResponse.json({ error: (err as Record<string, unknown>).message ?? 'SMS failed' }, { status: 502 })
+      const smsResult = await sendSMS(phone, confirmedMessage as string)
+      if (!smsResult.ok) {
+        return NextResponse.json({ error: smsResult.error ?? 'SMS failed' }, { status: 502 })
       }
     }
     return NextResponse.json({ ok: true, sent: true })

@@ -18,18 +18,8 @@ async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, u
 }
 
 async function sendShiftSMS(to: string, message: string): Promise<boolean> {
-  const sid = process.env.TWILIO_ACCOUNT_SID ?? ''
-  const token = process.env.TWILIO_AUTH_TOKEN ?? ''
-  const from = process.env.TWILIO_PHONE_NUMBER ?? ''
-  if (!sid || !token || !from) return false
-  try {
-        await sendSMS(to, message)
-      method: 'POST',
-      headers: { 'Authorization': `Basic ${Buffer.from(`${sid}:${token}`).toString('base64')}`, 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ To: to, From: from, Body: message }).toString(),
-    })
-    return r.ok
-  } catch { return false }
+  const result = await sendSMS(to, message)
+  return result.ok
 }
 
 async function sendShiftEmail(to: string, staffName: string, bizName: string, weekStart: string, shifts: ShiftEntry[]): Promise<boolean> {

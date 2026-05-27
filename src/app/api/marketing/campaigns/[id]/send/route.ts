@@ -85,21 +85,13 @@ async function _POST(_req: Request, { params }: { params: { id: string } }) {
         continue
       }
       try {
-        await sendSMS(cu.phone as string, messageText)
-          method: 'POST',
-          headers: {
-            'Authorization': `Basic ${Buffer.from(`${twilioSid}:${twilioToken}`).toString('base64')}`,
-            'Content-Type': 'application/x-www-form-urlencoded',
-          },
-          body: new URLSearchParams({ To: cu.phone as string, From: twilioFrom!, Body: messageText }),
-        })
-        const smsData = await res.json() as { sid?: string; error_message?: string }
+        const smsResult = await sendSMS(cu.phone as string, messageText)
         const rId = (recipientRow as Record<string,unknown>)?.id as string
-        if (smsData.sid) {
-          if (rId) await supabaseAdmin.from('campaign_recipients').update({ status: 'sent', sent_at: new Date().toISOString(), twilio_sid: smsData.sid }).eq('id', rId)
+        if (smsResult.ok) {
+          if (rId) await supabaseAdmin.from('campaign_recipients').update({ status: 'sent', sent_at: new Date().toISOString() }).eq('id', rId)
           sent++
         } else {
-          if (rId) await supabaseAdmin.from('campaign_recipients').update({ status: 'failed', error_message: smsData.error_message ?? 'twilio_error' }).eq('id', rId)
+          if (rId) await supabaseAdmin.from('campaign_recipients').update({ status: 'failed', error_message: smsResult.error ?? 'sms_error' }).eq('id', rId)
           failed++
         }
       } catch (e) {

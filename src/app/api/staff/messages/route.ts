@@ -62,18 +62,9 @@ async function _POST(req: Request) {
   if (isBroadcast) {
     const { data: allStaff } = await supabase.from('staff_members')
       .select('mobile,first_name').eq('business_id', bid).eq('status', 'active')
-    const sid = process.env.TWILIO_ACCOUNT_SID ?? ''
-    const token = process.env.TWILIO_AUTH_TOKEN ?? ''
-    const from = process.env.TWILIO_PHONE_NUMBER ?? ''
-    if (sid && token && from) {
-      for (const sm of allStaff ?? []) {
-        if (!sm.mobile) continue
-        await sendSMS(String(sm.mobile), `${subject ? subject + ': ' : '')
-          method: 'POST',
-          headers: { 'Authorization': `Basic ${Buffer.from(`${sid}:${token}`).toString('base64')}`, 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: new URLSearchParams({ To: String(sm.mobile), From: from, Body: `${subject ? subject + ': ' : ''}${msgBody.slice(0, 140)}` }).toString(),
-        }).catch(() => { /* non-fatal */ })
-      }
+    for (const sm of allStaff ?? []) {
+      if (!sm.mobile) continue
+      sendSMS(String(sm.mobile), `${subject ? subject + ': ' : ''}${msgBody.slice(0, 140)}`).catch(() => null)
     }
   }
 

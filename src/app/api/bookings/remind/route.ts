@@ -31,20 +31,11 @@ export async function POST(req: Request) {
 
   const message = `Hi ${booking.customer_name}! Just a reminder about your booking at ${bizName} tomorrow — ${date}${time ? ` at ${time}` : ''}${booking.party_size > 1 ? ` for ${booking.party_size} people` : ''}. See you then! 😊`
 
-  // Send via Twilio
-
-  if (!accountSid || !authToken || !from) {
-    return NextResponse.json({ error: 'Twilio not configured' }, { status: 500 })
-  }
-
   const phone = booking.customer_phone.replace(/\s/g, '').replace(/^0/, '+61')
+  const result = await sendSMS(phone, message)
 
-        await sendSMS(phone, message)
-    },
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    return NextResponse.json({ error: (err as Record<string,unknown>).message ?? 'SMS failed' }, { status: 500 })
+  if (!result.ok) {
+    return NextResponse.json({ error: result.error ?? 'SMS failed' }, { status: 500 })
   }
 
   // Mark reminder sent
