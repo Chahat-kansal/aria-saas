@@ -69,7 +69,7 @@
     },
     {
       "path": "/api/crons/aria-intelligence",
-      "schedule": "0 * * * *"
+      "schedule": "0 8 * * *"
     },
     {
       "path": "/api/cron/signal-engine",
@@ -93,7 +93,7 @@
     },
     {
       "path": "/api/cron/marketing-automations",
-      "schedule": "0 */2 * * *"
+      "schedule": "0 11 * * *"
     },
     {
       "path": "/api/cron/parcel-sync",
@@ -113,7 +113,7 @@
     },
     {
       "path": "/api/cron/price-schedules",
-      "schedule": "0 * * * *"
+      "schedule": "0 5 * * *"
     },
     {
       "path": "/api/cron/seo-keyword-check",
@@ -129,7 +129,7 @@
     },
     {
       "path": "/api/cron/timed-prices",
-      "schedule": "0 * * * *"
+      "schedule": "0 9 * * *"
     },
     {
       "path": "/api/cron/xero-sync",
@@ -137,11 +137,11 @@
     },
     {
       "path": "/api/cron/send-scheduled-campaigns",
-      "schedule": "0 * * * *"
+      "schedule": "0 12 * * *"
     },
     {
       "path": "/api/cron/booking-reminders",
-      "schedule": "0 * * * *"
+      "schedule": "0 13 * * *"
     }
   ]
 }
