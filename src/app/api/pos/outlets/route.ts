@@ -94,4 +94,5 @@ async function _DELETE(req: Request) {
 export const GET = withErrorCapture('pos/outlets', _GET)
 export const POST = withErrorCapture('pos/outlets', _POST)
 export const PATCH = withErrorCapture('pos/outlets', _PATCH)
+export const PUT = withErrorCapture('pos/outlets', _PATCH)
 export const DELETE = withErrorCapture('pos/outlets', _DELETE)

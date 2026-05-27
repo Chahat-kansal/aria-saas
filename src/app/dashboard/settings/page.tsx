@@ -56,10 +56,15 @@ export default function DashboardSettingsPage() {
 
   async function updateOutletPatch(id: string, form: typeof outletForm) {
     setSavingOutlet(true)
-    await fetch(`/api/pos/outlets?id=${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: form.name.trim(), address: form.address || null, phone: form.phone || null, is_active: form.is_active }) })
+    await fetch(`/api/pos/outlets?id=${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: form.name.trim(), address: form.address || null, phone: form.phone || null, is_active: form.is_active }) })
     setOutlets(os => os.map(o => o.id === id ? { ...o, name: form.name.trim(), address: form.address || null, phone: form.phone || null, is_active: form.is_active } : o))
     setEditingOutlet(null)
     setSavingOutlet(false)
+  }
+
+  async function toggleOutletActive(id: string, next: boolean) {
+    setOutlets(os => os.map(o => o.id === id ? { ...o, is_active: next } : o))
+    await fetch(`/api/pos/outlets?id=${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ is_active: next }) }).catch(() => {})
   }
 
   useEffect(() => {
@@ -288,9 +293,10 @@ export default function DashboardSettingsPage() {
                         {o.address && <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '2px 0 0' }}>{o.address}</p>}
                         {o.phone && <p style={{ fontSize: 12, color: 'var(--text-tertiary)', margin: '1px 0 0' }}>{o.phone}</p>}
                       </div>
-                      <span style={{ fontSize: 10, padding: '3px 8px', borderRadius: 99, background: o.is_active ? 'rgba(0,176,64,0.12)' : 'rgba(120,120,120,0.12)', color: o.is_active ? '#00B140' : 'var(--text-tertiary)', fontWeight: 700 }}>
-                        {o.is_active ? 'Active' : 'Inactive'}
-                      </span>
+                      <button onClick={() => toggleOutletActive(o.id, !o.is_active)} title="Toggle active"
+                        style={{ fontSize: 10, padding: '3px 8px', borderRadius: 99, border: 'none', background: o.is_active ? 'rgba(0,176,64,0.12)' : 'rgba(120,120,120,0.12)', color: o.is_active ? '#00B140' : 'var(--text-tertiary)', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                        {o.is_active ? '● Active' : '○ Inactive'}
+                      </button>
                       <button onClick={() => { setEditingOutlet(o.id); setOutletForm({ name: o.name, address: o.address ?? '', phone: o.phone ?? '', is_active: o.is_active }); }}
                         style={{ fontSize: 12, background: 'none', border: 'none', color: 'var(--violet)', cursor: 'pointer', fontFamily: 'inherit', padding: '4px 8px' }}>
                         ✏️ Edit
