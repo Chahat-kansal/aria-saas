@@ -36,11 +36,34 @@ export default function CashFlowPage() {
   const [loading, setLoading] = useState(true)
   const [horizon, setHorizon] = useState(30)
   const [scenario, setScenario] = useState<'base' | 'optimistic' | 'pessimistic'>('base')
-  const [view, setView] = useState<'chart' | 'table' | 'expenses'>('chart')
+  const [view, setView] = useState<'chart' | 'table'>('chart')
   const [expenses, setExpenses] = useState<ManualExpense[]>(DEFAULT_EXPENSES.map(e => ({ ...e })))
   const [showExpensePanel, setShowExpensePanel] = useState(false)
   const [newExpenseLabel, setNewExpenseLabel] = useState('')
   const [newExpenseAmount, setNewExpenseAmount] = useState('')
+  const [expensesSaving, setExpensesSaving] = useState(false)
+  const [expensesSavedAt, setExpensesSavedAt] = useState<string>('')
+
+  // Load persisted expenses on mount
+  useEffect(() => {
+    if (!business?.id) return
+    fetch('/api/business-expenses').then(r => r.json()).then((d: { expenses?: Array<{ label: string; amount: number }> }) => {
+      if (Array.isArray(d.expenses) && d.expenses.length > 0) {
+        setExpenses(d.expenses.map(e => ({ label: e.label, amount: Number(e.amount) || 0 })))
+      }
+    }).catch(() => { /* keep defaults */ })
+  }, [business?.id])
+
+  async function saveExpenses(rows: ManualExpense[]) {
+    if (!business?.id) return
+    setExpensesSaving(true)
+    const r = await fetch('/api/business-expenses', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ expenses: rows }),
+    }).then(r => r.json()).catch(() => ({ error: 'Network error' }))
+    setExpensesSaving(false)
+    if (!r.error) setExpensesSavedAt(new Date().toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' }))
+  }
   const chartRef = useRef<HTMLCanvasElement>(null)
   const chartInstance = useRef<unknown>(null)
 
@@ -279,10 +302,11 @@ export default function CashFlowPage() {
             <p style={{ fontSize: 12, color: C.muted }}>
               Total monthly expenses: <strong style={{ color: C.text }}>A${totalMonthlyExpenses.toLocaleString()}</strong>
               {' '}<span style={{ color: C.dim }}>= A${Math.round(totalMonthlyExpenses / 30).toLocaleString()}/day</span>
+              {expensesSavedAt && <span style={{ color: C.green, marginLeft: 8 }}>✓ Saved {expensesSavedAt}</span>}
             </p>
-            <button onClick={() => setShowExpensePanel(false)}
-              style={{ padding: '6px 14px', borderRadius: 8, border: 'none', background: C.green, color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
-              Apply
+            <button onClick={async () => { await saveExpenses(expenses); setShowExpensePanel(false) }} disabled={expensesSaving}
+              style={{ padding: '6px 14px', borderRadius: 8, border: 'none', background: C.green, color: '#fff', fontSize: 12, fontWeight: 600, cursor: expensesSaving ? 'wait' : 'pointer', fontFamily: 'inherit', opacity: expensesSaving ? 0.6 : 1 }}>
+              {expensesSaving ? 'Saving…' : 'Save & Apply'}
             </button>
           </div>
         </div>

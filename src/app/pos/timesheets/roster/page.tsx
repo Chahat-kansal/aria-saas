@@ -31,6 +31,7 @@ export default function RosterPage(){
   const [generating,setGenerating]=useState(false);
   const [error,setError]=useState<string|null>(null);
   const [staff,setStaff]=useState<PosUser[]>([]);
+  const [businessId,setBusinessId]=useState<string|null>(null);
   const [editShift,setEditShift]=useState<Shift|null>(null);
   const [editDate,setEditDate]=useState<string|null>(null);
   const [editStaffId,setEditStaffId]=useState<string|null>(null);
@@ -38,17 +39,25 @@ export default function RosterPage(){
 
   const dates=getWeekDates(weekStart);
 
+  // Resolve current business id once
+  useEffect(()=>{
+    fetch('/api/pos/business').then(r=>r.json()).then((d:{business?:{id?:string}})=>{
+      if(d.business?.id) setBusinessId(d.business.id);
+    }).catch(()=>{});
+  },[]);
+
   const load=useCallback(async()=>{
+    if(!businessId) return; // wait for business id before firing any queries
     try{
       const [rRes,sRes]=await Promise.all([
         fetch(`/api/aria/roster`).then(r=>r.json()),
-        fetch("/api/pos/users?business_id=").then(r=>r.json()),
+        fetch(`/api/pos/users?business_id=${encodeURIComponent(businessId)}`).then(r=>r.json()),
       ]);
       const matching=(rRes.rosters??[]).find((r:Roster)=>r.week_starting===weekStart);
       setRoster(matching??null);
       setStaff(sRes.users??[]);
     }catch{setError("Could not load roster");}
-  },[weekStart]);
+  },[weekStart,businessId]);
 
   useEffect(()=>{load();},[load]);
 
