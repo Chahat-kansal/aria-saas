@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 
 interface Business { id: string; name: string; industry: string; abn?: string; city?: string; address?: string; phone?: string; google_place_id?: string | null; google_average_rating?: number | null; google_total_reviews?: number | null; google_reviews_last_synced?: string | null }
+interface Outlet { id: string; name: string; address: string | null; phone: string | null; is_active: boolean; is_global: boolean; }
 
 const inp: React.CSSProperties = {
   width: '100%', boxSizing: 'border-box', background: 'var(--bg-input)', border: '1px solid var(--divider)',
@@ -10,7 +11,7 @@ const inp: React.CSSProperties = {
 }
 const lbl: React.CSSProperties = { display: 'block', fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.06em' }
 
-const TABS = ['Business Profile', 'Notifications', 'Privacy & Data']
+const TABS = ['Business Profile', 'Notifications', 'Privacy & Data', 'Locations']
 
 export default function DashboardSettingsPage() {
   const [tab,     setTab]     = useState(0)
@@ -32,6 +33,34 @@ export default function DashboardSettingsPage() {
   const [deleteConfirm, setDeleteConfirm] = useState('')
   const [deleting,      setDeleting]      = useState(false)
   const [deleteError,   setDeleteError]   = useState('')
+  const [outlets,       setOutlets]       = useState<Outlet[]>([])
+  const [outletsLoading, setOutletsLoading] = useState(false)
+  const [showAddOutlet, setShowAddOutlet] = useState(false)
+  const [outletForm,    setOutletForm]    = useState({ name: '', address: '', phone: '', is_active: true })
+  const [editingOutlet, setEditingOutlet] = useState<string | null>(null)
+  const [savingOutlet,  setSavingOutlet]  = useState(false)
+
+  function loadOutlets() {
+    setOutletsLoading(true)
+    fetch('/api/pos/outlets').then(r => r.json()).then(d => { setOutlets(d.outlets ?? []); setOutletsLoading(false); }).catch(() => setOutletsLoading(false))
+  }
+
+  async function saveNewOutlet() {
+    if (!outletForm.name.trim()) return
+    setSavingOutlet(true)
+    const res = await fetch('/api/pos/outlets', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: outletForm.name.trim(), address: outletForm.address || null, phone: outletForm.phone || null, is_active: true }) })
+    const d = await res.json()
+    if (d.outlet) { setOutlets(os => [...os, d.outlet]); setShowAddOutlet(false); setOutletForm({ name: '', address: '', phone: '', is_active: true }) }
+    setSavingOutlet(false)
+  }
+
+  async function updateOutletPatch(id: string, form: typeof outletForm) {
+    setSavingOutlet(true)
+    await fetch(`/api/pos/outlets?id=${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: form.name.trim(), address: form.address || null, phone: form.phone || null, is_active: form.is_active }) })
+    setOutlets(os => os.map(o => o.id === id ? { ...o, name: form.name.trim(), address: form.address || null, phone: form.phone || null, is_active: form.is_active } : o))
+    setEditingOutlet(null)
+    setSavingOutlet(false)
+  }
 
   useEffect(() => {
     fetch('/api/settings/business').then(r => r.json()).then(d => {
@@ -46,6 +75,7 @@ export default function DashboardSettingsPage() {
         setGooglePlaceId(b.google_place_id ?? '')
       }
     }).catch(() => {})
+    loadOutlets()
   }, [])
 
   async function save() {
@@ -229,6 +259,68 @@ export default function DashboardSettingsPage() {
               {deleting ? 'Deleting…' : 'Delete Account'}
             </button>
           </div>
+        </div>
+      )}
+
+      {tab === 3 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {outletsLoading ? <p style={{ fontSize: 13, color: 'var(--text-tertiary)' }}>Loading…</p> : (
+            <>
+              {outlets.map(o => (
+                <div key={o.id} style={{ padding: '14px 16px', borderRadius: 10, border: '1px solid var(--divider)', background: 'var(--bg-elevated)' }}>
+                  {editingOutlet === o.id ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      <div><label style={lbl}>Name *</label><input style={inp} value={outletForm.name} onChange={e => setOutletForm(f => ({ ...f, name: e.target.value }))} placeholder="Location name" /></div>
+                      <div><label style={lbl}>Address</label><input style={inp} value={outletForm.address} onChange={e => setOutletForm(f => ({ ...f, address: e.target.value }))} placeholder="123 Bay St, Brighton VIC 3186" /></div>
+                      <div><label style={lbl}>Phone</label><input style={inp} value={outletForm.phone} onChange={e => setOutletForm(f => ({ ...f, phone: e.target.value }))} placeholder="03 9000 0000" /></div>
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <button onClick={() => updateOutletPatch(o.id, outletForm)} disabled={savingOutlet || !outletForm.name.trim()}
+                          style={{ padding: '7px 16px', borderRadius: 8, border: 'none', background: 'var(--violet)', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', opacity: savingOutlet || !outletForm.name.trim() ? 0.5 : 1 }}>
+                          {savingOutlet ? '…' : 'Save'}
+                        </button>
+                        <button onClick={() => setEditingOutlet(null)} style={{ padding: '7px 14px', borderRadius: 8, border: '1px solid var(--divider)', background: 'transparent', color: 'var(--text-tertiary)', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <div style={{ flex: 1 }}>
+                        <p style={{ fontSize: 14, fontWeight: 700, margin: 0 }}>{o.name}{o.is_global ? ' (Default)' : ''}</p>
+                        {o.address && <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '2px 0 0' }}>{o.address}</p>}
+                        {o.phone && <p style={{ fontSize: 12, color: 'var(--text-tertiary)', margin: '1px 0 0' }}>{o.phone}</p>}
+                      </div>
+                      <span style={{ fontSize: 10, padding: '3px 8px', borderRadius: 99, background: o.is_active ? 'rgba(0,176,64,0.12)' : 'rgba(120,120,120,0.12)', color: o.is_active ? '#00B140' : 'var(--text-tertiary)', fontWeight: 700 }}>
+                        {o.is_active ? 'Active' : 'Inactive'}
+                      </span>
+                      <button onClick={() => { setEditingOutlet(o.id); setOutletForm({ name: o.name, address: o.address ?? '', phone: o.phone ?? '', is_active: o.is_active }); }}
+                        style={{ fontSize: 12, background: 'none', border: 'none', color: 'var(--violet)', cursor: 'pointer', fontFamily: 'inherit', padding: '4px 8px' }}>
+                        ✏️ Edit
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
+              {!showAddOutlet ? (
+                <button onClick={() => { setShowAddOutlet(true); setOutletForm({ name: '', address: '', phone: '', is_active: true }); }}
+                  style={{ padding: '10px 20px', borderRadius: 9, border: '1px dashed var(--divider)', background: 'transparent', color: 'var(--violet)', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+                  + Add location
+                </button>
+              ) : (
+                <div style={{ padding: '16px', borderRadius: 10, border: '1px solid var(--divider)', background: 'var(--bg-elevated)', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <p style={{ fontSize: 13, fontWeight: 700, margin: 0 }}>New location</p>
+                  <div><label style={lbl}>Name *</label><input style={inp} value={outletForm.name} onChange={e => setOutletForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Brighton CBD" /></div>
+                  <div><label style={lbl}>Address</label><input style={inp} value={outletForm.address} onChange={e => setOutletForm(f => ({ ...f, address: e.target.value }))} placeholder="123 Bay St, Brighton VIC 3186" /></div>
+                  <div><label style={lbl}>Phone</label><input style={inp} value={outletForm.phone} onChange={e => setOutletForm(f => ({ ...f, phone: e.target.value }))} placeholder="03 9000 0000" /></div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button onClick={saveNewOutlet} disabled={savingOutlet || !outletForm.name.trim()}
+                      style={{ padding: '8px 20px', borderRadius: 9, border: 'none', background: 'var(--violet)', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', opacity: savingOutlet || !outletForm.name.trim() ? 0.5 : 1 }}>
+                      {savingOutlet ? 'Adding…' : 'Add location'}
+                    </button>
+                    <button onClick={() => setShowAddOutlet(false)} style={{ padding: '8px 16px', borderRadius: 9, border: '1px solid var(--divider)', background: 'transparent', color: 'var(--text-secondary)', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
         </div>
       )}
 

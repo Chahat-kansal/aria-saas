@@ -123,7 +123,7 @@ async function _POST(req: Request) {
 
   if (existing) return NextResponse.json({ error: 'A session is already open' }, { status: 400 });
 
-  const { opening_float, pos_user_id: session_pos_user_id } = await req.json();
+  const { opening_float, pos_user_id: session_pos_user_id, outlet_id } = await req.json();
 
   // ── Permission check: open register ───────────────────────────────
   if (session_pos_user_id) {
@@ -147,6 +147,7 @@ async function _POST(req: Request) {
       status: 'open',
       total_cash_sales: 0,
       total_card_sales: 0,
+      outlet_id: outlet_id ?? null,
     })
     .select()
     .single();

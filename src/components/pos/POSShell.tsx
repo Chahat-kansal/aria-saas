@@ -152,6 +152,9 @@ function POSUserSelect({ businessId, businessName, onLogin }: {
   const [loadErr,  setLoadErr]  = useState(false);
   const [selected, setSelected] = useState<PosUser | null>(null);
   const [attempts, setAttempts] = useState(0);
+  const [outlets,  setOutlets]  = useState<Array<{ id: string; name: string; address: string | null; is_global: boolean }>>([]);
+  const [showOutletPicker, setShowOutletPicker] = useState(false);
+  const [pendingUser, setPendingUser] = useState<PosUser | null>(null);
 
   const loadUsers = useCallback(() => {
     if (!businessId) { setLoading(false); return; }
@@ -165,6 +168,14 @@ function POSUserSelect({ businessId, businessName, onLogin }: {
   }, [businessId]);
 
   useEffect(() => { loadUsers(); }, [loadUsers]);
+
+  useEffect(() => {
+    if (!businessId) return;
+    fetch('/api/pos/outlets').then(r => r.json()).then(d => {
+      const active = (d.outlets ?? []).filter((o: any) => o.is_active !== false && o.active !== false);
+      setOutlets(active);
+    }).catch(() => {});
+  }, [businessId]);
 
   function bypassAsOwner() {
     const owner: PosUser = {
@@ -191,7 +202,19 @@ function POSUserSelect({ businessId, businessName, onLogin }: {
     const withTime = { ...u, loginAt: Date.now() };
     localStorage.setItem(POS_USER_KEY, JSON.stringify(withTime));
     setEmpCookie(u.role);
-    onLogin(withTime);
+    if (outlets.length > 1) {
+      setPendingUser(withTime);
+      setShowOutletPicker(true);
+    } else {
+      onLogin(withTime);
+    }
+  }
+
+  function selectOutlet(outletId: string) {
+    localStorage.setItem('aria-active-outlet', outletId);
+    localStorage.setItem('pos_outlet_id', outletId);
+    setShowOutletPicker(false);
+    if (pendingUser) onLogin(pendingUser);
   }
 
   return (
@@ -211,6 +234,23 @@ function POSUserSelect({ businessId, businessName, onLogin }: {
         {loading ? (
           <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}>
             <div style={{ width: 24, height: 24, borderRadius: '50%', border: '2px solid rgba(139,92,246,0.3)', borderTopColor: 'var(--violet)', animation: 'pos-processing 0.7s linear infinite' }} />
+          </div>
+        ) : showOutletPicker && pendingUser ? (
+          <div style={{ textAlign: 'center' }}>
+            <p style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', fontFamily: 'var(--font-ui)', marginBottom: 4 }}>Which location today?</p>
+            <p style={{ fontSize: 12, color: 'var(--text-tertiary)', fontFamily: 'var(--font-ui)', marginBottom: 24 }}>Hi {pendingUser.name} — select your outlet</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {outlets.map(o => (
+                <button key={o.id} type="button" onClick={() => selectOutlet(o.id)}
+                  style={{ padding: '16px 20px', borderRadius: 14, border: '1px solid var(--border-default)', background: 'var(--bg-surface)', color: 'var(--text-primary)', cursor: 'pointer', fontFamily: 'var(--font-ui)', textAlign: 'left', transition: 'all 150ms', WebkitTapHighlightColor: 'transparent' }}
+                  onPointerDown={e => { const el = e.currentTarget; el.style.background = 'var(--bg-hover)'; el.style.border = '1px solid rgba(139,92,246,0.35)'; }}
+                  onPointerUp={e => { const el = e.currentTarget; setTimeout(() => { el.style.background = 'var(--bg-surface)'; el.style.border = '1px solid var(--border-default)'; }, 120); }}
+                  onPointerLeave={e => { const el = e.currentTarget; el.style.background = 'var(--bg-surface)'; el.style.border = '1px solid var(--border-default)'; }}>
+                  <p style={{ fontSize: 14, fontWeight: 600, margin: 0 }}>📍 {o.is_global ? 'Global' : o.name}</p>
+                  {o.address && <p style={{ fontSize: 11, color: 'var(--text-tertiary)', margin: '3px 0 0' }}>{o.address}</p>}
+                </button>
+              ))}
+            </div>
           </div>
         ) : selected ? (
           <PINEntry

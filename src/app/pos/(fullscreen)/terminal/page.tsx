@@ -312,6 +312,7 @@ export default function TerminalPage() {
   const [simplePriceModal, setSimplePriceModal] = useState<{ product: Product; variants: SimpleVariant[] } | null>(null);
 
   /* ── UI ───────────────────────────────────────────────────────── */
+  const [showOutletDropdown, setShowOutletDropdown] = useState(false);
   const [search,           setSearch]           = useState('');
   const [activeCategory,   setActiveCategory]   = useState<string | null>(null);
   const [showParked,       setShowParked]       = useState(false);
@@ -1371,7 +1372,7 @@ export default function TerminalPage() {
     setOpeningRegister(true); setRegisterError(null);
     try {
       const res = await fetch('/api/pos/sessions', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ opening_float: parseFloat(openingFloat) || 0 }) });
+        body: JSON.stringify({ opening_float: parseFloat(openingFloat) || 0, outlet_id: activeOutletId }) });
       const d = await res.json();
       if (!res.ok) { setRegisterError(d.error ?? 'Failed to open register'); setOpeningRegister(false); return; }
       await loadRegister(); setShowRegisterModal(false);
@@ -2546,27 +2547,34 @@ export default function TerminalPage() {
             <span style={{ flex: 1 }} />
             {/* Layout switcher */}
             <LayoutSwitcher current={currentLayout} onChange={setLayout} />
-            {/* Outlet select — compact, max-width 90px */}
-            <select
-              value={activeOutletId ?? ''}
-              onChange={e => {
-                const id = e.target.value;
-                setActiveOutletId(id);
-                localStorage.setItem('aria-active-outlet', id);
-                localStorage.setItem('pos_outlet_id', id);
-              }}
-              title="Active outlet"
-              style={{
-                padding: '4px 6px', borderRadius: 7, fontSize: 10, fontWeight: 500,
-                background: 'var(--violet-dim)', border: '1px solid rgba(0,106,255,0.10)',
-                color: 'var(--text-secondary)', cursor: 'pointer', fontFamily: 'inherit',
-                maxWidth: 80, flexShrink: 0,
-              }}
-            >
-              {(outlets.length > 0 ? outlets : [{ id: '', name: 'Global', is_global: true }]).map((o: any) => (
-                <option key={o.id} value={o.id}>{o.is_global ? 'Global' : o.name}</option>
-              ))}
-            </select>
+            {/* Outlet switcher — only shown if >1 outlet */}
+            {outlets.length > 1 && (
+              <div style={{ position: 'relative', flexShrink: 0 }}>
+                <button
+                  onClick={() => setShowOutletDropdown(v => !v)}
+                  style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 8px', borderRadius: 7, fontSize: 11, fontWeight: 600, background: 'var(--violet-dim)', border: '1px solid rgba(0,106,255,0.10)', color: 'var(--text-secondary)', cursor: 'pointer', fontFamily: 'inherit' }}>
+                  <span>📍</span>
+                  <span style={{ maxWidth: 80, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {(outlets.find((o: any) => o.id === activeOutletId) as any)?.name ?? 'Location'}
+                  </span>
+                  <span style={{ fontSize: 8, opacity: 0.6 }}>▼</span>
+                </button>
+                {showOutletDropdown && (
+                  <div style={{ position: 'absolute', top: '100%', right: 0, zIndex: 200, background: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.4)', minWidth: 160, marginTop: 4 }}>
+                    {outlets.map((o: any) => (
+                      <button key={o.id} onClick={() => {
+                        setActiveOutletId(o.id);
+                        localStorage.setItem('aria-active-outlet', o.id);
+                        localStorage.setItem('pos_outlet_id', o.id);
+                        setShowOutletDropdown(false);
+                      }} style={{ display: 'block', width: '100%', padding: '10px 14px', textAlign: 'left', border: 'none', background: o.id === activeOutletId ? 'rgba(0,106,255,0.08)' : 'transparent', color: o.id === activeOutletId ? 'var(--violet)' : 'var(--text-primary)', fontSize: 12, fontWeight: o.id === activeOutletId ? 700 : 400, cursor: 'pointer', fontFamily: 'inherit' }}>
+                        {o.is_global ? 'Global' : o.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {priceCheckMode && (
