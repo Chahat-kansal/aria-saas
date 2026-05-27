@@ -1,287 +1,153 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import Link from 'next/link'
+import { Sparkles } from 'lucide-react'
 import { C, RADIUS, MAX_W, FONT_DISPLAY } from './theme'
+import { PostCard, type PostCardData } from './PostCard'
+import { StoriesRow, type StoryBubble } from './StoriesRow'
 
-interface Member { id: string; nickname: string | null; joined_at: string }
-interface Follow {
-  id: string
-  business_id: string
-  consent_marketing: boolean
-  notifications_on: boolean
-  is_hidden: boolean
-  businesses: { name: string; industry: string | null; city: string | null; logo_url: string | null } | null
+interface FeedResponse {
+  posts: PostCardData[]
+  next_cursor: string | null
+  mode: 'followed' | 'discovery'
+  member: { id: string; nickname: string | null } | null
 }
 
-export default function CommunityHomePage() {
-  const [member, setMember] = useState<Member | null>(null)
-  const [follows, setFollows] = useState<Follow[]>([])
+export default function CommunityFeedPage() {
+  const [posts, setPosts] = useState<PostCardData[]>([])
+  const [bubbles, setBubbles] = useState<StoryBubble[]>([])
   const [loading, setLoading] = useState(true)
-  const [nickname, setNickname] = useState('')
-  const [saving, setSaving] = useState(false)
-  const [editingNick, setEditingNick] = useState(false)
+  const [mode, setMode] = useState<'followed' | 'discovery'>('discovery')
+  const [member, setMember] = useState<{ id: string; nickname: string | null } | null>(null)
+  const [cursor, setCursor] = useState<string | null>(null)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const sentinelRef = useRef<HTMLDivElement>(null)
 
-  useEffect(() => {
-    (async () => {
-      const d = await fetch('/api/community/follows').then(r => r.json())
-      setMember(d.member ?? null)
-      setFollows(d.follows ?? [])
-      setLoading(false)
-    })()
+  const load = useCallback(async () => {
+    setLoading(true)
+    try {
+      const [fRes, sRes] = await Promise.all([
+        fetch('/api/community/feed').then(r => r.json()),
+        fetch('/api/community/stories').then(r => r.json()),
+      ])
+      const feed = fRes as FeedResponse
+      setPosts(feed.posts ?? [])
+      setCursor(feed.next_cursor ?? null)
+      setMode(feed.mode ?? 'discovery')
+      setMember(feed.member ?? null)
+      setBubbles((sRes.bubbles ?? []) as StoryBubble[])
+    } catch (e) {
+      console.error(e)
+    }
+    setLoading(false)
   }, [])
 
-  async function join() {
-    setSaving(true)
-    const res = await fetch('/api/community/session', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ nickname }),
-    }).then(r => r.json())
-    setMember(res.member ?? null)
-    setSaving(false)
-  }
+  useEffect(() => { load() }, [load])
 
-  async function saveNickname() {
-    setSaving(true)
-    await fetch('/api/community/session', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ nickname }),
-    })
-    if (member) setMember({ ...member, nickname: nickname || null })
-    setEditingNick(false)
-    setSaving(false)
-  }
+  const loadMore = useCallback(async () => {
+    if (!cursor || loadingMore) return
+    setLoadingMore(true)
+    try {
+      const r = await fetch('/api/community/feed?before=' + encodeURIComponent(cursor)).then(r => r.json()) as FeedResponse
+      setPosts(prev => [...prev, ...(r.posts ?? [])])
+      setCursor(r.next_cursor)
+    } catch (e) {
+      console.error(e)
+    }
+    setLoadingMore(false)
+  }, [cursor, loadingMore])
 
-  async function leave() {
-    if (!confirm('Leave Aria Community? This unfollows every business and removes your session — your follows can\'t be restored.')) return
-    setSaving(true)
-    await fetch('/api/community/session', { method: 'DELETE' })
-    setMember(null); setFollows([]); setNickname(''); setEditingNick(false)
-    setSaving(false)
-  }
+  // Infinite scroll
+  useEffect(() => {
+    if (!sentinelRef.current || !cursor) return
+    const obs = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) loadMore()
+    }, { rootMargin: '300px' })
+    obs.observe(sentinelRef.current)
+    return () => obs.disconnect()
+  }, [cursor, loadMore])
 
-  async function togglePref(business_id: string, key: 'notifications_on' | 'is_hidden' | 'consent_marketing', value: boolean) {
+  async function hideBusiness(business_id: string) {
+    if (!member) return
+    if (!confirm('Hide all posts from this business? You\'ll stay subscribed — you can unhide in Settings.')) return
     await fetch('/api/community/follows', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ business_id, [key]: value }),
+      body: JSON.stringify({ business_id, is_hidden: true }),
     })
-    setFollows(prev => prev.map(f => f.business_id === business_id ? { ...f, [key]: value } : f))
+    setPosts(prev => prev.filter(p => p.business_id !== business_id))
+    setBubbles(prev => prev.filter(b => b.business_id !== business_id))
   }
 
-  async function unfollow(business_id: string) {
-    if (!confirm('Unfollow this business? You can re-follow anytime.')) return
-    await fetch('/api/community/follows?business_id=' + business_id, { method: 'DELETE' })
-    setFollows(prev => prev.filter(f => f.business_id !== business_id))
-  }
-
-  if (loading) {
-    return (
-      <main style={{ maxWidth: MAX_W, margin: '0 auto', padding: '32px 20px' }}>
-        <div style={{ height: 24, width: 160, background: C.surfaceHi, borderRadius: RADIUS.sm, marginBottom: 16 }} />
-        <div style={{ height: 14, width: '80%', background: C.surfaceHi, borderRadius: RADIUS.sm }} />
-      </main>
-    )
-  }
-
-  // ─── NOT JOINED YET — anonymous landing ─────────────────────────
-  if (!member) {
-    return (
-      <main style={{ maxWidth: MAX_W, margin: '0 auto', padding: '40px 20px 64px' }}>
-        <header style={{ marginBottom: 28 }}>
-          <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.16em', textTransform: 'uppercase', color: C.accent, margin: 0 }}>Aria Community</p>
-          <h1 style={{ fontSize: 32, fontWeight: 700, lineHeight: 1.12, margin: '8px 0 10px', fontFamily: FONT_DISPLAY, fontStyle: 'italic' }}>
-            Your local shops, one feed.
-          </h1>
-          <p style={{ fontSize: 15, lineHeight: 1.55, color: C.textDim, margin: 0 }}>
-            Browse anonymously — no signup needed. Join only if you want to follow a business or save what you find.
-          </p>
-        </header>
-
-        <section style={{ background: C.surface, border: '1px solid ' + C.border, borderRadius: RADIUS.lg, padding: 22, marginBottom: 20 }}>
-          <p style={{ fontSize: 14, fontWeight: 700, color: C.text, margin: '0 0 6px' }}>Anonymous by design</p>
-          <ul style={{ margin: 0, padding: 0, listStyle: 'none', fontSize: 13, color: C.textDim, lineHeight: 1.7 }}>
-            <li>· No email, phone, or real name required — ever.</li>
-            <li>· Following a shop is per-business and opt-in.</li>
-            <li>· Leave any shop — or the whole network — anytime.</li>
-            <li>· Identity (loyalty, points) lives only in-store, not here.</li>
-          </ul>
-        </section>
-
-        <section style={{ background: C.surface, border: '1px solid ' + C.border, borderRadius: RADIUS.lg, padding: 22 }}>
-          <p style={{ fontSize: 14, fontWeight: 700, margin: '0 0 6px' }}>Pick a nickname (optional)</p>
-          <p style={{ fontSize: 12, color: C.textMuted, margin: '0 0 14px', lineHeight: 1.5 }}>
-            Used only when you comment on a post. Leave it blank to stay completely anonymous.
-          </p>
-          <input
-            value={nickname}
-            onChange={e => setNickname(e.target.value)}
-            placeholder="e.g. neighbour42"
-            maxLength={40}
-            style={{
-              width: '100%', padding: '12px 14px',
-              background: C.surfaceHi, border: '1px solid ' + C.border, borderRadius: RADIUS.md,
-              color: C.text, fontSize: 15, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit',
-              marginBottom: 14,
-            }}
-          />
-          <button
-            onClick={join}
-            disabled={saving}
-            style={{
-              width: '100%', padding: '14px', border: 'none', borderRadius: RADIUS.md,
-              background: C.accent, color: '#0d0d14', fontSize: 15, fontWeight: 700,
-              cursor: saving ? 'wait' : 'pointer', fontFamily: 'inherit',
-              minHeight: 48,
-              opacity: saving ? 0.6 : 1,
-            }}
-          >
-            {saving ? 'Joining…' : 'Join the network'}
-          </button>
-          <p style={{ fontSize: 11, color: C.textMuted, margin: '12px 0 0', lineHeight: 1.55, textAlign: 'center' }}>
-            By joining you accept the <Link href="/terms" style={{ color: C.textDim, textDecoration: 'underline' }}>Terms</Link> and{' '}
-            <Link href="/privacy" style={{ color: C.textDim, textDecoration: 'underline' }}>Privacy</Link> notice. You can leave anytime.
-          </p>
-        </section>
-      </main>
-    )
-  }
-
-  // ─── JOINED ─────────────────────────────────────────────────────
   return (
-    <main style={{ maxWidth: MAX_W, margin: '0 auto', padding: '32px 20px 64px' }}>
-      <header style={{ marginBottom: 22 }}>
-        <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.16em', textTransform: 'uppercase', color: C.accent, margin: 0 }}>Aria Community</p>
-        <h1 style={{ fontSize: 26, fontWeight: 700, margin: '8px 0 0', fontFamily: FONT_DISPLAY, fontStyle: 'italic' }}>
-          {member.nickname ? `Hi ${member.nickname}` : 'You\'re in'}
-        </h1>
+    <main style={{ maxWidth: MAX_W, margin: '0 auto', padding: '20px 16px 24px' }}>
+      <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+        <div>
+          <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.16em', textTransform: 'uppercase', color: C.accent, margin: 0 }}>Aria Community</p>
+          <h1 style={{ fontSize: 24, fontWeight: 700, margin: '4px 0 0', fontFamily: FONT_DISPLAY, fontStyle: 'italic', letterSpacing: '-0.01em' }}>
+            {mode === 'followed' ? 'Your feed' : 'Discover local'}
+          </h1>
+        </div>
+        {!member && (
+          <Link href="/community/me" style={{
+            padding: '8px 14px', borderRadius: RADIUS.pill,
+            background: C.accent, color: '#0d0d14',
+            fontSize: 12, fontWeight: 700, textDecoration: 'none', minHeight: 36,
+            display: 'inline-flex', alignItems: 'center',
+          }}>Join</Link>
+        )}
       </header>
 
-      {/* Nickname inline edit */}
-      <section style={{ background: C.surface, border: '1px solid ' + C.border, borderRadius: RADIUS.lg, padding: 18, marginBottom: 20 }}>
-        {!editingNick ? (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-            <div style={{ minWidth: 0 }}>
-              <p style={{ fontSize: 11, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.08em', margin: 0 }}>Nickname</p>
-              <p style={{ fontSize: 15, fontWeight: 600, margin: '4px 0 0' }}>{member.nickname ?? 'Anonymous'}</p>
-            </div>
-            <button onClick={() => { setNickname(member.nickname ?? ''); setEditingNick(true) }}
-              style={{ background: 'transparent', border: '1px solid ' + C.border, color: C.textDim, padding: '8px 14px', borderRadius: RADIUS.sm, fontSize: 12, cursor: 'pointer', minHeight: 36, fontFamily: 'inherit' }}>
-              Change
-            </button>
-          </div>
-        ) : (
-          <div style={{ display: 'flex', gap: 8 }}>
-            <input value={nickname} onChange={e => setNickname(e.target.value)} placeholder="Nickname" maxLength={40}
-              style={{ flex: 1, padding: '10px 12px', background: C.surfaceHi, border: '1px solid ' + C.border, borderRadius: RADIUS.sm, color: C.text, fontSize: 14, outline: 'none', fontFamily: 'inherit', minWidth: 0 }} />
-            <button onClick={saveNickname} disabled={saving}
-              style={{ padding: '0 16px', background: C.accent, color: '#0d0d14', border: 'none', borderRadius: RADIUS.sm, fontSize: 13, fontWeight: 700, cursor: 'pointer', minHeight: 40, fontFamily: 'inherit' }}>
-              Save
-            </button>
-            <button onClick={() => setEditingNick(false)}
-              style={{ padding: '0 14px', background: 'transparent', color: C.textDim, border: '1px solid ' + C.border, borderRadius: RADIUS.sm, fontSize: 13, cursor: 'pointer', minHeight: 40, fontFamily: 'inherit' }}>
-              Cancel
-            </button>
-          </div>
-        )}
-      </section>
+      {/* Stories row */}
+      <StoriesRow bubbles={bubbles} loading={loading && bubbles.length === 0} />
 
-      {/* Follows */}
-      <section style={{ marginBottom: 24 }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 12 }}>
-          <h2 style={{ fontSize: 15, fontWeight: 700, margin: 0 }}>You follow ({follows.length})</h2>
+      {/* Posts */}
+      {loading && posts.length === 0 ? (
+        <FeedSkeleton />
+      ) : posts.length === 0 ? (
+        <div style={{ padding: '40px 20px', textAlign: 'center', background: C.surface, borderRadius: RADIUS.lg, border: `1px dashed ${C.border}`, marginTop: 16 }}>
+          <Sparkles size={26} style={{ color: C.accent, opacity: 0.7, marginBottom: 10 }} />
+          <p style={{ fontSize: 15, fontWeight: 600, margin: 0, color: C.text }}>{mode === 'followed' ? 'No posts yet from your follows.' : 'No posts yet — check back soon.'}</p>
+          {mode === 'discovery' && (
+            <p style={{ fontSize: 13, color: C.textMuted, margin: '8px 0 0', lineHeight: 1.5 }}>Visit a business page to follow them and start your personalised feed.</p>
+          )}
         </div>
-        {follows.length === 0 ? (
-          <div style={{ background: C.surface, border: '1px dashed ' + C.border, borderRadius: RADIUS.lg, padding: 22, textAlign: 'center' }}>
-            <p style={{ fontSize: 14, color: C.textDim, margin: 0, lineHeight: 1.5 }}>
-              You&apos;re not following anyone yet. Visit a shop&apos;s page or scan their poster to follow.
-            </p>
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {follows.map(f => (
-              <article key={f.id} style={{ background: C.surface, border: '1px solid ' + C.border, borderRadius: RADIUS.lg, padding: 16 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-                  <div style={{
-                    width: 48, height: 48, borderRadius: RADIUS.pill,
-                    background: f.businesses?.logo_url ? `url(${f.businesses.logo_url}) center/cover` : C.accentDeep,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    color: C.accent, fontWeight: 700, fontSize: 18, flexShrink: 0,
-                    border: '1px solid ' + C.border,
-                  }}>
-                    {!f.businesses?.logo_url && (f.businesses?.name?.[0] ?? '?')}
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{ fontSize: 15, fontWeight: 600, margin: 0, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.businesses?.name ?? 'Business'}</p>
-                    <p style={{ fontSize: 12, color: C.textMuted, margin: '2px 0 0' }}>
-                      {f.businesses?.industry ?? 'shop'}{f.businesses?.city ? ' · ' + f.businesses.city : ''}
-                    </p>
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
-                  <PrefRow label="Notifications" value={f.notifications_on} onChange={v => togglePref(f.business_id, 'notifications_on', v)} hint="Push when this shop posts" />
-                  <PrefRow label="Marketing messages" value={f.consent_marketing} onChange={v => togglePref(f.business_id, 'consent_marketing', v)} hint="Promos and special offers" />
-                  <PrefRow label="Hide from feed" value={f.is_hidden} onChange={v => togglePref(f.business_id, 'is_hidden', v)} hint="Stay subscribed, hide their posts" />
-                </div>
-
-                <button onClick={() => unfollow(f.business_id)}
-                  style={{ width: '100%', padding: '10px', background: 'transparent', border: '1px solid rgba(239,68,68,0.3)', color: C.danger, borderRadius: RADIUS.sm, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit', minHeight: 40 }}>
-                  Unfollow
-                </button>
-              </article>
-            ))}
-          </div>
-        )}
-      </section>
-
-      {/* Footer actions */}
-      <section style={{ display: 'flex', flexDirection: 'column', gap: 10, paddingTop: 8, borderTop: '1px solid ' + C.border, marginTop: 24 }}>
-        <button onClick={leave} disabled={saving}
-          style={{ width: '100%', padding: '12px', background: 'transparent', border: '1px solid ' + C.border, color: C.textMuted, borderRadius: RADIUS.sm, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit', minHeight: 44 }}>
-          Leave the network
-        </button>
-        <p style={{ fontSize: 11, color: C.textMuted, margin: 0, lineHeight: 1.55, textAlign: 'center' }}>
-          Identity (loyalty, points, your real name) only ever lives in-store at the shop — never here.
-        </p>
-      </section>
+      ) : (
+        <div style={{ marginTop: 16 }}>
+          {posts.map(p => (
+            <PostCard key={p.id} post={p} onHideBusiness={mode === 'followed' ? hideBusiness : undefined} showHide={mode === 'followed'} />
+          ))}
+          {cursor && (
+            <div ref={sentinelRef} style={{ textAlign: 'center', padding: 20 }}>
+              {loadingMore ? (
+                <span style={{ fontSize: 12, color: C.textMuted }}>Loading…</span>
+              ) : (
+                <span style={{ fontSize: 12, color: C.textMuted }}>Scroll for more</span>
+              )}
+            </div>
+          )}
+        </div>
+      )}
     </main>
   )
 }
 
-function PrefRow({ label, value, onChange, hint }: { label: string; value: boolean; onChange: (v: boolean) => void; hint?: string }) {
+function FeedSkeleton() {
   return (
-    <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '10px 12px', background: C.surfaceHi, borderRadius: RADIUS.sm, cursor: 'pointer', minHeight: 44 }}>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <p style={{ fontSize: 13, fontWeight: 600, margin: 0, color: C.text }}>{label}</p>
-        {hint && <p style={{ fontSize: 11, color: C.textMuted, margin: '2px 0 0' }}>{hint}</p>}
-      </div>
-      <Toggle value={value} onChange={onChange} ariaLabel={label} />
-    </label>
-  )
-}
-
-function Toggle({ value, onChange, ariaLabel }: { value: boolean; onChange: (v: boolean) => void; ariaLabel: string }) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={value}
-      aria-label={ariaLabel}
-      onClick={() => onChange(!value)}
-      style={{
-        position: 'relative', width: 42, height: 24, borderRadius: 24,
-        background: value ? C.accent : 'rgba(255,255,255,0.12)',
-        border: 'none', cursor: 'pointer', transition: 'background 180ms',
-        flexShrink: 0,
-      }}
-    >
-      <span style={{
-        position: 'absolute', top: 2, left: value ? 20 : 2,
-        width: 20, height: 20, borderRadius: '50%',
-        background: '#fff', transition: 'left 180ms',
-      }} />
-    </button>
+    <div style={{ marginTop: 16 }}>
+      {[0, 1, 2].map(i => (
+        <div key={i} style={{ background: C.surface, borderRadius: RADIUS.lg, border: `1px solid ${C.border}`, marginBottom: 14, padding: 14 }}>
+          <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
+            <div style={{ width: 40, height: 40, borderRadius: RADIUS.pill, background: C.surfaceHi }} />
+            <div style={{ flex: 1 }}>
+              <div style={{ height: 12, width: '40%', background: C.surfaceHi, borderRadius: 4, marginBottom: 6 }} />
+              <div style={{ height: 10, width: '25%', background: C.surfaceHi, borderRadius: 4 }} />
+            </div>
+          </div>
+          <div style={{ height: 220, background: C.surfaceHi, borderRadius: RADIUS.md, marginBottom: 10 }} />
+          <div style={{ height: 14, width: '80%', background: C.surfaceHi, borderRadius: 4 }} />
+        </div>
+      ))}
+    </div>
   )
 }

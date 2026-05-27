@@ -1,0 +1,135 @@
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+
+import { NextResponse } from 'next/server'
+import { supabaseAdmin } from '@/lib/supabase-admin'
+import { ensureCommunityMember, getCommunityMember } from '@/lib/community/session'
+
+const VALID_TYPES = new Set(['like', 'comment', 'save', 'view', 'share'])
+
+// Light comment privacy guard — block obvious phone / email / card patterns
+const PHONE_RE = /(?:\+?61|0)\s?\d(?:[\s-]?\d){7,9}/
+const EMAIL_RE = /[\w.+-]+@[\w-]+\.[\w.-]+/
+const CARD_RE  = /\b(?:\d[ -]?){13,19}\b/
+
+function commentIsBlocked(text: string): { blocked: boolean; reason?: string } {
+  if (PHONE_RE.test(text)) return { blocked: true, reason: 'Phone numbers can\'t be shared in comments — sort it in person at the shop.' }
+  if (EMAIL_RE.test(text)) return { blocked: true, reason: 'Email addresses can\'t be shared in comments — sort it in person at the shop.' }
+  if (CARD_RE.test(text))  return { blocked: true, reason: 'Numbers that look like card details can\'t be shared.' }
+  return { blocked: false }
+}
+
+// POST — toggle/insert engagement. Anonymous member (resolved via session cookie).
+// Body: { post_id, type: like|save|share|view|comment, comment_text? }
+export async function POST(req: Request) {
+  try {
+    const body = await req.json().catch(() => ({})) as { post_id?: string; type?: string; comment_text?: string }
+    if (!body.post_id || !body.type || !VALID_TYPES.has(body.type)) {
+      return NextResponse.json({ error: 'post_id and a valid type are required.' }, { status: 400 })
+    }
+
+    // Verify the post exists + is published
+    const { data: post } = await supabaseAdmin.from('community_posts')
+      .select('id, business_id, status').eq('id', body.post_id).maybeSingle()
+    if (!post || post.status !== 'published') {
+      return NextResponse.json({ error: 'Post not found.' }, { status: 404 })
+    }
+
+    // Comments — apply privacy guard before insert
+    if (body.type === 'comment') {
+      const txt = (body.comment_text ?? '').toString().trim().slice(0, 600)
+      if (!txt) return NextResponse.json({ error: 'Comment is empty.' }, { status: 400 })
+      const guard = commentIsBlocked(txt)
+      if (guard.blocked) {
+        return NextResponse.json({ blocked: true, error: guard.reason }, { status: 400 })
+      }
+      // Comments require a member (so the owner can identify which device commented)
+      const member = await ensureCommunityMember()
+      const { data, error } = await supabaseAdmin.from('community_post_engagement').insert({
+        post_id: body.post_id,
+        member_id: member.id,
+        engagement_type: 'comment',
+        comment_text: txt,
+      }).select('id, created_at').single()
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ ok: true, comment_id: data?.id, created_at: data?.created_at })
+    }
+
+    // Views — anonymous-allowed, dedupe per (member, post) — best-effort, single insert per session
+    if (body.type === 'view') {
+      const member = await getCommunityMember()
+      if (!member) {
+        // Anonymous never-joined visitor — count once per request, no dedupe possible without a member_id
+        await supabaseAdmin.from('community_post_engagement').insert({
+          post_id: body.post_id, member_id: null, engagement_type: 'view',
+        }).then(undefined, () => null)
+        return NextResponse.json({ ok: true })
+      }
+      // Joined visitor — only insert if no view exists yet for this (member, post)
+      const { count } = await supabaseAdmin.from('community_post_engagement')
+        .select('id', { count: 'exact', head: true })
+        .eq('post_id', body.post_id).eq('member_id', member.id).eq('engagement_type', 'view')
+      if ((count ?? 0) === 0) {
+        await supabaseAdmin.from('community_post_engagement').insert({
+          post_id: body.post_id, member_id: member.id, engagement_type: 'view',
+        })
+      }
+      return NextResponse.json({ ok: true })
+    }
+
+    // Like / save — toggle (remove if exists, insert if not)
+    if (body.type === 'like' || body.type === 'save') {
+      const member = await ensureCommunityMember()
+      const { data: existing } = await supabaseAdmin.from('community_post_engagement')
+        .select('id').eq('post_id', body.post_id).eq('member_id', member.id).eq('engagement_type', body.type)
+        .limit(1).maybeSingle()
+      if (existing) {
+        await supabaseAdmin.from('community_post_engagement').delete().eq('id', existing.id)
+        return NextResponse.json({ ok: true, on: false })
+      }
+      await supabaseAdmin.from('community_post_engagement').insert({
+        post_id: body.post_id, member_id: member.id, engagement_type: body.type,
+      })
+      return NextResponse.json({ ok: true, on: true })
+    }
+
+    // Share — log every share (no toggle, no dedupe — counts every share button press)
+    if (body.type === 'share') {
+      const member = await getCommunityMember()
+      await supabaseAdmin.from('community_post_engagement').insert({
+        post_id: body.post_id, member_id: member?.id ?? null, engagement_type: 'share',
+      })
+      return NextResponse.json({ ok: true })
+    }
+
+    return NextResponse.json({ error: 'Unhandled type' }, { status: 400 })
+  } catch (err) {
+    console.error('[community/engagement]', err)
+    return NextResponse.json({ error: 'Internal error' }, { status: 500 })
+  }
+}
+
+// GET — comments for a post (public, anonymous read OK)
+export async function GET(req: Request) {
+  try {
+    const { searchParams } = new URL(req.url)
+    const post_id = searchParams.get('post_id')
+    if (!post_id) return NextResponse.json({ error: 'post_id required' }, { status: 400 })
+
+    const { data } = await supabaseAdmin.from('community_post_engagement')
+      .select('id, comment_text, created_at, community_members(nickname)')
+      .eq('post_id', post_id).eq('engagement_type', 'comment')
+      .order('created_at', { ascending: false }).limit(50)
+
+    const comments = ((data ?? []) as unknown as Array<{ id: string; comment_text: string | null; created_at: string; community_members: { nickname: string | null } | null }>).map((c) => ({
+      id: c.id,
+      text: c.comment_text,
+      nickname: c.community_members?.nickname ?? 'Anonymous',
+      created_at: c.created_at,
+    }))
+    return NextResponse.json({ comments })
+  } catch (err) {
+    console.error('[community/engagement GET]', err)
+    return NextResponse.json({ error: 'Internal error' }, { status: 500 })
+  }
+}
