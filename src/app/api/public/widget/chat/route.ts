@@ -47,30 +47,76 @@ export async function POST(req: Request) {
 
     const businessId = config.business_id as string
 
-    // ── Load business details ─────────────────────────────────────────
+    // ── Load business details + Google rating (Fix 4) ────────────────
     const { data: biz } = await supabaseAdmin
       .from('businesses')
-      .select('name, industry, city, phone, email')
+      .select('name, industry, city, phone, email, google_average_rating, google_total_reviews')
       .eq('id', businessId)
       .maybeSingle()
 
-    // ── Load top products for context (if show_prices) ────────────────
+    // ── Fix 1+2: ALWAYS load products with real stock status ──────────
     let productContext = ''
-    if (config.show_prices) {
-      const { data: products } = await supabaseAdmin
-        .from('products')
-        .select('name, price, stock_quantity, is_active')
-        .eq('business_id', businessId)
-        .eq('is_active', true)
-        .order('name')
-        .limit(40)
-      if (products?.length) {
-        productContext = products.map(p => {
-          const stock = config.stock_visibility === 'in_out'
-            ? (p.stock_quantity > 0 ? ' (in stock)' : ' (out of stock)')
-            : ''
-          return p.name + ' — A$' + (Number(p.price) || 0).toFixed(2) + stock
-        }).join('\n')
+    const { data: products } = await supabaseAdmin
+      .from('products')
+      .select('name, price, stock_quantity, is_active, description')
+      .eq('business_id', businessId)
+      .eq('is_active', true)
+      .order('name')
+      .limit(40)
+    if (products?.length) {
+      productContext = products.map((p: { name: string; price: number | null; stock_quantity: number | null; description?: string | null }) => {
+        const qty = Number(p.stock_quantity ?? 0)
+        const stockNote = qty === 0 ? ' (currently unavailable)' : qty <= 5 ? ' (low stock)' : ' (in stock)'
+        const priceBit = config.show_prices ? ' — A$' + (Number(p.price) || 0).toFixed(2) : ''
+        const descBit = p.description ? ' — ' + String(p.description).slice(0, 80) : ''
+        return p.name + priceBit + descBit + stockNote
+      }).join('\n')
+    }
+
+    // ── Fix 4: top 3 best-sellers (last 30 days) ──────────────────────
+    let topSellersContext = ''
+    try {
+      const since = new Date(Date.now() - 30 * 86400_000).toISOString()
+      const { data: items } = await supabaseAdmin.from('pos_sale_items')
+        .select('product_name, quantity, pos_sales!inner(business_id, created_at, status)')
+        .eq('pos_sales.business_id', businessId)
+        .neq('pos_sales.status', 'voided')
+        .gte('pos_sales.created_at', since).limit(2000)
+      const counts: Record<string, number> = {}
+      for (const r of (items ?? []) as Array<{ product_name: string | null; quantity: number | null }>) {
+        if (!r.product_name) continue
+        counts[r.product_name] = (counts[r.product_name] ?? 0) + Number(r.quantity ?? 0)
+      }
+      const top3 = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([n]) => n)
+      if (top3.length > 0) topSellersContext = 'Top sellers: ' + top3.join(', ')
+    } catch { /* non-fatal */ }
+
+    // ── Fix 5: optional membership lookup from visitor message ────────
+    let memberContext = ''
+    if (config.recognise_members !== false) {
+      const emailMatch = message.match(/[\w.+-]+@[\w-]+\.[\w.-]+/)
+      const phoneMatch = message.match(/(?:\+?61|0)\d{8,9}|\d{10}/)
+      const lookup = emailMatch?.[0] ?? phoneMatch?.[0] ?? null
+      if (lookup) {
+        const { data: cust } = await supabaseAdmin.from('pos_customers')
+          .select('id, name, loyalty_points, points_balance, loyalty_balance, loyalty_tier')
+          .eq('business_id', businessId)
+          .or(`email.eq.${lookup},phone.eq.${lookup}`)
+          .maybeSingle()
+        if (cust) {
+          const points = Number(cust.points_balance ?? cust.loyalty_points ?? cust.loyalty_balance ?? 0)
+          let perks = ''
+          if (cust.loyalty_tier) {
+            const { data: tier } = await supabaseAdmin.from('loyalty_tiers')
+              .select('tier_name, perks, points_multiplier')
+              .eq('business_id', businessId).eq('tier_name', cust.loyalty_tier).maybeSingle()
+            if (tier?.perks) perks = ` Tier perks: ${tier.perks}.`
+            else if (tier?.tier_name) perks = ` ${tier.tier_name} tier.`
+          }
+          memberContext = `MEMBER LOOKUP: ${cust.name ?? 'Customer'} is a verified member with ${points} loyalty points${cust.loyalty_tier ? ' (' + cust.loyalty_tier + ' tier)' : ''}.${perks} Greet them by name, share these real numbers — never invent any.`
+        } else {
+          memberContext = `MEMBER LOOKUP: No membership found for ${lookup}. If asked, invite them to join the loyalty program — it is free.`
+        }
       }
     }
 
@@ -90,7 +136,14 @@ export async function POST(req: Request) {
         ? 'Opening hours:\n' + Object.entries(config.opening_hours).map(([d, h]) => d + ': ' + h).join('\n')
         : '',
       config.services ? 'Services offered:\n' + config.services : '',
-      productContext ? 'Products available:\n' + productContext : '',
+      biz?.phone ? 'Phone: ' + biz.phone : '',
+      biz?.email ? 'Email: ' + biz.email : '',
+      biz?.google_average_rating ? `Google rating: ${biz.google_average_rating}★ (${biz.google_total_reviews ?? 0} reviews)` : '',
+      productContext ? 'Products available (with real-time stock):\n' + productContext : '',
+      productContext ? 'If a visitor asks about an unavailable product, tell them it is currently out of stock and offer to notify them or suggest an alternative.' : '',
+      topSellersContext,
+      memberContext,
+      'PRIVACY: Never invent loyalty points, tiers, or benefits. Only state membership data when MEMBER LOOKUP is provided above. Never reveal data about other customers.',
       config.faqs?.length > 0
         ? 'FAQs:\n' + config.faqs.map((f: {q:string;a:string}) => 'Q: ' + f.q + '\nA: ' + f.a).join('\n')
         : '',
@@ -108,6 +161,7 @@ export async function POST(req: Request) {
 4. Service they want (if applicable): ${config.appointment_services ?? 'any service'}
 5. Their phone number or email for confirmation
 
+If a previous turn said a slot was already taken, suggest 2-3 alternative times rather than re-proposing the same slot.
 When you have ALL required details, confirm the booking and respond with ONLY this JSON block at the end of your message:
 \`\`\`json
 {"booking_confirmed": true, "visitor_name": "NAME", "booking_date": "YYYY-MM-DD", "booking_time": "HH:MM", "service": "SERVICE", "visitor_phone": "PHONE", "visitor_email": "EMAIL"}
@@ -141,7 +195,21 @@ Do NOT include the JSON block unless you have all details confirmed.`
     let convId = conversation_id ?? null
     const apptData = apptEnabled ? parseAppointmentJSON(replyText) : null
 
+    let slotFullMessage = ''
     if (apptData?.booking_confirmed) {
+      // Fix 3: prevent double bookings — check slot availability
+      const maxPerSlot = Number(config.max_bookings_per_slot ?? 1)
+      const { data: existing } = await supabaseAdmin
+        .from('bookings').select('id')
+        .eq('business_id', businessId)
+        .eq('booking_date', apptData.booking_date)
+        .eq('booking_time', apptData.booking_time)
+        .neq('status', 'cancelled')
+      const slotFull = (existing?.length ?? 0) >= maxPerSlot
+
+      if (slotFull) {
+        slotFullMessage = `\n\nThat time slot (${apptData.booking_date} at ${apptData.booking_time}) is already booked — sorry! Please pick another time and I'll lock it in for you.`
+      } else {
       // Create booking record
       const { data: booking } = await supabaseAdmin.from('bookings').insert({
         business_id: businessId,
@@ -185,6 +253,7 @@ Do NOT include the JSON block unless you have all details confirmed.`
         suggested_action: 'Confirm appointment with customer',
         status: 'pending',
       }).then(undefined, () => {})
+      }
     }
 
     // ── Save / update conversation ────────────────────────────────────
@@ -213,8 +282,8 @@ Do NOT include the JSON block unless you have all details confirmed.`
       convId = newConv?.id ?? null
     }
 
-    // ── Strip JSON block from visible reply ───────────────────────────
-    const visibleReply = replyText.replace(/```json[\s\S]*?```/g, '').trim()
+    // ── Strip JSON block from visible reply, append slot-full notice ──
+    const visibleReply = replyText.replace(/```json[\s\S]*?```/g, '').trim() + (slotFullMessage || '')
 
     return NextResponse.json({
       reply: visibleReply,

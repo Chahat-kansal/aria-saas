@@ -31,6 +31,9 @@ interface WidgetConfig {
   show_prices: boolean;
   stock_visibility: string;
   show_out_of_stock: boolean;
+  // Membership + booking smarts (prompt 69)
+  recognise_members: boolean;
+  max_bookings_per_slot: number;
   // Policies
   delivery_policy: string;
   pickup_policy: string;
@@ -67,6 +70,8 @@ const DEFAULT_CONFIG: WidgetConfig = {
   show_prices: true,
   stock_visibility: 'in_out',
   show_out_of_stock: false,
+  recognise_members: true,
+  max_bookings_per_slot: 1,
   delivery_policy: '',
   pickup_policy: '',
   returns_policy: '',
@@ -124,6 +129,8 @@ export default function WebsiteChatPage() {
         show_prices: data.show_prices ?? true,
         stock_visibility: data.stock_visibility ?? 'in_out',
         show_out_of_stock: data.show_out_of_stock ?? false,
+        recognise_members: data.recognise_members ?? true,
+        max_bookings_per_slot: data.max_bookings_per_slot ?? 1,
         delivery_policy: data.delivery_policy ?? '',
         pickup_policy: data.pickup_policy ?? '',
         returns_policy: data.returns_policy ?? '',
@@ -166,6 +173,8 @@ export default function WebsiteChatPage() {
       show_prices: config.show_prices,
       stock_visibility: config.stock_visibility,
       show_out_of_stock: config.show_out_of_stock,
+      recognise_members: config.recognise_members,
+      max_bookings_per_slot: config.max_bookings_per_slot,
       delivery_policy: config.delivery_policy || null,
       pickup_policy: config.pickup_policy || null,
       returns_policy: config.returns_policy || null,
@@ -453,7 +462,17 @@ export default function WebsiteChatPage() {
           <div className="space-y-4">
             <Panel title="Product visibility">
               <Field label="Show prices to website visitors">
-                <Toggle value={config.show_prices} onChange={v => setConfig(c => ({ ...c, show_prices: v }))} />
+                <Toggle value={config.show_prices} onChange={v => setConfig(c => ({ ...c, show_prices: v }))}
+                  description="The assistant always knows your catalogue — this only controls whether prices are visible to visitors." />
+              </Field>
+              <Field label="Recognise members">
+                <Toggle value={config.recognise_members} onChange={v => setConfig(c => ({ ...c, recognise_members: v }))}
+                  description="Look up returning customers by email or phone and greet them with their real loyalty status." />
+              </Field>
+              <Field label="Max bookings per time slot">
+                <input type="number" min={1} value={config.max_bookings_per_slot}
+                  onChange={e => setConfig(c => ({ ...c, max_bookings_per_slot: Math.max(1, Number(e.target.value) || 1) }))}
+                  className={inputCls} />
               </Field>
               <Field label="Stock visibility">
                 <select value={config.stock_visibility} onChange={e => setConfig(c => ({ ...c, stock_visibility: e.target.value }))}
