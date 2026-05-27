@@ -87,6 +87,8 @@ export default function IntegrationsPage() {
   const [xeroDisconnecting, setXeroDisconnecting] = useState(false)
   const [toast, setToast] = useState('')
   const [syncing, setSyncing] = useState<string | null>(null)
+  const [bank, setBank] = useState<{ connected: boolean; accounts: Array<{ id: string; account_name: string | null; institution_name: string | null; balance: number | null; last_synced_at: string | null }>; total_balance: number } | null>(null)
+  const [bankBusy, setBankBusy] = useState<'connect' | 'sync' | 'disconnect' | null>(null)
   const [shopInput, setShopInput] = useState('')
   const [lsInput, setLsInput] = useState('')
   const [csvFile, setCsvFile] = useState<File | null>(null)
@@ -116,6 +118,38 @@ export default function IntegrationsPage() {
   }, [loadStatus]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { loadXero() }, [loadXero])
+
+  const loadBank = useCallback(async () => {
+    if (!business?.id) return
+    const r = await fetch(`/api/integrations/basiq/status?business_id=${business.id}`).then(r => r.json()).catch(() => null)
+    if (r) setBank(r)
+  }, [business?.id])
+  useEffect(() => { loadBank() }, [loadBank])
+
+  const connectBank = async () => {
+    if (!business?.id) return
+    setBankBusy('connect')
+    const r = await fetch('/api/integrations/basiq/connect', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ business_id: business.id }),
+    }).then(r => r.json()).catch(() => ({ error: 'Network error' }))
+    setBankBusy(null)
+    if (r.consent_url) window.location.href = r.consent_url
+    else setToast(r.error ?? 'Could not start bank connection')
+  }
+  const syncBank = async () => {
+    if (!business?.id) return
+    setBankBusy('sync')
+    await fetch(`/api/integrations/basiq/sync?business_id=${business.id}`).catch(() => {})
+    setBankBusy(null); setToast('Bank synced.'); loadBank()
+  }
+  const disconnectBank = async () => {
+    if (!business?.id || !confirm('Disconnect your bank? Aria will lose access to balance data.')) return
+    setBankBusy('disconnect')
+    await fetch('/api/integrations/basiq/disconnect', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ business_id: business.id }),
+    }).catch(() => {})
+    setBankBusy(null); setToast('Bank disconnected.'); loadBank()
+  }
 
   const sync = async (platform: string) => {
     setSyncing(platform)
@@ -457,6 +491,43 @@ export default function IntegrationsPage() {
           )}
         </div>
       )}
+
+      {/* Bank accounts (Basiq) */}
+      <div style={{ marginTop: 24, padding: 20, borderRadius: 14, background: 'rgba(127,184,151,0.04)', border: '1px solid rgba(127,184,151,0.2)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12, gap: 12, flexWrap: 'wrap' }}>
+          <div>
+            <p style={{ fontSize: 14, fontWeight: 700, color: '#E8EDE7', margin: 0 }}>🏦 Bank accounts</p>
+            <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', margin: '4px 0 0' }}>Connect ANZ, CommBank, NAB, Westpac, ING + more via Basiq · read-only</p>
+          </div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            {bank?.connected ? (
+              <>
+                <button onClick={syncBank} disabled={bankBusy !== null} style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid rgba(127,184,151,0.3)', background: 'rgba(127,184,151,0.1)', color: '#7FB897', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>{bankBusy === 'sync' ? '…' : '↻ Sync'}</button>
+                <button onClick={disconnectBank} disabled={bankBusy !== null} style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.08)', color: '#ef4444', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>Disconnect</button>
+              </>
+            ) : (
+              <button onClick={connectBank} disabled={bankBusy !== null} style={{ padding: '10px 18px', borderRadius: 9, border: 'none', background: '#2D5240', color: '#7FB897', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>{bankBusy === 'connect' ? 'Opening…' : 'Connect your bank'}</button>
+            )}
+          </div>
+        </div>
+        {bank?.connected ? (
+          <>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10, marginBottom: 12 }}>
+              {bank.accounts.map(a => (
+                <div key={a.id} style={{ padding: 14, borderRadius: 10, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                  <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.06em', margin: 0 }}>{a.institution_name ?? 'Bank'}</p>
+                  <p style={{ fontSize: 13, color: '#E8EDE7', margin: '4px 0 6px' }}>{a.account_name ?? 'Account'}</p>
+                  <p style={{ fontSize: 20, fontWeight: 700, color: '#7FB897', margin: 0 }}>A${Number(a.balance ?? 0).toLocaleString('en-AU', { minimumFractionDigits: 2 })}</p>
+                  {a.last_synced_at && <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', margin: '4px 0 0' }}>synced {new Date(a.last_synced_at).toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</p>}
+                </div>
+              ))}
+            </div>
+            <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)' }}>Total balance: <strong style={{ color: '#7FB897' }}>A${Number(bank.total_balance ?? 0).toLocaleString('en-AU', { minimumFractionDigits: 2 })}</strong></p>
+          </>
+        ) : (
+          <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', margin: 0 }}>🔒 Read-only access · Aria can see balances but can never move money. Disconnect anytime.</p>
+        )}
+      </div>
 
       {toast && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 rounded-lg px-4 py-2 text-sm shadow-lg z-50"

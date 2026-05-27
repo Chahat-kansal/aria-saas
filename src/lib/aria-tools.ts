@@ -272,6 +272,17 @@ NEVER refuse on schema errors — system has self-healing fallback.`,
       required: ['title', 'sections'],
     },
   },
+  {
+    name: 'query_bank_balance',
+    description: 'Get real Australian bank balances and recent transactions via Basiq. Use when owner asks about cash balance, available money, recent large transactions, income vs expenses, or runway.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        metric: { type: 'string', enum: ['balance', 'transactions', 'summary', 'cashflow'], description: 'balance = total + per account, transactions = last 10, summary = month income/expenses/net, cashflow = top expense categories' },
+      },
+      required: ['metric'],
+    },
+  },
 ];
 
 function getWeekKey(dateStr: string): string {
@@ -934,6 +945,60 @@ ${sections.map(s => {
   }
 }
 
+interface BankTxnRow { amount: number | null; transaction_date: string | null; description: string | null; category: string | null }
+
+async function queryBankBalance(input: { metric?: string }, businessId: string): Promise<unknown> {
+  const metric = input.metric ?? 'summary';
+  const { data: biz } = await supabaseAdmin.from('businesses').select('basiq_connected').eq('id', businessId).maybeSingle();
+  if (!biz?.basiq_connected) return { connected: false, message: 'Bank not connected. Connect at /dashboard/integrations.' };
+
+  if (metric === 'balance') {
+    const { data: accounts } = await supabaseAdmin.from('bank_accounts')
+      .select('account_name, institution_name, balance, available_balance, currency, last_synced_at')
+      .eq('business_id', businessId).eq('is_active', true);
+    const total = (accounts ?? []).reduce((a, x) => a + Number(x.balance ?? 0), 0);
+    return { total_balance: Math.round(total * 100) / 100, accounts: accounts ?? [] };
+  }
+
+  if (metric === 'transactions') {
+    const { data: txns } = await supabaseAdmin.from('bank_transactions')
+      .select('amount, transaction_date, description, category')
+      .eq('business_id', businessId).order('transaction_date', { ascending: false }).limit(10);
+    return { recent: txns ?? [] };
+  }
+
+  const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0);
+  const { data: rows } = await supabaseAdmin.from('bank_transactions')
+    .select('amount, transaction_date, description, category')
+    .eq('business_id', businessId)
+    .gte('transaction_date', monthStart.toISOString().slice(0, 10));
+  const list = (rows ?? []) as BankTxnRow[];
+  const income = list.filter(r => Number(r.amount ?? 0) > 0).reduce((a, r) => a + Number(r.amount ?? 0), 0);
+  const expenses = list.filter(r => Number(r.amount ?? 0) < 0).reduce((a, r) => a + Math.abs(Number(r.amount ?? 0)), 0);
+
+  if (metric === 'cashflow') {
+    const cats: Record<string, number> = {};
+    for (const r of list) {
+      const amt = Number(r.amount ?? 0);
+      if (amt >= 0) continue;
+      const c = r.category ?? 'Uncategorised';
+      cats[c] = (cats[c] ?? 0) + Math.abs(amt);
+    }
+    const top = Object.entries(cats).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([category, amount]) => ({ category, amount: Math.round(amount * 100) / 100 }));
+    return { top_expense_categories: top };
+  }
+
+  // summary (default)
+  const { data: accounts } = await supabaseAdmin.from('bank_accounts').select('balance').eq('business_id', businessId).eq('is_active', true);
+  const total = (accounts ?? []).reduce((a, x) => a + Number(x.balance ?? 0), 0);
+  return {
+    total_balance: Math.round(total * 100) / 100,
+    month_income: Math.round(income * 100) / 100,
+    month_expenses: Math.round(expenses * 100) / 100,
+    month_net: Math.round((income - expenses) * 100) / 100,
+  };
+}
+
 export async function executePOSTool(name: string, input: unknown, businessId: string): Promise<unknown> {
   const inp = input as Record<string, unknown>;
 
@@ -968,6 +1033,8 @@ export async function executePOSTool(name: string, input: unknown, businessId: s
       return runCalculation(inp);
     case 'generate_pdf':
       return generatePdf(inp, businessId);
+    case 'query_bank_balance':
+      return queryBankBalance(inp as { metric?: string }, businessId);
     case 'query_bookings': {
       const { period } = inp as { period: string }
       const now = new Date()

@@ -2,6 +2,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useBusinessContext } from '@/components/providers/BusinessProvider'
 
+interface BankAccount { id: string; account_name: string | null; institution_name: string | null; balance: number | null; last_synced_at: string | null }
+interface BankStatus { connected: boolean; accounts: BankAccount[]; total_balance: number }
+
 interface DayForecast {
   date: string; day: string; revenue_actual: number | null; revenue_forecast: number
   expenses_actual: number | null; expenses_forecast: number
@@ -27,6 +30,8 @@ const DEFAULT_EXPENSES: ManualExpense[] = [
 
 export default function CashFlowPage() {
   const { business } = useBusinessContext()
+  const [bank, setBank] = useState<BankStatus | null>(null)
+  const [bankSyncing, setBankSyncing] = useState(false)
   const [days, setDays] = useState<DayForecast[]>([])
   const [loading, setLoading] = useState(true)
   const [horizon, setHorizon] = useState(30)
@@ -138,8 +143,41 @@ export default function CashFlowPage() {
   const netPosition = days[days.length - 1]?.cumulative ?? 0
   const usingManualExpenses = totalMonthlyExpenses > 0
 
+  useEffect(() => {
+    if (!business?.id) return
+    fetch(`/api/integrations/basiq/status?business_id=${business.id}`).then(r => r.json()).then(d => setBank(d)).catch(() => {})
+  }, [business?.id])
+
+  async function refreshBank() {
+    if (!business?.id) return
+    setBankSyncing(true)
+    await fetch(`/api/integrations/basiq/sync?business_id=${business.id}`).catch(() => {})
+    const d = await fetch(`/api/integrations/basiq/status?business_id=${business.id}`).then(r => r.json()).catch(() => null)
+    if (d) setBank(d)
+    setBankSyncing(false)
+  }
+
   return (
     <div style={{ minHeight: '100%', background: C.bg, color: C.text, fontFamily: "'Inter',sans-serif", padding: '24px 28px' }}>
+      {bank?.connected && (
+        <div style={{ marginBottom: 18, padding: 16, borderRadius: 12, background: 'rgba(127,184,151,0.06)', border: '1px solid rgba(127,184,151,0.25)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10, gap: 12, flexWrap: 'wrap' }}>
+            <div>
+              <p style={{ fontSize: 11, fontWeight: 700, color: '#7FB897', textTransform: 'uppercase', letterSpacing: '0.08em', margin: 0 }}>🏦 Live bank balance</p>
+              <p style={{ fontSize: 24, fontWeight: 800, color: '#7FB897', margin: '6px 0 0' }}>A${Number(bank.total_balance ?? 0).toLocaleString('en-AU', { minimumFractionDigits: 2 })}</p>
+            </div>
+            <button onClick={refreshBank} disabled={bankSyncing} style={{ padding: '6px 14px', borderRadius: 7, border: '1px solid rgba(127,184,151,0.3)', background: 'rgba(127,184,151,0.08)', color: '#7FB897', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', opacity: bankSyncing ? 0.5 : 1 }}>{bankSyncing ? 'Syncing…' : '↻ Refresh'}</button>
+          </div>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            {bank.accounts.map(a => (
+              <div key={a.id} style={{ flex: '1 1 200px', padding: '8px 12px', borderRadius: 8, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)' }}>
+                <p style={{ fontSize: 10, color: C.dim, margin: 0 }}>{a.institution_name ?? 'Bank'} · {a.account_name ?? 'Account'}</p>
+                <p style={{ fontSize: 15, fontWeight: 700, color: C.text, margin: '2px 0 0', fontFamily: 'monospace' }}>A${Number(a.balance ?? 0).toLocaleString('en-AU', { minimumFractionDigits: 2 })}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>Cash Flow Forecast</h1>

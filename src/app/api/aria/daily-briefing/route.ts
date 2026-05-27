@@ -267,6 +267,20 @@ async function _POST(req: NextRequest) {
     visa_alert_names: (staffVisaExpiring.data ?? []).map((s: any) => `${s.first_name} ${s.last_name}`),
     unverified_rtw: staffRtwUnverified.count ?? 0,
     ...warehouseCtx,
+    bank_context: await (async () => {
+      const { data: bizBank } = await supabase.from('businesses').select('basiq_connected').eq('id', business_id).maybeSingle();
+      if (!bizBank?.basiq_connected) return null;
+      const { data: accts } = await supabase.from('bank_accounts').select('balance').eq('business_id', business_id).eq('is_active', true);
+      const total = (accts ?? []).reduce((a, x) => a + Number(x.balance ?? 0), 0);
+      const weekAgo = new Date(Date.now() - 7 * 86400_000).toISOString().slice(0, 10);
+      const { data: txns } = await supabase.from('bank_transactions').select('amount').eq('business_id', business_id).gte('transaction_date', weekAgo);
+      const outflows = (txns ?? []).filter((t: { amount: number | null }) => Number(t.amount ?? 0) < 0).reduce((a, t: { amount: number | null }) => a + Math.abs(Number(t.amount ?? 0)), 0);
+      return {
+        current_balance_aud: Math.round(total * 100) / 100,
+        weekly_outflows_aud: Math.round(outflows * 100) / 100,
+        weeks_of_runway: outflows > 0 ? Math.round((total / outflows) * 10) / 10 : null,
+      };
+    })(),
     external_context: {
       weather_next_3_days: weatherForecast.slice(0, 3).map(d => ({
         date: d.date,
