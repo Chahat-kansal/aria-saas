@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 20;
 
 import { createServerSupabaseClient } from '@/lib/supabase-server';
+import { supabaseAdmin } from '@/lib/supabase-admin';
 import { parseLLMJsonOr } from '@/lib/ai-json';
 import Anthropic from '@anthropic-ai/sdk';
 import { ARIA_VOICE } from '@/lib/aria-voice-guide';
@@ -55,17 +56,20 @@ Return JSON:
     }));
 
     const raw = msg.content[0].type === 'text' ? msg.content[0].text : '';
-    const promo = parseLLMJsonOr(raw, null, 'generate-promotion');
+    const promo = parseLLMJsonOr(raw, null, 'generate-promotion') as Record<string, string> | null;
     if (!promo) throw new Error('No JSON');
+    try { await supabaseAdmin.from('aria_promotions').insert({ business_id, promotion_name: promo.promotion_name, offer_text: promo.offer_text, sms_message: promo.sms_message, target_day: context?.slowest_day ?? null, status: 'generated' }) } catch { /* non-fatal */ }
     return NextResponse.json(promo);
   } catch {
-    return NextResponse.json({
+    const fallback = {
       promotion_name: 'Slow Day Special',
       offer_text: '15% off all items',
       sms_message: `Hi! Enjoy 15% off at ${biz.name} this week. Show this SMS at the counter. Limited time only! 😊`,
       recommended_time_to_send: 'Monday morning 8am',
       rationale: 'Incentivise visits on your slowest day with a compelling discount.',
-    });
+    };
+    try { await supabaseAdmin.from('aria_promotions').insert({ business_id, promotion_name: fallback.promotion_name, offer_text: fallback.offer_text, sms_message: fallback.sms_message, target_day: context?.slowest_day ?? null, status: 'generated' }) } catch { /* non-fatal */ }
+    return NextResponse.json(fallback);
   }
 }
 
