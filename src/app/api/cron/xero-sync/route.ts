@@ -9,68 +9,19 @@ const CRON_SECRET = process.env.CRON_SECRET ?? ''
 
 interface PosSaleRow {
   total_amount: number
-  category_name: string | null
+  tax_amount: number | null
   payment_method: string | null
 }
 
-interface XeroTokens {
-  access_token: string
-  refresh_token: string
-  expires_in: number
-}
-
-async function refreshXero(refresh_token: string): Promise<XeroTokens> {
-  const credentials = Buffer.from(
-    `${process.env.XERO_CLIENT_ID}:${process.env.XERO_CLIENT_SECRET}`
-  ).toString('base64')
-  const res = await fetch('https://identity.xero.com/connect/token', {
+async function sendSms(to: string, body: string): Promise<void> {
+  const { TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM_NUMBER } = process.env
+  if (!TWILIO_ACCOUNT_SID || !TWILIO_AUTH_TOKEN || !TWILIO_FROM_NUMBER) return
+  const credentials = Buffer.from(`${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}`).toString('base64')
+  await fetch(`https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}/Messages.json`, {
     method: 'POST',
-    headers: {
-      'Authorization': `Basic ${credentials}`,
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token }),
+    headers: { 'Authorization': `Basic ${credentials}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ To: to, From: TWILIO_FROM_NUMBER, Body: body }),
   })
-  if (!res.ok) throw new Error('Xero token refresh failed')
-  return res.json()
-}
-
-async function pushToXero(
-  tenantId: string,
-  accessToken: string,
-  date: string,
-  lineItems: Array<{ description: string; unitAmount: string; quantity: number }>
-): Promise<void> {
-  const invoice = {
-    Type: 'ACCREC',
-    Contact: { Name: 'POS Sales' },
-    Date: date,
-    DueDate: date,
-    LineItems: lineItems.map(li => ({
-      Description: li.description,
-      Quantity: li.quantity,
-      UnitAmount: li.unitAmount,
-      AccountCode: '200',
-    })),
-    Status: 'AUTHORISED',
-  }
-
-  const res = await fetch('https://api.xero.com/api.xro/2.0/Invoices', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${accessToken}`,
-      'Xero-Tenant-Id': tenantId,
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-    },
-    body: JSON.stringify({ Invoices: [invoice] }),
-  })
-
-  if (res.status === 401) throw new Error('XERO_401')
-  if (!res.ok) {
-    const body = await res.text()
-    throw new Error(`Xero invoice POST ${res.status}: ${body.slice(0, 200)}`)
-  }
 }
 
 export async function GET(req: Request) {
@@ -88,7 +39,7 @@ export async function GET(req: Request) {
 
   const { data: businesses } = await supabaseAdmin
     .from('businesses')
-    .select('id, xero_access_token, xero_refresh_token, xero_tenant_id')
+    .select('id, name, xero_access_token, xero_tenant_id, owner_phone, alert_sms_enabled')
     .not('xero_access_token', 'is', null)
     .not('xero_tenant_id', 'is', null)
 
@@ -103,50 +54,72 @@ export async function GET(req: Request) {
     try {
       const { data: sales } = await supabaseAdmin
         .from('pos_sales')
-        .select('total_amount, category_name, payment_method')
+        .select('total_amount, tax_amount, payment_method')
         .eq('business_id', biz.id)
         .gte('created_at', dayStart)
         .lte('created_at', dayEnd)
 
       if (!sales || sales.length === 0) continue
 
-      const byCategory = new Map<string, number>()
-      for (const sale of sales as PosSaleRow[]) {
-        const cat = sale.category_name ?? 'Uncategorised'
-        byCategory.set(cat, (byCategory.get(cat) ?? 0) + (Number(sale.total_amount) || 0))
+      let totalSales = 0
+      let totalGst = 0
+      const byMethod: Record<string, { sales: number; gst: number }> = {}
+      const paymentBreakdown: Record<string, number> = {}
+
+      for (const s of sales as PosSaleRow[]) {
+        const amt = Number(s.total_amount) || 0
+        const gst = Number(s.tax_amount) || 0
+        const method = s.payment_method ?? 'other'
+        const label = method === 'cash' ? 'Cash' : method === 'card' ? 'Card/EFTPOS' : 'Other'
+        totalSales += amt
+        totalGst += gst
+        paymentBreakdown[method] = (paymentBreakdown[method] ?? 0) + amt
+        if (!byMethod[label]) byMethod[label] = { sales: 0, gst: 0 }
+        byMethod[label].sales += amt
+        byMethod[label].gst += gst
       }
 
-      const lineItems = Array.from(byCategory.entries()).map(([cat, total]) => ({
-        description: `${cat} — ${dateStr}`,
-        unitAmount: (Number(total) || 0).toFixed(2),
+      const lineItems = Object.entries(byMethod).map(([label, vals]) => ({
+        description: `Sales — ${label}`,
         quantity: 1,
+        unit_amount: vals.sales.toFixed(2),
+        account_code: '200',
+        tax_type: 'OUTPUT2',
+        gst: vals.gst.toFixed(2),
       }))
 
-      let token = biz.xero_access_token as string
-      try {
-        await pushToXero(biz.xero_tenant_id as string, token, dateStr, lineItems)
-      } catch (e) {
-        if ((e as Error).message === 'XERO_401') {
-          const fresh = await refreshXero(biz.xero_refresh_token as string)
-          token = fresh.access_token
-          await supabaseAdmin
-            .from('businesses')
-            .update({
-              xero_access_token: fresh.access_token,
-              xero_refresh_token: fresh.refresh_token,
-            })
-            .eq('id', biz.id)
-          await pushToXero(biz.xero_tenant_id as string, token, dateStr, lineItems)
-        } else {
-          throw e
-        }
-      }
+      await supabaseAdmin.from('xero_sync_queue').insert({
+        business_id: biz.id,
+        sync_date: dateStr,
+        status: 'pending_review',
+        line_items: lineItems,
+        total_sales: totalSales.toFixed(2),
+        total_gst: totalGst.toFixed(2),
+        total_refunds: 0,
+        payment_breakdown: paymentBreakdown,
+      })
 
-      await supabaseAdmin
-        .from('pos_oauth_integrations')
-        .update({ last_sync_at: new Date().toISOString() })
-        .eq('business_id', biz.id)
-        .eq('integration_key', 'xero')
+      await supabaseAdmin.from('aria_actions').insert({
+        business_id: biz.id,
+        category: 'xero',
+        title: `Xero sync ready for ${dateStr}`,
+        recommendation: `Your Xero sync for ${dateStr} is ready to review — $${totalSales.toFixed(2)} sales, $${totalGst.toFixed(2)} GST. Review and approve in the integrations page.`,
+        expected_impact: '0.00',
+        confidence: 'high',
+        status: 'pending',
+        source: 'cron:xero-sync',
+        priority: 'medium',
+        payload: { sync_date: dateStr, total_sales: totalSales, total_gst: totalGst },
+      })
+
+      if (biz.alert_sms_enabled && biz.owner_phone) {
+        try {
+          await sendSms(
+            biz.owner_phone as string,
+            `Aria: Your Xero sync for ${dateStr} is ready. $${totalSales.toFixed(2)} sales, $${totalGst.toFixed(2)} GST. Review at ariaos.site/dashboard/integrations`,
+          )
+        } catch { /* non-fatal */ }
+      }
 
       processed++
     } catch (e) {
