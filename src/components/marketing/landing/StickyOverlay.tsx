@@ -1,10 +1,14 @@
 'use client'
 import Link from 'next/link'
+import { SCENES } from './scene-data'
 
 interface Props {
   counterNum: string
   hasScrolled: boolean
 }
+
+// Self-maintaining denominator: hero (01) + every registered scene.
+const TOTAL = String(SCENES.length + 1).padStart(2, '0')
 
 export default function StickyOverlay({ counterNum, hasScrolled }: Props) {
   return (
@@ -22,7 +26,7 @@ export default function StickyOverlay({ counterNum, hasScrolled }: Props) {
           <div className="scene-counter">
             <span className="num">{counterNum}</span>
             <span style={{ opacity: 0.4 }}>/</span>
-            <span className="num" style={{ color: 'var(--text-tertiary)' }}>12</span>
+            <span className="num" style={{ color: 'var(--text-tertiary)' }}>{TOTAL}</span>
           </div>
         </div>
       </header>

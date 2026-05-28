@@ -15,8 +15,8 @@ export default function MeetAriaScene() {
       <div className="scene-label" style={{ textAlign: 'center' }}>Meet Aria</div>
       <h2 style={{ textAlign: 'center' }}>One AI that knows your <em>entire business</em></h2>
       <div style={{
-        display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1rem',
-        width: '100%', maxWidth: 920, marginInline: 'auto', marginTop: '1.75rem',
+        display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '0.7rem',
+        width: '100%', maxWidth: 920, marginInline: 'auto', marginTop: '1.5rem',
       }}>
         {FEATURES.map(({ Icon, title, body }, i) => (
           <div key={title} style={{
