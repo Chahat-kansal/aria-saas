@@ -615,9 +615,38 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
     userPrompt = attachmentsToContentBlocks(message, attachments)
   }
 
-  const model = intent.type === 'escalate' ? 'opus' : 'sonnet'
+  // ── Budget-based model routing ───────────────────────────────────────────
+  // Everyone gets Sonnet by default. Once a business burns its monthly Sonnet
+  // budget, non-tool calls gracefully downgrade to Haiku for the rest of the
+  // month. Spend is read from aria_monthly_spend (trigger-maintained — never
+  // computed in app code).
+  const ym = new Date().toISOString().slice(0, 7)
+  const [{ data: spend }, { data: sub }] = await Promise.all([
+    supabaseAdmin.from('aria_monthly_spend').select('sonnet_cents').eq('business_id', bid).eq('year_month', ym).maybeSingle(),
+    supabaseAdmin.from('business_subscriptions').select('sonnet_monthly_budget_cents, tier').eq('business_id', bid).eq('status', 'active').maybeSingle(),
+  ])
+  const planDefaults: Record<string, number> = { starter: 1000, growth: 3000, pro: 8000 }
+  const sonnetBudget = sub?.sonnet_monthly_budget_cents ?? planDefaults[sub?.tier ?? ''] ?? 3000
+  const sonnetUsed = spend?.sonnet_cents ?? 0
+  const sonnetExhausted = sonnetUsed >= sonnetBudget
 
-  const useThinking = intent.complexity === 'complex' || intent.type === 'troubleshoot' || intent.type === 'escalate'
+  // Tool-heavy calls stay on Sonnet even when exhausted — Haiku tool-use reliability is lower.
+  const needsTools = attachments.length > 0 ||
+    intent.type === 'troubleshoot' ||
+    /\b(export|download|report|spreadsheet|csv|excel|pdf|send|sms|text|email|restock|reorder|purchase\s*order|schedule|roster|invoice|generate|create|update|set\s*price|change\s*price)\b/i.test(message)
+
+  let routedModel: 'haiku' | 'sonnet' | 'opus'
+  if (intent.type === 'escalate') routedModel = 'opus'
+  else if (sonnetExhausted && !needsTools) routedModel = 'haiku'
+  else routedModel = 'sonnet'
+
+  if (sonnetExhausted && needsTools && intent.type !== 'escalate') {
+    console.log('[ask-aria] sonnet overage — tool-heavy call stays on Sonnet', { bid, sonnetUsed, budget: sonnetBudget })
+  }
+  console.log('[ask-aria] route', { bid, sonnetUsed, budget: sonnetBudget, exhausted: sonnetExhausted, model: routedModel })
+
+  // Haiku does not support extended thinking — only enable it for Sonnet/Opus.
+  const useThinking = routedModel !== 'haiku' && (intent.complexity === 'complex' || intent.type === 'troubleshoot' || intent.type === 'escalate')
   const thinkingBudget = intent.type === 'escalate' ? 4000 : 2000
 
   // Add Anthropic's native web_search tool to give Aria internet access
@@ -669,7 +698,7 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
     : undefined
 
   const toolResult = await callAnthropicWithTools({
-    model,
+    model: routedModel,
     systemPrompt,
     userPrompt,
     priorMessages: historyMessages,
@@ -797,6 +826,10 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
     tool_calls: toolResult.tool_calls.map(t => ({ name: t.name, ms: t.ms })),
     blocks: richBlocks ?? undefined,
     used_council: false,
+    ai_mode: routedModel,
+    sonnet_used_cents: sonnetUsed,
+    sonnet_budget_cents: sonnetBudget,
+    sonnet_percent_used: Math.min(100, Math.round((sonnetUsed / Math.max(1, sonnetBudget)) * 100)),
   })
 }
 
