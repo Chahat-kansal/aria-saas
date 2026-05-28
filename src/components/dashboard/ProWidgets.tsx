@@ -311,10 +311,10 @@ export function WeatherWidget() {
   const [w, setW] = useState<{ code: number; rain: number } | null>(null)
 
   useEffect(() => {
-    fetch('https://api.open-meteo.com/v1/forecast?latitude=-37.8136&longitude=144.9631&daily=weathercode,precipitation_probability_max&timezone=Australia%2FMelbourne&forecast_days=2')
+    fetch('/api/weather?mode=forecast')
       .then(r => r.json())
-      .then((d: { daily: { weathercode: number[]; precipitation_probability_max: number[] } }) => {
-        setW({ code: d.daily.weathercode[1], rain: d.daily.precipitation_probability_max[1] })
+      .then((d: { daily?: { weathercode: number[]; precipitation_probability_max: number[] } | null }) => {
+        if (d.daily) setW({ code: d.daily.weathercode[1], rain: d.daily.precipitation_probability_max[1] })
       })
       .catch(() => {})
   }, [])

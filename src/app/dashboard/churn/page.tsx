@@ -58,7 +58,7 @@ export default function ChurnPage() {
   useEffect(() => {
     async function fetchWeather() {
       try {
-        const res = await fetch('https://api.open-meteo.com/v1/forecast?latitude=-37.8136&longitude=144.9631&daily=precipitation_sum&past_days=30&timezone=Australia%2FMelbourne&forecast_days=0');
+        const res = await fetch('/api/weather?mode=history');
         const d = await res.json();
         const dates: string[] = d.daily?.time ?? [];
         const precips: number[] = d.daily?.precipitation_sum ?? [];
