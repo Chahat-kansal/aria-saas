@@ -129,6 +129,7 @@ const ALWAYS_SECTIONS: { section: string; items: (NavItemDef & { fresh?: boolean
       { href: '/dashboard/community/marketer',        label: 'Aria Marketer',         icon: SparklesIcon,    section: 'Customer surfaces', badge: 'AI', fresh: true },
       { href: '/dashboard/marketplace',               label: 'Marketplace listings',  icon: ShoppingBagIcon, section: 'Customer surfaces', fresh: true },
       { href: '/dashboard/marketplace?tab=enquiries', label: 'Marketplace enquiries', icon: ChatIcon,        section: 'Customer surfaces', fresh: true },
+      { href: '/dashboard/share',                     label: 'Share',                 icon: GridIcon,        section: 'Customer surfaces', fresh: true },
     ],
   },
   {
