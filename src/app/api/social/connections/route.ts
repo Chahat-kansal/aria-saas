@@ -23,7 +23,9 @@ async function _GET(req: Request) {
     .eq('is_active', true)
     .order('platform')
 
-  return NextResponse.json({ connections: connections ?? [] })
+  // platforms[] is the simple source of truth used to gate post generation.
+  const platforms = [...new Set((connections ?? []).map(c => c.platform).filter(Boolean))]
+  return NextResponse.json({ connections: connections ?? [], platforms })
 }
 
 export const GET = withErrorCapture('social/connections', _GET)
