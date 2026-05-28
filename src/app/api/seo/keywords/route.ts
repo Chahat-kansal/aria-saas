@@ -50,9 +50,29 @@ async function _GET(req: Request) {
     .from('seo_keywords')
     .select('*')
     .eq('business_id', business_id)
-    .order('search_volume', { ascending: false, nullsFirst: false })
+    .order('frequency', { ascending: false, nullsFirst: false })
+    .order('created_at', { ascending: false })
 
   return NextResponse.json({ keywords: keywords ?? [] })
+}
+
+// Toggle rank tracking for an extracted keyword. Body: { keyword_id, tracked }
+async function _PATCH(req: Request) {
+  const supabase = createServerSupabaseClient()
+  const { data: { user }, error: authErr } = await supabase.auth.getUser()
+  if (authErr || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const body = await req.json().catch(() => ({}))
+  const { keyword_id, tracked } = body as { keyword_id?: string; tracked?: boolean }
+  if (!keyword_id || typeof tracked !== 'boolean') return NextResponse.json({ error: 'keyword_id and tracked required' }, { status: 400 })
+
+  const { data: kw } = await supabase.from('seo_keywords').select('id, business_id').eq('id', keyword_id).maybeSingle()
+  if (!kw) return NextResponse.json({ error: 'Keyword not found' }, { status: 404 })
+  const { data: biz } = await supabase.from('businesses').select('id').eq('id', kw.business_id).eq('user_id', user.id).maybeSingle()
+  if (!biz) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
+  await supabase.from('seo_keywords').update({ tracked }).eq('id', keyword_id)
+  return NextResponse.json({ ok: true, tracked })
 }
 
 async function _POST(req: Request) {
@@ -99,3 +119,4 @@ async function _POST(req: Request) {
 
 export const GET = withErrorCapture('seo/keywords', _GET)
 export const POST = withErrorCapture('seo/keywords', _POST)
+export const PATCH = withErrorCapture('seo/keywords', _PATCH)

@@ -8,6 +8,7 @@ import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { crawlSite, PAGE_CAP, type CrawledPageData } from '@/lib/seo/crawler'
 import { analyzePage, crossPageIssues, siteIssues, localChecks, computeHealthScore, type DetectedIssue } from '@/lib/seo/audit'
+import { extractKeywords } from '@/lib/seo/keywords'
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000
 
@@ -62,6 +63,26 @@ async function runCrawl(auditId: string, businessId: string, websiteUrl: string)
       checklist: local.seoLocal.checklist,
       updated_at: new Date().toISOString(),
     }, { onConflict: 'business_id' })
+
+    // Keyword extraction — refresh the auto-extracted set, preserve owner-tracked keywords.
+    const keywords = extractKeywords(result.pages)
+    if (keywords.length > 0) {
+      const { data: trackedRows } = await supabaseAdmin.from('seo_keywords')
+        .select('keyword').eq('business_id', businessId).eq('tracked', true)
+      const tracked = new Set((trackedRows ?? []).map(r => (r.keyword as string).toLowerCase()))
+      await supabaseAdmin.from('seo_keywords').delete().eq('business_id', businessId).neq('tracked', true)
+      const rows = keywords
+        .filter(k => !tracked.has(k.keyword.toLowerCase()))
+        .map(k => ({ business_id: businessId, keyword: k.keyword, frequency: k.frequency, found_on_pages: k.found_on_pages, tracked: false, current_rank: null }))
+      if (rows.length > 0) await supabaseAdmin.from('seo_keywords').insert(rows)
+      // Refresh frequency on any keyword the owner already tracks.
+      for (const k of keywords) {
+        if (tracked.has(k.keyword.toLowerCase())) {
+          await supabaseAdmin.from('seo_keywords').update({ frequency: k.frequency, found_on_pages: k.found_on_pages })
+            .eq('business_id', businessId).eq('keyword', k.keyword)
+        }
+      }
+    }
 
     if (issues.length > 0) {
       await supabaseAdmin.from('seo_issues').insert(issues.map(i => ({
