@@ -73,6 +73,17 @@ async function _POST(req: Request) {
   const { business_id, platforms, count: req_count } = await req.json();
   if (!business_id) return NextResponse.json({ error: 'business_id required' }, { status: 400 });
 
+  // Server-side guard: only connected platforms may generate posts (token-spend protection).
+  const { data: connections } = await supabaseAdmin
+    .from('social_connections')
+    .select('platform')
+    .eq('business_id', business_id)
+    .eq('is_active', true);
+  const connectedPlatforms: string[] = (connections ?? []).map(c => c.platform).filter(Boolean);
+  if (connectedPlatforms.length === 0) {
+    return NextResponse.json({ error: 'no_connections', message: 'Connect at least one social account before generating posts.', posts: [] }, { status: 400 });
+  }
+
   const [
     { data: biz },
     { data: topItems },
@@ -114,8 +125,16 @@ async function _POST(req: Request) {
     ? `ACTIVE PROMOTIONS: ${promotions!.map(p => `${p.name} (${p.discount_value}${p.discount_type === 'percentage' ? '%' : 'A$'} off)`).join(', ')}`
     : 'No active promotions';
 
-  const requestedPlatforms: string[] = platforms || ['instagram', 'facebook'];
+  const requestedPlatforms: string[] = (Array.isArray(platforms) && platforms.length > 0)
+    ? platforms.filter((p: string) => connectedPlatforms.includes(p))
+    : connectedPlatforms;
+  // Hard guard: if filtering left nothing, abort before calling Anthropic.
+  if (requestedPlatforms.length === 0) {
+    return NextResponse.json({ error: 'no_matching_connections', message: 'None of the requested platforms are connected.', posts: [] }, { status: 400 });
+  }
   const count = Math.min(req_count || 3, 5);
+  // Cost telemetry — audit whether the connected-only fix reduced spend.
+  console.log('[social-suggest] generate', JSON.stringify({ business_id, platforms: requestedPlatforms, count: requestedPlatforms.length, connected: connectedPlatforms.length }));
 
   const userPrompt = `Generate ${count} social media post suggestions for this business.
 
