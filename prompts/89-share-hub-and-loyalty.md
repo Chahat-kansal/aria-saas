@@ -1,173 +1,250 @@
-# Prompt 89 — Customer-facing share links + loyalty platform completion
+# Prompt 89 — Customer hub page + share toolkit + loyalty config + Customer Inbox
 
-## The gap
-We have built powerful customer-facing surfaces (kiosk, loyalty signup, public
-bookings, Aria Community) but the owner has no way to share these with their
-customers. The customer would never type `/in-store/Sip` or `/loyalty/Sip` —
-they need a printable QR / shareable link / SMS-able URL.
+## Three real gaps this fixes
+1. **Multiple customer URLs** — bookings, loyalty, community, reviews, ordering
+   currently each have their own URL. Owners have to remember 5 URLs and pick
+   the right one to share. Customers get confused.
+2. **Loyalty platform is plumbed but unconfigured** — pos_loyalty_config is
+   empty for every business. Customers can technically sign up but nothing
+   happens because no program is configured.
+3. **Customer data is being collected but not surfaced** — kiosk conversations,
+   demand signals, marketplace chats, search queries, talk-to-staff messages,
+   thumbs-up/down feedback. ALL of it lands in DB tables but the owner has
+   NOWHERE to read it. This is the single biggest miss — these conversations
+   ARE the product value.
 
-Also: loyalty plumbing exists but no owner has actually CONFIGURED a loyalty
-program. `pos_loyalty_config` is empty. Without config there's no signup-bonus,
-no points-per-dollar, no redemption — so even if a customer signs up, nothing
-happens.
+## TASK 1 — Single Customer Hub Page at /{slug}
 
-This prompt closes both gaps.
+### URL design
+- `ariaos.site/{slug}` — the unified customer hub for a business (e.g. ariaos.site/Sip)
+- `ariaos.site/in-store/{slug}` — kiosk (kept separate, different intent)
 
-## TASK 1 — One central "Share with your customers" hub
+The hub is one page the customer lands on. From there they pick what they want:
+loyalty, booking, community, reviews, ordering. One URL replaces five.
 
-### New page: /dashboard/share-with-customers
+### Build steps
 
-A single page where the owner generates every customer-facing share link in one
-place. Layout: 5-6 cards, one per surface.
+1. **New route**: `src/app/[slug]/page.tsx`
+   - This is a CATCH-ALL route. Must be carefully placed so it doesn't collide
+     with existing top-level routes (dashboard, pos, community, in-store, login,
+     etc.). Use a Next.js `(public)` route group if needed.
+   - Lookup logic: find `businesses` where lowercase(name) = slug OR a new
+     `businesses.slug` column matches.
+   - Add `businesses.slug text UNIQUE` column if missing, backfill from name
+     (lowercase, alphanumeric, hyphens).
 
-For EACH surface:
-- The customer URL (e.g. `https://ariaos.site/loyalty/Sip`)
-- A "Copy link" button
-- A "Download QR code" button (PNG, 1200x1200, with the business logo in the
-  middle if available, suitable for printing on a poster)
-- An "Open preview" button that opens the customer URL in a new tab so the
-  owner sees what their customer would see
-- A short "Where to put this" hint:
-  - Kiosk → "Print and stick by the till — customers scan to order/ask Aria"
-  - Loyalty → "Print and put on receipts, or text to customers after purchase"
-  - Bookings → "Add to your Instagram bio, Google Business Profile, website"
-  - Community → "Tell regulars they can follow your shop and get deals"
-  - Online ordering (if exists) → "Share in WhatsApp groups, post to socials"
-  - Reviews ask (if exists) → "Send via SMS after a purchase"
+2. **Page layout** (light theme, Pipel design system from prompt 83):
+   - Top: business hero — logo, name (Fraunces italic for personality), city,
+     small bio, verified tick if applicable
+   - 3-6 large tappable cards (which ones depend on what the business has
+     enabled — only show cards for features they offer):
+     - "Join loyalty" → /loyalty/{slug}
+     - "Book a table/appointment" → /book/{slug}
+     - "Follow on Aria Community" → /community/businesses/{slug}
+     - "Leave a review" → opens Google review link if configured
+     - "Order online" → /order/{slug} (only if business has online ordering)
+     - "Visit our website" → external link (uses businesses.website)
+   - Footer: powered by Aria + small "report this page" link
 
-### Surfaces to surface (verify each exists)
-1. **In-Store Kiosk** — `/in-store/{slug}` (already has a QR generator in
-   /dashboard/in-store — reuse that QR logic, do not rebuild)
-2. **Loyalty signup** — `/loyalty/{slug}`
-3. **Public bookings** — there's an API at `/api/public/bookings/{slug}` but
-   probably no UI page yet. Build `/book/{slug}/page.tsx` (or wherever the
-   existing booking widget lives) as a simple mobile-friendly booking page that
-   uses the existing public bookings API.
-4. **Aria Community profile** — `/community/businesses/{slug}` or wherever the
-   business profile is
-5. **Online ordering** — only if /kiosk/{outlet_id} (POS-ordering, the OTHER
-   kiosk path) exists for this business
-6. **Leave a review** — `/review/{slug}` if exists, else hide this card
+3. **DB**:
+   ```sql
+   ALTER TABLE businesses
+     ADD COLUMN IF NOT EXISTS slug text UNIQUE,
+     ADD COLUMN IF NOT EXISTS hub_visible_features jsonb DEFAULT '["loyalty","booking","community","review","website"]';
+   
+   UPDATE businesses
+     SET slug = lower(regexp_replace(name, '[^a-zA-Z0-9]+', '-', 'g'))
+     WHERE slug IS NULL;
+   ```
 
-### QR generator
-Use the `qrcode` npm package (already a dep — verify). Generate at 1200x1200
-PNG, embed the business logo if `business.logo_url` exists. Provide both PNG
-download and a print-ready A5 poster PDF with:
-- Big QR code in the middle
-- Business name above
-- A clear instruction below ("Scan to join our loyalty program", "Scan to talk
-  to our shop assistant", etc.)
-Reuse the existing kiosk A5 poster generator pattern — extend it to all surfaces.
-
-### Sidebar entry
-Add "Share with customers" to the dashboard sidebar under the existing
-"Customer surfaces" section from prompt 83. Lucide icon: `share-2` or `qr-code`.
+4. **Tracking**: when a customer lands on /{slug}, log to a new table for the
+   owner to see what's being clicked:
+   ```sql
+   CREATE TABLE IF NOT EXISTS customer_hub_clicks (
+     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+     business_id uuid REFERENCES businesses(id) ON DELETE CASCADE,
+     visitor_id text,
+     target text,  -- 'loyalty' / 'booking' / 'community' / 'review' / 'website' / 'order' / 'hub_view'
+     referrer text,
+     user_agent text,
+     created_at timestamptz DEFAULT now()
+   );
+   ALTER TABLE customer_hub_clicks ENABLE ROW LEVEL SECURITY;
+   CREATE POLICY "hub_clicks_owner_read" ON customer_hub_clicks
+     FOR SELECT TO authenticated
+     USING (business_id IN (SELECT id FROM businesses WHERE user_id = auth.uid()));
+   CREATE POLICY "hub_clicks_anon_insert" ON customer_hub_clicks
+     FOR INSERT TO anon WITH CHECK (true);
+   ```
 
 ### Commit
-"feat(share): central 'Share with customers' hub with QR codes and posters for kiosk, loyalty, bookings, community, ordering, reviews"
+"feat(hub): unified customer hub at /{slug} — single URL replaces five customer-facing links"
 
-## TASK 2 — Owner-facing loyalty program configuration
+## TASK 2 — Owner Share Hub at /dashboard/share
 
-### What's missing
-`pos_loyalty_config` is empty for every business. Owners have never been asked
-to configure their loyalty program. So even if a customer signs up, nothing
-happens (no welcome bonus, no points accumulate, no rewards to redeem).
+### Purpose
+ONE central page where the owner generates:
+- **The unified customer hub URL + QR code** (just ariaos.site/{slug} — the BIG one)
+- **The in-store kiosk QR code** (separate because different intent)
 
-### What to build
+That's it. Two URLs, two QR codes. Stop trying to surface 6 different things.
 
-Page: /dashboard/loyalty/setup (or upgrade the existing /dashboard/loyalty
-if it exists and is empty)
+### Layout
+- Top card: "Your customer hub" — big URL, copy button, download QR PNG button,
+  download A5 poster PDF button, "Where to put this:" hint listing concrete
+  ideas (receipt footer, Instagram bio, Google Business profile, email signature)
+- Second card: "Your in-store kiosk" — separate URL, QR, A5 poster
+- Bottom strip: hub-click analytics — "X visits last 7 days, top-clicked card:
+  loyalty" — pulled from customer_hub_clicks table
 
-Configure:
-- **Points per dollar spent** (default 1) — number input
-- **Signup bonus** (default 50 points) — number input
-- **Birthday bonus** (default 100 points) — toggle + number
-- **Welcome message** — text (used in SMS + signup confirmation)
-- **Reward tiers** — table of "X points = $Y off / free item" rules. Pre-seeded
-  with sensible defaults the owner can edit:
-  - 100 points → $5 off
-  - 250 points → $15 off
-  - 500 points → 20% off your next purchase
-- **Auto-enrol** — toggle. If on, any customer who purchases gets auto-enrolled
-  (no signup page needed). If off, customers must visit /loyalty/{slug} and
-  enrol themselves.
-- **Communication preferences** — checkboxes: SMS welcome / Email welcome /
-  Birthday SMS / Points-update SMS after every transaction
+### Sidebar
+Add "Share" under the "Customer Surfaces" section from prompt 83. Lucide
+icon: `qr-code`.
+
+### QR generation
+Reuse the existing kiosk QR generator. 1200x1200 PNG, embed business logo if
+business.logo_url is present, A5 PDF poster with QR + business name + clear
+call-to-action.
+
+### Commit
+"feat(share): owner dashboard share page with hub QR + kiosk QR + click analytics"
+
+## TASK 3 — Customer Inbox: where the owner reads everything
+
+**This is the most important task in this prompt.** Without this, the kiosk
+and community generate nothing but data exhaust.
+
+### New page: /dashboard/inbox
+
+ONE central inbox showing every customer interaction:
+
+**Streams to merge into the inbox** (single timeline view, sorted by most recent):
+- `instore_conversations` — every kiosk chat session (customer's questions +
+  Aria's replies)
+- `instore_demand_signals` — "14 customers asked for gluten-free this week"
+- `instore_recommendation_feedback` — thumbs up/down on Aria's recommendations
+  with the product and the question that led to it
+- `marketplace_chats` — every customer-to-owner conversation, ordered by unread first
+- `community_message_reports` — flagged messages (from prompt 83's abuse guard)
+- `customer_hub_clicks` — what cards customers are tapping on the hub
+- `community_blocked_visitors` — when a visitor was blocked
+- Talk-to-staff requests from the kiosk (aria_autopilot_actions with
+  category='kiosk_help_request' from prompt 81)
+
+### Page design (light theme, Pipel system)
+- Left: list of items, newest first, with type icon + 1-line summary
+  - "💬 Kiosk chat · Customer asked about oat milk · 2h ago"
+  - "🛍️ Marketplace · 'Is the Shiraz still available?' · 5h ago · 2 unread"
+  - "📈 Demand signal · 14 customers asked for gluten-free this week"
+  - "👍 Feedback · 6 customers ❤️ the Ethiopian beans"
+  - "⚠️ Reported message · flagged by abuse guard · review needed"
+- Right: detail panel for the selected item — full conversation, with a
+  "Reply" box if it's a chat the owner can respond to (marketplace + talk-to-staff)
+- Top filter chips: All / Unread / Messages / Demand / Feedback / Flagged
+- Each item is marked read when opened
+
+### Aria intelligence layer on top
+- A summary card at the top: "Aria's weekly read" — Haiku summarises:
+  - Top 3 things customers asked for that you don't sell
+  - Most-loved product (by thumbs-up)
+  - Most-disliked product (by thumbs-down) — needs attention?
+  - Repeated unanswered questions — should add to FAQ
+  - Sentiment trend (improving / stable / declining)
+- This becomes the strongest selling point of the product: "Aria reads every
+  customer interaction and tells you the 3 things to act on this week."
 
 ### DB
-`pos_loyalty_config` table exists — read its schema, fill in the missing
-columns if needed:
-```sql
-ALTER TABLE pos_loyalty_config
-  ADD COLUMN IF NOT EXISTS points_per_dollar numeric DEFAULT 1,
-  ADD COLUMN IF NOT EXISTS signup_bonus int DEFAULT 50,
-  ADD COLUMN IF NOT EXISTS birthday_bonus int DEFAULT 100,
-  ADD COLUMN IF NOT EXISTS welcome_message text,
-  ADD COLUMN IF NOT EXISTS auto_enrol boolean DEFAULT false,
-  ADD COLUMN IF NOT EXISTS sms_welcome boolean DEFAULT true,
-  ADD COLUMN IF NOT EXISTS sms_points_update boolean DEFAULT false,
-  ADD COLUMN IF NOT EXISTS sms_birthday boolean DEFAULT true,
-  ADD COLUMN IF NOT EXISTS reward_tiers jsonb DEFAULT '[{"points":100,"reward":"$5 off"},{"points":250,"reward":"$15 off"},{"points":500,"reward":"20% off"}]';
-```
+- Need a unified `customer_interactions_v` view OR a dispatcher API route that
+  fetches each source and merges. View is cheaper. Create:
+  ```sql
+  CREATE OR REPLACE VIEW customer_interactions_v AS
+  SELECT
+    'kiosk_chat' as source,
+    id, business_id, NULL::text as customer_identifier,
+    LEFT(messages::text, 100) as preview,
+    created_at, false as has_unread
+  FROM instore_conversations
+  UNION ALL
+  SELECT
+    'marketplace_chat' as source,
+    id, business_id, member_id::text as customer_identifier,
+    LEFT(last_message::text, 100) as preview,
+    last_message_at as created_at, unread_for_owner as has_unread
+  FROM marketplace_chats
+  UNION ALL
+  SELECT
+    'demand_signal' as source,
+    id, business_id, NULL,
+    signal_text as preview,
+    created_at, false
+  FROM instore_demand_signals
+  UNION ALL
+  SELECT
+    'feedback' as source,
+    id, business_id, visitor_id,
+    reaction || ' on ' || COALESCE(context_query, 'product'),
+    created_at, false
+  FROM instore_recommendation_feedback;
+  ```
+  
+  (Field names approximate — match real schema, do not invent columns.)
 
-### Wiring up the actual loyalty engine
-- POS sale completes (`pos_sales` insert) → cron or trigger awards points based
-  on `points_per_dollar` × sale total → insert into `pos_loyalty_transactions`
-- Customer signs up via `/api/public/loyalty/{slug}/enrol` → awards `signup_bonus`
-  → fires welcome SMS (if `sms_welcome=true`) with the configured welcome message
-- Customer hits a tier threshold → fires "you've earned {reward}!" SMS
+### Sidebar
+Add "Customer inbox" near the TOP of the dashboard sidebar — this is the
+owner's most important daily check-in. Lucide icon: `inbox`. Show a small
+unread count badge.
+
+### Daily briefing
+Include the inbox summary in the daily briefing — "you have N unread customer
+messages, 3 new demand signals worth flagging."
+
+### Commits
+- "feat(inbox): customer_interactions_v unified view + inbox API"
+- "feat(inbox): /dashboard/inbox page with unified timeline + detail panel"
+- "feat(inbox): Aria weekly summary card + briefing integration"
+
+## TASK 4 — Owner-facing loyalty program configuration
+
+Same as the original Task 2 of the earlier draft (configure points per dollar,
+signup bonus, tiers, auto-enrol, SMS preferences). Keep the original spec —
+not duplicating here. Run AFTER the inbox so customers have somewhere to land
+once the program is configured.
 
 ### Commit
 "feat(loyalty): owner configuration page + auto-enrol + auto-award points + tier rewards"
 
-## TASK 3 — Public-facing loyalty page polish
+## TASK 5 — Customer-facing /loyalty/{slug} polish
 
-### Current state
-`/loyalty/[business_id]/page.tsx` exists. Verify and polish:
-1. Customer arrives at `/loyalty/Sip` (or similar slug)
-2. Top of page: business logo, business name, "Join {biz_name}'s rewards"
-3. If not signed up: simple form — phone OR email, first name. Submit → POST
-   /api/public/loyalty/{slug}/enrol → awards signup_bonus → shows confirmation
-4. If signed up (cookie or phone-lookup): show current points balance, history
-   of recent earns (last 10), and the tier rewards table — visually
-   highlighting which tiers are unlocked vs locked
-5. Add "Why join" benefit list at the top for new visitors (auto-generated from
-   reward_tiers + signup_bonus): "Get 50 points just for joining. Earn 1 point
-   per $1 spent. Unlock $5 off at 100 points."
-
-### Design
-Match the Pipel-direction community design (light theme, lime accent, ink
-borders) — that's the locked customer-facing visual system from prompt 83.
+Same as before — match Pipel design, simple signup form, points balance check,
+tier visualisation.
 
 ### Commit
 "feat(loyalty-public): polished customer-facing signup + points-check experience"
 
-## TASK 4 — Aria intelligence for loyalty
+## TASK 6 — Aria intelligence for loyalty (briefing + dashboard banner)
 
-Add invoice-style intelligence for loyalty into the daily briefing + weekly
-report:
-- New signups this period: X
-- Points awarded this period: Y
-- Rewards redeemed: Z worth $W
-- At-risk: customers in {tier} who haven't visited in 60 days (winback target)
-- Top loyalty earner this month: {customer_name}
-
-Also on the loyalty dashboard, add the AriaSays banner with the same data.
+Same as before. After the Customer Inbox lands, this is just adding loyalty
+counters into the briefing.
 
 ### Commit
 "feat(loyalty-intel): briefing + weekly report + dashboard banner include loyalty stats"
 
 ## RULES
 - Each task is its own commit
-- npx tsc --noEmit + npm run build pass before each commit
+- npx tsc --noEmit + npm run build pass before each commit  
 - After all commits: git push origin main
 - Customer-facing pages match the locked Pipel design from prompt 83
-- Reuse the existing kiosk QR generator pattern for all share-link QRs
+- Reuse the existing kiosk QR generator
+- The Customer Inbox is the most important deliverable in this prompt — do not
+  skip or down-scope it
 
 ## PRIORITY ORDER (if limit runs low)
-1. Task 1 (Share hub) — most-important launch fix, makes everything discoverable
-2. Task 2 (Loyalty config) — needed so loyalty actually works
-3. Task 3 (Public loyalty page polish) — verify, may already be fine
-4. Task 4 (Loyalty intelligence) — nice-to-have, post-launch is OK
+1. **Task 3 — Customer Inbox** — single biggest product value, the conversation
+   data is wasted without it
+2. Task 1 — Customer hub at /{slug}
+3. Task 2 — Owner share page
+4. Task 4 — Loyalty config
+5. Task 5 — Loyalty public page polish
+6. Task 6 — Loyalty intelligence
 
 Finish current commit, push, STOP, report.
