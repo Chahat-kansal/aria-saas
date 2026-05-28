@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import { useBusinessContext } from '@/components/providers/BusinessProvider';
+import { apiFetch } from '@/lib/api/client';
 import RecipeImportTab from '@/components/dashboard/RecipeImportTab';
 import ScaleModal from '@/components/dashboard/RecipeScaleModal';
 import WasteModal from '@/components/dashboard/RecipeWasteModal';
@@ -500,7 +501,7 @@ function TrainingTab({ businessId, recipes }: { businessId: string; recipes: Rec
       setLoading(true);
       const [staffRes, trainingRes] = await Promise.all([
         fetch(`/api/staff?business_id=${businessId}`).then(r => r.json()).catch(() => ({ staff: [] })),
-        fetch(`/api/recipes/training?business_id=${businessId}`).then(r => r.json()).catch(() => ({ training: [] })),
+        apiFetch<{ training?: unknown[] }>(`/api/recipes/training?business_id=${businessId}`).catch(() => ({ training: [] })),
       ]);
       setStaff(staffRes.staff ?? staffRes.data ?? []);
       setTraining(trainingRes.training ?? []);
@@ -515,12 +516,12 @@ function TrainingTab({ businessId, recipes }: { businessId: string; recipes: Rec
 
   async function updateStatus(staffId: string, recipeId: string, status: string) {
     setSaving(true);
-    await fetch('/api/recipes/training', {
+    await apiFetch('/api/recipes/training', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ business_id: businessId, staff_member_id: staffId, recipe_id: recipeId, status }),
-    });
-    const res = await fetch(`/api/recipes/training?business_id=${businessId}`).then(r => r.json()).catch(() => ({ training: [] }));
+    }).catch(() => {});
+    const res = await apiFetch<{ training?: unknown[] }>(`/api/recipes/training?business_id=${businessId}`).catch(() => ({ training: [] }));
     setTraining(res.training ?? []);
     setSaving(false);
   }

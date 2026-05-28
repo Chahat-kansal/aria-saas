@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import type { StaffMember } from '@/types/staff'
 import { useBusinessContext } from '@/components/providers/BusinessProvider'
+import { apiFetch } from '@/lib/api/client'
 import { AriaSays } from '@/components/dashboard/AriaSays'
 
 const G = '#7FB897', G2 = '#1D9E75'
@@ -40,7 +41,7 @@ function LiveWidget({ bid }: { bid: string }) {
   const [active, setActive] = useState<TS[]>([])
   useEffect(() => {
     if (!bid) return
-    const load = () => { const t = new Date().toISOString().slice(0, 10); fetch(`/api/pos/timesheets?from=${t}T00:00:00&to=${t}T23:59:59`).then(r => r.json()).then(d => setActive((d.sessions ?? []).filter((s: TS) => !s.clock_out))).catch(() => {}) }
+    const load = () => { const t = new Date().toISOString().slice(0, 10); apiFetch<{ sessions?: TS[] }>(`/api/pos/timesheets?from=${t}T00:00:00&to=${t}T23:59:59`).then(d => setActive((d.sessions ?? []).filter((s: TS) => !s.clock_out))).catch(() => {}) }
     load(); const iv = setInterval(load, 120000); return () => clearInterval(iv)
   }, [bid])
   return (
@@ -415,7 +416,7 @@ function TimesheetTab({ bid }: { bid: string }) {
 
   const load = useCallback(() => {
     const sun = new Date(week + 'T00:00:00'); sun.setDate(sun.getDate() + 6)
-    fetch(`/api/pos/timesheets?from=${week}T00:00:00&to=${sun.toISOString().slice(0, 10)}T23:59:59`).then(r => r.json()).then(d => setSessions(d.sessions ?? [])).catch(() => {})
+    apiFetch<{ sessions?: TS[] }>(`/api/pos/timesheets?from=${week}T00:00:00&to=${sun.toISOString().slice(0, 10)}T23:59:59`).then(d => setSessions(d.sessions ?? [])).catch(() => {})
   }, [week])
   useEffect(() => { if (bid) load() }, [bid, week, load])
 

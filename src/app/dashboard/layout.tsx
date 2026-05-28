@@ -5,6 +5,7 @@ import { DashboardShell } from '@/components/dashboard/DashboardShell';
 import { DailyBriefingModal } from '@/components/dashboard/DailyBriefingModal';
 import AriaBrainPanel from '@/components/aria/AriaBrainPanel';
 import AnnouncementBanner from '@/components/dashboard/AnnouncementBanner';
+import ApiErrorToaster from '@/components/dashboard/ApiErrorToaster';
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const supabase = createServerSupabaseClient();
@@ -45,6 +46,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
       <DashboardShell>{children}</DashboardShell>
       <DailyBriefingModal />
       <AriaBrainPanel />
+      <ApiErrorToaster />
     </BusinessProvider>
   );
 }
