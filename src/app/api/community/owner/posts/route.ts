@@ -111,6 +111,23 @@ async function _POST(req: Request) {
   const row = sanitizeForInsert(body, bid)
   const { data, error } = await supabaseAdmin.from('community_posts').insert(row).select().single()
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // Fire push to followers if the post is being PUBLISHED (not draft/scheduled).
+  // Skip stories from push by default — they're already in-app and ephemeral.
+  if (data && (row.status === 'published') && !row.is_story) {
+    try {
+      const { notifyBusinessFollowers } = await import('@/lib/community/push')
+      const { data: biz } = await supabaseAdmin.from('businesses').select('name, logo_url').eq('id', bid).maybeSingle()
+      await notifyBusinessFollowers(bid, {
+        title: (biz?.name as string | undefined) ?? 'New post',
+        body: (data.title as string | null) ?? (data.body as string | null)?.slice(0, 140) ?? 'New post in your feed',
+        url: '/community/businesses/' + bid,
+        icon: (biz?.logo_url as string | undefined) ?? '/icon-192.png',
+        tag: 'community-post-' + data.id,
+      })
+    } catch (e) { console.warn('[posts] push fan-out failed', (e as Error).message) }
+  }
+
   return NextResponse.json({ post: data })
 }
 
@@ -156,6 +173,28 @@ async function _PATCH(req: Request) {
 
   const { error } = await supabaseAdmin.from('community_posts').update(patch).eq('id', body.id).eq('business_id', bid)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // Fire push when a draft/scheduled/archived post is being PUBLISHED for the first time.
+  // (We only push on the transition — not every PATCH — so editing a live post doesn't re-spam.)
+  const becamePublished = patch.status === 'published' && existing.status !== 'published'
+  const willBeStory = (patch.is_story ?? existing.is_story) === true
+  if (becamePublished && !willBeStory) {
+    try {
+      const { notifyBusinessFollowers } = await import('@/lib/community/push')
+      const { data: row } = await supabaseAdmin.from('community_posts').select('id, title, body').eq('id', body.id).maybeSingle()
+      const { data: biz } = await supabaseAdmin.from('businesses').select('name, logo_url').eq('id', bid).maybeSingle()
+      if (row) {
+        await notifyBusinessFollowers(bid, {
+          title: (biz?.name as string | undefined) ?? 'New post',
+          body: (row.title as string | null) ?? (row.body as string | null)?.slice(0, 140) ?? 'New post in your feed',
+          url: '/community/businesses/' + bid,
+          icon: (biz?.logo_url as string | undefined) ?? '/icon-192.png',
+          tag: 'community-post-' + row.id,
+        })
+      }
+    } catch (e) { console.warn('[posts] push fan-out failed', (e as Error).message) }
+  }
+
   return NextResponse.json({ ok: true })
 }
 

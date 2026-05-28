@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import Link from 'next/link'
-import { Sparkles } from 'lucide-react'
+import { Sparkles, Search, Compass } from 'lucide-react'
 import { C, RADIUS, MAX_W, FONT_DISPLAY } from './theme'
 import { PostCard, type PostCardData } from './PostCard'
 import { StoriesRow, type StoryBubble } from './StoriesRow'
@@ -81,21 +81,39 @@ export default function CommunityFeedPage() {
 
   return (
     <main style={{ maxWidth: MAX_W, margin: '0 auto', padding: '20px 16px 24px' }}>
-      <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-        <div>
+      <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, gap: 8 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
           <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.16em', textTransform: 'uppercase', color: C.accent, margin: 0 }}>Aria Community</p>
           <h1 style={{ fontSize: 24, fontWeight: 700, margin: '4px 0 0', fontFamily: FONT_DISPLAY, fontStyle: 'italic', letterSpacing: '-0.01em' }}>
             {mode === 'followed' ? 'Your feed' : 'Discover local'}
           </h1>
         </div>
-        {!member && (
-          <Link href="/community/me" style={{
-            padding: '8px 14px', borderRadius: RADIUS.pill,
-            background: C.accent, color: '#0d0d14',
-            fontSize: 12, fontWeight: 700, textDecoration: 'none', minHeight: 36,
-            display: 'inline-flex', alignItems: 'center',
-          }}>Join</Link>
-        )}
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
+          <Link href="/community/discover" prefetch={false} aria-label="Discover" style={{
+            width: 40, height: 40, borderRadius: '50%',
+            background: C.surface, border: `1px solid ${C.border}`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            color: C.text, textDecoration: 'none',
+          }}>
+            <Compass size={18} />
+          </Link>
+          <Link href="/community/search" prefetch={false} aria-label="Search" style={{
+            width: 40, height: 40, borderRadius: '50%',
+            background: C.surface, border: `1px solid ${C.border}`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            color: C.text, textDecoration: 'none',
+          }}>
+            <Search size={18} />
+          </Link>
+          {!member && (
+            <Link href="/community/me" style={{
+              padding: '8px 14px', borderRadius: RADIUS.pill,
+              background: C.accent, color: '#0d0d14',
+              fontSize: 12, fontWeight: 700, textDecoration: 'none', minHeight: 40,
+              display: 'inline-flex', alignItems: 'center',
+            }}>Join</Link>
+          )}
+        </div>
       </header>
 
       {/* Stories row */}

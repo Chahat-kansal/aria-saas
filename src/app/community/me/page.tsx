@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { C, RADIUS, MAX_W, FONT_DISPLAY } from '../theme'
+import { PushOptIn } from '../PushOptIn'
 
 interface Member { id: string; nickname: string | null; joined_at: string }
 interface Follow {
@@ -186,6 +187,11 @@ export default function CommunityHomePage() {
           </div>
         )}
       </section>
+
+      {/* Push notifications opt-in */}
+      <div style={{ marginBottom: 20 }}>
+        <PushOptIn />
+      </div>
 
       {/* Follows */}
       <section style={{ marginBottom: 24 }}>
