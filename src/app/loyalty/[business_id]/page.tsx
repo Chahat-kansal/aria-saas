@@ -71,8 +71,17 @@ export default function LoyaltyEnrolPage() {
     </div>
   )
 
+  // Program exists but the owner hasn't switched it on yet — friendly holding state.
+  if (config.public_enrol_enabled === false) return wrap(
+    <div style={{ background: SURFACE, border: BORDER, borderRadius: 22, padding: 28, textAlign: 'center', boxShadow: '4px 4px 0 #0a0a0a' }}>
+      <div style={{ width: 56, height: 56, borderRadius: 16, border: BORDER, background: ACCENT, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px', fontSize: 26 }}>★</div>
+      <h1 style={{ fontSize: 24, fontWeight: 800, margin: '0 0 8px', fontFamily: "'Fraunces', serif", fontStyle: 'italic' }}>Loyalty rewards coming soon</h1>
+      <p style={{ color: INK_SOFT, fontSize: 15, lineHeight: 1.5 }}>{biz.name} is setting up their rewards programme. Check back soon — or ask the team in store.</p>
+    </div>
+  )
+
   const isStamps = config.program_type === 'stamps'
-  const enrolOpen = config.public_enrol_enabled !== false
+  const enrolOpen = true // enrolment-off is handled by the coming-soon guard above
   const tiers = [
     { label: 'Silver', pts: config.tier_silver_points },
     { label: 'Gold', pts: config.tier_gold_points },
