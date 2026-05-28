@@ -21,6 +21,21 @@ async function _POST(req: Request) {
   const { data: biz } = await supabase.from('businesses').select('id,name,industry,city').eq('id', business_id).eq('user_id', user.id).maybeSingle()
   if (!biz) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
+  // Server-side guard: only connected platforms generate calendar posts (token-spend protection).
+  const { data: connections } = await supabaseAdmin
+    .from('social_connections').select('platform')
+    .eq('business_id', business_id).eq('is_active', true)
+  const connectedPlatforms: string[] = (connections ?? []).map(c => c.platform).filter(Boolean)
+  if (connectedPlatforms.length === 0) {
+    return NextResponse.json({ error: 'no_connections', message: 'Connect at least one social account before generating a calendar.', posts: [] }, { status: 400 })
+  }
+  const requestedPlatforms: string[] = (Array.isArray(platforms) && platforms.length > 0)
+    ? platforms.filter((p: string) => connectedPlatforms.includes(p))
+    : connectedPlatforms
+  if (requestedPlatforms.length === 0) {
+    return NextResponse.json({ error: 'no_matching_connections', message: 'None of the requested platforms are connected.', posts: [] }, { status: 400 })
+  }
+
   // Get business media library
   const { data: mediaLibrary } = await supabaseAdmin
     .from('business_media')
@@ -72,7 +87,7 @@ async function _POST(req: Request) {
 BUSINESS: ${biz.name}, ${biz.city || 'Australia'}
 INDUSTRY: ${biz.industry}
 MONTH: ${month}
-PLATFORMS: ${(platforms || ['instagram', 'facebook']).join(', ')}
+PLATFORMS: ${requestedPlatforms.join(', ')}
 POSTING DATES: ${postDates.slice(0, 20).join(', ')}
 
 ${hasMedia ? `BUSINESS PHOTOS AVAILABLE (use these, don't suggest stock photos):
