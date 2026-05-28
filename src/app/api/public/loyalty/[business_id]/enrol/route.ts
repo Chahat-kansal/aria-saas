@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic'
 import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
+import { resolveBusinessId } from '@/lib/aria/resolve-business'
 
 type Params = { params: Promise<{ business_id: string }> | { business_id: string } }
 
@@ -10,6 +11,9 @@ export async function POST(req: Request, { params }: Params) {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   )
+  const realId = await resolveBusinessId(db, business_id)
+  if (!realId) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
   const body = await req.json()
   const { name, email, phone, birthday } = body
 
@@ -20,7 +24,7 @@ export async function POST(req: Request, { params }: Params) {
   const { data: config } = await db
     .from('pos_loyalty_config')
     .select('public_enrol_enabled')
-    .eq('business_id', business_id)
+    .eq('business_id', realId)
     .maybeSingle()
 
   if (!config?.public_enrol_enabled) {
@@ -30,7 +34,7 @@ export async function POST(req: Request, { params }: Params) {
   const { data: existing } = await db
     .from('pos_customers')
     .select('id')
-    .eq('business_id', business_id)
+    .eq('business_id', realId)
     .eq('phone', phone)
     .maybeSingle()
 
@@ -39,7 +43,7 @@ export async function POST(req: Request, { params }: Params) {
   }
 
   const { data, error } = await db.from('pos_customers').insert({
-    business_id,
+    business_id: realId,
     name,
     email: email || null,
     phone,

@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { resolveBusinessId } from '@/lib/aria/resolve-business'
 
 type Params = { params: { business_id: string } }
 
@@ -13,9 +14,12 @@ async function _GET(req: Request, { params }: Params) {
   const phone = new URL(req.url).searchParams.get('phone')?.trim()
   if (!business_id || !phone) return NextResponse.json({ error: 'phone required' }, { status: 400 })
 
+  const realId = await resolveBusinessId(supabaseAdmin, business_id)
+  if (!realId) return NextResponse.json({ found: false })
+
   const { data } = await supabaseAdmin.from('pos_customers')
     .select('name, points_balance, loyalty_points, visit_count, total_spent, total_spend')
-    .eq('business_id', business_id).eq('phone', phone).maybeSingle()
+    .eq('business_id', realId).eq('phone', phone).maybeSingle()
   if (!data) return NextResponse.json({ found: false })
 
   return NextResponse.json({
