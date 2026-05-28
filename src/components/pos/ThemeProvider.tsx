@@ -143,7 +143,10 @@ export function POSThemeProvider({ children }: { children: React.ReactNode }) {
   const colors = getTheme(theme)
 
   if (!mounted) {
-    return <div style={{ background: '#030510', minHeight: '100vh' }}>{children}</div>
+    // The anti-flash script (in root layout) has already applied the correct CSS vars
+    // for the saved pos_theme. Use var(--bg-base) so we respect whatever the script set,
+    // rather than hard-coding dark and causing a visible flash on light-mode refresh.
+    return <div style={{ background: 'var(--bg-base, #030510)', minHeight: '100vh' }}>{children}</div>
   }
 
   return (
