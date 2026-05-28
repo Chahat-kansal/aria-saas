@@ -46,7 +46,7 @@ export default function CommunitySearchPage() {
 
       <header style={{ marginBottom: 16 }}>
         <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.16em', textTransform: 'uppercase', color: C.accent, margin: 0 }}>Search</p>
-        <h1 style={{ fontSize: 24, fontWeight: 700, margin: '4px 0 0', fontFamily: FONT_DISPLAY, fontStyle: 'italic', letterSpacing: '-0.01em' }}>
+        <h1 style={{ fontSize: 24, fontWeight: 700, margin: '4px 0 0', fontFamily: FONT_DISPLAY, letterSpacing: '-0.01em' }}>
           Find local shops + products
         </h1>
       </header>
@@ -60,7 +60,7 @@ export default function CommunitySearchPage() {
           placeholder="Shop name, suburb, product…"
           style={{
             width: '100%', padding: '12px 14px 12px 40px',
-            background: C.surface, border: `1px solid ${C.border}`, borderRadius: RADIUS.pill,
+            background: C.surface, border: `1.5px solid ${C.border}`, borderRadius: RADIUS.pill,
             color: C.text, fontSize: 15, outline: 'none', fontFamily: 'inherit',
             minHeight: 44, boxSizing: 'border-box',
           }}
@@ -95,7 +95,7 @@ export default function CommunitySearchPage() {
       ) : loading ? (
         <p style={{ fontSize: 13, color: C.textMuted, textAlign: 'center', padding: 24 }}>Searching…</p>
       ) : (businesses.length === 0 && listings.length === 0) ? (
-        <div style={{ padding: '40px 20px', textAlign: 'center', background: C.surface, borderRadius: RADIUS.lg, border: `1px dashed ${C.border}` }}>
+        <div style={{ padding: '40px 20px', textAlign: 'center', background: C.surface, borderRadius: RADIUS.lg, border: `1.5px dashed ${C.border}` }}>
           <Search size={26} style={{ color: C.textMuted, opacity: 0.5, marginBottom: 10 }} />
           <p style={{ fontSize: 14, fontWeight: 600, margin: 0 }}>Nothing matched &quot;{committed}&quot;</p>
           <p style={{ fontSize: 12, color: C.textMuted, margin: '6px 0 0' }}>Try a shorter or simpler term.</p>
@@ -131,14 +131,14 @@ function BusinessRow({ biz }: { biz: BizHit }) {
   return (
     <Link href={`/community/businesses/${biz.id}`} prefetch={false} style={{
       display: 'flex', alignItems: 'center', gap: 12, padding: 12,
-      background: C.surface, border: `1px solid ${C.border}`, borderRadius: RADIUS.lg,
+      background: C.surface, border: `1.5px solid ${C.border}`, borderRadius: RADIUS.lg,
       textDecoration: 'none', color: C.text,
     }}>
       <div style={{
         width: 48, height: 48, borderRadius: '50%',
         background: biz.logo_url ? `url(${biz.logo_url}) center/cover` : C.accentDeep,
         color: C.accent, display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontWeight: 700, fontSize: 18, border: `1px solid ${C.border}`, flexShrink: 0,
+        fontWeight: 700, fontSize: 18, border: `1.5px solid ${C.border}`, flexShrink: 0,
       }}>
         {!biz.logo_url && (biz.name?.[0] ?? '?')}
       </div>
@@ -160,7 +160,7 @@ function ListingTile({ listing }: { listing: ListingHit }) {
   const cover = listing.media_urls?.[0]
   return (
     <Link href={`/community/market/${listing.id}`} prefetch={false} style={{
-      background: C.surface, border: `1px solid ${C.border}`, borderRadius: RADIUS.lg,
+      background: C.surface, border: `1.5px solid ${C.border}`, borderRadius: RADIUS.lg,
       overflow: 'hidden', textDecoration: 'none', color: C.text,
       display: 'flex', flexDirection: 'column',
     }}>

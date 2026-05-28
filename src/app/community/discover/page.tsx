@@ -45,7 +45,7 @@ export default function CommunityDiscoverPage() {
 
       <header style={{ marginBottom: 18 }}>
         <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.16em', textTransform: 'uppercase', color: C.accent, margin: 0 }}>Discover</p>
-        <h1 style={{ fontSize: 24, fontWeight: 700, margin: '4px 0 0', fontFamily: FONT_DISPLAY, fontStyle: 'italic', letterSpacing: '-0.01em' }}>
+        <h1 style={{ fontSize: 24, fontWeight: 700, margin: '4px 0 0', fontFamily: FONT_DISPLAY, letterSpacing: '-0.01em' }}>
           Local shops worth following
         </h1>
       </header>
@@ -53,7 +53,7 @@ export default function CommunityDiscoverPage() {
       {loading ? (
         <SkeletonRow />
       ) : !data || (data.nearby.length === 0 && data.recommended.length === 0) ? (
-        <div style={{ padding: '40px 20px', textAlign: 'center', background: C.surface, borderRadius: RADIUS.lg, border: `1px dashed ${C.border}` }}>
+        <div style={{ padding: '40px 20px', textAlign: 'center', background: C.surface, borderRadius: RADIUS.lg, border: `1.5px dashed ${C.border}` }}>
           <Sparkles size={26} style={{ color: C.accent, opacity: 0.6, marginBottom: 10 }} />
           <p style={{ fontSize: 14, fontWeight: 600, margin: 0 }}>Nothing nearby yet</p>
           <p style={{ fontSize: 12, color: C.textMuted, margin: '6px 0 0' }}>As more local shops join Aria, you&apos;ll see them here.</p>
@@ -91,7 +91,7 @@ export default function CommunityDiscoverPage() {
 function DiscoverCard({ biz }: { biz: BusinessCard }) {
   return (
     <Link href={`/community/businesses/${biz.id}`} prefetch={false} style={{
-      background: C.surface, border: `1px solid ${C.border}`, borderRadius: RADIUS.lg,
+      background: C.surface, border: `1.5px solid ${C.border}`, borderRadius: RADIUS.lg,
       padding: 14, textDecoration: 'none', color: C.text,
       display: 'flex', flexDirection: 'column', gap: 10,
     }}>
@@ -100,7 +100,7 @@ function DiscoverCard({ biz }: { biz: BusinessCard }) {
           width: 44, height: 44, borderRadius: '50%',
           background: biz.logo_url ? `url(${biz.logo_url}) center/cover` : C.accentDeep,
           color: C.accent, display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontWeight: 700, fontSize: 16, border: `1px solid ${C.border}`, flexShrink: 0,
+          fontWeight: 700, fontSize: 16, border: `1.5px solid ${C.border}`, flexShrink: 0,
         }}>
           {!biz.logo_url && (biz.name?.[0] ?? '?')}
         </div>
@@ -131,7 +131,7 @@ function SkeletonRow() {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}>
       {[0, 1, 2, 3].map(i => (
-        <div key={i} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: RADIUS.lg, padding: 14 }}>
+        <div key={i} style={{ background: C.surface, border: `1.5px solid ${C.border}`, borderRadius: RADIUS.lg, padding: 14 }}>
           <div style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
             <div style={{ width: 44, height: 44, borderRadius: '50%', background: C.surfaceHi }} />
             <div style={{ flex: 1 }}>

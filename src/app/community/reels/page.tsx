@@ -130,7 +130,7 @@ export default function ReelsPage() {
         <Play size={48} style={{ color: C.accent, opacity: 0.4 }} />
         <p style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>No reels yet</p>
         <p style={{ fontSize: 13, color: C.textMuted, margin: 0, textAlign: 'center', maxWidth: 320 }}>Local businesses share short vertical videos here. Check back soon.</p>
-        <Link href="/community" style={{ marginTop: 8, padding: '10px 18px', borderRadius: 999, background: C.accent, color: '#0d0d14', textDecoration: 'none', fontSize: 13, fontWeight: 700 }}>
+        <Link href="/community" style={{ marginTop: 8, padding: '10px 18px', borderRadius: 999, background: C.accent, color: C.ink, textDecoration: 'none', fontSize: 13, fontWeight: 700 }}>
           Back to feed
         </Link>
       </div>

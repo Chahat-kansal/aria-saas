@@ -38,7 +38,7 @@ export default function SavedPage() {
     <main style={{ maxWidth: MAX_W, margin: '0 auto', padding: '20px 16px 24px' }}>
       <header style={{ marginBottom: 16 }}>
         <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.16em', textTransform: 'uppercase', color: C.accent, margin: 0 }}>Saved</p>
-        <h1 style={{ fontSize: 24, fontWeight: 700, margin: '4px 0 0', fontFamily: FONT_DISPLAY, fontStyle: 'italic', letterSpacing: '-0.01em' }}>
+        <h1 style={{ fontSize: 24, fontWeight: 700, margin: '4px 0 0', fontFamily: FONT_DISPLAY, letterSpacing: '-0.01em' }}>
           Your offers wallet
         </h1>
         <p style={{ fontSize: 13, color: C.textMuted, margin: '4px 0 0' }}>
@@ -47,7 +47,7 @@ export default function SavedPage() {
       </header>
 
       {!member && !loading ? (
-        <div style={{ padding: '40px 20px', textAlign: 'center', background: C.surface, borderRadius: RADIUS.lg, border: `1px dashed ${C.border}` }}>
+        <div style={{ padding: '40px 20px', textAlign: 'center', background: C.surface, borderRadius: RADIUS.lg, border: `1.5px dashed ${C.border}` }}>
           <Bookmark size={26} style={{ color: C.accent, opacity: 0.6, marginBottom: 10 }} />
           <p style={{ fontSize: 15, fontWeight: 600, margin: '0 0 6px' }}>Join to save offers</p>
           <p style={{ fontSize: 13, color: C.textMuted, margin: '0 0 14px', lineHeight: 1.55 }}>
@@ -55,13 +55,13 @@ export default function SavedPage() {
           </p>
           <Link href="/community/me" style={{
             display: 'inline-block', padding: '10px 18px', borderRadius: RADIUS.pill,
-            background: C.accent, color: '#0d0d14', fontSize: 13, fontWeight: 700, textDecoration: 'none',
+            background: C.accent, color: C.ink, fontSize: 13, fontWeight: 700, textDecoration: 'none',
           }}>Join in 5 seconds</Link>
         </div>
       ) : loading ? (
         <p style={{ fontSize: 13, color: C.textMuted, textAlign: 'center', padding: 24 }}>Loading…</p>
       ) : posts.length === 0 ? (
-        <div style={{ padding: '40px 20px', textAlign: 'center', background: C.surface, borderRadius: RADIUS.lg, border: `1px dashed ${C.border}` }}>
+        <div style={{ padding: '40px 20px', textAlign: 'center', background: C.surface, borderRadius: RADIUS.lg, border: `1.5px dashed ${C.border}` }}>
           <Bookmark size={26} style={{ color: C.textMuted, opacity: 0.5, marginBottom: 10 }} />
           <p style={{ fontSize: 15, fontWeight: 600, margin: 0 }}>Nothing saved yet</p>
           <p style={{ fontSize: 13, color: C.textMuted, margin: '6px 0 0', lineHeight: 1.5 }}>

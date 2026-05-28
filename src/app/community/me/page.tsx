@@ -92,7 +92,7 @@ export default function CommunityHomePage() {
       <main style={{ maxWidth: MAX_W, margin: '0 auto', padding: '40px 20px 64px' }}>
         <header style={{ marginBottom: 28 }}>
           <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.16em', textTransform: 'uppercase', color: C.accent, margin: 0 }}>Aria Community</p>
-          <h1 style={{ fontSize: 32, fontWeight: 700, lineHeight: 1.12, margin: '8px 0 10px', fontFamily: FONT_DISPLAY, fontStyle: 'italic' }}>
+          <h1 style={{ fontSize: 32, fontWeight: 700, lineHeight: 1.12, margin: '8px 0 10px', fontFamily: FONT_DISPLAY }}>
             Your local shops, one feed.
           </h1>
           <p style={{ fontSize: 15, lineHeight: 1.55, color: C.textDim, margin: 0 }}>
@@ -132,7 +132,7 @@ export default function CommunityHomePage() {
             disabled={saving}
             style={{
               width: '100%', padding: '14px', border: 'none', borderRadius: RADIUS.md,
-              background: C.accent, color: '#0d0d14', fontSize: 15, fontWeight: 700,
+              background: C.accent, color: C.ink, fontSize: 15, fontWeight: 700,
               cursor: saving ? 'wait' : 'pointer', fontFamily: 'inherit',
               minHeight: 48,
               opacity: saving ? 0.6 : 1,
@@ -154,7 +154,7 @@ export default function CommunityHomePage() {
     <main style={{ maxWidth: MAX_W, margin: '0 auto', padding: '32px 20px 64px' }}>
       <header style={{ marginBottom: 22 }}>
         <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.16em', textTransform: 'uppercase', color: C.accent, margin: 0 }}>Aria Community</p>
-        <h1 style={{ fontSize: 26, fontWeight: 700, margin: '8px 0 0', fontFamily: FONT_DISPLAY, fontStyle: 'italic' }}>
+        <h1 style={{ fontSize: 26, fontWeight: 700, margin: '8px 0 0', fontFamily: FONT_DISPLAY }}>
           {member.nickname ? `Hi ${member.nickname}` : 'You\'re in'}
         </h1>
       </header>
@@ -177,7 +177,7 @@ export default function CommunityHomePage() {
             <input value={nickname} onChange={e => setNickname(e.target.value)} placeholder="Nickname" maxLength={40}
               style={{ flex: 1, padding: '10px 12px', background: C.surfaceHi, border: '1px solid ' + C.border, borderRadius: RADIUS.sm, color: C.text, fontSize: 14, outline: 'none', fontFamily: 'inherit', minWidth: 0 }} />
             <button onClick={saveNickname} disabled={saving}
-              style={{ padding: '0 16px', background: C.accent, color: '#0d0d14', border: 'none', borderRadius: RADIUS.sm, fontSize: 13, fontWeight: 700, cursor: 'pointer', minHeight: 40, fontFamily: 'inherit' }}>
+              style={{ padding: '0 16px', background: C.accent, color: C.ink, border: 'none', borderRadius: RADIUS.sm, fontSize: 13, fontWeight: 700, cursor: 'pointer', minHeight: 40, fontFamily: 'inherit' }}>
               Save
             </button>
             <button onClick={() => setEditingNick(false)}
@@ -187,6 +187,16 @@ export default function CommunityHomePage() {
           </div>
         )}
       </section>
+
+      {/* Saved offers wallet link */}
+      <Link href="/community/saved" prefetch={false} style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        background: C.surface, border: `1.5px solid ${C.border}`, borderRadius: RADIUS.lg,
+        padding: '14px 16px', marginBottom: 14, textDecoration: 'none', color: C.text,
+      }}>
+        <span style={{ fontSize: 14, fontWeight: 700, letterSpacing: '-0.01em' }}>saved offers</span>
+        <span style={{ fontSize: 13, fontWeight: 700, color: C.inkSoft }}>→</span>
+      </Link>
 
       {/* Push notifications opt-in */}
       <div style={{ marginBottom: 20 }}>
