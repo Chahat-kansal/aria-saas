@@ -1,159 +1,349 @@
-# Prompt 86 — Fix Ask Aria: render actual responses, not just pre-seeded cards
+# Prompt 86 — Ask Aria: rich blocks + cost tracking + budget-based routing
+
+This prompt has TWO independent halves. Run them in order — they touch related
+code but don't depend on each other and commit separately.
+
+If a previous version of prompt 86 (with a hardcoded Haiku complexity-router)
+was already partially run: REVERT the complexity-routing piece in
+/api/aria/ask/route.ts. The new approach below is budget-based, not
+complexity-based. KEEP the BlockRenderer and the data.blocks wire-up — those
+are still valuable.
+
+---
+
+# PART A — Rich block rendering
 
 ## The bug (verified)
 
-In src/app/pos/ask/page.tsx:
-1. Line 21: `const SUGGESTED = [...]` — a hardcoded array of starter-prompt cards.
-   These render at L442 as the suggestion chips. They're fine on the empty state,
-   but they look like Aria's response when the user actually expected a reply.
+In `src/app/pos/ask/page.tsx`:
+1. Line 21: `const SUGGESTED = [...]` — a hardcoded array of starter-prompt cards
+   that render at L442 as suggestion chips. Fine for empty state, but they look
+   like Aria's reply when the user actually expected a response.
 2. Line 328-333: The response type declaration MISSES `blocks` entirely. Only
    `response`, `conversation_id`, `intent`, `action`, `downloads` are typed.
-   The API actually returns `blocks: AskBlock[] | undefined` (see /api/aria/ask/route.ts).
-3. The frontend ONLY reads `data.response` and ignores `data.blocks` completely.
-   So when Aria generates rich blocks (charts, tables, structured cards), they
-   are silently thrown away and only the text reply renders.
-4. There's also no `<BlockRenderer>` component anywhere — even if `data.blocks`
-   were read, there's nothing to draw them.
+3. The API at /api/aria/ask actually returns `blocks: AskBlock[] | undefined`
+   (see /api/aria/ask/route.ts) — but the frontend reads only `data.response`
+   and silently drops `data.blocks`.
+4. There's no `<BlockRenderer>` component anywhere — even if `data.blocks` were
+   read, there's nothing to draw them.
 
 End result: users see hardcoded suggestion cards on the empty state and a plain
 text bubble when they ask something. The "graph cards" appearance is purely the
-SUGGESTED array, never Aria's actual reply.
+SUGGESTED array — never Aria's actual rich reply.
 
 ## What to build
 
 ### 1. Add `blocks` to the response type and message shape
-In src/app/pos/ask/page.tsx:
-- L328-332 — update the response type to include
+In `src/app/pos/ask/page.tsx`:
+- L328-332: update the response type to include
   `blocks?: import('@/lib/aria/ask-types').AskBlock[]`
-- The `messages` state already has shape `{ type, text, streaming, downloads? }`.
+- The `messages` state has shape `{ type, text, streaming, downloads? }`.
   Add `blocks?: AskBlock[]` to that shape.
-- Wherever a message is pushed (L353, L369, L381), if `data.blocks` exists, set
-  it on the message: `{ type: 'aria', text: reply, blocks: data.blocks, ... }`
+- Wherever a message is pushed (L353, L369, L381), pass `data.blocks` through:
+  `{ type: 'aria', text: reply, blocks: data.blocks, ... }`
 
 ### 2. Build a real `BlockRenderer` component
 New file: `src/components/aria/BlockRenderer.tsx`
 
-Reads `src/lib/aria/ask-types.ts` to understand all the block types it must render.
-Common block types (verify in the types file — match exactly, do NOT invent new ones):
+Read `src/lib/aria/ask-types.ts` to understand every block type the API returns.
+Match exactly — do NOT invent new types. Common types likely include:
 
-- `chart` — bar/line/pie. Use Recharts (already in package.json — verify). Title above, legend, axes labels, accessible.
-- `stat_grid` — 2-4 metric cards (label + big number + optional trend %). Use the existing dashboard metric-card design language.
-- `table` — sortable rows. Plain HTML table styled to match the dashboard.
-- `list` — bulleted list, supports clickable items if `href` present.
-- `markdown` — render the existing react-markdown component if installed, else fall back to plain text with newline preservation.
+- `chart` — bar/line/pie via Recharts (already a dep — verify). Title above, legend, axes labels, accessible.
+- `stat_grid` — 2-4 metric cards (label + big number + optional trend %). Match the existing dashboard metric-card design.
+- `table` — sortable rows, plain HTML table styled to match dashboard.
+- `list` — bulleted, supports clickable items if `href` present.
+- `markdown` — render via react-markdown if installed, else preserve newlines.
 - `callout` — info/warning/success card with an icon.
-- `action_card` — a card with a title, body, and 1-3 buttons that each post back to /api/aria/ask with a follow-up message (use `sendPrompt` pattern: append the action label as a new user message).
-- `image` — render uploaded image with download link.
+- `action_card` — title + body + 1-3 buttons that post follow-up messages back to /api/aria/ask.
+- `image` — uploaded image with download link.
 
-For ANY block type not recognised, render a small "Unsupported block: {type}" debug pill — never crash, never silently drop.
+Unknown block types render a small `"Unsupported block: {type}"` debug pill — never crash, never silently drop.
 
 ### 3. Render blocks in message order, mixed with text
-In the message list (around L500 in page.tsx — find the message map):
-- For each message: render the text bubble FIRST (existing behaviour)
-- If `message.blocks` exists and has length > 0: render `<BlockRenderer blocks={message.blocks} />` BELOW the text bubble, inside the same message group
-- Width: full width of the message column (not constrained to the text bubble width)
-- Spacing: 12px gap between the text bubble and the first block
+Find the message map (around L500 in page.tsx):
+- Text bubble FIRST (existing behaviour)
+- If `message.blocks` has length > 0: render `<BlockRenderer blocks={message.blocks} />` BELOW the text bubble in the same message group
+- Width: full message column (not constrained to text bubble width)
+- Spacing: 12px gap between text bubble and first block
 
 ### 4. Hide SUGGESTED once a conversation has started
-The SUGGESTED cards at L442 should ONLY render when `isEmpty` is true. Check the existing code — if they're already inside an `{isEmpty && (...)}` block, leave them. If they always render, wrap them.
+The SUGGESTED cards at L442 should render ONLY when `isEmpty` is true. Check existing code — if already inside `{isEmpty && (...)}`, leave it. Otherwise wrap it.
 
-### 5. Suggestion chips after a reply (NEW, small UX win)
-After Aria's reply, the API can already return follow-up suggestions via the
-`action_card` block type with `buttons[]`. Make sure the BlockRenderer wires
-each button's onClick to `setInput(label); send()` so the user can tap a
-follow-up suggestion and it sends as a new message.
+### 5. Suggestion chips after a reply
+Wire each `action_card` block button onClick to `setInput(label); send()` so tapping a suggestion sends as a new message.
 
-## Files to touch
-- src/app/pos/ask/page.tsx — update types, wire blocks into messages, render BlockRenderer
-- src/components/aria/BlockRenderer.tsx — NEW component
-- Confirm src/lib/aria/ask-types.ts exists and matches what the API returns; if not, create it
+### Files for Part A
+- `src/app/pos/ask/page.tsx` — types, state shape, render order
+- `src/components/aria/BlockRenderer.tsx` — NEW
+- Verify `src/lib/aria/ask-types.ts` exists and matches API; if not, create it
 
-## Rules
-- Match the EXISTING dashboard design language (Financial Trust palette, the same CSS vars used elsewhere in /pos/ask) — do NOT introduce a new look
-- Recharts for charts (already a dep — confirm in package.json)
-- All blocks must be keyboard-accessible — button blocks have proper aria-labels
-- Empty blocks array → render nothing extra (text-only response stays as today)
-- Never crash on unknown block types — show debug pill, continue rendering
+### Rules for Part A
+- Match EXISTING dashboard design (Financial Trust palette, same CSS vars used elsewhere in /pos/ask) — do NOT introduce a new look
+- Recharts for charts (verify in package.json)
+- All blocks keyboard-accessible — proper aria-labels on buttons
+- Empty blocks array → render nothing extra
 - npx tsc --noEmit + npm run build pass
 
-
-
-## TASK 3 — Cost routing: simple queries → Haiku, complex → Sonnet (saves ~80%)
-
-### Why this matters
-Current Ask Aria cost averages $0.091/message ($0.28 max), almost entirely from
-sending everything to Sonnet with 28k input tokens. Real measurements from
-aria_ai_calls show half of messages cost 1-2 cents (short answers, no tool use)
-and half cost 6-28 cents (long answers with tools). The cheap half is doing
-simple factual lookups that Haiku handles fine at 1/20th the cost.
-
-Haiku pricing: $0.25/M input vs Sonnet $3/M — a 12× input savings and roughly
-20× including output.
-
-### What to build
-The infrastructure ALREADY EXISTS:
-- src/lib/aria/ask/intent.ts already returns `complexity: 'simple' | 'complex'`
-- src/lib/aria/providers/anthropic.ts already takes `model: 'haiku' | 'sonnet' | 'opus'`
-
-The route is just ignoring the complexity field and always sending to Sonnet.
-
-### Implementation in src/app/api/aria/ask/route.ts
-
-After the line `const intent = await classifyIntent(message, ...)`:
-
-```ts
-// Cost router: simple factual questions go to Haiku (20× cheaper),
-// complex reasoning/optimisation goes to Sonnet. Tool-heavy calls
-// always go to Sonnet because Haiku's tool-use reliability is lower.
-const needsTools = /* check existing tool-trigger heuristic — likely already a variable */
-const routedModel: 'haiku' | 'sonnet' =
-  intent.type === 'smalltalk' ? 'haiku' :
-  intent.type === 'question' && intent.complexity === 'simple' && !needsTools ? 'haiku' :
-  'sonnet'
-```
-
-Then pass `model: routedModel` into whatever Anthropic call follows (it
-currently hardcodes `sonnet` or omits the param — find and update each call site).
-
-### Safety rails — don't lose answer quality
-
-1. **Escape hatch for confidence='low'** — if classifier returned `confidence: 'low'`, route to Sonnet anyway. Better to overspend than underdeliver on a misclassified message.
-2. **Tool-heavy queries always go to Sonnet** — Haiku is less reliable at multi-step tool use. Keep tool calls on Sonnet.
-3. **Council calls stay on Sonnet/Opus** — `runAriaCouncil` is intentionally heavy. Do not touch it.
-4. **Smalltalk goes to Haiku** — "hi", "thanks", "good morning" should never trigger Sonnet.
-
-### Log the routing decision
-
-In the existing aria_ai_calls insert, the `model_id` field already records what was used. Add ONE line to console.log the routing:
-
-```ts
-console.log('[ask-aria] routed', { intent: intent.type, complexity: intent.complexity, model: routedModel })
-```
-
-This lets us audit after launch whether the routing is sensible.
-
-### Expected impact
-Current average: $0.091/message
-Expected average after routing:
-- ~50% messages route to Haiku at ~$0.005 each
-- ~50% messages stay on Sonnet at ~$0.18 each (the expensive half)
-- New average: ~$0.09 → ~$0.045
-
-That's a 50% cost cut for free, with zero quality loss on the cheap half.
-
-### Commit
-"feat(ask-aria): cost router — simple questions go to Haiku, complex stays on Sonnet"
-
-
-## Commits
+### Commits for Part A
 - "feat(ask-aria): add BlockRenderer component for chart/stat/table/callout blocks"
 - "fix(ask-aria): wire data.blocks from API into rendered messages — was silently dropped"
-- "feat(ask-aria): cost router — simple questions go to Haiku, complex stays on Sonnet"
-- Then: git push origin main
 
-## Test after deploy
-1. Open /pos/ask
-2. Ask: "Show me this week's top sellers"
-3. Expect: a chart or table block under Aria's text reply, not just text
-4. Ask a follow-up like "and last week"
-5. Expect: another block, history preserved, no SUGGESTED chips reappearing
+---
+
+# PART B — Cost tracking + budget-based Sonnet→Haiku downgrade
+
+## Goal
+Every customer gets Sonnet by default, but once they hit their plan's monthly
+Sonnet budget, Aria gracefully downgrades to Haiku for the rest of the month.
+Quality stays high for normal use, costs stay bounded for power users, customer
+always knows what mode they're in.
+
+Plus a real admin panel showing AI cost per business, per agent, with daily and
+monthly aggregates and alerts for over-budget businesses.
+
+## DB schema
+
+```sql
+CREATE TABLE IF NOT EXISTS aria_monthly_spend (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  business_id uuid REFERENCES businesses(id) ON DELETE CASCADE,
+  year_month text NOT NULL,             -- e.g. '2026-05'
+  sonnet_cents int DEFAULT 0,
+  haiku_cents int DEFAULT 0,
+  opus_cents int DEFAULT 0,
+  other_cents int DEFAULT 0,
+  total_cents int DEFAULT 0,
+  updated_at timestamptz DEFAULT now(),
+  UNIQUE(business_id, year_month)
+);
+ALTER TABLE aria_monthly_spend ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "monthly_spend_owner" ON aria_monthly_spend
+  FOR SELECT TO authenticated
+  USING (business_id IN (SELECT id FROM businesses WHERE user_id = auth.uid()));
+CREATE INDEX idx_monthly_spend_business_month ON aria_monthly_spend(business_id, year_month);
+
+ALTER TABLE business_subscriptions 
+  ADD COLUMN IF NOT EXISTS sonnet_monthly_budget_cents int DEFAULT 3000;  -- $30 default
+```
+
+Per-plan defaults (apply at the route, since the column is one-size-fits-all otherwise):
+- Starter → 1000 cents ($10)
+- Growth → 3000 cents ($30)
+- Pro → 8000 cents ($80)
+
+## Spend aggregation trigger (cheap, automatic)
+
+```sql
+CREATE OR REPLACE FUNCTION accumulate_monthly_spend() 
+RETURNS TRIGGER LANGUAGE plpgsql AS $$
+DECLARE
+  ym text := to_char(NEW.created_at, 'YYYY-MM');
+  model_family text;
+BEGIN
+  IF NEW.business_id IS NULL OR NEW.cost_usd_cents IS NULL OR NEW.cost_usd_cents = 0 THEN
+    RETURN NEW;
+  END IF;
+  model_family := CASE 
+    WHEN NEW.model_id LIKE '%sonnet%' THEN 'sonnet'
+    WHEN NEW.model_id LIKE '%haiku%' THEN 'haiku'
+    WHEN NEW.model_id LIKE '%opus%' THEN 'opus'
+    ELSE 'other'
+  END;
+  INSERT INTO aria_monthly_spend (business_id, year_month, sonnet_cents, haiku_cents, opus_cents, other_cents, total_cents)
+  VALUES (
+    NEW.business_id, ym,
+    CASE WHEN model_family = 'sonnet' THEN NEW.cost_usd_cents ELSE 0 END,
+    CASE WHEN model_family = 'haiku' THEN NEW.cost_usd_cents ELSE 0 END,
+    CASE WHEN model_family = 'opus' THEN NEW.cost_usd_cents ELSE 0 END,
+    CASE WHEN model_family = 'other' THEN NEW.cost_usd_cents ELSE 0 END,
+    NEW.cost_usd_cents
+  )
+  ON CONFLICT (business_id, year_month) DO UPDATE SET
+    sonnet_cents = aria_monthly_spend.sonnet_cents + CASE WHEN model_family = 'sonnet' THEN NEW.cost_usd_cents ELSE 0 END,
+    haiku_cents = aria_monthly_spend.haiku_cents + CASE WHEN model_family = 'haiku' THEN NEW.cost_usd_cents ELSE 0 END,
+    opus_cents = aria_monthly_spend.opus_cents + CASE WHEN model_family = 'opus' THEN NEW.cost_usd_cents ELSE 0 END,
+    other_cents = aria_monthly_spend.other_cents + CASE WHEN model_family = 'other' THEN NEW.cost_usd_cents ELSE 0 END,
+    total_cents = aria_monthly_spend.total_cents + NEW.cost_usd_cents,
+    updated_at = now();
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS trg_accumulate_spend ON aria_ai_calls;
+CREATE TRIGGER trg_accumulate_spend
+  AFTER INSERT ON aria_ai_calls
+  FOR EACH ROW EXECUTE FUNCTION accumulate_monthly_spend();
+```
+
+Backfill historical spend (run once):
+```sql
+INSERT INTO aria_monthly_spend (business_id, year_month, sonnet_cents, haiku_cents, opus_cents, other_cents, total_cents)
+SELECT 
+  business_id,
+  to_char(created_at, 'YYYY-MM') AS year_month,
+  SUM(CASE WHEN model_id LIKE '%sonnet%' THEN cost_usd_cents ELSE 0 END),
+  SUM(CASE WHEN model_id LIKE '%haiku%' THEN cost_usd_cents ELSE 0 END),
+  SUM(CASE WHEN model_id LIKE '%opus%' THEN cost_usd_cents ELSE 0 END),
+  SUM(CASE WHEN model_id NOT LIKE '%sonnet%' AND model_id NOT LIKE '%haiku%' AND model_id NOT LIKE '%opus%' THEN cost_usd_cents ELSE 0 END),
+  SUM(cost_usd_cents)
+FROM aria_ai_calls
+WHERE business_id IS NOT NULL AND cost_usd_cents > 0
+GROUP BY business_id, to_char(created_at, 'YYYY-MM')
+ON CONFLICT (business_id, year_month) DO NOTHING;
+```
+
+## Budget-based routing in /api/aria/ask/route.ts
+
+```typescript
+const ym = new Date().toISOString().slice(0, 7)
+const { data: spend } = await supabaseAdmin
+  .from('aria_monthly_spend')
+  .select('sonnet_cents')
+  .eq('business_id', bid)
+  .eq('year_month', ym)
+  .maybeSingle()
+
+const { data: sub } = await supabaseAdmin
+  .from('business_subscriptions')
+  .select('sonnet_monthly_budget_cents, plan_tier')
+  .eq('business_id', bid)
+  .eq('status', 'active')
+  .maybeSingle()
+
+// Per-plan default if budget column not yet set per-business
+const planDefaults: Record<string, number> = { starter: 1000, growth: 3000, pro: 8000 }
+const budget = sub?.sonnet_monthly_budget_cents ?? planDefaults[sub?.plan_tier ?? ''] ?? 3000
+const sonnetUsed = spend?.sonnet_cents ?? 0
+const sonnetExhausted = sonnetUsed >= budget
+
+// Tool-heavy calls always need Sonnet — Haiku tool-use reliability is lower
+const needsTools = /* existing tool-trigger heuristic in the route */
+const routedModel: 'haiku' | 'sonnet' = sonnetExhausted && !needsTools ? 'haiku' : 'sonnet'
+
+console.log('[ask-aria] route', { bid, sonnetUsed, budget, exhausted: sonnetExhausted, model: routedModel })
+```
+
+Pass `routedModel` into the Anthropic call. Find every site in this route that hardcodes 'sonnet' or omits the model — update each.
+
+## Response telemetry for the frontend
+
+```typescript
+return NextResponse.json({
+  response: finalResponse,
+  /* existing fields */,
+  ai_mode: routedModel,
+  sonnet_used_cents: sonnetUsed,
+  sonnet_budget_cents: budget,
+  sonnet_percent_used: Math.min(100, Math.round((sonnetUsed / budget) * 100)),
+})
+```
+
+## Frontend lite-mode UX
+
+In `src/app/pos/ask/page.tsx`:
+1. Track `ai_mode` and `sonnet_percent_used` in state from each response.
+2. When `ai_mode === 'haiku'` (budget exhausted) — small subtle pill at the top of the chat panel:
+   ```
+   ⚡ Lite mode — premium AI budget reached for this month. [Upgrade] for unlimited.
+   ```
+3. When `percent_used >= 80 && < 100` — softer banner, dismissible, shown once per session:
+   ```
+   You've used 80% of this month's premium AI. Aria stays available on lite mode after that.
+   ```
+4. Per-message indicator (subtle, optional): each Haiku reply gets a tiny "lite" badge in the corner. Sonnet replies are unbadged.
+
+## Admin panel — /admin/ai-costs (gated to admin_users)
+
+Three tabs:
+
+**Overview**
+- Total Aria spend this month (one big number)
+- This month vs last month (% change)
+- Top 10 spending businesses with plan tier, budget, actual spend, over/under
+- Spend by agent_key bar chart for this month
+- Spend by model_id pie chart
+
+**Per business**
+- Search/filter to a specific business
+- Last 30 days daily column chart
+- Breakdown by agent_key
+- Their plan, budget, current month spend, % used
+- "Adjust budget" input that updates `business_subscriptions.sonnet_monthly_budget_cents`
+
+**Alerts**
+- Businesses currently over budget (>100% used)
+- Businesses tracking to exceed (>80% with >25% of month remaining)
+- Businesses with anomalous spike (today's spend > 3× their 30-day avg)
+
+### Source SQL examples
+
+```sql
+-- Top 10 spenders this month
+SELECT b.id, b.name, sub.plan_tier, sub.sonnet_monthly_budget_cents AS budget, s.total_cents AS spent_cents
+FROM aria_monthly_spend s
+JOIN businesses b ON b.id = s.business_id
+LEFT JOIN business_subscriptions sub ON sub.business_id = s.business_id AND sub.status = 'active'
+WHERE s.year_month = to_char(now(), 'YYYY-MM')
+ORDER BY s.total_cents DESC LIMIT 10;
+
+-- Spend by agent_key this month
+SELECT agent_key, SUM(cost_usd_cents) AS cents, COUNT(*) AS calls
+FROM aria_ai_calls
+WHERE created_at >= date_trunc('month', now())
+GROUP BY agent_key ORDER BY cents DESC;
+
+-- Anomalous spike
+WITH daily AS (
+  SELECT business_id, date_trunc('day', created_at) AS d, SUM(cost_usd_cents) AS cents
+  FROM aria_ai_calls
+  WHERE created_at >= now() - INTERVAL '30 days'
+  GROUP BY business_id, d
+)
+SELECT business_id,
+  SUM(CASE WHEN d = date_trunc('day', now()) THEN cents ELSE 0 END) AS today,
+  AVG(cents) FILTER (WHERE d < date_trunc('day', now())) AS daily_avg
+FROM daily GROUP BY business_id
+HAVING SUM(CASE WHEN d = date_trunc('day', now()) THEN cents ELSE 0 END) > 3 * AVG(cents) FILTER (WHERE d < date_trunc('day', now()))
+   AND AVG(cents) FILTER (WHERE d < date_trunc('day', now())) > 50;
+```
+
+Use Recharts for visualisation. Match existing dashboard design.
+
+## Customer-facing usage page — /dashboard/settings/ai-usage
+
+- Current month's Aria spend
+- 30-day bar chart
+- Breakdown by feature (Ask Aria, Daily briefings, etc.)
+- Current budget + % used
+- Link to upgrade plan
+
+## Rules for Part B
+
+- Trigger on aria_ai_calls is single source of truth — never compute spend in app code, always read aria_monthly_spend
+- Backfill runs once on deploy (in the migration above)
+- Tool-heavy Aria calls stay on Sonnet even when exhausted — log the overage
+- 80%/100% banner is per-session, not per-message (don't nag)
+- Admin panel gated to admin_users — never let a regular user view another business's spend
+- npx tsc --noEmit + npm run build pass
+
+## Commits for Part B
+- "feat(db): aria_monthly_spend table + auto-accumulate trigger + backfill"
+- "feat(ask-aria): budget-based Sonnet→Haiku downgrade with usage telemetry in response"
+- "feat(ask-aria): frontend lite-mode pill + 80% warning banner"
+- "feat(admin): AI cost dashboard at /admin/ai-costs (overview / per-business / alerts)"
+- "feat(dashboard): customer-facing AI usage page at /dashboard/settings/ai-usage"
+
+---
+
+# Final
+After all commits: `git push origin main`
+
+## If limit runs low
+Priority order across both parts:
+1. Part B section 1 — DB schema + trigger + backfill (do NOT split this commit)
+2. Part B section 2 — Budget-based routing (the actual cost-saver)
+3. Part A — BlockRenderer + wire-up (medium-priority UX win)
+4. Part B section 3 — Frontend lite-mode UX
+5. Part B section 4 — Admin panel (can ship without; SQL queries work fine for a week)
+6. Part B section 5 — Customer-facing usage page
+
+Finish current commit, push, STOP, tell me where you stopped.
