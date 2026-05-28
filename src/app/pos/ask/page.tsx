@@ -6,6 +6,8 @@ import {
   PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip,
 } from 'recharts'
 import { AriaArtifact } from '@/components/aria/AriaArtifact'
+import { BlockRenderer } from '@/components/aria/BlockRenderer'
+import type { AskBlock } from '@/lib/aria/ask-types'
 
 const COLORS = ['#006AFF', '#60A5FA', '#00B140', '#F59E0B', '#F87171']
 const MAX_INPUT = 1000
@@ -31,7 +33,7 @@ interface ConvMeta { id: string; title: string; last_message_at: string }
 interface DocumentReadResult { description: string; name: string; previewUrl: string | null }
 type DisplayMsg =
   | { type: 'user'; text: string }
-  | { type: 'aria'; text: string; streaming: boolean; downloads?: Array<{ filename: string; download_url: string; format: string; rows: number }> }
+  | { type: 'aria'; text: string; streaming: boolean; blocks?: AskBlock[]; downloads?: Array<{ filename: string; download_url: string; format: string; rows: number }> }
   | { type: 'tool'; toolName: string; status: 'running' | 'done'; count?: number }
   | { type: 'error'; text: string }
 
@@ -329,6 +331,7 @@ export default function AskAriaPage() {
         response?: string; conversation_id?: string; intent?: string
         action?: Record<string, unknown>
         downloads?: Array<{ filename: string; download_url: string; format: string; rows: number }>
+        blocks?: AskBlock[]
       }
       const reply = data.response ?? 'No response'
 
@@ -354,6 +357,7 @@ export default function AskAriaPage() {
             type: 'aria',
             text: `${reply}\n\n[Download ${exportData.filename}](${exportData.url}) — ${exportData.row_count} rows, expires in 1 hour.`,
             streaming: false,
+            blocks: data.blocks,
           }])
           setHistory(h => [...h, { role: 'user', content: fullContent }, { role: 'assistant', content: reply }])
           setStreaming(false)
@@ -371,6 +375,7 @@ export default function AskAriaPage() {
           text: reply,
           streaming: false,
           downloads: data.downloads,
+          blocks: data.blocks,
         }])
         setHistory(h => [...h, { role: 'user', content: fullContent }, { role: 'assistant', content: reply }])
         setStreaming(false)
@@ -378,7 +383,7 @@ export default function AskAriaPage() {
         return
       }
 
-      setMessages(prev => [...prev, { type: 'aria', text: reply, streaming: false }])
+      setMessages(prev => [...prev, { type: 'aria', text: reply, streaming: false, blocks: data.blocks }])
       setHistory(h => [...h, { role: 'user', content: fullContent }, { role: 'assistant', content: reply }])
       if (!convId) fetchConvs()
     } catch (err) {
@@ -507,6 +512,12 @@ export default function AskAriaPage() {
                               </a>
                             )
                           })}
+                        </div>
+                      )}
+                      {/* Rich blocks below the text bubble, full message-column width */}
+                      {!msg.streaming && msg.blocks && msg.blocks.length > 0 && (
+                        <div style={{ marginTop: 12 }}>
+                          <BlockRenderer blocks={msg.blocks} onAction={(p) => sendMessage(p)} />
                         </div>
                       )}
                     </div>
