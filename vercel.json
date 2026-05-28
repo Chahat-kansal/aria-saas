@@ -9,6 +9,10 @@
     "src/app/api/aria/live-intelligence/route.ts": {
       "maxDuration": 120
     },
+    "src/app/api/reports/weekly-generate/route.ts": {
+      "memory": 1024,
+      "maxDuration": 120
+    },
     "src/app/api/cron/**/*.ts": {
       "maxDuration": 300
     },

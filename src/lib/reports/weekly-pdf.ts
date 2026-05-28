@@ -366,9 +366,14 @@ export async function generateWeeklyPDF(
 ): Promise<Buffer> {
   const html = buildHTML(data, narrative, business, weekStart)
 
-  const puppeteer = await import('puppeteer')
-  const browser = await puppeteer.default.launch({
-    args: ['--no-sandbox', '--disable-setuid-sandbox'],
+  // Serverless-friendly Chromium (works on Vercel where full Chrome isn't installed).
+  const chromium = (await import('@sparticuz/chromium')).default
+  const puppeteer = (await import('puppeteer-core')).default
+  const browser = await puppeteer.launch({
+    args: chromium.args,
+    executablePath: await chromium.executablePath(),
+    headless: true,
+    defaultViewport: { width: 1200, height: 1600 },
   })
   try {
     const page = await browser.newPage()

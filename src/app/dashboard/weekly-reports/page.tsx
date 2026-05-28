@@ -106,6 +106,7 @@ export default function WeeklyReportsPage() {
         body: JSON.stringify({ business_id: business.id }),
       }).then(r => r.json())
       if (res.error) { setGenError(res.error); return }
+      if (res.not_enough_data) { setGenError(res.message ?? 'Not enough sales data yet.'); return }
       await loadRecords()
     } catch { setGenError('Network error — please try again.') }
     finally { setGenerating(false) }
