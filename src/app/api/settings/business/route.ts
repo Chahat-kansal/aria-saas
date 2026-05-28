@@ -21,7 +21,7 @@ async function _GET() {
 
   const { data: biz } = await supabase
     .from('businesses')
-    .select('id, name, industry, abn, city, address, phone, google_place_id, google_average_rating, google_total_reviews, google_reviews_last_synced, facebook_page_id, yelp_url, auto_review_requests, google_review_link')
+    .select('id, name, industry, abn, city, address, phone, google_place_id, google_average_rating, google_total_reviews, google_reviews_last_synced, facebook_page_id, yelp_url, auto_review_requests, google_review_link, booking_link_slug, slug')
     .eq('id', bid)
     .maybeSingle()
 
@@ -51,6 +51,10 @@ async function _PATCH(req: Request) {
   if (body.yelp_url            !== undefined) payload.yelp_url            = body.yelp_url || null
   if (body.auto_review_requests !== undefined) payload.auto_review_requests = !!body.auto_review_requests
   if (body.google_review_link  !== undefined) payload.google_review_link  = body.google_review_link || null
+  if (body.booking_link_slug   !== undefined) {
+    const s = String(body.booking_link_slug || '').trim().toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '')
+    payload.booking_link_slug = s || null
+  }
 
   if (Object.keys(payload).length === 0) return NextResponse.json({ ok: true })
 
