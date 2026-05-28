@@ -97,6 +97,20 @@ export default function ScanAndGoCart() {
 
   useEffect(() => () => stopScan(), [stopScan])
 
+  // Pre-add a product when arriving from a chat "Add to basket" link (?add=<id>),
+  // then strip the param so a refresh doesn't add it again.
+  const preAdded = useRef(false)
+  useEffect(() => {
+    if (preAdded.current) return
+    const pid = new URLSearchParams(window.location.search).get('add')
+    if (!pid) return
+    preAdded.current = true
+    sendCart('add', { product_id: pid })
+    const url = new URL(window.location.href)
+    url.searchParams.delete('add')
+    window.history.replaceState({}, '', url.toString())
+  }, [sendCart])
+
   async function finish() {
     stopScan()
     const res = await fetch('/api/public/scan-and-go/finish', {

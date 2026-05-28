@@ -115,6 +115,7 @@ export default function KioskClient() {
   const [kioskName, setKioskName] = useState('Aria')
   const [greeting, setGreeting] = useState('')
   const [industry, setIndustry] = useState<string | null>(null)
+  const [scanAndGo, setScanAndGo] = useState(false)
   const [showSignup, setShowSignup] = useState(false)
   const [signupEmail, setSignupEmail] = useState('')
   const [signupName, setSignupName] = useState('')
@@ -135,6 +136,7 @@ export default function KioskClient() {
         if (d.greeting) setGreeting(d.greeting)
         if (d.voice_enabled === false) setVoiceEnabled(false)
         if (d.industry) setIndustry(d.industry)
+        if (d.scan_and_go_enabled === true) setScanAndGo(true)
       })
       .catch(() => { /* non-fatal */ })
   }, [business_id])
@@ -442,6 +444,12 @@ export default function KioskClient() {
                       <p style={{ fontSize: 14, fontWeight: 600, margin: 0, color: C.text }}>{c.name}</p>
                       {c.price != null && <p style={{ fontSize: 13, color: C.green, margin: '4px 0 0', fontWeight: 700 }}>A${c.price.toFixed(2)}</p>}
                       {c.stock <= 3 && c.stock > 0 && <p style={{ fontSize: 11, color: '#F59E0B', margin: '4px 0 0' }}>Only {c.stock} left</p>}
+                      {scanAndGo && c.stock > 0 && (
+                        <a href={`/in-store/${business_id}/cart?add=${encodeURIComponent(c.id)}`}
+                          style={{ display: 'block', textAlign: 'center', marginTop: 8, padding: '8px 10px', borderRadius: 9, background: C.green, color: '#0E1812', fontSize: 13, fontWeight: 700, textDecoration: 'none' }}>
+                          + Add to basket
+                        </a>
+                      )}
                     </div>
                   ))}
                 </div>

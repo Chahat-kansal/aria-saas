@@ -12,7 +12,7 @@ export async function GET(req: Request) {
 
     const [cfgRes, bizRes] = await Promise.all([
       supabaseAdmin.from('instore_kiosk_configs')
-        .select('kiosk_name, greeting, personality, voice_enabled, loyalty_enabled, recipe_suggestions, enabled')
+        .select('kiosk_name, greeting, personality, voice_enabled, loyalty_enabled, recipe_suggestions, scan_and_go_enabled, enabled')
         .eq('business_id', business_id)
         .maybeSingle(),
       supabaseAdmin.from('businesses').select('name, industry').eq('id', business_id).maybeSingle(),
@@ -31,6 +31,7 @@ export async function GET(req: Request) {
       voice_enabled: cfg?.voice_enabled !== false,
       loyalty_enabled: cfg?.loyalty_enabled !== false,
       recipe_suggestions: cfg?.recipe_suggestions !== false,
+      scan_and_go_enabled: cfg?.scan_and_go_enabled === true,
       industry: (bizRes.data as { industry?: string | null } | null)?.industry ?? null,
     })
   } catch (err) {
