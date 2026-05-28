@@ -236,9 +236,26 @@ async function _POST(req: NextRequest) {
     };
   }
 
+  // Invoice intelligence — cash-flow visibility in the briefing.
+  const { getInvoiceStats, hasInvoiceSignal } = await import('@/lib/aria/invoice-intelligence');
+  const invoiceStats = await getInvoiceStats(supabase, business_id);
+
   const context = {
     business_name: business.name,
     industry: business.industry,
+    invoice_status: {
+      outstanding_count: invoiceStats.pendingCount,
+      outstanding_total_aud: invoiceStats.pendingTotal.toFixed(2),
+      overdue_count: invoiceStats.overdueCount,
+      overdue_total_aud: invoiceStats.overdueTotal.toFixed(2),
+      overdue_oldest_days: invoiceStats.oldestDays,
+      paid_30d_count: invoiceStats.paidCount,
+      paid_30d_total_aud: invoiceStats.paidTotal.toFixed(2),
+      drafts_unsent: invoiceStats.draftCount,
+      top_overdue: invoiceStats.topOverdue
+        ? { customer: invoiceStats.topOverdue.name, amount_aud: invoiceStats.topOverdue.amount.toFixed(2), days_late: invoiceStats.topOverdue.days }
+        : null,
+    },
     city: business.city,
     data_source: dataSource,
     pos_connected: Boolean(business.square_connected || dataSource === 'aria_pos' || dataSource === 'square'),
@@ -311,7 +328,8 @@ async function _POST(req: NextRequest) {
     (staffVisaExpiring.data ?? []).length > 0 ||
     (staffRtwUnverified.count ?? 0) > 0 ||
     Number(warehouseCtx.expiring_lots_30d ?? 0) > 0 ||
-    Number(warehouseCtx.pending_pos ?? 0) > 0;
+    Number(warehouseCtx.pending_pos ?? 0) > 0 ||
+    hasInvoiceSignal(invoiceStats);
 
   if (!hasActionableData) {
     await supabase.from('daily_briefings').upsert({
@@ -353,7 +371,7 @@ async function _POST(req: NextRequest) {
 Each item in the array must have these exact fields:
 - id: string slug (e.g. "revenue-up-this-week")
 - priority: "high" | "medium" | "low"
-- category: "customers" | "revenue" | "stock" | "reviews" | "marketing" | "compliance"
+- category: "customers" | "revenue" | "stock" | "reviews" | "marketing" | "compliance" | "finance"
 - title: string (max 8 words, specific)
 - description: string (max 25 words, must include real numbers from the data)
 - action_label: string (max 4 words)
@@ -372,7 +390,7 @@ Business: ${business.name as string} (${business.industry as string ?? 'retail'}
 Business data:
 ${dataStr.slice(0, 3000)}
 
-Generate 3-5 actionable briefing items from this real data. JSON array only.`
+Generate 3-5 actionable briefing items from this real data. If invoice_status shows overdue invoices, you MUST include a high-priority "finance" item naming the top_overdue customer, amount and days late (e.g. "$X overdue from {customer} — {days} days late, chase today"). JSON array only.`
         }]
       })
     )
@@ -402,6 +420,25 @@ Generate 3-5 actionable briefing items from this real data. JSON array only.`
     dismissed_at: null,
     remind_at: null,
   }, { onConflict: 'business_id,date' });
+
+  // Audit trail: record that Aria flagged overdue invoices in this briefing.
+  if (invoiceStats.overdueCount > 0) {
+    void (async () => {
+      try {
+        await supabase.from('aria_action_log').insert({
+          business_id,
+          action_type: 'flag_overdue_invoices',
+          entity_type: 'invoice',
+          entity_ids: invoiceStats.overdueIds,
+          triggered_by: 'aria_daily_briefing',
+          message_excerpt: invoiceStats.topOverdue
+            ? `$${invoiceStats.topOverdue.amount.toFixed(2)} overdue from ${invoiceStats.topOverdue.name} (${invoiceStats.topOverdue.days}d late) — ${invoiceStats.overdueCount} overdue total`
+            : `${invoiceStats.overdueCount} overdue invoices flagged`,
+          executed_at: new Date().toISOString(),
+        });
+      } catch { /* non-fatal */ }
+    })();
+  }
 
   return NextResponse.json({
     recommendations,

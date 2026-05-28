@@ -95,7 +95,15 @@ export async function generateWeeklyNarrative(
   data: WeeklyReportData,
   business: BusinessRow,
 ): Promise<WeeklyNarrative> {
-  const businessContext = buildContext(data, business)
+  let businessContext = buildContext(data, business)
+
+  // Invoice intelligence — roll cash-flow into the weekly narrative.
+  try {
+    const { getInvoiceStats, formatInvoiceBriefingBlock } = await import('@/lib/aria/invoice-intelligence')
+    const invStats = await getInvoiceStats(supabaseAdmin, business.id)
+    businessContext += '\n' + formatInvoiceBriefingBlock(invStats) +
+      '\n(If overdue value is rising, call it out as a trend to watch — e.g. "invoice overdue value up vs last week".)'
+  } catch (e) { console.error('[weekly-ai] invoice stats failed:', (e as Error).message) }
 
   // ── Aria Council (3-brain deliberation) ───────────────────────────────────
   const council = await runAriaCouncil(businessContext, business.id, 'weekly_report')

@@ -1,6 +1,7 @@
 'use client'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useBusinessContext } from '@/components/providers/BusinessProvider'
+import { AriaSays } from '@/components/dashboard/AriaSays'
 
 interface Service { id: string; name: string; description: string | null; unit_price: number; gst_applicable: boolean; recurring: boolean; active: boolean }
 interface BLine { description: string; quantity: number; unit_price: number; gst_applicable: boolean }
@@ -115,6 +116,20 @@ export default function InvoicesPage() {
     setReminderModal(true)
     setReminderDraft('')
     const r = await fetch('/api/invoices/reminder', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ invoiceId: selected.id }) }).then(x => x.json())
+    setReminderDraft(r.draft ?? '')
+  }
+
+  // Chase the largest overdue invoice — drafts a reminder for owner review/send.
+  async function chaseOverdue() {
+    const todayStr = new Date().toISOString().slice(0, 10)
+    const candidates = invoices.filter(i => i.status !== 'paid' && i.status !== 'draft' && (i.status === 'overdue' || (!!i.due_date && i.due_date < todayStr)))
+    if (!candidates.length) { alert('No overdue invoices to chase right now.'); return }
+    const target = [...candidates].sort((a, b) => Number(b.total) - Number(a.total))[0]
+    setSelected(target)
+    setReminderMethod(target.bill_to_email ? 'email' : 'sms')
+    setReminderModal(true)
+    setReminderDraft('')
+    const r = await fetch('/api/invoices/reminder', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ invoiceId: target.id }) }).then(x => x.json())
     setReminderDraft(r.draft ?? '')
   }
 
@@ -250,10 +265,15 @@ export default function InvoicesPage() {
           {(['invoices', 'services'] as const).map(t => (
             <button key={t} style={{ ...BTN(tab === t ? 'p' : 'g'), textTransform: 'capitalize' }} onClick={() => setTab(t)}>{t}</button>
           ))}
+          {tab === 'invoices' && invoices.some(i => i.status !== 'paid' && i.status !== 'draft' && (i.status === 'overdue' || (!!i.due_date && i.due_date < new Date().toISOString().slice(0, 10)))) && (
+            <button style={BTN('g')} onClick={chaseOverdue}>Chase overdue</button>
+          )}
           {tab === 'invoices' && <button style={BTN('p')} onClick={() => setBuilding(true)}>+ New Invoice</button>}
           {tab === 'services' && <button style={BTN('p')} onClick={() => { setSvcModal({}); setSvcForm(EMPTY_SVC) }}>+ Add Service</button>}
         </div>
       </div>
+
+      {tab === 'invoices' && <AriaSays businessId={bid} page="invoices" />}
 
       {tab === 'invoices' && (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 20 }}>

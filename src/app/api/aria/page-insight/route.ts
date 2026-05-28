@@ -512,6 +512,15 @@ async function _POST(req: Request): Promise<Response> {
       return NextResponse.json({ insight, priority, link: '/dashboard/bookings' } satisfies PageInsightResult);
     }
 
+    if (page === 'invoices') {
+      const { getInvoiceStats } = await import('@/lib/aria/invoice-intelligence')
+      const s = await getInvoiceStats(supabase, business_id)
+      const ctx = `Outstanding ${s.pendingCount} ($${s.pendingTotal.toFixed(0)}), overdue ${s.overdueCount} ($${s.overdueTotal.toFixed(0)}${s.overdueCount ? `, oldest ${s.oldestDays}d` : ''}), paid last 30d ${s.paidCount} ($${s.paidTotal.toFixed(0)}), ${s.draftCount} drafts unsent.${s.topOverdue ? ` Biggest overdue: $${s.topOverdue.amount.toFixed(0)} from ${s.topOverdue.name}, ${s.topOverdue.days}d late.` : ''}`
+      const insight = await callClaude(`In ONE sentence, give ${bizName} the most important invoice/cash-flow insight: ${ctx}. If overdue invoices exist, name the biggest customer and amount and say to chase today.`, systemPrompt)
+      const priority: Priority = s.overdueCount > 0 ? 'warning' : 'info'
+      return NextResponse.json({ insight, priority, link: '/dashboard/invoices' } satisfies PageInsightResult)
+    }
+
     if (page === 'quotes' || page === 'quote-builder') {
       const { data: qs } = await supabase.from('quotes')
         .select('status, quote_amount, win_score, view_count, sent_at, created_at, last_viewed_at')
