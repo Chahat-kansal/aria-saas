@@ -157,6 +157,11 @@ export default function KioskClient() {
           messages: messages.map(m => ({ role: m.role, content: m.content })),
         }),
       })
+      if (res.status === 401) {
+        // Session expired — bounce back to the scan-QR landing.
+        window.location.href = `/in-store/${business_id}`
+        return
+      }
       if (!res.ok || !res.body) {
         const errBody = await res.json().catch(() => ({}))
         throw new Error(errBody.error ?? ('HTTP ' + res.status))

@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 30
 
 import { NextResponse } from 'next/server'
+import { cookies } from 'next/headers'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import Anthropic from '@anthropic-ai/sdk'
 import { trackAICall } from '@/lib/aria/ai-telemetry'
@@ -47,6 +48,11 @@ export async function POST(req: Request) {
 
     if (!business_id || !message) {
       return NextResponse.json({ error: 'business_id and message required' }, { status: 400 })
+    }
+
+    // Require a valid kiosk session (customer 7-min token cookie OR counter-tablet cookie).
+    if (!cookies().get(`ariakiosk_${business_id}`)) {
+      return NextResponse.json({ error: 'session_expired' }, { status: 401 })
     }
 
     // ── Load kiosk config (auto-create if missing) ────────────────────
