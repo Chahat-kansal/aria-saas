@@ -1,47 +1,81 @@
 'use client'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Home, Film, Store, Bookmark, User } from 'lucide-react'
-import { C, MAX_W, FONT } from './theme'
+import { motion } from 'framer-motion'
+import { Home, Film, Store, Search, User } from 'lucide-react'
+import { PALETTE, BORDER, NAV_SHADOW, RADIUS, FONT, MAX_W } from './theme'
 
+// OPTION C — floating pill nav with a sliding lime indicator (Framer Motion layoutId).
+// feed · reels · market · search · profile
 const TABS = [
-  { href: '/community',           label: 'Feed',   icon: Home,     match: (p: string) => p === '/community' },
-  { href: '/community/reels',     label: 'Reels',  icon: Film,     match: (p: string) => p.startsWith('/community/reels') },
-  { href: '/community/market',    label: 'Market', icon: Store,    match: (p: string) => p.startsWith('/community/market') },
-  { href: '/community/saved',     label: 'Saved',  icon: Bookmark, match: (p: string) => p.startsWith('/community/saved') },
-  { href: '/community/me',        label: 'You',    icon: User,     match: (p: string) => p.startsWith('/community/me') },
+  { href: '/community',        label: 'feed',    icon: Home,   match: (p: string) => p === '/community' },
+  { href: '/community/reels',  label: 'reels',   icon: Film,   match: (p: string) => p.startsWith('/community/reels') },
+  { href: '/community/market', label: 'market',  icon: Store,  match: (p: string) => p.startsWith('/community/market') },
+  { href: '/community/search', label: 'search',  icon: Search, match: (p: string) => p.startsWith('/community/search') },
+  { href: '/community/me',     label: 'profile', icon: User,   match: (p: string) => p.startsWith('/community/me') },
 ]
 
 export function BottomNav() {
   const pathname = usePathname() || '/community'
-  // Hide on full-screen reels (immersive)
-  if (pathname.startsWith('/community/reels')) return null
+  // Immersive full-screen reel viewer — hide the nav.
+  if (pathname.startsWith('/community/reels/') && pathname !== '/community/reels') return null
+
+  const activeIdx = TABS.findIndex(t => t.match(pathname))
+
   return (
-    <nav style={{
-      position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 40,
-      background: 'rgba(13,13,20,0.92)',
-      backdropFilter: 'saturate(140%) blur(14px)',
-      WebkitBackdropFilter: 'saturate(140%) blur(14px)',
-      borderTop: `1px solid ${C.border}`,
-      fontFamily: FONT,
-      paddingBottom: 'env(safe-area-inset-bottom, 0)',
+    <div style={{
+      position: 'fixed', bottom: 14, left: 14, right: 14, zIndex: 50,
+      maxWidth: MAX_W, margin: '0 auto', fontFamily: FONT,
+      pointerEvents: 'none',
     }}>
-      <div style={{ maxWidth: MAX_W, margin: '0 auto', display: 'flex', justifyContent: 'space-around' }}>
-        {TABS.map(t => {
-          const active = t.match(pathname)
+      <nav style={{
+        display: 'flex', alignItems: 'center', gap: 4,
+        background: PALETTE.surface,
+        border: BORDER,
+        borderRadius: RADIUS.xl,
+        padding: 5,
+        boxShadow: NAV_SHADOW,
+        pointerEvents: 'auto',
+      }}>
+        {TABS.map((t, i) => {
+          const active = i === activeIdx
+          const Icon = t.icon
           return (
-            <Link key={t.href} href={t.href} prefetch={false} style={{
-              flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
-              padding: '10px 0 12px', minHeight: 56,
-              color: active ? C.accent : C.textMuted,
-              textDecoration: 'none', transition: 'color 160ms',
-            }}>
-              <t.icon size={22} strokeWidth={active ? 2.2 : 1.7} />
-              <span style={{ fontSize: 10, fontWeight: active ? 700 : 500, letterSpacing: '0.04em' }}>{t.label}</span>
+            <Link
+              key={t.href}
+              href={t.href}
+              prefetch={false}
+              aria-label={t.label}
+              aria-current={active ? 'page' : undefined}
+              style={{
+                position: 'relative',
+                flex: active ? 1.5 : 1,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                minHeight: 44,
+                borderRadius: 17,
+                textDecoration: 'none',
+                color: PALETTE.ink,
+                transition: 'flex 240ms cubic-bezier(0.22, 1, 0.36, 1)',
+              }}
+            >
+              {/* Sliding lime indicator behind the active tab */}
+              {active && (
+                <motion.div
+                  layoutId="community-nav-indicator"
+                  transition={{ type: 'spring', stiffness: 420, damping: 34 }}
+                  style={{ position: 'absolute', inset: 0, background: PALETTE.accent, borderRadius: 17 }}
+                />
+              )}
+              <span style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', gap: 6, padding: active ? '9px 13px' : '9px 0' }}>
+                <Icon size={active ? 16 : 18} strokeWidth={active ? 2.4 : 2} color={PALETTE.ink} />
+                {active && (
+                  <span style={{ fontSize: 11, fontWeight: 700, color: PALETTE.ink, letterSpacing: '-0.01em' }}>{t.label}</span>
+                )}
+              </span>
             </Link>
           )
         })}
-      </div>
-    </nav>
+      </nav>
+    </div>
   )
 }
