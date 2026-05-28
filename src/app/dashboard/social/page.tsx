@@ -227,12 +227,16 @@ export default function SocialPage() {
     setMediaLibrary(prev => prev.filter(m => m.id !== id));
   }
 
+  // Only the platforms actually connected (is_active) may generate posts — mirrors
+  // the server-side guard so we don't ask for content for disconnected accounts.
+  const connectedPlatforms = connections.filter(c => c.is_active).map(c => c.platform);
+
   async function generateCalendar() {
-    if (!bid) return;
+    if (!bid || connectedPlatforms.length === 0) return;
     setGeneratingCalendar(true);
     const r = await fetch('/api/social/calendar', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ business_id: bid, month: calendarMonth, platforms: ['instagram', 'facebook', 'google_business'], posts_per_week: postsPerWeek }),
+      body: JSON.stringify({ business_id: bid, month: calendarMonth, platforms: connectedPlatforms, posts_per_week: postsPerWeek }),
     });
     const d = await r.json();
     if (d.posts?.length) {
@@ -250,11 +254,11 @@ export default function SocialPage() {
   }
 
   async function generate() {
-    if (!bid) return;
+    if (!bid || connectedPlatforms.length === 0) return;
     setGenerating(true);
     const res = await fetch('/api/aria/social-suggest', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ business_id: bid, platforms: ['instagram', 'facebook', 'google_business'], count: 3 }),
+      body: JSON.stringify({ business_id: bid, platforms: connectedPlatforms, count: 3 }),
     });
     const d = await res.json();
     if (d.posts?.length) {
@@ -568,9 +572,9 @@ export default function SocialPage() {
                   <option value={5}>5x/week (daily)</option>
                 </select>
               </div>
-              <button onClick={generateCalendar} disabled={generatingCalendar}
-                style={{ padding: '10px 24px', background: generatingCalendar ? 'rgba(139,92,246,0.5)' : '#8B5CF6', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, cursor: 'pointer', fontSize: 14 }}>
-                {generatingCalendar ? '✨ Planning your month…' : '✨ Generate month of posts'}
+              <button onClick={generateCalendar} disabled={generatingCalendar || connectedPlatforms.length === 0}
+                style={{ padding: '10px 24px', background: (generatingCalendar || connectedPlatforms.length === 0) ? 'rgba(139,92,246,0.5)' : '#8B5CF6', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, cursor: connectedPlatforms.length === 0 ? 'not-allowed' : 'pointer', fontSize: 14 }}>
+                {generatingCalendar ? '✨ Planning your month…' : connectedPlatforms.length === 0 ? 'Connect an account first' : '✨ Generate month of posts'}
               </button>
             </div>
 
@@ -758,10 +762,17 @@ export default function SocialPage() {
             <h2 style={{ fontSize: 14, fontWeight: 700, color: C.text }}>Aria&rsquo;s Suggestions</h2>
             {generating && <p style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>Analysing your {industry} data…</p>}
           </div>
-          <button onClick={generate} disabled={generating || !bid}
-            style={{ padding: '9px 20px', borderRadius: 9, border: 'none', background: C.violet, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', opacity: generating ? 0.6 : 1 }}>
-            {generating ? '✨ Generating…' : '+ Generate new'}
-          </button>
+          <div style={{ textAlign: 'right' }}>
+            <button onClick={generate} disabled={generating || !bid || connectedPlatforms.length === 0}
+              style={{ padding: '9px 20px', borderRadius: 9, border: 'none', background: C.violet, color: '#fff', fontSize: 13, fontWeight: 700, cursor: connectedPlatforms.length === 0 ? 'not-allowed' : 'pointer', fontFamily: 'inherit', opacity: (generating || connectedPlatforms.length === 0) ? 0.55 : 1 }}>
+              {generating ? '✨ Generating…' : '+ Generate new'}
+            </button>
+            {connectedPlatforms.length === 0 && (
+              <p style={{ fontSize: 11, color: C.muted, marginTop: 6, maxWidth: 260 }}>
+                Connect Instagram, Facebook, or Google Business to start generating posts.
+              </p>
+            )}
+          </div>
         </div>
 
         {loadingPosts ? (
