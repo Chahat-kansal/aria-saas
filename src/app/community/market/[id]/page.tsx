@@ -107,7 +107,7 @@ export default function ListingDetailPage() {
   if (!listing) {
     return (
       <main style={{ maxWidth: MAX_W, margin: '0 auto', padding: '60px 20px', textAlign: 'center' }}>
-        <h1 style={{ fontSize: 20, fontFamily: FONT_DISPLAY, fontStyle: 'italic' }}>Listing not found</h1>
+        <h1 style={{ fontSize: 20, fontFamily: FONT_DISPLAY }}>Listing not found</h1>
         <p style={{ color: C.textMuted, marginTop: 8 }}>This item may have been removed.</p>
         <Link href="/community/market" style={{ display: 'inline-block', marginTop: 20, color: C.accent }}>← Back to marketplace</Link>
       </main>
@@ -148,22 +148,22 @@ export default function ListingDetailPage() {
           )}
         </div>
       ) : (
-        <div style={{ width: '100%', aspectRatio: '4/3', background: C.accentDeep, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.accent, fontSize: 80, fontWeight: 700, fontFamily: FONT_DISPLAY, fontStyle: 'italic' }}>
+        <div style={{ width: '100%', aspectRatio: '4/3', background: C.accentDeep, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.accent, fontSize: 80, fontWeight: 700, fontFamily: FONT_DISPLAY }}>
           {listing.title[0]}
         </div>
       )}
 
       <section style={{ padding: '20px 16px' }}>
-        <h1 style={{ fontSize: 22, fontWeight: 700, margin: 0, lineHeight: 1.25, fontFamily: FONT_DISPLAY, fontStyle: 'italic' }}>
+        <h1 style={{ fontSize: 22, fontWeight: 700, margin: 0, lineHeight: 1.25, fontFamily: FONT_DISPLAY }}>
           {listing.title}
         </h1>
         {listing.price !== null && (
-          <p style={{ fontSize: 28, fontWeight: 700, color: C.accent, margin: '8px 0 0', fontFamily: FONT_DISPLAY, fontStyle: 'italic' }}>
+          <p style={{ fontSize: 28, fontWeight: 700, color: C.accent, margin: '8px 0 0', fontFamily: FONT_DISPLAY }}>
             A${Number(listing.price).toFixed(2)}
           </p>
         )}
         {listing.category && (
-          <span style={{ display: 'inline-block', marginTop: 10, padding: '4px 10px', background: C.surface, border: `1px solid ${C.border}`, borderRadius: RADIUS.pill, fontSize: 11, color: C.textDim }}>
+          <span style={{ display: 'inline-block', marginTop: 10, padding: '4px 10px', background: C.surface, border: `1.5px solid ${C.border}`, borderRadius: RADIUS.pill, fontSize: 11, color: C.textDim }}>
             {listing.category}
           </span>
         )}
@@ -172,14 +172,14 @@ export default function ListingDetailPage() {
         <Link href={`/community/businesses/${listing.business_id}`} prefetch={false} style={{
           display: 'flex', alignItems: 'center', gap: 10,
           padding: '12px 14px', marginTop: 16,
-          background: C.surface, borderRadius: RADIUS.md, border: `1px solid ${C.border}`,
+          background: C.surface, borderRadius: RADIUS.md, border: `1.5px solid ${C.border}`,
           textDecoration: 'none', color: C.text,
         }}>
           <div style={{
             width: 40, height: 40, borderRadius: '50%',
             background: biz?.logo_url ? `url(${biz.logo_url}) center/cover` : C.accentDeep,
             color: C.accent, display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontWeight: 700, fontSize: 16, border: `1px solid ${C.border}`, flexShrink: 0,
+            fontWeight: 700, fontSize: 16, border: `1.5px solid ${C.border}`, flexShrink: 0,
           }}>
             {!biz?.logo_url && (biz?.name?.[0] ?? '?')}
           </div>
@@ -205,7 +205,7 @@ export default function ListingDetailPage() {
         )}
 
         {/* No-pay notice */}
-        <div style={{ marginTop: 22, padding: '12px 14px', background: 'rgba(127,184,151,0.05)', border: `1px solid ${C.border}`, borderRadius: RADIUS.md, fontSize: 12, color: C.textDim, display: 'flex', gap: 10, lineHeight: 1.5 }}>
+        <div style={{ marginTop: 22, padding: '12px 14px', background: 'rgba(127,184,151,0.05)', border: `1.5px solid ${C.border}`, borderRadius: RADIUS.md, fontSize: 12, color: C.textDim, display: 'flex', gap: 10, lineHeight: 1.5 }}>
           <Shield size={16} style={{ color: C.accent, flexShrink: 0, marginTop: 1 }} />
           <span>
             <strong style={{ color: C.text }}>No online payment.</strong> Message the shop to arrange pickup and pay in person. Personal details (phone, email, address) are blocked in chat — sort the rest at the shop.
@@ -246,7 +246,7 @@ export default function ListingDetailPage() {
             </div>
 
             {/* Drawer header */}
-            <header style={{ padding: '4px 16px 12px', borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', gap: 10 }}>
+            <header style={{ padding: '4px 16px 12px', borderBottom: `1.5px solid ${C.border}`, display: 'flex', alignItems: 'center', gap: 10 }}>
               <div style={{
                 width: 36, height: 36, borderRadius: '50%',
                 background: biz?.logo_url ? `url(${biz.logo_url}) center/cover` : C.accentDeep,
@@ -287,7 +287,7 @@ export default function ListingDetailPage() {
                     background: m.from === 'member' ? C.accent : C.surface,
                     color: m.from === 'member' ? '#0d0d14' : C.text,
                     fontSize: 14, lineHeight: 1.4,
-                    border: m.from === 'member' ? 'none' : `1px solid ${C.border}`,
+                    border: m.from === 'member' ? 'none' : `1.5px solid ${C.border}`,
                     whiteSpace: 'pre-wrap',
                     wordBreak: 'break-word',
                   }}>
@@ -307,7 +307,7 @@ export default function ListingDetailPage() {
             )}
 
             {/* Composer */}
-            <div style={{ padding: '10px 12px 14px', borderTop: `1px solid ${C.border}`, display: 'flex', gap: 8 }}>
+            <div style={{ padding: '10px 12px 14px', borderTop: `1.5px solid ${C.border}`, display: 'flex', gap: 8 }}>
               <input
                 value={input}
                 onChange={e => { setInput(e.target.value); setBlocked(null) }}
@@ -316,7 +316,7 @@ export default function ListingDetailPage() {
                 maxLength={1000}
                 style={{
                   flex: 1, padding: '11px 14px', borderRadius: RADIUS.pill,
-                  background: C.surfaceHi, border: `1px solid ${C.border}`,
+                  background: C.surfaceHi, border: `1.5px solid ${C.border}`,
                   color: C.text, fontSize: 14, outline: 'none', fontFamily: 'inherit',
                   minHeight: 40,
                 }}

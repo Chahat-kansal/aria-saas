@@ -48,13 +48,13 @@ export default function MyChatsPage() {
 
       <header style={{ marginBottom: 16 }}>
         <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.16em', textTransform: 'uppercase', color: C.accent, margin: 0 }}>Your chats</p>
-        <h1 style={{ fontSize: 24, fontWeight: 700, margin: '4px 0 0', fontFamily: FONT_DISPLAY, fontStyle: 'italic', letterSpacing: '-0.01em' }}>
+        <h1 style={{ fontSize: 24, fontWeight: 700, margin: '4px 0 0', fontFamily: FONT_DISPLAY, letterSpacing: '-0.01em' }}>
           Conversations
         </h1>
       </header>
 
       {!member && !loading ? (
-        <div style={{ padding: '40px 20px', textAlign: 'center', background: C.surface, borderRadius: RADIUS.lg, border: `1px dashed ${C.border}` }}>
+        <div style={{ padding: '40px 20px', textAlign: 'center', background: C.surface, borderRadius: RADIUS.lg, border: `1.5px dashed ${C.border}` }}>
           <MessageCircle size={26} style={{ color: C.accent, opacity: 0.6, marginBottom: 10 }} />
           <p style={{ fontSize: 15, fontWeight: 600, margin: 0 }}>You haven&apos;t messaged any shops yet</p>
           <p style={{ fontSize: 13, color: C.textMuted, margin: '6px 0 0' }}>Find something you like and tap &quot;Message to buy&quot;.</p>
@@ -62,7 +62,7 @@ export default function MyChatsPage() {
       ) : loading ? (
         <p style={{ fontSize: 13, color: C.textMuted, textAlign: 'center', padding: 24 }}>Loading…</p>
       ) : chats.length === 0 ? (
-        <div style={{ padding: '40px 20px', textAlign: 'center', background: C.surface, borderRadius: RADIUS.lg, border: `1px dashed ${C.border}` }}>
+        <div style={{ padding: '40px 20px', textAlign: 'center', background: C.surface, borderRadius: RADIUS.lg, border: `1.5px dashed ${C.border}` }}>
           <MessageCircle size={26} style={{ color: C.textMuted, opacity: 0.5, marginBottom: 10 }} />
           <p style={{ fontSize: 15, fontWeight: 600, margin: 0 }}>No conversations yet</p>
           <p style={{ fontSize: 13, color: C.textMuted, margin: '6px 0 0' }}>Browse the marketplace and message a shop to start.</p>
