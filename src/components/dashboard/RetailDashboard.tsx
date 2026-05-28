@@ -6,6 +6,7 @@ import { MorningCommandCentre } from '@/components/dashboard/MorningCommandCentr
 import { AriaBriefingCard } from '@/components/dashboard/AriaBriefingCard';
 import { PendingActionsCard } from '@/components/dashboard/PendingActionsCard'
 import { LiveRevenueTicker, ThreeWayRevenue, HourlyHeatmap, StaffOnShift, AIActionStrip, WeatherWidget } from './ProWidgets';
+import { CustomerSurfaces } from '@/components/dashboard/CustomerSurfaces';
 
 interface Business { id: string; name: string; owner_name?: string; industry?: string; pos_enabled?: boolean | null; }
 interface DailySale { total_amount: number; }
@@ -307,6 +308,9 @@ export function RetailDashboard({ business }: { business: Business }) {
       </div>
 
       <LiveRevenueTicker businessId={business.id} />
+
+      {/* ─── Customer-facing surfaces + What's new ───────────── */}
+      <CustomerSurfaces />
 
       {/* ─── Section 2: Live Business Pulse ──────────────────── */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

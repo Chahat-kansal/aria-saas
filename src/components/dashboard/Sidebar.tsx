@@ -115,7 +115,33 @@ const ALL_ITEMS: Record<string, NavItemDef> = {
 'timed-prices':   { href: '/dashboard/timed-prices',  label: 'Timed Prices',     icon: TagIcon,        section: 'Operations' },
 };
 
-const SECTION_ORDER = ['Overview', 'Marketing', 'Operations', 'Warehouse', 'Revenue', 'Reputation', 'Intelligence', 'Pro tools', 'VisaAI', 'Modules'];
+// Always-on sections — surfaced for EVERY business regardless of industry config,
+// because these customer-facing + growth features shipped without sidebar links.
+// `fresh: true` shows a "NEW" pill (built in the last 30 days).
+const ALWAYS_SECTIONS: { section: string; items: (NavItemDef & { fresh?: boolean })[] }[] = [
+  {
+    section: 'Customer surfaces',
+    items: [
+      { href: '/dashboard/in-store',                  label: 'In-Store Kiosk',        icon: RegisterIcon,    section: 'Customer surfaces', fresh: true },
+      { href: '/dashboard/community',                 label: 'Community feed',        icon: SocialIcon,      section: 'Customer surfaces', fresh: true },
+      { href: '/dashboard/community/profile',         label: 'Community profile',     icon: GlobeIcon,       section: 'Customer surfaces', fresh: true },
+      { href: '/dashboard/community/marketer',        label: 'Aria Marketer',         icon: SparklesIcon,    section: 'Customer surfaces', badge: 'AI', fresh: true },
+      { href: '/dashboard/marketplace',               label: 'Marketplace listings',  icon: ShoppingBagIcon, section: 'Customer surfaces', fresh: true },
+      { href: '/dashboard/marketplace?tab=enquiries', label: 'Marketplace enquiries', icon: ChatIcon,        section: 'Customer surfaces', fresh: true },
+    ],
+  },
+  {
+    section: 'Growth',
+    items: [
+      { href: '/dashboard/bundles',         label: 'Bundle builder',  icon: LayersIcon,     section: 'Growth', badge: 'AI', fresh: true },
+      { href: '/dashboard/dynamic-pricing', label: 'Dynamic pricing', icon: TrendingUpIcon, section: 'Growth', badge: 'AI', fresh: true },
+      { href: '/dashboard/ad-network',      label: 'Ad network',      icon: DollarIcon,     section: 'Growth', fresh: true },
+      { href: '/dashboard/parcel-tracking', label: 'Parcel tracking', icon: TruckOutlineIcon, section: 'Growth' },
+    ],
+  },
+]
+
+const SECTION_ORDER = ['Overview', 'Customer surfaces', 'Growth', 'Marketing', 'Operations', 'Warehouse', 'Revenue', 'Reputation', 'Intelligence', 'Pro tools', 'VisaAI', 'Modules'];
 
 /* ─── Component ─────────────────────────────────────────────────── */
 export function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
@@ -202,6 +228,19 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
     if (!sections[item.section]) sections[item.section] = [];
     if (!sections[item.section].some(i => i.href === item.href)) {
       sections[item.section].push(item);
+    }
+  }
+
+  // Merge always-on sections (Customer surfaces, Growth) so every shipped feature
+  // is discoverable regardless of the industry's configured sidebar list.
+  const freshHrefs = new Set<string>();
+  for (const grp of ALWAYS_SECTIONS) {
+    if (!sections[grp.section]) sections[grp.section] = [];
+    for (const item of grp.items) {
+      if (item.fresh) freshHrefs.add(item.href);
+      if (!sections[grp.section].some(i => i.href === item.href)) {
+        sections[grp.section].push(item);
+      }
     }
   }
 
@@ -352,6 +391,10 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
                         <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold bg-red-500/20 text-red-400 min-w-[18px] text-center">
                           {liveCount > 99 ? '99+' : liveCount}
                         </span>
+                      );
+                      // NEW pill for features shipped in the last 30 days
+                      if (freshHrefs.has(item.href) && item.badge !== 'AI') return (
+                        <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold bg-[rgba(217,245,78,0.22)] text-[#a5c400]">NEW</span>
                       );
                       if (item.badge) return (
                         <span className={
