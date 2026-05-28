@@ -3,6 +3,7 @@ export const runtime = 'nodejs'
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { resolveBusinessId } from '@/lib/aria/resolve-business'
 
 function adminClient() {
   return createClient(
@@ -13,10 +14,12 @@ function adminClient() {
 }
 
 export async function GET(_req: Request, { params }: { params: { business_id: string } }) {
-  const { business_id } = params
-  if (!business_id) return NextResponse.json({ error: 'business_id required' }, { status: 400 })
+  const idOrSlug = params.business_id
+  if (!idOrSlug) return NextResponse.json({ error: 'business_id required' }, { status: 400 })
 
   const sb = adminClient()
+  const business_id = await resolveBusinessId(sb, idOrSlug)
+  if (!business_id) return NextResponse.json({ error: 'Business not found or not accepting orders' }, { status: 404 })
 
   const [bizRes, productsRes] = await Promise.all([
     sb.from('businesses').select('id, name, industry, address, phone').eq('id', business_id).eq('is_active', true).maybeSingle(),

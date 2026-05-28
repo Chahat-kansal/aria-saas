@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic'
 import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
+import { resolveBusinessId } from '@/lib/aria/resolve-business'
 
 const getDb = () => createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -10,8 +11,11 @@ const getDb = () => createClient(
 type Params = { params: Promise<{ business_id: string }> | { business_id: string } }
 
 export async function GET(_req: Request, { params }: Params) {
-  const { business_id } = 'then' in params ? await params : params
+  const { business_id: idOrSlug } = 'then' in params ? await params : params
   const db = getDb()
+
+  const business_id = await resolveBusinessId(db, idOrSlug)
+  if (!business_id) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   const { data: biz } = await db
     .from('businesses')

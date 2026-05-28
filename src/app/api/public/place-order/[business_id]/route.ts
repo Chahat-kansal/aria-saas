@@ -3,6 +3,7 @@ export const runtime = 'nodejs'
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { resolveBusinessId } from '@/lib/aria/resolve-business'
 
 function adminClient() {
   return createClient(
@@ -13,7 +14,9 @@ function adminClient() {
 }
 
 export async function POST(req: Request, { params }: { params: { business_id: string } }) {
-  const { business_id } = params
+  const idOrSlug = params.business_id
+  const sb = adminClient()
+  const business_id = await resolveBusinessId(sb, idOrSlug)
   const body = await req.json() as {
     customer_name: string
     customer_phone?: string
@@ -25,10 +28,11 @@ export async function POST(req: Request, { params }: { params: { business_id: st
     source?: string
   }
 
+  if (!business_id) return NextResponse.json({ error: 'Business not found' }, { status: 404 })
+
   if (!body.customer_name || !body.items?.length)
     return NextResponse.json({ error: 'customer_name and items required' }, { status: 400 })
 
-  const sb = adminClient()
   const { data: biz } = await sb.from('businesses').select('id').eq('id', business_id).eq('is_active', true).maybeSingle()
   if (!biz) return NextResponse.json({ error: 'Business not found' }, { status: 404 })
 
