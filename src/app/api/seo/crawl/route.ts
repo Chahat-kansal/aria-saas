@@ -7,7 +7,7 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { crawlSite, PAGE_CAP, type CrawledPageData } from '@/lib/seo/crawler'
-import { analyzePage, computeHealthScore, type DetectedIssue } from '@/lib/seo/audit'
+import { analyzePage, crossPageIssues, siteIssues, localChecks, computeHealthScore, type DetectedIssue } from '@/lib/seo/audit'
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000
 
@@ -47,9 +47,21 @@ async function runCrawl(auditId: string, businessId: string, websiteUrl: string)
       return
     }
 
-    // On-page analysis → issues.
+    // On-page + cross-page + site-wide + local analysis → issues.
     const issues: DetectedIssue[] = []
     for (const p of result.pages) issues.push(...analyzePage(p))
+    issues.push(...crossPageIssues(result.pages))
+    issues.push(...siteIssues(result))
+
+    const { data: bizRow } = await supabaseAdmin.from('businesses').select('address, phone').eq('id', businessId).maybeSingle()
+    const local = localChecks(result, { address: bizRow?.address, phone: bizRow?.phone })
+    issues.push(...local.issues)
+    await supabaseAdmin.from('seo_local').upsert({
+      business_id: businessId,
+      gbp_completeness: local.seoLocal.gbp_completeness,
+      checklist: local.seoLocal.checklist,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'business_id' })
 
     if (issues.length > 0) {
       await supabaseAdmin.from('seo_issues').insert(issues.map(i => ({
