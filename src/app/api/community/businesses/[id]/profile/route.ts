@@ -16,7 +16,7 @@ export async function GET(_req: Request, { params }: Params) {
 
     const [bizRes, followCountRes, postCountRes, recentPostsRes, b2bFollowingRes, b2bFollowersRes] = await Promise.all([
       supabaseAdmin.from('businesses')
-        .select('id, name, industry, city, suburb, logo_url, website, community_verified, community_bio, community_cover_url')
+        .select('id, name, industry, city, suburb, logo_url, website, community_verified, community_bio, community_cover_url, google_rating')
         .eq('id', id).maybeSingle(),
       supabaseAdmin.from('community_follows')
         .select('id', { count: 'exact', head: true })
@@ -44,6 +44,7 @@ export async function GET(_req: Request, { params }: Params) {
         followers: followCountRes.count ?? 0,
         post_count: postCountRes.count ?? 0,
         b2b_followers: b2bFollowersRes.count ?? 0,
+        rating: (bizRes.data as { google_rating?: number | null }).google_rating ?? null,
       },
       recent_posts: recentPostsRes.data ?? [],
       b2b_following: ((b2bFollowingRes.data ?? []) as unknown as Array<{ following_business_id: string; businesses: { name: string | null; logo_url: string | null } | null }>).map((r) => ({
