@@ -11,6 +11,7 @@ interface KioskConfig {
   loyalty_enabled: boolean | null
   recipe_suggestions: boolean | null
   enabled: boolean | null
+  scan_and_go_enabled: boolean | null
 }
 
 interface Insights {
@@ -195,6 +196,16 @@ export default function InStoreDashboardPage() {
               <span style={{ fontSize: 13, color: C.text }}>{t.label}</span>
             </label>
           ))}
+
+          {/* Scan-and-Go — opt-in (default off; needs product barcodes) */}
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginTop: 6, cursor: 'pointer', padding: '10px 12px', borderRadius: 10, border: '1px solid ' + C.border, background: 'rgba(127,184,151,0.04)' }}>
+            <input type="checkbox" checked={config?.scan_and_go_enabled === true} style={{ marginTop: 2 }}
+              onChange={e => setConfig(c => c ? { ...c, scan_and_go_enabled: e.target.checked } : c)} />
+            <span>
+              <span style={{ display: 'block', fontSize: 13, fontWeight: 700, color: C.text }}>Enable Scan-and-Go self-checkout</span>
+              <span style={{ display: 'block', fontSize: 12, color: C.dim, marginTop: 2, lineHeight: 1.5 }}>Customers scan items with their phone and show one code at the till. Needs product barcodes set up first. When on, your in-shop QR shows a chooser (Ask Aria · Skip the queue).</span>
+            </span>
+          </label>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 16 }}>
             <button onClick={save} disabled={saving} style={{ padding: '10px 18px', background: C.sage, color: C.green, border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer', opacity: saving ? 0.6 : 1 }}>

@@ -36,7 +36,7 @@ async function _POST(req: Request) {
   if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
 
   const body = await req.json() as Record<string, unknown>
-  const SAFE = ['kiosk_name', 'greeting', 'personality', 'voice_enabled', 'loyalty_enabled', 'recipe_suggestions', 'enabled'] as const
+  const SAFE = ['kiosk_name', 'greeting', 'personality', 'voice_enabled', 'loyalty_enabled', 'recipe_suggestions', 'enabled', 'scan_and_go_enabled'] as const
   const patch: Record<string, unknown> = {}
   for (const k of SAFE) if (k in body) patch[k] = body[k]
 

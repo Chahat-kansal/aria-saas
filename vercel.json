@@ -28,6 +28,10 @@
       "schedule": "0 18 * * *"
     },
     {
+      "path": "/api/cron/expire-checkout-carts",
+      "schedule": "0 18 * * *"
+    },
+    {
       "path": "/api/cron/parcel-insights",
       "schedule": "0 */6 * * *"
     },
