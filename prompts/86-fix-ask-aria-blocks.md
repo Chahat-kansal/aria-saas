@@ -76,9 +76,79 @@ follow-up suggestion and it sends as a new message.
 - Never crash on unknown block types — show debug pill, continue rendering
 - npx tsc --noEmit + npm run build pass
 
+
+
+## TASK 3 — Cost routing: simple queries → Haiku, complex → Sonnet (saves ~80%)
+
+### Why this matters
+Current Ask Aria cost averages $0.091/message ($0.28 max), almost entirely from
+sending everything to Sonnet with 28k input tokens. Real measurements from
+aria_ai_calls show half of messages cost 1-2 cents (short answers, no tool use)
+and half cost 6-28 cents (long answers with tools). The cheap half is doing
+simple factual lookups that Haiku handles fine at 1/20th the cost.
+
+Haiku pricing: $0.25/M input vs Sonnet $3/M — a 12× input savings and roughly
+20× including output.
+
+### What to build
+The infrastructure ALREADY EXISTS:
+- src/lib/aria/ask/intent.ts already returns `complexity: 'simple' | 'complex'`
+- src/lib/aria/providers/anthropic.ts already takes `model: 'haiku' | 'sonnet' | 'opus'`
+
+The route is just ignoring the complexity field and always sending to Sonnet.
+
+### Implementation in src/app/api/aria/ask/route.ts
+
+After the line `const intent = await classifyIntent(message, ...)`:
+
+```ts
+// Cost router: simple factual questions go to Haiku (20× cheaper),
+// complex reasoning/optimisation goes to Sonnet. Tool-heavy calls
+// always go to Sonnet because Haiku's tool-use reliability is lower.
+const needsTools = /* check existing tool-trigger heuristic — likely already a variable */
+const routedModel: 'haiku' | 'sonnet' =
+  intent.type === 'smalltalk' ? 'haiku' :
+  intent.type === 'question' && intent.complexity === 'simple' && !needsTools ? 'haiku' :
+  'sonnet'
+```
+
+Then pass `model: routedModel` into whatever Anthropic call follows (it
+currently hardcodes `sonnet` or omits the param — find and update each call site).
+
+### Safety rails — don't lose answer quality
+
+1. **Escape hatch for confidence='low'** — if classifier returned `confidence: 'low'`, route to Sonnet anyway. Better to overspend than underdeliver on a misclassified message.
+2. **Tool-heavy queries always go to Sonnet** — Haiku is less reliable at multi-step tool use. Keep tool calls on Sonnet.
+3. **Council calls stay on Sonnet/Opus** — `runAriaCouncil` is intentionally heavy. Do not touch it.
+4. **Smalltalk goes to Haiku** — "hi", "thanks", "good morning" should never trigger Sonnet.
+
+### Log the routing decision
+
+In the existing aria_ai_calls insert, the `model_id` field already records what was used. Add ONE line to console.log the routing:
+
+```ts
+console.log('[ask-aria] routed', { intent: intent.type, complexity: intent.complexity, model: routedModel })
+```
+
+This lets us audit after launch whether the routing is sensible.
+
+### Expected impact
+Current average: $0.091/message
+Expected average after routing:
+- ~50% messages route to Haiku at ~$0.005 each
+- ~50% messages stay on Sonnet at ~$0.18 each (the expensive half)
+- New average: ~$0.09 → ~$0.045
+
+That's a 50% cost cut for free, with zero quality loss on the cheap half.
+
+### Commit
+"feat(ask-aria): cost router — simple questions go to Haiku, complex stays on Sonnet"
+
+
 ## Commits
 - "feat(ask-aria): add BlockRenderer component for chart/stat/table/callout blocks"
 - "fix(ask-aria): wire data.blocks from API into rendered messages — was silently dropped"
+- "feat(ask-aria): cost router — simple questions go to Haiku, complex stays on Sonnet"
 - Then: git push origin main
 
 ## Test after deploy
