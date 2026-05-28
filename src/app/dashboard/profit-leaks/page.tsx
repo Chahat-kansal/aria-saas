@@ -139,7 +139,7 @@ export default function ProfitLeaksPage() {
           {[1,2,3].map(i => <div key={i} style={{ height: 72, background: 'rgba(255,255,255,0.04)', borderRadius: 12 }} />)}
         </div>
         {[1,2,3,4].map(i => <div key={i} style={{ height: 100, background: 'rgba(255,255,255,0.04)', borderRadius: 12, marginBottom: 10 }} />)}
-        <p style={{ fontSize: 12, color: '#6b7280', textAlign: 'center', marginTop: 16 }}>Aria is analysing your data…</p>
+        <p style={{ fontSize: 12, color: 'var(--text-secondary, rgba(255,255,255,0.55))', textAlign: 'center', marginTop: 16 }}>Aria is analysing your data…</p>
       </div>
     );
   }
@@ -254,7 +254,7 @@ export default function ProfitLeaksPage() {
                       Fix with Aria →
                     </button>
                     <button onClick={() => markFixed(leak.id)}
-                      style={{ padding: '6px 14px', borderRadius: 8, background: 'rgba(255,255,255,0.06)', color: '#6b7280', fontSize: 11, fontWeight: 700, border: '1px solid rgba(255,255,255,0.08)', cursor: 'pointer', fontFamily: 'inherit' }}>
+                      style={{ padding: '6px 14px', borderRadius: 8, background: 'rgba(255,255,255,0.06)', color: 'var(--text-secondary, rgba(255,255,255,0.55))', fontSize: 11, fontWeight: 700, border: '1px solid rgba(255,255,255,0.08)', cursor: 'pointer', fontFamily: 'inherit' }}>
                       ✓ Mark as fixed
                     </button>
                   </div>

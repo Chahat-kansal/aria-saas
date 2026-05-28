@@ -719,7 +719,7 @@ export default function AskAriaPage() {
             <span style={{ width: 28, height: 28, borderRadius: 9, background: 'rgba(127,184,151,0.13)', border: '1px solid rgba(127,184,151,0.28)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Fraunces, serif', fontStyle: 'italic', fontSize: 15, color: '#7FB897', flexShrink: 0 }}>A</span>
             Aria
           </h1>
-              <p className="text-xs mt-0.5" style={{ color: '#6b7280' }}>
+              <p className="text-xs mt-0.5" style={{ color: 'var(--text-secondary, rgba(255,255,255,0.55))' }}>
                 AI advisor for {business?.name ?? 'your business'}
                 {' · '}
                 <span className="text-[#7FB897]">{business?.data_source === 'square' ? 'Square data' : 'Aria POS data'}</span>

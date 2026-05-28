@@ -128,7 +128,7 @@ export default function MissedDemandPage() {
         style={{ borderColor: 'rgba(255,255,255,0.06)', background: '#13131a' }}>
         <div>
           <h1 className="font-semibold text-white text-lg">Missed Demand</h1>
-          <p className="text-xs mt-0.5" style={{ color: '#6b7280' }}>
+          <p className="text-xs mt-0.5" style={{ color: 'var(--text-secondary, rgba(255,255,255,0.55))' }}>
             Products customers asked for that you didn't have
           </p>
         </div>

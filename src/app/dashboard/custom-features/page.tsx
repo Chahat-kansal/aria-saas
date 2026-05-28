@@ -114,7 +114,7 @@ export default function CustomFeaturesPage() {
       <div className="border-b px-6 py-5 flex-shrink-0"
         style={{ borderColor: 'rgba(255,255,255,0.06)', background: '#13131a' }}>
         <h1 className="font-semibold text-white text-xl">Custom Features</h1>
-        <p className="text-sm mt-0.5" style={{ color: '#6b7280' }}>
+        <p className="text-sm mt-0.5" style={{ color: 'var(--text-secondary, rgba(255,255,255,0.55))' }}>
           Aria builds live dashboard widgets for {business?.name ?? 'your business'} — no code, no deployment.
         </p>
       </div>
@@ -175,7 +175,7 @@ export default function CustomFeaturesPage() {
           <div className="rounded-2xl p-8 flex flex-col items-center gap-3" style={{ background: 'rgba(29,158,117,0.07)', border: '1px solid rgba(29,158,117,0.2)' }}>
             <div className="w-8 h-8 rounded-full border-2 border-[#1D9E75] border-t-transparent animate-spin" />
             <p className="text-sm text-white font-medium">Aria is designing your feature…</p>
-            <p className="text-xs text-gray-500">This takes 5–10 seconds</p>
+            <p className="text-xs" style={{ color: "rgba(255,255,255,0.55)" }}>This takes 5–10 seconds</p>
           </div>
         ) : buildState === 'previewing' && demoFeature ? (
           <div className="rounded-2xl overflow-hidden" style={{ border: '1px solid rgba(29,158,117,0.3)', background: 'rgba(29,158,117,0.05)' }}>
@@ -184,7 +184,7 @@ export default function CustomFeaturesPage() {
                 <p className="text-white font-medium text-sm">✦ Feature Preview</p>
                 <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.5)' }}>{preview?.preview_description}</p>
               </div>
-              <button onClick={reset} className="text-xs text-gray-500 hover:text-white transition-colors">✕ Discard</button>
+              <button onClick={reset} className="text-xs hover:text-white transition-colors" style={{ color: 'rgba(255,255,255,0.55)' }}>✕ Discard</button>
             </div>
             <div className="p-5">
               <div className="mb-5">
@@ -217,7 +217,7 @@ export default function CustomFeaturesPage() {
         ) : buildState === 'done' ? (
           <div className="rounded-2xl p-6 text-center" style={{ background: 'rgba(29,158,117,0.07)', border: '1px solid rgba(29,158,117,0.3)' }}>
             <p className="text-[#1D9E75] font-medium text-sm mb-1">✦ Done!</p>
-            <p className="text-xs text-gray-400">{successMsg}</p>
+            <p className="text-xs" style={{ color: 'rgba(255,255,255,0.55)' }}>{successMsg}</p>
           </div>
         ) : null}
 
@@ -252,7 +252,7 @@ export default function CustomFeaturesPage() {
         ) : (
           buildState === 'idle' && (
             <div className="text-center py-6">
-              <p className="text-sm text-gray-500">No custom features yet. Describe one above and Aria will build it live.</p>
+              <p className="text-sm" style={{ color: "rgba(255,255,255,0.55)" }}>No custom features yet. Describe one above and Aria will build it live.</p>
             </div>
           )
         )}

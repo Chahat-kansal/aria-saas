@@ -205,7 +205,7 @@ export default function ReceiptScanPage() {
     <div className="p-6 max-w-4xl mx-auto">
       <div className="mb-6">
         <h1 className="text-2xl font-semibold text-white mb-1">Receipt Scan</h1>
-        <p style={{ color: '#6b7280' }}>Photograph a supplier invoice to update stock instantly</p>
+        <p style={{ color: 'var(--text-secondary, rgba(255,255,255,0.55))' }}>Photograph a supplier invoice to update stock instantly</p>
       </div>
 
       {/* UPLOAD */}
@@ -224,7 +224,7 @@ export default function ReceiptScanPage() {
           >
             <div className="text-5xl mb-4">📸</div>
             <p className="text-white font-semibold text-lg mb-2">Take a photo or upload your supplier invoice</p>
-            <p className="text-sm mb-6" style={{ color: '#6b7280' }}>JPEG, PNG, WebP, HEIC, or PDF · Max 10MB</p>
+            <p className="text-sm mb-6" style={{ color: 'var(--text-secondary, rgba(255,255,255,0.55))' }}>JPEG, PNG, WebP, HEIC, or PDF · Max 10MB</p>
             <button className="px-6 py-2.5 rounded-full text-sm font-medium text-white" style={{ background: '#1D9E75' }}>
               Choose file
             </button>
@@ -300,7 +300,7 @@ export default function ReceiptScanPage() {
               <thead>
                 <tr style={{ background: '#13131a', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
                   {['', 'Product (invoice)', 'Qty', 'Match', 'Current', 'New Stock / Action'].map(h => (
-                    <th key={h} className="px-3 py-3 text-left text-xs font-medium" style={{ color: '#6b7280' }}>{h}</th>
+                    <th key={h} className="px-3 py-3 text-left text-xs font-medium" style={{ color: 'var(--text-secondary, rgba(255,255,255,0.55))' }}>{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -324,7 +324,7 @@ export default function ReceiptScanPage() {
                     <td className="px-3 py-3 text-white max-w-[200px]">
                       <span className="block truncate">{line.description}</span>
                       {line.unit_price_aud != null && (
-                        <span className="text-xs" style={{ color: '#6b7280' }}>Cost: A${line.unit_price_aud.toFixed(2)}</span>
+                        <span className="text-xs" style={{ color: 'var(--text-secondary, rgba(255,255,255,0.55))' }}>Cost: A${line.unit_price_aud.toFixed(2)}</span>
                       )}
                     </td>
                     <td className="px-3 py-3 text-white">{line.quantity} {line.unit}</td>
@@ -350,7 +350,7 @@ export default function ReceiptScanPage() {
                       ) : addAsNew[i] ? (
                         <span className="text-xs" style={{ color: '#fbbf24' }}>Draft — needs price</span>
                       ) : (
-                        <span className="text-xs" style={{ color: '#6b7280' }}>Tick to add →</span>
+                        <span className="text-xs" style={{ color: 'var(--text-secondary, rgba(255,255,255,0.55))' }}>Tick to add →</span>
                       )}
                     </td>
                   </tr>

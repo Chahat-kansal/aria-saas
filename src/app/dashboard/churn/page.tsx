@@ -9,7 +9,7 @@ interface CohortPoint { month: string; total: number; pct30: number; pct60: numb
 interface PastPromo { id: string; created_at: string; promotion_name: string; offer_text: string; sms_message: string; target_day: string | null; was_successful: boolean | null }
 
 const DOW = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
-const C = { bg: 'var(--bg-base)', card: '#13131a', text: 'var(--text-primary)', muted: '#6b7280', dim: '#4b5563', border: 'rgba(255,255,255,0.07)', green: '#22C55E', red: '#ef4444', amber: '#f59e0b' };
+const C = { bg: 'var(--bg-base)', card: '#13131a', text: 'var(--text-primary)', muted: 'rgba(255,255,255,0.55)', dim: 'rgba(255,255,255,0.38)', border: 'rgba(255,255,255,0.07)', green: '#22C55E', red: '#ef4444', amber: '#f59e0b' };
 
 function daysAgo(date: string | null) { if (!date) return null; return Math.floor((Date.now() - new Date(date).getTime()) / 86400000); }
 function churnScore(c: ChurnCustomer): number { const d = c.days_since_visit ?? daysAgo(c.last_visit) ?? 90; return Math.min(100, Math.round((d / 90) * 100)); }
@@ -324,9 +324,9 @@ export default function ChurnPage() {
                 return (
                   <tr key={c.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
                     <td className="px-5 py-3 text-white">{c.name}</td>
-                    <td className="px-5 py-3 text-xs" style={{ color: '#9ca3af' }}>{c.last_visit ? new Date(c.last_visit).toLocaleDateString() : '—'}</td>
+                    <td className="px-5 py-3 text-xs" style={{ color: 'rgba(255,255,255,0.55)' }}>{c.last_visit ? new Date(c.last_visit).toLocaleDateString() : '—'}</td>
                     <td className="px-5 py-3 text-xs font-medium" style={{ color: (daysAgo(c.last_visit) ?? 0) > 90 ? C.red : C.amber }}>{daysAgo(c.last_visit) ?? '—'}d</td>
-                    <td className="px-5 py-3 text-xs" style={{ color: '#9ca3af' }}>A${(c.total_spend ?? 0).toFixed(0)}</td>
+                    <td className="px-5 py-3 text-xs" style={{ color: 'rgba(255,255,255,0.55)' }}>A${(c.total_spend ?? 0).toFixed(0)}</td>
                     <td className="px-5 py-3"><span className="px-2 py-0.5 rounded-full text-xs" style={{ background: col + '20', color: col }}>{s}</span></td>
                   </tr>
                 );
