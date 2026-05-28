@@ -25,9 +25,11 @@ async function _POST(req: Request, { params }: { params: { id: string } }) {
   const { data: { user }, error: authErr } = await supabase.auth.getUser()
   if (authErr || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
+  // The customers dashboard (list + detail) is backed by `customers`, so the id
+  // here is a customers.id — look it up there, not in the POS-register table.
   const { data: customer } = await supabaseAdmin
-    .from('pos_customers')
-    .select('id, business_id, name, phone, email, last_visit, last_visit_at')
+    .from('customers')
+    .select('id, business_id, name, phone, email')
     .eq('id', params.id)
     .maybeSingle()
   if (!customer) return NextResponse.json({ error: 'Not found' }, { status: 404 })
