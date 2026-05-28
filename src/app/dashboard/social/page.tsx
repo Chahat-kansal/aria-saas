@@ -22,6 +22,26 @@ function PlatformBadge({ platform }: { platform: string }) {
   );
 }
 
+// Phase 6 — Aria Community is the only channel Aria fully owns, so we always
+// offer it as a "mirror" option next to social posts. Tick = also publish to
+// Community when this post goes out.
+function CommunityMirrorChip({ postId, value, onChange }: { postId: string; value: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <label htmlFor={'mirror-' + postId} style={{
+      display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 10px',
+      borderRadius: 99, fontSize: 11, fontWeight: 700, cursor: 'pointer',
+      background: value ? 'rgba(127,184,151,0.15)' : 'transparent',
+      border: '1px solid ' + (value ? 'rgba(127,184,151,0.4)' : 'rgba(127,184,151,0.18)'),
+      color: value ? '#7FB897' : 'rgba(255,255,255,0.55)',
+      userSelect: 'none', flexShrink: 0,
+    }}>
+      <input id={'mirror-' + postId} type="checkbox" checked={value} onChange={e => onChange(e.target.checked)}
+        style={{ width: 12, height: 12, accentColor: '#7FB897', margin: 0 }} />
+      ✦ Aria Community
+    </label>
+  );
+}
+
 export default function SocialPage() {
   const [socialTab, setSocialTab]   = useState<'calendar' | 'best-times'>('calendar');
   const [bid, setBid]               = useState<string | null>(null);
@@ -48,6 +68,8 @@ export default function SocialPage() {
   const [videoStatus, setVideoStatus] = useState<Record<string, { status: string; url?: string }>>({});
   const [publishing, setPublishing] = useState<Record<string, boolean>>({});
   const [publishToast, setPublishToast] = useState<{ id: string; ok: boolean; msg: string } | null>(null);
+  // Phase 6 cross-posting: per-post checkbox to also mirror to Aria Community
+  const [mirrorToCommunity, setMirrorToCommunity] = useState<Record<string, boolean>>({});
   const [voiceOpen, setVoiceOpen] = useState<string | null>(null);
   const [voiceText, setVoiceText] = useState('');
   const [voiceGenerating, setVoiceGenerating] = useState(false);
@@ -276,7 +298,30 @@ export default function SocialPage() {
         setPosts(prev => prev.map(p =>
           p.id === postId ? { ...p, status: 'published', published_at: new Date().toISOString() } : p
         ));
-        setPublishToast({ id: postId, ok: true, msg: 'Posted successfully!' });
+        // Aria Community mirror — if the owner ticked the "Also post to Community" chip,
+        // fire a community-only cross-post with the SAME caption + image. Failures here
+        // never block the social publish — Community is additive.
+        if (mirrorToCommunity[postId]) {
+          const post = posts.find(p => p.id === postId);
+          if (post) {
+            try {
+              await fetch('/api/community/owner/cross-post', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  body: post.caption,
+                  hashtags: post.hashtags ?? [],
+                  media_urls: post.image_url ? [post.image_url] : [],
+                  media_type: post.image_url ? 'image' : null,
+                  post_type: 'update',
+                  channels: ['community'],
+                }),
+              });
+            } catch { /* non-fatal */ }
+          }
+          setMirrorToCommunity(prev => { const n = { ...prev }; delete n[postId]; return n; });
+        }
+        setPublishToast({ id: postId, ok: true, msg: mirrorToCommunity[postId] ? 'Posted to both!' : 'Posted successfully!' });
       } else {
         setPublishToast({ id: postId, ok: false, msg: d.error || 'Failed to post' });
       }
@@ -369,6 +414,20 @@ export default function SocialPage() {
       <div style={{ marginBottom: 28 }}>
         <h1 style={{ fontSize: 24, fontWeight: 800, color: C.text, marginBottom: 6 }}>Social Media Manager</h1>
         <p style={{ fontSize: 14, color: C.muted }}>{INDUSTRY_SUBTITLE[industry] || INDUSTRY_SUBTITLE.retail}</p>
+      </div>
+
+      {/* Phase 6 — Aria Community channel banner */}
+      <div style={{ background: 'rgba(127,184,151,0.06)', border: '1px solid rgba(127,184,151,0.25)', borderRadius: 12, padding: '12px 16px', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 18 }}>✦</span>
+        <div style={{ flex: 1, minWidth: 200 }}>
+          <p style={{ fontSize: 13, fontWeight: 700, color: '#7FB897', margin: 0 }}>Aria Community is now a posting channel</p>
+          <p style={{ fontSize: 12, color: C.muted, margin: '2px 0 0', lineHeight: 1.4 }}>
+            Tick &quot;✦ Aria Community&quot; on any scheduled post to also publish it to your in-store followers — the only channel Aria fully owns.
+          </p>
+        </div>
+        <a href="/dashboard/community/marketer" style={{ fontSize: 12, fontWeight: 700, color: '#A78BFA', textDecoration: 'none', whiteSpace: 'nowrap' }}>
+          Use Aria Marketer →
+        </a>
       </div>
 
       {urlError && <div style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: 12, padding: '12px 16px', marginBottom: 20, fontSize: 13, color: C.red }}>⚠️ {urlError.replace(/\+/g, ' ')}</div>}
@@ -892,10 +951,11 @@ export default function SocialPage() {
           <h2 style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 12 }}>Scheduled ({scheduledPosts.length})</h2>
           <div style={{ background: C.card, border: ('1px solid ' + C.border), borderRadius: 14, overflow: 'hidden' }}>
             {scheduledPosts.map((post, i) => (
-              <div key={post.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderBottom: i < scheduledPosts.length - 1 ? ('1px solid ' + C.border) : 'none' }}>
+              <div key={post.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderBottom: i < scheduledPosts.length - 1 ? ('1px solid ' + C.border) : 'none', flexWrap: 'wrap' }}>
                 <PlatformBadge platform={post.platform} />
-                <p style={{ flex: 1, fontSize: 13, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{post.caption.slice(0, 80)}</p>
+                <p style={{ flex: 1, minWidth: 120, fontSize: 13, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{post.caption.slice(0, 80)}</p>
                 <span style={{ fontSize: 11, color: C.dim, flexShrink: 0 }}>{post.scheduled_for ? new Date(post.scheduled_for).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—'}</span>
+                <CommunityMirrorChip postId={post.id} value={!!mirrorToCommunity[post.id]} onChange={v => setMirrorToCommunity(p => ({ ...p, [post.id]: v }))} />
                 <button onClick={() => publish(post.id)} disabled={publishing[post.id]}
                   style={{ padding: '5px 12px', borderRadius: 7, border: 'none', background: publishing[post.id] ? 'rgba(29,158,117,0.5)' : C.green, color: '#fff', fontSize: 11, fontWeight: 700, cursor: publishing[post.id] ? 'wait' : 'pointer', fontFamily: 'inherit', flexShrink: 0 }}>
                   {publishing[post.id] ? '⏳ Posting…' : 'Publish now'}

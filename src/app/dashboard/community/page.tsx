@@ -280,11 +280,17 @@ export default function CommunityOwnerPage() {
           <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0, letterSpacing: '-0.01em', fontFamily: "'Fraunces', serif", fontStyle: 'italic' }}>Aria Community</h1>
           <p style={{ fontSize: 13, color: C.dim, margin: '4px 0 0' }}>Post updates, offers, 24-hour stories, videos, and reels to your followers.</p>
         </div>
-        <button
-          onClick={() => { setComposing(true); resetForm() }}
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 40, padding: '0 18px', borderRadius: 10, border: 'none', background: C.sage, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>
-          <Plus size={15} /> New post
-        </button>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <a href="/dashboard/community/marketer"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 40, padding: '0 16px', borderRadius: 10, border: `1px solid rgba(167,139,250,0.4)`, background: 'rgba(167,139,250,0.08)', color: '#A78BFA', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, textDecoration: 'none' }}>
+            <Sparkles size={14} /> Aria Marketer
+          </a>
+          <button
+            onClick={() => { setComposing(true); resetForm() }}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 40, padding: '0 18px', borderRadius: 10, border: 'none', background: C.sage, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>
+            <Plus size={15} /> New post
+          </button>
+        </div>
       </header>
 
       {/* Stats strip */}
