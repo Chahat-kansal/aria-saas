@@ -251,6 +251,16 @@ async function _POST(req: NextRequest) {
   const newBookingList = newBookings ?? [];
   const newFromPublic = newBookingList.filter(b => b.source && b.source !== 'manual').length;
 
+  // Parcel tracking summary — in transit / delivered today / at risk of late arrival.
+  const [{ data: activeParcels }, { count: parcelsDeliveredToday }] = await Promise.all([
+    supabase.from('pos_parcel_tracking').select('status, predicted_late')
+      .eq('business_id', business_id).not('status', 'in', '(delivered,cancelled,returned,lost)'),
+    supabase.from('pos_parcel_tracking').select('id', { count: 'exact', head: true })
+      .eq('business_id', business_id).gte('delivered_at', todayStart.toISOString()),
+  ]);
+  const parcelsInTransit = (activeParcels ?? []).length;
+  const parcelsAtRisk = (activeParcels ?? []).filter(p => p.predicted_late).length;
+
   const context = {
     business_name: business.name,
     industry: business.industry,
@@ -259,6 +269,11 @@ async function _POST(req: NextRequest) {
       new_from_public_form: newFromPublic,
       upcoming_total: upcomingBookings ?? 0,
       newest: newBookingList.slice(0, 3).map(b => ({ customer: b.customer_name, date: b.booking_date, source: b.source })),
+    },
+    parcels_status: {
+      in_transit: parcelsInTransit,
+      delivered_today: parcelsDeliveredToday ?? 0,
+      at_risk_of_late: parcelsAtRisk,
     },
     invoice_status: {
       outstanding_count: invoiceStats.pendingCount,
@@ -347,7 +362,8 @@ async function _POST(req: NextRequest) {
     Number(warehouseCtx.expiring_lots_30d ?? 0) > 0 ||
     Number(warehouseCtx.pending_pos ?? 0) > 0 ||
     hasInvoiceSignal(invoiceStats) ||
-    newBookingList.length > 0;
+    newBookingList.length > 0 ||
+    parcelsAtRisk > 0;
 
   if (!hasActionableData) {
     await supabase.from('daily_briefings').upsert({

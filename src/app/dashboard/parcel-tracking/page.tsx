@@ -6,6 +6,7 @@ import {
   ArrowDownToLine, ArrowUpFromLine, Store, HelpCircle, X, AlertCircle, ChevronRight,
   type LucideIcon,
 } from 'lucide-react'
+import { AriaSays } from '@/components/dashboard/AriaSays'
 
 // ── Theme — CSS vars only ─────────────────────────────────────────────
 const C = {
@@ -73,6 +74,7 @@ interface Parcel {
   recipient_address: string | null; recipient_city: string | null;
   recipient_state: string | null; recipient_postcode: string | null;
   order_reference: string | null;
+  aria_insight: string | null; predicted_late: boolean | null;
 }
 
 const fmt   = (d: string | null) => d ? new Date(d).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'
@@ -280,6 +282,10 @@ export default function ParcelTrackingPage() {
           </div>
         </div>
 
+        <div style={{ marginBottom: 18 }}>
+          <AriaSays businessId={null} page="delivery" />
+        </div>
+
         {/* Hero stats */}
         <div className="parcel-hero" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 18 }}>
           {[
@@ -430,6 +436,12 @@ export default function ParcelTrackingPage() {
                       </div>
                       <ChevronRight size={14} style={{ color: C.dim, alignSelf: 'center', flexShrink: 0 }} />
                     </div>
+                    {p.predicted_late && p.aria_insight && (
+                      <div style={{ marginTop: 10, display: 'flex', gap: 7, alignItems: 'flex-start', padding: '8px 10px', borderRadius: 8, background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' }}>
+                        <Sparkles size={13} style={{ color: C.amber, flexShrink: 0, marginTop: 1 }} />
+                        <span style={{ fontSize: 12, color: C.muted, lineHeight: 1.45 }}>{p.aria_insight}</span>
+                      </div>
+                    )}
                   </div>
                 )
               })}
