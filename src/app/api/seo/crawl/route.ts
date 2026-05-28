@@ -9,6 +9,7 @@ import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { crawlSite, PAGE_CAP, type CrawledPageData } from '@/lib/seo/crawler'
 import { analyzePage, crossPageIssues, siteIssues, localChecks, computeHealthScore, type DetectedIssue } from '@/lib/seo/audit'
 import { extractKeywords } from '@/lib/seo/keywords'
+import { generateFixes, type FixableIssue } from '@/lib/seo/ai-fix'
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000
 
@@ -54,7 +55,7 @@ async function runCrawl(auditId: string, businessId: string, websiteUrl: string)
     issues.push(...crossPageIssues(result.pages))
     issues.push(...siteIssues(result))
 
-    const { data: bizRow } = await supabaseAdmin.from('businesses').select('address, phone').eq('id', businessId).maybeSingle()
+    const { data: bizRow } = await supabaseAdmin.from('businesses').select('name, city, address, phone').eq('id', businessId).maybeSingle()
     const local = localChecks(result, { address: bizRow?.address, phone: bizRow?.phone })
     issues.push(...local.issues)
     await supabaseAdmin.from('seo_local').upsert({
@@ -84,11 +85,13 @@ async function runCrawl(auditId: string, businessId: string, websiteUrl: string)
       }
     }
 
+    let inserted: FixableIssue[] = []
     if (issues.length > 0) {
-      await supabaseAdmin.from('seo_issues').insert(issues.map(i => ({
+      const { data } = await supabaseAdmin.from('seo_issues').insert(issues.map(i => ({
         business_id: businessId, audit_id: auditId, page_url: i.page_url, affected_url: i.page_url,
         issue_type: i.issue_type, severity: i.severity, title: i.title, detail: i.detail, state: 'open',
-      })))
+      }))).select('id, issue_type, severity, page_url, detail')
+      inserted = (data ?? []) as FixableIssue[]
     }
 
     const score = computeHealthScore(issues)
@@ -98,10 +101,16 @@ async function runCrawl(auditId: string, businessId: string, websiteUrl: string)
       info_count: issues.filter(i => i.severity === 'info').length,
     }
 
+    // Persist progress + score, but stay 'crawling' until AI fixes are ready.
     await supabaseAdmin.from('seo_audits').update({
-      status: 'complete', pages_crawled: result.pages.length,
-      issues_found: issues.length, health_score: score, ...counts,
-      finished_at: new Date().toISOString(),
+      pages_crawled: result.pages.length, issues_found: issues.length, health_score: score, ...counts,
+    }).eq('id', auditId)
+
+    // AI fix suggestions (Haiku) for critical + warning issues only.
+    await generateFixes(businessId, inserted, { name: bizRow?.name, city: bizRow?.city })
+
+    await supabaseAdmin.from('seo_audits').update({
+      status: 'complete', finished_at: new Date().toISOString(),
     }).eq('id', auditId)
   } catch (e) {
     await supabaseAdmin.from('seo_audits').update({
