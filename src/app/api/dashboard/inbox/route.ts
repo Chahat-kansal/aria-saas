@@ -96,6 +96,13 @@ async function detail(bid: string, source: string, id: string) {
       if (!data) return NextResponse.json({ error: 'Not found' }, { status: 404 })
       return NextResponse.json({ detail: { source, ...data } })
     }
+    case 'scan_and_go': {
+      const { data } = await supabaseAdmin.from('pos_self_checkout_carts')
+        .select('id, business_id, items, subtotal_cents, status, finished_at, redeemed_at, created_at')
+        .eq('id', id).eq('business_id', bid).maybeSingle()
+      if (!data) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+      return NextResponse.json({ detail: { source, ...data } })
+    }
     default:
       return NextResponse.json({ error: 'Unknown source' }, { status: 400 })
   }

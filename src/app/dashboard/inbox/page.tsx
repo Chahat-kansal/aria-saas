@@ -18,6 +18,7 @@ const SOURCE_META: Record<string, { icon: string; label: string }> = {
   community_report: { icon: '⚠️', label: 'Reported message' },
   blocked_visitor: { icon: '🚫', label: 'Blocked visitor' },
   kiosk_help_request: { icon: '🙋', label: 'Talk to staff' },
+  scan_and_go: { icon: '🛒', label: 'Scan & Go' },
   feedback: { icon: '👍', label: 'Feedback' },
 }
 const FILTERS = [['all', 'All'], ['unread', 'Unread'], ['messages', 'Messages'], ['demand', 'Demand'], ['feedback', 'Feedback'], ['flagged', 'Flagged']] as const
@@ -251,6 +252,22 @@ function DetailView({ detail }: { detail: Detail }) {
         <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 6 }}>{String(detail.title ?? 'Talk-to-staff request')}</div>
         {detail.description ? <p style={{ fontSize: 14, color: '#333', lineHeight: 1.6 }}>{String(detail.description)}</p> : null}
         <div style={{ fontSize: 13, color: INK_SOFT, marginTop: 10 }}>Status: {String(detail.status ?? 'pending')}</div>
+      </div>
+    )
+  }
+
+  if (detail.source === 'scan_and_go') {
+    const its = (detail.items as Array<{ name: string; qty: number; price_cents: number; age_restricted?: boolean }> | null) ?? []
+    const sub = Number(detail.subtotal_cents ?? 0)
+    return (
+      <div>{header}
+        <div style={{ fontSize: 13, color: INK_SOFT, marginBottom: 10 }}>Status: <strong style={{ color: INK }}>{String(detail.status ?? '')}</strong> · ${(sub / 100).toFixed(2)}</div>
+        {its.length === 0 ? <p style={{ fontSize: 13, color: INK_SOFT }}>No items recorded.</p> : its.map((it, i) => (
+          <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13.5, padding: '6px 0', borderBottom: '1px solid #eee' }}>
+            <span>{it.qty}× {it.name} {it.age_restricted && <span style={{ color: LIVE, fontSize: 11, fontWeight: 700 }}>18+</span>}</span>
+            <span style={{ fontWeight: 600 }}>${((it.price_cents * it.qty) / 100).toFixed(2)}</span>
+          </div>
+        ))}
       </div>
     )
   }

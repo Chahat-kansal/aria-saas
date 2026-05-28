@@ -272,6 +272,13 @@ async function _POST(req: NextRequest) {
   const { getLoyaltyStats, hasLoyaltySignal } = await import('@/lib/aria/loyalty-intelligence');
   const loyaltyStats = await getLoyaltyStats(supabaseAdmin, business_id);
 
+  // Scan-and-Go usage today (does self-checkout move basket size?).
+  const { data: sgCarts } = await supabaseAdmin.from('pos_self_checkout_carts')
+    .select('subtotal_cents').eq('business_id', business_id).eq('status', 'redeemed').gte('redeemed_at', todayStart.toISOString());
+  const sgCount = (sgCarts ?? []).length;
+  const sgAvgCents = sgCount > 0 ? Math.round((sgCarts ?? []).reduce((n, c) => n + (c.subtotal_cents ?? 0), 0) / sgCount) : 0;
+  const normalAvgCents = salesToday.length > 0 ? Math.round(revToday / salesToday.length) : 0;
+
   const context = {
     business_name: business.name,
     industry: business.industry,
@@ -295,6 +302,11 @@ async function _POST(req: NextRequest) {
       new_members_30d: loyaltyStats.newMembers30d,
       points_outstanding: loyaltyStats.pointsOutstanding,
       redemptions_30d: loyaltyStats.redemptions30d,
+    } : null,
+    scan_and_go_status: sgCount > 0 ? {
+      used_today: sgCount,
+      avg_basket_aud: (sgAvgCents / 100).toFixed(2),
+      normal_avg_basket_aud: (normalAvgCents / 100).toFixed(2),
     } : null,
     invoice_status: {
       outstanding_count: invoiceStats.pendingCount,
@@ -387,7 +399,8 @@ async function _POST(req: NextRequest) {
     parcelsAtRisk > 0 ||
     (inboxUnread ?? 0) > 0 ||
     (newDemandSignals ?? 0) > 0 ||
-    hasLoyaltySignal(loyaltyStats);
+    hasLoyaltySignal(loyaltyStats) ||
+    sgCount > 0;
 
   if (!hasActionableData) {
     await supabase.from('daily_briefings').upsert({
@@ -448,7 +461,7 @@ Business: ${business.name as string} (${business.industry as string ?? 'retail'}
 Business data:
 ${dataStr.slice(0, 3000)}
 
-Generate 3-5 actionable briefing items from this real data. If invoice_status shows overdue invoices, you MUST include a high-priority "finance" item naming the top_overdue customer, amount and days late (e.g. "$X overdue from {customer} — {days} days late, chase today"). If bookings_status.new_since_yesterday > 0, include a "customers" item noting how many new bookings came in (call out new_from_public_form separately if any). If inbox_status.unread_messages > 0 or new_demand_signals > 0, include a "customers" item like "You have N unread customer messages and M new demand signals worth flagging — check your inbox". JSON array only.`
+Generate 3-5 actionable briefing items from this real data. If invoice_status shows overdue invoices, you MUST include a high-priority "finance" item naming the top_overdue customer, amount and days late (e.g. "$X overdue from {customer} — {days} days late, chase today"). If bookings_status.new_since_yesterday > 0, include a "customers" item noting how many new bookings came in (call out new_from_public_form separately if any). If inbox_status.unread_messages > 0 or new_demand_signals > 0, include a "customers" item like "You have N unread customer messages and M new demand signals worth flagging — check your inbox". If scan_and_go_status is present, include a "revenue" item comparing its avg_basket_aud to normal_avg_basket_aud (e.g. "X scan-and-go checkouts today, avg basket $Y vs $Z normal"). JSON array only.`
         }]
       })
     )
