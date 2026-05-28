@@ -6,11 +6,13 @@ import { AriaSays } from '@/components/dashboard/AriaSays'
 import { SitePreviewCard } from '@/components/SitePreviewCard'
 import type { SitePreviewResult } from '@/app/api/site-preview/route'
 
-interface SeoAudit { id: string; status: string; pages_crawled: number; issues_found: number; issues_fixed: number; health_score: number; started_at: string; finished_at: string | null }
-interface SeoIssue { id: string; page_url: string; issue_type: string; severity: string; title: string; detail: string; suggested_fix: string | null; fix_format: string | null; state: string }
+interface SeoAudit { id: string; status: string; pages_crawled: number; issues_found: number; issues_fixed: number; health_score: number; critical_count?: number | null; warning_count?: number | null; info_count?: number | null; error_detail?: string | null; started_at: string; finished_at: string | null }
+interface SeoIssue { id: string; page_url: string; issue_type: string; severity: string; title: string; detail: string; suggested_fix: string | null; ai_fix_text?: string | null; fix_format: string | null; state: string }
 interface SeoLocal { gbp_completeness: number | null; gbp_listed?: boolean | null; review_count?: number | null; review_avg?: number | null; map_pack_rank: number | null; citations_total: number | null; citations_consistent: number | null; review_velocity_30d: number | null; checklist: Array<{ item: string; ok: boolean }> | null }
-interface SeoKeyword { id: string; keyword: string; current_rank: number | null; previous_rank: number | null; search_volume: number | null }
+interface SeoKeyword { id: string; keyword: string; current_rank: number | null; previous_rank: number | null; search_volume: number | null; frequency?: number | null; found_on_pages?: string[] | null; tracked?: boolean | null }
 interface SeoPage { url: string; title: string | null }
+const SEV_ORDER: Record<string, number> = { critical: 0, warning: 1, info: 2 }
+const SEV_COLOR: Record<string, string> = { critical: '#ef4444', warning: '#f59e0b', info: '#6b7280' }
 
 // ── Shared helpers ─────────────────────────────────────────────────────────
 
@@ -37,257 +39,136 @@ function CopyBtn({ text }: { text: string }) {
   )
 }
 
+const statCell: React.CSSProperties = { padding: '16px 20px', background: 'rgba(255,255,255,0.04)', borderRadius: 12, minWidth: 90 }
+
 // ── Tab 1: Site Health ─────────────────────────────────────────────────────
 
 function SiteHealthTab({ businessId }: { businessId: string }) {
   const [audit, setAudit] = useState<SeoAudit | null>(null)
   const [issues, setIssues] = useState<SeoIssue[]>([])
-  const [pages, setPages] = useState<SeoPage[]>([])
-  const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
-  const [generating, setGenerating] = useState<string | null>(null)
-  const [applying, setApplying] = useState<string | null>(null)
   const [crawling, setCrawling] = useState(false)
-  const [fixingId, setFixingId] = useState<string | null>(null)
-  const [history, setHistory] = useState<Array<{ health_score: number; finished_at: string }>>([])
-  const [insights, setInsights] = useState<Array<{ title: string; fix: string }>>([])
-  const [insightLoading, setInsightLoading] = useState(false)
+  const [progress, setProgress] = useState('')
 
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true)
-    const { data: a } = await supabase.from('seo_audits').select('*').eq('business_id', businessId).eq('status', 'complete').order('finished_at', { ascending: false }).limit(1).maybeSingle()
-    setAudit(a)
-    if (a) {
-      const sevOrder = { high: 0, medium: 1, low: 2 }
+    const { data: a } = await supabase.from('seo_audits').select('*').eq('business_id', businessId).order('created_at', { ascending: false }).limit(1).maybeSingle()
+    setAudit(a as SeoAudit | null)
+    if (a?.id && a.status === 'complete') {
       const { data: iss } = await supabase.from('seo_issues').select('*').eq('business_id', businessId).eq('audit_id', a.id).neq('state', 'verified')
-      const sorted = ((iss ?? []) as SeoIssue[]).sort((x, y) => (sevOrder[x.severity as keyof typeof sevOrder] ?? 9) - (sevOrder[y.severity as keyof typeof sevOrder] ?? 9))
-      setIssues(sorted)
-      const { data: pg } = await supabase.from('seo_pages').select('url, title').eq('business_id', businessId).eq('audit_id', a.id).limit(20)
-      setPages(pg ?? [])
-      const { data: hist } = await supabase.from('seo_audits').select('health_score, finished_at').eq('business_id', businessId).eq('status', 'complete').order('finished_at', { ascending: true }).limit(10)
-      setHistory((hist ?? []) as Array<{ health_score: number; finished_at: string }>)
+      setIssues((iss ?? []) as SeoIssue[])
+    } else {
+      setIssues([])
     }
     setLoading(false)
+  }, [businessId])
+
+  useEffect(() => { load() }, [load])
+
+  // Poll the status endpoint until the background crawl finishes.
+  async function pollUntilDone(auditId: string) {
+    for (let i = 0; i < 120; i++) {
+      await new Promise(r => setTimeout(r, 3000))
+      try {
+        const d = await fetch(`/api/seo/audit/${auditId}/status`).then(r => r.json())
+        const st = d.audit?.status
+        setProgress(`Crawled ${d.audit?.pages_crawled ?? 0} pages…`)
+        if (st === 'complete' || st === 'failed') { setCrawling(false); setProgress(''); await load(); return }
+      } catch { /* keep polling */ }
+    }
+    setCrawling(false); setProgress(''); await load()
   }
 
-  useEffect(() => { load() }, [businessId]) // eslint-disable-line react-hooks/exhaustive-deps
-
   async function runAudit() {
-    setCrawling(true)
+    setCrawling(true); setProgress('Starting crawl…')
     try {
       const res = await fetch('/api/seo/crawl', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ business_id: businessId }) })
       const data = await res.json().catch(() => ({}))
-      if (!res.ok) { alert(data.error ?? 'Crawl failed — check your website URL is publicly accessible'); setCrawling(false); return }
-      // Poll for completion — crawl is async, DB writes happen server-side
-      let attempts = 0
-      const poll = setInterval(async () => {
-        attempts++
-        await load()
-        if (attempts >= 12) { clearInterval(poll); setCrawling(false) }  // max 60s
-      }, 5000)
+      if (res.status === 429) { alert(data.error ?? 'You can run one crawl per day.'); setCrawling(false); setProgress(''); return }
+      if (!res.ok || !data.audit_id) { alert(data.error ?? 'Crawl failed — check your website URL is publicly accessible'); setCrawling(false); setProgress(''); return }
+      await pollUntilDone(data.audit_id)
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'Network error'
-      alert(`Crawl failed: ${msg}. Check your website URL is publicly accessible.`)
-      setCrawling(false)
+      alert(`Crawl failed: ${e instanceof Error ? e.message : 'Network error'}.`)
+      setCrawling(false); setProgress('')
     }
   }
 
-  async function markFixed(issueId: string) {
-    setFixingId(issueId)
-    try {
-      await fetch(`/api/seo/issues/${issueId}`, { method: 'PATCH' })
-      setIssues(prev => prev.filter(i => i.id !== issueId))
-    } catch (e: unknown) { console.error('markFixed error:', e) }
-    setFixingId(null)
-    await load()
+  if (loading) return <p style={{ color: 'rgba(255,255,255,0.4)', textAlign: 'center', padding: 40 }}>Loading…</p>
+
+  // Group issues by type → severity + affected page count.
+  const groups = new Map<string, { severity: string; title: string; detail: string; pages: Set<string> }>()
+  for (const i of issues) {
+    const g = groups.get(i.issue_type) ?? { severity: i.severity, title: i.title, detail: i.detail, pages: new Set<string>() }
+    g.pages.add(i.page_url)
+    groups.set(i.issue_type, g)
   }
+  const topIssues = [...groups.values()]
+    .sort((a, b) => (SEV_ORDER[a.severity] ?? 9) - (SEV_ORDER[b.severity] ?? 9) || b.pages.size - a.pages.size)
+    .slice(0, 10)
 
-  async function generateFix(issueId: string) {
-    setGenerating(issueId)
-    try {
-      const res = await fetch('/api/seo/generate-fix', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ issue_id: issueId }) })
-      const d = await res.json()
-      if (d.suggested_fix) {
-        setIssues(prev => prev.map(i => i.id === issueId ? { ...i, suggested_fix: d.suggested_fix, fix_format: d.fix_format, state: 'suggested' } : i))
-        setExpanded(prev => new Set([...prev, issueId]))
-      }
-    } catch { /* ignore */ }
-    setGenerating(null)
-  }
-
-  async function markApplied(issueId: string) {
-    setApplying(issueId)
-    try {
-      await fetch('/api/seo/generate-fix', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ issue_id: issueId, action: 'mark_applied' }) })
-      setIssues(prev => prev.map(i => i.id === issueId ? { ...i, state: 'applied' } : i))
-    } catch { /* ignore */ }
-    setApplying(null)
-  }
-
-  function toggleExpand(id: string) { setExpanded(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n }) }
-
-  async function loadInsights() {
-    const topHigh = issues.filter(iss => iss.severity === 'high' && !iss.suggested_fix).slice(0, 3)
-    if (!topHigh.length) return
-    setInsightLoading(true)
-    const next: Array<{ title: string; fix: string }> = []
-    for (const iss of topHigh) {
-      try {
-        const res = await fetch('/api/seo/generate-fix', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ issue_id: iss.id }) })
-        const d = await res.json()
-        if (d.suggested_fix) next.push({ title: iss.title, fix: d.suggested_fix })
-      } catch { /* skip */ }
-    }
-    setInsights(next)
-    setInsightLoading(false)
-  }
-
-  const SEV: Record<string, string> = { high: '#ef4444', medium: '#f59e0b', low: '#6b7280' }
-  const cell: React.CSSProperties = { padding: '16px 20px', background: 'rgba(255,255,255,0.04)', borderRadius: 12, minWidth: 90 }
-
-  if (loading) return <p style={{ color: 'rgba(255,255,255,0.4)', textAlign: 'center', padding: 40 }}>Loading...</p>
-  if (crawling) return <p style={{ color: '#7FB897', textAlign: 'center', padding: 40, fontSize: 14 }}>Crawling your website...</p>
-  if (!audit) return (
-    <div style={{ textAlign: 'center', padding: 60 }}>
-      <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 14, marginBottom: 12 }}>No crawl data yet.</p>
-      <button onClick={runAudit} style={{ padding: '10px 24px', borderRadius: 8, border: 'none', background: '#7FB897', color: '#0E1411', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
-        Run Audit Now
-      </button>
-    </div>
-  )
-
-  const lastCrawl = audit.finished_at ? new Date(audit.finished_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'
-
-  const scoreCol = audit.health_score >= 80 ? '#7FB897' : audit.health_score >= 50 ? '#f59e0b' : '#ef4444'
+  const crit = audit?.critical_count ?? issues.filter(i => i.severity === 'critical').length
+  const warn = audit?.warning_count ?? issues.filter(i => i.severity === 'warning').length
+  const info = audit?.info_count ?? issues.filter(i => i.severity === 'info').length
+  const scoreCol = (audit?.health_score ?? 0) >= 80 ? '#7FB897' : (audit?.health_score ?? 0) >= 50 ? '#f59e0b' : '#ef4444'
+  const lastCrawl = audit?.finished_at ? new Date(audit.finished_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'
 
   return (
     <div>
       <div style={{ display: 'flex', gap: 12, marginBottom: 16, alignItems: 'center', flexWrap: 'wrap' }}>
-        <button onClick={runAudit} style={{ padding: '7px 18px', borderRadius: 8, border: 'none', background: '#2D5240', color: '#7FB897', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
-          Run Audit
+        <button onClick={runAudit} disabled={crawling} style={{ padding: '8px 20px', borderRadius: 8, border: 'none', background: '#7FB897', color: '#0E1411', fontSize: 13, fontWeight: 700, cursor: crawling ? 'default' : 'pointer', fontFamily: 'inherit', opacity: crawling ? 0.6 : 1 }}>
+          {crawling ? 'Crawling…' : audit ? 'Re-run audit' : 'Run audit'}
         </button>
+        {crawling && <span style={{ fontSize: 13, color: '#7FB897' }}>{progress}</span>}
+        {audit?.status === 'crawling' && !crawling && <span style={{ fontSize: 12, color: '#f59e0b' }}>A crawl is in progress…</span>}
       </div>
-      <div style={{ display: 'flex', gap: 20, alignItems: 'center', marginBottom: 32, flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-          <RingChart score={audit.health_score} />
-          <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Health</span>
-        </div>
-        <div style={{ ...cell, minWidth: 80 }}>
-          <div style={{ fontSize: 32, fontWeight: 800, color: scoreCol, lineHeight: 1 }}>{audit.health_score}</div>
-          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 2, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Score</div>
-        </div>
-        {([['Pages crawled', audit.pages_crawled], ['Issues found', audit.issues_found], ['Fixed', audit.issues_fixed], ['Last crawl', lastCrawl]] as [string, string | number][]).map(([label, value]) => (
-          <div key={label} style={cell}>
-            <div style={{ fontSize: 22, fontWeight: 700, color: '#fff' }}>{value}</div>
-            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 2, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</div>
-          </div>
-        ))}
-      </div>
-      {issues.length === 0 ? (
-        <p style={{ textAlign: 'center', padding: 40, color: 'rgba(255,255,255,0.4)', fontSize: 14 }}>No open issues — great work!</p>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {issues.map(issue => (
-            <div key={issue.id} style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 12, border: '1px solid rgba(255,255,255,0.07)', overflow: 'hidden' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px' }}>
-                <span style={{ width: 8, height: 8, borderRadius: '50%', background: SEV[issue.severity] ?? '#6b7280', flexShrink: 0 }} />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ color: '#fff', fontSize: 13, fontWeight: 600 }}>{issue.title}</div>
-                  <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 11, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{issue.page_url}</div>
-                </div>
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
-                  {issue.state === 'applied' ? (
-                    <span style={{ fontSize: 11, color: '#7FB897', background: 'rgba(127,184,151,0.12)', padding: '3px 10px', borderRadius: 20 }}>Applied</span>
-                  ) : issue.suggested_fix ? (
-                    <>
-                      <button onClick={() => toggleExpand(issue.id)} style={{ padding: '5px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', color: 'rgba(255,255,255,0.6)', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>
-                        {expanded.has(issue.id) ? 'Hide' : 'View fix'}
-                      </button>
-                      <button onClick={() => markApplied(issue.id)} disabled={applying === issue.id} style={{ padding: '5px 12px', borderRadius: 8, border: 'none', background: '#2D5240', color: '#7FB897', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', opacity: applying === issue.id ? 0.6 : 1 }}>
-                        {applying === issue.id ? '...' : 'Mark applied'}
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <button onClick={() => generateFix(issue.id)} disabled={generating === issue.id} style={{ padding: '5px 14px', borderRadius: 8, border: 'none', background: '#7FB897', color: '#0E1411', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', opacity: generating === issue.id ? 0.6 : 1 }}>
-                        {generating === issue.id ? 'Generating...' : 'Generate fix'}
-                      </button>
-                      <button onClick={() => markFixed(issue.id)} disabled={fixingId === issue.id} style={{ padding: '5px 12px', borderRadius: 8, border: '1px solid rgba(127,184,151,0.3)', background: 'transparent', color: '#7FB897', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit', opacity: fixingId === issue.id ? 0.6 : 1 }}>
-                        {fixingId === issue.id ? '...' : 'Mark fixed'}
-                      </button>
-                    </>
-                  )}
-                </div>
-              </div>
-              {expanded.has(issue.id) && issue.suggested_fix && (
-                <div style={{ borderTop: '1px solid rgba(255,255,255,0.07)', padding: '14px 16px', background: 'rgba(0,0,0,0.15)' }}>
-                  <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', marginBottom: 8 }}>
-                    <pre style={{ flex: 1, margin: 0, fontSize: 12, color: '#7FB897', fontFamily: 'monospace', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{issue.suggested_fix}</pre>
-                    <CopyBtn text={issue.suggested_fix} />
-                  </div>
-                  <p style={{ margin: 0, fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>Paste this into your site&apos;s SEO settings, then click &ldquo;Mark applied&rdquo; above.</p>
-                </div>
-              )}
-            </div>
-          ))}
+
+      {audit?.error_detail && (
+        <div style={{ marginBottom: 20, padding: '12px 16px', borderRadius: 10, border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.08)', fontSize: 13, color: '#fca5a5' }}>
+          {audit.error_detail}
         </div>
       )}
-      {pages.length > 0 && (
-        <div style={{ marginTop: 32 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: 'rgba(255,255,255,0.6)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            Pages crawled ({pages.length})
-          </div>
-          <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 10, border: '1px solid rgba(255,255,255,0.07)', overflow: 'hidden' }}>
-            {pages.map((p, i) => (
-              <div key={p.url} style={{ display: 'flex', gap: 12, padding: '9px 14px', borderBottom: i < pages.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none', alignItems: 'center' }}>
-                <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.title ?? p.url}</span>
-                <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', flexShrink: 0, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.url}</span>
+
+      {!audit ? (
+        <div style={{ textAlign: 'center', padding: 60 }}>
+          <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 14 }}>No crawl yet. Run your first audit to see real issues.</p>
+        </div>
+      ) : (
+        <>
+          <div style={{ display: 'flex', gap: 16, alignItems: 'center', marginBottom: 28, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+              <RingChart score={audit.health_score} />
+              <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Health</span>
+            </div>
+            {([['Critical', crit, '#ef4444'], ['Warnings', warn, '#f59e0b'], ['Info', info, '#9ca3af'], ['Pages', audit.pages_crawled, '#fff'], ['Fixed', audit.issues_fixed, '#7FB897'], ['Last crawl', lastCrawl, '#fff']] as [string, string | number, string][]).map(([label, value, col]) => (
+              <div key={label} style={statCell}>
+                <div style={{ fontSize: 24, fontWeight: 800, color: col, lineHeight: 1 }}>{value}</div>
+                <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 4, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</div>
               </div>
             ))}
           </div>
-        </div>
-      )}
-      {history.length > 1 && (
-        <div style={{ marginTop: 32 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: 'rgba(255,255,255,0.6)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Score history</div>
-          <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 10, border: '1px solid rgba(255,255,255,0.07)', padding: '16px 20px' }}>
-            <svg width="100%" height={72} viewBox={`0 0 ${history.length * 36} 72`} preserveAspectRatio="none">
-              {history.map((h, i) => {
-                const barH = Math.max(4, Math.round((h.health_score / 100) * 52))
-                const col = h.health_score >= 80 ? '#7FB897' : h.health_score >= 50 ? '#f59e0b' : '#ef4444'
-                return <rect key={i} x={i * 36 + 4} y={52 - barH} width={28} height={barH} rx={3} fill={col} fillOpacity={0.8} />
-              })}
-            </svg>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
-              <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>{new Date(history[0].finished_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}</span>
-              <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>{new Date(history[history.length - 1].finished_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}</span>
-            </div>
+
+          <div style={{ fontSize: 13, fontWeight: 700, color: 'rgba(255,255,255,0.6)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            Top issues
           </div>
-        </div>
-      )}
-      {audit && (
-        <div style={{ marginTop: 32 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Aria&apos;s SEO read</div>
-            <button onClick={loadInsights} disabled={insightLoading || !issues.some(iss => iss.severity === 'high' && !iss.suggested_fix)}
-              style={{ padding: '6px 14px', borderRadius: 8, border: 'none', background: '#7FB897', color: '#0E1411', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', opacity: insightLoading ? 0.6 : 1 }}>
-              {insightLoading ? 'Reading...' : "Get Aria's read"}
-            </button>
-          </div>
-          {insights.length > 0 && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {insights.map((ins, i) => (
-                <div key={i} style={{ background: 'rgba(127,184,151,0.06)', borderRadius: 12, border: '1px solid rgba(127,184,151,0.15)', padding: '14px 16px' }}>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: '#7FB897', marginBottom: 8 }}>{ins.title}</div>
-                  <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-                    <pre style={{ flex: 1, margin: 0, fontSize: 12, color: 'rgba(255,255,255,0.8)', fontFamily: 'monospace', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{ins.fix}</pre>
-                    <CopyBtn text={ins.fix} />
+          {topIssues.length === 0 ? (
+            <p style={{ textAlign: 'center', padding: 40, color: 'rgba(255,255,255,0.4)', fontSize: 14 }}>No open issues — great work!</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {topIssues.map((g, idx) => (
+                <div key={idx} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '14px 16px', background: 'rgba(255,255,255,0.04)', borderRadius: 12, border: '1px solid rgba(255,255,255,0.07)' }}>
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: SEV_COLOR[g.severity] ?? '#6b7280', flexShrink: 0, marginTop: 6 }} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ color: '#fff', fontSize: 13, fontWeight: 600 }}>{g.title}</div>
+                    <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12, marginTop: 2 }}>{g.detail}</div>
                   </div>
+                  <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', background: 'rgba(255,255,255,0.06)', padding: '3px 10px', borderRadius: 20, flexShrink: 0, whiteSpace: 'nowrap' }}>
+                    {g.pages.size} page{g.pages.size > 1 ? 's' : ''}
+                  </span>
                 </div>
               ))}
             </div>
           )}
-        </div>
+        </>
       )}
     </div>
   )
@@ -321,42 +202,28 @@ function LocalSeoTab({ businessId }: { businessId: string }) {
 
   const pct = Math.max(0, Math.min(100, local?.gbp_completeness ?? 0))
   const checklist: Array<{ item: string; ok: boolean }> = Array.isArray(local?.checklist) ? (local!.checklist as Array<{ item: string; ok: boolean }>) : []
-  const stats: [string, string | number][] = [
-    ['Google listed', local?.gbp_listed == null ? '—' : local.gbp_listed ? 'Yes' : 'No'],
-    ['Review avg', local?.review_avg != null ? (Number(local.review_avg)).toFixed(1) + ' ★' : '—'],
-    ['Review count', local?.review_count ?? '—'],
-    ['Map pack rank', local?.map_pack_rank ?? '—'],
-    ['Citations', local?.citations_total ?? '—'],
-    ['Reviews (30d)', local?.review_velocity_30d ?? '—'],
-  ]
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <div style={{ display: 'flex', gap: 8 }}>
         <button onClick={scanNow} disabled={scanning} style={{ padding: '7px 18px', borderRadius: 8, border: 'none', background: '#2D5240', color: '#7FB897', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', opacity: scanning ? 0.6 : 1 }}>
-          {scanning ? 'Scanning...' : 'Scan now'}
+          {scanning ? 'Scanning...' : 'Re-scan Google profile'}
         </button>
       </div>
       <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 12, padding: '20px 24px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-          <span style={{ color: '#fff', fontSize: 14, fontWeight: 600 }}>Google Business Profile completeness</span>
+          <span style={{ color: '#fff', fontSize: 14, fontWeight: 600 }}>Local SEO completeness</span>
           <span style={{ color: '#7FB897', fontWeight: 700, fontSize: 16 }}>{pct}%</span>
         </div>
         <div style={{ height: 8, background: 'rgba(255,255,255,0.08)', borderRadius: 4, overflow: 'hidden' }}>
           <div style={{ height: '100%', width: pct + '%', background: '#7FB897', borderRadius: 4 }} />
         </div>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12 }}>
-        {stats.map(([label, value]) => (
-          <div key={label} style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 12, padding: '16px 20px' }}>
-            <div style={{ fontSize: 20, fontWeight: 700, color: '#fff' }}>{value}</div>
-            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 2, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</div>
-          </div>
-        ))}
-      </div>
-      {checklist.length > 0 && (
+      {checklist.length === 0 ? (
+        <p style={{ textAlign: 'center', padding: 30, color: 'rgba(255,255,255,0.4)', fontSize: 13 }}>Run an audit to populate your NAP, maps and schema checks.</p>
+      ) : (
         <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 12, padding: '20px 24px' }}>
-          <div style={{ color: '#fff', fontSize: 14, fontWeight: 600, marginBottom: 14 }}>GBP checklist</div>
+          <div style={{ color: '#fff', fontSize: 14, fontWeight: 600, marginBottom: 14 }}>NAP, maps &amp; schema</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {checklist.map((row, i) => (
               <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -377,66 +244,65 @@ function LocalSeoTab({ businessId }: { businessId: string }) {
 
 function KeywordsTab({ businessId }: { businessId: string }) {
   const [keywords, setKeywords] = useState<SeoKeyword[]>([])
-  const [newKw, setNewKw] = useState('')
-  const [adding, setAdding] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [toggling, setToggling] = useState<string | null>(null)
 
   const load = useCallback(async () => {
-    const { data } = await supabase.from('seo_keywords').select('*').eq('business_id', businessId).order('created_at', { ascending: false })
-    setKeywords(data ?? [])
+    setLoading(true)
+    try {
+      const d = await fetch(`/api/seo/keywords?business_id=${businessId}`).then(r => r.json())
+      setKeywords((d.keywords ?? []) as SeoKeyword[])
+    } catch { /* ignore */ }
     setLoading(false)
   }, [businessId])
 
   useEffect(() => { load() }, [load])
 
-  async function addKeyword() {
-    if (!newKw.trim() || adding) return
-    setAdding(true)
+  async function toggleTracked(kw: SeoKeyword) {
+    setToggling(kw.id)
+    const next = !kw.tracked
     try {
-      await fetch('/api/seo/keywords', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ business_id: businessId, keyword: newKw.trim() }) })
+      await fetch('/api/seo/keywords', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ keyword_id: kw.id, tracked: next }) })
+      setKeywords(prev => prev.map(k => k.id === kw.id ? { ...k, tracked: next } : k))
     } catch { /* ignore */ }
-    setNewKw('')
-    await load()
-    setAdding(false)
+    setToggling(null)
   }
 
-  if (loading) return <p style={{ color: 'rgba(255,255,255,0.4)', textAlign: 'center', padding: 40 }}>Loading...</p>
+  if (loading) return <p style={{ color: 'rgba(255,255,255,0.4)', textAlign: 'center', padding: 40 }}>Loading…</p>
 
   return (
     <div>
-      <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
-        <input type="text" value={newKw} onChange={e => setNewKw(e.target.value)} onKeyDown={e => e.key === 'Enter' && addKeyword()} placeholder="Enter a keyword to track..."
-          style={{ flex: 1, padding: '9px 14px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.05)', color: '#fff', fontSize: 13, fontFamily: 'inherit', outline: 'none' }} />
-        <button onClick={addKeyword} disabled={adding || !newKw.trim()} style={{ padding: '9px 18px', borderRadius: 8, border: 'none', background: '#7FB897', color: '#0E1411', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', opacity: adding || !newKw.trim() ? 0.6 : 1 }}>
-          {adding ? 'Adding...' : 'Add'}
-        </button>
-      </div>
+      <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.45)', marginBottom: 16, lineHeight: 1.55 }}>
+        Keywords extracted from your crawled pages, by how often they appear. Enable rank tracking on the ones that matter —
+        live ranking is coming soon (it needs an external search-data source).
+      </p>
       {keywords.length === 0 ? (
-        <p style={{ textAlign: 'center', padding: 40, color: 'rgba(255,255,255,0.4)', fontSize: 14 }}>No keywords tracked yet. Add one above.</p>
+        <p style={{ textAlign: 'center', padding: 40, color: 'rgba(255,255,255,0.4)', fontSize: 14 }}>No keywords yet. Run an audit to extract them from your content.</p>
       ) : (
         <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 12, border: '1px solid rgba(255,255,255,0.07)', overflow: 'hidden' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
               <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
-                {['Keyword', 'Rank', 'Change', 'Volume'].map(h => (
+                {['Keyword', 'Frequency', 'Pages', 'Rank tracking'].map(h => (
                   <th key={h} style={{ padding: '10px 16px', textAlign: 'left', color: 'rgba(255,255,255,0.4)', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {keywords.map(kw => {
-                const d = kw.current_rank != null && kw.previous_rank != null ? kw.previous_rank - kw.current_rank : null
-                return (
-                  <tr key={kw.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                    <td style={{ padding: '12px 16px', color: '#fff', fontWeight: 500 }}>{kw.keyword}</td>
-                    <td style={{ padding: '12px 16px', color: kw.current_rank == null ? 'rgba(255,255,255,0.3)' : '#fff' }}>{kw.current_rank == null ? 'Not tracked yet' : '#' + kw.current_rank}</td>
-                    <td style={{ padding: '12px 16px', color: d == null ? 'rgba(255,255,255,0.3)' : d > 0 ? '#22c55e' : d < 0 ? '#ef4444' : 'rgba(255,255,255,0.4)' }}>
-                      {d == null ? '—' : d > 0 ? '▲ ' + d : d < 0 ? '▼ ' + Math.abs(d) : '—'}
-                    </td>
-                    <td style={{ padding: '12px 16px', color: kw.search_volume == null ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.7)' }}>{kw.search_volume == null ? '—' : kw.search_volume.toLocaleString()}</td>
-                  </tr>
-                )
-              })}
+              {keywords.map(kw => (
+                <tr key={kw.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                  <td style={{ padding: '12px 16px', color: '#fff', fontWeight: 500 }}>{kw.keyword}</td>
+                  <td style={{ padding: '12px 16px', color: 'rgba(255,255,255,0.7)' }}>{kw.frequency ?? '—'}</td>
+                  <td style={{ padding: '12px 16px', color: 'rgba(255,255,255,0.7)' }}>{kw.found_on_pages?.length ?? 0}</td>
+                  <td style={{ padding: '12px 16px' }}>
+                    <button onClick={() => toggleTracked(kw)} disabled={toggling === kw.id}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '4px 10px', borderRadius: 20, border: '1px solid ' + (kw.tracked ? '#7FB897' : 'rgba(255,255,255,0.15)'), background: kw.tracked ? 'rgba(127,184,151,0.12)' : 'transparent', color: kw.tracked ? '#7FB897' : 'rgba(255,255,255,0.5)', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', opacity: toggling === kw.id ? 0.6 : 1 }}>
+                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: kw.tracked ? '#7FB897' : 'rgba(255,255,255,0.3)' }} />
+                      {kw.tracked ? 'Tracking' : 'Enable'}
+                    </button>
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
@@ -445,86 +311,82 @@ function KeywordsTab({ businessId }: { businessId: string }) {
   )
 }
 
-// ── Tab 4: AI Optimizer ────────────────────────────────────────────────────
-
-const OPT_TYPES = ['missing_title', 'missing_meta_description', 'missing_schema'] as const
-const OPT_LABELS: Record<string, string> = { missing_title: 'Page title tag', missing_meta_description: 'Meta description', missing_schema: 'JSON-LD schema' }
-const OPT_INSTRUCTIONS: Record<string, string> = {
-  missing_title: "Paste into your site's <title> tag or CMS title field.",
-  missing_meta_description: "Paste into your site's meta description field.",
-  missing_schema: 'Paste into a <script type="application/ld+json"> block in your page <head>.',
-}
+// ── Tab 4: AI Optimiser ────────────────────────────────────────────────────
 
 function AiOptimizerTab({ businessId }: { businessId: string }) {
-  const [pages, setPages] = useState<SeoPage[]>([])
-  const [selectedUrl, setSelectedUrl] = useState('')
-  const [pageIssues, setPageIssues] = useState<SeoIssue[]>([])
-  const [results, setResults] = useState<Record<string, string>>({})
-  const [generating, setGenerating] = useState(false)
+  const [issues, setIssues] = useState<SeoIssue[]>([])
   const [loading, setLoading] = useState(true)
+  const [fixingId, setFixingId] = useState<string | null>(null)
+  const [generatingId, setGeneratingId] = useState<string | null>(null)
 
-  useEffect(() => {
-    supabase.from('seo_pages').select('url, title').eq('business_id', businessId).order('crawled_at', { ascending: false }).limit(50)
-      .then(({ data }: { data: SeoPage[] | null; error: unknown }) => { setPages(data ?? []); setLoading(false) })
+  const load = useCallback(async () => {
+    setLoading(true)
+    const { data: a } = await supabase.from('seo_audits').select('id').eq('business_id', businessId).eq('status', 'complete').order('finished_at', { ascending: false }).limit(1).maybeSingle()
+    if (a?.id) {
+      const { data: iss } = await supabase.from('seo_issues').select('*').eq('business_id', businessId).eq('audit_id', a.id).in('severity', ['critical', 'warning']).neq('state', 'verified')
+      const sorted = ((iss ?? []) as SeoIssue[]).sort((x, y) => (SEV_ORDER[x.severity] ?? 9) - (SEV_ORDER[y.severity] ?? 9))
+      setIssues(sorted)
+    } else { setIssues([]) }
+    setLoading(false)
   }, [businessId])
 
-  useEffect(() => {
-    if (!selectedUrl) { setPageIssues([]); setResults({}); return }
-    supabase.from('seo_issues').select('*').eq('business_id', businessId).eq('page_url', selectedUrl).in('issue_type', OPT_TYPES as unknown as string[])
-      .then(({ data }: { data: SeoIssue[] | null; error: unknown }) => { setPageIssues(data ?? []); setResults({}) })
-  }, [selectedUrl, businessId])
+  useEffect(() => { load() }, [load])
 
-  async function generateAll() {
-    if (!pageIssues.length || generating) return
-    setGenerating(true)
-    const next: Record<string, string> = {}
-    for (const issue of pageIssues) {
-      try {
-        const res = await fetch('/api/seo/generate-fix', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ issue_id: issue.id }) })
-        const d = await res.json()
-        if (d.suggested_fix) next[issue.issue_type] = d.suggested_fix
-      } catch { /* skip */ }
-    }
-    setResults(next)
-    setGenerating(false)
+  async function markFixed(id: string) {
+    setFixingId(id)
+    try { await fetch(`/api/seo/issues/${id}`, { method: 'PATCH' }); setIssues(prev => prev.filter(i => i.id !== id)) }
+    catch { /* ignore */ }
+    setFixingId(null)
   }
 
-  if (loading) return <p style={{ color: 'rgba(255,255,255,0.4)', textAlign: 'center', padding: 40 }}>Loading...</p>
-  if (pages.length === 0) return (
+  async function generateFix(id: string) {
+    setGeneratingId(id)
+    try {
+      const d = await fetch('/api/seo/generate-fix', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ issue_id: id }) }).then(r => r.json())
+      if (d.suggested_fix) setIssues(prev => prev.map(i => i.id === id ? { ...i, suggested_fix: d.suggested_fix, ai_fix_text: d.suggested_fix } : i))
+    } catch { /* ignore */ }
+    setGeneratingId(null)
+  }
+
+  if (loading) return <p style={{ color: 'rgba(255,255,255,0.4)', textAlign: 'center', padding: 40 }}>Loading…</p>
+  if (issues.length === 0) return (
     <div style={{ textAlign: 'center', padding: 60 }}>
-      <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 14, marginBottom: 6 }}>No crawled pages yet.</p>
-      <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: 12 }}>Pages appear after the first SEO crawl.</p>
+      <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 14, marginBottom: 6 }}>No critical or warning issues to fix.</p>
+      <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: 12 }}>Run an audit from the Site health tab to generate AI fixes.</p>
     </div>
   )
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-        <select value={selectedUrl} onChange={e => setSelectedUrl(e.target.value)}
-          style={{ flex: 1, padding: '9px 14px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.1)', background: '#1A2620', color: selectedUrl ? '#fff' : 'rgba(255,255,255,0.3)', fontSize: 13, fontFamily: 'inherit', outline: 'none' }}>
-          <option value="">Pick a page...</option>
-          {pages.map(p => <option key={p.url} value={p.url}>{p.title ? p.title + ' — ' + p.url : p.url}</option>)}
-        </select>
-        {selectedUrl && (
-          <button onClick={generateAll} disabled={generating || pageIssues.length === 0}
-            style={{ padding: '9px 20px', borderRadius: 8, border: 'none', background: '#7FB897', color: '#0E1411', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', opacity: generating || pageIssues.length === 0 ? 0.6 : 1 }}>
-            {generating ? 'Generating...' : 'Generate with Aria'}
-          </button>
-        )}
-      </div>
-      {selectedUrl && !generating && pageIssues.length === 0 && (
-        <p style={{ padding: 20, textAlign: 'center', color: 'rgba(255,255,255,0.4)', fontSize: 13 }}>No missing title, meta, or schema issues on this page.</p>
-      )}
-      {Object.entries(results).map(([type, fix]) => (
-        <div key={type} style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 12, border: '1px solid rgba(255,255,255,0.07)', padding: '18px 20px' }}>
-          <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>{OPT_LABELS[type] ?? type}</div>
-          <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', marginBottom: 10 }}>
-            <pre style={{ flex: 1, margin: 0, fontSize: 12, color: '#7FB897', fontFamily: 'monospace', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{fix}</pre>
-            <CopyBtn text={fix} />
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      {issues.map(issue => {
+        const fix = issue.ai_fix_text || issue.suggested_fix
+        return (
+          <div key={issue.id} style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 12, border: '1px solid rgba(255,255,255,0.07)', padding: '16px 18px' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 10 }}>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: SEV_COLOR[issue.severity] ?? '#6b7280', flexShrink: 0, marginTop: 6 }} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ color: '#fff', fontSize: 13, fontWeight: 600 }}>{issue.title}</div>
+                <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 11, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{issue.page_url}</div>
+              </div>
+              <button onClick={() => markFixed(issue.id)} disabled={fixingId === issue.id}
+                style={{ padding: '5px 12px', borderRadius: 8, border: '1px solid rgba(127,184,151,0.3)', background: 'transparent', color: '#7FB897', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0, opacity: fixingId === issue.id ? 0.6 : 1 }}>
+                {fixingId === issue.id ? '…' : 'Mark as fixed'}
+              </button>
+            </div>
+            {fix ? (
+              <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', background: 'rgba(0,0,0,0.18)', borderRadius: 10, padding: '12px 14px' }}>
+                <pre style={{ flex: 1, margin: 0, fontSize: 12, color: '#7FB897', fontFamily: 'monospace', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{fix}</pre>
+                <CopyBtn text={fix} />
+              </div>
+            ) : (
+              <button onClick={() => generateFix(issue.id)} disabled={generatingId === issue.id}
+                style={{ padding: '6px 14px', borderRadius: 8, border: 'none', background: '#7FB897', color: '#0E1411', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', opacity: generatingId === issue.id ? 0.6 : 1 }}>
+                {generatingId === issue.id ? 'Generating…' : 'Generate fix with Aria'}
+              </button>
+            )}
           </div>
-          <p style={{ margin: 0, fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>{OPT_INSTRUCTIONS[type]}</p>
-        </div>
-      ))}
+        )
+      })}
     </div>
   )
 }
@@ -661,14 +523,6 @@ export default function SeoPage() {
             <button onClick={() => { setUrlInput(websiteUrl); setWebsiteUrl(''); setPreview(null) }}
               style={{ marginLeft: 'auto', fontSize: 11, color: 'rgba(255,255,255,0.35)', background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: '2px 6px', borderRadius: 4 }}>
               Change URL
-            </button>
-            <button onClick={() => {
-              if (!business) return
-              fetch('/api/seo/connect', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ businessId: business.id, websiteUrl, triggerCrawl: true }) })
-              setCrawlTriggered(true); setTimeout(() => setCrawlTriggered(false), 5000)
-            }}
-              style={{ fontSize: 11, color: '#7FB897', background: 'rgba(127,184,151,0.1)', border: '1px solid rgba(127,184,151,0.2)', cursor: 'pointer', fontFamily: 'inherit', padding: '4px 10px', borderRadius: 6 }}>
-              Run crawl now
             </button>
           </div>
         )}
