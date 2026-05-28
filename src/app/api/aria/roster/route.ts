@@ -43,15 +43,35 @@ async function _POST(req: Request) {
   const body = await req.json().catch(() => ({}));
   const weekStarting: string = body.week_starting ?? new Date(Date.now() - ((new Date().getDay() || 7) - 1) * 86400000).toISOString().split("T")[0];
 
-  // Load staff
-  const [{ data: staff }, { data: biz }, { data: recentSales }] = await Promise.all([
-    supabase.from("pos_users").select("id,name,role,hourly_rate_cents,max_hours_per_week,availability").eq("business_id", bid).eq("is_active", true),
+  // Load the management team from staff_members (NOT pos_users — that's only the
+  // in-POS register logins, which is usually just the owner). Availability lives
+  // in staff_availability, joined in below.
+  const [{ data: staffRows }, { data: availRows }, { data: biz }, { data: recentSales }] = await Promise.all([
+    supabase.from("staff_members").select("id,name,first_name,last_name,position,employment_type,hourly_rate,base_rate_cents,pay_rate_cents").eq("business_id", bid).eq("status", "active"),
+    supabase.from("staff_availability").select("staff_member_id,day_of_week,specific_date,unavailable_from,unavailable_until,reason,is_recurring").eq("business_id", bid),
     supabase.from("businesses").select("name,industry").eq("id", bid).single(),
     supabase.from("pos_sales").select("total_amount,created_at").eq("business_id", bid).gte("created_at", new Date(Date.now() - 30 * 86400000).toISOString()).order("created_at", { ascending: false }).limit(500),
   ]);
 
-  if (!staff?.length) {
-    return NextResponse.json({ error: "No staff found. Add staff in Settings > Staff PINs first." }, { status: 400 });
+  const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const availByStaff = new Map<string, string[]>();
+  for (const a of availRows ?? []) {
+    const arr = availByStaff.get(a.staff_member_id as string) ?? [];
+    const day = a.day_of_week != null ? DOW[a.day_of_week as number] : (a.specific_date ?? "a date");
+    const window = a.unavailable_from && a.unavailable_until ? `${a.unavailable_from}–${a.unavailable_until}` : "all day";
+    arr.push(`${day} unavailable ${window}${a.reason ? ` (${a.reason})` : ""}`);
+    availByStaff.set(a.staff_member_id as string, arr);
+  }
+
+  // Normalise to a stable shape for the prompt + fallback.
+  const staff = (staffRows ?? []).map(s => {
+    const name = (s.name && String(s.name).trim()) || [s.first_name, s.last_name].filter(Boolean).join(" ").trim() || "Staff";
+    const rateCents = s.hourly_rate ? Math.round(Number(s.hourly_rate) * 100) : (s.base_rate_cents ?? s.pay_rate_cents ?? 2500);
+    return { id: s.id as string, name, role: (s.position as string) ?? "Staff", employment_type: (s.employment_type as string) ?? "casual", rate_cents: rateCents, availability: availByStaff.get(s.id as string) ?? [] };
+  });
+
+  if (!staff.length) {
+    return NextResponse.json({ error: "No staff found. Add your team in Dashboard > Staff first." }, { status: 400 });
   }
 
   // Sales by day-of-week
@@ -65,8 +85,8 @@ async function _POST(req: Request) {
 Business: ${biz?.name} (${biz?.industry ?? "retail"})
 Week starting: ${weekStarting}
 
-Staff available:
-${(staff ?? []).map(s => `- ${s.name} (${s.role}), max ${s.max_hours_per_week ?? 40}h/week, $${((s.hourly_rate_cents ?? 2500) / 100).toFixed(2)}/hr`).join("\n")}
+Staff available (schedule ALL of these unless availability/compliance prevents it):
+${staff.map(s => `- ${s.name} (${s.role}, ${s.employment_type}), $${(s.rate_cents / 100).toFixed(2)}/hr${s.availability.length ? `; unavailable: ${s.availability.join("; ")}` : "; no availability constraints recorded"}`).join("\n")}
 
 Recent daily revenue averages (0=Sun,1=Mon,...6=Sat):
 ${Object.entries(dayTotals).map(([d, t]) => `Day ${d}: A$${(t / 4).toFixed(0)} avg`).join(", ")}
@@ -77,10 +97,11 @@ ${Object.entries(dayTotals).map(([d, t]) => `Day ${d}: A$${(t / 4).toFixed(0)} a
 Rules (Australian Fair Work):
 - Max 10 hours per shift
 - Break of 30 min required for shifts > 5 hours
-- Max hours/week per person as specified
+- Respect each person's recorded unavailability
 - Minimum 2 staff when open (Mon-Sat: 8am-6pm, Sun: 9am-5pm)
 - Busier days (Fri/Sat) need more staff
-- Store closed if no revenue pattern for that day
+- Schedule the WHOLE team across the week — don't leave staff unscheduled without saying why
+- If you recommend NOT opening a day (e.g. no revenue pattern), DO NOT leave it silently empty: state it explicitly, e.g. "Aria recommends closing Mon & Tue — near-zero revenue last 4 weeks" in BOTH "reasoning" and "warnings". Closed days must be a visible decision, never an accident.
 
 Return ONLY a valid JSON object with this exact structure:
 {
@@ -131,12 +152,12 @@ Return ONLY a valid JSON object with this exact structure:
       d.setDate(d.getDate() + i);
       return d.toISOString().split("T")[0];
     });
-    for (const s of (staff ?? [])) {
+    for (const s of staff) {
       for (const day of days.slice(0, 5)) { // Mon-Fri
-        const rate = (s.hourly_rate_cents ?? 2500) / 100;
-        shifts.push({ staff_id: s.id, staff_name: s.name, date: day, start_time: "09:00", end_time: "17:00", break_minutes: 30, role: s.role, hours: 7.5, cost_cents: Math.round(rate * 7.5 * 100) });
+        const costCents = Math.round((s.rate_cents / 100) * 7.5 * 100);
+        shifts.push({ staff_id: s.id, staff_name: s.name, date: day, start_time: "09:00", end_time: "17:00", break_minutes: 30, role: s.role, hours: 7.5, cost_cents: costCents });
         totalHours += 7.5;
-        totalCostCents += Math.round(rate * 7.5 * 100);
+        totalCostCents += costCents;
       }
     }
     reasoning = "Auto-generated fallback roster (Mon-Fri 9am-5pm). Configure AI for smarter scheduling.";
