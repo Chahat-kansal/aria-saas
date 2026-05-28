@@ -46,12 +46,18 @@ async function _POST(req: Request) {
   // Load the management team from staff_members (NOT pos_users — that's only the
   // in-POS register logins, which is usually just the owner). Availability lives
   // in staff_availability, joined in below.
-  const [{ data: staffRows }, { data: availRows }, { data: biz }, { data: recentSales }] = await Promise.all([
+  const [{ data: staffRows }, { data: availRows }, { data: biz }, { data: recentSales }, { data: firstSaleRows }] = await Promise.all([
     supabase.from("staff_members").select("id,name,first_name,last_name,position,employment_type,hourly_rate,base_rate_cents,pay_rate_cents").eq("business_id", bid).eq("status", "active"),
     supabase.from("staff_availability").select("staff_member_id,day_of_week,specific_date,unavailable_from,unavailable_until,reason,is_recurring").eq("business_id", bid),
     supabase.from("businesses").select("name,industry").eq("id", bid).single(),
     supabase.from("pos_sales").select("total_amount,created_at").eq("business_id", bid).gte("created_at", new Date(Date.now() - 30 * 86400000).toISOString()).order("created_at", { ascending: false }).limit(500),
+    supabase.from("pos_sales").select("created_at").eq("business_id", bid).order("created_at", { ascending: true }).limit(1),
   ]);
+
+  // Confidence gate: closure/quiet-day recommendations require at least 4 weeks of
+  // trading history. Below that, low revenue is just "new business", not a quiet day.
+  const firstSaleAt = (firstSaleRows ?? [])[0]?.created_at as string | undefined;
+  const hasFourWeeksData = !!firstSaleAt && (Date.now() - new Date(firstSaleAt).getTime()) >= 28 * 86400000;
 
   const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   const availByStaff = new Map<string, string[]>();
@@ -101,7 +107,10 @@ Rules (Australian Fair Work):
 - Minimum 2 staff when open (Mon-Sat: 8am-6pm, Sun: 9am-5pm)
 - Busier days (Fri/Sat) need more staff
 - Schedule the WHOLE team across the week — don't leave staff unscheduled without saying why
-- If you recommend NOT opening a day (e.g. no revenue pattern), DO NOT leave it silently empty: state it explicitly, e.g. "Aria recommends closing Mon & Tue — near-zero revenue last 4 weeks" in BOTH "reasoning" and "warnings". Closed days must be a visible decision, never an accident.
+- NEVER recommend closing more than 2 days per week. Real businesses cannot shut 3+ days a week — that scares owners away from the feature.
+- If revenue is genuinely too low to staff every open day, REDUCE HOURS on the quiet days (e.g. open 10am–3pm with minimal cover), do NOT close the day.
+- If you do close a day (max 2), state it explicitly in BOTH "reasoning" and "warnings", e.g. "Aria recommends closing Mon — near-zero revenue last 4 weeks". Closed days must be a visible decision, never an accident.${hasFourWeeksData ? '' : `
+- IMPORTANT: this business has LESS THAN 4 WEEKS of trading history, so low revenue does NOT mean a day is quiet — there simply isn't enough data. Do NOT close any days and do NOT cut hours based on revenue. Schedule the team across all 7 open days evenly.`}
 
 Return ONLY a valid JSON object with this exact structure:
 {
@@ -128,6 +137,7 @@ Return ONLY a valid JSON object with this exact structure:
   let reasoning = "Roster generated based on sales patterns and staff availability.";
   let totalHours = 0;
   let totalCostCents = 0;
+  let warnings: string[] = [];
 
   try {
     const resp = await trackAICall({ route: 'aria/roster', model: 'claude-sonnet-4-5-20250929', businessId: undefined, purpose: 'roster-optimization' }, () => anthropic.messages.create({
@@ -138,11 +148,12 @@ Return ONLY a valid JSON object with this exact structure:
       system: systemPrompt,
     }));
     const text = ((resp.content[0] as { type: string; text: string }).text ?? "").trim();
-    const parsed = parseLLMJsonOr<{ shifts?: unknown[]; reasoning?: string; total_hours?: number; total_cost_cents?: number }>(
+    const parsed = parseLLMJsonOr<{ shifts?: unknown[]; reasoning?: string; warnings?: string[]; total_hours?: number; total_cost_cents?: number }>(
       text, {}, 'roster'
     );
     shifts = parsed.shifts ?? [];
     reasoning = parsed.reasoning ?? reasoning;
+    warnings = Array.isArray(parsed.warnings) ? parsed.warnings : [];
     totalHours = parsed.total_hours ?? shifts.reduce((s: number, sh: unknown) => s + ((sh as {hours?: number}).hours ?? 0), 0);
     totalCostCents = parsed.total_cost_cents ?? shifts.reduce((s: number, sh: unknown) => s + ((sh as {cost_cents?: number}).cost_cents ?? 0), 0);
   } catch (e) {
@@ -163,6 +174,45 @@ Return ONLY a valid JSON object with this exact structure:
     reasoning = "Auto-generated fallback roster (Mon-Fri 9am-5pm). Configure AI for smarter scheduling.";
   }
 
+  // ── Guard rail: never close more than 2 days/week (0 if <4wk data). ──────────
+  // If the AI (or fallback) left more days empty than allowed, reopen the excess
+  // on REDUCED HOURS (10am–3pm, minimal cover) instead of closing them.
+  const weekDates = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(weekStarting); d.setDate(d.getDate() + i);
+    return d.toISOString().split("T")[0];
+  });
+  const dowOf = (dateStr: string) => new Date(dateStr + "T12:00:00").getDay();
+  const availableOn = (s: typeof staff[number], dateStr: string) => {
+    const dl = DOW[dowOf(dateStr)];
+    return !s.availability.some(a => a.startsWith(dl) && a.includes("all day"));
+  };
+  const scheduledDates = new Set((shifts as Array<{ date?: string }>).map(sh => sh.date).filter(Boolean));
+  const closedDays = weekDates.filter(d => !scheduledDates.has(d));
+  const maxClosed = hasFourWeeksData ? 2 : 0;
+
+  if (closedDays.length > maxClosed) {
+    // Keep the lowest-revenue days closed (up to the cap); reopen the rest.
+    const revOf = (d: string) => dayTotals[dowOf(d)] ?? 0;
+    const keepClosed = new Set([...closedDays].sort((a, b) => revOf(a) - revOf(b)).slice(0, maxClosed));
+    const toReopen = closedDays.filter(d => !keepClosed.has(d));
+    const RH = { start: "10:00", end: "15:00", hours: 5, break_minutes: 0 };
+    for (const day of toReopen) {
+      const avail = staff.filter(s => availableOn(s, day));
+      const pick = (avail.length ? avail : staff).slice(0, 2);
+      for (const s of pick) {
+        const costCents = Math.round((s.rate_cents / 100) * RH.hours * 100);
+        shifts.push({ staff_id: s.id, staff_name: s.name, date: day, start_time: RH.start, end_time: RH.end, break_minutes: RH.break_minutes, role: s.role, hours: RH.hours, cost_cents: costCents });
+        totalHours += RH.hours;
+        totalCostCents += costCents;
+      }
+    }
+    const note = hasFourWeeksData
+      ? `Aria limits closures to 2 days/week — reopened ${toReopen.length} day(s) on reduced hours (10am–3pm) instead of closing them.`
+      : `Less than 4 weeks of trading history — too early to call any day "quiet", so all 7 days are staffed (reduced hours on ${toReopen.length} day(s)).`;
+    warnings = [...warnings, note];
+    reasoning = `${reasoning} ${note}`.trim();
+  }
+
   // Save to DB
   const { data: roster, error: rErr } = await supabase.from("pos_roster_templates").insert({
     business_id: bid,
@@ -178,7 +228,7 @@ Return ONLY a valid JSON object with this exact structure:
   if (rErr?.code === "42P01") return NextResponse.json({ error: "Run migration 20260508000000_complete_features.sql in Supabase first" }, { status: 500 });
   if (rErr) return NextResponse.json({ error: rErr.message }, { status: 500 });
 
-  return NextResponse.json({ roster, shifts, reasoning, total_hours: totalHours, total_cost_cents: totalCostCents });
+  return NextResponse.json({ roster, shifts, reasoning, warnings, total_hours: totalHours, total_cost_cents: totalCostCents });
 }
 
 async function _PATCH(req: Request) {
