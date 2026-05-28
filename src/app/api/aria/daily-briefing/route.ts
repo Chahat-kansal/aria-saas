@@ -240,9 +240,26 @@ async function _POST(req: NextRequest) {
   const { getInvoiceStats, hasInvoiceSignal } = await import('@/lib/aria/invoice-intelligence');
   const invoiceStats = await getInvoiceStats(supabase, business_id);
 
+  // New bookings since yesterday + upcoming — public-form bookings must be visible.
+  const nowIso = new Date().toISOString();
+  const [{ data: newBookings }, { count: upcomingBookings }] = await Promise.all([
+    supabase.from('bookings').select('customer_name, booking_date, source')
+      .eq('business_id', business_id).gte('created_at', yesterdayStart.toISOString()).neq('status', 'cancelled'),
+    supabase.from('bookings').select('id', { count: 'exact', head: true })
+      .eq('business_id', business_id).gte('booking_date', nowIso).neq('status', 'cancelled'),
+  ]);
+  const newBookingList = newBookings ?? [];
+  const newFromPublic = newBookingList.filter(b => b.source && b.source !== 'manual').length;
+
   const context = {
     business_name: business.name,
     industry: business.industry,
+    bookings_status: {
+      new_since_yesterday: newBookingList.length,
+      new_from_public_form: newFromPublic,
+      upcoming_total: upcomingBookings ?? 0,
+      newest: newBookingList.slice(0, 3).map(b => ({ customer: b.customer_name, date: b.booking_date, source: b.source })),
+    },
     invoice_status: {
       outstanding_count: invoiceStats.pendingCount,
       outstanding_total_aud: invoiceStats.pendingTotal.toFixed(2),
@@ -329,7 +346,8 @@ async function _POST(req: NextRequest) {
     (staffRtwUnverified.count ?? 0) > 0 ||
     Number(warehouseCtx.expiring_lots_30d ?? 0) > 0 ||
     Number(warehouseCtx.pending_pos ?? 0) > 0 ||
-    hasInvoiceSignal(invoiceStats);
+    hasInvoiceSignal(invoiceStats) ||
+    newBookingList.length > 0;
 
   if (!hasActionableData) {
     await supabase.from('daily_briefings').upsert({
@@ -390,7 +408,7 @@ Business: ${business.name as string} (${business.industry as string ?? 'retail'}
 Business data:
 ${dataStr.slice(0, 3000)}
 
-Generate 3-5 actionable briefing items from this real data. If invoice_status shows overdue invoices, you MUST include a high-priority "finance" item naming the top_overdue customer, amount and days late (e.g. "$X overdue from {customer} — {days} days late, chase today"). JSON array only.`
+Generate 3-5 actionable briefing items from this real data. If invoice_status shows overdue invoices, you MUST include a high-priority "finance" item naming the top_overdue customer, amount and days late (e.g. "$X overdue from {customer} — {days} days late, chase today"). If bookings_status.new_since_yesterday > 0, include a "customers" item noting how many new bookings came in (call out new_from_public_form separately if any). JSON array only.`
         }]
       })
     )

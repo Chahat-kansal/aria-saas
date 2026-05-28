@@ -29,7 +29,7 @@ export async function POST(req: Request, { params }: Params) {
     business_id, service_id: service_id || null, customer_name,
     customer_email: customer_email || null, customer_phone: customer_phone || null,
     booking_date, booking_time: booking_time || null, party_size: party_size || 1,
-    status: 'confirmed', source: 'online', notes: notes || null,
+    status: 'confirmed', source: 'public_form', notes: notes || null,
     confirmed_at: new Date().toISOString(),
   }).select().single()
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })

@@ -96,7 +96,7 @@ export async function POST(req: Request) {
     customer_phone: customer_phone || null,
     booking_date, booking_time: booking_time || null,
     party_size: party_size || 1, duration_minutes,
-    notes: notes || null, status: 'confirmed', source: 'online',
+    notes: notes || null, status: 'confirmed', source: 'public_form',
     confirmed_at: new Date().toISOString(),
   }).select().single()
 
