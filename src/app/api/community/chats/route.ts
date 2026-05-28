@@ -6,6 +6,7 @@ import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { ensureCommunityMember, getCommunityMember } from '@/lib/community/session'
 import { checkPrivacyFull } from '@/lib/community/privacy-guard'
+import { checkAbuseFull, logMessage } from '@/lib/community/abuse-guard'
 
 interface ChatMessage {
   from: 'member' | 'owner'
@@ -64,12 +65,6 @@ export async function POST(req: Request) {
     const text = String(body.text).trim().slice(0, 1000)
     if (!text) return NextResponse.json({ error: 'Message is empty.' }, { status: 400 })
 
-    // Privacy guard — BLOCK before delivery, regex first then optional Haiku
-    const guard = await checkPrivacyFull(text)
-    if (guard.blocked) {
-      return NextResponse.json({ blocked: true, reason: guard.reason }, { status: 400 })
-    }
-
     // Resolve listing → business
     const { data: listing } = await supabaseAdmin.from('marketplace_listings')
       .select('id, business_id, status').eq('id', body.listing_id).maybeSingle()
@@ -78,6 +73,24 @@ export async function POST(req: Request) {
 
     // Ensure member exists (anonymous — no PII captured)
     const member = await ensureCommunityMember()
+
+    // Abuse + spam guard (block-list → rate-limit → profanity/threat → history-gated Haiku)
+    const abuse = await checkAbuseFull(listing.business_id, member.session_token, text)
+    if (abuse.blocked) {
+      await logMessage(listing.business_id, member.session_token, !!abuse.flagged)
+      if (abuse.rateLimited) return NextResponse.json({ blocked: true, reason: abuse.reason, retry_after: abuse.retryAfter }, { status: 429 })
+      return NextResponse.json({ blocked: true, reason: abuse.reason }, { status: 403 })
+    }
+
+    // Privacy guard — BLOCK personal details before delivery, regex first then optional Haiku
+    const guard = await checkPrivacyFull(text)
+    if (guard.blocked) {
+      await logMessage(listing.business_id, member.session_token, false)
+      return NextResponse.json({ blocked: true, reason: guard.reason }, { status: 400 })
+    }
+
+    // Clean message — record for rate-limit ledger
+    await logMessage(listing.business_id, member.session_token, false)
 
     const now = new Date().toISOString()
     const newMsg: ChatMessage = { from: 'member', text, ts: now }

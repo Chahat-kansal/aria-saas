@@ -217,7 +217,7 @@ export default function ListingDetailPage() {
           style={{
             marginTop: 16, width: '100%',
             padding: '14px', borderRadius: RADIUS.pill,
-            background: C.accent, color: '#0d0d14',
+            background: C.accent, color: C.ink,
             border: 'none', fontSize: 15, fontWeight: 700,
             cursor: 'pointer', fontFamily: 'inherit',
             minHeight: 48,
@@ -285,7 +285,7 @@ export default function ListingDetailPage() {
                     padding: '10px 14px',
                     borderRadius: m.from === 'member' ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
                     background: m.from === 'member' ? C.accent : C.surface,
-                    color: m.from === 'member' ? '#0d0d14' : C.text,
+                    color: m.from === 'member' ? C.ink : C.text,
                     fontSize: 14, lineHeight: 1.4,
                     border: m.from === 'member' ? 'none' : `1.5px solid ${C.border}`,
                     whiteSpace: 'pre-wrap',
@@ -296,6 +296,22 @@ export default function ListingDetailPage() {
                 </div>
               ))}
               <div ref={messagesEndRef} />
+              {chatId && messages.length > 0 && (
+                <div style={{ textAlign: 'center', marginTop: 8 }}>
+                  <button
+                    onClick={async () => {
+                      if (!confirm('Report this conversation to keep the community safe?')) return
+                      await fetch('/api/community/report', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ message_id: chatId, business_id: listing.business_id, reason: 'reported from chat' }),
+                      }).catch(() => null)
+                      alert('Thanks — reported. We\'ll take a look.')
+                    }}
+                    style={{ background: 'transparent', border: 'none', color: C.textMuted, fontSize: 11, fontWeight: 600, cursor: 'pointer', textDecoration: 'underline', fontFamily: 'inherit' }}>
+                    report this conversation
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Blocked notice */}
@@ -324,7 +340,7 @@ export default function ListingDetailPage() {
               <button onClick={send} disabled={sending || !input.trim()}
                 style={{
                   width: 44, height: 44, borderRadius: '50%', border: 'none',
-                  background: C.accent, color: '#0d0d14',
+                  background: C.accent, color: C.ink,
                   cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
                   opacity: sending || !input.trim() ? 0.5 : 1,
                   flexShrink: 0,

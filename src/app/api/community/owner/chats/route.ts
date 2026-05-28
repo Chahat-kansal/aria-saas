@@ -7,6 +7,7 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { checkPrivacyFull } from '@/lib/community/privacy-guard'
+import { checkAbuseRegex } from '@/lib/community/abuse-guard'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
   const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
@@ -59,7 +60,9 @@ async function _POST(req: Request) {
   const text = String(body.text).trim().slice(0, 1000)
   if (!text) return NextResponse.json({ error: 'Message is empty.' }, { status: 400 })
 
-  // Privacy guard applies to owner replies too (per the prompt — both directions)
+  // Both guards apply to owner replies too (per the prompt — both directions)
+  const abuse = checkAbuseRegex(text)
+  if (abuse.blocked) return NextResponse.json({ blocked: true, reason: abuse.reason }, { status: 403 })
   const guard = await checkPrivacyFull(text)
   if (guard.blocked) return NextResponse.json({ blocked: true, reason: guard.reason }, { status: 400 })
 

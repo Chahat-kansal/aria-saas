@@ -470,6 +470,17 @@ export default function MarketplaceOwnerPage() {
                 <p style={{ fontSize: 13, fontWeight: 700, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{openChat.marketplace_listings?.title}</p>
                 <p style={{ fontSize: 11, color: C.dim, margin: '2px 0 0' }}>From {openChat.community_members?.nickname ?? 'Anonymous'}</p>
               </div>
+              <button onClick={async () => {
+                if (!confirm('Block this customer from messaging your shop? They can still message other shops.')) return
+                await fetch('/api/community/owner/block', {
+                  method: 'POST', headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ chat_id: openChat.id, reason: 'blocked from inbox' }),
+                }).catch(() => null)
+                setOpenChat(null)
+              }}
+                style={{ background: 'transparent', border: '1px solid rgba(239,68,68,0.3)', color: C.red, padding: '6px 10px', borderRadius: 7, cursor: 'pointer', fontSize: 11, fontWeight: 600, fontFamily: FONT }}>
+                Block
+              </button>
               <button onClick={() => setOpenChat(null)} style={{ background: 'transparent', border: 'none', color: C.dim, padding: 6, cursor: 'pointer' }}>
                 <X size={18} />
               </button>
