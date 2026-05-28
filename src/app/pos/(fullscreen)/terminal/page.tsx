@@ -53,6 +53,7 @@ import type { DiscountBarCartItem } from '@/components/pos/DiscountBar';
 import { useScanner } from '@/lib/hardware/scanner';
 import type { AppliedDiscount } from '@/lib/pos/discount-engine';
 import CartLineMenu from '@/components/pos/CartLineMenu';
+import { ScanGoRedeemModal } from '@/components/pos/ScanGoRedeemModal';
 import { POSAriaInsight } from '@/components/pos/POSAriaInsight';
 
 /* ─── Types ─────────────────────────────────────────────────────── */
@@ -204,6 +205,7 @@ export default function TerminalPage() {
 
   /* ── Cart ─────────────────────────────────────────────────────── */
   const [cart,           setCart]           = useState<CartItem[]>([]);
+  const [scanGoOpen,     setScanGoOpen]     = useState(false);
 
   // Multi-business killer feature: INSTANT in-place re-skin on business switch.
   // No window.location.reload() — we clear the cart, wipe all venue-scoped
@@ -4188,6 +4190,25 @@ export default function TerminalPage() {
           <path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3z"/>
         </svg>
       </Link>
+
+      {/* Scan-and-Go: redeem a customer's self-checkout cart */}
+      <button onClick={() => setScanGoOpen(true)} title="Scan customer cart"
+        style={{ position: 'fixed', bottom: 18, left: 18, zIndex: 50, height: 44, padding: '0 16px', borderRadius: 12, border: '1.5px solid #0a0a0a', background: '#d9f54e', color: '#0a0a0a', fontSize: 13, fontWeight: 800, cursor: 'pointer', boxShadow: '3px 3px 0 #0a0a0a' }}>
+        🛒 Scan customer cart
+      </button>
+      <ScanGoRedeemModal
+        open={scanGoOpen}
+        onClose={() => setScanGoOpen(false)}
+        onRedeemed={async ({ token, items, idConfirmed }) => {
+          for (const it of items) {
+            const p = products.find(pp => pp.id === it.product_id);
+            if (p) addToCartDirect(p, it.qty);
+          }
+          try {
+            await fetch('/api/pos/scan-and-go/complete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token, id_confirmed: idConfirmed }) });
+          } catch { /* non-fatal */ }
+        }}
+      />
     </div>
   );
 }
