@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useBusinessContext } from '@/components/providers/BusinessProvider'
 import { TIER_BADGE, type LoyaltyTier } from '@/lib/loyalty'
 import { TiersTab, ReferralsTab, RewardRulesTab, RevenueForecastCard, BrandingSection } from '@/components/dashboard/LoyaltyExtensions'
-import { AriaSays } from '@/components/dashboard/AriaSays'
+import { AriaSays, invalidateAriaInsight } from '@/components/dashboard/AriaSays'
 
 type Config = { program_type: string; points_per_dollar: number; point_value_cents: number; stamps_to_reward: number; stamp_reward_text: string; birthday_reward_text: string | null; winback_after_days: number; public_enrol_enabled?: boolean }
 type Stats = { enrolled: number; active_this_month: number; points_liability_dollars: number; redemptions_this_month: number; avg_points_per_customer: number }
@@ -70,7 +70,7 @@ export default function LoyaltyPage() {
       body: JSON.stringify(draft),
     })
     const j = await r.json()
-    if (r.ok) { setConfig(draft); setSaveMsg('Saved') }
+    if (r.ok) { setConfig(draft); setSaveMsg('Saved'); invalidateAriaInsight(business?.id, 'loyalty') }
     else setSaveMsg(j.error ?? 'Failed')
     setSaving(false)
     setTimeout(() => setSaveMsg(''), 2000)

@@ -5,7 +5,7 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recha
 import { useBusinessContext } from '@/components/providers/BusinessProvider'
 import { SEGMENT_COLORS } from '@/lib/customer-segments'
 import { calcRFM, TIER_COLOR, type RfmTier } from '@/lib/rfm'
-import { AriaSays } from '@/components/dashboard/AriaSays'
+import { AriaSays, invalidateAriaInsight } from '@/components/dashboard/AriaSays'
 
 const RFM_LABEL: Record<RfmTier, string> = { bronze: 'Bronze', silver: 'Silver', gold: 'Gold' }
 
@@ -152,11 +152,11 @@ export default function CustomersPage() {
       const res = await fetch('/api/customers/' + selected.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) })
       if (res.ok) { const d = await res.json(); setSelected(d.customer) }
     }
-    setFormMode(null); setFormSaving(false); load()
+    setFormMode(null); setFormSaving(false); load(); invalidateAriaInsight(bid, 'customers')
   }
   const archiveCustomer = async (id: string) => {
     await fetch('/api/customers/' + id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ archived: true }) })
-    setSelected(null); load()
+    setSelected(null); load(); invalidateAriaInsight(bid, 'customers')
   }
   const handleFile = (file: File) => {
     Papa.parse<Record<string, string>>(file, {
@@ -175,7 +175,7 @@ export default function CustomersPage() {
     setImportLoading(true)
     const r = await fetch('/api/customers/import-run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jobId: importJobId, businessId: bid, mapping, rows: csvRows }) })
     const d = await r.json()
-    setImportResult(d); setImportLoading(false); setImportStep(3); load()
+    setImportResult(d); setImportLoading(false); setImportStep(3); load(); invalidateAriaInsight(bid, 'customers')
   }
   const summarise = async () => {
     if (!selected || !bid) return
@@ -195,7 +195,7 @@ export default function CustomersPage() {
   }
   const markLapsed = async () => {
     await Promise.all([...checkedIds].map(id => fetch('/api/customers/' + id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ customer_segment: 'hibernating' }) })))
-    setCheckedIds(new Set()); load()
+    setCheckedIds(new Set()); load(); invalidateAriaInsight(bid, 'customers')
   }
 
   const filteredBase = customers.filter(c => matchSegTab(c, activeSegment))

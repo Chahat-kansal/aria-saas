@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 
 type Priority = 'info' | 'warning' | 'critical'
@@ -8,6 +8,20 @@ interface InsightResult { insight: string | null; priority?: Priority; link?: st
 // Per-browser cache: 1 hour per business+page
 const CACHE_KEY = (bid: string, page: string) => `aria-says:${bid}:${page}`
 const CACHE_TTL_MS = 60 * 60 * 1000
+const REFRESH_EVENT = 'aria-says:refresh'
+
+// Clears the cached insight for a page and asks any mounted AriaSays banner for
+// that page to regenerate. Call after a data mutation (invoice paid, parcel
+// delivered, customer added…) so the banner stops showing pre-mutation numbers.
+export function invalidateAriaInsight(businessId: string | null | undefined, page: string) {
+  try {
+    sessionStorage.removeItem(CACHE_KEY(businessId ?? 'self', page))
+    if (businessId) sessionStorage.removeItem(CACHE_KEY('self', page))
+  } catch { /* non-fatal */ }
+  try {
+    window.dispatchEvent(new CustomEvent(REFRESH_EVENT, { detail: { page } }))
+  } catch { /* non-fatal */ }
+}
 
 const COLORS: Record<Priority, { bg: string; border: string; text: string; dim: string }> = {
   critical: { bg: 'rgba(239,68,68,0.06)', border: 'rgba(239,68,68,0.25)', text: '#F87171', dim: 'rgba(248,113,113,0.7)' },
@@ -29,27 +43,29 @@ export function AriaSays({ businessId, page, pageData, dismissable = true }: Pro
   const [dismissed, setDismissed] = useState(false)
   const [error, setError] = useState(false)
 
-  useEffect(() => {
+  const load = useCallback((force: boolean) => {
     let cancelled = false
     const cacheBid = businessId ?? 'self'
 
-    // Cache hit?
-    try {
-      const raw = sessionStorage.getItem(CACHE_KEY(cacheBid, page))
-      if (raw) {
-        const cached = JSON.parse(raw) as { at: number; data: InsightResult }
-        if (Date.now() - cached.at < CACHE_TTL_MS) {
-          setResult(cached.data); setLoading(false); return
+    // Cache hit? (skipped when forced after a mutation)
+    if (!force) {
+      try {
+        const raw = sessionStorage.getItem(CACHE_KEY(cacheBid, page))
+        if (raw) {
+          const cached = JSON.parse(raw) as { at: number; data: InsightResult }
+          if (Date.now() - cached.at < CACHE_TTL_MS) {
+            setResult(cached.data); setLoading(false); return () => { cancelled = true }
+          }
         }
-      }
-    } catch { /* fall through */ }
+      } catch { /* fall through */ }
+    }
 
     setLoading(true); setError(false)
-    fetch('/api/aria/page-insight', {
+    fetch(force ? '/api/aria/page-insight?fresh=true' : '/api/aria/page-insight', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       // When businessId is omitted, the endpoint resolves it from the authenticated user
-      body: JSON.stringify({ business_id: businessId ?? undefined, page, page_data: pageData ?? null }),
+      body: JSON.stringify({ business_id: businessId ?? undefined, page, page_data: pageData ?? null, fresh: force }),
     })
       .then(r => r.ok ? r.json() : Promise.reject(r.status))
       .then((d: InsightResult) => {
@@ -62,6 +78,18 @@ export function AriaSays({ businessId, page, pageData, dismissable = true }: Pro
 
     return () => { cancelled = true }
   }, [businessId, page, pageData])
+
+  useEffect(() => load(false), [load])
+
+  // Regenerate when a mutation on this page fires invalidateAriaInsight().
+  useEffect(() => {
+    function onRefresh(e: Event) {
+      const detail = (e as CustomEvent).detail as { page?: string } | undefined
+      if (!detail || detail.page === page) load(true)
+    }
+    window.addEventListener(REFRESH_EVENT, onRefresh)
+    return () => window.removeEventListener(REFRESH_EVENT, onRefresh)
+  }, [load, page])
 
   if (dismissed) return null
   if (error) return null

@@ -1,7 +1,7 @@
 'use client'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useBusinessContext } from '@/components/providers/BusinessProvider'
-import { AriaSays } from '@/components/dashboard/AriaSays'
+import { AriaSays, invalidateAriaInsight } from '@/components/dashboard/AriaSays'
 
 interface Service { id: string; name: string; description: string | null; unit_price: number; gst_applicable: boolean; recurring: boolean; active: boolean }
 interface BLine { description: string; quantity: number; unit_price: number; gst_applicable: boolean }
@@ -99,7 +99,7 @@ export default function InvoicesPage() {
   async function markPaid() {
     if (!selected) return
     const r = await fetch('/api/invoices/' + selected.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'paid', paid_at: new Date().toISOString() }) }).then(x => x.json())
-    if (r.invoice) { setSelected(r.invoice); fetchInvoices() }
+    if (r.invoice) { setSelected(r.invoice); fetchInvoices(); invalidateAriaInsight(bid, 'invoices') }
   }
 
   async function sendInvoice() {
@@ -107,7 +107,7 @@ export default function InvoicesPage() {
     setSending(true)
     const r = await fetch('/api/invoices/send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ invoiceId: selected.id, sendMethod }) }).then(x => x.json())
     setSending(false)
-    if (r.invoice) { setSelected(r.invoice); fetchInvoices() }
+    if (r.invoice) { setSelected(r.invoice); fetchInvoices(); invalidateAriaInsight(bid, 'invoices') }
     else alert(r.error ?? 'Send failed')
   }
 
@@ -168,7 +168,7 @@ export default function InvoicesPage() {
     setSaving(true)
     const r = await fetch('/api/invoices', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ business_id: bid, ...bForm, lines: bLines }) }).then(x => x.json())
     setSaving(false)
-    if (r.invoice) { setBuilding(false); setBForm({ bill_to_name: '', bill_to_email: '', due_date: '', notes: '' }); setBLines([{ ...EMPTY_LINE }]); setAriaText(''); fetchInvoices() }
+    if (r.invoice) { setBuilding(false); setBForm({ bill_to_name: '', bill_to_email: '', due_date: '', notes: '' }); setBLines([{ ...EMPTY_LINE }]); setAriaText(''); fetchInvoices(); invalidateAriaInsight(bid, 'invoices') }
     else alert(r.error ?? 'Save failed')
   }
 

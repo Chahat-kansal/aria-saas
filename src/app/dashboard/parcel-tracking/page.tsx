@@ -6,7 +6,7 @@ import {
   ArrowDownToLine, ArrowUpFromLine, Store, HelpCircle, X, AlertCircle, ChevronRight,
   type LucideIcon,
 } from 'lucide-react'
-import { AriaSays } from '@/components/dashboard/AriaSays'
+import { AriaSays, invalidateAriaInsight } from '@/components/dashboard/AriaSays'
 
 // ── Theme — CSS vars only ─────────────────────────────────────────────
 const C = {
@@ -167,6 +167,7 @@ export default function ParcelTrackingPage() {
     setShowAdd(false); setForm(emptyForm); setAdding(false)
     setNotice(d.warning ?? (d.tracking_live ? 'Parcel added — live tracking is on.' : ''))
     await load(); if (d.parcel) setSelected(d.parcel)
+    invalidateAriaInsight(null, 'delivery')
   }
 
   async function refresh(id: string) {
@@ -184,6 +185,7 @@ export default function ParcelTrackingPage() {
     const d = await res.json() as { parcel?: Parcel }
     if (d.parcel) { setParcels(ps => ps.map(p => p.id === id ? d.parcel! : p)); if (selected?.id === id) setSelected(d.parcel) }
     setSaving(false)
+    invalidateAriaInsight(null, 'delivery')
   }
 
   async function remove(id: string) {
@@ -191,6 +193,7 @@ export default function ParcelTrackingPage() {
     await fetch('/api/pos/parcel-tracking', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) })
     setParcels(ps => ps.filter(p => p.id !== id))
     if (selected?.id === id) setSelected(null)
+    invalidateAriaInsight(null, 'delivery')
   }
 
   async function runBulk() {
@@ -203,7 +206,7 @@ export default function ParcelTrackingPage() {
     if (rows.length === 0) { setBulkResult('No valid rows'); return }
     const res = await fetch('/api/parcel-tracking/bulk', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rows }) }).then(r => r.json()).catch(() => ({ error: 'Network error' }))
     if (res.error) setBulkResult(`Error: ${res.error}`)
-    else { setBulkResult(`Imported ${res.imported} parcels`); load() }
+    else { setBulkResult(`Imported ${res.imported} parcels`); load(); invalidateAriaInsight(null, 'delivery') }
   }
 
   async function predictDelivery(id: string) {
