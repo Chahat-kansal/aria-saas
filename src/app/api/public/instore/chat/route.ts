@@ -126,6 +126,7 @@ export async function POST(req: Request) {
       greeting,
       'You are speaking to a customer who is IN the shop right now, on a tablet or their phone.',
       'Keep replies SHORT — a few sentences max. People are standing in a shop, not reading an essay.',
+      'FORMAT: reply in plain conversational prose. NEVER use markdown — no **asterisks**, no # headings, no `backticks`, no "-" bullet lists. When you name products we show them as cards automatically, so list them naturally in a sentence ("the piccolo, the latte and the cold brew"), not as a bulleted/bolded list.',
       'NEVER sarcastic. NEVER make the customer feel dumb. If they ask something silly, play along kindly.',
       'When you recommend, recommend with ENTHUSIASM — like a staff member who genuinely loves the product.',
       '',
@@ -315,6 +316,33 @@ export async function POST(req: Request) {
             } catch { /* non-fatal */ }
           }
 
+          // Structured menu block — when the customer asks to see the menu/list,
+          // build it deterministically from the real catalogue (grouped by category)
+          // so it renders as a clean menu card instead of relying on the LLM to format.
+          type MenuItem = { name: string; price: string; description?: string }
+          type Block = { type: 'menu_list'; title: string; items: MenuItem[] }
+          let blocks: Block[] = []
+          const isMenuQuery = /\b(menu|what (do|do you|'?s)( you)? (have|sell|offer|stock|got|serve)|what'?s on|full (list|menu)|see (the )?menu|browse|everything you)\b/i.test(message)
+          if (isMenuQuery) {
+            const byCat = new Map<string, MenuItem[]>()
+            for (const p of products) {
+              const qty = Number(p.stock_quantity ?? 0)
+              const tracked = p.track_stock !== false
+              if (tracked && qty <= 0) continue
+              const cat = p.pos_categories?.name ?? 'Menu'
+              if (!byCat.has(cat)) byCat.set(cat, [])
+              byCat.get(cat)!.push({
+                name: p.name,
+                price: p.price != null ? '$' + Number(p.price).toFixed(2) : '',
+                description: p.description ?? undefined,
+              })
+            }
+            blocks = [...byCat.entries()]
+              .map(([title, items]) => ({ type: 'menu_list' as const, title, items: items.slice(0, 15) }))
+              .filter(b => b.items.length)
+              .slice(0, 6)
+          }
+
           const wantsRecipe = config?.recipe_suggestions !== false && /recipe|what (can|could) i (make|cook|do)|dinner ideas?|lunch ideas?|breakfast ideas?|cook(ing)? with/i.test(message)
 
           const suggestLoyalty = (config?.loyalty_enabled !== false)
@@ -391,6 +419,7 @@ export async function POST(req: Request) {
             suggest_loyalty_signup: suggestLoyalty,
             visitor_id: visitor_id ?? null,
             full_reply: replyText,
+            blocks,
           })))
           controller.enqueue(encoder.encode('data: [DONE]\n\n'))
         } catch (err) {

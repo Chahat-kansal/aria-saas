@@ -4,9 +4,21 @@ import { useParams } from 'next/navigation'
 import { AdRotator } from '@/components/ads/AdRotator'
 import { BundlesShelf } from '@/components/bundles/BundlesShelf'
 
-interface Message { role: 'user' | 'assistant'; content: string; cards?: ProductCard[]; upsell?: ProductCard | null; recipe?: RecipeCard | null }
+interface Message { role: 'user' | 'assistant'; content: string; cards?: ProductCard[]; upsell?: ProductCard | null; recipe?: RecipeCard | null; blocks?: MenuBlock[] }
 interface ProductCard { id: string; name: string; price: number | null; stock: number; image_url: string | null }
 interface RecipeCard { recipe_name: string; ingredients: string[]; one_liner: string; matched_products: Array<{ id: string; name: string; price: number | null }> }
+interface MenuBlock { type: 'menu_list'; title: string; items: Array<{ name: string; price: string; description?: string }> }
+
+// Safety net: strip basic markdown the model may emit despite the system prompt,
+// so the kiosk never shows literal **asterisks** or # to a customer.
+function stripBasicMarkdown(s: string): string {
+  return s
+    .replace(/\*\*(.+?)\*\*/g, '$1')
+    .replace(/\*(.+?)\*/g, '$1')
+    .replace(/^#+\s+/gm, '')
+    .replace(/^\s*[-•]\s+/gm, '')
+    .replace(/`([^`]+)`/g, '$1')
+}
 
 const IDLE_PROMPTS = [
   "Ask me anything — what's good today, what's in stock, gift ideas…",
@@ -179,6 +191,7 @@ export default function KioskClient() {
         suggest_recipe?: boolean
         suggest_loyalty_signup?: boolean
         full_reply?: string
+        blocks?: MenuBlock[]
       } = {}
 
       while (true) {
@@ -195,7 +208,7 @@ export default function KioskClient() {
           let evt: { type?: string; text?: string; message?: string;
             conversation_id?: string | null; product_cards?: ProductCard[];
             upsell?: ProductCard | null; suggest_recipe?: boolean;
-            suggest_loyalty_signup?: boolean; full_reply?: string } = {}
+            suggest_loyalty_signup?: boolean; full_reply?: string; blocks?: MenuBlock[] } = {}
           try { evt = JSON.parse(payload) } catch { continue }
           if (evt.type === 'token' && evt.text) {
             streamedReply += evt.text
@@ -245,6 +258,7 @@ export default function KioskClient() {
               cards: metadata.product_cards,
               upsell: metadata.upsell,
               recipe,
+              blocks: metadata.blocks,
             }
             break
           }
@@ -252,7 +266,7 @@ export default function KioskClient() {
         return next
       })
 
-      if (voiceEnabled && finalText) speak(finalText)
+      if (voiceEnabled && finalText) speak(stripBasicMarkdown(finalText))
       if (metadata.suggest_loyalty_signup) setShowSignup(true)
     } catch (e: unknown) {
       // Roll back the empty placeholder if the stream blew up before any tokens
@@ -402,9 +416,24 @@ export default function KioskClient() {
                 background: m.role === 'user' ? C.darkGreen : C.card,
                 color: m.role === 'user' ? '#fff' : C.text,
                 border: m.role === 'user' ? 'none' : '1px solid ' + C.border,
+                whiteSpace: 'pre-wrap',
               }}>
-                {m.content}
+                {m.role === 'assistant' ? stripBasicMarkdown(m.content) : m.content}
               </div>
+              {m.blocks && m.blocks.map((b, bi) => (
+                <div key={bi} style={{ marginTop: 10, background: C.card, border: '1px solid ' + C.border, borderRadius: 14, overflow: 'hidden' }}>
+                  <div style={{ padding: '10px 16px', fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.green, borderBottom: '1px solid ' + C.border }}>{b.title}</div>
+                  {b.items.map((it, ii) => (
+                    <div key={ii} style={{ padding: '11px 16px', borderBottom: ii < b.items.length - 1 ? '1px solid ' + C.border : 'none' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12 }}>
+                        <span style={{ fontSize: 15, fontWeight: 600, color: C.text }}>{it.name}</span>
+                        {it.price && <span style={{ fontSize: 14, fontWeight: 700, color: C.green, flexShrink: 0 }}>{it.price}</span>}
+                      </div>
+                      {it.description && <div style={{ fontSize: 12, color: C.muted, marginTop: 3 }}>{it.description}</div>}
+                    </div>
+                  ))}
+                </div>
+              ))}
               {m.cards && m.cards.length > 0 && (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 10, marginTop: 10 }}>
                   {m.cards.map(c => (
