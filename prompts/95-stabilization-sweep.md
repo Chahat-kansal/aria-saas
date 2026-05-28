@@ -156,6 +156,49 @@ For other industries: skip - they shouldn't have drink modifiers.
 
 **Commit**: "fix(pos-modifiers): backfill modifier groups on all café drink products"
 
+
+
+### TASK 14 - Competitor Intelligence: scan writes to one table, page reads from another (CONFIRMED BUG)
+
+**Bug** (verified against live DB): When the owner clicks "Scan Area" on /dashboard/competitor-watch, the scan writes 4 rows to `aria_competitor_watches`. But the Competitor Intelligence overview page reads from `competitor_businesses` and `competitor_snapshots` - both empty. The "no competitor data yet" message is permanent because the page is reading the wrong tables.
+
+The same scan writes nothing to `competitor_snapshots`, `competitor_alerts`, or `aria_competitor_alerts` either - so neither the overview, prices, alerts, nor "manage watches" tab gets populated even though the scan "succeeded."
+
+**Fix**:
+1. Audit `src/app/dashboard/competitor-watch/page.tsx` - identify every table it queries.
+2. Audit the scan route at `/api/aria/competitor-scan` (or wherever the "Scan Area" button calls) - identify every table it writes to.
+3. Reconcile: the scan should populate THE SAME tables that the page reads from. Either rename one set to match the other, or write a small adapter so the scan output mirrors into both.
+4. Standardize on ONE set of tables going forward. The six competitor tables (aria_competitor_watches, aria_competitor_alerts, competitor_businesses, competitor_snapshots, competitor_alerts, competitor_price_cache) are obvious legacy debt - propose the cleanest consolidation in the commit message even if you don't refactor all six tables in this commit.
+5. Add real error handling: when the scan completes successfully but returns 0 watches found, surface that to the owner ("No competitors found within 5km - try expanding the radius") instead of silently leaving the page empty.
+
+**Commit**: "fix(competitor-watch): scan now writes to same tables the page reads from (was writing to aria_competitor_watches, page was reading competitor_businesses)"
+
+### TASK 15 - Weekly report generation failing 3 times (PUPPETEER + something else)
+
+**Bug**: User reports trying to generate the weekly report 3 times - each fails. The puppeteer Chrome issue from Task 3 is one cause. But likely there's a second failure mode behind it (data preparation, prompt parsing, or PDF buffer handling).
+
+**Fix order**:
+1. Complete Task 3 (puppeteer-core + @sparticuz/chromium) FIRST. That removes the Chrome-not-found error.
+2. Then attempt to generate a report and trace any remaining failure. The `/api/reports/weekly-generate/route.ts` route should log every step (data fetch, AI summary call, PDF render) so the actual failure point is visible.
+3. If the report depends on data that doesn't exist yet (e.g. expects pos_sales to have >= 7 days of data), short-circuit with a friendly "Not enough sales data yet - try again after 7 days of trading" rather than throwing.
+4. Make report generation idempotent - calling it twice in a row should not double-bill Anthropic; cache the output for 1 hour.
+
+**Commit**: "fix(reports): weekly-generate works after puppeteer fix + add data-prereq guards + 1h cache"
+
+### TASK 16 - Aria's "no data yet" insight text needs honesty (verification step)
+
+**Bug**: On screens like Cash Flow, Reports, and Intelligence Centre, when the underlying tables have data but the page-specific briefing has none, Aria shows "Not enough data yet - keep using Aria and an insight will appear here." This is partly a CSP-blocking issue (Task 2 covers the weather block), but for other pages it's just that the briefing generator hasn't been triggered.
+
+**Fix**:
+1. For every dashboard page that has an "Aria Says" banner, verify the briefing generator actually runs at least once when the page first loads (with empty-state fallback if data is genuinely missing).
+2. The empty-state fallback shouldn't say "not enough data" if the data actually exists - it should say "give me a moment, I'm thinking about this." Then trigger a regeneration.
+3. If after retry the briefing is still empty, surface the actual reason (insufficient sales history / API error / etc.) instead of the generic "not enough data" text.
+
+This connects to Task 1 (cache invalidation) - both are about the briefing system being accurate.
+
+**Commit**: "fix(aria-says): honest empty states + auto-regenerate on page load if briefing missing"
+
+
 ## Final pass
 
 After all 12 tasks ship:
@@ -179,14 +222,18 @@ After all 12 tasks ship:
 
 ## If limit runs low
 
-Priority order:
-1. TASK 1 (briefing cache - most visible)
-2. TASK 2 (CSP - blocks weather feature)
-3. TASK 3 (Puppeteer - blocks PDF reports)
-4. TASK 6 (error surfacing - everything else depends on knowing what's broken)
-5. TASK 9 (roster guard rails - blocks customer demos)
-6. TASK 7 (resolveBusinessId sweep)
-7. TASK 8 (integration state sweep)
-8. TASK 4, 5, 10, 11, 12, 13 in any order
+Priority order (revised):
+1. TASK 1 (briefing cache - the invoice-says-outstanding-after-paid bug)
+2. TASK 14 (competitor scan/read table mismatch - confirmed bug, easy fix)
+3. TASK 3 (Puppeteer + Task 15 weekly report - blocks PDF reports entirely)
+4. TASK 2 (CSP - blocks weather + future external APIs)
+5. TASK 6 (error surfacing - everything else depends on knowing what's broken)
+6. TASK 9 (roster guard rails - blocks customer demos)
+7. TASK 16 (Aria "no data" honesty - small but visible)
+8. TASK 7 (resolveBusinessId sweep)
+9. TASK 8 (integration state sweep)
+10. TASK 10 (text contrast - visible polish)
+11. TASK 4 (theme persistence - small polish)
+12. TASK 5, 11, 12, 13 in any order
 
 Finish current commit, push, STOP, report.
