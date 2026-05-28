@@ -128,10 +128,22 @@ auto-apply when the cashier redeems the cart.
 
 ## Customer flow
 
-### Entry point
-- From the kiosk URL `/in-store/{slug}` — add a big card on the empty state:
-  "🛒 Skip the queue — scan as you shop"
-- Or from the Share Hub at `ariaos.site/{slug}` — also a card option
+### Entry points (three places — same destination)
+The customer can start scan-and-go from any of these:
+
+**1. In-shop QR sticker (the BIG one)** — the printed QR by the till.
+This QR now lands on a tiny chooser page `/in-store/{slug}/welcome?t={token}` showing two big buttons:
+- "Ask Aria a question" → existing kiosk chat at `/in-store/{slug}`
+- "Skip the queue — scan as you shop" → `/in-store/{slug}/cart`
+Both buttons use the same session cookie from the token redeem. Customer picks once.
+
+If the business has scan-and-go DISABLED in their kiosk config: skip the chooser entirely, the QR goes straight to the kiosk chat as before. The chooser only appears for businesses that have opted in.
+
+**2. Unified hub at `ariaos.site/{slug}`** — one of the hub cards is "Skip the queue — scan as you shop." Tapping it requires the customer to scan the in-shop QR first to get a valid session (we cannot let them shop from home and generate a basket from the couch). The card on the hub redirects to a friendly "Please scan our in-shop QR to get started — your phone needs to be in our shop for this to work."
+
+**3. Inside the kiosk chat itself** — if the customer is mid-conversation with Aria and asks something like "do you have ABC?" Aria can reply with a "Yes — tap here to start a basket and skip the queue" action_card block. One-tap into the scan-and-go flow with the cookie already valid.
+
+All three entry points end up at `/in-store/{slug}/cart` with a valid session.
 
 ### Cart page `/in-store/{slug}/cart`
 - Big "Tap to scan a product" button — opens browser camera with BarcodeDetector overlay
@@ -225,6 +237,7 @@ field for the cart token. Decode → call redeem → populate the sale.
 
 ## Commits — Part B
 - "feat(scan-go): DB schema + pos_self_checkout_carts table + age_restricted flag"
+- "feat(kiosk-welcome): /in-store/{slug}/welcome chooser page (Ask Aria | Skip the queue)"
 - "feat(scan-go): customer scan + cart + finish + token-QR flow"
 - "feat(scan-go): cashier-side redeem in POS sale page with ID-check enforcement"
 - "feat(scan-go): owner toggle on /dashboard/in-store + barcode setup helper"
