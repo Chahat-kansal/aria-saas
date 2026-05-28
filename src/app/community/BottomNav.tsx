@@ -1,14 +1,15 @@
 'use client'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Home, Film, Bookmark, User } from 'lucide-react'
+import { Home, Film, Store, Bookmark, User } from 'lucide-react'
 import { C, MAX_W, FONT } from './theme'
 
 const TABS = [
-  { href: '/community',       label: 'Feed',   icon: Home,     match: (p: string) => p === '/community' },
-  { href: '/community/reels', label: 'Reels',  icon: Film,     match: (p: string) => p.startsWith('/community/reels') },
-  { href: '/community/saved', label: 'Saved',  icon: Bookmark, match: (p: string) => p.startsWith('/community/saved') },
-  { href: '/community/me',    label: 'You',    icon: User,     match: (p: string) => p.startsWith('/community/me') },
+  { href: '/community',           label: 'Feed',   icon: Home,     match: (p: string) => p === '/community' },
+  { href: '/community/reels',     label: 'Reels',  icon: Film,     match: (p: string) => p.startsWith('/community/reels') },
+  { href: '/community/market',    label: 'Market', icon: Store,    match: (p: string) => p.startsWith('/community/market') },
+  { href: '/community/saved',     label: 'Saved',  icon: Bookmark, match: (p: string) => p.startsWith('/community/saved') },
+  { href: '/community/me',        label: 'You',    icon: User,     match: (p: string) => p.startsWith('/community/me') },
 ]
 
 export function BottomNav() {
