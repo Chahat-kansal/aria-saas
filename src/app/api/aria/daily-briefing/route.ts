@@ -268,6 +268,10 @@ async function _POST(req: NextRequest) {
     supabaseAdmin.from('instore_demand_signals').select('id', { count: 'exact', head: true }).eq('business_id', business_id).gte('created_at', yesterdayStart.toISOString()),
   ]);
 
+  // Loyalty counters (only meaningful once a program is configured).
+  const { getLoyaltyStats, hasLoyaltySignal } = await import('@/lib/aria/loyalty-intelligence');
+  const loyaltyStats = await getLoyaltyStats(supabaseAdmin, business_id);
+
   const context = {
     business_name: business.name,
     industry: business.industry,
@@ -286,6 +290,12 @@ async function _POST(req: NextRequest) {
       unread_messages: inboxUnread ?? 0,
       new_demand_signals: newDemandSignals ?? 0,
     },
+    loyalty_status: loyaltyStats.configured ? {
+      members: loyaltyStats.members,
+      new_members_30d: loyaltyStats.newMembers30d,
+      points_outstanding: loyaltyStats.pointsOutstanding,
+      redemptions_30d: loyaltyStats.redemptions30d,
+    } : null,
     invoice_status: {
       outstanding_count: invoiceStats.pendingCount,
       outstanding_total_aud: invoiceStats.pendingTotal.toFixed(2),
@@ -376,7 +386,8 @@ async function _POST(req: NextRequest) {
     newBookingList.length > 0 ||
     parcelsAtRisk > 0 ||
     (inboxUnread ?? 0) > 0 ||
-    (newDemandSignals ?? 0) > 0;
+    (newDemandSignals ?? 0) > 0 ||
+    hasLoyaltySignal(loyaltyStats);
 
   if (!hasActionableData) {
     await supabase.from('daily_briefings').upsert({

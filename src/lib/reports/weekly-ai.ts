@@ -105,6 +105,15 @@ export async function generateWeeklyNarrative(
       '\n(If overdue value is rising, call it out as a trend to watch — e.g. "invoice overdue value up vs last week".)'
   } catch (e) { console.error('[weekly-ai] invoice stats failed:', (e as Error).message) }
 
+  // Loyalty counters — only once a program is configured.
+  try {
+    const { getLoyaltyStats, hasLoyaltySignal } = await import('@/lib/aria/loyalty-intelligence')
+    const ls = await getLoyaltyStats(supabaseAdmin, business.id)
+    if (hasLoyaltySignal(ls)) {
+      businessContext += `\nLOYALTY: ${ls.members} members (${ls.newMembers30d} new in 30d), ${ls.redemptions30d} redemptions in 30d, ${ls.pointsOutstanding} points outstanding.`
+    }
+  } catch (e) { console.error('[weekly-ai] loyalty stats failed:', (e as Error).message) }
+
   // ── Aria Council (3-brain deliberation) ───────────────────────────────────
   const council = await runAriaCouncil(businessContext, business.id, 'weekly_report')
 
