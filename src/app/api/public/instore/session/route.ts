@@ -14,9 +14,12 @@ async function _GET(req: Request) {
   const biz = url.searchParams.get('biz') ?? ''
   const t = url.searchParams.get('t')
   const key = url.searchParams.get('key')
+  const next = url.searchParams.get('next')
   if (!biz) return NextResponse.redirect(new URL('/', req.url))
 
-  const dest = new URL(`/in-store/${biz}`, req.url)
+  // Only allow known sub-pages as a post-redeem destination.
+  const suffix = next === 'welcome' || next === 'cart' ? `/${next}` : ''
+  const dest = new URL(`/in-store/${biz}${suffix}`, req.url)
   let maxAge = 0
   if (t && await validateToken(supabaseAdmin, biz, t)) {
     maxAge = SESSION_MAX_AGE

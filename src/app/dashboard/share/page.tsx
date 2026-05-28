@@ -53,7 +53,7 @@ export default function SharePage() {
 
   const bid = business?.id ?? null
   const hubUrl = slug ? `${APP}/${slug}` : ''
-  const kioskUrl = bid ? `${APP}/in-store/${bid}${kioskToken ? `?t=${kioskToken}` : ''}` : ''
+  const kioskUrl = bid ? `${APP}/in-store/${bid}/welcome${kioskToken ? `?t=${kioskToken}` : ''}` : ''
   const tabletUrl = bid && tabletKey ? `${APP}/kiosk-tablet/${bid}?key=${tabletKey}` : ''
 
   useEffect(() => {
