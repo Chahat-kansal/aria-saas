@@ -50,6 +50,7 @@ export default function SharePage() {
   const [tabletKey, setTabletKey] = useState<string | null>(null)
   const [showTablet, setShowTablet] = useState(false)
   const [rotating, setRotating] = useState(false)
+  const [hubStatus, setHubStatus] = useState<{ loyalty: boolean; booking: boolean; review: boolean; website: boolean; community: boolean } | null>(null)
 
   const bid = business?.id ?? null
   const hubUrl = slug ? `${APP}/${slug}` : ''
@@ -64,6 +65,7 @@ export default function SharePage() {
     })
     fetch('/api/dashboard/hub-analytics').then(r => r.json()).then(d => { if (!d.error) setStats(d) }).catch(() => {})
     fetch('/api/dashboard/kiosk-share').then(r => r.json()).then(d => { if (!d.error) { setKioskToken(d.token ?? null); setDaysLeft(d.days_left ?? null); setTabletKey(d.tablet_api_key ?? null) } }).catch(() => {})
+    fetch('/api/dashboard/hub-status').then(r => r.json()).then(d => { if (!d.error) setHubStatus(d) }).catch(() => {})
   }, [bid])
 
   async function rotateTabletKey() {
@@ -154,6 +156,34 @@ export default function SharePage() {
             <p style={{ fontSize: 11, color: C.dim, margin: '10px 0 0', lineHeight: 1.5 }}>QR rotates daily; each printed poster stays valid for 5 days.</p>
           </div>
         </div>
+
+        {/* Hub checklist — what's live on the customer hub + setup links for the rest */}
+        {hubStatus && (
+          <div style={{ ...cardBox, marginTop: 16 }}>
+            <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>What&apos;s on your hub</div>
+            <p style={{ fontSize: 12.5, color: C.dim, margin: '0 0 14px' }}>Cards only appear to customers once their data is set. Finish the unchecked ones below.</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {([
+                { key: 'loyalty', label: 'Loyalty', ok: 'Configured', set: 'Not yet configured — set up loyalty', href: '/dashboard/loyalty' },
+                { key: 'booking', label: 'Bookings', ok: 'Link set', set: 'No booking link yet — set it up', href: '/dashboard/settings/business' },
+                { key: 'review', label: 'Reviews', ok: 'Link set', set: 'Add your Google review link', href: '/dashboard/settings/business' },
+                { key: 'website', label: 'Website', ok: 'Set', set: 'Add your website', href: '/dashboard/community/profile' },
+                { key: 'community', label: 'Community', ok: 'Profile live', set: 'Set up your community profile', href: '/dashboard/community/profile' },
+              ] as const).map(item => {
+                const on = (hubStatus as Record<string, boolean>)[item.key]
+                return (
+                  <div key={item.key} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0', borderTop: '1px solid ' + C.border }}>
+                    <span style={{ width: 20, height: 20, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, background: on ? 'rgba(127,184,151,0.15)' : 'rgba(255,255,255,0.05)', border: '1px solid ' + (on ? C.green : C.border), color: on ? C.green : C.dim }}>{on ? '✓' : '!'}</span>
+                    <span style={{ fontSize: 13, fontWeight: 600, width: 88 }}>{item.label}</span>
+                    {on
+                      ? <span style={{ fontSize: 12.5, color: C.green }}>{item.ok}</span>
+                      : <a href={item.href} style={{ fontSize: 12.5, color: C.dim, textDecoration: 'underline' }}>{item.set}</a>}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Counter tablet — always-on, never printed on a QR */}
         <div style={{ ...cardBox, marginTop: 16 }}>
