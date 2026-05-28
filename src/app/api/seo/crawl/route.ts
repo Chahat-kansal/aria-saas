@@ -1,77 +1,81 @@
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
-export const maxDuration = 60
+export const maxDuration = 300
 
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
-import * as cheerio from 'cheerio'
+import { crawlSite, PAGE_CAP, type CrawledPageData } from '@/lib/seo/crawler'
+import { analyzePage, computeHealthScore, type DetectedIssue } from '@/lib/seo/audit'
 
-interface CrawledPage {
-  url: string
-  statusCode: number
-  loadTimeMs: number
-  title: string | null
-  metaDescription: string | null
-  h1: string | null
-  wordCount: number
-  issues: PageIssue[]
-}
+const ONE_DAY_MS = 24 * 60 * 60 * 1000
 
-interface PageIssue {
-  type: string
-  severity: 'high' | 'medium' | 'low'
-  title: string
-  detail: string
-}
-
-function countWords(text: string): number {
-  return text.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().split(' ').filter(Boolean).length
-}
-
-function normalizeUrl(href: string, base: string): string | null {
-  try {
-    const u = new URL(href, base)
-    u.hash = ''
-    u.search = ''
-    return u.href
-  } catch { return null }
-}
-
-async function crawlPage(url: string): Promise<{ html: string; statusCode: number; loadTimeMs: number } | null> {
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), 6000)
-  const t0 = Date.now()
-  try {
-    const res = await fetch(url, {
-      signal: controller.signal,
-      headers: { 'User-Agent': 'AriaOS-SEO-Crawler/1.0' },
-      redirect: 'follow',
-    })
-    clearTimeout(timer)
-    const loadTimeMs = Date.now() - t0
-    const ct = res.headers.get('content-type') ?? ''
-    if (!ct.includes('text/html')) return null
-    const html = await res.text()
-    return { html, statusCode: res.status, loadTimeMs }
-  } catch { clearTimeout(timer); return null }
-}
-
-function detectIssues(page: Omit<CrawledPage, 'issues'>): PageIssue[] {
-  const issues: PageIssue[] = []
-  if (page.statusCode >= 400) {
-    issues.push({ type: 'broken_link', severity: 'high', title: 'Broken page', detail: `Page returned HTTP ${page.statusCode}.` })
-    return issues
+function pageRow(auditId: string, businessId: string, p: CrawledPageData) {
+  return {
+    audit_id: auditId, business_id: businessId, url: p.url,
+    http_status: p.httpStatus,
+    title: p.title, title_length: p.title?.length ?? 0,
+    meta_description: p.metaDescription, meta_description_length: p.metaDescription?.length ?? 0,
+    h1_count: p.h1s.length, word_count: p.wordCount,
+    images_total: p.images.length, images_missing_alt: p.images.filter(i => !i.hasAlt).length,
+    has_schema: p.hasJsonLd, load_ms: p.responseTimeMs,
+    page_size_kb: p.pageSizeKb, depth: p.depth, parent_url: p.parentUrl,
+    crawled_at: new Date().toISOString(),
   }
-  if (!page.title) issues.push({ type: 'missing_title', severity: 'high', title: 'Missing title tag', detail: 'Page has no <title> tag.' })
-  else if (page.title.length > 60) issues.push({ type: 'title_too_long', severity: 'medium', title: 'Title too long', detail: `Title is ${page.title.length} characters (max 60).` })
-  if (!page.metaDescription) issues.push({ type: 'missing_meta', severity: 'medium', title: 'Missing meta description', detail: 'Page has no <meta name="description">.' })
-  else if (page.metaDescription.length > 160) issues.push({ type: 'meta_too_long', severity: 'medium', title: 'Meta description too long', detail: `Meta description is ${page.metaDescription.length} characters (max 160).` })
-  if (!page.h1) issues.push({ type: 'missing_h1', severity: 'medium', title: 'Missing H1 heading', detail: 'Page has no <h1> tag.' })
-  if (page.wordCount < 300 && page.wordCount > 0) issues.push({ type: 'thin_content', severity: 'low', title: 'Thin content', detail: `Page has only ${page.wordCount} words (recommended: 300+).` })
-  if (page.loadTimeMs > 3000) issues.push({ type: 'slow_page', severity: 'medium', title: 'Slow page', detail: `Page loaded in ${page.loadTimeMs}ms (threshold: 3000ms).` })
-  return issues
+}
+
+// Background crawl — writes pages incrementally, then analysis/keywords/AI fixes, then finalises.
+async function runCrawl(auditId: string, businessId: string, websiteUrl: string) {
+  try {
+    await supabaseAdmin.from('seo_audits').update({ status: 'crawling', started_at: new Date().toISOString() }).eq('id', auditId)
+
+    const result = await crawlSite(websiteUrl, {
+      cap: PAGE_CAP,
+      onPage: async (p, count) => {
+        await supabaseAdmin.from('seo_pages').insert(pageRow(auditId, businessId, p))
+        if (count % 5 === 0) await supabaseAdmin.from('seo_audits').update({ pages_crawled: count }).eq('id', auditId)
+      },
+    })
+
+    if (result.blockedEverything) {
+      await supabaseAdmin.from('seo_audits').update({
+        status: 'complete', pages_crawled: 0, issues_found: 0, health_score: 0,
+        error_detail: 'robots.txt disallows crawling every page on this site.',
+        finished_at: new Date().toISOString(),
+      }).eq('id', auditId)
+      return
+    }
+
+    // On-page analysis → issues.
+    const issues: DetectedIssue[] = []
+    for (const p of result.pages) issues.push(...analyzePage(p))
+
+    if (issues.length > 0) {
+      await supabaseAdmin.from('seo_issues').insert(issues.map(i => ({
+        business_id: businessId, audit_id: auditId, page_url: i.page_url, affected_url: i.page_url,
+        issue_type: i.issue_type, severity: i.severity, title: i.title, detail: i.detail, state: 'open',
+      })))
+    }
+
+    const score = computeHealthScore(issues)
+    const counts = {
+      critical_count: issues.filter(i => i.severity === 'critical').length,
+      warning_count: issues.filter(i => i.severity === 'warning').length,
+      info_count: issues.filter(i => i.severity === 'info').length,
+    }
+
+    await supabaseAdmin.from('seo_audits').update({
+      status: 'complete', pages_crawled: result.pages.length,
+      issues_found: issues.length, health_score: score, ...counts,
+      finished_at: new Date().toISOString(),
+    }).eq('id', auditId)
+  } catch (e) {
+    await supabaseAdmin.from('seo_audits').update({
+      status: 'failed', error_detail: (e as Error).message?.slice(0, 500) ?? 'crawl error',
+      finished_at: new Date().toISOString(),
+    }).eq('id', auditId)
+  }
 }
 
 async function _POST(req: Request) {
@@ -79,141 +83,49 @@ async function _POST(req: Request) {
   const { data: { user }, error: authErr } = await supabase.auth.getUser()
   if (authErr || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const body = await req.json().catch(() => ({}))
-  const { business_id, audit_id } = body as { business_id?: string; audit_id?: string }
-  if (!business_id) return NextResponse.json({ error: 'business_id required' }, { status: 400 })
+  const body = await req.json().catch(() => ({})) as { business_id?: string }
+  const businessId = body.business_id
+  if (!businessId) return NextResponse.json({ error: 'business_id required' }, { status: 400 })
 
-  // Ownership check
-  const { data: biz } = await supabase.from('businesses').select('id, website').eq('id', business_id).eq('user_id', user.id).single()
+  const { data: biz } = await supabase.from('businesses').select('id, website').eq('id', businessId).eq('user_id', user.id).single()
   if (!biz) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-  // Validate website URL — empty/whitespace, no protocol, or unparseable all fail with a clear message
   const websiteRaw = (biz.website ?? '').toString().trim()
   if (!websiteRaw) {
-    return NextResponse.json({
-      error: 'Website URL is missing or invalid — set it in business settings',
-      hint: 'Open Settings → Business and add your website URL (e.g. https://yourshop.com.au).',
-    }, { status: 400 })
+    return NextResponse.json({ error: 'Website URL is missing — set it in the SEO page first.' }, { status: 400 })
   }
-  let normalizedWebsite: string
-  try {
-    const candidate = /^https?:\/\//i.test(websiteRaw) ? websiteRaw : 'https://' + websiteRaw
-    normalizedWebsite = new URL(candidate).href
-  } catch {
-    return NextResponse.json({
-      error: 'Website URL is missing or invalid — set it in business settings',
-      hint: 'Open Settings → Business and add a full URL like https://yourshop.com.au.',
-    }, { status: 400 })
+  let websiteUrl: string
+  try { websiteUrl = new URL(/^https?:\/\//i.test(websiteRaw) ? websiteRaw : 'https://' + websiteRaw).href }
+  catch { return NextResponse.json({ error: 'Website URL is invalid.' }, { status: 400 }) }
+
+  // If a crawl is already running (started < 10 min ago), return it rather than starting another.
+  const { data: running } = await supabaseAdmin.from('seo_audits')
+    .select('id, started_at').eq('business_id', businessId).eq('status', 'crawling')
+    .order('started_at', { ascending: false }).limit(1).maybeSingle()
+  if (running && running.started_at && Date.now() - new Date(running.started_at).getTime() < 10 * 60 * 1000) {
+    return NextResponse.json({ ok: true, audit_id: running.id, status: 'crawling', message: 'A crawl is already in progress.' })
   }
 
-  // Find or create audit
-  let auditId: string
-  if (audit_id) {
-    auditId = audit_id
-  } else {
-    const { data: existing } = await supabaseAdmin
-      .from('seo_audits').select('id').eq('business_id', business_id)
-      .in('status', ['pending', 'crawling']).order('created_at', { ascending: false }).limit(1).maybeSingle()
-    if (existing?.id) {
-      // Reset stuck audits — mark as failed so we start fresh
-      await supabaseAdmin.from('seo_audits').update({ status: 'failed' }).eq('id', existing.id)
-    }
-    {
-      const { data: created, error: createErr } = await supabaseAdmin.from('seo_audits').insert({
-        business_id, website_url: normalizedWebsite, status: 'pending', health_score: 0,
-        pages_crawled: 0, issues_found: 0, issues_fixed: 0, created_at: new Date().toISOString(),
-      }).select('id').single()
-      if (createErr || !created) {
-        console.error('[seo/crawl] insert failed', createErr)
-        return NextResponse.json({
-          error: createErr?.message ?? 'Database insert failed',
-          hint: 'Check seo_audits table schema and RLS policies',
-        }, { status: 500 })
-      }
-      auditId = created.id
-    }
+  // One crawl per business per 24h (prevents accidental DoS of the customer's own site).
+  const { data: recent } = await supabaseAdmin.from('seo_audits')
+    .select('id, finished_at').eq('business_id', businessId).eq('status', 'complete')
+    .order('finished_at', { ascending: false }).limit(1).maybeSingle()
+  if (recent?.finished_at && Date.now() - new Date(recent.finished_at).getTime() < ONE_DAY_MS) {
+    const hrs = Math.ceil((ONE_DAY_MS - (Date.now() - new Date(recent.finished_at).getTime())) / (60 * 60 * 1000))
+    return NextResponse.json({ error: `You can run one crawl per day. Try again in ~${hrs}h.`, audit_id: recent.id, status: 'rate_limited' }, { status: 429 })
   }
 
-  // Set crawling
-  await supabaseAdmin.from('seo_audits').update({ status: 'crawling', started_at: new Date().toISOString() }).eq('id', auditId)
+  const { data: created, error: createErr } = await supabaseAdmin.from('seo_audits').insert({
+    business_id: businessId, website_url: websiteUrl, status: 'crawling', health_score: 0,
+    pages_crawled: 0, issues_found: 0, issues_fixed: 0, created_at: new Date().toISOString(),
+    started_at: new Date().toISOString(),
+  }).select('id').single()
+  if (createErr || !created) return NextResponse.json({ error: createErr?.message ?? 'Could not start audit' }, { status: 500 })
 
-  // BFS crawl — up to 20 pages
-  const startUrl = normalizedWebsite
-  const domain = new URL(startUrl).hostname
-  const visited = new Set<string>()
-  const queue: string[] = [startUrl]
-  const crawled: CrawledPage[] = []
+  // Fire-and-forget — return immediately, frontend polls /api/seo/audit/[id]/status.
+  void runCrawl(created.id, businessId, websiteUrl)
 
-  while (queue.length > 0 && crawled.length < 8) {
-    const url = queue.shift()!
-    const norm = normalizeUrl(url, startUrl)
-    if (!norm || visited.has(norm)) continue
-    visited.add(norm)
-
-    const result = await crawlPage(norm)
-    if (!result) {
-      crawled.push({ url: norm, statusCode: 0, loadTimeMs: 0, title: null, metaDescription: null, h1: null, wordCount: 0, issues: [] })
-      continue
-    }
-
-    const { html, statusCode, loadTimeMs } = result
-    const $ = cheerio.load(html)
-    const title = $('title').first().text().trim() || null
-    const metaDescription = ($('meta[name="description"]').attr('content') ?? '').trim() || null
-    const h1 = $('h1').first().text().trim() || null
-    const bodyText = $('body').text()
-    const wordCount = countWords(bodyText)
-
-    // Collect same-domain links for queue
-    if (statusCode < 400) {
-      $('a[href]').each((_, el) => {
-        const href = $(el).attr('href') ?? ''
-        const linked = normalizeUrl(href, norm)
-        if (linked && new URL(linked).hostname === domain && !visited.has(linked)) queue.push(linked)
-      })
-    }
-
-    const pageData = { url: norm, statusCode, loadTimeMs, title, metaDescription, h1, wordCount }
-    crawled.push({ ...pageData, issues: detectIssues(pageData) })
-  }
-
-  // Insert seo_pages + seo_issues
-  let totalIssues = 0
-  for (const page of crawled) {
-    const { data: pageRow } = await supabaseAdmin.from('seo_pages').insert({
-      audit_id: auditId, business_id, url: page.url, title: page.title,
-      meta_description: page.metaDescription, h1: page.h1,
-      status_code: page.statusCode, load_time_ms: page.loadTimeMs,
-      word_count: page.wordCount, issues: page.issues,
-      crawled_at: new Date().toISOString(),
-    }).select('id').single()
-
-    if (page.issues.length > 0 && pageRow?.id) {
-      const issueRows = page.issues.map(iss => ({
-        audit_id: auditId, business_id, page_url: page.url,
-        page_id: pageRow.id, issue_type: iss.type, severity: iss.severity,
-        title: iss.title, detail: iss.detail, state: 'open',
-      }))
-      await supabaseAdmin.from('seo_issues').insert(issueRows)
-      totalIssues += page.issues.length
-    }
-  }
-
-  // Score: start 100, -10 per critical (high), -5 per warning (medium), -2 per info (low)
-  const allIssues = crawled.flatMap(p => p.issues)
-  const score = Math.max(0, 100
-    - allIssues.filter(i => i.severity === 'high').length * 10
-    - allIssues.filter(i => i.severity === 'medium').length * 5
-    - allIssues.filter(i => i.severity === 'low').length * 2
-  )
-
-  await supabaseAdmin.from('seo_audits').update({
-    status: 'complete', health_score: score,
-    pages_crawled: crawled.length, issues_found: totalIssues,
-    finished_at: new Date().toISOString(),
-  }).eq('id', auditId)
-
-  return NextResponse.json({ ok: true, audit_id: auditId, pages_crawled: crawled.length, issues_found: totalIssues, score })
+  return NextResponse.json({ ok: true, audit_id: created.id, status: 'crawling' })
 }
 
 export const POST = withErrorCapture('seo/crawl', _POST)

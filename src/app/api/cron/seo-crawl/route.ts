@@ -4,7 +4,7 @@ export const maxDuration = 300;
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { crawlSite } from '@/lib/seo/crawler';
-import { auditPage, computeHealthScore } from '@/lib/seo/audit';
+import { analyzePage, computeHealthScore } from '@/lib/seo/audit';
 
 const CRON_SECRET = process.env.CRON_SECRET ?? '';
 // Cap businesses per run so we stay under maxDuration
@@ -52,7 +52,7 @@ export async function GET(req: Request) {
 
     try {
       // Crawl the site
-      const pages = await crawlSite(biz.website as string);
+      const { pages } = await crawlSite(biz.website as string);
 
       // Insert seo_pages rows
       if (pages.length > 0) {
@@ -61,30 +61,27 @@ export async function GET(req: Request) {
             business_id: biz.id,
             audit_id: auditId,
             url: p.url,
-            http_status: p.http_status,
+            http_status: p.httpStatus,
             title: p.title,
-            title_length: p.title_length,
-            meta_description: p.meta_description,
-            meta_description_length: p.meta_description_length,
-            h1_count: p.h1_count,
-            word_count: p.word_count,
-            images_total: p.images_total,
-            images_missing_alt: p.images_missing_alt,
-            has_schema: p.has_schema,
-            load_ms: p.load_ms,
+            title_length: p.title?.length ?? 0,
+            meta_description: p.metaDescription,
+            meta_description_length: p.metaDescription?.length ?? 0,
+            h1_count: p.h1s.length,
+            word_count: p.wordCount,
+            images_total: p.images.length,
+            images_missing_alt: p.images.filter(i => !i.hasAlt).length,
+            has_schema: p.hasJsonLd,
+            load_ms: p.responseTimeMs,
+            page_size_kb: p.pageSizeKb,
+            depth: p.depth,
+            parent_url: p.parentUrl,
             crawled_at: new Date().toISOString(),
           }))
         );
       }
 
       // Collect all issues from all pages
-      const allIssues: Array<{ page_url: string; issue_type: string; severity: string; title: string; detail: string }> = [];
-      for (const page of pages) {
-        const pageIssues = auditPage(page);
-        for (const issue of pageIssues) {
-          allIssues.push({ page_url: page.url, ...issue });
-        }
-      }
+      const allIssues = pages.flatMap(page => analyzePage(page));
 
       // VERIFY LOOP: check applied issues
       const { data: appliedIssues } = await supabaseAdmin
@@ -139,9 +136,7 @@ export async function GET(req: Request) {
         );
       }
 
-      const healthScore = computeHealthScore(
-        allIssues.map(i => ({ issue_type: i.issue_type, severity: i.severity as 'high' | 'medium' | 'low', title: i.title, detail: i.detail }))
-      );
+      const healthScore = computeHealthScore(allIssues);
 
       await supabaseAdmin
         .from('seo_audits')
