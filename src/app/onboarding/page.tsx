@@ -2,6 +2,8 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { SitePreviewCard } from '@/components/SitePreviewCard';
+import type { SitePreviewResult } from '@/app/api/site-preview/route';
 
 function validateABN(raw: string): boolean {
   const digits = raw.replace(/\s/g, '');
@@ -336,11 +338,49 @@ function Details({ form, set }: { form: FD; set: Setter }) {
 }
 
 function Operations({ form, set }: { form: FD; set: Setter }) {
+  const [preview, setPreview] = useState<SitePreviewResult | null>(null);
+  const [previewing, setPreviewing] = useState(false);
+  const [confirmed, setConfirmed] = useState(false);
+
+  async function startPreview() {
+    const url = form.website.trim();
+    if (!url) return;
+    setPreviewing(true); setPreview(null); setConfirmed(false);
+    try {
+      const res = await fetch('/api/site-preview', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }),
+      });
+      setPreview((await res.json()) as SitePreviewResult);
+    } catch { /* leave preview null — field still saves */ }
+    setPreviewing(false);
+  }
+
   return (
     <div className="space-y-4">
       <Sel label="Staff count" value={form.staff_count} onChange={v => set('staff_count', v)} options={STAFF_OPTS} />
       <Sel label="Monthly revenue (approx.)" value={form.monthly_revenue} onChange={v => set('monthly_revenue', v)} options={REV_OPTS} />
-      <Field label="Website" value={form.website} onChange={v => set('website', v)} type="url" placeholder="https://yourbusiness.com.au" />
+      <div>
+        <label className="block text-xs font-medium text-[#2D5240] mb-1">Website</label>
+        <div className="flex gap-2">
+          <input type="url" value={form.website} onChange={e => { set('website', e.target.value); setPreview(null); setConfirmed(false); }}
+            placeholder="https://yourbusiness.com.au"
+            className="flex-1 border border-[rgba(45,82,64,0.2)] rounded-lg px-3 py-2 text-sm text-[#1a1a16] placeholder-[rgba(0,0,0,0.3)] focus:outline-none focus:border-[#2D5240] focus:ring-1 focus:ring-[rgba(45,82,64,0.3)]" />
+          <button type="button" onClick={startPreview} disabled={previewing || !form.website.trim()}
+            className="px-4 rounded-lg bg-[#2D5240] text-white text-sm font-medium whitespace-nowrap disabled:opacity-50">
+            {previewing ? 'Checking…' : confirmed ? 'Confirmed ✓' : 'Preview'}
+          </button>
+        </div>
+        {confirmed && <p className="text-xs text-[#2D5240] mt-1.5 font-medium">✓ Website confirmed</p>}
+        {preview && (
+          <div className="mt-3">
+            <SitePreviewCard
+              result={preview}
+              onConfirm={() => { if (preview.ok) set('website', preview.finalUrl); setConfirmed(true); setPreview(null); }}
+              onReject={() => setPreview(null)}
+            />
+          </div>
+        )}
+      </div>
       <Field label="Google Business URL" value={form.google_business_url} onChange={v => set('google_business_url', v)} type="url" placeholder="https://g.page/..." />
     </div>
   );

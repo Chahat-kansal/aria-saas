@@ -2,6 +2,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { AriaSays } from '@/components/dashboard/AriaSays'
+import { SitePreviewCard } from '@/components/SitePreviewCard'
+import type { SitePreviewResult } from '@/app/api/site-preview/route'
 import { Globe, Check, Pencil, Trash2, ExternalLink, ChevronLeft, Loader2, AlertCircle, BadgeCheck } from 'lucide-react'
 
 const C = {
@@ -40,6 +42,8 @@ export default function CommunityProfileDashboard() {
   const [savingBio, setSavingBio] = useState(false)
   const [error, setError] = useState('')
   const [bioSaved, setBioSaved] = useState(false)
+  const [preview, setPreview] = useState<SitePreviewResult | null>(null)
+  const [previewing, setPreviewing] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -56,6 +60,20 @@ export default function CommunityProfileDashboard() {
 
   useEffect(() => { load() }, [load])
 
+  // Confirm-before-save: fetch a live preview so the owner verifies it's really their site.
+  async function startPreview() {
+    const url = websiteInput.trim()
+    if (!url) return
+    setPreviewing(true); setError(''); setPreview(null)
+    try {
+      const res = await fetch('/api/site-preview', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }),
+      })
+      setPreview((await res.json()) as SitePreviewResult)
+    } catch { setError('Network error — please try again') }
+    setPreviewing(false)
+  }
+
   async function saveWebsite(value: string | null) {
     setSavingWebsite(true)
     setError('')
@@ -68,6 +86,7 @@ export default function CommunityProfileDashboard() {
       if (!res.ok) throw new Error(d.error ?? 'Could not save')
       setProfile(p => p ? { ...p, website: d.website ?? null } : p)
       setEditingWebsite(false)
+      setPreview(null)
     } catch (e: unknown) {
       setError((e as Error).message)
     }
@@ -161,19 +180,29 @@ export default function CommunityProfileDashboard() {
               </div>
             ) : editingWebsite ? (
               <div>
+                {preview && (
+                  <div style={{ marginBottom: 12 }}>
+                    <SitePreviewCard
+                      result={preview}
+                      busy={savingWebsite}
+                      onConfirm={() => saveWebsite(preview.ok ? preview.finalUrl : websiteInput.trim())}
+                      onReject={() => setPreview(null)}
+                    />
+                  </div>
+                )}
                 <input
                   value={websiteInput}
-                  onChange={e => { setWebsiteInput(e.target.value); setError('') }}
-                  onKeyDown={e => { if (e.key === 'Enter' && !savingWebsite) saveWebsite(websiteInput) }}
+                  onChange={e => { setWebsiteInput(e.target.value); setError(''); setPreview(null) }}
+                  onKeyDown={e => { if (e.key === 'Enter' && !previewing) startPreview() }}
                   placeholder="yourshop.com.au"
                   style={inp}
                 />
                 <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-                  <button onClick={() => saveWebsite(websiteInput)} disabled={savingWebsite || !websiteInput.trim()}
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 40, padding: '0 16px', borderRadius: 9, border: 'none', background: C.sage, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, opacity: savingWebsite || !websiteInput.trim() ? 0.6 : 1 }}>
-                    {savingWebsite ? <Loader2 size={14} className="community-spin" /> : <Check size={14} />} Save
+                  <button onClick={startPreview} disabled={previewing || !websiteInput.trim()}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 40, padding: '0 16px', borderRadius: 9, border: 'none', background: C.sage, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, opacity: previewing || !websiteInput.trim() ? 0.6 : 1 }}>
+                    {previewing ? <Loader2 size={14} className="community-spin" /> : <Check size={14} />} {previewing ? 'Fetching…' : 'Preview & confirm'}
                   </button>
-                  <button onClick={() => { setEditingWebsite(false); setWebsiteInput(profile.website ?? ''); setError('') }}
+                  <button onClick={() => { setEditingWebsite(false); setWebsiteInput(profile.website ?? ''); setError(''); setPreview(null) }}
                     style={{ height: 40, padding: '0 16px', borderRadius: 9, border: `1px solid ${C.border}`, background: 'transparent', color: C.muted, fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>
                     Cancel
                   </button>

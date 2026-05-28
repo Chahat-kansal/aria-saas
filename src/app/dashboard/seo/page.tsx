@@ -3,6 +3,8 @@ import { useState, useEffect, useCallback } from 'react'
 import { useBusinessContext } from '@/components/providers/BusinessProvider'
 import { supabase } from '@/lib/supabase'
 import { AriaSays } from '@/components/dashboard/AriaSays'
+import { SitePreviewCard } from '@/components/SitePreviewCard'
+import type { SitePreviewResult } from '@/app/api/site-preview/route'
 
 interface SeoAudit { id: string; status: string; pages_crawled: number; issues_found: number; issues_fixed: number; health_score: number; started_at: string; finished_at: string | null }
 interface SeoIssue { id: string; page_url: string; issue_type: string; severity: string; title: string; detail: string; suggested_fix: string | null; fix_format: string | null; state: string }
@@ -545,6 +547,8 @@ export default function SeoPage() {
   const [connecting, setConnecting] = useState(false)
   const [connectError, setConnectError] = useState<string | null>(null)
   const [crawlTriggered, setCrawlTriggered] = useState(false)
+  const [preview, setPreview] = useState<SitePreviewResult | null>(null)
+  const [previewing, setPreviewing] = useState(false)
 
   // Load website URL from business record — always scoped to the ACTIVE business.
   // If the active business has no website URL, the connect panel will show; we do
@@ -560,22 +564,38 @@ export default function SeoPage() {
     fetchWebsite()
   }, [business])
 
-  async function connectWebsite() {
+  // Step 1 — fetch a live preview of the typed URL so the owner can confirm it's really theirs.
+  async function startPreview() {
     if (!business) return
-    let url = urlInput.trim()
+    const url = urlInput.trim()
     if (!url) return
-    if (!url.startsWith('http')) url = 'https://' + url
-    try { new URL(url) } catch { setConnectError('Please enter a valid URL'); return }
+    setPreviewing(true); setConnectError(null); setPreview(null)
+    try {
+      const res = await fetch('/api/site-preview', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }),
+      })
+      const data = (await res.json()) as SitePreviewResult
+      setPreview(data)
+    } catch { setConnectError('Network error — please try again') }
+    finally { setPreviewing(false) }
+  }
+
+  // Step 2 — owner confirmed ("Yes, that's my site" or "Save anyway") → save + queue crawl.
+  async function confirmWebsite() {
+    if (!business) return
+    const saveUrl = preview && preview.ok ? preview.finalUrl : (urlInput.trim().startsWith('http') ? urlInput.trim() : 'https://' + urlInput.trim())
     setConnecting(true); setConnectError(null)
     try {
       const res = await fetch('/api/seo/connect', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ businessId: business.id, websiteUrl: url }),
+        body: JSON.stringify({ businessId: business.id, websiteUrl: saveUrl }),
       })
       const data = await res.json()
       if (!res.ok) { setConnectError(data.error ?? 'Failed to connect'); return }
-      setWebsiteUrl(url)
+      setWebsiteUrl(data.website_url ?? saveUrl)
+      setUrlInput(data.website_url ?? saveUrl)
+      setPreview(null)
       setCrawlTriggered(true)
       setTimeout(() => setCrawlTriggered(false), 5000)
     } catch { setConnectError('Network error — please try again') }
@@ -607,18 +627,23 @@ export default function SeoPage() {
                   Paste this business&apos;s website URL below — Aria will crawl it like Google does. Read-only, external audit only.
                   If you set a URL on a different business, switch to that business in the top-left picker first.
                 </div>
+                {preview && (
+                  <div style={{ marginBottom: 14 }}>
+                    <SitePreviewCard result={preview} onConfirm={confirmWebsite} onReject={() => setPreview(null)} busy={connecting} />
+                  </div>
+                )}
                 <div style={{ display: 'flex', gap: 8 }}>
                   <input
                     type="url"
                     value={urlInput}
-                    onChange={e => { setUrlInput(e.target.value); setConnectError(null) }}
-                    onKeyDown={e => e.key === 'Enter' && connectWebsite()}
+                    onChange={e => { setUrlInput(e.target.value); setConnectError(null); setPreview(null) }}
+                    onKeyDown={e => e.key === 'Enter' && startPreview()}
                     placeholder="https://yourcafe.com.au"
                     style={{ flex: 1, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, padding: '9px 13px', color: '#fff', fontSize: 13, fontFamily: 'inherit', outline: 'none' }}
                   />
-                  <button onClick={connectWebsite} disabled={connecting || !urlInput.trim()}
-                    style={{ padding: '9px 20px', borderRadius: 8, background: '#2D5240', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', opacity: connecting || !urlInput.trim() ? 0.5 : 1, whiteSpace: 'nowrap' }}>
-                    {connecting ? 'Connecting…' : 'Connect & crawl'}
+                  <button onClick={startPreview} disabled={previewing || !urlInput.trim()}
+                    style={{ padding: '9px 20px', borderRadius: 8, background: '#2D5240', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', opacity: previewing || !urlInput.trim() ? 0.5 : 1, whiteSpace: 'nowrap' }}>
+                    {previewing ? 'Fetching your site…' : 'Preview & confirm'}
                   </button>
                 </div>
                 {connectError && <p style={{ fontSize: 12, color: '#F87171', marginTop: 6 }}>✗ {connectError}</p>}
@@ -633,7 +658,7 @@ export default function SeoPage() {
             <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#7FB897', flexShrink: 0 }} />
             <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)' }}>Tracking <strong style={{ color: '#7FB897' }}>{hostname}</strong></span>
             {crawlTriggered && <span style={{ fontSize: 12, color: '#7FB897', marginLeft: 4 }}>— crawl queued ✓</span>}
-            <button onClick={() => { setWebsiteUrl(''); setUrlInput('') }}
+            <button onClick={() => { setUrlInput(websiteUrl); setWebsiteUrl(''); setPreview(null) }}
               style={{ marginLeft: 'auto', fontSize: 11, color: 'rgba(255,255,255,0.35)', background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: '2px 6px', borderRadius: 4 }}>
               Change URL
             </button>
