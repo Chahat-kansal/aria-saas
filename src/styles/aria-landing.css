@@ -376,6 +376,12 @@ html:has(.landing-v3) { scroll-behavior: auto; }
   opacity: 0.85;
 }
 
+/* Staggered card entrance for grid scenes (Problem / Meet Aria / etc.) */
+@keyframes l-cardUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: none; }
+}
+
 /*  STICKY OVERLAY  */
 .landing-v3 .overlay-top {
   position: fixed;
