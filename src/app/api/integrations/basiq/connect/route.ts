@@ -24,8 +24,21 @@ async function _POST(req: Request) {
 
   let basiqUserId = (biz.basiq_user_id as string | null) ?? null;
   if (!basiqUserId) {
-    const email = (biz.email as string | null) ?? user.email;
-    if (!email) return NextResponse.json({ error: 'Business email required to connect bank' }, { status: 400 });
+    // Use the authenticated user's email as the primary source — it's always a
+    // real verified email. Fall back to the businesses.email column only if the
+    // user session somehow has no email (rare Google OAuth edge case).
+    const email = user.email ?? (biz.email as string | null);
+    if (!email) {
+      return NextResponse.json({
+        error: 'Please add an email address to your profile before connecting your bank.',
+      }, { status: 400 });
+    }
+    // Basic format guard so Basiq never receives a malformed value.
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return NextResponse.json({
+        error: 'Your account email appears to be invalid. Please update it in your profile settings.',
+      }, { status: 400 });
+    }
     const created = await createUser(email);
     basiqUserId = created.id;
     await supabaseAdmin.from('businesses').update({ basiq_user_id: basiqUserId }).eq('id', business_id);
