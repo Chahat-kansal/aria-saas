@@ -1,13 +1,15 @@
 'use client'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 
 type Priority = 'info' | 'warning' | 'critical'
 interface InsightResult { insight: string | null; priority?: Priority; link?: string }
 
-// Per-browser cache: 1 hour per business+page
+// Per-browser cache: 1 hour per business+page (null insights get a shorter 5-min TTL
+// so the banner retries once real data arrives).
 const CACHE_KEY = (bid: string, page: string) => `aria-says:${bid}:${page}`
 const CACHE_TTL_MS = 60 * 60 * 1000
+const NULL_CACHE_TTL_MS = 5 * 60 * 1000
 const REFRESH_EVENT = 'aria-says:refresh'
 
 // Clears the cached insight for a page and asks any mounted AriaSays banner for
@@ -33,7 +35,6 @@ interface Props {
   businessId: string | null | undefined
   page: string
   pageData?: Record<string, unknown>
-  // Optional: hide entirely on dismissal in this session
   dismissable?: boolean
 }
 
@@ -42,18 +43,21 @@ export function AriaSays({ businessId, page, pageData, dismissable = true }: Pro
   const [loading, setLoading] = useState(true)
   const [dismissed, setDismissed] = useState(false)
   const [error, setError] = useState(false)
+  // Tracks whether we've already done one auto-retry for a null insight.
+  const retriedRef = useRef(false)
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const load = useCallback((force: boolean) => {
     let cancelled = false
     const cacheBid = businessId ?? 'self'
 
-    // Cache hit? (skipped when forced after a mutation)
     if (!force) {
       try {
         const raw = sessionStorage.getItem(CACHE_KEY(cacheBid, page))
         if (raw) {
           const cached = JSON.parse(raw) as { at: number; data: InsightResult }
-          if (Date.now() - cached.at < CACHE_TTL_MS) {
+          const ttl = cached.data.insight ? CACHE_TTL_MS : NULL_CACHE_TTL_MS
+          if (Date.now() - cached.at < ttl) {
             setResult(cached.data); setLoading(false); return () => { cancelled = true }
           }
         }
@@ -64,7 +68,6 @@ export function AriaSays({ businessId, page, pageData, dismissable = true }: Pro
     fetch(force ? '/api/aria/page-insight?fresh=true' : '/api/aria/page-insight', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      // When businessId is omitted, the endpoint resolves it from the authenticated user
       body: JSON.stringify({ business_id: businessId ?? undefined, page, page_data: pageData ?? null, fresh: force }),
     })
       .then(r => r.ok ? r.json() : Promise.reject(r.status))
@@ -81,21 +84,55 @@ export function AriaSays({ businessId, page, pageData, dismissable = true }: Pro
 
   useEffect(() => load(false), [load])
 
+  // Task 16: if the first load returns no insight, auto-retry once with a fresh call
+  // so pages that have real data but haven't generated an insight yet get one immediately.
+  useEffect(() => {
+    if (loading || error || result?.insight || retriedRef.current) return
+    // Insight is null — show "thinking" then fire a fresh fetch after 1.5s
+    retriedRef.current = true
+    retryTimerRef.current = setTimeout(() => load(true), 1500)
+    return () => { if (retryTimerRef.current) clearTimeout(retryTimerRef.current) }
+  }, [loading, error, result, load])
+
   // Regenerate when a mutation on this page fires invalidateAriaInsight().
   useEffect(() => {
     function onRefresh(e: Event) {
       const detail = (e as CustomEvent).detail as { page?: string } | undefined
-      if (!detail || detail.page === page) load(true)
+      if (!detail || detail.page === page) {
+        retriedRef.current = false  // allow a fresh auto-retry after forced invalidation
+        load(true)
+      }
     }
     window.addEventListener(REFRESH_EVENT, onRefresh)
     return () => window.removeEventListener(REFRESH_EVENT, onRefresh)
   }, [load, page])
 
   if (dismissed) return null
-  if (error) return null
 
   const priority: Priority = result?.priority ?? 'info'
   const c = COLORS[priority]
+
+  // Error state: show a subtle message instead of hiding entirely.
+  // Owner needs to know Aria isn't working, not see a blank space.
+  if (error) {
+    return (
+      <div role="status" style={{ borderRadius: 12, padding: '10px 16px', background: COLORS.info.bg, border: '1px solid ' + COLORS.info.border, marginBottom: 16, display: 'flex', alignItems: 'center', gap: 10 }}>
+        <span style={{ fontSize: 14 }}>✦</span>
+        <p style={{ fontSize: 12, color: COLORS.info.dim, margin: 0, fontStyle: 'italic', flex: 1 }}>
+          Aria couldn&apos;t load right now — try refreshing the page.
+        </p>
+        <button onClick={() => { setError(false); retriedRef.current = false; load(true) }}
+          style={{ fontSize: 11, color: COLORS.info.text, background: 'none', border: '1px solid ' + COLORS.info.border, borderRadius: 6, padding: '3px 8px', cursor: 'pointer' }}>
+          Retry
+        </button>
+      </div>
+    )
+  }
+
+  // Determine the empty-state message based on whether we've retried.
+  const emptyMsg = retriedRef.current
+    ? 'Not enough transaction data yet — Aria will generate an insight once there\'s more to work with.'
+    : 'Give me a moment, I\'m thinking about this…'
 
   return (
     <div role="status" aria-live="polite"
@@ -110,7 +147,7 @@ export function AriaSays({ businessId, page, pageData, dismissable = true }: Pro
         ) : result?.insight ? (
           <p style={{ fontSize: 13, lineHeight: 1.55, color: 'rgba(255,255,255,0.92)', margin: '4px 0 0' }}>{result.insight}</p>
         ) : (
-          <p style={{ fontSize: 12, color: c.dim, margin: '4px 0 0', fontStyle: 'italic' }}>Not enough data yet — keep using Aria and an insight will appear here.</p>
+          <p style={{ fontSize: 12, color: c.dim, margin: '4px 0 0', fontStyle: 'italic' }}>{emptyMsg}</p>
         )}
         {result?.link && !loading && (
           <Link href={result.link} style={{ display: 'inline-block', marginTop: 6, fontSize: 11, color: c.text, fontWeight: 600, textDecoration: 'none' }}>
