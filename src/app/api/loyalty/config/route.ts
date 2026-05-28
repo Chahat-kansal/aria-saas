@@ -45,7 +45,13 @@ async function _POST(req: Request) {
   if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
 
   const body = await req.json().catch(() => ({}))
-  const SAFE = ['program_type', 'points_per_dollar', 'point_value_cents', 'stamps_to_reward', 'stamp_reward_text', 'birthday_reward_text', 'winback_after_days', 'winback_reward_text'] as const
+  const SAFE = [
+    'program_type', 'points_per_dollar', 'point_value_cents', 'stamps_to_reward', 'stamp_reward_text',
+    'birthday_reward_text', 'winback_after_days', 'winback_reward_text',
+    // auto-enrol (public sign-up) + tiers + referral + expiry
+    'public_enrol_enabled', 'points_expiry_days', 'referral_bonus_points', 'referee_bonus_points',
+    'tier_silver_points', 'tier_gold_points', 'tier_platinum_points',
+  ] as const
   const payload: Record<string, unknown> = { business_id: bid, updated_at: new Date().toISOString() }
   for (const k of SAFE) if (k in body) payload[k] = body[k]
 

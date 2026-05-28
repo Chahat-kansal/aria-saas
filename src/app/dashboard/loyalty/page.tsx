@@ -5,12 +5,12 @@ import { TIER_BADGE, type LoyaltyTier } from '@/lib/loyalty'
 import { TiersTab, ReferralsTab, RewardRulesTab, RevenueForecastCard, BrandingSection } from '@/components/dashboard/LoyaltyExtensions'
 import { AriaSays } from '@/components/dashboard/AriaSays'
 
-type Config = { program_type: string; points_per_dollar: number; point_value_cents: number; stamps_to_reward: number; stamp_reward_text: string; birthday_reward_text: string | null; winback_after_days: number }
+type Config = { program_type: string; points_per_dollar: number; point_value_cents: number; stamps_to_reward: number; stamp_reward_text: string; birthday_reward_text: string | null; winback_after_days: number; public_enrol_enabled?: boolean }
 type Stats = { enrolled: number; active_this_month: number; points_liability_dollars: number; redemptions_this_month: number; avg_points_per_customer: number }
 type TopCustomer = { id: string; name: string; points_balance: number; loyalty_points: number; stamps_count: number; total_spent: number; total_spend: number; visit_count: number; tier: LoyaltyTier; last_redemption: string | null }
 type Txn = { id: string; type: string; points_delta: number; stamps_delta: number; reward_redeemed: string | null; created_at: string; pos_customers: { name: string; email: string | null } | null }
 
-const DEFAULT_CONFIG: Config = { program_type: 'points', points_per_dollar: 1, point_value_cents: 1, stamps_to_reward: 10, stamp_reward_text: 'Free coffee', birthday_reward_text: null, winback_after_days: 30 }
+const DEFAULT_CONFIG: Config = { program_type: 'points', points_per_dollar: 1, point_value_cents: 1, stamps_to_reward: 10, stamp_reward_text: 'Free coffee', birthday_reward_text: null, winback_after_days: 30, public_enrol_enabled: true }
 
 function StatCard({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
@@ -216,6 +216,22 @@ export default function LoyaltyPage() {
               SMS preview: &quot;Happy Birthday, [Name]! 🎂 {draft.birthday_reward_text} Show this in store to redeem.&quot;
             </p>
           )}
+        </div>
+
+        {/* Public sign-up / auto-enrol */}
+        <div className="space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-secondary)' }}>Public sign-up</p>
+          <button type="button" onClick={() => setDraft(d => ({ ...d, public_enrol_enabled: !(d.public_enrol_enabled ?? true) }))}
+            className="flex items-center gap-3 w-full text-left px-3 py-2.5 rounded-lg text-sm"
+            style={{ background: 'var(--bg-surface, #0E1812)', border: '1px solid rgba(127,184,151,0.2)', color: 'var(--text-primary)' }}>
+            <span className="inline-flex items-center" style={{ width: 38, height: 22, borderRadius: 999, background: (draft.public_enrol_enabled ?? true) ? '#2D5240' : 'rgba(255,255,255,0.12)', padding: 2, transition: 'background 150ms' }}>
+              <span style={{ width: 18, height: 18, borderRadius: '50%', background: (draft.public_enrol_enabled ?? true) ? '#7FB897' : '#888', transform: (draft.public_enrol_enabled ?? true) ? 'translateX(16px)' : 'translateX(0)', transition: 'transform 150ms' }} />
+            </span>
+            <span className="flex-1">
+              <span className="block font-medium">Let customers join from your hub link</span>
+              <span className="block text-xs" style={{ color: 'var(--text-secondary)' }}>{(draft.public_enrol_enabled ?? true) ? 'On — customers can self-enrol at your /loyalty link' : 'Off — sign-ups happen in store only'}</span>
+            </span>
+          </button>
         </div>
       </div>
       )}
