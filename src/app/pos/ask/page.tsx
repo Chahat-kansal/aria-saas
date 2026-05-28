@@ -33,7 +33,7 @@ interface ConvMeta { id: string; title: string; last_message_at: string }
 interface DocumentReadResult { description: string; name: string; previewUrl: string | null }
 type DisplayMsg =
   | { type: 'user'; text: string }
-  | { type: 'aria'; text: string; streaming: boolean; blocks?: AskBlock[]; downloads?: Array<{ filename: string; download_url: string; format: string; rows: number }> }
+  | { type: 'aria'; text: string; streaming: boolean; mode?: string; blocks?: AskBlock[]; downloads?: Array<{ filename: string; download_url: string; format: string; rows: number }> }
   | { type: 'tool'; toolName: string; status: 'running' | 'done'; count?: number }
   | { type: 'error'; text: string }
 
@@ -219,6 +219,9 @@ export default function AskAriaPage() {
   const [inputError, setInputError] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
   const [pendingAttachment, setPendingAttachment] = useState<DocumentReadResult | null>(null)
+  const [aiMode, setAiMode] = useState<string | null>(null)
+  const [sonnetPct, setSonnetPct] = useState(0)
+  const [warnDismissed, setWarnDismissed] = useState(false)
   const threadRef = useRef<HTMLDivElement>(null)
   const ariaIdxRef = useRef(-1)
   const toolIdxRef = useRef<Record<string, number>>({})
@@ -332,8 +335,12 @@ export default function AskAriaPage() {
         action?: Record<string, unknown>
         downloads?: Array<{ filename: string; download_url: string; format: string; rows: number }>
         blocks?: AskBlock[]
+        ai_mode?: string
+        sonnet_percent_used?: number
       }
       const reply = data.response ?? 'No response'
+      if (data.ai_mode) setAiMode(data.ai_mode)
+      if (typeof data.sonnet_percent_used === 'number') setSonnetPct(data.sonnet_percent_used)
 
       if (data.conversation_id) {
         setConvId(data.conversation_id)
@@ -358,6 +365,7 @@ export default function AskAriaPage() {
             text: `${reply}\n\n[Download ${exportData.filename}](${exportData.url}) — ${exportData.row_count} rows, expires in 1 hour.`,
             streaming: false,
             blocks: data.blocks,
+            mode: data.ai_mode,
           }])
           setHistory(h => [...h, { role: 'user', content: fullContent }, { role: 'assistant', content: reply }])
           setStreaming(false)
@@ -376,6 +384,7 @@ export default function AskAriaPage() {
           streaming: false,
           downloads: data.downloads,
           blocks: data.blocks,
+          mode: data.ai_mode,
         }])
         setHistory(h => [...h, { role: 'user', content: fullContent }, { role: 'assistant', content: reply }])
         setStreaming(false)
@@ -383,7 +392,7 @@ export default function AskAriaPage() {
         return
       }
 
-      setMessages(prev => [...prev, { type: 'aria', text: reply, streaming: false, blocks: data.blocks }])
+      setMessages(prev => [...prev, { type: 'aria', text: reply, streaming: false, blocks: data.blocks, mode: data.ai_mode }])
       setHistory(h => [...h, { role: 'user', content: fullContent }, { role: 'assistant', content: reply }])
       if (!convId) fetchConvs()
     } catch (err) {
@@ -439,6 +448,24 @@ export default function AskAriaPage() {
       {/* Chat area */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
+        {/* Lite mode — premium AI budget exhausted for the month */}
+        {aiMode === 'haiku' && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 16px', background: 'var(--bg-elevated)', borderBottom: '1px solid var(--divider)', fontSize: 12.5, color: 'var(--text-secondary)' }}>
+            <span aria-hidden>⚡</span>
+            <span style={{ flex: 1 }}>Lite mode — premium AI budget reached for this month.</span>
+            <a href="/dashboard/billing" style={{ color: 'var(--text-violet)', fontWeight: 600, textDecoration: 'none' }}>Upgrade</a>
+            <span>for unlimited.</span>
+          </div>
+        )}
+
+        {/* 80% warning — softer, dismissible, once per session */}
+        {aiMode !== 'haiku' && sonnetPct >= 80 && sonnetPct < 100 && !warnDismissed && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px', background: 'rgba(245,158,11,0.08)', borderBottom: '1px solid rgba(245,158,11,0.2)', fontSize: 12.5, color: 'var(--text-secondary)' }}>
+            <span style={{ flex: 1 }}>You&apos;ve used {sonnetPct}% of this month&apos;s premium AI. Aria stays available on lite mode after that.</span>
+            <button onClick={() => setWarnDismissed(true)} aria-label="Dismiss" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-tertiary)', fontSize: 16, lineHeight: 1, padding: 2, fontFamily: 'inherit' }}>×</button>
+          </div>
+        )}
+
         {isEmpty ? (
           <div style={{ flex: 1, overflowY: 'auto', padding: '48px 48px 24px', maxWidth: 720, margin: '0 auto', width: '100%' }}>
             <div style={{ fontSize: 28, fontWeight: 800, color: 'var(--text-primary)', marginBottom: 10 }}>Ask Aria anything.</div>
@@ -480,6 +507,9 @@ export default function AskAriaPage() {
                   <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
                     <div style={{ width: 24, height: 24, borderRadius: '50%', background: 'var(--gradient-aria)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: '#fff', fontWeight: 800, flexShrink: 0, marginTop: 2 }}>✦</div>
                     <div style={{ flex: 1, fontSize: 14, color: 'var(--text-primary)', lineHeight: 1.7 }}>
+                      {msg.mode === 'haiku' && (
+                        <span title="Answered in lite mode" style={{ float: 'right', fontSize: 10, fontWeight: 600, color: 'var(--text-tertiary)', background: 'var(--bg-elevated)', border: '1px solid var(--divider)', borderRadius: 99, padding: '1px 7px', marginLeft: 8 }}>⚡ lite</span>
+                      )}
                       {msg.streaming
                         ? msg.text
                         : parseAriaResponse(msg.text).map((seg, si) =>
