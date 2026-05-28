@@ -45,10 +45,16 @@ export default function SharePage() {
   const [kioskQr, setKioskQr] = useState('')
   const [copied, setCopied] = useState<string | null>(null)
   const [stats, setStats] = useState<{ visits_7d: number; total_clicks_7d: number; top_card: { target: string; count: number } | null } | null>(null)
+  const [kioskToken, setKioskToken] = useState<string | null>(null)
+  const [daysLeft, setDaysLeft] = useState<number | null>(null)
+  const [tabletKey, setTabletKey] = useState<string | null>(null)
+  const [showTablet, setShowTablet] = useState(false)
+  const [rotating, setRotating] = useState(false)
 
   const bid = business?.id ?? null
   const hubUrl = slug ? `${APP}/${slug}` : ''
-  const kioskUrl = bid ? `${APP}/in-store/${bid}` : ''
+  const kioskUrl = bid ? `${APP}/in-store/${bid}${kioskToken ? `?t=${kioskToken}` : ''}` : ''
+  const tabletUrl = bid && tabletKey ? `${APP}/kiosk-tablet/${bid}?key=${tabletKey}` : ''
 
   useEffect(() => {
     if (!bid) return
@@ -57,7 +63,14 @@ export default function SharePage() {
       if (data) { setSlug(data.slug); setLogoUrl(data.logo_url); setName(data.name ?? '') }
     })
     fetch('/api/dashboard/hub-analytics').then(r => r.json()).then(d => { if (!d.error) setStats(d) }).catch(() => {})
+    fetch('/api/dashboard/kiosk-share').then(r => r.json()).then(d => { if (!d.error) { setKioskToken(d.token ?? null); setDaysLeft(d.days_left ?? null); setTabletKey(d.tablet_api_key ?? null) } }).catch(() => {})
   }, [bid])
+
+  async function rotateTabletKey() {
+    setRotating(true)
+    try { const d = await fetch('/api/dashboard/kiosk-share', { method: 'POST' }).then(r => r.json()); if (d.tablet_api_key) setTabletKey(d.tablet_api_key) } catch { /* ignore */ }
+    setRotating(false)
+  }
 
   useEffect(() => { if (hubUrl) qrPreview(hubUrl).then(setHubQr) }, [hubUrl])
   useEffect(() => { if (kioskUrl) qrPreview(kioskUrl).then(setKioskQr) }, [kioskUrl])
@@ -122,8 +135,8 @@ export default function SharePage() {
 
           {/* Kiosk */}
           <div style={cardBox}>
-            <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>Your in-store kiosk</div>
-            <p style={{ fontSize: 12.5, color: C.dim, margin: '0 0 14px' }}>For a tablet on the counter — customers ask Aria anything in-store.</p>
+            <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>Your in-store kiosk QR</div>
+            <p style={{ fontSize: 12.5, color: C.dim, margin: '0 0 14px' }}>Print this by the till — customers scan it with their phone to chat with Aria in-store.</p>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 12 }}>
               {kioskQr ? <img src={kioskQr} alt="Kiosk QR" style={{ width: 200, height: 200, borderRadius: 12, border: '1px solid ' + C.border, background: '#fff', padding: 6 }} /> : <div style={{ width: 200, height: 200 }} />}
             </div>
@@ -133,7 +146,33 @@ export default function SharePage() {
               <button style={btn()} onClick={() => downloadPng(kioskUrl, 'kiosk-qr.png')} disabled={!kioskUrl}>Download QR</button>
               <button style={btn(true)} onClick={() => printPoster(kioskUrl, 'Ask us anything', 'Scan to chat with our in-store assistant')} disabled={!kioskUrl}>A5 poster</button>
             </div>
+            {daysLeft != null && daysLeft <= 2 && (
+              <div style={{ marginTop: 12, padding: '9px 12px', borderRadius: 8, background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)', fontSize: 12, color: '#F59E0B', lineHeight: 1.5 }}>
+                ⚠ Your current poster expires in {daysLeft} day{daysLeft === 1 ? '' : 's'} — reprint it so customers can keep scanning. The QR rotates for security.
+              </div>
+            )}
+            <p style={{ fontSize: 11, color: C.dim, margin: '10px 0 0', lineHeight: 1.5 }}>QR rotates daily; each printed poster stays valid for 5 days.</p>
           </div>
+        </div>
+
+        {/* Counter tablet — always-on, never printed on a QR */}
+        <div style={{ ...cardBox, marginTop: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 15, fontWeight: 700 }}>Set up a counter tablet</div>
+              <p style={{ fontSize: 12.5, color: C.dim, margin: '4px 0 0' }}>An always-on device on your counter. Paste this URL once — it never expires. Keep it private; don&apos;t print it.</p>
+            </div>
+            <button style={btn()} onClick={() => setShowTablet(s => !s)}>{showTablet ? 'Hide' : 'Reveal'}</button>
+          </div>
+          {showTablet && (
+            <div style={{ marginTop: 12 }}>
+              <code style={{ display: 'block', fontSize: 12, color: C.green, background: 'rgba(127,184,151,0.08)', padding: '8px 10px', borderRadius: 8, wordBreak: 'break-all', marginBottom: 10 }}>{tabletUrl || 'No tablet key yet — rotate to create one.'}</code>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button style={btn()} onClick={() => tabletUrl && copy(tabletUrl, 'tablet')} disabled={!tabletUrl}>{copied === 'tablet' ? 'Copied!' : 'Copy URL'}</button>
+                <button style={btn()} onClick={rotateTabletKey} disabled={rotating}>{rotating ? 'Rotating…' : 'Rotate key'}</button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Analytics strip */}
