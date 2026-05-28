@@ -1,8 +1,8 @@
 'use client'
-import { useState } from 'react'
+import { useState, Fragment } from 'react'
 import Link from 'next/link'
-import { Heart, MessageCircle, Bookmark, Share2, MoreHorizontal, BadgeCheck, EyeOff } from 'lucide-react'
-import { C, RADIUS, FONT_DISPLAY } from './theme'
+import { Heart, MessageCircle, MoreHorizontal, BadgeCheck, EyeOff } from 'lucide-react'
+import { PALETTE, BORDER, RADIUS } from './theme'
 
 export interface PostCardData {
   id: string
@@ -33,17 +33,36 @@ function fmtRel(iso: string | null) {
   const d = new Date(iso)
   const diff = Date.now() - d.getTime()
   if (diff < 60_000) return 'just now'
-  if (diff < 3600_000) return Math.floor(diff / 60_000) + 'm'
-  if (diff < 86_400_000) return Math.floor(diff / 3600_000) + 'h'
-  if (diff < 7 * 86_400_000) return Math.floor(diff / 86_400_000) + 'd'
+  if (diff < 3600_000) return Math.floor(diff / 60_000) + ' mins ago'
+  if (diff < 86_400_000) return Math.floor(diff / 3600_000) + 'h ago'
+  if (diff < 7 * 86_400_000) return Math.floor(diff / 86_400_000) + 'd ago'
   return d.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })
+}
+
+const BADGE_LABEL: Record<string, string> = {
+  offer: 'TODAY ONLY',
+  new_stock: 'NEW IN',
+  event: 'EVENT',
+  story: 'STORY',
+  reel: 'REEL',
+  video: 'VIDEO',
+}
+
+// Signature move: wrap "$N" price tokens in a lime highlight span.
+function renderBodyWithPrices(text: string) {
+  const parts = text.split(/(\$\d[\d,]*(?:\.\d{2})?)/g)
+  return parts.map((part, i) =>
+    /^\$\d/.test(part)
+      ? <span key={i} style={{ background: PALETTE.accent, color: PALETTE.ink, padding: '0 5px', borderRadius: 5 }}>{part}</span>
+      : <Fragment key={i}>{part}</Fragment>
+  )
 }
 
 export function PostCard({ post, onAfterAction, onHideBusiness, showHide = true }: Props) {
   const [liked, setLiked] = useState(!!post.mine?.liked)
   const [saved, setSaved] = useState(!!post.mine?.saved)
   const [likeCount, setLikeCount] = useState(post.counts?.like ?? 0)
-  const [saveCount, setSaveCount] = useState(post.counts?.save ?? 0)
+  const [commentCount] = useState(post.counts?.comment ?? 0)
   const [showMenu, setShowMenu] = useState(false)
   const [showComments, setShowComments] = useState(false)
   const [commentInput, setCommentInput] = useState('')
@@ -54,48 +73,24 @@ export function PostCard({ post, onAfterAction, onHideBusiness, showHide = true 
 
   async function toggle(type: 'like' | 'save') {
     const wasOn = type === 'like' ? liked : saved
-    // Optimistic update
     if (type === 'like') {
       setLiked(!wasOn)
       setLikeCount(c => c + (wasOn ? -1 : 1))
       if (!wasOn) { setPopping(true); setTimeout(() => setPopping(false), 320) }
     } else {
       setSaved(!wasOn)
-      setSaveCount(c => c + (wasOn ? -1 : 1))
     }
     try {
       const res = await fetch('/api/community/engagement', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ post_id: post.id, type }),
       })
       if (!res.ok) throw new Error('Failed')
       onAfterAction?.(post.id, type === 'like' ? { liked: !wasOn } : { saved: !wasOn })
     } catch {
-      // Revert
       if (type === 'like') { setLiked(wasOn); setLikeCount(c => c + (wasOn ? 1 : -1)) }
-      else { setSaved(wasOn); setSaveCount(c => c + (wasOn ? 1 : -1)) }
+      else setSaved(wasOn)
     }
-  }
-
-  async function share() {
-    const url = typeof window !== 'undefined' ? window.location.origin + '/community/businesses/' + post.business_id : ''
-    try {
-      if (typeof navigator !== 'undefined' && (navigator as Navigator & { share?: (data: { title?: string; text?: string; url?: string }) => Promise<void> }).share) {
-        await (navigator as Navigator & { share: (data: { title?: string; text?: string; url?: string }) => Promise<void> }).share({
-          title: post.business?.name ?? 'Aria Community',
-          text: post.title ?? post.body?.slice(0, 80) ?? '',
-          url,
-        })
-      } else if (typeof navigator !== 'undefined' && navigator.clipboard) {
-        await navigator.clipboard.writeText(url)
-      }
-    } catch { /* user cancelled */ }
-    // Always log the share attempt
-    fetch('/api/community/engagement', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ post_id: post.id, type: 'share' }),
-    }).catch(() => null)
   }
 
   async function postComment() {
@@ -120,12 +115,15 @@ export function PostCard({ post, onAfterAction, onHideBusiness, showHide = true 
 
   const isVideo = post.media_type === 'video' || post.media_type === 'reel'
   const firstMedia = post.media_urls?.[0]
+  const meta = [post.business?.suburb ?? post.business?.city ?? post.business?.industry].filter(Boolean).join('')
+  const badge = BADGE_LABEL[post.post_type]
+  const bodyText = post.title || post.body || ''
 
   return (
     <article style={{
-      background: C.surface,
-      borderRadius: RADIUS.lg,
-      border: `1px solid ${C.border}`,
+      background: PALETTE.surface,
+      borderRadius: RADIUS.xl,
+      border: BORDER,
       marginBottom: 14,
       overflow: 'hidden',
     }}>
@@ -133,41 +131,38 @@ export function PostCard({ post, onAfterAction, onHideBusiness, showHide = true 
       <header style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px' }}>
         <Link href={`/community/businesses/${post.business_id}`} style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0, textDecoration: 'none', color: 'inherit' }}>
           <div style={{
-            width: 40, height: 40, borderRadius: RADIUS.pill,
-            background: post.business?.logo_url ? `url(${post.business.logo_url}) center/cover` : C.accentDeep,
-            color: C.accent, display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontWeight: 700, fontSize: 15, flexShrink: 0, border: `1px solid ${C.border}`,
+            width: 30, height: 30, borderRadius: 10,
+            background: post.business?.logo_url ? `url(${post.business.logo_url}) center/cover` : PALETTE.ink,
+            color: PALETTE.accent, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontWeight: 700, fontSize: 13, flexShrink: 0,
           }}>
-            {!post.business?.logo_url && (post.business?.name?.[0] ?? '?')}
+            {!post.business?.logo_url && (post.business?.name?.[0]?.toLowerCase() ?? '?')}
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <p style={{ fontSize: 14, fontWeight: 600, margin: 0, color: C.text, display: 'flex', alignItems: 'center', gap: 5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {post.business?.name}
-              {post.business?.community_verified && <BadgeCheck size={14} style={{ color: C.accent, flexShrink: 0 }} />}
+            <p style={{ fontSize: 12, fontWeight: 700, margin: 0, color: PALETTE.ink, letterSpacing: '-0.01em', display: 'flex', alignItems: 'center', gap: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {(post.business?.name ?? '').toLowerCase()}
+              {post.business?.community_verified && <BadgeCheck size={13} style={{ color: PALETTE.ink, flexShrink: 0 }} />}
             </p>
-            <p style={{ fontSize: 11, color: C.textMuted, margin: '2px 0 0', display: 'flex', gap: 5, alignItems: 'center' }}>
-              {post.business?.suburb ?? post.business?.city ?? post.business?.industry}
-              {post.published_at && <><span style={{ opacity: 0.5 }}>·</span><span>{fmtRel(post.published_at)}</span></>}
-              {post.ai_generated && <><span style={{ opacity: 0.5 }}>·</span><span style={{ color: '#A78BFA' }}>✦ Aria</span></>}
+            <p style={{ fontSize: 9, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: PALETTE.inkSoft, margin: '2px 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {fmtRel(post.published_at)}{meta && ' · ' + meta}{post.ai_generated && ' · ✦ ARIA'}
             </p>
           </div>
         </Link>
         <div style={{ position: 'relative' }}>
-          <button onClick={() => setShowMenu(v => !v)}
-            style={{ background: 'transparent', border: 'none', color: C.textMuted, padding: 8, cursor: 'pointer', display: 'flex', minWidth: 36, minHeight: 36, alignItems: 'center', justifyContent: 'center' }}>
+          <button onClick={() => setShowMenu(v => !v)} aria-label="Post menu"
+            style={{ background: 'transparent', border: 'none', color: PALETTE.ink, padding: 8, cursor: 'pointer', display: 'flex', minWidth: 36, minHeight: 36, alignItems: 'center', justifyContent: 'center' }}>
             <MoreHorizontal size={18} />
           </button>
           {showMenu && (
             <div onClick={() => setShowMenu(false)}
-              style={{ position: 'absolute', top: '100%', right: 0, marginTop: 4, background: C.surface, border: `1px solid ${C.border}`, borderRadius: RADIUS.md, padding: 6, zIndex: 10, minWidth: 180, boxShadow: '0 10px 30px rgba(0,0,0,0.4)' }}>
+              style={{ position: 'absolute', top: '100%', right: 0, marginTop: 4, background: PALETTE.surface, border: BORDER, borderRadius: RADIUS.md, padding: 6, zIndex: 10, minWidth: 190 }}>
               {showHide && onHideBusiness && (
                 <button onClick={() => onHideBusiness(post.business_id)}
-                  style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 10px', background: 'transparent', border: 'none', color: C.text, fontSize: 13, cursor: 'pointer', borderRadius: RADIUS.sm, textAlign: 'left' }}>
-                  <EyeOff size={14} /> Hide posts from this business
+                  style={menuItem}>
+                  <EyeOff size={14} /> Hide posts from this shop
                 </button>
               )}
-              <Link href={`/community/businesses/${post.business_id}`}
-                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', color: C.text, fontSize: 13, textDecoration: 'none', borderRadius: RADIUS.sm }}>
+              <Link href={`/community/businesses/${post.business_id}`} style={{ ...menuItem, textDecoration: 'none' }}>
                 Visit profile
               </Link>
             </div>
@@ -175,83 +170,86 @@ export function PostCard({ post, onAfterAction, onHideBusiness, showHide = true 
         </div>
       </header>
 
-      {/* Media */}
+      {/* Hero — full-bleed, 148px */}
       {firstMedia && (
-        <div style={{ width: '100%', background: '#000', position: 'relative' }}>
+        <div style={{ position: 'relative', width: '100%', height: 148, background: PALETTE.ink, overflow: 'hidden' }}>
           {isVideo ? (
-            <video src={firstMedia} controls playsInline preload="metadata" style={{ width: '100%', maxHeight: 560, display: 'block', objectFit: 'contain' }} />
+            <video src={firstMedia} muted playsInline preload="metadata" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           ) : (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={firstMedia} alt="" style={{ width: '100%', maxHeight: 560, display: 'block', objectFit: 'cover' }} />
+            <img src={firstMedia} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          )}
+          {badge && (
+            <span style={{
+              position: 'absolute', top: 10, right: 10,
+              background: PALETTE.ink, color: PALETTE.accent,
+              fontSize: 10, fontWeight: 700, letterSpacing: '0.04em',
+              padding: '4px 10px', borderRadius: RADIUS.pill,
+            }}>{badge}</span>
           )}
         </div>
       )}
 
       {/* Body */}
-      {(post.title || post.body) && (
-        <div style={{ padding: '12px 14px 4px' }}>
-          {post.title && <h3 style={{ fontSize: 16, fontWeight: 700, margin: '0 0 4px', fontFamily: FONT_DISPLAY, fontStyle: 'italic', letterSpacing: '-0.01em' }}>{post.title}</h3>}
-          {post.body && <p style={{ fontSize: 14, color: C.textDim, margin: 0, lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>{post.body}</p>}
+      {bodyText && (
+        <div style={{ padding: '14px 14px 4px' }}>
+          {post.title && post.body
+            ? (<>
+                <p style={{ fontSize: 15, fontWeight: 700, letterSpacing: '-0.01em', margin: 0, lineHeight: 1.3, color: PALETTE.ink }}>{renderBodyWithPrices(post.title)}</p>
+                <p style={{ fontSize: 13, fontWeight: 500, margin: '6px 0 0', lineHeight: 1.5, color: PALETTE.ink, opacity: 0.78, whiteSpace: 'pre-wrap' }}>{renderBodyWithPrices(post.body)}</p>
+              </>)
+            : (<p style={{ fontSize: 15, fontWeight: 700, letterSpacing: '-0.01em', margin: 0, lineHeight: 1.35, color: PALETTE.ink, whiteSpace: 'pre-wrap' }}>{renderBodyWithPrices(bodyText)}</p>)}
         </div>
       )}
 
       {/* Actions */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '10px 8px 12px' }}>
-        <ActionButton
-          icon={<Heart size={20} fill={liked ? C.accent : 'transparent'} strokeWidth={liked ? 0 : 1.8} className={popping ? 'community-pop' : undefined} />}
-          label={likeCount > 0 ? String(likeCount) : 'Like'}
-          active={liked}
-          onClick={() => toggle('like')}
-        />
-        <ActionButton
-          icon={<MessageCircle size={20} strokeWidth={1.8} />}
-          label={post.counts?.comment ? String(post.counts.comment) : 'Comment'}
-          onClick={() => setShowComments(v => !v)}
-        />
-        <ActionButton
-          icon={<Bookmark size={20} fill={saved ? C.accent : 'transparent'} strokeWidth={saved ? 0 : 1.8} />}
-          label={saveCount > 0 ? String(saveCount) : 'Save'}
-          active={saved}
-          onClick={() => toggle('save')}
-        />
-        <ActionButton
-          icon={<Share2 size={20} strokeWidth={1.8} />}
-          label="Share"
-          onClick={share}
-        />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 18, padding: '12px 14px 14px' }}>
+        <button onClick={() => toggle('like')} aria-label="Like"
+          style={iconAction}>
+          <Heart size={20} fill={liked ? PALETTE.live : 'transparent'} color={liked ? PALETTE.live : PALETTE.ink} strokeWidth={liked ? 0 : 2} className={popping ? 'community-pop' : undefined} />
+          <span style={{ fontSize: 13, fontWeight: 700, color: PALETTE.ink, letterSpacing: '-0.02em' }}>{likeCount}</span>
+        </button>
+        <button onClick={() => setShowComments(v => !v)} aria-label="Comment"
+          style={iconAction}>
+          <MessageCircle size={20} color={PALETTE.ink} strokeWidth={2} />
+          <span style={{ fontSize: 13, fontWeight: 700, color: PALETTE.ink, letterSpacing: '-0.02em' }}>{commentCount}</span>
+        </button>
+        <button onClick={() => toggle('save')}
+          style={{
+            marginLeft: 'auto',
+            background: saved ? PALETTE.accent : PALETTE.surface,
+            color: PALETTE.ink, border: BORDER, borderRadius: RADIUS.pill,
+            fontSize: 12, fontWeight: 700, padding: '7px 16px', cursor: 'pointer', minHeight: 36,
+          }}>
+          {saved ? 'saved' : 'save'}
+        </button>
       </div>
 
       {/* Comment composer */}
       {showComments && (
-        <div style={{ padding: '0 14px 14px', borderTop: `1px solid ${C.border}` }}>
+        <div style={{ padding: '0 14px 14px', borderTop: BORDER }}>
           <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
             <input
               value={commentInput}
               onChange={e => setCommentInput(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter' && !commentBusy) postComment() }}
-              placeholder="Say something nice…"
+              placeholder="say something nice…"
               maxLength={600}
               style={{
                 flex: 1, padding: '10px 14px', borderRadius: RADIUS.pill,
-                background: C.surfaceHi, border: `1px solid ${C.border}`,
-                color: C.text, fontSize: 14, outline: 'none', fontFamily: 'inherit',
-                minHeight: 40,
+                background: PALETTE.surfaceAlt, border: BORDER,
+                color: PALETTE.ink, fontSize: 13, outline: 'none', fontFamily: 'inherit', fontWeight: 500, minHeight: 40,
               }}
             />
             <button onClick={postComment} disabled={commentBusy || !commentInput.trim()}
-              style={{
-                padding: '0 16px', borderRadius: RADIUS.pill, border: 'none',
-                background: C.accent, color: '#0d0d14', fontSize: 13, fontWeight: 700,
-                cursor: 'pointer', minHeight: 40, fontFamily: 'inherit',
-                opacity: commentBusy || !commentInput.trim() ? 0.5 : 1,
-              }}>
-              Post
+              style={{ padding: '0 16px', borderRadius: RADIUS.pill, border: BORDER, background: PALETTE.accent, color: PALETTE.ink, fontSize: 12, fontWeight: 700, cursor: 'pointer', minHeight: 40, opacity: commentBusy || !commentInput.trim() ? 0.5 : 1 }}>
+              post
             </button>
           </div>
-          {commentError && <p style={{ fontSize: 12, color: C.danger, margin: '8px 0 0' }}>{commentError}</p>}
-          {commentSuccess && <p style={{ fontSize: 12, color: C.accent, margin: '8px 0 0' }}>✓ Comment posted</p>}
-          <p style={{ fontSize: 10, color: C.textMuted, margin: '8px 0 0', lineHeight: 1.5 }}>
-            For your safety, comments with phone numbers, emails, or card details are blocked. Sort it in person at the shop.
+          {commentError && <p style={{ fontSize: 11, color: PALETTE.live, margin: '8px 0 0' }}>{commentError}</p>}
+          {commentSuccess && <p style={{ fontSize: 11, color: PALETTE.ink, margin: '8px 0 0', fontWeight: 600 }}>✓ comment posted</p>}
+          <p style={{ fontSize: 9, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: PALETTE.inkSoft, margin: '8px 0 0', lineHeight: 1.5 }}>
+            Phone, email + card details are blocked. Sort the rest in person.
           </p>
         </div>
       )}
@@ -259,18 +257,13 @@ export function PostCard({ post, onAfterAction, onHideBusiness, showHide = true 
   )
 }
 
-function ActionButton({ icon, label, active, onClick }: { icon: React.ReactNode; label: string; active?: boolean; onClick: () => void }) {
-  return (
-    <button onClick={onClick}
-      style={{
-        display: 'inline-flex', alignItems: 'center', gap: 6,
-        padding: '10px 14px', borderRadius: 999,
-        background: 'transparent', border: 'none',
-        color: active ? C.accent : C.textDim, fontSize: 13, fontWeight: 600,
-        cursor: 'pointer', fontFamily: 'inherit', minHeight: 44,
-      }}>
-      {icon}
-      <span>{label}</span>
-    </button>
-  )
+const iconAction: React.CSSProperties = {
+  display: 'inline-flex', alignItems: 'center', gap: 7,
+  background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, minHeight: 36,
+}
+
+const menuItem: React.CSSProperties = {
+  display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '9px 10px',
+  background: 'transparent', border: 'none', color: PALETTE.ink, fontSize: 13, fontWeight: 600,
+  cursor: 'pointer', borderRadius: RADIUS.sm, textAlign: 'left', fontFamily: 'inherit',
 }

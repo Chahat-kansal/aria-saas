@@ -1,8 +1,8 @@
 'use client'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import Link from 'next/link'
-import { Sparkles, Search, Compass } from 'lucide-react'
-import { C, RADIUS, MAX_W, FONT_DISPLAY } from './theme'
+import { Search, Compass } from 'lucide-react'
+import { PALETTE, BORDER, RADIUS, MAX_W } from './theme'
 import { PostCard, type PostCardData } from './PostCard'
 import { StoriesRow, type StoryBubble } from './StoriesRow'
 
@@ -82,36 +82,30 @@ export default function CommunityFeedPage() {
   return (
     <main style={{ maxWidth: MAX_W, margin: '0 auto', padding: '20px 16px 24px' }}>
       <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, gap: 8 }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.16em', textTransform: 'uppercase', color: C.accent, margin: 0 }}>Aria Community</p>
-          <h1 style={{ fontSize: 24, fontWeight: 700, margin: '4px 0 0', fontFamily: FONT_DISPLAY, fontStyle: 'italic', letterSpacing: '-0.01em' }}>
-            {mode === 'followed' ? 'Your feed' : 'Discover local'}
-          </h1>
+        {/* "a. aria" wordmark — lime squircle + lowercase wordmark */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 }}>
+          <span style={{
+            width: 34, height: 34, borderRadius: 11,
+            background: PALETTE.accent, border: BORDER,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 15, fontWeight: 800, color: PALETTE.ink, letterSpacing: '-0.04em',
+          }}>a.</span>
+          <span style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.03em', color: PALETTE.ink }}>aria</span>
         </div>
-        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
-          <Link href="/community/discover" prefetch={false} aria-label="Discover" style={{
-            width: 40, height: 40, borderRadius: '50%',
-            background: C.surface, border: `1px solid ${C.border}`,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: C.text, textDecoration: 'none',
-          }}>
-            <Compass size={18} />
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
+          <Link href="/community/discover" prefetch={false} aria-label="Discover" style={roundBtn}>
+            <Compass size={18} color={PALETTE.ink} />
           </Link>
-          <Link href="/community/search" prefetch={false} aria-label="Search" style={{
-            width: 40, height: 40, borderRadius: '50%',
-            background: C.surface, border: `1px solid ${C.border}`,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: C.text, textDecoration: 'none',
-          }}>
-            <Search size={18} />
+          <Link href="/community/search" prefetch={false} aria-label="Search" style={roundBtn}>
+            <Search size={18} color={PALETTE.ink} />
           </Link>
           {!member && (
             <Link href="/community/me" style={{
-              padding: '8px 14px', borderRadius: RADIUS.pill,
-              background: C.accent, color: '#0d0d14',
+              padding: '9px 16px', borderRadius: RADIUS.pill,
+              background: PALETTE.accent, color: PALETTE.ink, border: BORDER,
               fontSize: 12, fontWeight: 700, textDecoration: 'none', minHeight: 40,
               display: 'inline-flex', alignItems: 'center',
-            }}>Join</Link>
+            }}>join</Link>
           )}
         </div>
       </header>
@@ -123,11 +117,10 @@ export default function CommunityFeedPage() {
       {loading && posts.length === 0 ? (
         <FeedSkeleton />
       ) : posts.length === 0 ? (
-        <div style={{ padding: '40px 20px', textAlign: 'center', background: C.surface, borderRadius: RADIUS.lg, border: `1px dashed ${C.border}`, marginTop: 16 }}>
-          <Sparkles size={26} style={{ color: C.accent, opacity: 0.7, marginBottom: 10 }} />
-          <p style={{ fontSize: 15, fontWeight: 600, margin: 0, color: C.text }}>{mode === 'followed' ? 'No posts yet from your follows.' : 'No posts yet — check back soon.'}</p>
+        <div style={{ padding: '40px 20px', textAlign: 'center', background: PALETTE.surface, borderRadius: RADIUS.xl, border: BORDER, marginTop: 16 }}>
+          <p style={{ fontSize: 15, fontWeight: 700, margin: 0, letterSpacing: '-0.02em', color: PALETTE.ink }}>{mode === 'followed' ? 'no posts yet from your follows.' : 'no posts yet — check back soon.'}</p>
           {mode === 'discovery' && (
-            <p style={{ fontSize: 13, color: C.textMuted, margin: '8px 0 0', lineHeight: 1.5 }}>Visit a business page to follow them and start your personalised feed.</p>
+            <p style={{ fontSize: 13, fontWeight: 500, color: PALETTE.ink, opacity: 0.6, margin: '8px 0 0', lineHeight: 1.5 }}>Visit a shop&apos;s page to follow them and start your personalised feed.</p>
           )}
         </div>
       ) : (
@@ -137,11 +130,7 @@ export default function CommunityFeedPage() {
           ))}
           {cursor && (
             <div ref={sentinelRef} style={{ textAlign: 'center', padding: 20 }}>
-              {loadingMore ? (
-                <span style={{ fontSize: 12, color: C.textMuted }}>Loading…</span>
-              ) : (
-                <span style={{ fontSize: 12, color: C.textMuted }}>Scroll for more</span>
-              )}
+              <span style={{ ...metaCaps }}>{loadingMore ? 'loading…' : 'scroll for more'}</span>
             </div>
           )}
         </div>
@@ -150,20 +139,30 @@ export default function CommunityFeedPage() {
   )
 }
 
+const roundBtn: React.CSSProperties = {
+  width: 40, height: 40, borderRadius: '50%',
+  background: PALETTE.surface, border: BORDER,
+  display: 'flex', alignItems: 'center', justifyContent: 'center',
+  textDecoration: 'none',
+}
+const metaCaps: React.CSSProperties = {
+  fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: PALETTE.inkSoft,
+}
+
 function FeedSkeleton() {
   return (
     <div style={{ marginTop: 16 }}>
       {[0, 1, 2].map(i => (
-        <div key={i} style={{ background: C.surface, borderRadius: RADIUS.lg, border: `1px solid ${C.border}`, marginBottom: 14, padding: 14 }}>
+        <div key={i} style={{ background: PALETTE.surface, borderRadius: RADIUS.xl, border: BORDER, marginBottom: 14, padding: 14 }}>
           <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
-            <div style={{ width: 40, height: 40, borderRadius: RADIUS.pill, background: C.surfaceHi }} />
+            <div style={{ width: 30, height: 30, borderRadius: 10, background: PALETTE.surfaceAlt }} />
             <div style={{ flex: 1 }}>
-              <div style={{ height: 12, width: '40%', background: C.surfaceHi, borderRadius: 4, marginBottom: 6 }} />
-              <div style={{ height: 10, width: '25%', background: C.surfaceHi, borderRadius: 4 }} />
+              <div style={{ height: 11, width: '40%', background: PALETTE.surfaceAlt, borderRadius: 4, marginBottom: 6 }} />
+              <div style={{ height: 9, width: '25%', background: PALETTE.surfaceAlt, borderRadius: 4 }} />
             </div>
           </div>
-          <div style={{ height: 220, background: C.surfaceHi, borderRadius: RADIUS.md, marginBottom: 10 }} />
-          <div style={{ height: 14, width: '80%', background: C.surfaceHi, borderRadius: 4 }} />
+          <div style={{ height: 148, background: PALETTE.surfaceAlt, borderRadius: RADIUS.md, marginBottom: 10 }} />
+          <div style={{ height: 14, width: '80%', background: PALETTE.surfaceAlt, borderRadius: 4 }} />
         </div>
       ))}
     </div>
