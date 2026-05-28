@@ -27,6 +27,7 @@ export default function MarketingPage() {
   const [ariaSuggestion, setAriaSuggestion] = useState<AriaSuggestion | null>(null)
   const [ariaInsight, setAriaInsight] = useState<string>('')
   const [sending, setSending] = useState(false)
+  const [sendError, setSendError] = useState('')
 
   // Create form state
   const [step, setStep] = useState(1)
@@ -91,7 +92,7 @@ export default function MarketingPage() {
 
   async function handleSend() {
     if (!formMsg.trim() || !formName.trim()) return
-    setSending(true)
+    setSending(true); setSendError('')
     try {
       // Create campaign then send
       const createRes = await fetch('/api/marketing/campaigns', {
@@ -107,15 +108,24 @@ export default function MarketingPage() {
           aria_rationale: ariaSuggestion?.rationale ?? null,
         }),
       })
-      const { campaign } = await createRes.json() as { campaign?: Campaign }
-      if (!campaign) return
+      const { campaign, error: createErr } = await createRes.json() as { campaign?: Campaign; error?: string }
+      if (createErr) { setSendError(createErr); return }
+      if (!campaign) { setSendError('Campaign could not be created — please try again.'); return }
 
       if (!formSchedule) {
-        await fetch(`/api/marketing/campaigns/${campaign.id}/send`, { method: 'POST' })
+        const sendRes = await fetch(`/api/marketing/campaigns/${campaign.id}/send`, { method: 'POST' })
+        const sendJson = await sendRes.json() as { error?: string; not_configured?: boolean }
+        if (!sendRes.ok) {
+          const msg = sendJson.not_configured
+            ? 'SMS not configured — connect Twilio in Settings → Integrations first.'
+            : (sendJson.error ?? 'Send failed — please try again.')
+          setSendError(msg); return
+        }
       }
       setStep(1); setFormMsg(''); setFormName(''); setFormSeg('all'); setAriaSuggestion(null); setFormSchedule('')
       setTab('overview')
       await load()
+    } catch { setSendError('Network error — please try again.')
     } finally { setSending(false) }
   }
 
@@ -316,6 +326,14 @@ export default function MarketingPage() {
                   </div>
                 )}
               </div>
+              {sendError && (
+                <div style={{ padding: '10px 14px', borderRadius: 8, background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', fontSize: 13, color: '#F87171', marginBottom: 10 }}>
+                  {sendError}
+                  {sendError.includes('Twilio') && (
+                    <a href="/dashboard/integrations" style={{ marginLeft: 8, color: '#F87171', fontWeight: 600 }}>Go to Integrations →</a>
+                  )}
+                </div>
+              )}
               <div style={{ display: 'flex', gap: 10 }}>
                 <button onClick={() => setStep(2)} style={{ padding: '9px 18px', borderRadius: 8, fontSize: 13, background: 'rgba(255,255,255,0.04)', color: 'var(--text-secondary)', border: '1px solid rgba(255,255,255,0.08)', cursor: 'pointer' }}>← Edit</button>
                 <button onClick={handleSend} disabled={sending}

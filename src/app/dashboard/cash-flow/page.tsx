@@ -187,6 +187,12 @@ export default function CashFlowPage() {
   return (
     <div style={{ minHeight: '100%', background: C.bg, color: C.text, fontFamily: "'Inter',sans-serif", padding: '24px 28px' }}>
       <AriaSays businessId={business?.id ?? null} page="cash-flow" pageData={negativeDip ? { negative_day: negativeDip.date, cumulative_at_dip: negativeDip.cumulative } : undefined} />
+      {bank !== null && !bank?.connected && (
+        <div style={{ marginBottom: 18, padding: '12px 16px', borderRadius: 12, background: 'rgba(96,165,250,0.06)', border: '1px solid rgba(96,165,250,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+          <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)', margin: 0 }}>🏦 Connect your bank to see live balance alongside your cash-flow forecast.</p>
+          <a href="/dashboard/integrations#bank" style={{ fontSize: 12, fontWeight: 700, color: '#60A5FA', textDecoration: 'none', padding: '6px 14px', borderRadius: 7, border: '1px solid rgba(96,165,250,0.3)', background: 'rgba(96,165,250,0.08)', whiteSpace: 'nowrap' }}>Connect bank →</a>
+        </div>
+      )}
       {bank?.connected && (
         <div style={{ marginBottom: 18, padding: 16, borderRadius: 12, background: 'rgba(127,184,151,0.06)', border: '1px solid rgba(127,184,151,0.25)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10, gap: 12, flexWrap: 'wrap' }}>
