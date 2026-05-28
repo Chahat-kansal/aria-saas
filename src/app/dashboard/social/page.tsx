@@ -143,6 +143,27 @@ export default function SocialPage() {
 
   useEffect(() => { if (bid && activeTab === 'library') loadMedia(); }, [bid, activeTab]);
 
+  // Load social connections so connectedPlatforms gates work correctly.
+  // Without this, the parent state stays empty and the generate buttons are
+  // permanently disabled, even when accounts ARE connected (loaded by the
+  // SocialConnections child component, but never lifted up).
+  useEffect(() => {
+    if (!bid) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await fetch(`/api/social/connections?business_id=${bid}`);
+        if (!r.ok) return;
+        const d = await r.json();
+        if (cancelled) return;
+        setConnections(Array.isArray(d.connections) ? d.connections : []);
+      } catch {
+        // silent — the buttons stay disabled which is the safe default
+      }
+    })();
+    return () => { cancelled = true };
+  }, [bid]);
+
   // Inbox loader + 60s poll
   useEffect(() => {
     if (!bid) return
@@ -720,7 +741,13 @@ export default function SocialPage() {
       )}
 
       {/* Connected Accounts — uses new SocialConnections component */}
-      {bid && <SocialConnections businessId={bid} />}
+      {bid && <SocialConnections businessId={bid} onChange={async () => {
+        const r = await fetch(`/api/social/connections?business_id=${bid}`);
+        if (r.ok) {
+          const d = await r.json();
+          setConnections(Array.isArray(d.connections) ? d.connections : []);
+        }
+      }} />}
 
       {/* Tab bar */}
       {bid && (

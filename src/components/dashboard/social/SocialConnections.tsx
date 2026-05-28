@@ -40,7 +40,7 @@ function fmt(n: number): string {
   return String(n)
 }
 
-export default function SocialConnections({ businessId }: { businessId: string }) {
+export default function SocialConnections({ businessId, onChange }: { businessId: string; onChange?: () => void }) {
   const [connections, setConnections] = useState<Connection[]>([])
   const [loading, setLoading]         = useState(true)
   const [disconnecting, setDisconnecting] = useState<string | null>(null)
@@ -68,6 +68,7 @@ export default function SocialConnections({ businessId }: { businessId: string }
     try {
       await fetch(`/api/social/connections/${id}`, { method: 'DELETE' })
       setConnections(prev => prev.filter(c => c.id !== id))
+      onChange?.()
     } finally {
       setDisconnecting(null)
     }
