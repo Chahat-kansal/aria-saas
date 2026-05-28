@@ -1,5 +1,6 @@
 import { parseLLMJsonOr } from '@/lib/ai-json';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
+import { supabaseAdmin } from '@/lib/supabase-admin';
 import { trackUsage } from '@/lib/track-usage';
 import { getBusinessSales, getBusinessCustomers, getBusinessItems } from '@/lib/business-data';
 import { NextRequest, NextResponse } from 'next/server';
@@ -261,6 +262,12 @@ async function _POST(req: NextRequest) {
   const parcelsInTransit = (activeParcels ?? []).length;
   const parcelsAtRisk = (activeParcels ?? []).filter(p => p.predicted_late).length;
 
+  // Customer Inbox — unread messages + new demand signals worth flagging.
+  const [{ count: inboxUnread }, { count: newDemandSignals }] = await Promise.all([
+    supabaseAdmin.from('customer_interactions_v').select('id', { count: 'exact', head: true }).eq('business_id', business_id).eq('has_unread', true),
+    supabaseAdmin.from('instore_demand_signals').select('id', { count: 'exact', head: true }).eq('business_id', business_id).gte('created_at', yesterdayStart.toISOString()),
+  ]);
+
   const context = {
     business_name: business.name,
     industry: business.industry,
@@ -274,6 +281,10 @@ async function _POST(req: NextRequest) {
       in_transit: parcelsInTransit,
       delivered_today: parcelsDeliveredToday ?? 0,
       at_risk_of_late: parcelsAtRisk,
+    },
+    inbox_status: {
+      unread_messages: inboxUnread ?? 0,
+      new_demand_signals: newDemandSignals ?? 0,
     },
     invoice_status: {
       outstanding_count: invoiceStats.pendingCount,
@@ -363,7 +374,9 @@ async function _POST(req: NextRequest) {
     Number(warehouseCtx.pending_pos ?? 0) > 0 ||
     hasInvoiceSignal(invoiceStats) ||
     newBookingList.length > 0 ||
-    parcelsAtRisk > 0;
+    parcelsAtRisk > 0 ||
+    (inboxUnread ?? 0) > 0 ||
+    (newDemandSignals ?? 0) > 0;
 
   if (!hasActionableData) {
     await supabase.from('daily_briefings').upsert({
@@ -424,7 +437,7 @@ Business: ${business.name as string} (${business.industry as string ?? 'retail'}
 Business data:
 ${dataStr.slice(0, 3000)}
 
-Generate 3-5 actionable briefing items from this real data. If invoice_status shows overdue invoices, you MUST include a high-priority "finance" item naming the top_overdue customer, amount and days late (e.g. "$X overdue from {customer} — {days} days late, chase today"). If bookings_status.new_since_yesterday > 0, include a "customers" item noting how many new bookings came in (call out new_from_public_form separately if any). JSON array only.`
+Generate 3-5 actionable briefing items from this real data. If invoice_status shows overdue invoices, you MUST include a high-priority "finance" item naming the top_overdue customer, amount and days late (e.g. "$X overdue from {customer} — {days} days late, chase today"). If bookings_status.new_since_yesterday > 0, include a "customers" item noting how many new bookings came in (call out new_from_public_form separately if any). If inbox_status.unread_messages > 0 or new_demand_signals > 0, include a "customers" item like "You have N unread customer messages and M new demand signals worth flagging — check your inbox". JSON array only.`
         }]
       })
     )

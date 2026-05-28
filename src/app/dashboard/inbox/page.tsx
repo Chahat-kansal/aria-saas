@@ -9,6 +9,7 @@ const FONT = 'Inter, system-ui, -apple-system, sans-serif'
 interface Item { source: string; id: string; business_id: string; customer_identifier: string | null; preview: string | null; created_at: string; has_unread: boolean }
 type Msg = { role?: string; sender?: string; content?: string; text?: string; body?: string; at?: string; created_at?: string }
 interface Detail { source: string; [k: string]: unknown }
+interface Summary { headline: string; asks: string[]; loved: string | null; disliked: string | null; faq: string[]; sentiment: string }
 
 const SOURCE_META: Record<string, { icon: string; label: string }> = {
   kiosk_chat: { icon: '💬', label: 'Kiosk chat' },
@@ -43,6 +44,9 @@ export default function InboxPage() {
   const [detailLoading, setDetailLoading] = useState(false)
   const [reply, setReply] = useState('')
   const [sending, setSending] = useState(false)
+  const [summary, setSummary] = useState<Summary | null>(null)
+
+  useEffect(() => { fetch('/api/dashboard/inbox/summary').then(r => r.json()).then(d => setSummary(d.summary ?? null)).catch(() => {}) }, [])
 
   const load = useCallback(async (f: string) => {
     setLoading(true)
@@ -89,6 +93,33 @@ export default function InboxPage() {
         <p style={{ fontSize: 14, color: INK_SOFT, margin: '0 0 18px' }}>
           Every customer interaction in one place — kiosk chats, marketplace messages, demand signals and flags.{unread > 0 ? ` ${unread} unread.` : ''}
         </p>
+
+        {/* Aria's weekly read */}
+        {summary && (
+          <div style={{ background: SURFACE, border: BORDER, borderRadius: 18, padding: 18, marginBottom: 16, boxShadow: '4px 4px 0 #0a0a0a' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+              <span style={{ width: 22, height: 22, borderRadius: 7, background: ACCENT, border: BORDER, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800 }}>a</span>
+              <span style={{ fontSize: 13, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Aria&apos;s weekly read</span>
+              <span style={{ marginLeft: 'auto', fontSize: 11, color: INK_SOFT }}>sentiment: {summary.sentiment}</span>
+            </div>
+            <p style={{ fontSize: 15, fontWeight: 600, margin: '0 0 10px', lineHeight: 1.5 }}>{summary.headline}</p>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
+              {summary.asks.length > 0 && (
+                <div><div style={{ fontSize: 11, fontWeight: 700, color: INK_SOFT, textTransform: 'uppercase', marginBottom: 4 }}>Asked for, you don&apos;t sell</div>
+                  <ul style={{ margin: 0, paddingLeft: 16, fontSize: 13, lineHeight: 1.6 }}>{summary.asks.map((a, i) => <li key={i}>{a}</li>)}</ul></div>
+              )}
+              {summary.faq.length > 0 && (
+                <div><div style={{ fontSize: 11, fontWeight: 700, color: INK_SOFT, textTransform: 'uppercase', marginBottom: 4 }}>Repeated questions → add to FAQ</div>
+                  <ul style={{ margin: 0, paddingLeft: 16, fontSize: 13, lineHeight: 1.6 }}>{summary.faq.map((a, i) => <li key={i}>{a}</li>)}</ul></div>
+              )}
+              {(summary.loved || summary.disliked) && (
+                <div><div style={{ fontSize: 11, fontWeight: 700, color: INK_SOFT, textTransform: 'uppercase', marginBottom: 4 }}>Products</div>
+                  {summary.loved && <div style={{ fontSize: 13 }}>❤️ {summary.loved}</div>}
+                  {summary.disliked && <div style={{ fontSize: 13, marginTop: 2 }}>⚠️ {summary.disliked}</div>}</div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Filter chips */}
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
