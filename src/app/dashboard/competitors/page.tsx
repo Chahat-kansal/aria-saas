@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useBusinessContext } from '@/components/providers/BusinessProvider'
 
 interface Alert { id: string; competitor_name: string; alert_text: string; source_url: string | null; detected_at: string; alert_type: string }
-interface Competitor { name: string; alerts: Alert[]; lastSeen: string; alertCount: number }
+interface Competitor { name: string; alerts: Alert[]; lastSeen: string; alertCount: number; rating?: number | null; distance?: number | null; address?: string | null }
 
 const TYPE_ICONS: Record<string, string> = { pricing: '💰', promotion: '🎁', review: '⭐', new_service: '✨', web: '🌐', general: '📡' }
 const TYPE_COLORS: Record<string, string> = { pricing: '#F59E0B', promotion: '#8B5CF6', review: '#22C55E', new_service: '#3B82F6', web: '#6B7280', general: '#6B7280' }
@@ -82,6 +82,7 @@ interface Watch { id: string; competitor_name: string; competitor_url: string | 
 interface AlertRow { id: string; competitor_name: string | null; alert_type: string | null; message: string; data: unknown; is_read: boolean | null; read: boolean | null; created_at: string }
 interface Opportunity { competitor: string; complaint_theme: string; advantage: string; message: string }
 interface Snapshot { competitor_name: string; rating: number | null; review_count: number | null; snapshot_date: string }
+interface Discovered { id: string; competitor_name: string; competitor_address: string | null; distance_m: number | null; google_rating: number | null; website: string | null; phone: string | null; last_checked: string | null }
 
 function alertIcon(type: string | null) {
   if (type === 'rating_change') return { icon: '⭐', color: '#F59E0B' }
@@ -108,6 +109,7 @@ export default function CompetitorsPage() {
   const [oppsLoading, setOppsLoading] = useState(false)
   const [alertRows, setAlertRows] = useState<AlertRow[]>([])
   const [snapshots, setSnapshots] = useState<Snapshot[]>([])
+  const [discovered, setDiscovered] = useState<Discovered[]>([])
 
   const load = useCallback(async () => {
     if (!business?.id) return
@@ -133,6 +135,8 @@ export default function CompetitorsPage() {
       .then(r => r.json()).then(d => setAlertRows(d.alerts ?? [])).catch(() => {})
     fetch(`/api/competitor-snapshots?business_id=${business.id}`)
       .then(r => r.json()).then(d => setSnapshots(d.snapshots ?? [])).catch(() => {})
+    fetch(`/api/aria/competitor-businesses?business_id=${business.id}`)
+      .then(r => r.json()).then(d => setDiscovered(d.competitors ?? [])).catch(() => {})
   }, [business?.id])
 
   async function loadOpportunities() {
@@ -172,6 +176,12 @@ export default function CompetitorsPage() {
 
   useEffect(() => { load() }, [load])
 
+  useEffect(() => {
+    if (selectedComp) return
+    const first = alerts[0]?.competitor_name ?? discovered[0]?.competitor_name
+    if (first) setSelectedComp(first)
+  }, [alerts, discovered, selectedComp])
+
   async function scan() {
     if (!business?.id) return
     setScanning(true); setError('')
@@ -179,13 +189,22 @@ export default function CompetitorsPage() {
       const params = new URLSearchParams({ business_id: business.id, radius_m: '5000' })
       const res = await fetch('/api/aria/competitors?' + params.toString()).then(r => r.json())
       if (res.error) throw new Error(res.error)
+      const found: Discovered[] = res.competitors ?? []
+      setDiscovered(found)
       setLastScanned(new Date().toISOString())
+      if (res.no_api_key) setError(res.message ?? 'Competitor scanning is not enabled yet.')
+      else if (found.length === 0) setError('No competitors found within 5km — try again later or add competitors manually under "Manage watches".')
       load()
     } catch (e: unknown) { setError((e as Error).message) }
     setScanning(false)
   }
 
   const competitorMap: Record<string, Competitor> = {}
+  // Seed with businesses the scan discovered so they appear even before any alerts fire.
+  for (const d of discovered) {
+    const name = d.competitor_name ?? 'Unknown'
+    if (!competitorMap[name]) competitorMap[name] = { name, alerts: [], lastSeen: d.last_checked ?? new Date().toISOString(), alertCount: 0, rating: d.google_rating, distance: d.distance_m, address: d.competitor_address }
+  }
   for (const a of alerts) {
     const name = a.competitor_name ?? 'Unknown'
     if (!competitorMap[name]) competitorMap[name] = { name, alerts: [], lastSeen: a.detected_at, alertCount: 0 }
@@ -193,7 +212,7 @@ export default function CompetitorsPage() {
     competitorMap[name].alertCount++
     if (a.detected_at > competitorMap[name].lastSeen) competitorMap[name].lastSeen = a.detected_at
   }
-  const competitors = Object.values(competitorMap).sort((a, b) => b.alertCount - a.alertCount)
+  const competitors = Object.values(competitorMap).sort((a, b) => b.alertCount - a.alertCount || (a.distance ?? 1e9) - (b.distance ?? 1e9))
   const currentAlerts = selectedComp ? (competitorMap[selectedComp]?.alerts ?? []) : []
   const typeBreakdown = currentAlerts.reduce((acc: Record<string, number>, a) => {
     acc[a.alert_type] = (acc[a.alert_type] ?? 0) + 1
@@ -246,7 +265,7 @@ export default function CompetitorsPage() {
 
       {activeTab === 'overview' && (loading ? (
         <div style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '60px 0' }}>Loading competitor data...</div>
-      ) : alerts.length === 0 ? (
+      ) : competitors.length === 0 ? (
         <div style={{ background: 'var(--bg-surface)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 14, padding: '48px 24px', textAlign: 'center' }}>
           <div style={{ fontSize: 32, marginBottom: 12 }}>📡</div>
           <p style={{ fontSize: 16, fontWeight: 700, marginBottom: 6 }}>No competitor data yet</p>
@@ -274,11 +293,17 @@ export default function CompetitorsPage() {
                       style={{ background: isSelected ? 'rgba(139,92,246,0.12)' : 'var(--bg-surface)', border: '1px solid ' + (isSelected ? 'rgba(139,92,246,0.4)' : 'rgba(255,255,255,0.07)'), borderRadius: 10, padding: '12px 14px', cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <span style={{ fontSize: 13, fontWeight: 600, color: isSelected ? '#8B5CF6' : 'var(--text-primary)' }}>{c.name}</span>
-                        <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 99, background: isSelected ? 'rgba(139,92,246,0.2)' : 'rgba(255,255,255,0.06)', color: isSelected ? '#8B5CF6' : 'var(--text-secondary)' }}>
-                          {c.alertCount}
-                        </span>
+                        {c.alertCount > 0 ? (
+                          <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 99, background: isSelected ? 'rgba(139,92,246,0.2)' : 'rgba(255,255,255,0.06)', color: isSelected ? '#8B5CF6' : 'var(--text-secondary)' }}>
+                            {c.alertCount}
+                          </span>
+                        ) : c.rating != null ? (
+                          <span style={{ fontSize: 10, fontWeight: 700, color: '#F59E0B' }}>★ {Number(c.rating).toFixed(1)}</span>
+                        ) : null}
                       </div>
-                      <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 4 }}>{timeAgo(c.lastSeen)}</div>
+                      <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 4 }}>
+                        {c.alertCount > 0 ? timeAgo(c.lastSeen) : c.distance != null ? `${(c.distance / 1000).toFixed(1)}km away` : 'Monitoring'}
+                      </div>
                     </button>
                   )
                 })}
@@ -296,6 +321,11 @@ export default function CompetitorsPage() {
                       </span>
                     ))}
                   </div>
+                  {currentAlerts.length === 0 && (
+                    <div style={{ background: 'var(--bg-surface)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 12, padding: '20px 18px', fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+                      Found nearby{competitorMap[selectedComp]?.distance != null ? ` — ${(competitorMap[selectedComp]!.distance! / 1000).toFixed(1)}km away` : ''}{competitorMap[selectedComp]?.rating != null ? ` · ${Number(competitorMap[selectedComp]!.rating).toFixed(1)}★ on Google` : ''}. No activity detected yet — Aria monitors this competitor daily and will surface price changes, promotions and review shifts here.
+                    </div>
+                  )}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                     {currentAlerts.map(a => (
                       <div key={a.id} style={{ background: 'var(--bg-surface)', border: '1px solid rgba(255,255,255,0.07)', borderLeft: '4px solid ' + (TYPE_COLORS[a.alert_type] ?? '#6B7280'), borderRadius: '0 12px 12px 0', padding: '14px 16px' }}>
