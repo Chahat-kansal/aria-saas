@@ -23,8 +23,10 @@ function ScanLanding() {
 export default function InStorePage({ params, searchParams }: { params: { business_id: string }; searchParams: { t?: string } }) {
   const biz = params.business_id
   const t = searchParams?.t
-  // Token present → redeem it (sets cookie) and bounce back to the clean URL.
-  if (t) redirect(`/api/public/instore/session?biz=${encodeURIComponent(biz)}&t=${encodeURIComponent(t)}`)
+  // Token present → redeem it (sets cookie) and land on the welcome chooser, which
+  // forks to scan-and-go or chat. The welcome page itself redirects straight to chat
+  // when the business has scan-and-go disabled, so cafes lose no taps.
+  if (t) redirect(`/api/public/instore/session?biz=${encodeURIComponent(biz)}&t=${encodeURIComponent(t)}&next=welcome`)
 
   const hasSession = cookies().get(`ariakiosk_${biz}`)
   if (!hasSession) return <ScanLanding />
