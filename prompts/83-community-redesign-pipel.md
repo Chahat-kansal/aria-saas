@@ -137,6 +137,151 @@ On `/dashboard/community/profile` (find it — should exist from Phase 1 or 3):
 - Reject obvious junk: javascript: URLs, malformed hosts, anything under 4 chars
 - No iframe embed for launch — open in a new tab (in-app browser is a future enhancement)
 
+
+
+## NEW SECTION — Anonymous Memory Across Sessions (verify, don't break)
+
+The whole community is anonymous-first. A visitor's identity is a UUID stored in
+their browser's localStorage as session_token, mapped to community_members.session_token.
+
+This MUST continue to work after this redesign — verify it does:
+1. Open /community in browser A → a session_token is created, member row inserted
+2. Like a post, follow a business, save an offer
+3. Close the tab, reopen /community next day
+4. Same like, same follow, same saved offer must still be there
+5. Test in a second browser → must look like a brand-new user (because localStorage is per-browser)
+
+If any redesigned page accidentally bypasses session_token (e.g. by calling a route
+that expects auth.uid()), fix it. Anonymous browsing is the core promise of the platform.
+
+## NEW SECTION — Abuse and Spam Protection
+
+The privacy guard only catches PII. Add an ABUSE guard alongside it, in the same
+src/lib/community/privacy-guard.ts file (or a new src/lib/community/abuse-guard.ts).
+
+### Layer 1 — profanity regex (cheap, fast, server-side)
+Block messages containing:
+- Profanity (common F-word, C-word, etc — use a published list like noswearing.com seed)
+- Slurs (racial, sexual, ableist)
+- Direct threats (variations of "kill", "find you", "burn down", "ruin", "destroy your business")
+- Harassment patterns ("scam", "thief", "fraud", "fake", repeated with anger)
+
+Be conservative on threats — match the verb + object pattern, not just the verb. "Kill the music" should pass; "kill you" should not.
+
+### Layer 2 — Haiku second-pass (for coded abuse the regex misses)
+If a message survives the regex but the customer's chat history with this business has 3+ previous flagged messages within 24h, run a Haiku check:
+"Is this message harassing or threatening? Reply only YES or NO."
+Block if YES.
+
+### Layer 3 — rate limits per session_token
+- Max 5 messages per minute per session_token per business
+- Max 20 messages per hour per session_token across ALL businesses
+- Exceeded → 429 with "Slow down — try again in N seconds"
+
+### Layer 4 — report button + block list
+- Every message gets a small dots-menu with "Report message"
+- Owner inbox gets a "Block this customer" option that adds session_token to a
+  `community_blocked_visitors` table (business_id, session_token, reason, blocked_at)
+- Blocked visitors cannot send any new messages to that business (other businesses fine)
+
+### DB migrations
+```sql
+CREATE TABLE IF NOT EXISTS community_message_reports (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  message_id uuid NOT NULL,
+  business_id uuid REFERENCES businesses(id),
+  reported_by_session_token text,
+  reason text,
+  status text DEFAULT 'pending' CHECK (status IN ('pending','reviewed','dismissed')),
+  created_at timestamptz DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS community_blocked_visitors (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  business_id uuid REFERENCES businesses(id),
+  session_token text NOT NULL,
+  reason text,
+  blocked_at timestamptz DEFAULT now(),
+  UNIQUE(business_id, session_token)
+);
+
+ALTER TABLE community_message_reports ENABLE ROW LEVEL SECURITY;
+ALTER TABLE community_blocked_visitors ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "reports_anon_insert" ON community_message_reports
+  FOR INSERT TO anon WITH CHECK (true);
+CREATE POLICY "reports_owner_read" ON community_message_reports
+  FOR SELECT TO authenticated
+  USING (business_id IN (SELECT id FROM businesses WHERE user_id = auth.uid()));
+
+CREATE POLICY "blocked_owner_all" ON community_blocked_visitors
+  FOR ALL TO authenticated
+  USING (business_id IN (SELECT id FROM businesses WHERE user_id = auth.uid()))
+  WITH CHECK (business_id IN (SELECT id FROM businesses WHERE user_id = auth.uid()));
+```
+
+### Wire-in
+- src/app/api/community/chats POST → run checkAbuseFull() alongside checkPrivacyFull()
+- On block: return 403 with "This message was flagged as abusive. If this is a mistake, contact support."
+- The owner-reply route ALSO runs both guards (owners can be abusive too)
+
+## NEW SECTION — Surface every built feature in the dashboard sidebar
+
+This is the most important section. We have shipped many features that are NOT
+discoverable from the main dashboard. Fix this.
+
+### Audit step (do this first)
+Read src/components/dashboard/Sidebar.tsx (or wherever the sidebar component lives — find it).
+List every link in the current sidebar.
+Then list every page that exists in src/app/dashboard/* and src/app/community/* and src/app/in-store/*.
+Identify the GAP — pages that exist but aren't linked.
+
+### Sidebar restructure
+Reorganise into clear sections (these section labels go above the link groups):
+
+OPERATIONS (existing, keep)
+- Sales / POS / Orders / Reorder / etc — whatever's there now
+
+INTELLIGENCE (existing, keep + add)
+- Reviews, SEO, Competitor watch (existing)
+- Profit leaks, Cash flow, Missed demand, Intelligence centre (existing)
+- Churn prevention, Smart reorder, Variance & shrinkage (existing)
+- Add: Parcel tracking (link to /dashboard/parcel-tracking)
+- Add: Ask Aria (link to wherever the Ask Aria chat panel opens — could be a toggle)
+
+CUSTOMER SURFACES (NEW section)
+- In-Store Kiosk owner config → /dashboard/in-store
+- Aria Community profile → /dashboard/community/profile (or whatever the path is — find it)
+- Aria Marketer → /dashboard/community/marketer
+- Marketplace listings → /dashboard/marketplace
+- Marketplace enquiries → /dashboard/marketplace?tab=enquiries
+
+GROWTH (existing, keep + add)
+- Social media (cross-posting)
+- Loyalty, Reviews automation, Marketing
+- Add: Bundle builder (if /dashboard/bundles exists)
+- Add: Dynamic pricing (if /dashboard/pricing exists)
+- Add: Ad network (if /dashboard/ads exists)
+
+SETTINGS (existing, keep)
+- Business, Team, Billing, Integrations
+
+### Rules for the sidebar restructure
+- Group with the section headers above (small caps labels, 10px/600 ink-soft)
+- Active route gets accent treatment (lime bar on the left edge OR lime background — whichever matches the existing dashboard design language, don't break it)
+- Add a small "NEW" pill on links to features built in the last 30 days — helps the owner notice what's new
+- DO NOT redesign the whole dashboard sidebar — match existing styles
+- Mobile: the sidebar collapses into a hamburger, the new sections should also collapse
+
+### Dashboard homepage updates
+The dashboard root (/dashboard) probably has tiles or cards for features. Add:
+- A "Customer-facing" section with tiles for: Kiosk config, Community profile, Marketer, Marketplace
+- A "What's new" strip pinned at the top showing the 3 most recently shipped features (with screenshots/icons)
+- This is how owners discover what they have
+
+### One single commit
+"feat(dashboard): surface every feature in the sidebar, new Customer Surfaces section, What's New strip"
+
 ## RULES
 - Read the attached image reference FIRST, before writing any code.
 - Hard 1.5px ink borders stay hard. Don't soften to grey.
