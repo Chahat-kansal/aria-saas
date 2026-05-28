@@ -122,6 +122,7 @@ const ALWAYS_SECTIONS: { section: string; items: (NavItemDef & { fresh?: boolean
   {
     section: 'Customer surfaces',
     items: [
+      { href: '/dashboard/inbox',                     label: 'Customer inbox',        icon: InboxIcon,       section: 'Customer surfaces', fresh: true },
       { href: '/dashboard/in-store',                  label: 'In-Store Kiosk',        icon: RegisterIcon,    section: 'Customer surfaces', fresh: true },
       { href: '/dashboard/community',                 label: 'Community feed',        icon: SocialIcon,      section: 'Customer surfaces', fresh: true },
       { href: '/dashboard/community/profile',         label: 'Community profile',     icon: GlobeIcon,       section: 'Customer surfaces', fresh: true },
@@ -176,14 +177,18 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
     Promise.all([
       fetch(`/api/aria/badge-counts?business_id=${bid}`).then(r => r.json()).catch(() => ({})),
       fetch(`/api/aria/business-health-quick?business_id=${bid}`).then(r => r.json()).catch(() => null),
-    ]).then(([badges, h]) => {
-      if (badges) setBadgeCounts(badges);
+      fetch(`/api/dashboard/inbox?filter=unread`).then(r => r.json()).catch(() => null),
+    ]).then(([badges, h, inbox]) => {
+      const merged = { ...(badges ?? {}) };
+      if (inbox && typeof inbox.unread_count === 'number') merged.inbox = inbox.unread_count;
+      setBadgeCounts(merged);
       if (h?.grade) setHealth({ score: h.score as number, grade: h.grade as string });
     });
   }, [business?.id]);
 
   // Map hrefs to badge count keys
   const BADGE_MAP: Record<string, string> = {
+    '/dashboard/inbox':          'inbox',
     '/dashboard/reviews':        'reviews',
     '/dashboard/winback':        'winback',
     '/dashboard/profit-leaks':   'profit_leaks',
