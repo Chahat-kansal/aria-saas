@@ -22,8 +22,8 @@ export async function getServerToken(scope: 'SERVER_ACCESS' | 'CLIENT_ACCESS' = 
     },
     body: `scope=${scope}`,
   });
-  const tokenText = await res.text();
   if (!res.ok) {
+    const tokenText = await res.text();
     console.error('[basiq/token] failed:', res.status, tokenText);
     throw new Error(`Basiq token failed: ${res.status} ${tokenText}`);
   }
@@ -34,17 +34,22 @@ export async function getServerToken(scope: 'SERVER_ACCESS' | 'CLIENT_ACCESS' = 
 
 async function basiqFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const token = await getServerToken();
+  const hasBody = init?.body != null;
   const res = await fetch(`${BASIQ_BASE}${path}`, {
     ...init,
     headers: {
       'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
       'Accept': 'application/json',
       'basiq-version': '3.0',
+      ...(hasBody ? { 'Content-Type': 'application/json' } : {}),
       ...(init?.headers ?? {}),
     },
   });
-  if (!res.ok) throw new Error(`Basiq ${path} failed: ${res.status} ${(await res.text()).slice(0, 300)}`);
+  if (!res.ok) {
+    const text = await res.text();
+    console.error('[basiq] failed:', path, res.status, text);
+    throw new Error(`Basiq ${path} failed: ${res.status} ${text.slice(0, 300)}`);
+  }
   return res.json() as Promise<T>;
 }
 
