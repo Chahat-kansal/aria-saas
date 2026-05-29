@@ -5,6 +5,7 @@ import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { markBriefingStale } from '@/lib/aria/briefing-invalidate'
 
 type Params = { params: { id: string } }
 
@@ -40,6 +41,7 @@ async function _PATCH(req: Request, { params }: Params) {
 
   const { data, error } = await supabaseAdmin.from('customers').update(update).eq('id', params.id).select('*').single()
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  void markBriefingStale(customer.business_id)
   return NextResponse.json({ customer: data })
 }
 

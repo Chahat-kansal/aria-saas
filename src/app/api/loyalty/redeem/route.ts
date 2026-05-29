@@ -5,6 +5,7 @@ import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { markBriefingStale } from '@/lib/aria/briefing-invalidate'
 
 async function _POST(req: Request) {
   const supabase = createServerSupabaseClient()
@@ -58,6 +59,7 @@ async function _POST(req: Request) {
     created_at: new Date().toISOString(),
   })
 
+  void markBriefingStale(business_id)
   return NextResponse.json({
     ok: true,
     discount_cents: discountCents,

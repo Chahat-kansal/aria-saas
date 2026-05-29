@@ -3,6 +3,7 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { markBriefingStale } from '@/lib/aria/briefing-invalidate'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string) {
   const { data: a } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
@@ -426,6 +427,7 @@ async function _PATCH(req: Request) {
   const { data, error } = await supabaseAdmin.from('pos_parcel_tracking')
     .update(updates).eq('id', body.id).select().single()
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  void markBriefingStale(bid)
   return NextResponse.json({ parcel: data, warning: refreshWarning })
 }
 

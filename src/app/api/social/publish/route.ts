@@ -5,6 +5,7 @@ import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { NextResponse } from 'next/server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { markBriefingStale } from '@/lib/aria/briefing-invalidate'
 
 // Instagram requires a clean publicly accessible URL — proxy Pexels/external images to Supabase storage
 async function ensurePublicImageUrl(imageUrl: string, postId: string): Promise<string> {
@@ -126,6 +127,7 @@ async function _POST(req: Request) {
     return NextResponse.json({ error: publishError }, { status: 502 });
   }
   console.log('[social/publish] success:', post.platform, platformPostId);
+  void markBriefingStale(business_id)
   return NextResponse.json({ ok: true, platform_post_id: platformPostId });
 }
 

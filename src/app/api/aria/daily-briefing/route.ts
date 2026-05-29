@@ -68,12 +68,15 @@ async function _POST(req: NextRequest) {
   // Verify ownership + get business details
   const { data: business } = await supabase
     .from('businesses')
-    .select('id, name, owner_name, industry, city, monthly_revenue, staff_count, biggest_challenge, data_source, square_connected')
+    .select('id, name, owner_name, industry, city, monthly_revenue, staff_count, biggest_challenge, data_source, square_connected, requires_briefing_refresh')
     .eq('id', business_id)
     .eq('user_id', user.id)
     .single();
 
   if (!business) return NextResponse.json({ error: 'Business not found' }, { status: 404 });
+
+  // If the DB flag says data changed since last briefing, treat as force_refresh
+  const shouldRefresh = force_refresh || Boolean((business as { requires_briefing_refresh?: boolean }).requires_briefing_refresh)
 
   trackUsage({ business_id: business_id, event_type: 'daily_briefing' });
 
@@ -85,7 +88,7 @@ async function _POST(req: NextRequest) {
   const sixHoursAgo = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString();
 
   // Cache check — skip Claude if fresh enough
-  if (!force_refresh) {
+  if (!shouldRefresh) {
     const { data: cached } = await supabase
       .from('daily_briefings')
       .select('recommendations, generated_at, data_snapshot, dismissed_at, remind_at')
@@ -482,6 +485,11 @@ Generate 3-5 actionable briefing items from this real data. If invoice_status sh
     dismissed_at: null,
     remind_at: null,
   }, { onConflict: 'business_id,date' });
+
+  // Reset stale flag now that briefing is fresh
+  if (shouldRefresh) {
+    void supabase.from('businesses').update({ requires_briefing_refresh: false }).eq('id', business_id)
+  }
 
   // Audit trail: record that Aria flagged overdue invoices in this briefing.
   if (invoiceStats.overdueCount > 0) {
