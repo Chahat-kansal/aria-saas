@@ -101,16 +101,21 @@ Generate 5-10 realistic, specific actions based on the data provided. Return ONL
   }
 
   if (actions.length > 0) {
-    const rows = (actions as Array<{category?: string; priority?: string; title?: string; description?: string; action_data?: unknown; estimated_impact?: string}>).map(a => ({
-      business_id: bid,
-      category: a.category ?? "GENERAL",
-      priority: a.priority ?? "routine",
-      title: a.title ?? "Action",
-      description: a.description ?? "",
-      action_data: a.action_data ?? {},
-      estimated_impact: a.estimated_impact ?? null,
-      status: "pending",
-    }));
+    const VALID_PRIORITIES = new Set(['urgent', 'important', 'routine'])
+    const rows = (actions as Array<{category?: string; priority?: string; title?: string; description?: string; action_data?: unknown; estimated_impact?: string}>).map(a => {
+      const rawP = a.priority ?? ''
+      const priority = rawP === 'high' ? 'urgent' : rawP === 'medium' ? 'important' : VALID_PRIORITIES.has(rawP) ? rawP : 'routine'
+      return {
+        business_id: bid,
+        category: a.category ?? "GENERAL",
+        priority,
+        title: a.title ?? "Action",
+        description: a.description ?? "",
+        action_data: a.action_data ?? {},
+        estimated_impact: a.estimated_impact ?? null,
+        status: "pending",
+      }
+    });
     await supabase.from("aria_autopilot_actions").insert(rows);
   }
 

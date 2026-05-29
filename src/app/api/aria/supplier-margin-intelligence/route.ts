@@ -110,7 +110,7 @@ Then respond ONLY in this JSON format:
       await supabase.from('aria_autopilot_actions').insert({
         business_id: bid,
         category: 'pricing',
-        priority: totalRecoverable > 5000 ? 'high' : 'medium',
+        priority: totalRecoverable > 5000 ? 'urgent' : 'important',
         title: 'Supplier price increase — pricing adjustment needed',
         description: parsed.summary ?? `${atRisk.length} products need sell price review after supplier cost increase.`,
         action_data: {

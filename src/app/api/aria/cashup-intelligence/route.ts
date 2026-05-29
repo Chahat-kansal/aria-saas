@@ -114,7 +114,8 @@ async function _POST(req: Request) {
 
   // Run Claude haiku — fast & cheap, structured output
   let insight = ''
-  let priority: 'high' | 'medium' | 'routine' = 'routine'
+  // aria_autopilot_actions.priority CHECK: ('urgent','important','routine')
+  let priority: 'urgent' | 'important' | 'routine' = 'routine'
 
   try {
     const response = await trackAICall(
@@ -143,7 +144,7 @@ Write your insight in this exact JSON format:
 {
   "title": "Short headline (max 8 words)",
   "body": "2-3 sentence specific finding with numbers. Tell them what to do about it.",
-  "priority": "high|medium|routine",
+  "priority": "urgent|important|routine",
   "estimated_annual_impact_cents": <integer, annual cost of this pattern>
 }
 
@@ -156,7 +157,10 @@ Only output the JSON. No markdown, no explanation.`,
     const cleaned = text.replace(/```json|```/g, '').trim()
     const parsed = JSON.parse(cleaned)
     insight = parsed.body ?? ''
-    priority = parsed.priority ?? 'routine'
+    const rawPriority: string = parsed.priority ?? ''
+    priority = rawPriority === 'high' || rawPriority === 'urgent' ? 'urgent'
+      : rawPriority === 'medium' || rawPriority === 'important' ? 'important'
+      : 'routine'
 
     // Write to aria_autopilot_actions so it shows up in the autopilot dashboard
     if (insight) {
