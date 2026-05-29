@@ -7,7 +7,7 @@ import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { randomBytes } from 'crypto'
 
-export const SHAREABLE_PAGES = [
+const SHAREABLE_PAGES = [
   { key: 'Overview', label: 'Overview / Dashboard' },
   { key: 'Cash Flow', label: 'Cash Flow' },
   { key: 'Invoices', label: 'Invoices' },

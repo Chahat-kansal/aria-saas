@@ -166,6 +166,10 @@
     {
       "path": "/api/cron/market-price-refresh",
       "schedule": "0 15 * * *"
+    },
+    {
+      "path": "/api/cron/send-scheduled-reports",
+      "schedule": "0 20 * * *"
     }
   ]
 }
