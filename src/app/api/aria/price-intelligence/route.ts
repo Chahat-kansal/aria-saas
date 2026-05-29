@@ -45,7 +45,7 @@ async function _POST(req: NextRequest) {
   ]);
   let promosData: any[] = [];
   try {
-    const { data } = await supabase.from('pos_promotions').select('*').eq('business_id', resolvedBid).eq('is_active', true);
+    const { data } = await supabase.from('pos_promotions').select('*').eq('business_id', resolvedBid).eq('active', true);
     promosData = data ?? [];
   } catch { /* table may not exist */ }
 
@@ -93,15 +93,15 @@ async function _POST(req: NextRequest) {
   // Promotion matching
   for (const promo of promotions) {
     // Simple percentage discount that applies to any item
-    if (promo.type === 'percentage' && promo.discount_value > 0) {
+    if (promo.promotion_type === 'percentage_discount' && promo.discount_percent > 0) {
       // Only surface active promos as suggestions — don't auto-apply
-      suggestions.push(`Active offer: ${promo.discount_value}% off — "${promo.name || 'Promotion'}"`);
+      suggestions.push(`Active offer: ${promo.discount_percent}% off — "${promo.name || 'Promotion'}"`);
     }
   }
 
   // Bundle suggestion from promotions
   for (const promo of promotions) {
-    if (promo.type === 'bxgy' || promo.type === 'bundle') {
+    if (promo.promotion_type === 'bogo' || promo.promotion_type === 'bundle') {
       suggestions.push(`Bundle offer available: ${promo.name ?? 'See promotions'}`);
     }
   }

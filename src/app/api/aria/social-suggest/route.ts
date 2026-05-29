@@ -93,7 +93,7 @@ async function _POST(req: Request) {
     supabase.from('businesses').select('id,name,industry,city').eq('id', business_id).eq('user_id', user.id).maybeSingle(),
     supabaseAdmin.from('pos_sale_items').select('product_name,quantity').eq('business_id', business_id).gte('created_at', new Date(Date.now() - 7 * 86400000).toISOString()),
     supabaseAdmin.from('social_preferences').select('*').eq('business_id', business_id).maybeSingle(),
-    supabaseAdmin.from('pos_promotions').select('name,discount_type,discount_value').eq('business_id', business_id).eq('is_active', true),
+    supabaseAdmin.from('pos_promotions').select('name,discount_percent,promotion_type').eq('business_id', business_id).eq('active', true),
   ]);
 
   if (!biz) return NextResponse.json({ error: 'Business not found' }, { status: 404 });
@@ -122,7 +122,7 @@ async function _POST(req: Request) {
 
   const strategyContext = INDUSTRY_STRATEGIES[biz.industry] || INDUSTRY_STRATEGIES.retail;
   const promoContext = (promotions || []).length > 0
-    ? `ACTIVE PROMOTIONS: ${promotions!.map(p => `${p.name} (${p.discount_value}${p.discount_type === 'percentage' ? '%' : 'A$'} off)`).join(', ')}`
+    ? `ACTIVE PROMOTIONS: ${promotions!.map(p => `${p.name}${p.discount_percent ? ` (${p.discount_percent}% off)` : ''}`).join(', ')}`
     : 'No active promotions';
 
   const requestedPlatforms: string[] = (Array.isArray(platforms) && platforms.length > 0)

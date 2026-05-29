@@ -60,7 +60,6 @@ async function _PATCH(req: Request, { params }: { params: { id: string } }) {
       confidence: String(h.confidence ?? 0.6),
       status: 'approved',
       source: 'hypothesis_engine',
-      triggered_by: 'owner_accept',
       payload: { hypothesis_id: params.id, predicted_impact_cents: h.predicted_impact_cents },
     })
     .select('id')

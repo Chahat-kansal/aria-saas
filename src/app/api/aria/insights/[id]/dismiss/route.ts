@@ -21,7 +21,7 @@ async function _POST(_req: Request, { params }: { params: Promise<{ id: string }
 
   const { error } = await supabase
     .from('aria_actions')
-    .update({ status: 'dismissed', updated_at: new Date().toISOString() })
+    .update({ status: 'ignored', updated_at: new Date().toISOString() })
     .eq('id', id)
     .eq('business_id', bid)
 
