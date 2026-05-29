@@ -5,11 +5,12 @@ const BASIQ_BASE = 'https://au-api.basiq.io';
 
 interface TokenResp { access_token: string; expires_in: number }
 
-// Bearer tokens are 60-minute scoped — keep in-memory cache
-let cached: { token: string; expires_at: number } | null = null;
+// Bearer tokens are 60-minute scoped — keep per-scope cache
+const tokenCache: Record<string, { token: string; expires_at: number }> = {};
 
 export async function getServerToken(scope: 'SERVER_ACCESS' | 'CLIENT_ACCESS' = 'SERVER_ACCESS'): Promise<string> {
-  if (cached && Date.now() < cached.expires_at - 60_000) return cached.token;
+  const c = tokenCache[scope];
+  if (c && Date.now() < c.expires_at - 60_000) return c.token;
   const key = process.env.BASIQ_API_KEY;
   if (!key) throw new Error('BASIQ_API_KEY not set');
 
@@ -28,7 +29,7 @@ export async function getServerToken(scope: 'SERVER_ACCESS' | 'CLIENT_ACCESS' = 
     throw new Error(`Basiq token failed: ${res.status} ${tokenText}`);
   }
   const j = await res.json() as TokenResp;
-  cached = { token: j.access_token, expires_at: Date.now() + j.expires_in * 1000 };
+  tokenCache[scope] = { token: j.access_token, expires_at: Date.now() + j.expires_in * 1000 };
   return j.access_token;
 }
 
