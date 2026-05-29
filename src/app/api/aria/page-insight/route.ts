@@ -163,10 +163,10 @@ async function _POST(req: Request): Promise<Response> {
 
     if (page === 'reviews') {
       const { data: unanswered } = await supabase
-        .from('reviews')
+        .from('google_reviews')
         .select('id, rating')
         .eq('business_id', business_id)
-        .is('response', null);
+        .eq('has_reply', false);
 
       const count = (unanswered ?? []).length;
       const ratings = (unanswered ?? []).map(
@@ -190,7 +190,7 @@ async function _POST(req: Request): Promise<Response> {
     if (page === 'staff') {
       const { data: staff } = await supabase
         .from('staff_members')
-        .select('id, name, visa_expiry_date')
+        .select('id, first_name, last_name, visa_expiry_date')
         .eq('business_id', business_id)
         .lte('visa_expiry_date', thirtyDaysFromNow)
         .gte('visa_expiry_date', today);
@@ -199,8 +199,8 @@ async function _POST(req: Request): Promise<Response> {
       const context = `${count} staff members have visa expiring within 30 days. Names: ${(staff ?? [])
         .slice(0, 3)
         .map(
-          (s: { name: string; visa_expiry_date: string | null }) =>
-            `${s.name} (expires ${s.visa_expiry_date ?? 'unknown'})`
+          (s: { first_name: string; last_name: string; visa_expiry_date: string | null }) =>
+            `${s.first_name} ${s.last_name} (expires ${s.visa_expiry_date ?? 'unknown'})`
         )
         .join(', ')}`;
 
@@ -555,8 +555,8 @@ async function _POST(req: Request): Promise<Response> {
     }
 
     if (page === 'customers') {
-      const { data: custs } = await supabase.from('pos_customers')
-        .select('customer_segment, churn_risk, visit_count, last_visit, total_spent, total_spend')
+      const { data: custs } = await supabase.from('customers')
+        .select('customer_segment, churn_risk, last_visit, total_spent')
         .eq('business_id', business_id).limit(2000);
       type C = { customer_segment: string | null; churn_risk: string | null; visit_count: number | null; last_visit: string | null; total_spent: number | null; total_spend: number | null };
       const list = (custs ?? []) as C[];

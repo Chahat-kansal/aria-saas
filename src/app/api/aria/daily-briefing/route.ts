@@ -152,9 +152,9 @@ async function _POST(req: NextRequest) {
     getBusinessSales(business_id, fourteenDaysAgo, dataSource),
     getBusinessCustomers(business_id, dataSource),
     getBusinessItems(business_id, dataSource),
-    supabase.from('reviews').select('id', { count: 'exact', head: true })
-      .eq('business_id', business_id).is('response', null)
-      .gt('created_at', thirtyDaysAgo.toISOString()),
+    supabase.from('google_reviews').select('id', { count: 'exact', head: true })
+      .eq('business_id', business_id).eq('has_reply', false)
+      .gte('review_date', thirtyDaysAgo.toISOString()),
     supabase.from('campaigns').select('id', { count: 'exact', head: true })
       .eq('business_id', business_id).eq('type', 'winback')
       .gt('created_at', thirtyDaysAgo.toISOString()),
