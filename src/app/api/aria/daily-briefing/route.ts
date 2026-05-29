@@ -407,7 +407,6 @@ async function _POST(req: NextRequest) {
       business_id,
       date: today,
       recommendations: [],
-      content: null,
       data_snapshot: context,
       generated_at: new Date().toISOString(),
       dismissed_at: null,
@@ -473,19 +472,11 @@ Generate 3-5 actionable briefing items from this real data. If invoice_status sh
     console.error('[daily-briefing] AI call failed:', (e as Error).message)
   }
 
-  // Build plain-text content from recommendations for display in content column
-  const briefingContent = Array.isArray(recommendations) && recommendations.length > 0
-    ? (recommendations as Array<{ priority?: string; title?: string; description?: string }>)
-        .map(r => `[${(r.priority ?? 'info').toUpperCase()}] ${r.title ?? ''}: ${r.description ?? ''}`)
-        .join('\n\n')
-    : null;
-
   // Upsert
   await supabase.from('daily_briefings').upsert({
     business_id,
     date: today,
     recommendations,
-    content: briefingContent,
     data_snapshot: context,
     generated_at: new Date().toISOString(),
     dismissed_at: null,
