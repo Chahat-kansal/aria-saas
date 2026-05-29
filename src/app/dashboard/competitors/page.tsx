@@ -5,6 +5,240 @@ import { useBusinessContext } from '@/components/providers/BusinessProvider'
 interface Alert { id: string; competitor_name: string; alert_text: string; source_url: string | null; detected_at: string; alert_type: string }
 interface Competitor { name: string; alerts: Alert[]; lastSeen: string; alertCount: number; rating?: number | null; distance?: number | null; address?: string | null }
 
+interface MarketScan { id: string; status: string; products_scanned: number; prices_found: number; overpriced_count: number; underpriced_count: number; potential_revenue_gain_cents: number; started_at: string; finished_at: string | null }
+interface MarketResult { product_id: string; product_name: string; your_price_dollars: number; market_low_dollars: number; market_avg_dollars: number; price_gap_cents: number; price_gap_pct: number; is_overpriced: boolean; is_underpriced: boolean; retailers: Array<{ name: string; price: number; url: string }> }
+
+function formatDollars(n: number) { return `A$${n.toFixed(2)}` }
+function formatGap(cents: number) {
+  const d = cents / 100
+  const sign = d > 0 ? '+' : ''
+  return `${sign}A$${Math.abs(d).toFixed(2)}`
+}
+
+function MarketPricesTab({ businessId }: { businessId: string }) {
+  const [scan, setScan] = useState<MarketScan | null>(null)
+  const [results, setResults] = useState<MarketResult[]>([])
+  const [scanning, setScanning] = useState(false)
+  const [polling, setPolling] = useState(false)
+  const [error, setError] = useState('')
+  const [dailyLimitMsg, setDailyLimitMsg] = useState('')
+  const [confirmMatch, setConfirmMatch] = useState<{ product: MarketResult; newPrice: number } | null>(null)
+  const [matchingId, setMatchingId] = useState<string | null>(null)
+
+  const loadResults = useCallback(async () => {
+    const d = await fetch(`/api/market-prices/results?business_id=${businessId}`).then(r => r.json()).catch(() => ({}))
+    if (d.scan) setScan(d.scan as MarketScan)
+    if (d.results) setResults(d.results as MarketResult[])
+  }, [businessId])
+
+  useEffect(() => { loadResults() }, [loadResults])
+
+  async function pollScan(scanId: string) {
+    setPolling(true)
+    for (let i = 0; i < 60; i++) {
+      await new Promise(r => setTimeout(r, 5000))
+      try {
+        const d = await fetch(`/api/market-prices/scan/${scanId}`).then(r => r.json())
+        const s = d.scan as MarketScan
+        setScan(s)
+        if (s.status === 'complete' || s.status === 'failed') { await loadResults(); break }
+      } catch { /* keep polling */ }
+    }
+    setPolling(false)
+    setScanning(false)
+  }
+
+  async function startScan() {
+    setScanning(true); setError(''); setDailyLimitMsg('')
+    try {
+      const res = await fetch('/api/market-prices/scan', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ business_id: businessId }),
+      })
+      const d = await res.json()
+      if (res.status === 429) {
+        setDailyLimitMsg(d.message ?? 'Scan already ran today.')
+        setScanning(false)
+        if (d.last_scan_id) await loadResults()
+        return
+      }
+      if (!res.ok || !d.scan_id) { setError(d.error ?? 'Could not start scan'); setScanning(false); return }
+      setScan({ id: d.scan_id, status: 'running', products_scanned: 0, prices_found: 0, overpriced_count: 0, underpriced_count: 0, potential_revenue_gain_cents: 0, started_at: new Date().toISOString(), finished_at: null })
+      void pollScan(d.scan_id)
+    } catch (e: unknown) { setError((e as Error).message); setScanning(false) }
+  }
+
+  async function matchPrice(product: MarketResult, newPrice: number) {
+    setMatchingId(product.product_id)
+    try {
+      await fetch(`/api/pos/products`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: product.product_id, price: newPrice }),
+      })
+      setResults(prev => prev.map(r => r.product_id === product.product_id ? { ...r, your_price_dollars: newPrice, is_overpriced: false, price_gap_cents: Math.round((newPrice - r.market_avg_dollars) * 100) } : r))
+    } catch { /* ignore */ }
+    setMatchingId(null)
+    setConfirmMatch(null)
+  }
+
+  const overpriced = results.filter(r => r.is_overpriced)
+  const underpriced = results.filter(r => r.is_underpriced)
+  const inRange = results.filter(r => !r.is_overpriced && !r.is_underpriced && r.retailers.length > 0)
+
+  const statCard = (label: string, count: number, sub: string, accent: string) => (
+    <div style={{ flex: 1, minWidth: 120, padding: '16px 18px', background: 'rgba(255,255,255,0.04)', border: `1px solid ${accent}33`, borderRadius: 12 }}>
+      <div style={{ fontSize: 28, fontWeight: 800, color: accent, lineHeight: 1 }}>{count}</div>
+      <div style={{ fontSize: 13, fontWeight: 600, color: '#fff', marginTop: 4 }}>{label}</div>
+      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>{sub}</div>
+    </div>
+  )
+
+  const lastScanned = scan?.finished_at
+    ? `Last scanned ${Math.round((Date.now() - new Date(scan.finished_at).getTime()) / 3600000)}h ago`
+    : scan?.started_at ? 'Scan in progress…' : 'Never scanned'
+
+  return (
+    <div>
+      {/* Trigger row */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 20, flexWrap: 'wrap' }}>
+        <button onClick={startScan} disabled={scanning || polling}
+          style={{ padding: '9px 20px', borderRadius: 9, border: 'none', background: scanning || polling ? 'rgba(127,184,151,0.3)' : '#7FB897', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', opacity: scanning || polling ? 0.7 : 1 }}>
+          {scanning || polling ? '🔍 Scanning…' : '🔍 Run market price scan'}
+        </button>
+        <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)' }}>{lastScanned}</span>
+        {scan?.status === 'running' && <span style={{ fontSize: 12, color: '#7FB897' }}>Scanned {scan.products_scanned} products so far…</span>}
+      </div>
+      <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)', marginBottom: 20 }}>
+        Scans your top 20 active products against major Australian retailers. Takes 2–4 minutes.
+      </p>
+
+      {dailyLimitMsg && (
+        <div style={{ marginBottom: 16, padding: '12px 16px', background: 'rgba(127,184,151,0.08)', border: '1px solid rgba(127,184,151,0.25)', borderRadius: 10, fontSize: 13, color: '#7FB897' }}>
+          ✓ {dailyLimitMsg}
+          <button onClick={() => document.getElementById('market-table')?.scrollIntoView({ behavior: 'smooth' })}
+            style={{ marginLeft: 12, fontSize: 12, color: '#7FB897', background: 'none', border: '1px solid rgba(127,184,151,0.4)', borderRadius: 6, padding: '2px 10px', cursor: 'pointer' }}>
+            View today&apos;s results ↓
+          </button>
+        </div>
+      )}
+
+      {error && <div style={{ marginBottom: 16, padding: '10px 14px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: 10, fontSize: 13, color: '#EF4444' }}>{error}</div>}
+
+      {results.length > 0 && (
+        <>
+          {/* Stat cards */}
+          <div style={{ display: 'flex', gap: 12, marginBottom: 24, flexWrap: 'wrap' }}>
+            {statCard('Overpriced', overpriced.length, `A$${(scan?.potential_revenue_gain_cents ?? 0) / 100 > 0 ? ((scan?.potential_revenue_gain_cents ?? 0) / 100).toFixed(0) + ' potential gain/unit' : 'review pricing'}`, '#EF4444')}
+            {statCard('Underpriced', underpriced.length, 'room to raise prices', '#7FB897')}
+            {statCard('In range', inRange.length, 'competitively priced', 'rgba(255,255,255,0.4)')}
+          </div>
+
+          {/* Product table */}
+          <div id="market-table" style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 14, border: '1px solid rgba(255,255,255,0.08)', overflow: 'hidden', marginBottom: 24 }}>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+                    {['Product', 'Your price', 'Market low', 'Market avg', 'Gap', 'Status', 'Action'].map(h => (
+                      <th key={h} style={{ padding: '10px 14px', textAlign: 'left', color: 'rgba(255,255,255,0.4)', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600, whiteSpace: 'nowrap' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {results.map(r => (
+                    <tr key={r.product_id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                      <td style={{ padding: '12px 14px', color: '#fff', fontWeight: 500 }}>{r.product_name}</td>
+                      <td style={{ padding: '12px 14px', color: '#fff', fontFamily: 'monospace' }}>{formatDollars(r.your_price_dollars)}</td>
+                      <td style={{ padding: '12px 14px', color: 'rgba(255,255,255,0.7)', fontFamily: 'monospace' }}>{formatDollars(r.market_low_dollars)}</td>
+                      <td style={{ padding: '12px 14px', color: 'rgba(255,255,255,0.7)', fontFamily: 'monospace' }}>{formatDollars(r.market_avg_dollars)}</td>
+                      <td style={{ padding: '12px 14px', fontFamily: 'monospace', color: r.price_gap_cents > 0 ? '#EF4444' : r.price_gap_cents < 0 ? '#7FB897' : 'rgba(255,255,255,0.4)' }}>
+                        {formatGap(r.price_gap_cents)}
+                        {r.price_gap_pct !== 0 && <span style={{ fontSize: 10, opacity: 0.7, marginLeft: 4 }}>({r.price_gap_pct > 0 ? '+' : ''}{Number(r.price_gap_pct).toFixed(1)}%)</span>}
+                      </td>
+                      <td style={{ padding: '12px 14px' }}>
+                        {r.is_overpriced ? <span style={{ fontSize: 12, fontWeight: 700, color: '#EF4444' }}>🔴 Overpriced</span>
+                          : r.is_underpriced ? <span style={{ fontSize: 12, fontWeight: 700, color: '#7FB897' }}>🟢 Underpriced</span>
+                          : <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)' }}>⚪ In range</span>}
+                      </td>
+                      <td style={{ padding: '12px 14px' }}>
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                          {r.is_overpriced && (
+                            <button onClick={() => setConfirmMatch({ product: r, newPrice: r.market_low_dollars })}
+                              disabled={matchingId === r.product_id}
+                              style={{ padding: '4px 10px', borderRadius: 6, border: 'none', background: 'rgba(239,68,68,0.15)', color: '#EF4444', fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+                              Match price
+                            </button>
+                          )}
+                          {r.retailers[0]?.url && (
+                            <a href={r.retailers[0].url} target="_blank" rel="noopener noreferrer"
+                              style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.5)', fontSize: 11, textDecoration: 'none', fontFamily: 'inherit', lineHeight: '22px' }}>
+                              View source ↗
+                            </a>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Retailer breakdown */}
+          <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 14, border: '1px solid rgba(255,255,255,0.08)', padding: '16px 20px' }}>
+            <h3 style={{ fontSize: 13, fontWeight: 700, color: '#fff', marginBottom: 12 }}>Retailer breakdown</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {results.filter(r => r.retailers.length > 0).map(r => (
+                <div key={r.product_id} style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)' }}>
+                  <span style={{ color: '#fff', fontWeight: 600 }}>{r.product_name}:</span>{' '}
+                  {r.retailers.map((ret, i) => (
+                    <span key={i}>
+                      <a href={ret.url} target="_blank" rel="noopener noreferrer" style={{ color: 'rgba(255,255,255,0.6)', textDecoration: 'none' }}>{ret.name}</a>
+                      {' '}<span style={{ fontFamily: 'monospace', color: '#7FB897' }}>{formatDollars(ret.price)}</span>
+                      {i < r.retailers.length - 1 && ' / '}
+                    </span>
+                  ))}
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+
+      {!scanning && !polling && results.length === 0 && (
+        <div style={{ textAlign: 'center', padding: '60px 0', color: 'rgba(255,255,255,0.4)', fontSize: 14 }}>
+          <div style={{ fontSize: 32, marginBottom: 12 }}>💰</div>
+          <p style={{ marginBottom: 6 }}>No market price data yet.</p>
+          <p style={{ fontSize: 12 }}>Run a scan to compare your prices against Australian retailers.</p>
+        </div>
+      )}
+
+      {/* Confirm match dialog */}
+      {confirmMatch && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div style={{ background: '#1a1f1c', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 16, padding: '24px 28px', maxWidth: 360, width: '90%' }}>
+            <h3 style={{ fontSize: 16, fontWeight: 700, color: '#fff', marginBottom: 10 }}>Match price?</h3>
+            <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)', marginBottom: 20, lineHeight: 1.6 }}>
+              Set <strong>{confirmMatch.product.product_name}</strong> to <strong style={{ color: '#7FB897' }}>{formatDollars(confirmMatch.newPrice)}</strong>?
+              Current price: {formatDollars(confirmMatch.product.your_price_dollars)}.
+            </p>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => matchPrice(confirmMatch.product, confirmMatch.newPrice)}
+                style={{ flex: 1, padding: '10px 0', borderRadius: 9, border: 'none', background: '#7FB897', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                Confirm
+              </button>
+              <button onClick={() => setConfirmMatch(null)}
+                style={{ flex: 1, padding: '10px 0', borderRadius: 9, border: '1px solid rgba(255,255,255,0.15)', background: 'transparent', color: 'rgba(255,255,255,0.7)', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 const TYPE_ICONS: Record<string, string> = { pricing: '💰', promotion: '🎁', review: '⭐', new_service: '✨', web: '🌐', general: '📡' }
 const TYPE_COLORS: Record<string, string> = { pricing: '#F59E0B', promotion: '#8B5CF6', review: '#22C55E', new_service: '#3B82F6', web: '#6B7280', general: '#6B7280' }
 
@@ -102,7 +336,7 @@ export default function CompetitorsPage() {
   const [watches, setWatches] = useState<Watch[]>([])
   const [newCompetitor, setNewCompetitor] = useState('')
   const [addingWatch, setAddingWatch] = useState(false)
-  const [activeTab, setActiveTab] = useState<'overview' | 'prices' | 'alerts' | 'watches'>('overview')
+  const [activeTab, setActiveTab] = useState<'overview' | 'prices' | 'alerts' | 'watches' | 'market'>('overview')
   const [brief, setBrief] = useState<string>('')
   const [briefLoading, setBriefLoading] = useState(true)
   const [opps, setOpps] = useState<Opportunity[]>([])
@@ -236,14 +470,14 @@ export default function CompetitorsPage() {
       </div>
 
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: 6, marginBottom: 16, borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-        {(['overview','prices','alerts','watches'] as const).map(t => {
+      <div style={{ display: 'flex', gap: 6, marginBottom: 16, borderBottom: '1px solid rgba(255,255,255,0.06)', flexWrap: 'wrap' }}>
+        {(['overview','prices','alerts','watches','market'] as const).map(t => {
           const active = activeTab === t
           const unread = t === 'alerts' ? alertRows.filter(a => !(a.is_read ?? a.read)).length : 0
           return (
             <button key={t} onClick={() => setActiveTab(t)}
               style={{ padding: '8px 14px', border: 'none', background: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: active ? 700 : 500, color: active ? '#fff' : 'rgba(255,255,255,0.5)', borderBottom: active ? '2px solid #8B5CF6' : '2px solid transparent', marginBottom: -1, textTransform: 'capitalize' }}>
-              {t === 'watches' ? 'Manage watches' : t}
+              {t === 'watches' ? 'Manage watches' : t === 'market' ? '💰 Market Prices' : t}
               {unread > 0 && <span style={{ marginLeft: 6, fontSize: 10, padding: '1px 6px', borderRadius: 99, background: '#EF4444', color: '#fff', fontWeight: 700 }}>{unread}</span>}
             </button>
           )
@@ -387,6 +621,10 @@ export default function CompetitorsPage() {
 
       {activeTab === 'prices' && (
         <PriceComparisonTable competitorNames={watches.map(w => w.competitor_name)} />
+      )}
+
+      {activeTab === 'market' && business?.id && (
+        <MarketPricesTab businessId={business.id} />
       )}
 
       {activeTab === 'alerts' && (
