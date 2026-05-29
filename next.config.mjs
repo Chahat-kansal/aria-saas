@@ -11,6 +11,17 @@ const nextConfig = {
   experimental: {
     serverComponentsExternalPackages: ['mongoose'],
     serverSourceMaps: false,
+    outputFileTracingExcludes: {
+      '*': [
+        './node_modules/@sparticuz/chromium/**',
+        './node_modules/puppeteer-core/**',
+        './node_modules/puppeteer/**',
+        './node_modules/chromium/**',
+        './node_modules/sharp/**',
+        './node_modules/@aws-sdk/**',
+        './node_modules/canvas/**',
+      ],
+    },
   },
   typescript: {
     ignoreBuildErrors: true,
