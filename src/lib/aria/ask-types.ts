@@ -50,6 +50,50 @@ export type AskBlock =
       downloadable?: boolean
       download_filename?: string
     }
+  | {
+      type: 'styled_chart'
+      chart_type: 'bar' | 'line' | 'pie' | 'area' | 'scatter'
+      color: string
+      title: string
+      data: Array<{ name: string; value: number }>
+      x_label?: string
+      y_label?: string
+      show_legend?: boolean
+      show_grid?: boolean
+    }
+  | {
+      type: 'data_table'
+      title: string
+      columns: Array<{ key: string; label: string; format?: 'currency' | 'number' | 'percent' | 'text' | 'date' }>
+      rows: Array<Record<string, unknown>>
+      sortable?: boolean
+      downloadable?: boolean
+    }
+  | {
+      type: 'spreadsheet'
+      filename: string
+      headers: string[]
+      rows: Array<string[]>
+      auto_download?: boolean
+    }
+  | {
+      type: 'kpi_card'
+      label: string
+      value: string | number
+      format?: 'currency' | 'number' | 'percent'
+      trend?: number
+      trend_label?: string
+      color?: string
+      icon?: string
+    }
+  | {
+      type: 'comparison_table'
+      title: string
+      left_label: string
+      right_label: string
+      rows: Array<{ metric: string; left: number; right: number; format?: string }>
+      show_delta?: boolean
+    }
 
 export interface AskResponse {
   blocks: AskBlock[]

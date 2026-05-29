@@ -8,7 +8,7 @@ import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { callAnthropic, callAnthropicWithTools } from '@/lib/aria/providers/anthropic'
 import { ARIA_POS_TOOLS, executePOSTool } from '@/lib/aria-tools'
-import { classifyIntent } from '@/lib/aria/ask/intent'
+import { classifyIntent, detectOutputFormat } from '@/lib/aria/ask/intent'
 import { buildAskAriaContext } from '@/lib/aria/ask/business-context'
 // buildSystemPrompt replaced by inline Aria OS prompt below
 import { ARTIFACT_INSTRUCTIONS } from '@/lib/aria-system-prompt'
@@ -190,8 +190,9 @@ async function _POST(req: Request) {
     }, { status: 402 })
   }
 
-  // 1. Classify intent
+  // 1. Classify intent + detect output format preference
   const intent = await classifyIntent(message)
+  const outputFmt = detectOutputFormat(message)
 
   // 1a. Check if a pending action awaits confirmation
   if (conversationId) {
@@ -585,6 +586,27 @@ For live_render, generate complete self-contained HTML with:
 - "action_list": priority action items with buttons
 - "html": simple HTML snippet
 
+### Rich output blocks (new — match to what the owner asks for)
+- "styled_chart": chart with explicit chart_type ("bar"|"line"|"pie"|"area") and color. Use when owner specifies a chart type or colour.
+  Fields: chart_type, color (hex), title, data [{name, value}], x_label?, y_label?, show_legend?, show_grid?
+- "data_table": sortable, filterable table with Export CSV button. Use when owner asks for "table", "rows", "list of".
+  Fields: title, columns [{key, label, format?}], rows [{}], sortable?, downloadable?
+- "spreadsheet": preview table + download button. Use when owner asks for "spreadsheet", "export", "download", "CSV", "Excel".
+  Fields: filename, headers [], rows [[]], auto_download? (set true to trigger download immediately on render)
+- "kpi_card": single big number with trend arrow. Use when owner asks for a single metric or KPI.
+  Fields: label, value, format? ("currency"|"number"|"percent"), trend? (number: positive=up), trend_label?, color?
+- "comparison_table": side-by-side metric comparison. Use when owner asks to "compare", "vs", "this week vs last week".
+  Fields: title, left_label, right_label, rows [{metric, left, right, format?}], show_delta?
+
+OUTPUT FORMAT — match the output type to what the owner asks for:
+When the owner asks for a "graph", "chart", "visualise", or specifies a chart type → use "styled_chart" with their preferred chart_type and color if specified.
+When the owner asks for a "table", "tabular", "rows", "list of" → use "data_table" with downloadable: true.
+When the owner asks for a "spreadsheet", "export", "download", "CSV", "Excel" → use "spreadsheet" with auto_download: true.
+When the owner asks to "compare", "vs", "this week vs last week" → use "comparison_table" with the two periods clearly labelled.
+When the owner wants a single metric/KPI/number → use "kpi_card" with appropriate format and trend if data supports it.
+When the owner specifies a colour ("in green", "red chart") → pass it as a hex in the color field.
+You can return MULTIPLE blocks — e.g. both a styled_chart AND a spreadsheet if the owner wants both a visual and a download.
+
 ### Plain text
 For explanations, advice, writing tasks, emails, analysis in words — just reply in the text field. No block needed unless a visual adds value.
 
@@ -669,6 +691,18 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
       systemPrompt += '\n\nACTIVE SKILLS (the owner has asked you to take on these roles — stack their lenses across your reply):\n' + block
     }
   } catch { /* skills are additive — never block the response */ }
+
+  // 4c. Inject detected output format hint so Claude picks the right block type
+  if (outputFmt.wants_download) {
+    systemPrompt += '\n\nOUTPUT HINT: Owner wants a download/export — use "spreadsheet" block with auto_download: true.'
+  } else if (outputFmt.wants_comparison) {
+    systemPrompt += '\n\nOUTPUT HINT: Owner wants a comparison — use "comparison_table" block with clear left/right period labels and show_delta: true.'
+  } else if (outputFmt.wants_chart) {
+    const chartHint = [`use "styled_chart" block with chart_type: "${outputFmt.chart_type ?? 'bar'}"`, outputFmt.chart_color ? `color: "${outputFmt.chart_color}"` : ''].filter(Boolean).join(', ')
+    systemPrompt += `\n\nOUTPUT HINT: Owner wants a chart — ${chartHint}.`
+  } else if (outputFmt.wants_table) {
+    systemPrompt += '\n\nOUTPUT HINT: Owner wants a table — use "data_table" block with downloadable: true.'
+  }
 
   // 5. Build proper multi-turn history for Claude
   // Strip prior "broken" assistant messages for image/generation requests

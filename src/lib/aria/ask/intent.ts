@@ -38,6 +38,42 @@ For troubleshoot/escalate, identify: issue_summary (brief), issue_category (hard
 
 Respond with JSON only: {"type":"...","confidence":"high|medium|low","complexity":"simple|complex","export_format":"...","export_subject":"...","export_period":"...","issue_summary":"...","issue_category":"..."}`
 
+export interface OutputFormat {
+  wants_chart: boolean
+  chart_type?: string
+  chart_color?: string
+  wants_table: boolean
+  wants_download: boolean
+  wants_comparison: boolean
+}
+
+function extractColor(m: string): string | undefined {
+  const colors: Record<string, string> = {
+    green: '#22c55e', red: '#ef4444', blue: '#3b82f6',
+    purple: '#a855f7', orange: '#f97316', yellow: '#eab308',
+    teal: '#14b8a6', sage: '#7FB897', forest: '#2D5240',
+    lime: '#d9f54e', pink: '#ec4899', indigo: '#6366f1',
+  }
+  for (const [name, hex] of Object.entries(colors)) {
+    if (m.includes(name)) return hex
+  }
+  const hexMatch = m.match(/#[0-9a-f]{6}/i)
+  return hexMatch ? hexMatch[0] : undefined
+}
+
+export function detectOutputFormat(message: string): OutputFormat {
+  const m = message.toLowerCase()
+  return {
+    wants_chart: /chart|graph|plot|visualis|bar|line|pie|area/.test(m),
+    chart_type: m.includes('bar') ? 'bar' : m.includes('line') ? 'line' :
+                m.includes('pie') ? 'pie' : m.includes('area') ? 'area' : undefined,
+    chart_color: extractColor(m),
+    wants_table: /table|tabular|rows|list of|show me all/.test(m),
+    wants_download: /spreadsheet|export|download|csv|excel/.test(m),
+    wants_comparison: /compare|vs |versus|against|this week vs|vs last/.test(m),
+  }
+}
+
 export async function classifyIntent(
   message: string,
   conversationContext?: string,
