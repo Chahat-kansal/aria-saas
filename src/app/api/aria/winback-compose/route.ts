@@ -26,9 +26,9 @@ async function _POST(req: Request) {
   const [d30, d60, d90] = [30, 60, 90].map(d => new Date(now.getTime() - d * 86400_000).toISOString())
 
   const [{ count: c30 }, { count: c60 }, { count: c90 }] = await Promise.all([
-    supabaseAdmin.from('pos_customers').select('id', { count: 'exact', head: true }).eq('business_id', business_id).lt('last_visit_at', d30).gt('last_visit_at', d60),
-    supabaseAdmin.from('pos_customers').select('id', { count: 'exact', head: true }).eq('business_id', business_id).lt('last_visit_at', d60).gt('last_visit_at', d90),
-    supabaseAdmin.from('pos_customers').select('id', { count: 'exact', head: true }).eq('business_id', business_id).lt('last_visit_at', d90),
+    supabaseAdmin.from('pos_customers').select('id', { count: 'exact', head: true }).eq('business_id', business_id).lt('last_visit', d30).gt('last_visit', d60),
+    supabaseAdmin.from('pos_customers').select('id', { count: 'exact', head: true }).eq('business_id', business_id).lt('last_visit', d60).gt('last_visit', d90),
+    supabaseAdmin.from('pos_customers').select('id', { count: 'exact', head: true }).eq('business_id', business_id).lt('last_visit', d90),
   ])
 
   const context = `Business: ${biz.name} (${biz.industry}, ${biz.city ?? 'Australia'})

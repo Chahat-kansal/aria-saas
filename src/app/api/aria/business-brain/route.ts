@@ -30,9 +30,6 @@ const MODES = new Set<AriaBrainMode>([
   'supplier', 'customer', 'staff', 'explain', 'chat',
 ]);
 
-const CACHE_MODES = new Set<AriaBrainMode>(['daily', 'health', 'sales', 'inventory']);
-const CACHE_MINUTES = 30;
-
 // Parallel saves — eliminates sequential for-loop bottleneck
 async function saveRecommendations(
   supabase: ReturnType<typeof createServerSupabaseClient>,
@@ -131,25 +128,6 @@ export const POST = withErrorCapture('aria/business-brain', async (req: Request)
   if (!MODES.has(mode)) return NextResponse.json({ error: 'Invalid mode' }, { status: 400 });
 
   try {
-    // ── 30-minute cache for high-frequency modes ─────────────────────
-    if (CACHE_MODES.has(mode) && !body.force_refresh) {
-      const cacheFloor = new Date(Date.now() - CACHE_MINUTES * 60_000).toISOString();
-      const { data: cached } = await supabase
-        .from('daily_briefings')
-        .select('content, generated_at')
-        .eq('business_id', businessId)
-        .eq('mode', mode)
-        .gte('generated_at', cacheFloor)
-        .order('generated_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()
-        .then(r => r, () => ({ data: null }));
-
-      if (cached?.content) {
-        return NextResponse.json({ ...cached.content, cached: true });
-      }
-    }
-
     trackUsage({ business_id: businessId, event_type: 'daily_briefing', metadata: { mode } })
 
     const businessData = await collectBusinessData(businessId, { userId: user.id, supabase });
@@ -213,16 +191,6 @@ export const POST = withErrorCapture('aria/business-brain', async (req: Request)
       saved_actions,
       raw_counts: businessData.raw_counts,
     };
-
-    // ── Write to cache ────────────────────────────────────────────────
-    if (CACHE_MODES.has(mode)) {
-      void supabase.from('daily_briefings').upsert({
-        business_id: businessId,
-        mode,
-        content: result,
-        generated_at: new Date().toISOString(),
-      }, { onConflict: 'business_id,mode' });
-    }
 
     return NextResponse.json(result);
   } catch (error) {
