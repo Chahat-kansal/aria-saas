@@ -3,7 +3,7 @@ export const runtime = 'nodejs';
 
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
-import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { withErrorCapture } from '@/lib/api/with-error-capture';
 
 async function _GET(req: Request) {
   const supabase = createServerSupabaseClient();
@@ -16,7 +16,6 @@ async function _GET(req: Request) {
 
   if (!barcode) return NextResponse.json({ error: 'barcode required' }, { status: 400 });
 
-  // Verify business ownership
   let bid = business_id;
   if (!bid) {
     const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', user.id).maybeSingle();
@@ -34,14 +33,26 @@ async function _GET(req: Request) {
 
   const { data: product } = await supabase
     .from('pos_products')
-    .select('id,name,price,cost_price,stock_quantity,low_stock_threshold,track_stock,barcode,sku,image_url,category_id,tax_rate,is_active,pos_categories(name,color)')
+    .select('id,name,price,cost_price,stock_quantity,qty_backroom,shelf_capacity,expiry_date,low_stock_threshold,track_stock,barcode,sku,image_url,category_id,tax_rate,is_active,pos_categories(name,color)')
     .eq('business_id', bid)
     .eq('is_active', true)
     .or(`barcode.eq.${barcode},sku.eq.${barcode}`)
     .limit(1)
     .maybeSingle();
 
-  return NextResponse.json({ product: product ?? null, barcode });
+  // External fallback for unknown barcodes — Open Food Facts
+  let external: { name?: string; brand?: string; image_url?: string } | null = null;
+  if (!product) {
+    try {
+      const r = await fetch(`https://world.openfoodfacts.org/api/v0/product/${barcode}.json`, { signal: AbortSignal.timeout(3000) });
+      const d = await r.json() as { status: number; product?: { product_name?: string; brands?: string; image_url?: string } };
+      if (d.status === 1 && d.product?.product_name) {
+        external = { name: d.product.product_name, brand: d.product.brands, image_url: d.product.image_url };
+      }
+    } catch { /* ignore */ }
+  }
+
+  return NextResponse.json({ product: product ?? null, barcode, external });
 }
 
-export const GET = withErrorCapture('pos/products/scan', _GET)
+export const GET = withErrorCapture('pos/products/scan', _GET);
