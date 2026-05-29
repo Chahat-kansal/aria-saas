@@ -48,12 +48,12 @@ async function _POST(req: Request) {
   const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString();
   const [{ data: sales }, { data: products }, { data: customers }] = await Promise.all([
     supabase.from("pos_sales").select("total_amount,created_at,payment_method").eq("business_id", bid).gte("created_at", thirtyDaysAgo).order("created_at", { ascending: false }).limit(500),
-    supabase.from("pos_products").select("id,name,price,stock_quantity,track_inventory").eq("business_id", bid).eq("is_active", true).limit(100),
+    supabase.from("pos_products").select("id,name,price,stock_quantity,track_stock").eq("business_id", bid).eq("is_active", true).limit(100),
     supabase.from("pos_customers").select("id,name,last_visit_at,total_spend").eq("business_id", bid).order("last_visit_at", { ascending: true }).limit(50),
   ]);
 
   const totalRevenue = (sales ?? []).reduce((s: number, r: {total_amount?: number}) => s + (r.total_amount ?? 0), 0);
-  const lowStock = (products ?? []).filter(p => p.track_inventory && (p.stock_quantity ?? 0) < 5);
+  const lowStock = (products ?? []).filter(p => p.track_stock && (p.stock_quantity ?? 0) < 5);
   const winbackCustomers = (customers ?? []).filter(c => {
     if (!c.last_visit_at) return true;
     return (Date.now() - new Date(c.last_visit_at).getTime()) > 30 * 86400000;

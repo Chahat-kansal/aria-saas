@@ -56,7 +56,7 @@ async function _POST(req: Request) {
     const message: string = body.message;
     if (!message?.trim()) return NextResponse.json({ error: 'message required' }, { status: 400 });
 
-    const { data: customers } = await supabase.from('customers')
+    const { data: customers } = await supabase.from('pos_customers')
       .select('id, name, phone')
       .eq('business_id', business_id)
       .in('id', customerIds);
@@ -113,7 +113,7 @@ async function _POST(req: Request) {
   const customerId = singleCustomerId;
   if (!customerId) return NextResponse.json({ error: 'customer_ids or customerId required' }, { status: 400 });
 
-  const { data: customer } = await supabase.from('customers').select('*').eq('id', customerId).eq('business_id', business_id).single();
+  const { data: customer } = await supabase.from('pos_customers').select('*').eq('id', customerId).eq('business_id', business_id).single();
   if (!customer) return NextResponse.json({ error: 'Customer not found' }, { status: 404 });
 
   if (!twilioConfigured) {

@@ -40,7 +40,7 @@ async function _POST(req: Request) {
 
   const [{ data: business }, { data: customer }] = await Promise.all([
     supabase.from('businesses').select('*').eq('id', businessId).eq('user_id', user.id).single(),
-    supabase.from('customers').select('*').eq('id', customerId).eq('business_id', businessId).single(),
+    supabase.from('pos_customers').select('*').eq('id', customerId).eq('business_id', businessId).single(),
   ]);
 
   if (!business || !customer) return NextResponse.json({ error: 'Not found' }, { status: 404 });

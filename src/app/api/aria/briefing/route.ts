@@ -51,10 +51,10 @@ async function _GET(req: Request) {
   ] = await Promise.all([
     supabase.from('activity_log').select('description', { count: 'exact' }).eq('business_id', businessId).gte('created_at', sevenDaysAgo),
     supabase.from('profit_leaks').select('description,monthly_loss').eq('business_id', businessId).eq('status', 'detected'),
-    supabase.from('customers').select('id', { count: 'exact' }).eq('business_id', businessId).in('churn_risk', ['medium', 'high']),
+    supabase.from('pos_customers').select('id', { count: 'exact' }).eq('business_id', businessId).lt('last_visit', thirtyDaysAgo),
     supabase.from('reviews').select('rating,content').eq('business_id', businessId).order('created_at', { ascending: false }).limit(3),
     supabase.from('pos_cash_sessions').select('variance_cents,closed_at,closed_by').eq('business_id', businessId).eq('status', 'closed').gte('closed_at', sevenDaysAgo).order('closed_at', { ascending: false }).limit(14),
-    supabase.from('pos_customers').select('name,current_balance_cents,last_visit_at').eq('business_id', businessId).gt('current_balance_cents', 0).lt('last_visit_at', ninetyDaysAgo).limit(20),
+    supabase.from('pos_customers').select('name,current_balance_cents,last_visit').eq('business_id', businessId).gt('current_balance_cents', 0).lt('last_visit', ninetyDaysAgo).limit(20),
     supabase.from('pos_stock_takes').select('status,items_counted,items_with_variance,completed_at').eq('business_id', businessId).order('completed_at', { ascending: false }).limit(1),
     supabase.from('pos_products').select('name,stock_quantity,low_stock_threshold').eq('business_id', businessId).eq('track_stock', true).lt('stock_quantity', 5).limit(5),
     supabase.from('pos_shift_audits').select('flagged_items,failed_checks,shift_date').eq('business_id', businessId).gte('shift_date', new Date(Date.now() - 2 * 86400_000).toISOString().slice(0, 10)).order('shift_date', { ascending: false }).limit(5),
