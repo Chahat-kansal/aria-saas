@@ -60,7 +60,7 @@ async function _POST(req: Request) {
       const ninetyDaysAgo = new Date(Date.now() - 90 * 86400_000).toISOString()
       const thirtyDaysAgo = new Date(Date.now() - 30 * 86400_000).toISOString()
       let q = supabaseAdmin.from('pos_customers').select('id,name,phone,email').eq('business_id', bid)
-      if ((campaign as any).campaign_type === 'winback') q = q.lt('last_visit_at', ninetyDaysAgo)
+      if ((campaign as any).campaign_type === 'winback') q = q.lt('last_visit', ninetyDaysAgo)
       else if ((campaign as any).campaign_type === 'new_customer') q = q.gte('created_at', thirtyDaysAgo)
       const { data } = await q.limit(200)
       customers = (data ?? []).filter((c: any) => c.phone || c.email)

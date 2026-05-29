@@ -31,9 +31,9 @@ async function _POST(req: Request) {
     weather,
   ] = await Promise.all([
     supabaseAdmin.from('pos_products')
-      .select('id,name,barcode,sku,stock_quantity,cost_price,track_inventory,supplier_id,category_id,pos_categories(name)')
+      .select('id,name,barcode,sku,stock_quantity,cost_price,track_stock,supplier_id,category_id,pos_categories(name)')
       .eq('business_id', business_id).eq('is_active', true)
-      .or('track_stock.eq.true,track_inventory.eq.true'),
+      .eq('track_stock', true),
     supabaseAdmin.from('pos_sale_items')
       .select('product_id,product_name,quantity,created_at')
       .eq('business_id', business_id)
