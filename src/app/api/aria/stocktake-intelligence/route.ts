@@ -106,7 +106,8 @@ async function _POST(req: Request) {
   // Run Claude to classify each variance
   let classified: Array<{ name: string; variance: number; classification: string; reason: string; action: string }> = []
   let overallInsight = ''
-  let priority: 'high' | 'medium' | 'routine' = totalCostImpact > 50000 ? 'high' : totalCostImpact > 10000 ? 'medium' : 'routine'
+  // aria_autopilot_actions.priority CHECK: ('urgent','important','routine')
+  let priority: 'urgent' | 'important' | 'routine' = totalCostImpact > 50000 ? 'urgent' : totalCostImpact > 10000 ? 'important' : 'routine'
 
   try {
     const response = await trackAICall(
@@ -152,7 +153,11 @@ Respond ONLY in this JSON format:
 
     classified = parsed.classified ?? []
     overallInsight = parsed.overall_insight ?? ''
-    priority = parsed.priority ?? priority
+    const rawPriority: string = parsed.priority ?? ''
+    priority = rawPriority === 'high' || rawPriority === 'urgent' ? 'urgent'
+      : rawPriority === 'medium' || rawPriority === 'important' ? 'important'
+      : rawPriority === 'routine' ? 'routine'
+      : priority
 
     // Write to autopilot
     if (overallInsight) {
