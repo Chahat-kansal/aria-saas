@@ -100,8 +100,9 @@ async function _POST(req: Request) {
     business_id: bid, week_start: weekStart, week_end: weekEnd, report_data: reportData, send_status: 'generated',
   }, { onConflict: 'business_id,week_start' }).select().single()
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ report, report_data: reportData, ok: true })
+  // Table may not yet exist in all envs — non-fatal: report data is in the response regardless
+  if (error && error.code !== '42P01') return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ report: report ?? null, report_data: reportData, ok: true })
 }
 
 export const GET = withErrorCapture('aria/weekly-report', _GET)

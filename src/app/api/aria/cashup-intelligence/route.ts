@@ -45,7 +45,7 @@ async function _POST(req: Request) {
   // Get all timesheets for the same date range
   const { data: timesheets } = await supabase
     .from('pos_timesheets')
-    .select('staff_name, staff_member_id, clock_in, clock_out, total_pay_cents')
+    .select('staff_name, staff_id, clock_in, clock_out, pay_rate_cents')
     .eq('business_id', bid)
     .gte('clock_in', ninetyDaysAgo)
     .not('clock_out', 'is', null)
