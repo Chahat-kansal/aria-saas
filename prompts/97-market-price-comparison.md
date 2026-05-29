@@ -155,6 +155,32 @@ Body: `{ business_id: string, product_ids?: string[] }`
 
 Auth: authenticated owner of that business only.
 
+### 1-scan-per-day limit (enforced server-side)
+Before creating a new scan, check if a scan already completed successfully today:
+```typescript
+const { data: todaysScan } = await supabaseAdmin
+  .from('market_price_scans')
+  .select('id, started_at, status')
+  .eq('business_id', business_id)
+  .eq('status', 'complete')
+  .gte('started_at', new Date(new Date().setHours(0,0,0,0)).toISOString())
+  .maybeSingle()
+
+if (todaysScan) {
+  return NextResponse.json({
+    error: 'daily_limit_reached',
+    message: 'Market price scan already ran today. Results are fresh — check again tomorrow.',
+    next_available: new Date(new Date().setHours(24,0,0,0)).toISOString(),
+    last_scan_id: todaysScan.id,
+  }, { status: 429 })
+}
+```
+The frontend should show: "Scan already ran today — results are fresh. Next scan available tomorrow."
+Include a "View today's results" button that scrolls to the product table.
+
+Failed scans do NOT count against the daily limit — the owner can retry if something went wrong.
+The cron auto-scan counts as the daily scan (so manual scans are blocked after the cron runs too).
+
 1. Create a `market_price_scans` row with status='running'. Return `{ scan_id }` immediately (don't keep the HTTP connection open for 3 minutes).
 2. Run the scan in the background (use `setImmediate` or just fire-and-forget after returning the response):
    - Load up to 20 active products for this business, ordered by revenue DESC (highest value products first — those are the ones where pricing matters most)
