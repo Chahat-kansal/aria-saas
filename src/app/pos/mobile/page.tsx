@@ -24,7 +24,7 @@ interface SessionInfo {
 
 type ViewState = 'cart' | 'scanning' | 'payment' | 'receipt';
 
-type AppMode = 'sell' | 'stocktake' | 'order' | 'receive'
+type AppMode = 'sell' | 'stocktake' | 'order' | 'receive' | 'replenish' | 'price' | 'expiry'
 
 type InventoryItem = {
   product_id:      string
@@ -32,8 +32,21 @@ type InventoryItem = {
   barcode?:        string
   sku?:            string
   current_stock:   number
+  qty_backroom:    number
+  shelf_capacity:  number | null
   scanned_qty:     number
   unit_cost_cents: number
+  cost_price?:     number | null
+  price?:          number
+  note?:           string
+}
+
+type ScannedProduct = Record<string, any> & {
+  qty_backroom?: number | null
+  shelf_capacity?: number | null
+  expiry_date?: string | null
+  cost_price?: number | null
+  price?: number
 }
 
 /* ─── Helpers ────────────────────────────────────────────────────── */
@@ -71,6 +84,19 @@ export default function MobileTerminal() {
   const [invScanning,   setInvScanning]   = useState(false)
   const [invSubmitting, setInvSubmitting] = useState(false)
   const [invDone,       setInvDone]       = useState(false)
+  const [invCurrent,    setInvCurrent]    = useState<ScannedProduct | null>(null)
+  const [invBarcode,    setInvBarcode]    = useState('')
+  const [invQty,        setInvQty]        = useState(1)
+  const [invQtyBack,    setInvQtyBack]    = useState(0)
+  const [invExpiry,     setInvExpiry]     = useState('')
+  const [invNotFound,   setInvNotFound]   = useState(false)
+  const [invExternal,   setInvExternal]   = useState<{name?:string;brand?:string}|null>(null)
+  const [invCreating,   setInvCreating]   = useState(false)
+  const [newName,       setNewName]       = useState('')
+  const [newPrice,      setNewPrice]      = useState('')
+  const [newCost,       setNewCost]       = useState('')
+  const [newShelf,      setNewShelf]      = useState('')
+  const [invLoading,    setInvLoading]    = useState(false)
 
   /* ── Bootstrap ────────────────────────────────────────────────── */
   useEffect(() => {
@@ -278,23 +304,21 @@ export default function MobileTerminal() {
     setInvItems([])
     setInvSession(null)
     setInvDone(false)
+    setInvCurrent(null); setInvBarcode(''); setInvQty(1); setInvQtyBack(0)
+    setInvExpiry(''); setInvNotFound(false); setInvExternal(null); setInvCreating(false)
 
-    if (mode !== 'sell') {
+    if (mode !== 'sell' && mode !== 'price') {
       try {
         const sessionType = mode === 'stocktake' ? 'count'
-          : mode === 'order' ? 'order' : 'receive'
+          : mode === 'order' ? 'order' : mode === 'receive' ? 'receive'
+          : mode === 'replenish' ? 'replenish' : 'expiry'
         const r = await fetch('/api/pos/mobile-session', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ business_id: businessId, session_type: sessionType }),
         })
         const d = await r.json()
-        console.log('[switchMode] session response:', d)
-        if (r.ok) {
-          setInvSession({ id: d.session?.id ?? d.id })
-        } else {
-          console.error('[switchMode] failed:', d)
-        }
+        if (r.ok) setInvSession({ id: d.session?.id ?? d.id })
       } catch (err) { console.error('[switchMode] network error:', err) }
     }
   }, [appMode, businessId])
@@ -302,47 +326,104 @@ export default function MobileTerminal() {
   /* ── handleInventoryScan ─────────────────────────────────────── */
   const handleInventoryScan = useCallback(async (barcode: string) => {
     setInvScanning(false)
-    setNotFound(null)
+    setInvLoading(true)
+    setInvCurrent(null); setInvBarcode(barcode); setInvQty(1)
+    setInvNotFound(false); setInvExternal(null); setInvCreating(false)
+    setNewName(''); setNewPrice(''); setNewCost(''); setNewShelf('')
 
-    let product: Record<string, any> | null = null
+    let product: ScannedProduct | null = null
+    let external: {name?:string;brand?:string} | null = null
     try {
       const url = `/api/pos/products/scan?barcode=${encodeURIComponent(barcode)}${businessId ? `&business_id=${businessId}` : ''}`
       const r = await fetch(url)
       if (r.ok) {
         const d = await r.json()
         product = d.product ?? null
+        external = d.external ?? null
       }
     } catch {}
 
     if (!product) {
       const cached = loadProductsFromCache()
-      product = cached?.products?.find((p: any) =>
-        p.barcode === barcode || p.sku === barcode
-      ) ?? null
+      product = cached?.products?.find((p: any) => p.barcode === barcode || p.sku === barcode) ?? null
     }
 
-    if (!product) { setNotFound(barcode); return }
+    setInvLoading(false)
 
-    setInvItems(prev => {
-      const existing = prev.find(i => i.product_id === product!.id)
-      if (existing) {
-        return prev.map(i =>
-          i.product_id === product!.id
-            ? { ...i, scanned_qty: i.scanned_qty + 1 }
-            : i
-        )
+    if (!product) {
+      setInvNotFound(true)
+      setInvExternal(external)
+      if (external?.name) setNewName(external.name)
+      return
+    }
+
+    setInvCurrent(product)
+    setInvQtyBack(product.qty_backroom ?? 0)
+    if (product.expiry_date) setInvExpiry(product.expiry_date)
+
+    // Price mode: no confirm needed, just show card
+    // Other modes: wait for confirm
+  }, [businessId, appMode]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  function confirmInvScan() {
+    if (!invBarcode) return
+    const product = invCurrent
+
+    // Inline stock patch
+    if (product?.id && businessId) {
+      const patch: Record<string, unknown> = {}
+      if (appMode === 'stocktake') patch.stock_quantity = invQty
+      if (appMode === 'receive')   patch.stock_quantity = (product.stock_quantity ?? 0) + invQty
+      if (appMode === 'replenish') { patch.qty_backroom = Math.max(0, invQtyBack - invQty); patch.stock_quantity = (product.stock_quantity ?? 0) + invQty }
+      if (appMode === 'expiry' && invExpiry) patch.expiry_date = invExpiry
+      if (Object.keys(patch).length) {
+        fetch(`/api/pos/products/${product.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch) })
       }
-      return [...prev, {
-        product_id:      product!.id,
-        product_name:    product!.name,
-        barcode:         product!.barcode,
-        sku:             product!.sku,
-        current_stock:   product!.stock_quantity ?? 0,
-        scanned_qty:     1,
-        unit_cost_cents: Math.round((product!.cost_price ?? 0) * 100),
-      }]
+    }
+
+    if (appMode !== 'price') {
+      setInvItems(prev => {
+        const existing = prev.find(i => i.product_id === (product?.id ?? invBarcode))
+        const entry: InventoryItem = {
+          product_id:      product?.id ?? invBarcode,
+          product_name:    product?.name ?? `Unknown (${invBarcode})`,
+          barcode:         product?.barcode,
+          sku:             product?.sku,
+          current_stock:   product?.stock_quantity ?? 0,
+          qty_backroom:    product?.qty_backroom ?? 0,
+          shelf_capacity:  product?.shelf_capacity ?? null,
+          scanned_qty:     invQty,
+          unit_cost_cents: Math.round((product?.cost_price ?? 0) * 100),
+          price:           product?.price,
+          note:            appMode === 'expiry' ? invExpiry : appMode === 'replenish' ? `back:${invQtyBack}→${Math.max(0, invQtyBack - invQty)}` : undefined,
+        }
+        if (existing) return prev.map(i => i.product_id === entry.product_id ? { ...i, scanned_qty: i.scanned_qty + invQty } : i)
+        return [entry, ...prev]
+      })
+    }
+
+    // Continuous: clear card and reopen camera
+    setInvCurrent(null); setInvBarcode(''); setInvQty(1); setInvQtyBack(0)
+    setInvExpiry(''); setInvNotFound(false); setInvCreating(false)
+    setInvScanning(true)
+  }
+
+  async function quickCreateProduct() {
+    if (!businessId || !newName.trim()) return
+    setInvLoading(true)
+    const res = await fetch('/api/pos/products/quick-create', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        business_id: businessId, barcode: invBarcode, name: newName.trim(),
+        price: parseFloat(newPrice) || 0, cost_price: parseFloat(newCost) || null,
+        stock_quantity: invQty, qty_backroom: invQtyBack,
+        shelf_capacity: parseInt(newShelf) || null,
+      }),
     })
-  }, [businessId]) // eslint-disable-line react-hooks/exhaustive-deps
+    const d = await res.json()
+    setInvCurrent(d.product); setInvNotFound(false); setInvCreating(false)
+    setInvLoading(false)
+  }
 
   /* ── submitInventorySession ──────────────────────────────────── */
   const submitInventorySession = useCallback(async () => {
@@ -526,15 +607,18 @@ export default function MobileTerminal() {
 
   /* ══ INVENTORY MODES (stocktake / order / receive) ══════════════ */
   if (appMode !== 'sell') {
-    const modeLabel = appMode === 'stocktake' ? 'Stocktake'
-      : appMode === 'order' ? 'Build Order' : 'Receive Stock'
-    const modeIcon = appMode === 'stocktake' ? '📦'
-      : appMode === 'order' ? '📋' : '📥'
-    const modeHint = appMode === 'stocktake'
-      ? 'Scan each product — count updates when you submit'
-      : appMode === 'order'
-      ? 'Scan products to add to a purchase order draft'
-      : 'Scan products as they arrive to add to stock'
+    const modeLabel = appMode === 'stocktake' ? 'Count Stock'
+      : appMode === 'order' ? 'Build Order' : appMode === 'receive' ? 'Receive Stock'
+      : appMode === 'replenish' ? 'Replenish' : appMode === 'price' ? 'Price Check' : 'Expiry Dates'
+    const modeIcon = appMode === 'stocktake' ? '📦' : appMode === 'order' ? '📋'
+      : appMode === 'receive' ? '📥' : appMode === 'replenish' ? '🔄'
+      : appMode === 'price' ? '💰' : '📅'
+    const modeHint = appMode === 'stocktake' ? 'Scan → set count → auto-continues'
+      : appMode === 'order' ? 'Scan products you need to reorder'
+      : appMode === 'receive' ? 'Scan items as they arrive from supplier'
+      : appMode === 'replenish' ? 'Move stock from backroom to floor'
+      : appMode === 'price' ? 'Scan to see price, margin and stock'
+      : 'Scan → enter expiry date'
 
     if (invDone) {
       return (
@@ -592,12 +676,30 @@ export default function MobileTerminal() {
             </button>
           </div>
           {/* Mode tabs */}
-          <div className="grid grid-cols-4 gap-1">
+          <div className="grid grid-cols-4 gap-1 mb-1">
             {([
               { mode: 'sell',      label: 'Sell',      icon: '🛒' },
-              { mode: 'stocktake', label: 'Stocktake', icon: '📦' },
+              { mode: 'stocktake', label: 'Count',     icon: '📦' },
+              { mode: 'replenish', label: 'Replenish', icon: '🔄' },
               { mode: 'order',     label: 'Order',     icon: '📋' },
-              { mode: 'receive',   label: 'Receive',   icon: '📥' },
+            ] as { mode: AppMode; label: string; icon: string }[]).map(({ mode, label, icon }) => (
+              <button key={mode} onClick={() => switchMode(mode)}
+                className="flex flex-col items-center py-2 rounded-xl text-xs font-medium"
+                style={{
+                  background: appMode === mode ? 'rgba(29,158,117,0.2)' : 'transparent',
+                  color: appMode === mode ? '#1D9E75' : 'rgba(255,255,255,0.4)',
+                  border: appMode === mode ? '1px solid rgba(29,158,117,0.3)' : '1px solid transparent',
+                }}>
+                <span className="text-base mb-0.5">{icon}</span>
+                {label}
+              </button>
+            ))}
+          </div>
+          <div className="grid grid-cols-3 gap-1">
+            {([
+              { mode: 'receive', label: 'Receive', icon: '📥' },
+              { mode: 'price',   label: 'Price',   icon: '💰' },
+              { mode: 'expiry',  label: 'Expiry',  icon: '📅' },
             ] as { mode: AppMode; label: string; icon: string }[]).map(({ mode, label, icon }) => (
               <button key={mode} onClick={() => switchMode(mode)}
                 className="flex flex-col items-center py-2 rounded-xl text-xs font-medium"
@@ -619,74 +721,185 @@ export default function MobileTerminal() {
           {modeHint}
         </div>
 
-        {/* Not found banner */}
-        {notFound && (
-          <div className="mx-4 mt-3 px-4 py-3 rounded-xl"
-            style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.25)' }}>
-            <p className="text-red-400 text-sm">
-              Barcode not found: <span className="font-mono">{notFound}</span>
-            </p>
-            <button onClick={() => setNotFound(null)} className="text-red-400/50 text-xs mt-1">
-              Dismiss
-            </button>
+        {/* Product card — shown after scan */}
+        {invLoading && (
+          <div className="mx-4 mt-3 p-4 rounded-2xl flex items-center gap-3"
+            style={{ background: '#13131a', border: '1px solid rgba(255,255,255,0.07)' }}>
+            <div className="w-5 h-5 rounded-full border-2 border-white/20 border-t-[#1D9E75] animate-spin" />
+            <p className="text-gray-400 text-sm">Looking up…</p>
           </div>
         )}
 
-        {/* Scanned items list */}
+        {!invLoading && invBarcode && (
+          <div className="mx-4 mt-3 rounded-2xl overflow-hidden"
+            style={{ border: '1.5px solid rgba(29,158,117,0.4)', background: '#13131a' }}>
+
+            {/* Not found */}
+            {invNotFound && !invCreating && (
+              <div className="p-4">
+                <p className="text-amber-400 text-xs font-bold mb-1">⚠ Not in catalogue</p>
+                <p className="text-gray-500 text-xs font-mono mb-3">{invBarcode}</p>
+                {invExternal?.name && (
+                  <div className="p-3 rounded-xl mb-3" style={{ background: 'rgba(0,106,255,0.1)', border: '1px solid rgba(0,106,255,0.25)' }}>
+                    <p className="text-xs text-gray-400 mb-1">Found online:</p>
+                    <p className="text-white text-sm font-semibold">{invExternal.name}</p>
+                    {invExternal.brand && <p className="text-gray-500 text-xs">{invExternal.brand}</p>}
+                  </div>
+                )}
+                <div className="grid grid-cols-2 gap-2">
+                  <button onClick={() => setInvCreating(true)}
+                    className="py-3 rounded-xl text-white text-sm font-bold"
+                    style={{ background: '#1D9E75' }}>+ Create</button>
+                  <button onClick={() => { setInvBarcode(''); setInvNotFound(false); setInvScanning(true) }}
+                    className="py-3 rounded-xl text-sm font-medium text-gray-400"
+                    style={{ background: 'rgba(255,255,255,0.06)' }}>Skip</button>
+                </div>
+              </div>
+            )}
+
+            {/* Quick create form */}
+            {invNotFound && invCreating && (
+              <div className="p-4 space-y-3">
+                <p className="text-white text-sm font-bold">Create product</p>
+                {[
+                  { label: 'Name *', val: newName, set: setNewName, mode: 'text', ph: 'Product name' },
+                  { label: 'Sell price ($)', val: newPrice, set: setNewPrice, mode: 'decimal', ph: '0.00' },
+                  { label: 'Cost price ($)', val: newCost, set: setNewCost, mode: 'decimal', ph: '0.00' },
+                  { label: 'Shelf capacity', val: newShelf, set: setNewShelf, mode: 'numeric', ph: 'Max units on shelf' },
+                ].map(f => (
+                  <div key={f.label}>
+                    <p className="text-gray-500 text-xs mb-1">{f.label}</p>
+                    <input value={f.val} onChange={e => f.set(e.target.value)}
+                      inputMode={f.mode as 'text'|'decimal'|'numeric'} placeholder={f.ph}
+                      className="w-full px-3 py-2.5 rounded-xl text-white text-sm outline-none"
+                      style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.1)' }} />
+                  </div>
+                ))}
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                  <button onClick={quickCreateProduct} disabled={!newName.trim() || invLoading}
+                    className="py-3 rounded-xl text-white text-sm font-bold disabled:opacity-40"
+                    style={{ background: '#1D9E75' }}>
+                    {invLoading ? 'Creating…' : 'Create & continue'}
+                  </button>
+                  <button onClick={() => setInvCreating(false)}
+                    className="py-3 rounded-xl text-sm text-gray-400"
+                    style={{ background: 'rgba(255,255,255,0.06)' }}>Back</button>
+                </div>
+              </div>
+            )}
+
+            {/* Found product */}
+            {invCurrent && (
+              <div className="p-4">
+                <p className="text-white font-bold text-base mb-1">{invCurrent.name}</p>
+                <div className="flex gap-4 mb-4 text-xs text-gray-400">
+                  <span>Floor: <strong className="text-white">{invCurrent.stock_quantity ?? 0}</strong></span>
+                  <span>Backroom: <strong className="text-white">{invCurrent.qty_backroom ?? 0}</strong></span>
+                  {invCurrent.shelf_capacity && <span>Cap: <strong className="text-white">{invCurrent.shelf_capacity}</strong></span>}
+                </div>
+
+                {/* Price mode — info only */}
+                {appMode === 'price' && (
+                  <div className="space-y-2 mb-4">
+                    {[
+                      { l: 'Sell price', v: `A$${(invCurrent.price ?? 0).toFixed(2)}`, c: 'text-white' },
+                      { l: 'Cost', v: invCurrent.cost_price ? `A$${invCurrent.cost_price.toFixed(2)}` : '—', c: 'text-gray-400' },
+                      { l: 'Margin', v: invCurrent.cost_price && invCurrent.price ? `${((invCurrent.price - invCurrent.cost_price) / invCurrent.price * 100).toFixed(1)}%` : '—',
+                        c: invCurrent.cost_price && invCurrent.price && ((invCurrent.price - invCurrent.cost_price) / invCurrent.price) < 0.2 ? 'text-red-400' : 'text-[#1D9E75]' },
+                    ].map(row => (
+                      <div key={row.l} className="flex justify-between px-3 py-2 rounded-lg" style={{ background: 'rgba(255,255,255,0.04)' }}>
+                        <span className="text-gray-400 text-sm">{row.l}</span>
+                        <span className={`text-sm font-bold font-mono ${row.c}`}>{row.v}</span>
+                      </div>
+                    ))}
+                    <button onClick={() => { setInvCurrent(null); setInvBarcode(''); setInvScanning(true) }}
+                      className="w-full py-3 rounded-xl text-white text-sm font-bold mt-2"
+                      style={{ background: '#1D9E75' }}>Scan next →</button>
+                  </div>
+                )}
+
+                {/* Replenish mode */}
+                {appMode === 'replenish' && (
+                  <div>
+                    <p className="text-gray-400 text-xs mb-2">Units to move backroom → floor:</p>
+                    <div className="flex items-center justify-center gap-4 mb-4">
+                      <button onClick={() => setInvQty(q => Math.max(1, q - 1))} className="w-11 h-11 rounded-full text-white text-xl font-bold" style={{ background: 'rgba(255,255,255,0.1)' }}>−</button>
+                      <span className="text-white text-2xl font-bold w-10 text-center">{invQty}</span>
+                      <button onClick={() => setInvQty(q => q + 1)} className="w-11 h-11 rounded-full text-white text-xl font-bold" style={{ background: '#1D9E75' }}>+</button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button onClick={confirmInvScan} className="py-3 rounded-xl text-white text-sm font-bold" style={{ background: '#1D9E75' }}>✓ Log move</button>
+                      <button onClick={() => { setInvCurrent(null); setInvBarcode(''); setInvScanning(true) }} className="py-3 rounded-xl text-sm text-gray-400" style={{ background: 'rgba(255,255,255,0.06)' }}>Skip</button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Expiry mode */}
+                {appMode === 'expiry' && (
+                  <div>
+                    <p className="text-gray-400 text-xs mb-2">Set expiry date:</p>
+                    <input type="date" value={invExpiry} onChange={e => setInvExpiry(e.target.value)}
+                      className="w-full px-3 py-2.5 rounded-xl text-white text-sm outline-none mb-2"
+                      style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.1)' }} />
+                    {invExpiry && new Date(invExpiry) < new Date(Date.now() + 7 * 86400_000) && (
+                      <p className="text-red-400 text-xs mb-2">⚠ Expires within 7 days — consider markdown</p>
+                    )}
+                    <div className="grid grid-cols-2 gap-2">
+                      <button onClick={confirmInvScan} disabled={!invExpiry} className="py-3 rounded-xl text-white text-sm font-bold disabled:opacity-40" style={{ background: '#1D9E75' }}>✓ Save date</button>
+                      <button onClick={() => { setInvCurrent(null); setInvBarcode(''); setInvScanning(true) }} className="py-3 rounded-xl text-sm text-gray-400" style={{ background: 'rgba(255,255,255,0.06)' }}>Skip</button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Count / Order / Receive */}
+                {(appMode === 'stocktake' || appMode === 'order' || appMode === 'receive') && (
+                  <div>
+                    <p className="text-gray-400 text-xs mb-2">
+                      {appMode === 'stocktake' ? 'Qty on floor:' : appMode === 'order' ? 'Qty to order:' : 'Qty received:'}
+                    </p>
+                    <div className="flex items-center justify-center gap-4 mb-4">
+                      <button onClick={() => setInvQty(q => Math.max(1, q - 1))} className="w-11 h-11 rounded-full text-white text-xl font-bold" style={{ background: 'rgba(255,255,255,0.1)' }}>−</button>
+                      <span className="text-white text-2xl font-bold w-10 text-center">{invQty}</span>
+                      <button onClick={() => setInvQty(q => q + 1)} className="w-11 h-11 rounded-full text-white text-xl font-bold" style={{ background: '#1D9E75' }}>+</button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button onClick={confirmInvScan} className="py-3 rounded-xl text-white text-sm font-bold" style={{ background: '#1D9E75' }}>
+                        ✓ {appMode === 'stocktake' ? 'Set stock' : appMode === 'order' ? 'Add to order' : 'Receive'}
+                      </button>
+                      <button onClick={() => { setInvCurrent(null); setInvBarcode(''); setInvScanning(true) }} className="py-3 rounded-xl text-sm text-gray-400" style={{ background: 'rgba(255,255,255,0.06)' }}>Skip</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Scanned log */}
         <div className="flex-1 overflow-y-auto p-4 space-y-2">
-          {invItems.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-48 text-center">
+          {invItems.length === 0 && !invBarcode && !invLoading ? (
+            <div className="flex flex-col items-center justify-center h-40 text-center">
               <span className="text-4xl mb-3">{modeIcon}</span>
-              <p className="text-gray-400 text-sm">
-                Tap <strong className="text-white">Scan</strong> to start
-              </p>
+              <p className="text-gray-400 text-sm">Tap <strong className="text-white">Scan</strong> to start</p>
+              <p className="text-gray-600 text-xs mt-1">Continuous · auto-resumes after each scan</p>
             </div>
           ) : (
-            invItems.map(item => (
-              <div key={item.product_id}
+            invItems.map((item, idx) => (
+              <div key={`${item.product_id}-${idx}`}
                 className="flex items-center gap-3 px-4 py-3 rounded-2xl"
                 style={{ background: '#13131a', border: '1px solid rgba(255,255,255,0.07)' }}>
                 <div className="flex-1 min-w-0">
                   <p className="text-white font-medium text-sm truncate">{item.product_name}</p>
-                  {appMode === 'stocktake' && (
-                    <p className="text-gray-500 text-xs mt-0.5">
-                      Was: {item.current_stock} → Now: {item.scanned_qty}
-                    </p>
-                  )}
-                  {appMode === 'receive' && (
-                    <p className="text-gray-500 text-xs mt-0.5">
-                      Current: {item.current_stock} + {item.scanned_qty} = {item.current_stock + item.scanned_qty}
-                    </p>
-                  )}
-                  {appMode === 'order' && (
-                    <p className="text-gray-500 text-xs mt-0.5">
-                      Stock: {item.current_stock} · Ordering: {item.scanned_qty}
-                    </p>
-                  )}
+                  <p className="text-gray-500 text-xs mt-0.5">{item.note ?? `qty: ${item.scanned_qty}`}</p>
                 </div>
-                {/* Qty controls */}
                 <div className="flex items-center gap-2 flex-shrink-0">
-                  <button
-                    onClick={() => setInvItems(prev =>
-                      prev.map(i => i.product_id === item.product_id
-                        ? { ...i, scanned_qty: Math.max(0, i.scanned_qty - 1) }
-                        : i
-                      ).filter(i => i.scanned_qty > 0)
-                    )}
+                  <button onClick={() => setInvItems(prev => prev.map(i => i.product_id === item.product_id ? { ...i, scanned_qty: Math.max(0, i.scanned_qty - 1) } : i).filter(i => i.scanned_qty > 0))}
                     className="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold"
-                    style={{ background: 'rgba(255,255,255,0.1)' }}>−
-                  </button>
+                    style={{ background: 'rgba(255,255,255,0.1)' }}>−</button>
                   <span className="text-white font-bold w-6 text-center">{item.scanned_qty}</span>
-                  <button
-                    onClick={() => setInvItems(prev =>
-                      prev.map(i => i.product_id === item.product_id
-                        ? { ...i, scanned_qty: i.scanned_qty + 1 }
-                        : i
-                      )
-                    )}
+                  <button onClick={() => setInvItems(prev => prev.map(i => i.product_id === item.product_id ? { ...i, scanned_qty: i.scanned_qty + 1 } : i))}
                     className="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold"
-                    style={{ background: '#1D9E75' }}>+
-                  </button>
+                    style={{ background: '#1D9E75' }}>+</button>
                 </div>
               </div>
             ))
@@ -696,17 +909,17 @@ export default function MobileTerminal() {
         {/* Action bar */}
         <div className="p-4 pb-safe-bottom pb-6 flex-shrink-0 grid grid-cols-2 gap-3"
           style={{ borderTop: '1px solid rgba(255,255,255,0.07)', background: '#13131a' }}>
-          <button onClick={() => setInvScanning(true)}
-            className="py-4 rounded-2xl text-white font-semibold flex items-center justify-center gap-2"
+          <button onClick={() => { setInvCurrent(null); setInvBarcode(''); setInvScanning(true) }}
+            disabled={!!invBarcode && !invNotFound}
+            className="py-4 rounded-2xl text-white font-semibold flex items-center justify-center gap-2 disabled:opacity-40"
             style={{ background: '#1D9E75' }}>
             <span>📷</span> Scan
           </button>
-          <button
-            onClick={submitInventorySession}
-            disabled={invItems.length === 0 || invSubmitting || !invSession}
+          <button onClick={submitInventorySession}
+            disabled={invItems.length === 0 || invSubmitting || (!invSession && appMode !== 'price')}
             className="py-4 rounded-2xl text-white font-semibold disabled:opacity-40"
             style={{ background: 'rgba(29,158,117,0.2)', border: '1px solid rgba(29,158,117,0.35)' }}>
-            {invSubmitting ? 'Saving…' : `Submit (${invItems.length})`}
+            {invSubmitting ? 'Saving…' : appMode === 'price' ? `${invItems.length} checked` : `Submit (${invItems.length})`}
           </button>
         </div>
       </div>
@@ -733,27 +946,45 @@ export default function MobileTerminal() {
       </div>
 
       {/* Mode switcher */}
-      <div className="grid grid-cols-4 gap-1 px-3 py-2 flex-shrink-0"
+      <div className="px-3 py-2 flex-shrink-0"
         style={{ background: '#13131a', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
-        {([
-          { mode: 'sell',      label: 'Sell',      icon: '🛒' },
-          { mode: 'stocktake', label: 'Stocktake', icon: '📦' },
-          { mode: 'order',     label: 'Order',     icon: '📋' },
-          { mode: 'receive',   label: 'Receive',   icon: '📥' },
-        ] as { mode: AppMode; label: string; icon: string }[]).map(({ mode, label, icon }) => (
-          <button
-            key={mode}
-            onClick={() => switchMode(mode)}
-            className="flex flex-col items-center py-2 rounded-xl text-xs font-medium transition-all"
-            style={{
-              background: appMode === mode ? 'rgba(29,158,117,0.2)' : 'transparent',
-              color: appMode === mode ? '#1D9E75' : 'rgba(255,255,255,0.4)',
-              border: appMode === mode ? '1px solid rgba(29,158,117,0.3)' : '1px solid transparent',
-            }}>
-            <span className="text-base mb-0.5">{icon}</span>
-            {label}
-          </button>
-        ))}
+        <div className="grid grid-cols-4 gap-1 mb-1">
+          {([
+            { mode: 'sell',      label: 'Sell',      icon: '🛒' },
+            { mode: 'stocktake', label: 'Count',     icon: '📦' },
+            { mode: 'replenish', label: 'Replenish', icon: '🔄' },
+            { mode: 'order',     label: 'Order',     icon: '📋' },
+          ] as { mode: AppMode; label: string; icon: string }[]).map(({ mode, label, icon }) => (
+            <button key={mode} onClick={() => switchMode(mode)}
+              className="flex flex-col items-center py-2 rounded-xl text-xs font-medium transition-all"
+              style={{
+                background: appMode === mode ? 'rgba(29,158,117,0.2)' : 'transparent',
+                color: appMode === mode ? '#1D9E75' : 'rgba(255,255,255,0.4)',
+                border: appMode === mode ? '1px solid rgba(29,158,117,0.3)' : '1px solid transparent',
+              }}>
+              <span className="text-base mb-0.5">{icon}</span>
+              {label}
+            </button>
+          ))}
+        </div>
+        <div className="grid grid-cols-3 gap-1">
+          {([
+            { mode: 'receive', label: 'Receive', icon: '📥' },
+            { mode: 'price',   label: 'Price',   icon: '💰' },
+            { mode: 'expiry',  label: 'Expiry',  icon: '📅' },
+          ] as { mode: AppMode; label: string; icon: string }[]).map(({ mode, label, icon }) => (
+            <button key={mode} onClick={() => switchMode(mode)}
+              className="flex flex-col items-center py-2 rounded-xl text-xs font-medium transition-all"
+              style={{
+                background: appMode === mode ? 'rgba(29,158,117,0.2)' : 'transparent',
+                color: appMode === mode ? '#1D9E75' : 'rgba(255,255,255,0.4)',
+                border: appMode === mode ? '1px solid rgba(29,158,117,0.3)' : '1px solid transparent',
+              }}>
+              <span className="text-base mb-0.5">{icon}</span>
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Sync / offline banners */}
