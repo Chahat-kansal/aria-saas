@@ -3,6 +3,7 @@ export const maxDuration = 60
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { supabaseAdmin } from '@/lib/supabase-admin'
 import { generateInsight } from '@/lib/aria-insights'
 import { checkBriefingTrigger, localDateString, BriefingBusiness } from '@/lib/aria/timezone'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
@@ -42,10 +43,43 @@ async function generateMorning(
     .lte('stock_quantity', 5)
     .limit(5)
 
+  // Market price intelligence — include if a scan ran within 7 days
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+  const { data: marketScan } = await supabaseAdmin
+    .from('market_price_scans')
+    .select('overpriced_count, underpriced_count, potential_revenue_gain_cents, finished_at')
+    .eq('business_id', biz.id)
+    .eq('status', 'complete')
+    .gte('started_at', sevenDaysAgo)
+    .order('started_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  let biggestGapName: string | null = null
+  let biggestGapMarketPrice: number | null = null
+  if (marketScan && Number(marketScan.overpriced_count) > 0) {
+    const { data: topGap } = await supabaseAdmin
+      .from('pos_market_price_cache')
+      .select('search_query, shelf_price, price_gap_cents')
+      .eq('business_id', biz.id)
+      .eq('is_overpriced', true)
+      .order('price_gap_cents', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    if (topGap) {
+      biggestGapName = topGap.search_query as string
+      biggestGapMarketPrice = Number(topGap.shelf_price)
+    }
+  }
+
+  const marketCtx = marketScan
+    ? ` market_prices_checked=${(marketScan.finished_at as string | null)?.slice(0, 10)} overpriced_products=${marketScan.overpriced_count} underpriced_products=${marketScan.underpriced_count} potential_revenue_gain_per_unit_cents=${marketScan.potential_revenue_gain_cents}${biggestGapName ? ` biggest_gap_product="${biggestGapName}" market_price=$${biggestGapMarketPrice?.toFixed(2)}` : ''}`
+    : ''
+
   const { bullets } = await generateInsight({
     business_id: biz.id,
-    context: `morning_briefing date=${today} yesterday_revenue=$${revenue.toFixed(0)} yesterday_transactions=${txCount} low_stock_count=${(lowStock ?? []).length}`,
-    data: { revenue, transactions: txCount, low_stock: (lowStock ?? []).map(p => p.name) },
+    context: `morning_briefing date=${today} yesterday_revenue=$${revenue.toFixed(0)} yesterday_transactions=${txCount} low_stock_count=${(lowStock ?? []).length}${marketCtx}`,
+    data: { revenue, transactions: txCount, low_stock: (lowStock ?? []).map(p => p.name), market_price_intel: marketScan ? { overpriced: marketScan.overpriced_count, underpriced: marketScan.underpriced_count, potential_gain_cents: marketScan.potential_revenue_gain_cents, biggest_gap_product: biggestGapName } : null },
     maxBullets: 3,
     realtime: true,
   })
