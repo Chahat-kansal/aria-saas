@@ -22,7 +22,11 @@ export async function getServerToken(scope: 'SERVER_ACCESS' | 'CLIENT_ACCESS' = 
     },
     body: `scope=${scope}`,
   });
-  if (!res.ok) throw new Error(`Basiq token failed: ${res.status} ${await res.text()}`);
+  const tokenText = await res.text();
+  if (!res.ok) {
+    console.error('[basiq/token] failed:', res.status, tokenText);
+    throw new Error(`Basiq token failed: ${res.status} ${tokenText}`);
+  }
   const j = await res.json() as TokenResp;
   cached = { token: j.access_token, expires_at: Date.now() + j.expires_in * 1000 };
   return j.access_token;
