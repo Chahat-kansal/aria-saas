@@ -81,11 +81,13 @@ export async function deleteUser(userId: string): Promise<void> {
   });
 }
 
-export async function createAuthLink(userId: string): Promise<{ url: string; expiresAt?: string }> {
+export async function createAuthLink(userId: string, businessId: string): Promise<{ url: string; expiresAt?: string }> {
   // The Basiq hosted consent UI uses /users/{id}/auth_link
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://www.ariaos.site';
+  const redirectUri = `${baseUrl}/api/integrations/basiq/callback?business_id=${businessId}`;
   const res = await basiqFetch<{ links?: { public?: string }; expiresAt?: string }>(
     `/users/${userId}/auth_link`,
-    { method: 'POST', body: JSON.stringify({}) },
+    { method: 'POST', body: JSON.stringify({ mobile: false, redirect_uri: redirectUri }) },
   );
   const url = res.links?.public ?? '';
   return { url, expiresAt: res.expiresAt };
