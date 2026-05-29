@@ -224,6 +224,17 @@ export function BlockRenderer({ block, onChoice }: Props) {
             Download
           </button>
         )}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
+          {['Change the colour', 'Download this', 'Show me a different time period', 'Explain what this means', 'Show me as a table instead'].map((chip) => (
+            <button
+              key={chip}
+              onClick={() => onChoice?.(chip)}
+              style={{ padding: '4px 11px', borderRadius: 99, fontSize: 10, fontWeight: 500, border: '0.5px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.04)', cursor: 'pointer', color: 'rgba(255,255,255,0.5)', fontFamily: 'inherit' }}
+            >
+              {chip}
+            </button>
+          ))}
+        </div>
       </div>
     )
   }

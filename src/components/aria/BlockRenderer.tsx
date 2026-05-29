@@ -194,6 +194,17 @@ function OneBlock({ block, onAction }: { block: AskBlock; onAction?: (prompt: st
               Download
             </button>
           )}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
+            {['Change the colour', 'Download this', 'Show me a different time period', 'Explain what this means', 'Show me as a table instead'].map((chip) => (
+              <button
+                key={chip}
+                onClick={() => onAction?.(chip)}
+                style={{ padding: '4px 11px', borderRadius: 99, fontSize: 11, fontWeight: 500, border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.05)', cursor: 'pointer', color: 'rgba(255,255,255,0.6)', fontFamily: 'inherit' }}
+              >
+                {chip}
+              </button>
+            ))}
+          </div>
         </div>
       )
     }
