@@ -90,7 +90,7 @@ export async function createAuthLink(userId: string, businessId: string): Promis
   // We pass business_id via Basiq's ?state= param — it is appended to the redirect URL by Basiq.
   const res = await basiqFetch<{ links?: { public?: string }; expiresAt?: string }>(
     `/users/${userId}/auth_link`,
-    { method: 'POST', body: JSON.stringify({}) },
+    { method: 'POST' },
   );
   const rawUrl = res.links?.public ?? '';
   // Append state=businessId so the callback can resolve the business
