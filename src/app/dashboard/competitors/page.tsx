@@ -124,6 +124,16 @@ function MarketPricesTab({ businessId }: { businessId: string }) {
 
       {error && <div style={{ marginBottom: 16, padding: '10px 14px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: 10, fontSize: 13, color: '#EF4444' }}>{error}</div>}
 
+      {results.length > 0 && scan && (
+        <div style={{ padding: '12px 16px', background: 'rgba(127,184,151,0.06)', border: '1px solid rgba(127,184,151,0.2)', borderRadius: 10, marginBottom: 20, fontSize: 13, color: 'rgba(255,255,255,0.85)', lineHeight: 1.55 }}>
+          <span style={{ fontSize: 10, fontWeight: 700, color: '#7FB897', textTransform: 'uppercase', letterSpacing: '0.07em', display: 'block', marginBottom: 4 }}>✦ Aria says</span>
+          {overpriced.length > 0
+            ? `${overpriced.length} of your products are priced above market. Fixing them could recover A$${Math.max(1, Math.round((scan.potential_revenue_gain_cents ?? 0) * 5 / 100))}/week.`
+            : underpriced.length > 0
+            ? `Your ${underpriced[0]?.product_name} is below the local average — you have room to raise it.`
+            : `Your pricing is competitive. Last checked ${scan.finished_at ? new Date(scan.finished_at).toLocaleDateString('en-AU') : 'today'}.`}
+        </div>
+      )}
       {results.length > 0 && (
         <>
           {/* Stat cards */}
