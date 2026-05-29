@@ -273,6 +273,38 @@ NEVER refuse on schema errors — system has self-healing fallback.`,
     },
   },
   {
+    name: 'get_hourly_sales',
+    description: 'Get total sales grouped by hour of day and day of week — for heatmaps and time analysis. Returns a 2D grid of revenue totals.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        date_range: { type: 'string', enum: ['last_7_days', 'last_30_days', 'this_month', 'last_month'], description: 'The time window to analyse' },
+      },
+      required: ['date_range'],
+    },
+  },
+  {
+    name: 'get_product_sales_detail',
+    description: 'Get sales quantity and revenue for every product — for charts and comparisons. Returns each product with total units sold and total revenue.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        limit: { type: 'number', description: 'Max products to return (default 20)' },
+        date_range: { type: 'string', enum: ['last_7_days', 'last_30_days', 'this_month', 'last_month'], description: 'The time window' },
+      },
+    },
+  },
+  {
+    name: 'get_cashier_performance',
+    description: 'Get sales and metrics per cashier — for leaderboards and comparisons. Returns each cashier with total sales, transaction count, and avg basket.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        date_range: { type: 'string', enum: ['last_7_days', 'last_30_days', 'this_month', 'last_month'], description: 'The time window' },
+      },
+    },
+  },
+  {
     name: 'query_bank_balance',
     description: 'Get real Australian bank balances and recent transactions via Basiq. Use when owner asks about cash balance, available money, recent large transactions, income vs expenses, or runway.',
     input_schema: {
@@ -1069,6 +1101,72 @@ export async function executePOSTool(name: string, input: unknown, businessId: s
       const delivery = rows.filter(r => (r as Record<string,unknown>).fulfillment_type === 'delivery').length
       return { count: rows.length, total_revenue: total_revenue.toFixed(2), avg_order_value: avg.toFixed(2), pickup_count: pickup, delivery_count: delivery, period }
     }
+    case 'get_hourly_sales': {
+      const { date_range = 'last_30_days' } = inp as { date_range?: string }
+      const now = new Date()
+      const from = date_range === 'last_7_days' ? new Date(Date.now() - 7 * 86400000).toISOString()
+        : date_range === 'this_month' ? new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
+        : date_range === 'last_month' ? new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString()
+        : new Date(Date.now() - 30 * 86400000).toISOString()
+      const to = date_range === 'last_month' ? new Date(now.getFullYear(), now.getMonth(), 1).toISOString() : now.toISOString()
+      const { data } = await supabaseAdmin.from('pos_sales').select('total_amount, created_at').eq('business_id', businessId).neq('status', 'voided').gte('created_at', from).lte('created_at', to).limit(5000)
+      const grid: Record<number, Record<number, number>> = {}
+      for (const row of (data ?? [])) {
+        const d = new Date(row.created_at)
+        const dow = d.getDay()
+        const hour = d.getHours()
+        if (!grid[dow]) grid[dow] = {}
+        grid[dow][hour] = (grid[dow][hour] ?? 0) + Number(row.total_amount ?? 0)
+      }
+      const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
+      const result = days.map((day, dow) => ({
+        day,
+        hours: Array.from({ length: 24 }, (_, h) => ({ hour: h, revenue: Math.round((grid[dow]?.[h] ?? 0) * 100) / 100 })),
+      }))
+      return { date_range, heatmap: result, total_rows: (data ?? []).length }
+    }
+
+    case 'get_product_sales_detail': {
+      const { limit = 20, date_range = 'last_30_days' } = inp as { limit?: number; date_range?: string }
+      const now = new Date()
+      const from = date_range === 'last_7_days' ? new Date(Date.now() - 7 * 86400000).toISOString()
+        : date_range === 'this_month' ? new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
+        : date_range === 'last_month' ? new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString()
+        : new Date(Date.now() - 30 * 86400000).toISOString()
+      const { data } = await supabaseAdmin.from('pos_sale_items').select('product_name, quantity, line_total, pos_sales!inner(business_id, created_at, status)').eq('pos_sales.business_id', businessId).neq('pos_sales.status', 'voided').gte('pos_sales.created_at', from).limit(10000)
+      const map: Record<string, { name: string; qty: number; revenue: number }> = {}
+      for (const row of (data ?? []) as Array<{ product_name: string | null; quantity: number | null; line_total: number | null }>) {
+        const name = row.product_name ?? 'Unknown'
+        if (!map[name]) map[name] = { name, qty: 0, revenue: 0 }
+        map[name].qty += Number(row.quantity ?? 1)
+        map[name].revenue += Number(row.line_total ?? 0)
+      }
+      const products = Object.values(map).sort((a, b) => b.revenue - a.revenue).slice(0, limit).map(p => ({ ...p, revenue: Math.round(p.revenue * 100) / 100 }))
+      return { date_range, products, total_products: products.length }
+    }
+
+    case 'get_cashier_performance': {
+      const { date_range = 'last_30_days' } = inp as { date_range?: string }
+      const now = new Date()
+      const from = date_range === 'last_7_days' ? new Date(Date.now() - 7 * 86400000).toISOString()
+        : date_range === 'this_month' ? new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
+        : date_range === 'last_month' ? new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString()
+        : new Date(Date.now() - 30 * 86400000).toISOString()
+      const { data } = await supabaseAdmin.from('pos_sales').select('served_by, total_amount').eq('business_id', businessId).neq('status', 'voided').gte('created_at', from).limit(10000)
+      const map: Record<string, { name: string; sales: number; transactions: number }> = {}
+      for (const row of (data ?? []) as Array<{ served_by: string | null; total_amount: number | null }>) {
+        const name = row.served_by ?? 'Unknown'
+        if (!map[name]) map[name] = { name, sales: 0, transactions: 0 }
+        map[name].sales += Number(row.total_amount ?? 0)
+        map[name].transactions += 1
+      }
+      const cashiers = Object.values(map).sort((a, b) => b.sales - a.sales).map(c => ({
+        name: c.name, total_sales: Math.round(c.sales * 100) / 100,
+        transactions: c.transactions, avg_basket: c.transactions > 0 ? Math.round((c.sales / c.transactions) * 100) / 100 : 0,
+      }))
+      return { date_range, cashiers, total_cashiers: cashiers.length }
+    }
+
     default:
       throw new Error(`Unknown tool: ${name}`);
   }
