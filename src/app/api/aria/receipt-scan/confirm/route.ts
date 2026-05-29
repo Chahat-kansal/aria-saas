@@ -62,8 +62,6 @@ async function _POST(req: Request) {
       price: 0,
       status: 'draft',
       is_active: false,
-      source: 'receipt_scan',
-      notes: `Auto-created from receipt scan. Supplier: ${np.supplier_name ?? 'unknown'}`,
     }).select('id').single();
     if (created?.id) {
       createdIds.push(created.id);
