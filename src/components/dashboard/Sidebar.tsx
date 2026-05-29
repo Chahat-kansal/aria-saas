@@ -141,9 +141,16 @@ const ALWAYS_SECTIONS: { section: string; items: (NavItemDef & { fresh?: boolean
       { href: '/dashboard/parcel-tracking', label: 'Parcel tracking', icon: TruckOutlineIcon, section: 'Growth' },
     ],
   },
+  {
+    section: 'Settings',
+    items: [
+      { href: '/dashboard/settings/sharing', label: 'Sharing',           icon: ShareIcon,   section: 'Settings', fresh: true },
+      { href: '/dashboard/settings/reports', label: 'Scheduled Reports', icon: CalendarIcon, section: 'Settings', fresh: true },
+    ],
+  },
 ]
 
-const SECTION_ORDER = ['Overview', 'Customer surfaces', 'Growth', 'Marketing', 'Operations', 'Warehouse', 'Revenue', 'Reputation', 'Intelligence', 'Pro tools', 'VisaAI', 'Modules'];
+const SECTION_ORDER = ['Overview', 'Customer surfaces', 'Growth', 'Marketing', 'Operations', 'Warehouse', 'Revenue', 'Reputation', 'Intelligence', 'Pro tools', 'VisaAI', 'Modules', 'Settings'];
 
 /* ─── Component ─────────────────────────────────────────────────── */
 export function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
@@ -529,6 +536,9 @@ function SettingsIcon() {
   );
 }
 
+function ShareIcon({ className }: { className?: string }) {
+  return <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>;
+}
 function ProfileIcon() {
   return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-3.5 h-3.5"><circle cx="12" cy="8" r="4"/><path strokeLinecap="round" d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>;
 }
