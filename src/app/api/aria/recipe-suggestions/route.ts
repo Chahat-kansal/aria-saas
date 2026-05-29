@@ -17,8 +17,8 @@ async function _POST(req: NextRequest) {
     if (!user) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
 
     const [bizRes, productsRes, salesRes] = await Promise.all([
-      supabase.from('businesses').select('name, industry, suburb, state').eq('id', business_id).maybeSingle(),
-      supabase.from('pos_products').select('name, category, price_cents, current_stock').eq('business_id', business_id).limit(100),
+      supabase.from('businesses').select('name, industry').eq('id', business_id).maybeSingle(),
+      supabase.from('pos_products').select('name, category, price, stock_quantity').eq('business_id', business_id).limit(100),
       supabase.from('pos_sale_items').select('product_name, quantity').eq('business_id', business_id)
         .gte('created_at', new Date(Date.now() - 30 * 86400000).toISOString()).limit(500),
     ]);

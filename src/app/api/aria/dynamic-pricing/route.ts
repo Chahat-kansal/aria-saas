@@ -80,7 +80,7 @@ async function _POST() {
 
   const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString()
   const { data: sales } = await supabaseAdmin.from('pos_sale_items')
-    .select('product_id, quantity, total, pos_sales!inner(business_id, created_at, status)')
+    .select('product_id, quantity, pos_sales!inner(business_id, created_at, status)')
     .eq('pos_sales.business_id', bid)
     .neq('pos_sales.status', 'voided')
     .gte('pos_sales.created_at', thirtyDaysAgo)

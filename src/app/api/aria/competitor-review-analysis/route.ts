@@ -93,11 +93,10 @@ async function _POST(req: Request) {
   }))
 
   const { data: ourReviews } = await supabaseAdmin.from('google_reviews')
-    .select('rating, keyword_tags').eq('business_id', business_id)
+    .select('rating').eq('business_id', business_id)
     .order('review_date', { ascending: false }).limit(30)
 
-  const positiveKeywords = (ourReviews ?? []).filter(r => Number(r.rating ?? 0) >= 4)
-    .flatMap(r => (r.keyword_tags as string[] | null) ?? []).slice(0, 10)
+  const positiveKeywords: string[] = []
 
   const context = `Our business: ${biz.name} (${biz.industry}, ${suburb})
 Our rating: ${biz.google_average_rating ?? '?'}★ (${biz.google_total_reviews ?? 0} reviews)
