@@ -82,14 +82,15 @@ export async function deleteUser(userId: string): Promise<void> {
 }
 
 export async function createAuthLink(userId: string, businessId: string): Promise<{ url: string; expiresAt?: string }> {
-  // The Basiq hosted consent UI uses /users/{id}/auth_link
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://www.ariaos.site';
-  const redirectUri = `${baseUrl}/api/integrations/basiq/callback?business_id=${businessId}`;
+  // Redirect URL is configured in Basiq Dashboard → Customise UI.
+  // We pass business_id via Basiq's ?state= param — it is appended to the redirect URL by Basiq.
   const res = await basiqFetch<{ links?: { public?: string }; expiresAt?: string }>(
     `/users/${userId}/auth_link`,
-    { method: 'POST', body: JSON.stringify({ mobile: false, redirect_uri: redirectUri }) },
+    { method: 'POST', body: JSON.stringify({}) },
   );
-  const url = res.links?.public ?? '';
+  const rawUrl = res.links?.public ?? '';
+  // Append state=businessId so the callback can resolve the business
+  const url = rawUrl ? `${rawUrl}&state=${encodeURIComponent(businessId)}` : '';
   return { url, expiresAt: res.expiresAt };
 }
 
