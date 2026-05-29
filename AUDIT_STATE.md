@@ -1,20 +1,25 @@
 # Aria OS Audit State
 
 ## Last updated
-Not started yet — run prompt 98 to begin Session 1.
+2026-05-30 — Session 1 complete (prompt 98)
 
 ## Status
-NOT STARTED
+IN PROGRESS — src/app/api/aria/ COMPLETE
 
 ## Completed sections
-(none yet)
+- [x] src/app/api/aria/ — all ~47 route files audited
 
 ## Current position
-Start at: src/app/api/aria/
+Next: src/app/api/pos/ (~80 route files)
 
 ## Issues found (running log)
 | File | Type | Issue | Fixed? | Commit |
 |------|------|-------|--------|--------|
+| src/app/api/aria/daily-briefing/route.ts | Wrong table + column | `reviews.response` doesn't exist; query was from('reviews').is('response', null). Fixed to from('google_reviews').eq('has_reply', false).gte('review_date', ...) | YES | 1ee57b9 |
+| src/app/api/aria/page-insight/route.ts | Wrong table + column | Same `reviews.response` bug (unanswered reviews count). Fixed to google_reviews.has_reply | YES | 1ee57b9 |
+| src/app/api/aria/page-insight/route.ts | Wrong column | `staff_members.name` doesn't exist; select had `id, name, first_name, last_name, visa_expiry_date`. Fixed select + map to use first_name/last_name | YES | 1ee57b9 |
+| src/app/api/aria/page-insight/route.ts | Wrong table | `pos_customers.customer_segment, churn_risk` don't exist on pos_customers. Changed from('pos_customers') → from('customers') | YES | 1ee57b9 |
+| src/app/api/aria/roster/route.ts | Wrong column | `staff_members.name` in select caused PostgREST 400, staffRows null, always "No staff found". Removed `name` from select; simplified name-construction line to use first_name/last_name only | YES | af918e0 |
 
 ## Known already-fixed issues (do not re-fix)
 | File | Issue | Fixed in |
@@ -26,9 +31,17 @@ Start at: src/app/api/aria/
 | src/app/api/public/menu/*/route.ts | slug-vs-UUID | prompt 92 |
 | src/app/api/public/business/*/route.ts | slug-vs-UUID | prompt 92 |
 
+## Routes confirmed CLEAN in src/app/api/aria/ (Session 1)
+ask, autopilot-actions, briefing, bundle-builder, business-brain, competitor-businesses,
+competitor-prices, competitor-prices/history, competitor-watches, compliance,
+custom-features, daily-briefing (after fix), delivery-prediction, dynamic-pricing,
+explain-metric, hypotheses, marketing-campaigns, page-insight (after fix), price-intelligence,
+recipe-suggestions, reorder-forecast, review-request, roster (after fix), shift-analysis,
+skills, social-suggest, studio, studio/upload, test, weekly-report, winback-compose
+
 ## Sections remaining
-- [ ] src/app/api/aria/ (~47 route files)
-- [ ] src/app/api/pos/ (~80 route files)
+- [x] src/app/api/aria/ (~47 route files) ← DONE Session 1
+- [ ] src/app/api/pos/ (~80 route files) ← START HERE next session
 - [ ] src/app/api/public/ (~30 route files)
 - [ ] src/app/api/social/ (~20 route files)
 - [ ] src/app/api/reports/ (~10 route files)
@@ -82,7 +95,7 @@ If a table or column is NOT in this list, the code is wrong.
 
 **pos_sale_items**: id, sale_id, product_id, variant_id, product_name, product_sku, quantity, unit_price, discount_percent, tax_rate, line_total, modifiers, notes, cost_price, margin_percent, business_id, created_at, returned_quantity, price_overridden, original_unit_price, price_override_reason
 
-**staff_members** (NOT pos_staff for team management): id, business_id, first_name, last_name, preferred_name, date_of_birth, position, department, employment_type, start_date, end_date, status, pay_type, pay_rate_cents, pay_per_annum_cents, pay_frequency, superannuation_rate, visa_type, visa_subclass, visa_expiry_date, visa_work_restrictions, notes, created_at, updated_at, user_id, pos_staff_id, portal_enabled, color, hourly_rate, **name** (text — also has first_name + last_name separately)
+**staff_members** (NOT pos_staff for team management): id, business_id, first_name, last_name, preferred_name, date_of_birth, position, department, employment_type, start_date, end_date, status, pay_type, pay_rate_cents, pay_per_annum_cents, pay_frequency, superannuation_rate, visa_type, visa_subclass, visa_expiry_date, visa_work_restrictions, notes, created_at, updated_at, user_id, pos_staff_id, portal_enabled, color, hourly_rate. **NO `name` column** (confirmed from migration 20260428000007; pre-existing AUDIT_STATE entry was wrong) — always use first_name + last_name
 
 **pos_staff** (register login table — NOT team management): id, business_id, name, email, pin, role, is_active, color, permissions, created_at
 
