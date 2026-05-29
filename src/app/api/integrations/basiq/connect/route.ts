@@ -44,7 +44,7 @@ async function _POST(req: Request) {
     await supabaseAdmin.from('businesses').update({ basiq_user_id: basiqUserId }).eq('id', business_id);
   }
 
-  const link = await createAuthLink(basiqUserId);
+  const link = await createAuthLink(basiqUserId, business_id);
   return NextResponse.json({ consent_url: link.url, basiq_user_id: basiqUserId, expires_at: link.expiresAt ?? null });
 }
 
