@@ -47,7 +47,7 @@ async function _POST(req: Request) {
   // in-POS register logins, which is usually just the owner). Availability lives
   // in staff_availability, joined in below.
   const [{ data: staffRows }, { data: availRows }, { data: biz }, { data: recentSales }, { data: firstSaleRows }] = await Promise.all([
-    supabase.from("staff_members").select("id,name,first_name,last_name,position,employment_type,hourly_rate,base_rate_cents,pay_rate_cents").eq("business_id", bid).eq("status", "active"),
+    supabase.from("staff_members").select("id,first_name,last_name,position,employment_type,hourly_rate,base_rate_cents,pay_rate_cents").eq("business_id", bid).eq("status", "active"),
     supabase.from("staff_availability").select("staff_member_id,day_of_week,specific_date,unavailable_from,unavailable_until,reason,is_recurring").eq("business_id", bid),
     supabase.from("businesses").select("name,industry").eq("id", bid).single(),
     supabase.from("pos_sales").select("total_amount,created_at").eq("business_id", bid).gte("created_at", new Date(Date.now() - 30 * 86400000).toISOString()).order("created_at", { ascending: false }).limit(500),
@@ -71,7 +71,7 @@ async function _POST(req: Request) {
 
   // Normalise to a stable shape for the prompt + fallback.
   const staff = (staffRows ?? []).map(s => {
-    const name = (s.name && String(s.name).trim()) || [s.first_name, s.last_name].filter(Boolean).join(" ").trim() || "Staff";
+    const name = [s.first_name, s.last_name].filter(Boolean).join(" ").trim() || "Staff";
     const rateCents = s.hourly_rate ? Math.round(Number(s.hourly_rate) * 100) : (s.base_rate_cents ?? s.pay_rate_cents ?? 2500);
     return { id: s.id as string, name, role: (s.position as string) ?? "Staff", employment_type: (s.employment_type as string) ?? "casual", rate_cents: rateCents, availability: availByStaff.get(s.id as string) ?? [] };
   });
