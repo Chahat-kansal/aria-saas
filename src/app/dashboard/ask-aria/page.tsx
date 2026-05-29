@@ -37,6 +37,7 @@ interface Message {
   blocks?: AskBlock[]
   followups?: string[]
   used_council?: boolean
+  model_used?: string
 }
 
 interface ConvSummary {
@@ -403,6 +404,7 @@ export default function AskAriaPage() {
         blocks?: AskBlock[] | null
         followups?: string[]
         used_council?: boolean
+        model_used?: string
       }
 
       if (data.conversation_id) setConversationId(data.conversation_id)
@@ -439,6 +441,7 @@ export default function AskAriaPage() {
             blocks: data.blocks ?? undefined,
             followups: data.followups ?? undefined,
             used_council: data.used_council ?? false,
+            model_used: data.model_used,
           }
         }
         return updated
@@ -867,6 +870,11 @@ export default function AskAriaPage() {
                 {m.role === 'assistant' && m.tool_calls && m.tool_calls.length > 0 && !m.streaming && (
                   <p className="text-[10px] mt-1 px-1 opacity-40">
                     🔧 {m.tool_calls.map(t => t.name).join(', ')}
+                  </p>
+                )}
+                {m.role === 'assistant' && !m.streaming && m.model_used && (
+                  <p className="text-[9px] mt-1 px-1 opacity-50">
+                    {m.model_used === 'haiku' ? '⚡ Fast response' : m.model_used === 'sonnet' ? '🧠 Deep analysis' : '🔬 Expert analysis'}
                   </p>
                 )}
                 {m.role === 'assistant' && !m.streaming && m.content && <CopyButton text={m.content} />}

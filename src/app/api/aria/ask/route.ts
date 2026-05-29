@@ -701,35 +701,58 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
     userPrompt = attachmentsToContentBlocks(message, attachments)
   }
 
-  // ── Budget-based model routing ───────────────────────────────────────────
-  // Everyone gets Sonnet by default. Once a business burns its monthly Sonnet
-  // budget, non-tool calls gracefully downgrade to Haiku for the rest of the
-  // month. Spend is read from aria_monthly_spend (trigger-maintained — never
-  // computed in app code).
+  // ── Cost-optimised model routing ─────────────────────────────────────────
+  // Haiku first by default. Escalate to Sonnet only for genuinely complex
+  // requests. Opus only for explicit escalation. This is 12x cheaper than
+  // the previous "Sonnet first" logic while maintaining output quality for
+  // the vast majority of questions.
+
   const ym = new Date().toISOString().slice(0, 7)
   const [{ data: spend }, { data: sub }] = await Promise.all([
-    supabaseAdmin.from('aria_monthly_spend').select('sonnet_cents').eq('business_id', bid).eq('year_month', ym).maybeSingle(),
+    supabaseAdmin.from('aria_monthly_spend').select('sonnet_cents, haiku_cents').eq('business_id', bid).eq('year_month', ym).maybeSingle(),
     supabaseAdmin.from('business_subscriptions').select('sonnet_monthly_budget_cents, tier').eq('business_id', bid).eq('status', 'active').maybeSingle(),
   ])
+
+  // Monthly Sonnet budget — used as a hard cap, not as the default
   const planDefaults: Record<string, number> = { starter: 1000, growth: 3000, pro: 8000 }
   const sonnetBudget = sub?.sonnet_monthly_budget_cents ?? planDefaults[sub?.tier ?? ''] ?? 3000
   const sonnetUsed = spend?.sonnet_cents ?? 0
   const sonnetExhausted = sonnetUsed >= sonnetBudget
 
-  // Tool-heavy calls stay on Sonnet even when exhausted — Haiku tool-use reliability is lower.
-  const needsTools = attachments.length > 0 ||
+  // Signals that this request genuinely needs Sonnet
+  const needsSonnet =
+    intent.complexity === 'complex' ||
     intent.type === 'troubleshoot' ||
-    /\b(export|download|report|spreadsheet|csv|excel|pdf|send|sms|text|email|restock|reorder|purchase\s*order|schedule|roster|invoice|generate|create|update|set\s*price|change\s*price)\b/i.test(message)
+    attachments.length > 0 ||
+    /(live.?render|generate.?html|heatmap|complex.?chart|analysis|compare.*week|profit.*if|what.*happen|should.*hire|strategy|forecast|predict|multi.?step|deep.?dive|breakdown|reconcil|cash.?flow.*analysis)/i.test(message)
+
+  // Signals that even Haiku needs to be careful (bigger context window needed)
+  const needsTools =
+    /(export|download|report|spreadsheet|csv|pdf|send|sms|email|restock|reorder|purchase.?order|schedule|roster|invoice|generate|create|update|set.?price|change.?price)/i.test(message) ||
+    attachments.length > 0
 
   let routedModel: 'haiku' | 'sonnet' | 'opus'
-  if (intent.type === 'escalate') routedModel = 'opus'
-  else if (sonnetExhausted && !needsTools) routedModel = 'haiku'
-  else routedModel = 'sonnet'
 
-  if (sonnetExhausted && needsTools && intent.type !== 'escalate') {
-    console.log('[ask-aria] sonnet overage — tool-heavy call stays on Sonnet', { bid, sonnetUsed, budget: sonnetBudget })
+  if (intent.type === 'escalate') {
+    routedModel = 'opus'
+  } else if (sonnetExhausted) {
+    routedModel = 'haiku'
+  } else if (needsSonnet) {
+    routedModel = 'sonnet'
+  } else {
+    routedModel = 'haiku'
   }
-  console.log('[ask-aria] route', { bid, sonnetUsed, budget: sonnetBudget, exhausted: sonnetExhausted, model: routedModel })
+
+  console.log('[ask-aria] route', {
+    bid,
+    sonnetUsed,
+    budget: sonnetBudget,
+    exhausted: sonnetExhausted,
+    needsSonnet,
+    model: routedModel,
+    intent: intent.type,
+    complexity: intent.complexity,
+  })
 
   // Haiku does not support extended thinking — only enable it for Sonnet/Opus.
   const useThinking = routedModel !== 'haiku' && (intent.complexity === 'complex' || intent.type === 'troubleshoot' || intent.type === 'escalate')
@@ -783,6 +806,13 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
     ? { type: 'tool' as const, name: 'generate_image' }
     : undefined
 
+  // Token limits by model — Haiku is fast, Sonnet has more capacity
+  const maxTokens = routedModel === 'haiku'
+    ? (needsTools ? 2000 : 1500)
+    : routedModel === 'sonnet'
+    ? (useThinking ? 4096 : 3500)
+    : 4096
+
   const toolResult = await callAnthropicWithTools({
     model: routedModel,
     systemPrompt,
@@ -790,10 +820,10 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
     priorMessages: historyMessages,
     tools: allTools,
     executeTool: (name, input) => executePOSTool(name, input, bid),
-    maxTokens: useThinking ? 4096 : 3500,
-    maxIterations: 8,
+    maxTokens,
+    maxIterations: routedModel === 'haiku' ? 4 : 8,
     thinking: useThinking ? { enabled: true, budget_tokens: thinkingBudget } : undefined,
-    timeoutMs: 55_000,
+    timeoutMs: routedModel === 'haiku' ? 30_000 : 55_000,
     businessId: bid,
     agentKey: 'ask_aria',
     role: 'chat',
@@ -913,6 +943,7 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
     blocks: richBlocks ?? undefined,
     used_council: false,
     ai_mode: routedModel,
+    model_used: routedModel,
     sonnet_used_cents: sonnetUsed,
     sonnet_budget_cents: sonnetBudget,
     sonnet_percent_used: Math.min(100, Math.round((sonnetUsed / Math.max(1, sonnetBudget)) * 100)),
