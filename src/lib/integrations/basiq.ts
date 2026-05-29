@@ -91,16 +91,27 @@ export async function deleteUser(userId: string): Promise<void> {
 }
 
 export async function createAuthLink(userId: string, businessId: string): Promise<{ url: string; expiresAt?: string }> {
-  // Redirect URL is configured in Basiq Dashboard → Customise UI.
-  // We pass business_id via Basiq's ?state= param — it is appended to the redirect URL by Basiq.
-  const res = await basiqFetch<{ links?: { public?: string }; expiresAt?: string }>(
-    `/users/${userId}/auth_link`,
-    { method: 'POST' },
-  );
-  const rawUrl = res.links?.public ?? '';
-  // Append state=businessId so the callback can resolve the business
-  const url = rawUrl ? `${rawUrl}&state=${encodeURIComponent(businessId)}` : '';
-  return { url, expiresAt: res.expiresAt };
+  // Basiq v3 consent UI: get a CLIENT_ACCESS token scoped to the user, then
+  // redirect to https://consent.basiq.io/home?token=TOKEN
+  // The redirect URL (with ?state=) is configured in Basiq Dashboard → Customise UI.
+  const key = process.env.BASIQ_API_KEY;
+  if (!key) throw new Error('BASIQ_API_KEY not set');
+  const res = await fetch(`${BASIQ_BASE}/token`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Basic ${key}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'basiq-version': '3.0',
+    },
+    body: `scope=CLIENT_ACCESS&userId=${userId}`,
+  });
+  if (!res.ok) {
+    const t = await res.text();
+    throw new Error(`Basiq client token failed: ${res.status} ${t}`);
+  }
+  const { access_token } = await res.json() as { access_token: string };
+  const url = `https://consent.basiq.io/home?token=${access_token}&state=${encodeURIComponent(businessId)}`;
+  return { url };
 }
 
 interface AccountsListResp { data?: BasiqAccount[] }
