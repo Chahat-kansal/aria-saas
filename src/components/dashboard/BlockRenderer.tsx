@@ -192,5 +192,41 @@ export function BlockRenderer({ block, onChoice }: Props) {
     </div>
   )
 
+  if (block.type === 'live_render') {
+    const sanitized = block.html
+      .replace(/<script[^>]+src=["'][^"']*["'][^>]*>/gi, '')
+      .replace(/fetch\s*\(\s*["']https?:\/\/(?!ariaos\.site)/gi, 'void(')
+    const srcDoc = `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Inter,-apple-system,sans-serif;background:transparent}</style></head><body>${sanitized}</body></html>`
+    return (
+      <div style={{ marginBottom: 12 }}>
+        {block.title && (
+          <div style={{ fontSize: 9, fontWeight: 600, color: B, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 6 }}>
+            {block.title}
+          </div>
+        )}
+        <iframe
+          srcDoc={srcDoc}
+          style={{ width: '100%', height: block.height ?? 400, border: '1.5px solid #0a0a0a', borderRadius: 14, background: '#fafafa' }}
+          sandbox="allow-scripts allow-same-origin"
+          title={block.title ?? 'Aria output'}
+        />
+        {block.downloadable && (
+          <button
+            onClick={() => {
+              const blob = new Blob([block.html], { type: 'text/html' })
+              const url = URL.createObjectURL(blob)
+              const a = document.createElement('a')
+              a.href = url; a.download = block.download_filename ?? 'aria-output.html'; a.click()
+              URL.revokeObjectURL(url)
+            }}
+            style={{ marginTop: 8, padding: '6px 14px', borderRadius: 10, border: '1.5px solid #0a0a0a', background: '#d9f54e', fontWeight: 700, fontSize: 12, cursor: 'pointer', color: '#0a0a0a' }}
+          >
+            Download
+          </button>
+        )}
+      </div>
+    )
+  }
+
   return null
 }

@@ -162,6 +162,42 @@ function OneBlock({ block, onAction }: { block: AskBlock; onAction?: (prompt: st
         </div>
       )
 
+    case 'live_render': {
+      const sanitized = block.html
+        .replace(/<script[^>]+src=["'][^"']*["'][^>]*>/gi, '')
+        .replace(/fetch\s*\(\s*["']https?:\/\/(?!ariaos\.site)/gi, 'void(')
+      const srcDoc = `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Inter,-apple-system,sans-serif;background:transparent}</style></head><body>${sanitized}</body></html>`
+      return (
+        <div style={{ margin: '12px 0' }}>
+          {block.title && (
+            <div style={{ fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,0.45)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>
+              {block.title}
+            </div>
+          )}
+          <iframe
+            srcDoc={srcDoc}
+            style={{ width: '100%', height: block.height ?? 400, border: '1px solid rgba(255,255,255,0.09)', borderRadius: 14, background: '#fafafa' }}
+            sandbox="allow-scripts allow-same-origin"
+            title={block.title ?? 'Aria output'}
+          />
+          {block.downloadable && (
+            <button
+              onClick={() => {
+                const blob = new Blob([block.html], { type: 'text/html' })
+                const url = URL.createObjectURL(blob)
+                const a = document.createElement('a')
+                a.href = url; a.download = block.download_filename ?? 'aria-output.html'; a.click()
+                URL.revokeObjectURL(url)
+              }}
+              style={{ marginTop: 8, padding: '5px 14px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.15)', background: '#d9f54e', fontWeight: 700, fontSize: 11, cursor: 'pointer', color: '#0a0a0a' }}
+            >
+              Download
+            </button>
+          )}
+        </div>
+      )
+    }
+
     default:
       return (
         <span style={{ display: 'inline-block', fontSize: 11, padding: '3px 10px', borderRadius: 99, background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.25)', color: '#F87171', fontFamily: 'monospace' }}>

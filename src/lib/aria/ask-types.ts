@@ -42,6 +42,14 @@ export type AskBlock =
     }
   | { type: 'action_single'; icon: string; title: string; sub: string; prompt: string }
   | { type: 'html'; content: string; title?: string }
+  | {
+      type: 'live_render'
+      html: string
+      height?: number
+      title?: string
+      downloadable?: boolean
+      download_filename?: string
+    }
 
 export interface AskResponse {
   blocks: AskBlock[]
