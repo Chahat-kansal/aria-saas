@@ -8,6 +8,73 @@ import { supabaseAdmin } from '@/lib/supabase-admin'
 import { submitBatch } from '@/lib/aria-batch'
 import { ARIA_SYSTEM_PROMPT } from '@/lib/aria-system-prompt'
 
+interface MarketCtx {
+  overpricedCount: number
+  underpricedCount: number
+  biggestOverpricedProduct: string | null
+  biggestGapCents: number
+  potentialRevenueCents: number
+  lastChecked: string | null
+}
+
+async function getMarketPriceContext(businessId: string): Promise<MarketCtx | null> {
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+  const { data: scan } = await supabaseAdmin
+    .from('market_price_scans')
+    .select('id, overpriced_count, underpriced_count, potential_revenue_gain_cents, finished_at')
+    .eq('business_id', businessId)
+    .eq('status', 'complete')
+    .gte('started_at', sevenDaysAgo)
+    .order('started_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (!scan) return null
+
+  // Find the biggest overpriced gap for a specific product name
+  const { data: topOverpriced } = await supabaseAdmin
+    .from('pos_market_price_cache')
+    .select('search_query, price_gap_cents')
+    .eq('business_id', businessId)
+    .eq('is_overpriced', true)
+    .order('price_gap_cents', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  return {
+    overpricedCount: scan.overpriced_count as number ?? 0,
+    underpricedCount: scan.underpriced_count as number ?? 0,
+    biggestOverpricedProduct: (topOverpriced?.search_query as string | null) ?? null,
+    biggestGapCents: (topOverpriced?.price_gap_cents as number | null) ?? 0,
+    potentialRevenueCents: scan.potential_revenue_gain_cents as number ?? 0,
+    lastChecked: scan.finished_at as string | null,
+  }
+}
+
+function buildMarketPricesPromptBlock(market: MarketCtx | null, industry: string | null): string {
+  if (!market) return ''
+  const ind = (industry ?? 'retail').toLowerCase()
+  const lastDate = market.lastChecked ? new Date(market.lastChecked).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' }) : 'recently'
+
+  if (market.overpricedCount > 0) {
+    const gain = (market.potentialRevenueCents / 100).toFixed(0)
+    const product = market.biggestOverpricedProduct ?? 'a product'
+    const gap = (market.biggestGapCents / 100).toFixed(2)
+    if (ind === 'liquor') return `\n\nMARKET PRICE ALERT (checked ${lastDate}): ${market.overpricedCount} product(s) priced above major retailers. Dan Murphy's guarantee means customers who check will leave. Biggest gap: ${product} at A$${gap} above market — fixing it alone could recover A$${gain} in unit margins. Visit Competitor Intelligence → Market Prices to match with one click.`
+    if (ind === 'cafe') return `\n\nMARKET PRICE INTELLIGENCE (checked ${lastDate}): ${market.overpricedCount} item(s) above market average. Biggest gap: ${product} is A$${gap} above the local average — that's pricing power you're not capturing, or margin you're losing. Check Market Prices tab to review.`
+    if (ind === 'restaurant') return `\n\nPRICING INSIGHT (checked ${lastDate}): ${market.overpricedCount} menu item(s) above Uber Eats/Menulog average for your area. Your delivery margin is exposed — ${product} is A$${gap} above market. Review Market Prices in Competitor Intelligence.`
+    return `\n\nMARKET PRICE ALERT (checked ${lastDate}): ${market.overpricedCount} product(s) priced above major retailers. Biggest gap: ${product} at A$${gap} above market. Fixing pricing could recover A$${gain} per unit. Visit Competitor Intelligence → Market Prices.`
+  }
+
+  if (market.underpricedCount > 0) {
+    if (ind === 'cafe') return `\n\nPRICING POWER (checked ${lastDate}): ${market.underpricedCount} item(s) below local average — you have room to raise prices without losing customers. Check Market Prices in Competitor Intelligence.`
+    if (ind === 'bakery') return `\n\nPRICING OPPORTUNITY (checked ${lastDate}): ${market.underpricedCount} product(s) below artisan bakery average in your area. Strong demand signal — consider a small price increase and monitor conversion. Market Prices tab has the details.`
+    return `\n\nPRICING POWER (checked ${lastDate}): ${market.underpricedCount} product(s) are below market average — you have room to raise prices. Check Market Prices in Competitor Intelligence.`
+  }
+
+  return `\n\nMARKET PRICING (last checked ${lastDate}): Your pricing is competitive — no significant gaps found.`
+}
+
 async function buildBriefingContext(businessId: string) {
   const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000)
   const yStart = new Date(yesterday.setHours(0, 0, 0, 0)).toISOString()
@@ -57,7 +124,11 @@ async function _GET(req: Request) {
     }
 
     const requests = await Promise.all(businesses.map(async biz => {
-      const ctx = await buildBriefingContext(biz.id)
+      const [ctx, marketCtx] = await Promise.all([
+        buildBriefingContext(biz.id),
+        getMarketPriceContext(biz.id),
+      ])
+      const marketBlock = buildMarketPricesPromptBlock(marketCtx, biz.industry ?? null)
       return {
         custom_id: biz.id,
         params: {
@@ -66,7 +137,7 @@ async function _GET(req: Request) {
           system: ARIA_SYSTEM_PROMPT,
           messages: [{
             role: 'user' as const,
-            content: `Write today's morning briefing for ${biz.name}, a ${biz.industry ?? 'business'} in ${biz.city ?? 'Australia'}. Owner: ${biz.owner_name ?? 'there'}.\n\nYesterday: A$${ctx.yesterdayRevenue} from ${ctx.yesterdayTransactions} sales. Top seller: ${ctx.topProduct}.\nWeek so far: A$${ctx.weekRevenue}.\nLow stock: ${ctx.lowStock.join(', ') || 'none'}.\n\nWrite 4 sentences: how yesterday went, one thing to watch today, one specific action they should take now. End with a single priority. No bullet points.`,
+            content: `Write today's morning briefing for ${biz.name}, a ${biz.industry ?? 'business'} in ${biz.city ?? 'Australia'}. Owner: ${biz.owner_name ?? 'there'}.\n\nYesterday: A$${ctx.yesterdayRevenue} from ${ctx.yesterdayTransactions} sales. Top seller: ${ctx.topProduct}.\nWeek so far: A$${ctx.weekRevenue}.\nLow stock: ${ctx.lowStock.join(', ') || 'none'}.${marketBlock}\n\nWrite 4 sentences: how yesterday went, one thing to watch today, one specific action they should take now. If market price data is included, add a sentence about the pricing opportunity. End with a single priority. No bullet points.`,
           }],
         },
       }
