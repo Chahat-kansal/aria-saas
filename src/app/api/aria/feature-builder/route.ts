@@ -11,6 +11,8 @@ import { trackAICall } from '@/lib/aria/ai-telemetry';
 import { getBusinessContext, hasEnoughData } from '@/lib/aria/get-business-context'
 import { getSystemPrompt } from '@/lib/aria/get-system-prompt'
 import { writeAriaOutcome } from '@/lib/aria/write-outcome'
+import { FEATURE_SCHEMA_PROMPT, validateFeatureConfig } from '@/lib/aria/feature-schema'
+import type { FeatureConfig } from '@/lib/aria/feature-schema'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -25,14 +27,7 @@ Available feature_type values and when to use them:
 - "calculator"    — interactive inputs + formula result (e.g. commission estimator)
 - "data_table"    — a table of recent records
 
-Available tables (ONLY these — never invent others):
-- pos_sales        — fields: id, business_id, created_at, total, subtotal, payment_method, served_by, customer_id, customer_name, status
-- pos_sale_items   — fields: id, business_id, sale_id, product_name, quantity, unit_price, total, category, created_at
-- pos_commissions  — fields: id, business_id, sale_id, user_id, user_name, amount, rate, created_at, paid_at
-- pos_customers    — fields: id, business_id, name, email, phone, loyalty_points, created_at
-- pos_products     — fields: id, business_id, name, category, price, cost, stock_qty
-- pos_timesheets   — fields: id, business_id, user_id, user_name, clock_in, clock_out, hours_worked
-- staff_members    — fields: id, business_id, name, role, hourly_rate
+${FEATURE_SCHEMA_PROMPT}
 
 Date range options: "today" | "this_week" | "this_month" | "last_month" | "last_7_days" | "last_30_days" | "all_time"
 
@@ -140,6 +135,12 @@ await trackAICall(
   // ── phase: confirm — save the approved config to business_features ────────────
   if (phase === 'confirm') {
     if (!feature_config) return NextResponse.json({ error: 'feature_config required' }, { status: 400 });
+
+    const validation = validateFeatureConfig(feature_config as FeatureConfig)
+    if (!validation.valid) {
+      console.warn('[feature-builder/validate]', business_id, validation.error)
+      return NextResponse.json({ error: `Aria couldn't build that feature — try rephrasing it. (${validation.error})` }, { status: 422 })
+    }
 
     const { feature_name, feature_type, description, location, display_order, config } = feature_config;
 
