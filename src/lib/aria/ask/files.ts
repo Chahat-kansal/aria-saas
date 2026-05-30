@@ -16,14 +16,14 @@ async function fetchSales(businessId: string, period: string) {
   const since = periodToDate(period)
   const { data } = await supabaseAdmin
     .from('pos_sales')
-    .select('id,created_at,total_price,payment_method,register_id,pos_users(name)')
+    .select('id,created_at,total_amount,payment_method,register_id,pos_users(name)')
     .eq('business_id', businessId)
     .gte('created_at', since)
     .order('created_at', { ascending: false })
     .limit(2000)
   return (data ?? []).map((r: Record<string, unknown>) => ({
     date: String(r.created_at ?? '').slice(0, 19).replace('T', ' '),
-    total: (Number(r.total_price) || 0).toFixed(2),
+    total: (Number(r.total_amount) || 0).toFixed(2),
     payment: String(r.payment_method ?? ''),
     staff: String((r.pos_users as Record<string,unknown> | null)?.name ?? ''),
   }))
@@ -46,12 +46,12 @@ async function fetchInventory(businessId: string) {
 async function fetchStaff(businessId: string) {
   const { data } = await supabaseAdmin
     .from('pos_users')
-    .select('name,email,role,created_at')
+    .select('name,role,created_at')
     .eq('business_id', businessId)
     .limit(500)
   return (data ?? []).map((r: Record<string, unknown>) => ({
     name: String(r.name ?? ''),
-    email: String(r.email ?? ''),
+    email: '',
     role: String(r.role ?? ''),
     joined: String(r.created_at ?? '').slice(0, 10),
   }))
@@ -60,11 +60,11 @@ async function fetchStaff(businessId: string) {
 async function fetchCustomers(businessId: string) {
   const { data } = await supabaseAdmin
     .from('pos_customers')
-    .select('first_name,last_name,email,phone,created_at,loyalty_points')
+    .select('name,email,phone,created_at,loyalty_points')
     .eq('business_id', businessId)
     .limit(2000)
   return (data ?? []).map((r: Record<string, unknown>) => ({
-    name: `${r.first_name ?? ''} ${r.last_name ?? ''}`.trim(),
+    name: String(r.name ?? ''),
     email: String(r.email ?? ''),
     phone: String(r.phone ?? ''),
     loyalty_points: String(Number(r.loyalty_points) || 0),
