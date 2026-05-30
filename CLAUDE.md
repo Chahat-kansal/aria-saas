@@ -3,6 +3,7 @@
 ## Skills
 
 - **ALWAYS apply `aria-coding-rules` skill on every UI/TSX task** — run `/skill aria-coding-rules` before editing any `.tsx` or `.ts` component file. The rules cover JSX template literal restrictions, DB column names, model IDs, vercel.json limits, and protected files.
+- **ALWAYS apply `ui-ux-pro-max` skill on every UI/TSX task** — run `/skill ui-ux-pro-max` before building any UI. Covers accessibility, touch targets, color palettes, typography, animation timing, responsive layout, and UX quality checklist.
 
 ## Rules
 
