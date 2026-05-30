@@ -97,10 +97,10 @@ async function _POST(req: Request) {
   }
   const topProducts = Object.values(productMap).sort((a, b) => b.revenue - a.revenue).slice(0, 5)
 
-  const { data: timesheets } = await supabaseAdmin.from('pos_timesheet_sessions')
-    .select('staff_name,total_minutes').eq('business_id', bid)
+  const { data: timesheets } = await supabaseAdmin.from('pos_timesheets')
+    .select('staff_name,hours_worked').eq('business_id', bid)
     .gte('clock_in', shiftStart).lte('clock_in', shiftEnd)
-  const staffOnShift = (timesheets ?? []).map((t: any) => ({ name: t.staff_name, hours: t.total_minutes ? +(t.total_minutes / 60).toFixed(1) : null }))
+  const staffOnShift = (timesheets ?? []).map((t: any) => ({ name: t.staff_name, hours: t.hours_worked != null ? +(Number(t.hours_worked)).toFixed(1) : null }))
 
   const varianceCents = Number(session.variance_cents ?? 0)
 
