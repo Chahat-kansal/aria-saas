@@ -73,13 +73,13 @@ async function RetailCafeDashboard({ business }: { business: any }) {
     supabase.from('profit_leaks').select('*').eq('business_id', business.id).eq('status', 'detected').limit(5),
     supabase.from('competitor_alerts').select('*').eq('business_id', business.id).order('created_at', { ascending: false }).limit(5),
     supabase.from('customers').select('*').eq('business_id', business.id).in('churn_risk', ['medium', 'high']).limit(5),
-    supabase.from('bookings').select('value').eq('business_id', business.id).gte('date', startOfMonth),
+    supabase.from('bookings').select('amount').eq('business_id', business.id).gte('booking_date', startOfMonth),
     supabase.from('pos_sales').select('total_amount').eq('business_id', business.id).gte('created_at', `${today}T00:00:00`).eq('status', 'completed'),
     supabase.from('pos_sales').select('total_amount').eq('business_id', business.id).gte('created_at', `${yesterday}T00:00:00`).lt('created_at', `${today}T00:00:00`).eq('status', 'completed'),
     supabase.from('pos_products').select('id, name, stock_quantity, low_stock_threshold').eq('business_id', business.id).eq('track_stock', true).lte('stock_quantity', 5),
   ]);
 
-  const revenueThisMonth = (bookings ?? []).reduce((s: number, b: any) => s + (b.value || 0), 0);
+  const revenueThisMonth = (bookings ?? []).reduce((s: number, b: any) => s + (b.amount || 0), 0);
   const posSalesToday = (posToday ?? []).reduce((s: number, s2: any) => s + (s2.total_amount || 0), 0);
   const posSalesYesterday = (posYesterday ?? []).reduce((s: number, s2: any) => s + (s2.total_amount || 0), 0);
   const posDeltaPct = posSalesYesterday > 0 ? Math.round(((posSalesToday - posSalesYesterday) / posSalesYesterday) * 100) : null;
@@ -155,10 +155,10 @@ async function VisaDashboard({ business }: { business: any }) {
     { data: expiringVisas },
     { data: news },
   ] = await Promise.all([
-    supabase.from('visa_clients').select('*').eq('business_id', business.id).eq('status', 'active').limit(6),
-    supabase.from('visa_applications').select('*').eq('business_id', business.id).eq('status', 'pending').limit(6),
-    supabase.from('immigration_alerts').select('*').eq('is_read', false).order('created_at', { ascending: false }).limit(6),
-    supabase.from('visa_applications').select('*, visa_clients(name)').eq('business_id', business.id).lte('expiry_date', in90Days).neq('status', 'expired').limit(5),
+    supabase.from('visa_clients').select('*').eq('agent_id', business.id).eq('application_status', 'active').limit(6),
+    supabase.from('visa_applications').select('*').eq('agent_id', business.id).eq('status', 'pending').limit(6),
+    supabase.from('immigration_alerts').select('*').eq('is_read', false).order('detected_at', { ascending: false }).limit(6),
+    supabase.from('visa_clients').select('id, full_name, visa_type, visa_expiry').eq('agent_id', business.id).not('visa_expiry', 'is', null).lte('visa_expiry', in90Days).neq('application_status', 'expired').limit(5),
     supabase.from('immigration_news').select('*').order('published_at', { ascending: false }).limit(5),
   ]);
 
@@ -192,7 +192,7 @@ async function VisaDashboard({ business }: { business: any }) {
                   <li key={a.id} className="border-b border-[rgba(255,255,255,0.04)] pb-3 last:border-0 last:pb-0">
                     <p className="text-xs text-[rgba(255,255,255,0.8)] font-medium leading-snug">{a.title}</p>
                     <p className="text-[11px] text-[rgba(255,255,255,0.4)] mt-0.5 leading-snug line-clamp-2">{a.description}</p>
-                    <p className="text-[10px] text-[rgba(255,255,255,0.25)] mt-1">{new Date(a.created_at).toLocaleDateString('en-AU')}</p>
+                    <p className="text-[10px] text-[rgba(255,255,255,0.25)] mt-1">{new Date(a.detected_at).toLocaleDateString('en-AU')}</p>
                   </li>
                 ))}
               </ul>
@@ -251,11 +251,11 @@ async function VisaDashboard({ business }: { business: any }) {
                 {expiringVisas.map((v: any) => (
                   <li key={v.id} className="flex items-center justify-between gap-2">
                     <div>
-                      <p className="text-xs text-[rgba(255,255,255,0.8)]">{(v.visa_clients as any)?.name ?? 'Client'}</p>
+                      <p className="text-xs text-[rgba(255,255,255,0.8)]">{v.full_name ?? 'Client'}</p>
                       <p className="text-[10px] text-[rgba(255,255,255,0.35)]">{v.visa_type ?? 'Visa'}</p>
                     </div>
                     <span className="text-[10px] text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full flex-shrink-0">
-                      {v.expiry_date ? new Date(v.expiry_date).toLocaleDateString('en-AU') : 'Unknown'}
+                      {v.visa_expiry ? new Date(v.visa_expiry).toLocaleDateString('en-AU') : 'Unknown'}
                     </span>
                   </li>
                 ))}
@@ -292,17 +292,15 @@ async function TradieProfessionalDashboard({ business }: { business: any }) {
     { data: monthBookings },
     { data: quotes },
     { data: churnCustomers },
-    { data: reviews },
   ] = await Promise.all([
     supabase.from('activity_log').select('*').eq('business_id', business.id).order('created_at', { ascending: false }).limit(8),
-    supabase.from('bookings').select('*').eq('business_id', business.id).gte('date', `${today}T00:00:00`).lte('date', `${today}T23:59:59`).limit(10),
-    supabase.from('bookings').select('value').eq('business_id', business.id).gte('date', startOfMonth),
+    supabase.from('bookings').select('*').eq('business_id', business.id).gte('booking_date', `${today}T00:00:00`).lte('booking_date', `${today}T23:59:59`).limit(10),
+    supabase.from('bookings').select('amount').eq('business_id', business.id).gte('booking_date', startOfMonth),
     supabase.from('quotes').select('*').eq('business_id', business.id).eq('status', 'pending').order('created_at', { ascending: false }).limit(5),
     supabase.from('customers').select('*').eq('business_id', business.id).in('churn_risk', ['medium', 'high']).limit(5),
-    supabase.from('customers').select('id, name, google_review_score').eq('business_id', business.id).not('google_review_score', 'is', null).order('created_at', { ascending: false }).limit(5),
   ]);
 
-  const revenue = (monthBookings ?? []).reduce((s: number, b: any) => s + (b.value || 0), 0);
+  const revenue = (monthBookings ?? []).reduce((s: number, b: any) => s + (b.amount || 0), 0);
   const now = new Date();
   const greeting = now.getHours() < 12 ? 'Good morning' : now.getHours() < 17 ? 'Good afternoon' : 'Good evening';
 
@@ -338,7 +336,7 @@ async function TradieProfessionalDashboard({ business }: { business: any }) {
                       <p className="text-xs text-[rgba(255,255,255,0.8)] truncate">{b.customer_name ?? b.title ?? 'Job'}</p>
                       <p className="text-[10px] text-[rgba(255,255,255,0.3)]">{b.service ?? b.description ?? ''}</p>
                     </div>
-                    {b.value ? <span className="text-xs text-[#1D9E75] flex-shrink-0">${b.value}</span> : null}
+                    {b.amount ? <span className="text-xs text-[#1D9E75] flex-shrink-0">${b.amount}</span> : null}
                   </li>
                 ))}
               </ul>
@@ -357,7 +355,7 @@ async function TradieProfessionalDashboard({ business }: { business: any }) {
                       <p className="text-xs text-[rgba(255,255,255,0.8)] truncate">{q.customer_name ?? q.title ?? 'Quote'}</p>
                       <p className="text-[10px] text-[rgba(255,255,255,0.3)]">Sent {q.created_at ? new Date(q.created_at).toLocaleDateString('en-AU') : ''}</p>
                     </div>
-                    <span className="text-xs text-[rgba(255,255,255,0.6)] flex-shrink-0">${q.total ?? '—'}</span>
+                    <span className="text-xs text-[rgba(255,255,255,0.6)] flex-shrink-0">${q.quote_amount ?? '—'}</span>
                   </li>
                 ))}
               </ul>
@@ -406,14 +404,14 @@ async function SalonGymDashboard({ business }: { business: any }) {
     { data: winbackCandidates },
     { data: slowDays },
   ] = await Promise.all([
-    supabase.from('bookings').select('*').eq('business_id', business.id).gte('date', `${today}T00:00:00`).lte('date', `${today}T23:59:59`).limit(10),
-    supabase.from('bookings').select('value').eq('business_id', business.id).gte('date', startOfMonth),
+    supabase.from('bookings').select('*').eq('business_id', business.id).gte('booking_date', `${today}T00:00:00`).lte('booking_date', `${today}T23:59:59`).limit(10),
+    supabase.from('bookings').select('amount').eq('business_id', business.id).gte('booking_date', startOfMonth),
     supabase.from('customers').select('*').eq('business_id', business.id).in('churn_risk', ['medium', 'high']).limit(6),
     supabase.from('customers').select('*').eq('business_id', business.id).lte('last_visit', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()).limit(5),
-    supabase.from('bookings').select('date, count').eq('business_id', business.id).gte('date', today).lte('date', in7Days).limit(7),
+    supabase.from('bookings').select('booking_date').eq('business_id', business.id).gte('booking_date', today).lte('booking_date', in7Days).limit(7),
   ]);
 
-  const revenue = (monthBookings ?? []).reduce((s: number, b: any) => s + (b.value || 0), 0);
+  const revenue = (monthBookings ?? []).reduce((s: number, b: any) => s + (b.amount || 0), 0);
   const now = new Date();
   const greeting = now.getHours() < 12 ? 'Good morning' : now.getHours() < 17 ? 'Good afternoon' : 'Good evening';
 
@@ -468,7 +466,7 @@ async function SalonGymDashboard({ business }: { business: any }) {
                   return (
                     <div key={i} className="flex items-center gap-3">
                       <span className="text-[10px] text-[rgba(255,255,255,0.4)] w-24 flex-shrink-0">
-                        {d.date ? new Date(d.date).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' }) : `Day ${i + 1}`}
+                        {d.booking_date ? new Date(d.booking_date).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' }) : `Day ${i + 1}`}
                       </span>
                       <div className="flex-1 h-2 bg-[rgba(255,255,255,0.06)] rounded-full overflow-hidden">
                         <div className={`h-full rounded-full ${pct < 30 ? 'bg-red-400' : pct < 60 ? 'bg-amber-400' : 'bg-[#1D9E75]'}`} style={{ width: (pct + '%') }} />
@@ -531,14 +529,14 @@ async function RealEstateDashboard({ business }: { business: any }) {
     { data: competitors },
     { data: activity },
   ] = await Promise.all([
-    supabase.from('bookings').select('value').eq('business_id', business.id).gte('date', startOfMonth),
-    supabase.from('bookings').select('*').eq('business_id', business.id).gte('date', `${today}T00:00:00`).lte('date', `${today}T23:59:59`).limit(8),
+    supabase.from('bookings').select('amount').eq('business_id', business.id).gte('booking_date', startOfMonth),
+    supabase.from('bookings').select('*').eq('business_id', business.id).gte('booking_date', `${today}T00:00:00`).lte('booking_date', `${today}T23:59:59`).limit(8),
     supabase.from('customers').select('*').eq('business_id', business.id).gte('created_at', startOfWeek).order('created_at', { ascending: false }).limit(6),
     supabase.from('competitor_alerts').select('*').eq('business_id', business.id).order('created_at', { ascending: false }).limit(5),
     supabase.from('activity_log').select('*').eq('business_id', business.id).order('created_at', { ascending: false }).limit(8),
   ]);
 
-  const revenue = (monthBookings ?? []).reduce((s: number, b: any) => s + (b.value || 0), 0);
+  const revenue = (monthBookings ?? []).reduce((s: number, b: any) => s + (b.amount || 0), 0);
   const now = new Date();
   const greeting = now.getHours() < 12 ? 'Good morning' : now.getHours() < 17 ? 'Good afternoon' : 'Good evening';
 
