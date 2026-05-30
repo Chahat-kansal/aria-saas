@@ -259,12 +259,12 @@ async function _POST(req: Request): Promise<Response> {
     try {
       await supabaseAdmin.from('aria_ai_calls').insert({
         business_id: biz.id,
-        model: MODEL,
-        prompt_summary: 'seo_fix',
-        response_summary: suggestedFix.slice(0, 200),
-        tokens_used: msg.usage.input_tokens + msg.usage.output_tokens,
-        feature: 'seo_fix',
-        issue_type: issue.issue_type,
+        agent_key: 'seo/generate-fix',
+        model_id: MODEL,
+        request_summary: 'seo_fix',
+        input_tokens: msg.usage.input_tokens,
+        output_tokens: msg.usage.output_tokens,
+        success: true,
       });
     } catch { /* non-fatal */ }
   })();

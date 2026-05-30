@@ -8,7 +8,7 @@ import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { trackAICall } from '@/lib/aria/ai-telemetry'
 import Anthropic from '@anthropic-ai/sdk'
 
-const MODEL = 'claude-sonnet-4-6'
+const MODEL = 'claude-sonnet-4-5-20250929'
 
 // Industry benchmarks: { industry_keyword: { avg_health, target_reviews } }
 const INDUSTRY_BENCHMARKS: Record<string, { avg_health: number; target_reviews: number; top_keywords: string[] }> = {
