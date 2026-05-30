@@ -5,14 +5,17 @@ import { supabase } from '@/lib/supabase'
 import { AriaSays } from '@/components/dashboard/AriaSays'
 import { SitePreviewCard } from '@/components/SitePreviewCard'
 import type { SitePreviewResult } from '@/app/api/site-preview/route'
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 
 interface SeoAudit { id: string; status: string; pages_crawled: number; issues_found: number; issues_fixed: number; health_score: number; critical_count?: number | null; warning_count?: number | null; info_count?: number | null; error_detail?: string | null; started_at: string; finished_at: string | null }
-interface SeoIssue { id: string; page_url: string; issue_type: string; severity: string; title: string; detail: string; suggested_fix: string | null; ai_fix_text?: string | null; fix_format: string | null; state: string }
+interface SeoIssue { id: string; page_url: string; issue_type: string; severity: string; title: string; detail: string; suggested_fix: string | null; ai_fix_text?: string | null; fix_format: string | null; state: string; applied_at?: string | null }
 interface SeoLocal { gbp_completeness: number | null; gbp_listed?: boolean | null; review_count?: number | null; review_avg?: number | null; map_pack_rank: number | null; citations_total: number | null; citations_consistent: number | null; review_velocity_30d: number | null; checklist: Array<{ item: string; ok: boolean }> | null }
 interface SeoKeyword { id: string; keyword: string; current_rank: number | null; previous_rank: number | null; search_volume: number | null; frequency?: number | null; found_on_pages?: string[] | null; tracked?: boolean | null }
 interface SeoPage { url: string; title: string | null }
 const SEV_ORDER: Record<string, number> = { critical: 0, warning: 1, info: 2 }
 const SEV_COLOR: Record<string, string> = { critical: '#ef4444', warning: '#f59e0b', info: '#6b7280' }
+const AI_FIXABLE = new Set(['missing_title', 'title_too_long', 'missing_meta_description', 'meta_too_long', 'missing_h1', 'thin_content', 'missing_schema', 'missing_alt_text'])
+const MANUAL_TYPES = new Set(['slow_page', 'broken_link', 'broken_page'])
 
 // ── Shared helpers ─────────────────────────────────────────────────────────
 
@@ -49,6 +52,7 @@ function SiteHealthTab({ businessId }: { businessId: string }) {
   const [loading, setLoading] = useState(true)
   const [crawling, setCrawling] = useState(false)
   const [progress, setProgress] = useState('')
+  const [history, setHistory] = useState<Array<{ date: string; score: number }>>([])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -60,6 +64,17 @@ function SiteHealthTab({ businessId }: { businessId: string }) {
     } else {
       setIssues([])
     }
+    const { data: hist } = await supabase.from('seo_audits')
+      .select('health_score, finished_at')
+      .eq('business_id', businessId)
+      .eq('status', 'complete')
+      .not('finished_at', 'is', null)
+      .order('finished_at', { ascending: true })
+      .limit(8)
+    setHistory((hist ?? []).map((h: { health_score: number | null; finished_at: string | null }) => ({
+      date: new Date(h.finished_at ?? '').toLocaleDateString('en-AU', { day: 'numeric', month: 'short' }),
+      score: h.health_score ?? 0,
+    })))
     setLoading(false)
   }, [businessId])
 
@@ -166,6 +181,22 @@ function SiteHealthTab({ businessId }: { businessId: string }) {
                   </span>
                 </div>
               ))}
+            </div>
+          )}
+
+          {history.length > 1 && (
+            <div style={{ marginTop: 28 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: 'rgba(255,255,255,0.6)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Score history</div>
+              <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 12, padding: '16px 12px 8px', border: '1px solid rgba(255,255,255,0.07)' }}>
+                <ResponsiveContainer width="100%" height={120}>
+                  <LineChart data={history}>
+                    <XAxis dataKey="date" tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 11 }} />
+                    <YAxis domain={[0, 100]} tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 11 }} width={28} />
+                    <Tooltip contentStyle={{ background: '#1a1a2e', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, color: '#fff', fontSize: 12 }} />
+                    <Line type="monotone" dataKey="score" stroke="#7FB897" strokeWidth={2} dot={{ fill: '#7FB897', r: 3 }} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
             </div>
           )}
         </>
@@ -318,6 +349,8 @@ function AiOptimizerTab({ businessId }: { businessId: string }) {
   const [loading, setLoading] = useState(true)
   const [fixingId, setFixingId] = useState<string | null>(null)
   const [generatingId, setGeneratingId] = useState<string | null>(null)
+  const [applyModal, setApplyModal] = useState<{ id: string; fixText: string } | null>(null)
+  const [applying, setApplying] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -348,6 +381,18 @@ function AiOptimizerTab({ businessId }: { businessId: string }) {
     setGeneratingId(null)
   }
 
+  async function applyFix(id: string, fixText: string) {
+    setApplying(true)
+    try {
+      const res = await fetch('/api/seo/apply-fix', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ issue_id: id, fix_value: fixText }) }).then(r => r.json())
+      if (res.success) {
+        setIssues(prev => prev.map(i => i.id === id ? { ...i, state: res.state, applied_at: new Date().toISOString() } : i))
+        setApplyModal(null)
+      }
+    } catch { /* ignore */ }
+    setApplying(false)
+  }
+
   if (loading) return <p style={{ color: 'rgba(255,255,255,0.4)', textAlign: 'center', padding: 40 }}>Loading…</p>
   if (issues.length === 0) return (
     <div style={{ textAlign: 'center', padding: 60 }}>
@@ -357,37 +402,82 @@ function AiOptimizerTab({ businessId }: { businessId: string }) {
   )
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      {issues.map(issue => {
-        const fix = issue.ai_fix_text || issue.suggested_fix
-        return (
-          <div key={issue.id} style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 12, border: '1px solid rgba(255,255,255,0.07)', padding: '16px 18px' }}>
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 10 }}>
-              <span style={{ width: 8, height: 8, borderRadius: '50%', background: SEV_COLOR[issue.severity] ?? '#6b7280', flexShrink: 0, marginTop: 6 }} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ color: '#fff', fontSize: 13, fontWeight: 600 }}>{issue.title}</div>
-                <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 11, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{issue.page_url}</div>
-              </div>
-              <button onClick={() => markFixed(issue.id)} disabled={fixingId === issue.id}
-                style={{ padding: '5px 12px', borderRadius: 8, border: '1px solid rgba(127,184,151,0.3)', background: 'transparent', color: '#7FB897', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0, opacity: fixingId === issue.id ? 0.6 : 1 }}>
-                {fixingId === issue.id ? '…' : 'Mark as fixed'}
+    <>
+      {applyModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
+          onClick={() => !applying && setApplyModal(null)}>
+          <div style={{ background: '#13131a', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 16, padding: 24, maxWidth: 560, width: '100%' }}
+            onClick={e => e.stopPropagation()}>
+            <p style={{ color: '#fff', fontSize: 14, fontWeight: 700, margin: '0 0 12px' }}>Apply fix — review &amp; edit</p>
+            <textarea value={applyModal.fixText} onChange={e => setApplyModal(m => m ? { ...m, fixText: e.target.value } : null)} rows={6}
+              style={{ width: '100%', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 10, padding: '10px 12px', color: '#7FB897', fontSize: 12, fontFamily: 'monospace', resize: 'vertical', outline: 'none', boxSizing: 'border-box' }} />
+            <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', margin: '6px 0 16px' }}>Edit the fix above, then click Apply to mark this issue as applied.</p>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => applyFix(applyModal.id, applyModal.fixText)} disabled={applying}
+                style={{ flex: 1, padding: 10, borderRadius: 10, border: 'none', background: '#7FB897', color: '#0E1411', fontSize: 13, fontWeight: 700, cursor: applying ? 'default' : 'pointer', fontFamily: 'inherit', opacity: applying ? 0.6 : 1 }}>
+                {applying ? 'Applying…' : 'Apply fix'}
+              </button>
+              <button onClick={() => setApplyModal(null)} disabled={applying}
+                style={{ padding: '10px 20px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.15)', background: 'transparent', color: 'rgba(255,255,255,0.5)', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>
+                Cancel
               </button>
             </div>
-            {fix ? (
-              <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', background: 'rgba(0,0,0,0.18)', borderRadius: 10, padding: '12px 14px' }}>
-                <pre style={{ flex: 1, margin: 0, fontSize: 12, color: '#7FB897', fontFamily: 'monospace', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{fix}</pre>
-                <CopyBtn text={fix} />
-              </div>
-            ) : (
-              <button onClick={() => generateFix(issue.id)} disabled={generatingId === issue.id}
-                style={{ padding: '6px 14px', borderRadius: 8, border: 'none', background: '#7FB897', color: '#0E1411', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', opacity: generatingId === issue.id ? 0.6 : 1 }}>
-                {generatingId === issue.id ? 'Generating…' : 'Generate fix with Aria'}
-              </button>
-            )}
           </div>
-        )
-      })}
-    </div>
+        </div>
+      )}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {issues.map(issue => {
+          const fix = issue.ai_fix_text || issue.suggested_fix
+          const isApplied = issue.state === 'applied'
+          const isFlagged = issue.state === 'flagged'
+          const isManual = MANUAL_TYPES.has(issue.issue_type)
+          const isAiFix = AI_FIXABLE.has(issue.issue_type)
+          return (
+            <div key={issue.id} style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 12, border: '1px solid rgba(255,255,255,0.07)', padding: '16px 18px' }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 10 }}>
+                <span style={{ width: 8, height: 8, borderRadius: '50%', background: SEV_COLOR[issue.severity] ?? '#6b7280', flexShrink: 0, marginTop: 6 }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ color: '#fff', fontSize: 13, fontWeight: 600 }}>{issue.title}</div>
+                  <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 11, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{issue.page_url}</div>
+                </div>
+                <div style={{ display: 'flex', gap: 8, flexShrink: 0, alignItems: 'center' }}>
+                  {isApplied ? (
+                    <span style={{ padding: '4px 10px', borderRadius: 20, background: 'rgba(127,184,151,0.15)', color: '#7FB897', fontSize: 11, fontWeight: 700 }}>
+                      ✓ Applied{issue.applied_at ? ' ' + new Date(issue.applied_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' }) : ''}
+                    </span>
+                  ) : isFlagged || isManual ? (
+                    <a href="https://web.dev/performance/" target="_blank" rel="noreferrer"
+                      style={{ padding: '4px 10px', borderRadius: 20, background: 'rgba(245,158,11,0.15)', color: '#f59e0b', fontSize: 11, fontWeight: 700, textDecoration: 'none' }}>
+                      ⚠ Manual fix
+                    </a>
+                  ) : fix && isAiFix ? (
+                    <button onClick={() => setApplyModal({ id: issue.id, fixText: fix })}
+                      style={{ padding: '5px 12px', borderRadius: 8, border: 'none', background: '#7FB897', color: '#0E1411', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                      Apply Fix
+                    </button>
+                  ) : null}
+                  <button onClick={() => markFixed(issue.id)} disabled={fixingId === issue.id}
+                    style={{ padding: '5px 12px', borderRadius: 8, border: '1px solid rgba(127,184,151,0.3)', background: 'transparent', color: '#7FB897', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', opacity: fixingId === issue.id ? 0.6 : 1 }}>
+                    {fixingId === issue.id ? '…' : 'Mark as fixed'}
+                  </button>
+                </div>
+              </div>
+              {fix ? (
+                <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', background: 'rgba(0,0,0,0.18)', borderRadius: 10, padding: '12px 14px' }}>
+                  <pre style={{ flex: 1, margin: 0, fontSize: 12, color: '#7FB897', fontFamily: 'monospace', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{fix}</pre>
+                  <CopyBtn text={fix} />
+                </div>
+              ) : !isManual ? (
+                <button onClick={() => generateFix(issue.id)} disabled={generatingId === issue.id}
+                  style={{ padding: '6px 14px', borderRadius: 8, border: 'none', background: '#7FB897', color: '#0E1411', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', opacity: generatingId === issue.id ? 0.6 : 1 }}>
+                  {generatingId === issue.id ? 'Generating…' : 'Generate fix with Aria'}
+                </button>
+              ) : null}
+            </div>
+          )
+        })}
+      </div>
+    </>
   )
 }
 
