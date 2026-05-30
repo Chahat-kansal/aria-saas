@@ -82,11 +82,13 @@ async function _GET(req: Request, { params }: Params) {
           realtime: true,
         });
 
-        await supabase.from('aria_briefings_cache').upsert({
-          business_id: business.id,
-          briefing_date: from.split('T')[0],
-          bullets,
-        }, { onConflict: 'business_id,briefing_date' });
+        try {
+          await supabase.from('aria_briefings_cache').upsert({
+            business_id: business.id,
+            briefing_date: from.split('T')[0],
+            bullets,
+          }, { onConflict: 'business_id,briefing_date' });
+        } catch { /* legacy table — non-fatal */ }
 
         processed++;
       } catch (err) {
