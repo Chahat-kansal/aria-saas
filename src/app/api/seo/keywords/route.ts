@@ -50,7 +50,8 @@ async function _GET(req: Request) {
     .from('seo_keywords')
     .select('*')
     .eq('business_id', business_id)
-    .order('frequency', { ascending: false, nullsFirst: false })
+    .order('search_volume', { ascending: false, nullsFirst: false })
+    .order('current_rank', { ascending: true, nullsFirst: false })
     .order('created_at', { ascending: false })
 
   return NextResponse.json({ keywords: keywords ?? [] })
