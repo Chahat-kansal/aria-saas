@@ -453,7 +453,76 @@ function KeywordsTab({ businessId, businessName, businessIndustry }: { businessI
   )
 }
 
-// ── Tab 4: AI Optimiser ────────────────────────────────────────────────────
+// ── Tab 4: Issues (filterable) ────────────────────────────────────────────────
+
+function IssuesTab({ businessId }: { businessId: string }) {
+  const [issues, setIssues] = useState<SeoIssue[]>([])
+  const [loading, setLoading] = useState(true)
+  const [sev, setSev] = useState('all')
+  const [stateF, setStateF] = useState('open')
+
+  useEffect(() => {
+    async function load() {
+      setLoading(true)
+      const { data: a } = await supabase.from('seo_audits').select('id').eq('business_id', businessId).eq('status', 'complete').order('finished_at', { ascending: false }).limit(1).maybeSingle()
+      if (a?.id) {
+        const { data: iss } = await supabase.from('seo_issues').select('id,page_url,issue_type,severity,title,detail,state,applied_at').eq('business_id', businessId).eq('audit_id', a.id)
+        setIssues((iss ?? []) as SeoIssue[])
+      } else setIssues([])
+      setLoading(false)
+    }
+    load()
+  }, [businessId])
+
+  if (loading) return <p style={{ color: 'rgba(255,255,255,0.4)', textAlign: 'center', padding: 40 }}>Loading…</p>
+
+  const counts = { all: issues.length, critical: issues.filter(i => i.severity === 'critical').length, warning: issues.filter(i => i.severity === 'warning').length, info: issues.filter(i => i.severity === 'info').length }
+  const filtered = issues
+    .filter(i => sev === 'all' || i.severity === sev)
+    .filter(i => stateF === 'all' || i.state === stateF)
+    .sort((a, b) => (SEV_ORDER[a.severity] ?? 9) - (SEV_ORDER[b.severity] ?? 9) || a.page_url.localeCompare(b.page_url))
+
+  const pill = (active: boolean): React.CSSProperties => ({ padding: '5px 14px', borderRadius: 20, border: '1px solid rgba(255,255,255,0.15)', background: active ? 'rgba(127,184,151,0.15)' : 'transparent', color: active ? '#7FB897' : 'rgba(255,255,255,0.5)', fontSize: 12, fontWeight: active ? 700 : 400, cursor: 'pointer', fontFamily: 'inherit' })
+
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap', alignItems: 'center' }}>
+        {(['all', 'critical', 'warning', 'info'] as const).map(v => (
+          <button key={v} onClick={() => setSev(v)} style={pill(sev === v)}>
+            {v === 'all' ? `All (${counts.all})` : `${v.charAt(0).toUpperCase() + v.slice(1)} (${counts[v]})`}
+          </button>
+        ))}
+        <span style={{ width: 1, height: 20, background: 'rgba(255,255,255,0.1)', margin: '0 4px', display: 'block' }} />
+        {(['open', 'applied', 'verified', 'all'] as const).map(v => (
+          <button key={v} onClick={() => setStateF(v)} style={pill(stateF === v)}>
+            {v.charAt(0).toUpperCase() + v.slice(1)}
+          </button>
+        ))}
+      </div>
+      {filtered.length === 0 ? (
+        <p style={{ textAlign: 'center', padding: 40, color: 'rgba(255,255,255,0.4)', fontSize: 14 }}>No issues match this filter.</p>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {filtered.slice(0, 50).map(i => (
+            <div key={i.id} style={{ display: 'flex', gap: 12, padding: '13px 16px', background: 'rgba(255,255,255,0.04)', borderRadius: 12, border: '1px solid rgba(255,255,255,0.07)', alignItems: 'flex-start' }}>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: SEV_COLOR[i.severity] ?? '#6b7280', flexShrink: 0, marginTop: 5 }} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ color: '#fff', fontSize: 13, fontWeight: 600 }}>{i.title}</div>
+                <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 11, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{i.page_url}</div>
+              </div>
+              <span style={{ fontSize: 11, padding: '3px 10px', borderRadius: 20, background: i.state === 'verified' ? 'rgba(127,184,151,0.15)' : i.state === 'applied' ? 'rgba(245,158,11,0.1)' : 'rgba(255,255,255,0.06)', color: i.state === 'verified' ? '#7FB897' : i.state === 'applied' ? '#f59e0b' : 'rgba(255,255,255,0.4)', flexShrink: 0 }}>
+                {i.state}
+              </span>
+            </div>
+          ))}
+          {filtered.length > 50 && <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)', textAlign: 'center', padding: '8px 0' }}>Showing 50 of {filtered.length} issues</p>}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Tab 5: AI Optimiser ────────────────────────────────────────────────────
 
 function AiOptimizerTab({ businessId }: { businessId: string }) {
   const [issues, setIssues] = useState<SeoIssue[]>([])
@@ -464,6 +533,7 @@ function AiOptimizerTab({ businessId }: { businessId: string }) {
   const [applying, setApplying] = useState(false)
   const [bulkFixing, setBulkFixing] = useState(false)
   const [bulkProgress, setBulkProgress] = useState('')
+  const [allFixed, setAllFixed] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -511,6 +581,7 @@ function AiOptimizerTab({ businessId }: { businessId: string }) {
     try { await fetch('/api/seo/crawl', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ business_id: businessId }) }) } catch { /* ignore */ }
     setBulkFixing(false)
     setBulkProgress('')
+    setAllFixed(true)
   }
 
   async function applyFix(id: string, fixText: string) {
@@ -526,10 +597,20 @@ function AiOptimizerTab({ businessId }: { businessId: string }) {
   }
 
   if (loading) return <p style={{ color: 'rgba(255,255,255,0.4)', textAlign: 'center', padding: 40 }}>Loading…</p>
+
+  if (allFixed) return (
+    <div style={{ textAlign: 'center', padding: 60 }}>
+      <div style={{ fontSize: 48, marginBottom: 16 }}>🎉</div>
+      <p style={{ color: '#7FB897', fontSize: 20, fontWeight: 700, marginBottom: 8 }}>All critical fixes applied!</p>
+      <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 13 }}>A new audit has been queued — check back in a few minutes to see your improved score.</p>
+      <button onClick={() => setAllFixed(false)} style={{ marginTop: 20, padding: '8px 20px', borderRadius: 8, border: '1px solid rgba(127,184,151,0.4)', background: 'transparent', color: '#7FB897', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>View remaining issues</button>
+    </div>
+  )
+
   if (issues.length === 0) return (
     <div style={{ textAlign: 'center', padding: 60 }}>
       <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 14, marginBottom: 6 }}>No critical or warning issues to fix.</p>
-      <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: 12 }}>Run an audit from the Site health tab to generate AI fixes.</p>
+      <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: 12 }}>Run an audit from the Overview tab to generate AI fixes.</p>
     </div>
   )
 
@@ -628,14 +709,156 @@ function AiOptimizerTab({ businessId }: { businessId: string }) {
   )
 }
 
+// ── Tab 6: Competitors ────────────────────────────────────────────────────────
+
+interface CompetitorAnalysis { id: string; competitor_url: string; analysis: Record<string, unknown>; created_at: string }
+
+function CompetitorsTab({ businessId }: { businessId: string }) {
+  const [analyses, setAnalyses] = useState<CompetitorAnalysis[]>([])
+  const [loading, setLoading] = useState(true)
+  const [urlInput, setUrlInput] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState<string | null>(null)
+
+  async function loadAnalyses() {
+    const d = await fetch(`/api/seo/competitors?business_id=${businessId}`).then(r => r.json()).catch(() => ({}))
+    setAnalyses(d.analyses ?? [])
+    setLoading(false)
+  }
+  useEffect(() => { loadAnalyses() }, [businessId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function analyse() {
+    const url = urlInput.trim()
+    if (!url) return
+    setSubmitting(true); setSubmitError(null)
+    try {
+      const res = await fetch('/api/seo/competitors', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ business_id: businessId, competitor_url: url }) }).then(r => r.json())
+      if (res.ok && res.analysis) { setAnalyses(prev => [res.analysis as CompetitorAnalysis, ...prev]); setUrlInput('') }
+      else setSubmitError(res.error ?? 'Analysis failed')
+    } catch { setSubmitError('Network error') }
+    setSubmitting(false)
+  }
+
+  if (loading) return <p style={{ color: 'rgba(255,255,255,0.4)', textAlign: 'center', padding: 40 }}>Loading…</p>
+
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+        <input value={urlInput} onChange={e => { setUrlInput(e.target.value); setSubmitError(null) }}
+          onKeyDown={e => e.key === 'Enter' && !submitting && analyse()}
+          placeholder="https://competitor.com.au"
+          style={{ flex: 1, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, padding: '9px 13px', color: '#fff', fontSize: 13, fontFamily: 'inherit', outline: 'none' }} />
+        <button onClick={analyse} disabled={submitting || !urlInput.trim()}
+          style={{ padding: '9px 18px', borderRadius: 8, border: 'none', background: '#7FB897', color: '#0E1411', fontSize: 13, fontWeight: 700, cursor: submitting || !urlInput.trim() ? 'default' : 'pointer', fontFamily: 'inherit', opacity: submitting || !urlInput.trim() ? 0.5 : 1, flexShrink: 0, whiteSpace: 'nowrap' }}>
+          {submitting ? 'Analysing…' : 'Analyse competitor'}
+        </button>
+      </div>
+      {submitError && <p style={{ fontSize: 12, color: '#F87171', marginBottom: 14 }}>✗ {submitError}</p>}
+      {!submitError && <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)', marginBottom: 20 }}>Crawl takes ~30 seconds. Aria compares their keywords and SEO signals to yours.</p>}
+      {analyses.length === 0 ? (
+        <p style={{ textAlign: 'center', padding: 40, color: 'rgba(255,255,255,0.4)', fontSize: 14 }}>No competitor analyses yet. Paste a competitor URL above to start.</p>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {analyses.map(a => {
+            const an = a.analysis
+            const gaps = (an.keyword_gaps as string[] | undefined) ?? []
+            const shared = (an.shared_keywords as string[] | undefined) ?? []
+            const pages = (an.pages_crawled as number | undefined) ?? 0
+            const aiComp = (an.ai_comparison as string | undefined) ?? ''
+            const date = new Date(a.created_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })
+            return (
+              <div key={a.id} style={{ padding: '20px 22px', background: 'rgba(255,255,255,0.04)', borderRadius: 14, border: '1px solid rgba(255,255,255,0.08)' }}>
+                <div style={{ marginBottom: 12 }}>
+                  <div style={{ color: '#fff', fontSize: 14, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{(an.competitor_hostname as string | undefined) ?? a.competitor_url}</div>
+                  <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 11, marginTop: 2 }}>{pages} page{pages !== 1 ? 's' : ''} crawled · {date}</div>
+                </div>
+                {aiComp && <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.75)', lineHeight: 1.65, margin: '0 0 14px', padding: '12px 14px', background: 'rgba(127,184,151,0.06)', borderRadius: 10, borderLeft: '3px solid #7FB897' }}>{aiComp}</p>}
+                {gaps.length > 0 && (
+                  <div style={{ marginBottom: 10 }}>
+                    <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Keyword gaps — they rank, you don&apos;t</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                      {gaps.slice(0, 12).map(g => <span key={g} style={{ padding: '4px 12px', borderRadius: 20, background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.25)', color: '#fca5a5', fontSize: 12 }}>{g}</span>)}
+                    </div>
+                  </div>
+                )}
+                {shared.length > 0 && (
+                  <div>
+                    <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Shared keywords</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                      {shared.slice(0, 8).map(g => <span key={g} style={{ padding: '4px 12px', borderRadius: 20, background: 'rgba(127,184,151,0.08)', border: '1px solid rgba(127,184,151,0.2)', color: '#7FB897', fontSize: 12 }}>{g}</span>)}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Tab 7: Recommendations ────────────────────────────────────────────────────
+
+interface Rec { priority: number; action: string; impact: string; effort: string; category: string }
+
+function RecommendationsTab({ businessId }: { businessId: string }) {
+  const [recs, setRecs] = useState<Rec[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    async function load() {
+      setLoading(true); setError(null)
+      try {
+        const d = await fetch(`/api/seo/recommendations?business_id=${businessId}`).then(r => r.json())
+        if (d.recommendations) setRecs(d.recommendations as Rec[])
+        else setError(d.error ?? 'Failed to load')
+      } catch { setError('Network error') }
+      setLoading(false)
+    }
+    load()
+  }, [businessId])
+
+  if (loading) return <p style={{ color: 'rgba(255,255,255,0.4)', textAlign: 'center', padding: 40 }}>Aria is analysing your SEO data…</p>
+  if (error) return <p style={{ color: '#F87171', textAlign: 'center', padding: 40 }}>{error}</p>
+  if (recs.length === 0) return <p style={{ textAlign: 'center', padding: 40, color: 'rgba(255,255,255,0.4)', fontSize: 14 }}>Run an audit first to generate recommendations.</p>
+
+  const impactCol: Record<string, string> = { high: '#7FB897', medium: '#f59e0b', low: '#9ca3af' }
+  const effortCol: Record<string, string> = { low: '#7FB897', medium: '#f59e0b', high: '#ef4444' }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {recs.map((r, i) => (
+        <div key={i} style={{ padding: '18px 20px', background: 'rgba(255,255,255,0.04)', borderRadius: 14, border: '1px solid rgba(255,255,255,0.08)', display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+          <div style={{ width: 32, height: 32, borderRadius: '50%', background: r.priority === 1 ? '#7FB897' : 'rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 2 }}>
+            <span style={{ fontSize: 14, fontWeight: 800, color: r.priority === 1 ? '#0E1411' : 'rgba(255,255,255,0.5)' }}>{r.priority}</span>
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <p style={{ margin: '0 0 10px', color: '#fff', fontSize: 13, fontWeight: 500, lineHeight: 1.55 }}>{r.action}</p>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <span style={{ padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 600, background: 'rgba(255,255,255,0.06)', color: impactCol[r.impact] ?? '#9ca3af' }}>{r.impact} impact</span>
+              <span style={{ padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 600, background: 'rgba(255,255,255,0.06)', color: effortCol[r.effort] ?? '#9ca3af' }}>{r.effort} effort</span>
+              <span style={{ padding: '3px 10px', borderRadius: 20, fontSize: 11, background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.4)' }}>{r.category}</span>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 // ── Page ───────────────────────────────────────────────────────────────────
 
-type TabId = 'health' | 'local' | 'keywords' | 'optimizer'
+type TabId = 'health' | 'issues' | 'optimizer' | 'keywords' | 'local' | 'competitors' | 'recommendations'
 const TABS: Array<{ id: TabId; label: string }> = [
-  { id: 'health', label: 'Site health' },
-  { id: 'local', label: 'Local SEO' },
+  { id: 'health', label: 'Overview' },
+  { id: 'issues', label: 'Issues' },
+  { id: 'optimizer', label: 'Fix' },
   { id: 'keywords', label: 'Keywords' },
-  { id: 'optimizer', label: 'AI optimizer' },
+  { id: 'local', label: 'Local SEO' },
+  { id: 'competitors', label: 'Competitors' },
+  { id: 'recommendations', label: 'Recommendations' },
 ]
 
 export default function SeoPage() {
@@ -776,9 +999,12 @@ export default function SeoPage() {
               ))}
             </div>
             {tab === 'health' && <SiteHealthTab businessId={business.id} />}
-            {tab === 'local' && <LocalSeoTab businessId={business.id} />}
-            {tab === 'keywords' && <KeywordsTab businessId={business.id} businessName={business.name ?? undefined} businessIndustry={(business as unknown as { industry?: string }).industry ?? undefined} />}
+            {tab === 'issues' && <IssuesTab businessId={business.id} />}
             {tab === 'optimizer' && <AiOptimizerTab businessId={business.id} />}
+            {tab === 'keywords' && <KeywordsTab businessId={business.id} businessName={business.name ?? undefined} businessIndustry={(business as unknown as { industry?: string }).industry ?? undefined} />}
+            {tab === 'local' && <LocalSeoTab businessId={business.id} />}
+            {tab === 'competitors' && <CompetitorsTab businessId={business.id} />}
+            {tab === 'recommendations' && <RecommendationsTab businessId={business.id} />}
           </>
         )}
       </div>
