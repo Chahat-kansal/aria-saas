@@ -410,7 +410,7 @@ async function queryInventory(
   const supabase = supabaseAdmin;
   const query = supabase
     .from('pos_products')
-    .select('id, name, sku, stock_quantity, reorder_point, cost_price, retail_price, category')
+    .select('id, name, sku, stock_quantity, reorder_point, cost_price, price, category')
     .eq('business_id', businessId)
     .eq('is_active', true)
     .eq('track_stock', true);
@@ -799,13 +799,13 @@ async function updateProductPrice(input: Record<string, unknown>, businessId: st
   if (!productId || newPrice <= 0) return { error: 'product_id and positive new_price required' };
 
   const { data: existing } = await supabaseAdmin.from('pos_products')
-    .select('id, name, selling_price').eq('id', productId).eq('business_id', businessId).maybeSingle();
+    .select('id, name, price').eq('id', productId).eq('business_id', businessId).maybeSingle();
   if (!existing) return { error: 'Product not found' };
 
   const { error } = await supabaseAdmin.from('pos_products')
-    .update({ selling_price: newPrice }).eq('id', productId).eq('business_id', businessId);
+    .update({ price: newPrice }).eq('id', productId).eq('business_id', businessId);
   if (error) return { error: error.message };
-  return { ok: true, product: existing.name, old_price: existing.selling_price, new_price: newPrice };
+  return { ok: true, product: existing.name, old_price: (existing as Record<string, unknown>).price, new_price: newPrice };
 }
 
 async function generateImage(input: Record<string, unknown>, businessId: string): Promise<unknown> {
