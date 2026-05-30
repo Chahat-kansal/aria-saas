@@ -115,6 +115,9 @@ export default function CustomersPage() {
   const [importLoading, setImportLoading] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
   const [summaryLoading, setSummaryLoading] = useState(false)
+  const [winbackLoading, setWinbackLoading] = useState<string | null>(null)
+  const [recalcLoading, setRecalcLoading] = useState(false)
+  const [bulkWinbackLoading, setBulkWinbackLoading] = useState(false)
 
   const load = useCallback(async () => {
     if (!bid) return
@@ -196,6 +199,23 @@ export default function CustomersPage() {
   const markLapsed = async () => {
     await Promise.all([...checkedIds].map(id => fetch('/api/customers/' + id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ customer_segment: 'hibernating' }) })))
     setCheckedIds(new Set()); load(); invalidateAriaInsight(bid, 'customers')
+  }
+  const sendWinback = async (id: string) => {
+    setWinbackLoading(id)
+    await fetch('/api/customers/' + id + '/winback', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) })
+    setWinbackLoading(null)
+  }
+  const bulkWinback = async () => {
+    if (!checkedIds.size) return
+    setBulkWinbackLoading(true)
+    await Promise.all([...checkedIds].map(id => fetch('/api/customers/' + id + '/winback', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) })))
+    setBulkWinbackLoading(false); setCheckedIds(new Set())
+  }
+  const recalcSegments = async () => {
+    if (!bid) return
+    setRecalcLoading(true)
+    await fetch('/api/customers/segment', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ business_id: bid }) })
+    setRecalcLoading(false); load()
   }
 
   const filteredBase = customers.filter(c => matchSegTab(c, activeSegment))
@@ -282,6 +302,7 @@ export default function CustomersPage() {
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <input type="file" ref={fileRef} accept=".csv" style={{ display: 'none' }} onChange={e => { if (e.target.files?.[0]) handleFile(e.target.files[0]) }} />
             <button onClick={() => fileRef.current?.click()} style={BTN('ghost')}>↑ Import CSV</button>
+            <button onClick={recalcSegments} disabled={recalcLoading} style={BTN('ghost')} aria-label="Recalculate RFM segments">{recalcLoading ? 'Scoring…' : '↻ Segments'}</button>
             <button onClick={() => openForm('add')} style={BTN('primary')}>+ Add customer</button>
           </div>
         </div>
@@ -342,7 +363,7 @@ export default function CustomersPage() {
           <div style={{ position: 'sticky', bottom: 16, marginTop: 12, padding: '12px 20px', borderRadius: 12, background: C.card, border: '1px solid ' + C.border, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', boxShadow: '0 8px 32px rgba(0,0,0,0.4)' }}>
             <span style={{ fontSize: 12, color: C.muted }}>{checkedIds.size} selected</span>
             <button onClick={exportCSV} style={BTN('ghost')}>Export CSV</button>
-            <button style={BTN('ghost')}>Send SMS</button>
+            <button onClick={bulkWinback} disabled={bulkWinbackLoading} style={BTN('ghost')} aria-label="Send AI winback to selected customers">{bulkWinbackLoading ? 'Sending…' : 'Send winback'}</button>
             <button style={BTN('ghost')}>Tag segment</button>
             <button onClick={markLapsed} style={BTN('danger')}>Mark lapsed</button>
             <button onClick={() => setCheckedIds(new Set())} style={{ ...BTN('ghost'), marginLeft: 'auto' }}>Clear</button>
@@ -423,7 +444,7 @@ export default function CustomersPage() {
           {daysSince(selected.last_visit) >= 45 && (
             <div style={{ marginBottom: 16, padding: 12, background: 'rgba(239,159,39,0.08)', borderRadius: 10, border: '1px solid rgba(239,159,39,0.2)' }}>
               <p style={{ fontSize: 12, color: '#efb52a', marginBottom: 8 }}>Lapsed {daysSince(selected.last_visit)} days ago</p>
-              <button style={{ fontSize: 12, padding: '7px 14px', borderRadius: 8, cursor: 'pointer', fontWeight: 600, background: 'rgba(239,159,39,0.15)', color: '#efb52a', border: '1px solid rgba(239,159,39,0.3)' }}>Send winback message</button>
+              <button onClick={() => sendWinback(selected.id)} disabled={winbackLoading === selected.id} style={{ fontSize: 12, padding: '7px 14px', borderRadius: 8, cursor: 'pointer', fontWeight: 600, background: 'rgba(239,159,39,0.15)', color: '#efb52a', border: '1px solid rgba(239,159,39,0.3)', opacity: winbackLoading === selected.id ? 0.6 : 1 }} aria-label="Send AI-generated winback message">{winbackLoading === selected.id ? 'Sending…' : 'Send winback'}</button>
             </div>
           )}
           {selected.notes && <div style={{ marginBottom: 16, fontSize: 13 }}><p style={{ fontSize: 12, color: C.muted, marginBottom: 4 }}>Notes</p><p style={{ lineHeight: 1.5 }}>{selected.notes}</p></div>}
