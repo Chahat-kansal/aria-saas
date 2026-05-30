@@ -402,7 +402,7 @@ export default function InventoryScanPage() {
             {product && (
               <div>
                 {/* Product header */}
-                <div style={{ display: 'flex', align: 'start', gap: 10, marginBottom: 14 }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 14 }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <p style={{ fontSize: 16, fontWeight: 800, color: C.text, marginBottom: 4 }}>{product.name}</p>
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
