@@ -1,10 +1,14 @@
 # Aria OS Audit State
 
 ## Last updated
-2026-05-31 — Session 2 Batch G complete (ALL pos/ routes done)
+2026-05-31 — Session 3 Batch C complete (seo/ + reports/ done)
 
 ## Status
 COMPLETE — src/app/api/pos/ all ~120 route files audited (Batches A–G)
+COMPLETE — src/app/api/public/ all ~19 route files audited (Batch A)
+COMPLETE — src/app/api/social/ all ~31 route files audited (Batch B)
+COMPLETE — src/app/api/seo/ all ~12 route files audited (Batch C)
+COMPLETE — src/app/api/reports/ all ~3 route files audited (Batch C)
 
 ## Completed sections
 - [x] src/app/api/aria/ — all ~47 route files audited
@@ -15,7 +19,7 @@ COMPLETE — src/app/api/pos/ all ~120 route files audited (Batches A–G)
 - [x] src/app/api/pos/ Batch E — online, orders (3 files), orders/receive, orders/schedule, orders/[id]/lines (2 files), outlet-tax-overrides, outlets/[id], park, permissions/outlet-overlay, price-points, price-tickets, product-batches, product-intelligence, products/backfill-images, products/[id] (3 files)
 
 ## Current position
-Next: src/app/api/public/ (~30 route files)
+Next: src/app/api/community/ (~25 route files)
 
 ## Issues found (running log)
 | File | Type | Issue | Fixed? | Commit |
@@ -37,6 +41,17 @@ Next: src/app/api/public/ (~30 route files)
 | src/app/api/pos/transfer-reports/route.ts | Wrong table + invalid join | `pos_stock_transfers` doesn't exist → `pos_inventory_transfers`; removed `pos_products(name)` join (no FK from pos_inventory_transfers to pos_products) | YES | b1f41112 |
 | src/app/api/pos/xero-sync/route.ts | Wrong column | `pos_sales.total` doesn't exist → `total_amount` (2 occurrences: select + reduce) | YES | 3aaaba87 |
 | src/app/api/pos/variants/route.ts | Wrong table + invalid join | `pos_product_modifiers` doesn't exist → `pos_product_modifier_groups`; `pos_modifiers(*)` → `pos_modifier_groups(*)` (FK is group_id → pos_modifier_groups) | YES | 78338351 |
+| src/app/api/public/widget/chat/route.ts | Wrong table | `products` table doesn't exist → `pos_products` | YES | 71e7e496 |
+| src/app/api/public/widget/chat/route.ts | Wrong column | `aria_autopilot_actions.suggested_action` doesn't exist → `action_data` (wrapped in object) | YES | 71e7e496 |
+| src/app/api/public/instore/chat/route.ts | Wrong columns | `aria_ai_calls.route/model/purpose/status` don't exist → `agent_key/model_id/request_summary/success` (2 stall telemetry inserts) | YES | 339e8800 |
+| src/app/api/social/analytics/route.ts | Missing columns | `social_posts.impressions/reach/likes/comments/shares` didn't exist; added via migration `social_posts_analytics_and_publish_columns` | YES (migration) | — |
+| src/app/api/social/posts/[id]/publish/route.ts | Missing columns | `social_posts.platform_url` and `publish_error` didn't exist; added via same migration | YES (migration) | — |
+| src/app/api/social/bulk-schedule/route.ts | Wrong column | `scheduled_at` → `scheduled_for` in insert | YES | 7e78ac11 |
+| src/app/api/social/owner-request/route.ts | Wrong columns | `image_urls/ai_generated/ai_prompt/post_type` don't exist on `social_posts`; fixed to `image_url` and removed non-existent fields | YES | 7e78ac11 |
+| src/app/api/seo/local/route.ts | Missing columns | `seo_local.gbp_listed/review_count/review_avg/scanned_at` didn't exist; added via migration `add_missing_seo_local_columns` | YES (migration) | e871aac9 |
+| src/app/api/seo/local/scan/route.ts | Missing columns | Same `seo_local` missing columns; fixed by same migration | YES (migration) | e871aac9 |
+| src/app/api/seo/recommendations/route.ts | Missing columns + wrong model | Selected `gbp_listed/review_count/review_avg` (now added); model `claude-sonnet-4-6` → `claude-sonnet-4-5-20250929` | YES | e871aac9 |
+| src/app/api/seo/generate-fix/route.ts | Wrong columns | `aria_ai_calls.model/prompt_summary/tokens_used/feature/issue_type` don't exist → `model_id/request_summary/input_tokens+output_tokens/agent_key`; removed `response_summary` | YES | e871aac9 |
 
 ## Known already-fixed issues (do not re-fix)
 | File | Issue | Fixed in |
@@ -125,13 +140,41 @@ warehouse/replenish,
 xero-sync (after fix), xero-sync/prepare, xero-sync/approve,
 waste
 
+## Routes confirmed CLEAN in src/app/api/public/ Batch A (Session 3)
+order/[id]/status, receipt/[sale_id], widget/embed/[api_key],
+widget/chat (after fix), instore/recipe, instore/loyalty, instore/session,
+scan-and-go/cart, scan-and-go/finish, loyalty/[business_id],
+loyalty/[business_id]/enrol, loyalty/[business_id]/balance,
+bookings/[business_id], instore/chat (after fix), instore/config,
+business/[business_id], menu/[business_id], menu/[business_id]/descriptions,
+place-order/[business_id]
+
+## Routes confirmed CLEAN in src/app/api/reports/ Batch C (Session 3)
+revenue/route.ts, customers/route.ts, staff/route.ts
+
+## Routes confirmed CLEAN in src/app/api/seo/ Batch C (Session 3)
+crawl/route.ts, issues/[id]/route.ts, apply-fix/route.ts, audit/[id]/status/route.ts,
+competitors/route.ts, keywords/route.ts, keywords/[id]/route.ts, connect/route.ts,
+local/route.ts (after migration), local/scan/route.ts (after migration),
+recommendations/route.ts (after model fix), generate-fix/route.ts (after aria_ai_calls fix)
+
+## Routes confirmed CLEAN in src/app/api/social/ Batch B (Session 3)
+posts (after bulk-schedule fix), posts/[id]/publish (after migration),
+posts/bulk-approve, connections, connections/[id], approve,
+preferences, analytics (after migration), publish, calendar, media,
+library, bulk-schedule (after fix), scheduler/analyze, scheduler/best-times,
+providers, inbox, image-suggest, owner-request (after fix),
+generate-image, generate-video, generate-voiceover, video-status,
+data-deletion, callback/google, callback/facebook,
+connect/google, connect/facebook, google/connect, google/callback, google/post
+
 ## Sections remaining
 - [x] src/app/api/aria/ (~47 route files) ← DONE Session 1
 - [x] src/app/api/pos/ (~120 route files) ← DONE Session 2 (Batches A–G)
-- [ ] src/app/api/public/ (~30 route files)
-- [ ] src/app/api/social/ (~20 route files)
-- [ ] src/app/api/reports/ (~10 route files)
-- [ ] src/app/api/seo/ (~10 route files)
+- [x] src/app/api/public/ (~19 route files) ← DONE Session 3 Batch A
+- [x] src/app/api/social/ (~31 route files) ← DONE Session 3 Batch B
+- [x] src/app/api/reports/ (~3 route files) ← DONE Session 3 Batch C
+- [x] src/app/api/seo/ (~12 route files) ← DONE Session 3 Batch C
 - [ ] src/app/api/community/ (~25 route files)
 - [ ] src/app/api/integrations/ (~15 route files)
 - [ ] src/app/api/cron/ (~15 route files)
@@ -257,7 +300,9 @@ If a table or column is NOT in this list, the code is wrong.
 
 Note: THREE briefing tables exist. Code that reads briefings must use the right one.
 
-**social_posts**: id, business_id, platform, status, caption, hashtags, image_url, image_prompt, scheduled_for, published_at, platform_post_id, aria_reasoning, industry_context, performance, created_at, approved_at, approval_status
+**social_posts**: id, business_id, platform, status, caption, hashtags, image_url, image_prompt, scheduled_for, published_at, platform_post_id, aria_reasoning, industry_context, performance, created_at, approved_at, approval_status, engagement_data, media_id, content_calendar_month, approved_by, owner_request, schedule_kind, recurrence_rule, image_credit, reel_concept, reel_script, **impressions**, **reach**, **likes**, **comments**, **shares**, **platform_url**, **publish_error** (last 7 added via migration social_posts_analytics_and_publish_columns)
+
+**seo_local**: business_id (PK), gbp_completeness, map_pack_rank, citations_total, citations_consistent, review_velocity_30d, checklist, updated_at, **gbp_listed** (boolean), **review_count** (integer), **review_avg** (numeric), **scanned_at** (timestamptz) — last 4 added via migration add_missing_seo_local_columns
 
 **aria_ai_calls**: id, business_id, agent_key, provider, model_id, role, input_tokens, output_tokens, search_units, latency_ms, cost_usd_cents, success, error_message, request_summary, response_summary, created_at, cache_write_tokens, cache_read_tokens, model_provider
 
