@@ -18,7 +18,7 @@ const AU_HOLIDAY_NAMES: Record<string, string> = {
   '2026-12-26': 'Boxing Day', '2026-12-28': 'Boxing Day (observed)',
 };
 
-interface StaffRow { id: string; name: string; role: string; hourly_rate_cents: number; rsa_expiry: string | null; max_hours_week: number; availability: Record<string, number[][]>; }
+interface StaffRow { id: string; name: string; role: string; hourly_rate_cents?: number | null; rsa_expiry?: string | null; max_hours_week?: number | null; availability?: Record<string, number[][]> | null; }
 interface ShiftAssignment { staff_id: string; staff_name: string; hour: number; day: string; hourly_rate_cents: number; reasoning: string; }
 
 const DOW_NAMES = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
@@ -45,10 +45,10 @@ export class ScheduleAgent extends BaseAgent {
     if (!settings.enabled) return { decisions: [], errors: [], duration_ms: Date.now() - started };
 
     try {
-      const { data: outlets } = await this.supabase.from('outlets').select('id,name').eq('business_id', business_id).limit(10);
+      const { data: outlets } = await this.supabase.from('pos_outlets').select('id,name').eq('business_id', business_id).limit(10);
       if (!outlets?.length) return { decisions: [], errors: [], duration_ms: Date.now() - started };
 
-      const { data: staff } = await this.supabase.from('pos_staff').select('id,name,role,hourly_rate_cents,rsa_expiry,max_hours_week,availability').eq('business_id', business_id).eq('active', true).limit(50);
+      const { data: staff } = await this.supabase.from('pos_staff').select('id,name,role').eq('business_id', business_id).eq('is_active', true).limit(50);
       if (!staff?.length) return { decisions: [], errors: [], duration_ms: Date.now() - started };
 
       // 4-week hourly revenue history
@@ -101,13 +101,13 @@ export class ScheduleAgent extends BaseAgent {
 
             // Assign cheapest available staff up to targetStaff
             const available = eligibleStaff
-              .filter(s => isStaffAvailable(s, dow, h) && (staffHours[s.id] ?? 0) < s.max_hours_week && (staffHours[s.id] ?? 0) < 8)
-              .sort((a, b) => (a.hourly_rate_cents ?? 0) - (b.hourly_rate_cents ?? 0));
+              .filter(s => isStaffAvailable(s, dow, h) && (staffHours[s.id] ?? 0) < (s.max_hours_week ?? 38) && (staffHours[s.id] ?? 0) < 8)
+              .sort((a, b) => (a.hourly_rate_cents ?? 2500) - (b.hourly_rate_cents ?? 2500));
 
             const assigned = available.slice(0, targetStaff);
             for (const s of assigned) {
               staffHours[s.id] = (staffHours[s.id] ?? 0) + 1;
-              shifts.push({ staff_id: s.id, staff_name: s.name, hour: h, day: dateStr, hourly_rate_cents: s.hourly_rate_cents ?? 2500, reasoning: `${s.name} assigned — predicted A$${avgRevenue.toFixed(0)} revenue this hour` });
+              shifts.push({ staff_id: s.id, staff_name: s.name, hour: h, day: dateStr, hourly_rate_cents: 2500, reasoning: `${s.name} assigned — predicted A$${avgRevenue.toFixed(0)} revenue this hour` });
             }
           }
         }
