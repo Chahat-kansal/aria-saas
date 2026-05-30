@@ -55,13 +55,16 @@ export async function GET(req: Request) {
     .filter((b): b is { start: number; dur: number } => b.start !== null)
 
   const slots: string[] = []
+  const availability: { time: string; available: boolean }[] = []
   for (let t = startMin; t + duration <= endMin; t += 30) {
     const conflict = booked.some(b => {
       const bEnd = b.start + b.dur + buffer
       return !(t + duration <= b.start || t >= bEnd)
     })
-    if (!conflict) slots.push(toHHMM(t))
+    const time = toHHMM(t)
+    if (!conflict) slots.push(time)
+    availability.push({ time, available: !conflict })
   }
 
-  return NextResponse.json({ slots })
+  return NextResponse.json({ slots, availability })
 }
