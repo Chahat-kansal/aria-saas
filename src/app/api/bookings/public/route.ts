@@ -6,27 +6,39 @@ import { NextResponse } from 'next/server'
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://www.ariaos.site'
 
+async function sendResendEmail(to: string, subject: string, html: string, businessName?: string) {
+  const key = process.env.RESEND_API_KEY
+  if (!key) return
+  const from = `${businessName ?? 'Bookings'} <bookings@${process.env.RESEND_FROM_DOMAIN ?? 'ariaos.site'}>`
+  await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + key, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ from, to, subject, html }),
+  }).catch(() => {})
+}
+
 async function sendConfirmationEmail(opts: {
   to: string; customerName: string; businessName: string
   bookingDate: string; bookingTime: string | null
   slug: string | null; token: string
 }) {
-  const key = process.env.RESEND_API_KEY
-  if (!key) return
-  const from = process.env.RESEND_FROM_DOMAIN
-    ? `${opts.businessName} <bookings@${process.env.RESEND_FROM_DOMAIN}>`
-    : `Bookings <bookings@${process.env.RESEND_FROM_DOMAIN ?? 'ariaos.site'}>`
-  const manageUrl = opts.slug ? `${APP_URL}/book/${opts.slug}/manage?token=${opts.token}` : null
-  await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      from,
-      to: opts.to,
-      subject: `Booking confirmed — ${opts.businessName}`,
-      html: `<p>Hi ${opts.customerName},</p><p>Your booking at <strong>${opts.businessName}</strong> is confirmed.</p><p>📅 ${opts.bookingDate}${opts.bookingTime ? ` at ${opts.bookingTime}` : ''}</p>${manageUrl ? `<p><a href="${manageUrl}">Cancel or reschedule your booking</a></p>` : ''}<p>See you soon!</p>`,
-    }),
-  }).catch(() => {})
+  const manageUrl = opts.slug ? APP_URL + '/book/' + opts.slug + '/manage?token=' + opts.token : null
+  const cancelUrl = APP_URL + '/book/cancel/' + opts.token
+  await sendResendEmail(
+    opts.to,
+    'Booking confirmed — ' + opts.businessName,
+    '<p>Hi ' + opts.customerName + ',</p><p>Your booking at <strong>' + opts.businessName + '</strong> is confirmed.</p><p>📅 ' + opts.bookingDate + (opts.bookingTime ? ' at ' + opts.bookingTime : '') + '</p>' + (manageUrl ? '<p><a href="' + manageUrl + '">Reschedule your booking</a></p>' : '') + '<p><a href="' + cancelUrl + '">Cancel your booking</a></p><p>See you soon!</p>',
+    opts.businessName
+  )
+}
+
+async function sendCancellationEmail(to: string, customerName: string, businessName: string, bookingDate: string) {
+  await sendResendEmail(
+    to,
+    'Booking cancelled — ' + businessName,
+    '<p>Hi ' + customerName + ',</p><p>Your booking at <strong>' + businessName + '</strong> on ' + bookingDate + ' has been cancelled.</p><p>We hope to see you again soon!</p>',
+    businessName
+  )
 }
 
 export async function GET(req: Request) {
@@ -37,7 +49,7 @@ export async function GET(req: Request) {
   if (token) {
     const { data } = await supabaseAdmin
       .from('bookings')
-      .select('*,booking_services(name,duration_minutes,color,price)')
+      .select('*,booking_services(name,duration_minutes,color,price),businesses(name,booking_link_slug)')
       .eq('booking_token', token)
       .maybeSingle()
     if (!data) return NextResponse.json({ error: 'Not found' }, { status: 404 })
@@ -124,12 +136,12 @@ export async function PATCH(req: Request) {
 
   const { data: existing } = await supabaseAdmin
     .from('bookings')
-    .select('id,status,booking_time')
+    .select('id,status,booking_time,booking_date,business_id,service_id,customer_email,customer_name,businesses(name,booking_link_slug)')
     .eq('booking_token', token)
     .maybeSingle()
   if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  const ex = existing as { id: string; status: string; booking_time: string | null }
+  const ex = existing as unknown as { id: string; status: string; booking_time: string | null; booking_date: string | null; business_id: string; service_id: string | null; customer_email: string | null; customer_name: string; businesses: { name: string; booking_link_slug: string | null } | null }
   if (ex.status === 'cancelled') return NextResponse.json({ error: 'Already cancelled' }, { status: 400 })
 
   const body = await req.json() as Record<string, unknown>
@@ -138,10 +150,36 @@ export async function PATCH(req: Request) {
   if (action === 'cancel') {
     const { data, error } = await supabaseAdmin.from('bookings').update({
       status: 'cancelled', cancelled_at: new Date().toISOString(),
-      cancellation_reason: cancellation_reason || 'Customer cancelled',
+      cancellation_reason: (cancellation_reason as string) || 'Customer cancelled',
       updated_at: new Date().toISOString(),
     }).eq('id', ex.id).select().single()
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+    // Free the booking slot (best-effort)
+    if (ex.service_id && ex.booking_date && ex.booking_time) {
+      const slotDate = String(ex.booking_date).slice(0, 10)
+      const slotTime = String(ex.booking_time).slice(0, 5)
+      const { data: slot } = await supabaseAdmin.from('booking_slots')
+        .select('id,current_bookings')
+        .eq('business_id', ex.business_id)
+        .eq('service_id', ex.service_id)
+        .eq('slot_date', slotDate)
+        .eq('slot_time', slotTime)
+        .maybeSingle()
+      if (slot) {
+        await supabaseAdmin.from('booking_slots')
+          .update({ current_bookings: Math.max(0, Number(slot.current_bookings ?? 1) - 1) })
+          .eq('id', (slot as { id: string }).id)
+      }
+    }
+
+    // Send cancellation email (best-effort)
+    if (ex.customer_email) {
+      const bizName = ex.businesses?.name ?? 'your provider'
+      const bookingDate = ex.booking_date ? String(ex.booking_date).slice(0, 10) : ''
+      await sendCancellationEmail(ex.customer_email, ex.customer_name, bizName, bookingDate)
+    }
+
     const cleaned = { ...data, booking_date: data.booking_date ? String(data.booking_date).slice(0, 10) : data.booking_date }
     return NextResponse.json({ booking: cleaned })
   }

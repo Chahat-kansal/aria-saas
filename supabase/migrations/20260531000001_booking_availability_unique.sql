@@ -1,0 +1,1 @@
+ALTER TABLE booking_availability ADD CONSTRAINT booking_availability_business_day_unique UNIQUE (business_id, day_of_week);
