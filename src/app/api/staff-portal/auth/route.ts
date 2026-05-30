@@ -1,0 +1,51 @@
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+
+import { NextResponse } from 'next/server'
+import { supabaseAdmin } from '@/lib/supabase-admin'
+import { withErrorCapture } from '@/lib/api/with-error-capture'
+
+async function _POST(req: Request) {
+  const body = await req.json().catch(() => ({}))
+  const email = String(body.email ?? '').toLowerCase().trim()
+  if (!email) return NextResponse.json({ error: 'email required' }, { status: 400 })
+
+  const { data: member } = await supabaseAdmin
+    .from('staff_members')
+    .select('id, first_name, portal_enabled, personal_email, work_email')
+    .or('personal_email.eq.' + email + ',work_email.eq.' + email)
+    .eq('status', 'active')
+    .maybeSingle()
+
+  if (!member || !member.portal_enabled) {
+    return NextResponse.json({ ok: true })
+  }
+
+  const code = String(Math.floor(100000 + Math.random() * 900000))
+  const expiresAt = new Date(Date.now() + 24 * 3600 * 1000).toISOString()
+
+  await supabaseAdmin.from('staff_members').update({
+    portal_token: code,
+    portal_token_expires_at: expiresAt,
+  }).eq('id', member.id)
+
+  const resendKey = process.env.RESEND_API_KEY
+  if (resendKey) {
+    await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + resendKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        from: process.env.RESEND_FROM_DOMAIN
+          ? 'Aria Staff Portal <noreply@' + process.env.RESEND_FROM_DOMAIN + '>'
+          : 'Aria Staff Portal <onboarding@resend.dev>',
+        to: email,
+        subject: 'Your Aria Staff Portal code: ' + code,
+        html: '<p style="font-family:Arial,sans-serif;">Hi ' + String(member.first_name) + ',</p><p style="font-size:24px;font-weight:700;letter-spacing:4px;">' + code + '</p><p style="color:#888;font-size:13px;">This code expires in 24 hours. Do not share it.</p>',
+      }),
+    }).catch(() => null)
+  }
+
+  return NextResponse.json({ ok: true })
+}
+
+export const POST = withErrorCapture('staff-portal/auth', _POST)
