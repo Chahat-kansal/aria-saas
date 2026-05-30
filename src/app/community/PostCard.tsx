@@ -172,7 +172,7 @@ export function PostCard({ post, onAfterAction, onHideBusiness, showHide = true 
 
       {/* Hero — full-bleed, 148px */}
       {firstMedia && (
-        <div style={{ position: 'relative', width: '100%', height: 148, background: PALETTE.ink, overflow: 'hidden' }}>
+        <div style={{ position: 'relative', width: '100%', aspectRatio: '4/5', background: PALETTE.ink, overflow: 'hidden' }}>
           {isVideo ? (
             <video src={firstMedia} muted playsInline preload="metadata" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           ) : (
