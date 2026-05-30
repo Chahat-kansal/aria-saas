@@ -12,6 +12,7 @@ const trendColor = (t?: string, c?: string) => c ?? (t === 'up' ? G : t === 'dow
 
 export function BlockRenderer({ block, onChoice }: Props) {
   if (!block || !block.type) return null
+  try {
 
 
   if (block.type === 'lead') return (
@@ -45,7 +46,7 @@ export function BlockRenderer({ block, onChoice }: Props) {
               </div>
             ))}
           </div>
-          <div style={{ display: 'flex', gap: 3, marginBottom: block.metrics.length ? 12 : 0 }}>
+          <div style={{ display: 'flex', gap: 3, marginBottom: (block.metrics ?? []).length ? 12 : 0 }}>
             {(block.labels ?? []).map((l, i) => (
               <div key={i} style={{ flex: 1, textAlign: 'center', fontSize: 9, color: 'rgba(255,255,255,0.22)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l}</div>
             ))}
