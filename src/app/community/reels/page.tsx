@@ -226,7 +226,7 @@ function ReelItem({ reel, videoRef, onLike, onSave, onShare }: {
           </span>
         </Link>
         {reel.title && <p style={{ fontSize: 14, fontWeight: 600, margin: '0 0 4px', textShadow: '0 1px 8px rgba(0,0,0,0.6)' }}>{reel.title}</p>}
-        {reel.body && <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.86)', margin: 0, lineHeight: 1.4, textShadow: '0 1px 8px rgba(0,0,0,0.6)' }}>{reel.body}</p>}
+        {reel.body && <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.86)', margin: 0, lineHeight: 1.4, textShadow: '0 1px 8px rgba(0,0,0,0.6)', whiteSpace: 'pre-wrap' }}>{reel.body}</p>}
       </div>
 
       {muted && (
