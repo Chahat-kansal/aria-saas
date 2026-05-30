@@ -286,13 +286,44 @@ async function sendOffer() {
 ```
 
 Live overlay (on top of camera preview):
-- Top-left: 🔴 LIVE + duration timer (counting up)
+- Top-left: 🔴 LIVE + duration timer (counting up mm:ss)
 - Top-right: viewer count (poll GET /api/community/live/[id]/viewers every 10s)
 - Bottom: chat messages scrolling up (last 5 visible) + chat input
 - "End Live" button → confirms → DELETE /api/community/live → show stats screen
 
+7-MINUTE LIMIT — hard enforced on broadcaster UI:
+- Show a countdown ring when < 60 seconds remaining (red arc depleting around timer)
+- At 6:00 show toast: "⚠ 1 minute remaining"
+- At 6:30 show toast: "⚠ 30 seconds remaining"
+- At 7:00 (420 seconds): automatically call DELETE /api/community/live and end the stream
+  — no user action required, stream cuts off
+- Stats screen shows "Your 7-min live just ended" message
+
+Implementation:
+```typescript
+const LIVE_LIMIT_SECONDS = 420 // 7 minutes hard limit
+
+useEffect(() => {
+  if (!isLive) return
+  const interval = setInterval(() => {
+    setElapsed(e => {
+      const next = e + 1
+      if (next === 360) showToast('⚠ 1 minute remaining')
+      if (next === 390) showToast('⚠ 30 seconds remaining')
+      if (next >= LIVE_LIMIT_SECONDS) {
+        clearInterval(interval)
+        endLive('time_limit') // auto-end
+      }
+      return next
+    })
+  }, 1000)
+  return () => clearInterval(interval)
+}, [isLive])
+```
+
 Stats screen after ending:
 - Duration, peak viewers, total messages
+- If ended by time limit: show "7-min limit reached" badge
 - "Done" → back to /community/me
 
 Commit: "feat(community/live): broadcaster UI — WebRTC WHIP to Cloudflare + live overlay + chat"
