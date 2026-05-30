@@ -441,3 +441,268 @@ Commit: "feat(aria/ask): full technical help — debug errors, explain code, wri
 
 Task 3 (g-is-not-a-function) may take multiple sub-commits — that is fine.
 Each fixed route gets its own commit.
+
+
+---
+
+## TASK 7 — Long document processing (full depth)
+
+### Goal
+Aria reads and reasons across entire long documents (100+ page PDFs, large spreadsheets,
+multi-page contracts) — not just the first few pages.
+
+### Implementation
+
+Create src/lib/aria/documents/long-doc-processor.ts
+
+```typescript
+import { supabaseAdmin } from '@/lib/supabase-admin'
+import { callAnthropic } from '@/lib/aria/providers/anthropic'
+
+interface DocChunk { index: number; text: string; page_range: string }
+interface DocSummary { chunk_summaries: string[]; full_synthesis: string; key_facts: string[]; page_count: number }
+
+// Split a long document into ~8000-token chunks preserving page boundaries
+export function chunkDocument(pages: string[], tokensPerChunk = 8000): DocChunk[] {
+  const chunks: DocChunk[] = []
+  let current = ''; let startPage = 1; let chunkIndex = 0
+  const charsPerChunk = tokensPerChunk * 4 // rough token→char ratio
+
+  for (let i = 0; i < pages.length; i++) {
+    if ((current + pages[i]).length > charsPerChunk && current.length > 0) {
+      chunks.push({ index: chunkIndex++, text: current, page_range: `${startPage}-${i}` })
+      current = pages[i]; startPage = i + 1
+    } else {
+      current += '\n\n' + pages[i]
+    }
+  }
+  if (current.trim()) chunks.push({ index: chunkIndex, text: current, page_range: `${startPage}-${pages.length}` })
+  return chunks
+}
+
+// Map-reduce: summarise each chunk, then synthesise across all summaries
+export async function processLongDocument(
+  pages: string[],
+  question: string,
+  businessId: string,
+): Promise<DocSummary> {
+  const chunks = chunkDocument(pages)
+
+  // MAP: summarise each chunk in parallel (with the user's question as focus)
+  const chunkSummaries = await Promise.all(
+    chunks.map(async chunk => {
+      const result = await callAnthropic({
+        model: 'haiku',
+        systemPrompt: `Extract all information relevant to this question from this document section (pages ${chunk.page_range}). Question: "${question}". List every relevant fact, figure, date, name, and clause. Be exhaustive — do not summarise away details.`,
+        userPrompt: chunk.text,
+        maxTokens: 1500,
+        businessId,
+        agentKey: 'long_doc_map',
+      })
+      return `[Pages ${chunk.page_range}]: ${result.text}`
+    })
+  )
+
+  // REDUCE: synthesise across all chunk summaries to answer the question
+  const synthesis = await callAnthropic({
+    model: 'sonnet',
+    systemPrompt: `You have summaries of every section of a ${pages.length}-page document. Answer the owner's question by reasoning across ALL sections. Cite page ranges. Question: "${question}"`,
+    userPrompt: chunkSummaries.join('\n\n'),
+    maxTokens: 3000,
+    businessId,
+    agentKey: 'long_doc_reduce',
+  })
+
+  // Extract key facts
+  const keyFacts = chunkSummaries.flatMap(s =>
+    s.split('\n').filter(l => /\$[\d,]+|\d{1,2}\/\d{1,2}\/\d{2,4}|clause|section \d|\d+%/i.test(l)).slice(0, 5)
+  ).slice(0, 30)
+
+  return {
+    chunk_summaries: chunkSummaries,
+    full_synthesis: synthesis.text,
+    key_facts: keyFacts,
+    page_count: pages.length,
+  }
+}
+```
+
+Update src/lib/aria/attachments.ts:
+- When a PDF has > 10 pages, route to processLongDocument instead of inline parsing
+- Extract per-page text with pdf-parse (already a dependency), pass page array to chunker
+- For large xlsx/csv: chunk by row ranges (5000 rows per chunk), same map-reduce
+
+Wire into ask/route.ts: when attachments include a doc with page_count > 10 or row_count > 5000,
+call processLongDocument with the user's message as the question, inject full_synthesis into context.
+
+Commit: "feat(aria-docs): long document processing — map-reduce over 100+ page PDFs and large spreadsheets"
+
+---
+
+## TASK 8 — Full URL fetching + page navigation (full depth)
+
+### Goal
+Aria fetches and reads FULL page content from any URL (not just search snippets),
+and can follow links to gather information across multiple pages.
+
+### Implementation
+
+Update the fetch_url tool in src/lib/aria-tools.ts to fetch full content:
+
+```typescript
+{
+  name: 'fetch_url',
+  description: 'Fetch the FULL content of any web page. Use after web_search to read a specific result in depth, or when the user gives a URL. Returns full text, not just a snippet.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      url: { type: 'string', description: 'Full URL including https://' },
+      extract: { type: 'string', enum: ['full_text', 'main_content', 'links', 'tables'], description: 'What to extract' },
+    },
+    required: ['url'],
+  },
+}
+```
+
+Implement fetchUrl in aria-tools.ts:
+```typescript
+async function fetchUrl(input: Record<string, unknown>): Promise<unknown> {
+  const url = String(input.url ?? '')
+  const extract = String(input.extract ?? 'main_content')
+  if (!/^https?:\/\//.test(url)) return { error: 'Invalid URL — must start with https://' }
+
+  try {
+    const res = await fetch(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; AriaOS/1.0)' },
+      signal: AbortSignal.timeout(10000),
+    })
+    if (!res.ok) return { error: `Page returned ${res.status}` }
+    const html = await res.text()
+
+    // Strip scripts/styles, extract text
+    const cleaned = html
+      .replace(/<script[\s\S]*?<\/script>/gi, '')
+      .replace(/<style[\s\S]*?<\/style>/gi, '')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&nbsp;/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+
+    if (extract === 'links') {
+      const links = [...html.matchAll(/href="(https?:\/\/[^"]+)"/g)].map(m => m[1]).slice(0, 50)
+      return { url, links, count: links.length }
+    }
+    if (extract === 'tables') {
+      const tables = [...html.matchAll(/<table[\s\S]*?<\/table>/gi)].map(m =>
+        m[0].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+      ).slice(0, 10)
+      return { url, tables }
+    }
+
+    // full_text or main_content
+    const text = extract === 'full_text' ? cleaned : cleaned.slice(0, 8000)
+    return { url, content: text, length: cleaned.length, truncated: cleaned.length > text.length }
+  } catch (e) {
+    return { error: `Failed to fetch: ${(e as Error).message}` }
+  }
+}
+```
+
+Add to executePOSTool switch:
+```typescript
+case 'fetch_url':
+  return fetchUrl(inp)
+```
+
+Add fetch_url to allTools in ask/route.ts (alongside web_search).
+
+Add to system prompt:
+```
+URL FETCHING — you can read ANY web page in full:
+- User gives a URL → call fetch_url with extract: 'main_content'
+- Need full page → extract: 'full_text'
+- Comparing competitor sites → fetch_url each, then compare
+- Need data tables from a page → extract: 'tables'
+- Following research → fetch_url with extract: 'links' then fetch the relevant link
+Chain web_search → fetch_url to go deep on any topic.
+```
+
+Commit: "feat(aria-tools): full URL fetching — read complete page content, tables, links, multi-page navigation"
+
+---
+
+## TASK 9 — Deep image analysis (full depth)
+
+### Goal
+Aria analyses uploaded images in full depth — receipts, invoices, product photos,
+screenshots, handwritten notes, charts, multiple images at once.
+
+### Implementation
+
+Update src/lib/aria/attachments.ts image handling:
+
+```typescript
+// For images, build a rich vision prompt based on detected type
+export function buildImageAnalysisPrompt(userMessage: string, imageCount: number): string {
+  return `Analyse ${imageCount > 1 ? `all ${imageCount} images` : 'this image'} in full detail.
+
+If it's a RECEIPT or INVOICE: extract every line item, quantity, price, tax, total, vendor, date, invoice number. Return structured data.
+If it's a PRODUCT PHOTO: identify the product, brand, condition, any visible pricing or labels.
+If it's a SCREENSHOT: read all visible text, identify the app/page, describe any errors or data shown.
+If it's a CHART/GRAPH: extract the data points, axes, trends, and what it shows.
+If it's HANDWRITTEN: transcribe the text accurately.
+If it's a DOCUMENT: extract all text and structure.
+
+Owner's question: "${userMessage}"
+
+Be exhaustive. Extract every number, name, date, and detail visible.`
+}
+```
+
+In ask/route.ts, when attachments contain images:
+- Route to Sonnet (vision quality matters), never Haiku
+- Use buildImageAnalysisPrompt
+- Support up to 5 images in one message (already partially there — verify)
+- For receipts/invoices: offer to auto-create an expense record or supplier bill
+
+Add a new tool for acting on extracted image data:
+```typescript
+{
+  name: 'save_extracted_receipt',
+  description: 'After analysing a receipt/invoice image, save it as a business expense.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      vendor: { type: 'string' },
+      total: { type: 'number' },
+      date: { type: 'string' },
+      category: { type: 'string' },
+      line_items: { type: 'array', items: { type: 'object' } },
+    },
+    required: ['vendor', 'total', 'date'],
+  },
+}
+```
+
+Implement saveExtractedReceipt → insert into business_expenses (label=vendor, amount=total dollars, category, expense_date).
+
+Add to system prompt:
+```
+IMAGE ANALYSIS — full depth vision:
+- Receipts/invoices → extract every line item, then offer to save as expense (save_extracted_receipt)
+- Product photos → identify product, condition, pricing
+- Screenshots → read all text, diagnose errors
+- Charts → extract underlying data
+- Handwritten notes → transcribe accurately
+- Multiple images → analyse all and compare
+Always extract EVERY number, date, and name visible. Never say "I can see an image" — describe exactly what's in it.
+```
+
+Commit: "feat(aria-vision): deep image analysis — receipts, invoices, products, charts, handwriting + auto-expense"
+
+---
+
+## Updated execution order
+1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9
+
+All 9 tasks must complete for full 110% capability. No partial runs.
