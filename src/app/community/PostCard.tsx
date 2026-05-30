@@ -1,6 +1,7 @@
 'use client'
 import { useState, Fragment } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { Heart, MessageCircle, MoreHorizontal, BadgeCheck, EyeOff, Play } from 'lucide-react'
 import { PALETTE, BORDER, RADIUS } from './theme'
 
@@ -17,6 +18,7 @@ export interface PostCardData {
   published_at: string | null
   saved_at?: string
   is_expired?: boolean
+  stream_id?: string | null
   counts?: { like: number; comment: number; save: number }
   mine?: { liked: boolean; saved: boolean }
 }
@@ -59,6 +61,7 @@ function renderBodyWithPrices(text: string) {
 }
 
 export function PostCard({ post, onAfterAction, onHideBusiness, showHide = true }: Props) {
+  const router = useRouter()
   const [liked, setLiked] = useState(!!post.mine?.liked)
   const [saved, setSaved] = useState(!!post.mine?.saved)
   const [likeCount, setLikeCount] = useState(post.counts?.like ?? 0)
@@ -115,6 +118,7 @@ export function PostCard({ post, onAfterAction, onHideBusiness, showHide = true 
 
   const isVideo = post.media_type === 'video' || post.media_type === 'reel'
   const isReel = post.media_type === 'reel'
+  const isLive = post.post_type === 'live'
   const firstMedia = post.media_urls?.[0]
   const meta = [post.business?.suburb ?? post.business?.city ?? post.business?.industry].filter(Boolean).join('')
   const badge = BADGE_LABEL[post.post_type]
@@ -172,9 +176,20 @@ export function PostCard({ post, onAfterAction, onHideBusiness, showHide = true 
       </header>
 
       {/* Hero — full-bleed */}
-      {firstMedia && (
+      {(firstMedia || isLive) && (
         <div style={{ position: 'relative', width: '100%', aspectRatio: '4/5', background: PALETTE.ink, overflow: 'hidden' }}>
-          {isReel ? (
+          {isLive ? (
+            <button onClick={() => post.stream_id && router.push('/community/live/' + post.stream_id)}
+              style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 'none', background: '#111', cursor: post.stream_id ? 'pointer' : 'default', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              {firstMedia && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={firstMedia} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', opacity: 0.55 }} />
+              )}
+              <span style={{ position: 'relative', zIndex: 1, background: PALETTE.live, color: PALETTE.surface, padding: '8px 20px', borderRadius: RADIUS.pill, fontSize: 15, fontWeight: 800, letterSpacing: '0.06em', animation: 'community-live-pulse 1.4s ease-in-out infinite' }}>
+                LIVE
+              </span>
+            </button>
+          ) : isReel ? (
             <Link href="/community/reels" prefetch={false} style={{ display: 'block', position: 'absolute', inset: 0, textDecoration: 'none' }}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={post.media_urls[1] ?? firstMedia} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />

@@ -94,15 +94,34 @@ export async function GET(req: Request) {
       followed: !!(businessIds && businessIds.includes(p.business_id)),
     }))
 
-    // Boost followed businesses to top, then sort by recency
-    posts.sort((a, b) => {
+    // Fetch stream IDs for live posts so the card can link to the viewer
+    const livePostIds = slice.filter(p => p.post_type === 'live').map(p => p.id)
+    const liveStreamMap: Record<string, string> = {}
+    if (livePostIds.length > 0) {
+      const { data: liveStreams } = await supabaseAdmin.from('community_live_streams')
+        .select('id,community_post_id').in('community_post_id', livePostIds).eq('status', 'active')
+      for (const s of (liveStreams ?? []) as { id: string; community_post_id: string }[]) {
+        if (s.community_post_id) liveStreamMap[s.community_post_id] = s.id
+      }
+    }
+
+    const postsWithStream = posts.map(p => ({
+      ...p,
+      stream_id: liveStreamMap[p.id] ?? null,
+    }))
+
+    // Live posts first, then followed, then recency
+    postsWithStream.sort((a, b) => {
+      const aLive = a.post_type === 'live', bLive = b.post_type === 'live'
+      if (aLive && !bLive) return -1
+      if (!aLive && bLive) return 1
       if (a.followed && !b.followed) return -1
       if (!a.followed && b.followed) return 1
       return new Date(b.published_at).getTime() - new Date(a.published_at).getTime()
     })
 
     return NextResponse.json({
-      posts,
+      posts: postsWithStream,
       next_cursor: hasMore ? slice[slice.length - 1].published_at : null,
       mode: 'discovery',
       member: member ? { id: member.id, nickname: member.nickname } : null,

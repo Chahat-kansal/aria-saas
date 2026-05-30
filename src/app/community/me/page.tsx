@@ -153,10 +153,18 @@ export default function CommunityHomePage() {
   return (
     <main style={{ maxWidth: MAX_W, margin: '0 auto', padding: '32px 20px 64px' }}>
       <header style={{ marginBottom: 22 }}>
-        <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.16em', textTransform: 'uppercase', color: C.accent, margin: 0 }}>Aria Community</p>
-        <h1 style={{ fontSize: 26, fontWeight: 700, margin: '8px 0 0', fontFamily: FONT_DISPLAY }}>
-          {member.nickname ? `Hi ${member.nickname}` : 'You\'re in'}
-        </h1>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+          <div>
+            <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.16em', textTransform: 'uppercase', color: C.accent, margin: 0 }}>Aria Community</p>
+            <h1 style={{ fontSize: 26, fontWeight: 700, margin: '8px 0 0', fontFamily: FONT_DISPLAY }}>
+              {member.nickname ? 'Hi ' + member.nickname : 'You\'re in'}
+            </h1>
+          </div>
+          <Link href="/community/live/broadcast" prefetch={false}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 16px', background: C.danger, color: '#fff', borderRadius: 999, fontSize: 12, fontWeight: 800, textDecoration: 'none', letterSpacing: '0.04em', flexShrink: 0, marginTop: 8 }}>
+            &#9679; Go Live
+          </Link>
+        </div>
       </header>
 
       {/* Nickname inline edit */}

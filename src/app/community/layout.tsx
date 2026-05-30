@@ -23,6 +23,7 @@ export default function CommunityLayout({ children }: { children: React.ReactNod
         .community-spin { animation: community-spin 1s linear infinite; }
         @keyframes community-pop { 0% { transform: scale(0.8); opacity: 0.6; } 50% { transform: scale(1.18); } 100% { transform: scale(1); opacity: 1; } }
         .community-pop { animation: community-pop 320ms ease-out; }
+        @keyframes community-live-pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.75; transform: scale(1.04); } }
       `}</style>
       {/* Pad bottom so the floating bottom-nav doesn't cover content */}
       <div style={{ paddingBottom: NAV_HEIGHT }}>
