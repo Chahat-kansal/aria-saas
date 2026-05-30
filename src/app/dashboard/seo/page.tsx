@@ -10,7 +10,7 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'rec
 interface SeoAudit { id: string; status: string; pages_crawled: number; issues_found: number; issues_fixed: number; health_score: number; critical_count?: number | null; warning_count?: number | null; info_count?: number | null; error_detail?: string | null; started_at: string; finished_at: string | null }
 interface SeoIssue { id: string; page_url: string; issue_type: string; severity: string; title: string; detail: string; suggested_fix: string | null; ai_fix_text?: string | null; fix_format: string | null; state: string; applied_at?: string | null }
 interface SeoLocal { gbp_completeness: number | null; gbp_listed?: boolean | null; review_count?: number | null; review_avg?: number | null; map_pack_rank: number | null; citations_total: number | null; citations_consistent: number | null; review_velocity_30d: number | null; checklist: Array<{ item: string; ok: boolean }> | null }
-interface SeoKeyword { id: string; keyword: string; current_rank: number | null; previous_rank: number | null; search_volume: number | null; frequency?: number | null; found_on_pages?: string[] | null; tracked?: boolean | null }
+interface SeoKeyword { id: string; keyword: string; current_rank: number | null; previous_rank: number | null; search_volume: number | null; frequency?: number | null; found_on_pages?: string[] | null; tracked?: boolean | null; last_checked_at?: string | null }
 interface SeoPage { url: string; title: string | null }
 const SEV_ORDER: Record<string, number> = { critical: 0, warning: 1, info: 2 }
 const SEV_COLOR: Record<string, string> = { critical: '#ef4444', warning: '#f59e0b', info: '#6b7280' }
@@ -223,7 +223,7 @@ function LocalSeoTab({ businessId }: { businessId: string }) {
   async function scanNow() {
     setScanning(true)
     try {
-      await fetch('/api/seo/local/scan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ business_id: businessId }) })
+      await fetch('/api/seo/local', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ business_id: businessId }) })
       await loadLocal()
     } catch { /* ignore */ }
     setScanning(false)
@@ -231,30 +231,39 @@ function LocalSeoTab({ businessId }: { businessId: string }) {
 
   if (loading) return <p style={{ color: 'rgba(255,255,255,0.4)', textAlign: 'center', padding: 40 }}>Loading...</p>
 
-  const pct = Math.max(0, Math.min(100, local?.gbp_completeness ?? 0))
+  const score = Math.max(0, Math.min(100, local?.gbp_completeness ?? 0))
   const checklist: Array<{ item: string; ok: boolean }> = Array.isArray(local?.checklist) ? (local!.checklist as Array<{ item: string; ok: boolean }>) : []
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <div style={{ display: 'flex', gap: 8 }}>
         <button onClick={scanNow} disabled={scanning} style={{ padding: '7px 18px', borderRadius: 8, border: 'none', background: '#2D5240', color: '#7FB897', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', opacity: scanning ? 0.6 : 1 }}>
-          {scanning ? 'Scanning...' : 'Re-scan Google profile'}
+          {scanning ? 'Scanning...' : 'Scan now'}
         </button>
       </div>
-      <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 12, padding: '20px 24px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-          <span style={{ color: '#fff', fontSize: 14, fontWeight: 600 }}>Local SEO completeness</span>
-          <span style={{ color: '#7FB897', fontWeight: 700, fontSize: 16 }}>{pct}%</span>
+
+      <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+          <RingChart score={score} />
+          <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Local score</span>
         </div>
-        <div style={{ height: 8, background: 'rgba(255,255,255,0.08)', borderRadius: 4, overflow: 'hidden' }}>
-          <div style={{ height: '100%', width: pct + '%', background: '#7FB897', borderRadius: 4 }} />
-        </div>
+        {([
+          ['GBP claimed', local?.gbp_listed ? '✓' : '✗', local?.gbp_listed ? '#7FB897' : '#ef4444'],
+          ['Reviews', String(local?.review_count ?? '—'), '#fff'],
+          ['Avg rating', local?.review_avg != null ? local.review_avg.toFixed(1) + ' ★' : '—', local?.review_avg != null && local.review_avg >= 4 ? '#7FB897' : '#f59e0b'],
+        ] as [string, string, string][]).map(([label, value, col]) => (
+          <div key={label} style={statCell}>
+            <div style={{ fontSize: 22, fontWeight: 800, color: col, lineHeight: 1 }}>{value}</div>
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 4, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</div>
+          </div>
+        ))}
       </div>
+
       {checklist.length === 0 ? (
-        <p style={{ textAlign: 'center', padding: 30, color: 'rgba(255,255,255,0.4)', fontSize: 13 }}>Run an audit to populate your NAP, maps and schema checks.</p>
+        <p style={{ textAlign: 'center', padding: 30, color: 'rgba(255,255,255,0.4)', fontSize: 13 }}>Click &quot;Scan now&quot; to check your Google Business Profile health.</p>
       ) : (
         <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 12, padding: '20px 24px' }}>
-          <div style={{ color: '#fff', fontSize: 14, fontWeight: 600, marginBottom: 14 }}>NAP, maps &amp; schema</div>
+          <div style={{ color: '#fff', fontSize: 14, fontWeight: 600, marginBottom: 14 }}>GBP checklist</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {checklist.map((row, i) => (
               <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -273,10 +282,23 @@ function LocalSeoTab({ businessId }: { businessId: string }) {
 
 // ── Tab 3: Keywords ────────────────────────────────────────────────────────
 
-function KeywordsTab({ businessId }: { businessId: string }) {
+const INDUSTRY_KEYWORDS: Record<string, string[]> = {
+  cafe: ['cafe near me', 'best coffee', 'brunch near me', 'coffee shop'],
+  restaurant: ['restaurant near me', 'best restaurant', 'dining near me', 'takeaway'],
+  retail: ['shop near me', 'buy online', 'store near me', 'products'],
+  bakery: ['fresh bread near me', 'artisan bakery', 'custom cakes', 'bakery near me'],
+  pharmacy: ['pharmacy near me', 'chemist near me', 'prescription', 'medication'],
+  default: ['near me', 'best', 'reviews', 'open now'],
+}
+
+function KeywordsTab({ businessId, businessName, businessIndustry }: { businessId: string; businessName?: string; businessIndustry?: string }) {
   const [keywords, setKeywords] = useState<SeoKeyword[]>([])
   const [loading, setLoading] = useState(true)
-  const [toggling, setToggling] = useState<string | null>(null)
+  const [addInput, setAddInput] = useState('')
+  const [adding, setAdding] = useState(false)
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [historyMap, setHistoryMap] = useState<Record<string, Array<{ rank: number; date: string }>>>({})
+  const [removing, setRemoving] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -289,51 +311,140 @@ function KeywordsTab({ businessId }: { businessId: string }) {
 
   useEffect(() => { load() }, [load])
 
-  async function toggleTracked(kw: SeoKeyword) {
-    setToggling(kw.id)
-    const next = !kw.tracked
+  async function addKeyword() {
+    const kw = addInput.trim()
+    if (!kw) return
+    setAdding(true)
     try {
-      await fetch('/api/seo/keywords', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ keyword_id: kw.id, tracked: next }) })
-      setKeywords(prev => prev.map(k => k.id === kw.id ? { ...k, tracked: next } : k))
+      const res = await fetch('/api/seo/keywords', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ business_id: businessId, keyword: kw }) }).then(r => r.json())
+      if (res.keyword) { setKeywords(prev => [res.keyword as SeoKeyword, ...prev]); setAddInput('') }
+      else if (res.error) alert(res.error)
     } catch { /* ignore */ }
-    setToggling(null)
+    setAdding(false)
+  }
+
+  async function expandHistory(id: string) {
+    if (expandedId === id) { setExpandedId(null); return }
+    setExpandedId(id)
+    if (historyMap[id]) return
+    try {
+      const res = await fetch(`/api/seo/keywords/${id}`).then(r => r.json())
+      setHistoryMap(prev => ({
+        ...prev,
+        [id]: ((res.history ?? []) as Array<{ rank: number; checked_at: string }>).map(h => ({
+          rank: h.rank,
+          date: new Date(h.checked_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' }),
+        })),
+      }))
+    } catch { /* ignore */ }
+  }
+
+  async function removeKeyword(id: string) {
+    setRemoving(id)
+    try {
+      await fetch(`/api/seo/keywords/${id}`, { method: 'DELETE' })
+      setKeywords(prev => prev.filter(k => k.id !== id))
+      if (expandedId === id) setExpandedId(null)
+    } catch { /* ignore */ }
+    setRemoving(null)
   }
 
   if (loading) return <p style={{ color: 'rgba(255,255,255,0.4)', textAlign: 'center', padding: 40 }}>Loading…</p>
 
+  const suggestions = (INDUSTRY_KEYWORDS[businessIndustry ?? 'default'] ?? INDUSTRY_KEYWORDS.default)
+    .map(s => businessName ? `${businessName} ${s}` : s)
+
   return (
     <div>
-      <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.45)', marginBottom: 16, lineHeight: 1.55 }}>
-        Keywords extracted from your crawled pages, by how often they appear. Enable rank tracking on the ones that matter —
-        live ranking is coming soon (it needs an external search-data source).
-      </p>
+      {/* Add keyword */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
+        <input value={addInput} onChange={e => setAddInput(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && !adding && addKeyword()}
+          placeholder='Add a keyword to track, e.g. "best cafe Melbourne"'
+          style={{ flex: 1, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, padding: '9px 13px', color: '#fff', fontSize: 13, fontFamily: 'inherit', outline: 'none' }} />
+        <button onClick={addKeyword} disabled={adding || !addInput.trim()}
+          style={{ padding: '9px 18px', borderRadius: 8, border: 'none', background: '#7FB897', color: '#0E1411', fontSize: 13, fontWeight: 700, cursor: adding || !addInput.trim() ? 'default' : 'pointer', fontFamily: 'inherit', opacity: adding || !addInput.trim() ? 0.5 : 1, flexShrink: 0 }}>
+          {adding ? 'Adding…' : 'Track keyword'}
+        </button>
+      </div>
+
       {keywords.length === 0 ? (
-        <p style={{ textAlign: 'center', padding: 40, color: 'rgba(255,255,255,0.4)', fontSize: 14 }}>No keywords yet. Run an audit to extract them from your content.</p>
+        <div style={{ textAlign: 'center', padding: 40 }}>
+          <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 14, marginBottom: 16 }}>No keywords tracked yet.</p>
+          <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)', marginBottom: 16 }}>Try tracking these for {businessName ?? 'your business'}:</p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
+            {suggestions.map(s => (
+              <button key={s} onClick={() => setAddInput(s)}
+                style={{ padding: '6px 14px', borderRadius: 20, border: '1px solid rgba(127,184,151,0.3)', background: 'rgba(127,184,151,0.08)', color: '#7FB897', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>
+                {s}
+              </button>
+            ))}
+          </div>
+        </div>
       ) : (
         <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 12, border: '1px solid rgba(255,255,255,0.07)', overflow: 'hidden' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
               <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
-                {['Keyword', 'Frequency', 'Pages', 'Rank tracking'].map(h => (
-                  <th key={h} style={{ padding: '10px 16px', textAlign: 'left', color: 'rgba(255,255,255,0.4)', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>{h}</th>
+                {['Keyword', 'Rank', 'Change', 'Volume', 'Last checked', ''].map(h => (
+                  <th key={h} style={{ padding: '10px 14px', textAlign: 'left', color: 'rgba(255,255,255,0.4)', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {keywords.map(kw => (
-                <tr key={kw.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                  <td style={{ padding: '12px 16px', color: '#fff', fontWeight: 500 }}>{kw.keyword}</td>
-                  <td style={{ padding: '12px 16px', color: 'rgba(255,255,255,0.7)' }}>{kw.frequency ?? '—'}</td>
-                  <td style={{ padding: '12px 16px', color: 'rgba(255,255,255,0.7)' }}>{kw.found_on_pages?.length ?? 0}</td>
-                  <td style={{ padding: '12px 16px' }}>
-                    <button onClick={() => toggleTracked(kw)} disabled={toggling === kw.id}
-                      style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '4px 10px', borderRadius: 20, border: '1px solid ' + (kw.tracked ? '#7FB897' : 'rgba(255,255,255,0.15)'), background: kw.tracked ? 'rgba(127,184,151,0.12)' : 'transparent', color: kw.tracked ? '#7FB897' : 'rgba(255,255,255,0.5)', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', opacity: toggling === kw.id ? 0.6 : 1 }}>
-                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: kw.tracked ? '#7FB897' : 'rgba(255,255,255,0.3)' }} />
-                      {kw.tracked ? 'Tracking' : 'Enable'}
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              {keywords.map(kw => {
+                const rankDiff = kw.current_rank != null && kw.previous_rank != null ? kw.previous_rank - kw.current_rank : null
+                const isExpanded = expandedId === kw.id
+                const hist = historyMap[kw.id]
+                return (
+                  <>
+                    <tr key={kw.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', cursor: 'pointer' }} onClick={() => expandHistory(kw.id)}>
+                      <td style={{ padding: '12px 14px', color: '#fff', fontWeight: 500 }}>{kw.keyword}</td>
+                      <td style={{ padding: '12px 14px', color: kw.current_rank != null ? '#fff' : 'rgba(255,255,255,0.3)' }}>
+                        {kw.current_rank != null ? `#${kw.current_rank}` : '—'}
+                      </td>
+                      <td style={{ padding: '12px 14px' }}>
+                        {rankDiff === null ? <span style={{ color: 'rgba(255,255,255,0.3)' }}>—</span>
+                          : rankDiff > 0 ? <span style={{ color: '#7FB897' }}>▲{rankDiff}</span>
+                          : rankDiff < 0 ? <span style={{ color: '#ef4444' }}>▼{Math.abs(rankDiff)}</span>
+                          : <span style={{ color: 'rgba(255,255,255,0.3)' }}>–</span>}
+                      </td>
+                      <td style={{ padding: '12px 14px', color: 'rgba(255,255,255,0.6)' }}>{kw.search_volume ?? '—'}</td>
+                      <td style={{ padding: '12px 14px', color: 'rgba(255,255,255,0.4)', fontSize: 12 }}>
+                        {kw.last_checked_at ? new Date(kw.last_checked_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' }) : '—'}
+                      </td>
+                      <td style={{ padding: '12px 14px' }}>
+                        <button onClick={e => { e.stopPropagation(); removeKeyword(kw.id) }} disabled={removing === kw.id}
+                          style={{ padding: '3px 8px', borderRadius: 6, border: '1px solid rgba(239,68,68,0.3)', background: 'transparent', color: '#ef4444', fontSize: 11, cursor: 'pointer', fontFamily: 'inherit', opacity: removing === kw.id ? 0.5 : 1 }}>
+                          {removing === kw.id ? '…' : '✕'}
+                        </button>
+                      </td>
+                    </tr>
+                    {isExpanded && (
+                      <tr key={kw.id + '-hist'}>
+                        <td colSpan={6} style={{ padding: '0 14px 14px', background: 'rgba(0,0,0,0.12)' }}>
+                          {!hist ? (
+                            <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)', padding: '10px 0' }}>Loading history…</p>
+                          ) : hist.length < 2 ? (
+                            <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)', padding: '10px 0' }}>Not enough history yet — check back after a few daily rank checks.</p>
+                          ) : (
+                            <div style={{ paddingTop: 10 }}>
+                              <ResponsiveContainer width="100%" height={100}>
+                                <LineChart data={hist}>
+                                  <XAxis dataKey="date" tick={{ fill: 'rgba(255,255,255,0.35)', fontSize: 10 }} />
+                                  <YAxis reversed domain={['dataMin - 2', 'dataMax + 2']} tick={{ fill: 'rgba(255,255,255,0.35)', fontSize: 10 }} width={28} />
+                                  <Tooltip contentStyle={{ background: '#1a1a2e', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, color: '#fff', fontSize: 11 }} formatter={(v) => [`#${v}`, 'Rank']} />
+                                  <Line type="monotone" dataKey="rank" stroke="#7FB897" strokeWidth={2} dot={{ fill: '#7FB897', r: 3 }} />
+                                </LineChart>
+                              </ResponsiveContainer>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    )}
+                  </>
+                )
+              })}
             </tbody>
           </table>
         </div>
@@ -666,7 +777,7 @@ export default function SeoPage() {
             </div>
             {tab === 'health' && <SiteHealthTab businessId={business.id} />}
             {tab === 'local' && <LocalSeoTab businessId={business.id} />}
-            {tab === 'keywords' && <KeywordsTab businessId={business.id} />}
+            {tab === 'keywords' && <KeywordsTab businessId={business.id} businessName={business.name ?? undefined} businessIndustry={(business as unknown as { industry?: string }).industry ?? undefined} />}
             {tab === 'optimizer' && <AiOptimizerTab businessId={business.id} />}
           </>
         )}
