@@ -413,6 +413,9 @@ function TimesheetTab({ bid }: { bid: string }) {
   const [sessions, setSessions] = useState<TS[]>([])
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [week, setWeek] = useState(monOfWeek)
+  const [exportStart, setExportStart] = useState('')
+  const [exportEnd, setExportEnd] = useState('')
+  const [exporting, setExporting] = useState(false)
 
   const load = useCallback(() => {
     const sun = new Date(week + 'T00:00:00'); sun.setDate(sun.getDate() + 6)
@@ -427,6 +430,16 @@ function TimesheetTab({ bid }: { bid: string }) {
       ...sessions.map(s => { const h = (s.total_minutes ?? 0) / 60; const r = (s.pay_rate_cents ?? 0) / 100; return [s.staff_name, s.clock_in, s.clock_out ?? '', h.toFixed(2), r.toFixed(2), (h * r).toFixed(2), s.approved ? 'Approved' : 'Pending'] })]
     const a = document.createElement('a'); a.href = 'data:text/csv,' + encodeURIComponent(rows.map(r => r.join(',')).join('\n')); a.download = `timesheets-${week}.csv`; a.click()
   }
+  const exportPayroll = async (format: 'csv' | 'pdf') => {
+    if (!exportStart || !exportEnd) { alert('Select start and end dates for payroll export'); return }
+    setExporting(true)
+    const url = '/api/pos/timesheets/export?start_date=' + exportStart + '&end_date=' + exportEnd + '&format=' + format
+    const r = await fetch(url)
+    if (!r.ok) { const d = await r.json().catch(() => ({})); alert((d as Record<string,string>).error ?? 'Export failed'); setExporting(false); return }
+    const blob = await r.blob()
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'payroll-' + exportStart + '-to-' + exportEnd + '.' + format; a.click()
+    setExporting(false)
+  }
 
   const done = sessions.filter(s => s.clock_out)
   const totals: Record<string, { hrs: number; cost: number }> = {}
@@ -440,6 +453,15 @@ function TimesheetTab({ bid }: { bid: string }) {
         <button onClick={() => { const d = new Date(week + 'T00:00:00'); d.setDate(d.getDate() + 7); setWeek(d.toISOString().slice(0, 10)) }} style={smBtn()}>Next ›</button>
         {selected.size > 0 && <button onClick={approveAll} style={smBtn(G2)}>Approve {selected.size}</button>}
         <button onClick={csvExport} style={smBtn()}>Export CSV</button>
+      </div>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 14, alignItems: 'center', flexWrap: 'wrap', padding: '10px 14px', background: 'rgba(127,184,151,0.05)', borderRadius: 8, border: '1px solid rgba(127,184,151,0.12)' }}>
+        <span style={{ fontSize: 11, fontWeight: 700, color: G }}>Export payroll</span>
+        <input type="date" value={exportStart} onChange={e => setExportStart(e.target.value)} style={{ ...inp, height: 28, padding: '4px 8px' }} />
+        <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>to</span>
+        <input type="date" value={exportEnd} onChange={e => setExportEnd(e.target.value)} style={{ ...inp, height: 28, padding: '4px 8px' }} />
+        <button onClick={() => exportPayroll('csv')} disabled={exporting} style={{ ...smBtn(G2), opacity: exporting ? 0.5 : 1 }}>CSV</button>
+        <button onClick={() => exportPayroll('pdf')} disabled={exporting} style={{ ...smBtn(), opacity: exporting ? 0.5 : 1 }}>PDF</button>
+        {exporting && <span style={{ fontSize: 11, color: G }}>Generating…</span>}
       </div>
       <div style={{ overflowX: 'auto' }}>
         <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
@@ -636,6 +658,10 @@ function TeamTab({ bid }: { bid: string }) {
   const dn = (m: MR) => m.preferred_name ?? `${m.first_name} ${m.last_name}`
   const pay = (m: MR) => m.pay_rate_cents ? `$${(m.pay_rate_cents / 100).toFixed(2)}/hr` : '—'
   const SC: Record<string, [string, string]> = { active: ['rgba(16,185,129,0.2)', '#10b981'], inactive: ['rgba(245,158,11,0.2)', '#f59e0b'], terminated: ['rgba(239,68,68,0.2)', '#ef4444'] }
+  const visaDaysLeft = (m: MR) => {
+    if (!m.visa_expiry_date) return null
+    return Math.ceil((new Date(m.visa_expiry_date).getTime() - Date.now()) / 86400000)
+  }
 
   return (
     <div>
@@ -653,7 +679,7 @@ function TeamTab({ bid }: { bid: string }) {
           : <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
               <thead><tr style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-                {['Name', 'Position', 'Type', 'Pay', 'Skills', 'Portal', 'Status', ''].map((h, i) => <th key={i} style={{ padding: '6px 10px', textAlign: 'left', fontSize: 10, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</th>)}
+                {['Name', 'Position', 'Type', 'Pay', 'Skills', 'Visa', 'Portal', 'Status', ''].map((h, i) => <th key={i} style={{ padding: '6px 10px', textAlign: 'left', fontSize: 10, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</th>)}
               </tr></thead>
               <tbody>{members.map(m => (
                 <tr key={m.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
@@ -667,6 +693,7 @@ function TeamTab({ bid }: { bid: string }) {
                   <td style={{ padding: '8px 10px', color: 'rgba(255,255,255,0.5)', textTransform: 'capitalize' }}>{(m.employment_type ?? '').replace('_', ' ')}</td>
                   <td style={{ padding: '8px 10px', color: 'rgba(255,255,255,0.5)' }}>{pay(m)}</td>
                   <td style={{ padding: '8px 10px' }}><div style={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>{(m.staff_member_skills ?? []).slice(0, 2).map((s, j) => s.staff_skills && <span key={j} style={{ fontSize: 9, padding: '1px 5px', borderRadius: 3, background: (s.staff_skills.color ?? '#6366f1') + '33', color: s.staff_skills.color ?? '#6366f1' }}>{s.staff_skills.name}</span>)}</div></td>
+                  <td style={{ padding: '8px 10px' }}>{(() => { const d = visaDaysLeft(m); if (d === null) return null; const c = d < 30 ? '#ef4444' : d < 60 ? '#f59e0b' : '#10b981'; return <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: c + '20', color: c }} title={'Visa expires ' + (m.visa_expiry_date ?? '')}>{d <= 0 ? 'Expired' : d + 'd'}</span> })()}</td>
                   <td style={{ padding: '8px 10px' }}><PortalBadge member={m} /></td>
                   <td style={{ padding: '8px 10px' }}><span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: SC[m.status]?.[0] ?? 'rgba(255,255,255,0.06)', color: SC[m.status]?.[1] ?? 'rgba(255,255,255,0.5)', textTransform: 'capitalize' }}>{m.status}</span></td>
                   <td style={{ padding: '8px 10px' }}><Link href={`/dashboard/staff/${m.id}`} style={{ fontSize: 11, color: G }}>View →</Link></td>

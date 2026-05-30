@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { computeHours } from '@/lib/staff/timesheets'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
   const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle();
@@ -109,7 +110,7 @@ async function _PATCH(req: Request) {
   // Fetch session to verify it's open
   const { data: session, error: fetchError } = await supabase
     .from('pos_timesheets')
-    .select('id, clock_in')
+    .select('id, clock_in, pay_rate_cents')
     .eq('id', session_id)
     .eq('business_id', bid)
     .is('clock_out', null)
@@ -118,8 +119,18 @@ async function _PATCH(req: Request) {
   if (fetchError || !session) return NextResponse.json({ error: 'Open session not found' }, { status: 404 });
 
   const now = new Date();
-  const updates: Record<string, unknown> = { clock_out: now.toISOString() };
-  if (break_minutes !== undefined) updates.break_minutes = break_minutes;
+  const breakMins = break_minutes !== undefined ? Number(break_minutes) : 0;
+  const clockOutTime = now.toISOString();
+  const hoursWorked = computeHours(String(session.clock_in), clockOutTime, breakMins);
+  const totalPayCents = Math.round(hoursWorked * (Number(session.pay_rate_cents) || 0));
+
+  const updates: Record<string, unknown> = {
+    clock_out: clockOutTime,
+    break_minutes: breakMins,
+    hours_worked: hoursWorked,
+    total_pay_cents: totalPayCents,
+    status: 'pending',
+  };
 
   const { data, error } = await supabase
     .from('pos_timesheets')

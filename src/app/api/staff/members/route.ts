@@ -24,7 +24,7 @@ async function _GET(req: Request) {
   const search = url.searchParams.get('q') ?? ''
 
   let q = supabase.from('staff_members')
-    .select('id, first_name, last_name, preferred_name, position, employment_type, status, personal_email, work_email, mobile, color, portal_enabled, invite_sent_at, user_id, pay_type, pay_rate_cents, start_date, created_at')
+    .select('id, first_name, last_name, preferred_name, position, employment_type, status, personal_email, work_email, mobile, color, portal_enabled, invite_sent_at, user_id, pay_type, pay_rate_cents, start_date, visa_expiry_date, created_at')
     .eq('business_id', bid)
     .order('first_name', { ascending: true })
 

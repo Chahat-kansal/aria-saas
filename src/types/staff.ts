@@ -33,6 +33,7 @@ export interface StaffMember {
   superannuation_rate: number
   start_date: string | null
   end_date: string | null
+  visa_expiry_date: string | null
   invite_sent_at: string | null
   created_at: string
   updated_at: string
