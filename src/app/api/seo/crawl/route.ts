@@ -112,6 +112,32 @@ async function runCrawl(auditId: string, businessId: string, websiteUrl: string)
     await supabaseAdmin.from('seo_audits').update({
       status: 'complete', finished_at: new Date().toISOString(),
     }).eq('id', auditId)
+
+    // Write SEO summary to business brain so Aria's briefing can reference it.
+    try {
+      const top3Critical = issues
+        .filter(i => i.severity === 'critical')
+        .slice(0, 3)
+        .map(i => ({ type: i.issue_type, title: i.title, page: i.page_url }))
+
+      const { data: topKw } = await supabaseAdmin
+        .from('seo_keywords')
+        .select('keyword, current_rank')
+        .eq('business_id', businessId)
+        .not('current_rank', 'is', null)
+        .order('current_rank', { ascending: true })
+        .limit(1)
+        .maybeSingle()
+
+      await supabaseAdmin.from('aria_seo_context').upsert({
+        business_id: businessId,
+        health_score: score,
+        critical_issues: top3Critical,
+        top_keyword: topKw?.keyword ?? null,
+        top_keyword_rank: topKw?.current_rank ?? null,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'business_id' })
+    } catch { /* non-fatal — brain context is best-effort */ }
   } catch (e) {
     await supabaseAdmin.from('seo_audits').update({
       status: 'failed', error_detail: (e as Error).message?.slice(0, 500) ?? 'crawl error',

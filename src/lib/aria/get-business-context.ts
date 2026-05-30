@@ -153,6 +153,19 @@ export async function getBusinessContext(businessId: string): Promise<string> {
     low_stock_alerts: alts,
     recent_aria_outcomes: outs,
     weather: weather ?? { _note: 'Weather data unavailable — proceeding without weather context.' },
+    seo: await (async () => {
+      try {
+        const { data: seo } = await db.from('aria_seo_context').select('health_score, critical_issues, top_keyword, top_keyword_rank, updated_at').eq('business_id', businessId).maybeSingle()
+        if (!seo) return null
+        return {
+          health_score: seo.health_score,
+          critical_issues: seo.critical_issues,
+          top_keyword: seo.top_keyword,
+          top_keyword_rank: seo.top_keyword_rank,
+          last_audit: seo.updated_at,
+        }
+      } catch { return null }
+    })(),
   }, null, 2)
 }
 
