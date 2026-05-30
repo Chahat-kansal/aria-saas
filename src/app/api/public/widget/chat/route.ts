@@ -57,7 +57,7 @@ export async function POST(req: Request) {
     // ── Fix 1+2: ALWAYS load products with real stock status ──────────
     let productContext = ''
     const { data: products } = await supabaseAdmin
-      .from('products')
+      .from('pos_products')
       .select('name, price, stock_quantity, is_active, description')
       .eq('business_id', businessId)
       .eq('is_active', true)
@@ -250,7 +250,7 @@ Do NOT include the JSON block unless you have all details confirmed.`
         priority: 'high',
         title: 'New website booking: ' + apptData.visitor_name,
         description: apptData.booking_date + ' at ' + apptData.booking_time + (apptData.service ? ' — ' + apptData.service : ''),
-        suggested_action: 'Confirm appointment with customer',
+        action_data: { suggested_action: 'Confirm appointment with customer' },
         status: 'pending',
       }).then(undefined, () => {})
       }
