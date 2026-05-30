@@ -24,6 +24,12 @@ interface AllStatus {
   csv: { product_count: number }
 }
 
+interface JournalLine { description: string; amount: number; account_code: string; type: 'debit' | 'credit' }
+interface XeroPreview {
+  id: string; date: string; status: 'pending' | 'synced' | 'failed'
+  payload: { sales_count: number; total_revenue: number; total_tax: number; journal_lines: JournalLine[] }
+  synced_at: string | null; xero_journal_id: string | null; created_at: string
+}
 interface LineItem { description: string; quantity: number; unit_amount: string; account_code: string; gst?: string }
 interface XeroPending {
   id: string; sync_date: string; line_items: LineItem[]
@@ -35,7 +41,10 @@ interface XeroHistory {
   total_sales: number; total_gst: number
   sent_at: string | null; xero_invoice_id: string | null
 }
-interface XeroStatus { connected: boolean; connected_at: string | null; pending: XeroPending[]; history: XeroHistory[] }
+interface XeroStatus {
+  connected: boolean; token_expired: boolean; connected_at: string | null
+  auto_sync: boolean; pending: XeroPending[]; history: XeroHistory[]; previews: XeroPreview[]
+}
 
 function statusDot(s?: string) {
   if (s === 'connected' || s === 'synced') return 'bg-emerald-500'
@@ -81,10 +90,11 @@ export default function IntegrationsPage() {
   const { business } = useBusinessContext()
   const [status, setStatus] = useState<AllStatus | null>(null)
   const [xero, setXero] = useState<XeroStatus | null>(null)
-  const [xeroNotes, setXeroNotes] = useState<Record<string, string>>({})
-  const [xeroSending, setXeroSending] = useState<string | null>(null)
-  const [xeroSkipping, setXeroSkipping] = useState<string | null>(null)
   const [xeroDisconnecting, setXeroDisconnecting] = useState(false)
+  const [xeroPreparingToday, setXeroPreparingToday] = useState(false)
+  const [xeroModal, setXeroModal] = useState<XeroPreview | null>(null)
+  const [xeroApprovedItems, setXeroApprovedItems] = useState<Set<string>>(new Set())
+  const [xeroApproving, setXeroApproving] = useState(false)
   const [toast, setToast] = useState('')
   const [syncing, setSyncing] = useState<string | null>(null)
   const [bank, setBank] = useState<{ connected: boolean; accounts: Array<{ id: string; account_name: string | null; institution_name: string | null; balance: number | null; last_synced_at: string | null }>; total_balance: number } | null>(null)
@@ -177,32 +187,40 @@ export default function IntegrationsPage() {
     loadStatus()
   }
 
-  const approveSync = async (id: string) => {
-    setXeroSending(id)
-    const r = await fetch('/api/integrations/xero/approve-sync', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, notes: xeroNotes[id] ?? null }),
-    })
-    const j = await r.json() as { error?: string }
-    setXeroSending(null)
-    if (r.ok) { showToast('Sync sent to Xero!'); loadXero() }
-    else showToast(`Sync failed: ${j.error}`)
-  }
-
-  const skipSync = async (id: string) => {
-    setXeroSkipping(id)
-    await fetch('/api/integrations/xero/skip-sync', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }),
-    })
-    setXeroSkipping(null); showToast('Sync skipped.'); loadXero()
-  }
-
   const disconnectXero = async () => {
     if (!business?.id) return
     setXeroDisconnecting(true)
-    await fetch(`/api/integrations/xero/status?business_id=${business.id}`, { method: 'DELETE' })
+    await fetch('/api/integrations/xero/status?business_id=' + business.id, { method: 'DELETE' })
     setXeroDisconnecting(false); showToast('Xero disconnected.'); loadXero()
+  }
+
+  const prepareToday = async () => {
+    if (!business?.id) return
+    setXeroPreparingToday(true)
+    const r = await fetch('/api/pos/xero-sync/prepare', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}),
+    })
+    const j = await r.json() as { preview?: XeroPreview; message?: string; error?: string }
+    setXeroPreparingToday(false)
+    if (!r.ok) { showToast(j.error ?? 'Could not prepare sync'); return }
+    if (!j.preview) { showToast(j.message ?? 'No sales found for today'); return }
+    const all = new Set((j.preview.payload.journal_lines ?? []).map(l => l.description))
+    setXeroApprovedItems(all)
+    setXeroModal(j.preview)
+  }
+
+  const approvePreview = async () => {
+    if (!xeroModal) return
+    setXeroApproving(true)
+    const r = await fetch('/api/pos/xero-sync/approve', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ preview_id: xeroModal.id, approved_items: Array.from(xeroApprovedItems) }),
+    })
+    const j = await r.json() as { error?: string }
+    setXeroApproving(false)
+    if (r.ok) { showToast('Synced to Xero!'); setXeroModal(null); loadXero() }
+    else showToast(j.error ?? 'Sync failed')
   }
 
   const sq = status?.square
@@ -210,8 +228,6 @@ export default function IntegrationsPage() {
   const lsX = status?.lightspeed_x
   const kounta = status?.kounta
   const csv = status?.csv
-  const lastSent = xero?.history.find(h => h.status === 'sent')
-
   return (
     <div className="p-6 max-w-5xl space-y-8" style={{ color: 'var(--text-primary, #E8EDE7)' }}>
       <header>
@@ -361,28 +377,61 @@ export default function IntegrationsPage() {
               <div className="w-10 h-10 rounded-xl flex items-center justify-center text-sm font-bold" style={{ background: 'rgba(19,176,170,0.15)', color: '#13b0aa' }}>XE</div>
               <div><p className="font-medium">Xero</p><p className="text-xs" style={{ color: 'var(--text-secondary, #A8B5A8)' }}>Accounting · Review-first sync</p></div>
             </div>
-            {xero?.connected
+            {xero?.connected && !xero.token_expired
               ? <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-emerald-500" /><span className="text-xs" style={{ color: 'var(--text-secondary, #A8B5A8)' }}>Connected</span></div>
-              : <span className="text-xs px-2 py-0.5 rounded" style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--text-secondary, #A8B5A8)' }}>Not connected</span>}
+              : xero?.token_expired
+                ? <span className="text-xs px-2 py-0.5 rounded" style={{ background: 'rgba(245,158,11,0.15)', color: '#f59e0b' }}>Token expired</span>
+                : <span className="text-xs px-2 py-0.5 rounded" style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--text-secondary, #A8B5A8)' }}>Not connected</span>}
           </div>
           {xero?.connected ? (
             <div className="space-y-2">
-              {lastSent && <p className="text-xs" style={{ color: 'var(--text-secondary, #A8B5A8)' }}>Last sync: {lastSent.sync_date} — ${Number(lastSent.total_sales).toFixed(2)} sent</p>}
-              {xero.pending.length > 0 && <p className="text-xs text-amber-400">{xero.pending.length} pending review</p>}
+              {xero.token_expired && (
+                <p className="text-xs text-amber-400">Access token expired — reconnect to resume syncing.</p>
+              )}
+              {!xero.token_expired && (
+                <button onClick={prepareToday} disabled={xeroPreparingToday}
+                  className="w-full py-2 rounded-lg text-sm font-medium disabled:opacity-50"
+                  style={{ background: '#2D5240', color: '#7FB897' }}>
+                  {xeroPreparingToday ? 'Preparing…' : 'Sync today\'s sales'}
+                </button>
+              )}
+              {!xero.token_expired && (
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" checked={xero.auto_sync}
+                    onChange={async e => {
+                      if (!business?.id) return
+                      await fetch('/api/integrations/xero/auto-sync', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ business_id: business.id, enabled: e.target.checked }),
+                      })
+                      loadXero()
+                    }}
+                    className="w-4 h-4 accent-emerald-500" />
+                  <span className="text-xs" style={{ color: 'var(--text-secondary, #A8B5A8)' }}>
+                    Auto-sync daily (no review required)
+                  </span>
+                </label>
+              )}
               <div className="flex gap-2">
                 <a href="https://go.xero.com" target="_blank" rel="noopener noreferrer" className="flex-1 text-center py-2 rounded-lg text-sm"
                   style={{ background: 'rgba(255,255,255,0.04)', color: 'var(--text-secondary, #A8B5A8)', border: '1px solid var(--divider, rgba(232,237,231,0.06))' }}>
                   View in Xero →
                 </a>
-                <button onClick={disconnectXero} disabled={xeroDisconnecting} className="flex-1 py-2 rounded-lg text-sm disabled:opacity-50" style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444' }}>
-                  {xeroDisconnecting ? 'Disconnecting…' : 'Disconnect'}
-                </button>
+                {xero.token_expired
+                  ? <a href={business?.id ? '/api/integrations/xero/connect?business_id=' + business.id : '#'}
+                      className="flex-1 text-center py-2 rounded-lg text-sm font-medium"
+                      style={{ background: 'rgba(245,158,11,0.15)', color: '#f59e0b' }}>
+                      Reconnect →
+                    </a>
+                  : <button onClick={disconnectXero} disabled={xeroDisconnecting} className="flex-1 py-2 rounded-lg text-sm disabled:opacity-50" style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444' }}>
+                      {xeroDisconnecting ? '…' : 'Disconnect'}
+                    </button>}
               </div>
             </div>
           ) : (
             <div className="space-y-2">
               <p className="text-xs" style={{ color: 'var(--text-secondary, #A8B5A8)' }}>Connect Xero to review and approve daily sales syncs before anything is sent to your accounting.</p>
-              <a href={business?.id ? `/api/integrations/xero/connect?business_id=${business.id}` : '#'} className="block text-center py-2 rounded-lg text-sm font-medium" style={{ background: '#2D5240', color: '#7FB897' }}>
+              <a href={business?.id ? '/api/integrations/xero/connect?business_id=' + business.id : '#'} className="block text-center py-2 rounded-lg text-sm font-medium" style={{ background: '#2D5240', color: '#7FB897' }}>
                 Connect Xero →
               </a>
             </div>
@@ -391,104 +440,117 @@ export default function IntegrationsPage() {
 
       </div>
 
-      {/* Xero pending review + history */}
-      {xero?.connected && (xero.pending.length > 0 || xero.history.length > 0) && (
-        <div className="space-y-4">
-          {xero.pending.map(q => (
-            <div key={q.id} className="rounded-xl p-5 space-y-4" style={{ background: 'var(--bg-elevated, #1A2620)', border: '1px solid rgba(245,158,11,0.3)', borderLeft: '3px solid #f59e0b' }}>
-              <div className="flex items-center justify-between">
-                <p className="font-medium">Xero sync ready for {q.sync_date} — review before sending</p>
-                <span className="text-xs px-2 py-0.5 rounded" style={{ background: 'rgba(245,158,11,0.15)', color: '#f59e0b' }}>Pending review</span>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr style={{ color: 'var(--text-secondary, #A8B5A8)' }}>
-                      <th className="text-left py-1.5 font-medium">Description</th>
-                      <th className="text-right py-1.5 font-medium">Amount</th>
-                      <th className="text-right py-1.5 font-medium">GST</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {q.line_items.map((li, i) => (
-                      <tr key={i} style={{ borderTop: '1px solid var(--divider, rgba(232,237,231,0.06))' }}>
-                        <td className="py-2">{li.description}</td>
-                        <td className="py-2 text-right tabular-nums">${Number(li.unit_amount).toFixed(2)}</td>
-                        <td className="py-2 text-right tabular-nums" style={{ color: 'var(--text-secondary, #A8B5A8)' }}>${Number(li.gst ?? 0).toFixed(2)}</td>
-                      </tr>
-                    ))}
-                    <tr style={{ borderTop: '2px solid var(--divider, rgba(232,237,231,0.1))' }}>
-                      <td className="py-2 font-medium">Total</td>
-                      <td className="py-2 text-right tabular-nums font-medium">${Number(q.total_sales).toFixed(2)}</td>
-                      <td className="py-2 text-right tabular-nums font-medium" style={{ color: 'var(--text-secondary, #A8B5A8)' }}>${Number(q.total_gst).toFixed(2)}</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-              <textarea
-                placeholder="Add a note (optional — e.g. 'Includes catering event')"
-                value={xeroNotes[q.id] ?? ''}
-                onChange={e => setXeroNotes(n => ({ ...n, [q.id]: e.target.value }))}
-                rows={2}
-                className="w-full px-3 py-2 rounded-lg text-sm resize-none"
-                style={{ background: 'var(--bg-surface, #0E1812)', border: '1px solid var(--divider, rgba(232,237,231,0.08))', color: 'var(--text-primary, #E8EDE7)' }}
-              />
-              <div className="space-y-2">
-                <div className="flex gap-3">
-                  <button onClick={() => approveSync(q.id)} disabled={xeroSending === q.id}
-                    className="flex-1 py-2.5 rounded-lg text-sm font-medium disabled:opacity-50"
-                    style={{ background: '#7FB897', color: '#0E1812' }}>
-                    {xeroSending === q.id ? 'Sending…' : 'Send to Xero →'}
-                  </button>
-                  <button onClick={() => skipSync(q.id)} disabled={xeroSkipping === q.id}
-                    className="py-2.5 px-4 rounded-lg text-sm disabled:opacity-50"
-                    style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--text-secondary, #A8B5A8)' }}>
-                    {xeroSkipping === q.id ? 'Skipping…' : 'Skip today'}
-                  </button>
-                </div>
-                <p className="text-xs" style={{ color: 'var(--text-secondary, #A8B5A8)' }}>
-                  This will create an invoice in your Xero account. This cannot be undone.
+      {/* Xero previews history */}
+      {xero?.connected && (xero.previews.length > 0) && (
+        <div className="rounded-xl p-5 space-y-3" style={{ background: 'var(--bg-elevated, #1A2620)', border: '1px solid var(--divider, rgba(232,237,231,0.06))' }}>
+          <p className="font-medium text-sm">Xero Sync History</p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr style={{ color: 'var(--text-secondary, #A8B5A8)' }}>
+                  <th className="text-left py-1.5 font-medium">Date</th>
+                  <th className="text-right py-1.5 font-medium">Sales</th>
+                  <th className="text-right py-1.5 font-medium">GST</th>
+                  <th className="text-left py-1.5 font-medium pl-4">Status</th>
+                  <th className="text-right py-1.5 font-medium">Synced at</th>
+                  <th className="text-right py-1.5 font-medium"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {xero.previews.map(p => (
+                  <tr key={p.id} style={{ borderTop: '1px solid var(--divider, rgba(232,237,231,0.06))' }}>
+                    <td className="py-2">{p.date}</td>
+                    <td className="py-2 text-right tabular-nums">${Number(p.payload?.total_revenue ?? 0).toFixed(2)}</td>
+                    <td className="py-2 text-right tabular-nums" style={{ color: 'var(--text-secondary, #A8B5A8)' }}>${Number(p.payload?.total_tax ?? 0).toFixed(2)}</td>
+                    <td className="py-2 pl-4">
+                      {p.status === 'synced' ? <span className="text-emerald-400">Synced</span>
+                        : p.status === 'failed' ? <span className="text-red-400">Failed</span>
+                        : <span style={{ color: '#f59e0b' }}>Pending</span>}
+                    </td>
+                    <td className="py-2 text-right tabular-nums" style={{ color: 'var(--text-secondary, #A8B5A8)' }}>
+                      {p.synced_at ? new Date(p.synced_at).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' }) : '—'}
+                    </td>
+                    <td className="py-2 text-right">
+                      {p.status === 'pending' && (
+                        <button onClick={() => { setXeroApprovedItems(new Set((p.payload.journal_lines ?? []).map(l => l.description))); setXeroModal(p) }}
+                          className="text-xs px-2 py-0.5 rounded"
+                          style={{ background: 'rgba(127,184,151,0.15)', color: '#7FB897' }}>
+                          Review
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Xero review modal */}
+      {xeroModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: 'rgba(0,0,0,0.7)' }}
+          onClick={e => { if (e.target === e.currentTarget) setXeroModal(null) }}>
+          <div className="w-full max-w-xl rounded-2xl p-6 space-y-4"
+            style={{ background: 'var(--bg-elevated, #1A2620)', border: '1px solid var(--divider, rgba(232,237,231,0.1))' }}>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="font-semibold">Review Xero sync — {xeroModal.date}</p>
+                <p className="text-xs mt-0.5" style={{ color: 'var(--text-secondary, #A8B5A8)' }}>
+                  {xeroModal.payload.sales_count} sales · ${Number(xeroModal.payload.total_revenue).toFixed(2)} total
                 </p>
               </div>
+              <button onClick={() => setXeroModal(null)} className="text-xl leading-none" style={{ color: 'var(--text-secondary, #A8B5A8)' }}>×</button>
             </div>
-          ))}
-
-          {xero.history.length > 0 && (
-            <div className="rounded-xl p-5 space-y-3" style={{ background: 'var(--bg-elevated, #1A2620)', border: '1px solid var(--divider, rgba(232,237,231,0.06))' }}>
-              <p className="font-medium text-sm">Sync History</p>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr style={{ color: 'var(--text-secondary, #A8B5A8)' }}>
-                      <th className="text-left py-1.5 font-medium">Date</th>
-                      <th className="text-right py-1.5 font-medium">Sales</th>
-                      <th className="text-right py-1.5 font-medium">GST</th>
-                      <th className="text-left py-1.5 font-medium pl-4">Status</th>
-                      <th className="text-right py-1.5 font-medium">Sent at</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {xero.history.map(h => (
-                      <tr key={h.id} style={{ borderTop: '1px solid var(--divider, rgba(232,237,231,0.06))' }}>
-                        <td className="py-2">{h.sync_date}</td>
-                        <td className="py-2 text-right tabular-nums">${Number(h.total_sales).toFixed(2)}</td>
-                        <td className="py-2 text-right tabular-nums" style={{ color: 'var(--text-secondary, #A8B5A8)' }}>${Number(h.total_gst).toFixed(2)}</td>
-                        <td className="py-2 pl-4">
-                          {h.status === 'sent' ? <span className="text-emerald-400">✅ Sent</span>
-                            : h.status === 'skipped' ? <span style={{ color: 'var(--text-secondary, #A8B5A8)' }}>⏭ Skipped</span>
-                            : h.status === 'failed' ? <span className="text-red-400">❌ Failed</span>
-                            : <span>{h.status}</span>}
-                        </td>
-                        <td className="py-2 text-right tabular-nums" style={{ color: 'var(--text-secondary, #A8B5A8)' }}>
-                          {h.sent_at ? new Date(h.sent_at).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' }) : '—'}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+            <p className="text-xs" style={{ color: 'var(--text-secondary, #A8B5A8)' }}>
+              Toggle line items to include or exclude from the Xero manual journal entry.
+            </p>
+            <div className="space-y-2 max-h-64 overflow-y-auto">
+              {(xeroModal.payload.journal_lines ?? []).map((l, i) => {
+                const checked = xeroApprovedItems.has(l.description)
+                return (
+                  <label key={i} className="flex items-center gap-3 p-3 rounded-lg cursor-pointer"
+                    style={{ background: checked ? 'rgba(127,184,151,0.06)' : 'rgba(255,255,255,0.02)', border: '1px solid ' + (checked ? 'rgba(127,184,151,0.2)' : 'rgba(255,255,255,0.04)') }}>
+                    <input type="checkbox" checked={checked}
+                      onChange={() => {
+                        setXeroApprovedItems(prev => {
+                          const n = new Set(prev)
+                          if (n.has(l.description)) n.delete(l.description)
+                          else n.add(l.description)
+                          return n
+                        })
+                      }}
+                      className="w-4 h-4 accent-emerald-500" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm truncate">{l.description}</p>
+                      <p className="text-xs mt-0.5" style={{ color: 'var(--text-secondary, #A8B5A8)' }}>
+                        Account {l.account_code} · {l.type === 'debit' ? 'DR' : 'CR'} ${Number(l.amount).toFixed(2)}
+                      </p>
+                    </div>
+                    <span className="text-sm font-medium tabular-nums"
+                      style={{ color: l.type === 'debit' ? '#7FB897' : 'var(--text-secondary, #A8B5A8)' }}>
+                      ${Number(l.amount).toFixed(2)}
+                    </span>
+                  </label>
+                )
+              })}
             </div>
-          )}
+            <div className="flex gap-3 pt-2">
+              <button onClick={approvePreview} disabled={xeroApproving || xeroApprovedItems.size === 0}
+                className="flex-1 py-2.5 rounded-xl text-sm font-semibold disabled:opacity-50"
+                style={{ background: '#7FB897', color: '#0E1812' }}>
+                {xeroApproving ? 'Pushing to Xero…' : 'Push to Xero (' + xeroApprovedItems.size + ' items)'}
+              </button>
+              <button onClick={() => setXeroModal(null)} className="py-2.5 px-4 rounded-xl text-sm"
+                style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--text-secondary, #A8B5A8)' }}>
+                Cancel
+              </button>
+            </div>
+            <p className="text-xs" style={{ color: 'var(--text-secondary, #A8B5A8)' }}>
+              This creates a manual journal in Xero. Cannot be undone from here — use Xero to reverse if needed.
+            </p>
+          </div>
         </div>
       )}
 

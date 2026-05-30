@@ -17,13 +17,18 @@ async function _GET(req: Request) {
 
   const { data: biz } = await supabase
     .from('businesses')
-    .select('id, xero_access_token, xero_connected_at')
+    .select('id, xero_access_token, xero_connected_at, xero_token_expires_at, xero_auto_sync')
     .eq('id', business_id)
     .eq('user_id', user.id)
     .single()
   if (!biz) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  const [{ data: pending }, { data: history }] = await Promise.all([
+  const connected = !!biz.xero_access_token
+  const token_expired = connected && biz.xero_token_expires_at
+    ? new Date(biz.xero_token_expires_at as string) < new Date()
+    : false
+
+  const [{ data: queuePending }, { data: queueHistory }, { data: previews }] = await Promise.all([
     supabaseAdmin
       .from('xero_sync_queue')
       .select('id, sync_date, status, line_items, total_sales, total_gst, total_refunds, payment_breakdown, prepared_at, notes')
@@ -38,13 +43,22 @@ async function _GET(req: Request) {
       .neq('status', 'pending_review')
       .order('sync_date', { ascending: false })
       .limit(30),
+    supabaseAdmin
+      .from('xero_sync_previews')
+      .select('id, date, status, payload, synced_at, xero_journal_id, created_at')
+      .eq('business_id', business_id)
+      .order('date', { ascending: false })
+      .limit(30),
   ])
 
   return NextResponse.json({
-    connected: !!biz.xero_access_token,
+    connected,
+    token_expired,
     connected_at: biz.xero_connected_at,
-    pending: pending ?? [],
-    history: history ?? [],
+    auto_sync: biz.xero_auto_sync ?? false,
+    pending: queuePending ?? [],
+    history: queueHistory ?? [],
+    previews: previews ?? [],
   })
 }
 
@@ -70,6 +84,7 @@ async function _DELETE(req: Request) {
     xero_refresh_token: null,
     xero_tenant_id: null,
     xero_connected_at: null,
+    xero_token_expires_at: null,
   }).eq('id', biz.id)
 
   return NextResponse.json({ ok: true })
