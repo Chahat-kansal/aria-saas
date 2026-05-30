@@ -1,10 +1,10 @@
 # Aria OS Audit State
 
 ## Last updated
-2026-05-31 — Session 2 Batch E complete
+2026-05-31 — Session 2 Batch G complete (ALL pos/ routes done)
 
 ## Status
-IN PROGRESS — src/app/api/pos/ Batch E complete (online → products)
+COMPLETE — src/app/api/pos/ all ~120 route files audited (Batches A–G)
 
 ## Completed sections
 - [x] src/app/api/aria/ — all ~47 route files audited
@@ -15,7 +15,7 @@ IN PROGRESS — src/app/api/pos/ Batch E complete (online → products)
 - [x] src/app/api/pos/ Batch E — online, orders (3 files), orders/receive, orders/schedule, orders/[id]/lines (2 files), outlet-tax-overrides, outlets/[id], park, permissions/outlet-overlay, price-points, price-tickets, product-batches, product-intelligence, products/backfill-images, products/[id] (3 files)
 
 ## Current position
-Next: src/app/api/pos/ Batch F (promotions → sales)
+Next: src/app/api/public/ (~30 route files)
 
 ## Issues found (running log)
 | File | Type | Issue | Fixed? | Commit |
@@ -32,6 +32,11 @@ Next: src/app/api/pos/ Batch F (promotions → sales)
 | src/app/api/pos/customers/[id]/route.ts | Wrong columns | `pos_sales.points_earned, points_redeemed` don't exist → removed from select | YES | dd2988e9 |
 | src/app/api/pos/laybys/route.ts | Wrong table join + missing FK | `customers(name,phone)` → `pos_customers(name,phone)`; added FK pos_laybys.customer_id → pos_customers.id | YES | 0630d77c |
 | src/app/api/pos/inventory/route.ts | Wrong column | `pos_outlet_inventory.stock_quantity` doesn't exist → `items_on_hand` (4 occurrences: order, select, read, upsert) | YES | 12971389 |
+| src/app/api/pos/reports/closure/[id]/route.ts | Wrong column | `pos_sale_items.total_price` doesn't exist → removed from select (correct column is `line_total`) | YES | 447a71c1 |
+| src/app/api/pos/shift-reports/route.ts | Wrong table + column | `pos_timesheet_sessions` doesn't exist → `pos_timesheets`; `total_minutes` doesn't exist → `hours_worked` (already in hours, removed /60 conversion) | YES | 5e694eaf |
+| src/app/api/pos/transfer-reports/route.ts | Wrong table + invalid join | `pos_stock_transfers` doesn't exist → `pos_inventory_transfers`; removed `pos_products(name)` join (no FK from pos_inventory_transfers to pos_products) | YES | b1f41112 |
+| src/app/api/pos/xero-sync/route.ts | Wrong column | `pos_sales.total` doesn't exist → `total_amount` (2 occurrences: select + reduce) | YES | 3aaaba87 |
+| src/app/api/pos/variants/route.ts | Wrong table + invalid join | `pos_product_modifiers` doesn't exist → `pos_product_modifier_groups`; `pos_modifiers(*)` → `pos_modifier_groups(*)` (FK is group_id → pos_modifier_groups) | YES | 78338351 |
 
 ## Known already-fixed issues (do not re-fix)
 | File | Issue | Fixed in |
@@ -85,9 +90,44 @@ inventory, kds, kds/all-day, kds/tickets/[id]/refire, laybys (after fix),
 loyalty/redeem, manager-verify, media, migrate/[source], missed-demand,
 mobile-session/[id]/submit, modifiers, modifiers/[id]
 
+## Routes confirmed CLEAN in src/app/api/pos/ Batch F (Session 2)
+promotions, promotions/[id], purchase-orders (2 files), receipts, register-close,
+register-open, registers, reports/closure/[id] (after fix),
+sale-keys, sales/draft, sales/draft/[sale_id]/promote, sales/draft/[sale_id]/void,
+sales/return, sales/[id], sales/[id]/refund, sales/[id]/reopen, sales/[id]/reprint,
+sales/[id]/split, sales/[id]/void, sales,
+scan-and-go/redeem, scan-and-go/complete,
+scheduled-cost-changes, scheduled-price-changes, seed-cafe-products, settings,
+sessions, shift-audits,
+shift-reports (after fix), shift-reports/staff-hours, shift-reports/payroll-export,
+split-groups, split-groups/[id], split-groups/[id]/history, split-groups/[id]/members,
+split-groups/[id]/members/[member_id],
+split-ious, split-ious/simplify, split-ious/[id], split-ious/[id]/settle,
+split-ious/[id]/dispute, split-ious/[id]/resolve-dispute,
+splits, splits/[id], splits/[id]/pay, splits/[id]/void, splits/[id]/receipt,
+splits/[id]/combine, splits/[id]/reassign-item,
+splits/ai-suggest, splits/ai-suggest/confirm,
+splits/ocr, splits/ocr/from-scan, splits/ocr/[scan_id],
+staff, staff-leave, staff-performance, staff-shifts,
+stock/adjust, stock-takes, store-credits, suppliers, suppliers/integrations,
+surcharge-rules, sync-offline, timesheets
+
+## Routes confirmed CLEAN in src/app/api/pos/ Batch G (Session 2)
+tables, tables/[id], tables/[id]/seat, tables/[id]/clear,
+tax-codes, tax-codes/[id], tax-holidays,
+timesheets/export, timed-prices,
+transfer-reports (after fix), transfers/history, transfers/[id]/items,
+transfers/[id]/transition, transfers,
+users, users/[id], users/me-permissions, users/verify-pin, users/verify-override,
+variant-groups, variant-groups/[id],
+variants (after fix), variance-intelligence,
+warehouse/replenish,
+xero-sync (after fix), xero-sync/prepare, xero-sync/approve,
+waste
+
 ## Sections remaining
 - [x] src/app/api/aria/ (~47 route files) ← DONE Session 1
-- [~] src/app/api/pos/ (~80 route files) — Batches A-E done, Batch F next (promotions → sales)
+- [x] src/app/api/pos/ (~120 route files) ← DONE Session 2 (Batches A–G)
 - [ ] src/app/api/public/ (~30 route files)
 - [ ] src/app/api/social/ (~20 route files)
 - [ ] src/app/api/reports/ (~10 route files)
