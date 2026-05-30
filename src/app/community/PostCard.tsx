@@ -1,7 +1,7 @@
 'use client'
 import { useState, Fragment } from 'react'
 import Link from 'next/link'
-import { Heart, MessageCircle, MoreHorizontal, BadgeCheck, EyeOff } from 'lucide-react'
+import { Heart, MessageCircle, MoreHorizontal, BadgeCheck, EyeOff, Play } from 'lucide-react'
 import { PALETTE, BORDER, RADIUS } from './theme'
 
 export interface PostCardData {
@@ -114,6 +114,7 @@ export function PostCard({ post, onAfterAction, onHideBusiness, showHide = true 
   }
 
   const isVideo = post.media_type === 'video' || post.media_type === 'reel'
+  const isReel = post.media_type === 'reel'
   const firstMedia = post.media_urls?.[0]
   const meta = [post.business?.suburb ?? post.business?.city ?? post.business?.industry].filter(Boolean).join('')
   const badge = BADGE_LABEL[post.post_type]
@@ -170,10 +171,20 @@ export function PostCard({ post, onAfterAction, onHideBusiness, showHide = true 
         </div>
       </header>
 
-      {/* Hero — full-bleed, 148px */}
+      {/* Hero — full-bleed */}
       {firstMedia && (
         <div style={{ position: 'relative', width: '100%', aspectRatio: '4/5', background: PALETTE.ink, overflow: 'hidden' }}>
-          {isVideo ? (
+          {isReel ? (
+            <Link href="/community/reels" prefetch={false} style={{ display: 'block', position: 'absolute', inset: 0, textDecoration: 'none' }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={post.media_urls[1] ?? firstMedia} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.22)' }}>
+                <div style={{ width: 52, height: 52, borderRadius: '50%', background: 'rgba(255,255,255,0.92)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Play size={22} color={PALETTE.ink} fill={PALETTE.ink} style={{ marginLeft: 3 }} />
+                </div>
+              </div>
+            </Link>
+          ) : isVideo ? (
             <video src={firstMedia} muted playsInline preload="metadata" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           ) : (
             // eslint-disable-next-line @next/next/no-img-element

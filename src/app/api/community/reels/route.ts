@@ -63,6 +63,7 @@ export async function GET(req: Request) {
       title: r.title,
       body: r.body,
       video_url: r.media_urls?.[0] ?? null,
+      thumbnail_url: r.media_urls?.[1] ?? null,
       published_at: r.published_at,
       counts: counts[r.id] ?? { like: 0, comment: 0, save: 0 },
       mine: mineMap[r.id] ?? { liked: false, saved: false },

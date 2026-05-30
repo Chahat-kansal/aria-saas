@@ -199,7 +199,6 @@ function VideoPlayer({ videoRef, src, muted, onToggleMute, poster }: {
       loop
       muted={muted}
       playsInline
-      crossOrigin="anonymous"
       poster={poster}
       preload="metadata"
       onError={() => setFailed(true)}
