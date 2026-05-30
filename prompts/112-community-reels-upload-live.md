@@ -26,7 +26,7 @@ BUNNY_STREAM_LIBRARY_ID     # Bunny Stream → your library → Library ID
 BUNNY_STREAM_CDN_HOSTNAME   # Bunny Stream → your library → Pull Zone hostname (e.g. vz-abc123.b-cdn.net)
 CLOUDFLARE_ACCOUNT_ID       # Cloudflare dashboard → right sidebar → Account ID
 CLOUDFLARE_STREAM_API_TOKEN # Cloudflare → My Profile → API Tokens → Create Token → Stream:Edit
-NEXT_PUBLIC_CLOUDFLARE_CUSTOMER_SUBDOMAIN  # Cloudflare Stream → your stream → customer subdomain (e.g. customer-abc123.cloudflarestream.com)
+# NEXT_PUBLIC_CLOUDFLARE_CUSTOMER_SUBDOMAIN — NOT NEEDED. Subdomain is returned dynamically in the API response (hls/dash URLs) — read it from there.
 ```
 
 Install packages:
@@ -435,6 +435,7 @@ CREATE TABLE IF NOT EXISTS community_live_streams (
   cf_stream_uid text NOT NULL,
   cf_playback_hls text NOT NULL,
   cf_whip_url text NOT NULL,
+  cf_customer_subdomain text,
   status text DEFAULT 'active' CHECK (status IN ('active', 'ended')),
   title text,
   started_at timestamptz DEFAULT now(),
