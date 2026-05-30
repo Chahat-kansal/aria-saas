@@ -126,7 +126,7 @@ async function _GET(req: Request) {
   // Get all active businesses (not just Square — for intelligence events)
   const { data: businesses } = await supabaseAdmin
     .from('businesses')
-    .select('id, square_connected')
+    .select('id, square_connected, basiq_user_id')
     .eq('is_active', true);
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? '';
@@ -144,6 +144,21 @@ async function _GET(req: Request) {
           const err = await res.json().catch(() => ({}));
           errors.push({ business_id: biz.id, error: err.error ?? 'Sync failed' });
         }
+      }
+
+      // Basiq bank transaction sync (fire-and-forget, non-critical)
+      if ((biz as any).basiq_user_id) {
+        try {
+          await fetch(`${appUrl}/api/integrations/basiq/sync-transactions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ business_id: biz.id }),
+          })
+          // Warm the cash-flow cache after sync
+          fetch(`${appUrl}/api/pos/cash-flow/analysis?period=30d`, {
+            headers: { 'x-business-id': biz.id },
+          }).catch(() => { /* non-critical */ })
+        } catch { /* non-critical */ }
       }
 
       // Pre-generate tomorrow's briefing so it loads instantly at 8am

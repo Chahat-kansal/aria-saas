@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useBusinessContext } from '@/components/providers/BusinessProvider'
 import { AriaSays } from '@/components/dashboard/AriaSays'
+import BankTab from './BankTab'
 
 interface BankAccount { id: string; account_name: string | null; institution_name: string | null; balance: number | null; last_synced_at: string | null }
 interface BankStatus { connected: boolean; accounts: BankAccount[]; total_balance: number }
@@ -31,6 +32,7 @@ const DEFAULT_EXPENSES: ManualExpense[] = [
 
 export default function CashFlowPage() {
   const { business } = useBusinessContext()
+  const [activeTab, setActiveTab] = useState<'forecast' | 'bank'>('forecast')
   const [bank, setBank] = useState<BankStatus | null>(null)
   const [bankSyncing, setBankSyncing] = useState(false)
   const [days, setDays] = useState<DayForecast[]>([])
@@ -187,13 +189,28 @@ export default function CashFlowPage() {
   return (
     <div style={{ minHeight: '100%', background: C.bg, color: C.text, fontFamily: "'Inter',sans-serif", padding: '24px 28px' }}>
       <AriaSays businessId={business?.id ?? null} page="cash-flow" pageData={negativeDip ? { negative_day: negativeDip.date, cumulative_at_dip: negativeDip.cumulative } : undefined} />
-      {bank !== null && !bank?.connected && (
+
+      {/* Tab switcher */}
+      <div style={{ display: 'flex', gap: 4, marginBottom: 24, background: 'rgba(255,255,255,0.03)', borderRadius: 10, padding: 4, width: 'fit-content' }}>
+        {([['forecast', 'Forecast'], ['bank', 'Bank Feed']] as const).map(([t, label]) => (
+          <button key={t} onClick={() => setActiveTab(t)}
+            style={{ padding: '7px 18px', borderRadius: 7, border: 'none', background: activeTab === t ? C.card : 'transparent', color: activeTab === t ? C.text : C.muted, fontSize: 12, fontWeight: activeTab === t ? 700 : 400, cursor: 'pointer', fontFamily: 'inherit', boxShadow: activeTab === t ? '0 1px 4px rgba(0,0,0,0.3)' : 'none' }}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === 'bank' && (
+        <BankTab businessId={business?.id ?? null} connected={bank?.connected ?? false} />
+      )}
+
+      {activeTab === 'forecast' && bank !== null && !bank?.connected && (
         <div style={{ marginBottom: 18, padding: '12px 16px', borderRadius: 12, background: 'rgba(96,165,250,0.06)', border: '1px solid rgba(96,165,250,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
           <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)', margin: 0 }}>🏦 Connect your bank to see live balance alongside your cash-flow forecast.</p>
           <a href="/dashboard/integrations#bank" style={{ fontSize: 12, fontWeight: 700, color: '#60A5FA', textDecoration: 'none', padding: '6px 14px', borderRadius: 7, border: '1px solid rgba(96,165,250,0.3)', background: 'rgba(96,165,250,0.08)', whiteSpace: 'nowrap' }}>Connect bank →</a>
         </div>
       )}
-      {bank?.connected && (
+      {activeTab === 'forecast' && bank?.connected && (
         <div style={{ marginBottom: 18, padding: 16, borderRadius: 12, background: 'rgba(127,184,151,0.06)', border: '1px solid rgba(127,184,151,0.25)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10, gap: 12, flexWrap: 'wrap' }}>
             <div>
@@ -212,7 +229,7 @@ export default function CashFlowPage() {
           </div>
         </div>
       )}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
+      {activeTab === 'forecast' && <><div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>Cash Flow Forecast</h1>
           <p style={{ fontSize: 13, color: C.muted }}>
@@ -393,7 +410,7 @@ export default function CashFlowPage() {
       <div style={{ marginTop: 20, padding: '12px 16px', background: 'rgba(255,255,255,0.02)', borderRadius: 10, fontSize: 11, color: C.dim }}>
         Scenarios: <b style={{ color: C.green }}>Optimistic</b> +20%, <b style={{ color: C.amber }}>Base</b> historical average, <b style={{ color: C.red }}>Pessimistic</b> -25%.
         {usingManualExpenses ? ' Expenses from your manual entries.' : ' Expenses estimated at 68% of revenue — click ⚙ Expenses to enter real costs.'}
-      </div>
+      </div></>}
     </div>
   )
 }
