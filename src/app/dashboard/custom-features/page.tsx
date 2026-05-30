@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useBusinessContext } from '@/components/providers/BusinessProvider';
 import FeatureRenderer, { type BusinessFeature } from '@/components/features/FeatureRenderer';
 import { FeaturesExtensions } from '@/components/dashboard/Prompt55Extensions';
+import { apiFetch } from '@/lib/api/client';
 
 type FeatureConfig = Record<string, unknown>;
 
@@ -28,9 +29,9 @@ export default function CustomFeaturesPage() {
   const load = useCallback(async () => {
     if (!business?.id) return;
     try {
-      const res = await fetch(`/api/business-features?business_id=${business.id}`);
-      if (res.ok) { const d = await res.json(); setFeatures(d.features ?? []); }
-    } catch { /* silent */ }
+      const d = await apiFetch<{ features: BusinessFeature[] }>(`/api/business-features?business_id=${business.id}`);
+      setFeatures(d.features ?? []);
+    } catch { /* apiFetch emits toast on error */ }
     setLoading(false);
   }, [business?.id]);
 
