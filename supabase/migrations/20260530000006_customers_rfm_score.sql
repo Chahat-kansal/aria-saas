@@ -1,0 +1,1 @@
+ALTER TABLE customers ADD COLUMN IF NOT EXISTS rfm_score_numeric integer DEFAULT NULL;

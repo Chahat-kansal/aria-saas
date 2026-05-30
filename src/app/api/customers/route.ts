@@ -8,7 +8,7 @@ import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 const PAGE_SIZE = 50
 
-const SELECT = 'id, business_id, name, email, phone, company, address, city, postcode, tags, notes, source, customer_segment, churn_risk, visit_count, total_spent, total_spend, last_visit, ai_summary, ai_summary_at, archived, created_at, updated_at'
+const SELECT = 'id, business_id, name, email, phone, company, address, city, postcode, tags, notes, source, customer_segment, churn_risk, visit_count, total_spent, total_spend, last_visit, ai_summary, ai_summary_at, archived, rfm_score_numeric, created_at, updated_at'
 
 async function _GET(req: Request) {
   const supabase = createServerSupabaseClient()
@@ -25,7 +25,13 @@ async function _GET(req: Request) {
   const q = searchParams.get('q') ?? ''
   const archived = searchParams.get('archived') === 'true'
   const segment = searchParams.get('segment') ?? ''
+  const churn_risk = searchParams.get('churn_risk') ?? ''
+  const sort_by = searchParams.get('sort_by') ?? 'created_at'
+  const sort_dir = searchParams.get('sort_dir') === 'asc'
   const page = Math.max(0, parseInt(searchParams.get('page') ?? '0'))
+
+  const allowed_sorts = ['created_at', 'name', 'total_spent', 'total_spend', 'visit_count', 'last_visit', 'rfm_score_numeric']
+  const safe_sort = allowed_sorts.includes(sort_by) ? sort_by : 'created_at'
 
   let query = supabaseAdmin
     .from('customers')
@@ -35,11 +41,50 @@ async function _GET(req: Request) {
 
   if (q) query = query.or(`name.ilike.%${q}%,email.ilike.%${q}%,phone.ilike.%${q}%`)
   if (segment) query = query.eq('customer_segment', segment)
-  query = query.order('created_at', { ascending: false }).range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)
+  if (churn_risk) query = query.eq('churn_risk', churn_risk)
+  query = query.order(safe_sort, { ascending: sort_dir }).range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)
 
   const { data, error } = await query
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ customers: data ?? [], page, page_size: PAGE_SIZE })
+
+  const customers = data ?? []
+
+  // Merge pos_customers loyalty data by email/phone
+  const emails = customers.filter(c => c.email).map(c => c.email as string)
+  const phones = customers.filter(c => c.phone).map(c => c.phone as string)
+  const posMap = new Map<string, { loyalty_points: number | null; total_spent: number | null; visit_count: number | null; last_visit_at: string | null }>()
+
+  if (emails.length > 0) {
+    const { data: byEmail } = await supabaseAdmin
+      .from('pos_customers')
+      .select('email, loyalty_points, total_spent, visit_count, last_visit_at')
+      .eq('business_id', business_id)
+      .in('email', emails)
+    for (const p of byEmail ?? []) { if (p.email) posMap.set(p.email, p) }
+  }
+  if (phones.length > 0) {
+    const { data: byPhone } = await supabaseAdmin
+      .from('pos_customers')
+      .select('phone, loyalty_points, total_spent, visit_count, last_visit_at')
+      .eq('business_id', business_id)
+      .in('phone', phones)
+    for (const p of byPhone ?? []) {
+      if (p.phone && !posMap.has(p.phone)) posMap.set(p.phone, p)
+    }
+  }
+
+  const merged = customers.map(c => {
+    const pos = posMap.get(c.email ?? '') ?? posMap.get(c.phone ?? '') ?? null
+    return {
+      ...c,
+      loyalty_points: pos?.loyalty_points ?? null,
+      total_spent: c.total_spent ?? c.total_spend ?? pos?.total_spent ?? 0,
+      visit_count: c.visit_count ?? pos?.visit_count ?? 0,
+      last_visit: c.last_visit ?? pos?.last_visit_at ?? null,
+    }
+  })
+
+  return NextResponse.json({ customers: merged, page, page_size: PAGE_SIZE })
 }
 
 async function _POST(req: Request) {
