@@ -1,14 +1,101 @@
 'use client';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 
 interface Ingredient { item: string; quantity: string; unit: string; }
 interface ExtractedRecipe { title: string; ingredients: Ingredient[]; steps: string[]; }
 interface ImportRow { id: string; source_url: string; source_type: string; extracted_title: string | null; status: string; created_at: string; }
 interface ExistingRecipe { id: string; name: string; }
+interface FileImportRow { id: string; file_name: string; rows_imported: number; rows_failed: number; imported_at: string; }
 
 const inputCls = 'w-full px-3 py-2 rounded-xl text-sm text-white outline-none bg-[rgba(255,255,255,0.06)] border border-[rgba(255,255,255,0.08)] focus:border-[rgba(29,158,117,0.4)]';
+const accentGreen = '#1D9E75';
 
-export default function RecipeImportTab({ businessId, existingRecipes }: { businessId: string; existingRecipes: ExistingRecipe[] }) {
+function FileImportSection({ businessId, onImported }: { businessId: string; onImported: () => void }) {
+  const [dragging, setDragging] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [result, setResult] = useState<{ imported: number; failed: number; recipes: { name: string }[] } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [history, setHistory] = useState<FileImportRow[]>([]);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const loadHistory = useCallback(async () => {
+    const d = await fetch(`/api/pos/recipes/import?business_id=${businessId}`).then(r => r.json()).catch(() => ({}));
+    setHistory(d.imports ?? []);
+  }, [businessId]);
+
+  useEffect(() => { loadHistory(); }, [loadHistory]);
+
+  async function uploadFile(file: File) {
+    setUploading(true); setError(null); setResult(null);
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('business_id', businessId);
+    try {
+      const res = await fetch('/api/pos/recipes/import', { method: 'POST', body: fd }).then(r => r.json());
+      if (res.error) { setError(res.error); }
+      else { setResult(res); loadHistory(); onImported(); }
+    } catch { setError('Upload failed — please try again.'); }
+    setUploading(false);
+  }
+
+  function onDrop(e: React.DragEvent) {
+    e.preventDefault(); setDragging(false);
+    const file = e.dataTransfer.files[0];
+    if (file) uploadFile(file);
+  }
+
+  return (
+    <div className="rounded-xl p-5 space-y-4" style={{ background: '#13131a', border: '1px solid rgba(255,255,255,0.07)' }}>
+      <div>
+        <h3 className="text-white font-medium mb-0.5">Import recipes from file</h3>
+        <p className="text-xs" style={{ color: '#6b7280' }}>Upload a CSV, PDF, or photo. Aria extracts recipes automatically.</p>
+      </div>
+      <div
+        onDragOver={e => { e.preventDefault(); setDragging(true); }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={onDrop}
+        onClick={() => fileRef.current?.click()}
+        className="rounded-xl flex flex-col items-center justify-center gap-2 cursor-pointer transition-colors"
+        style={{ height: 110, border: `2px dashed ${dragging ? accentGreen : 'rgba(255,255,255,0.12)'}`, background: dragging ? 'rgba(29,158,117,0.06)' : 'rgba(255,255,255,0.02)' }}>
+        <input ref={fileRef} type="file" accept=".csv,.pdf,image/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) uploadFile(f); e.target.value = ''; }} />
+        {uploading ? (
+          <span className="flex items-center gap-2 text-sm" style={{ color: accentGreen }}>
+            <span className="inline-block w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" /> Importing…
+          </span>
+        ) : (
+          <>
+            <span className="text-2xl">📄</span>
+            <span className="text-sm font-medium text-white">Drop file or click to browse</span>
+            <span className="text-xs" style={{ color: '#6b7280' }}>CSV · PDF · JPG · PNG</span>
+          </>
+        )}
+      </div>
+      {error && <p className="text-xs px-3 py-2 rounded-lg" style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444' }}>{error}</p>}
+      {result && (
+        <div className="text-xs px-3 py-2 rounded-lg" style={{ background: 'rgba(29,158,117,0.1)', color: accentGreen }}>
+          ✓ Imported {result.imported} recipe{result.imported !== 1 ? 's' : ''}
+          {result.failed > 0 && <span style={{ color: '#f59e0b' }}> · {result.failed} failed</span>}
+          {result.recipes.length > 0 && <span className="block mt-0.5" style={{ color: '#d1d5db' }}>{result.recipes.map(r => r.name).join(', ')}</span>}
+        </div>
+      )}
+      {history.length > 0 && (
+        <div>
+          <p className="text-xs font-medium uppercase tracking-wider mb-2" style={{ color: '#6b7280' }}>File import history</p>
+          <div className="space-y-1.5">
+            {history.map(h => (
+              <div key={h.id} className="flex items-center justify-between gap-3 rounded-lg px-3 py-2" style={{ background: 'rgba(255,255,255,0.04)' }}>
+                <span className="text-sm text-white truncate">{h.file_name}</span>
+                <span className="text-xs shrink-0" style={{ color: '#6b7280' }}>{h.rows_imported} imported{h.rows_failed > 0 ? ` · ${h.rows_failed} failed` : ''} · {new Date(h.imported_at).toLocaleDateString('en-AU')}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function RecipeImportTab({ businessId, existingRecipes, onImported }: { businessId: string; existingRecipes: ExistingRecipe[]; onImported?: () => void }) {
   const [url, setUrl] = useState('');
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
@@ -91,6 +178,9 @@ export default function RecipeImportTab({ businessId, existingRecipes }: { busin
 
   return (
     <div className="space-y-6">
+      {/* File upload (CSV / PDF / image) */}
+      <FileImportSection businessId={businessId} onImported={onImported ?? (() => {})} />
+
       {/* URL input */}
       <div className="rounded-xl p-5 space-y-3" style={{ background: '#13131a', border: '1px solid rgba(255,255,255,0.07)' }}>
         <div>

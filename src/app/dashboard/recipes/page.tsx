@@ -8,8 +8,8 @@ import WasteModal from '@/components/dashboard/RecipeWasteModal';
 import ProductionTab from '@/components/dashboard/RecipeProductionTab';
 import InsightsTab from '@/components/dashboard/RecipeInsightsTab';
 
-interface Ingredient { id?: string; ingredient_name: string; quantity: number; unit: string; cost_cents?: number | null; cost_per_unit?: number | null; supplier_id?: string | null; allergens?: string[]; notes?: string | null; }
-interface Recipe { id: string; name: string; description: string | null; category: string | null; serves: number; prep_time_minutes: number | null; sell_price_cents: number | null; cost_cents: number | null; cost_per_serve?: number | null; menu_price?: number | null; margin_percent?: number | null; allergens?: string[] | null; linked_product_id?: string | null; notes: string | null; is_active: boolean; recipe_ingredients: Ingredient[]; }
+interface Ingredient { id?: string; ingredient_name: string; quantity: number; unit: string; cost_cents?: number | null; cost_per_unit?: number | null; supplier_id?: string | null; allergens?: string[]; notes?: string | null; product_id?: string | null; }
+interface Recipe { id: string; name: string; description: string | null; category: string | null; serves: number; prep_time_minutes: number | null; sell_price_cents: number | null; cost_cents: number | null; cost_per_serve?: number | null; menu_price?: number | null; margin_percent?: number | null; margin?: number | null; allergens?: string[] | null; linked_product_id?: string | null; notes: string | null; is_active: boolean; recipe_ingredients: Ingredient[]; total_cost?: number | null; yield_qty?: number | null; yield_unit?: string | null; source?: string | null; }
 
 const UNITS = ['g', 'kg', 'ml', 'L', 'each', 'tsp', 'tbsp', 'cup', 'slice'];
 const CATEGORIES = ['coffee', 'food', 'drink', 'cocktail', 'juice', 'other'];
@@ -36,6 +36,8 @@ export default function RecipesPage() {
   const [products, setProducts] = useState<{ id: string; name: string }[]>([]);
   const [scaleModal, setScaleModal] = useState<Recipe | null>(null);
   const [wasteModal, setWasteModal] = useState<Recipe | null>(null);
+  const [detailModal, setDetailModal] = useState<Recipe | null>(null);
+  const [recalculating, setRecalculating] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!business?.id) return;
@@ -169,6 +171,17 @@ export default function RecipesPage() {
     load();
   }
 
+  async function recalcCost(id: string) {
+    setRecalculating(id);
+    try {
+      const res = await fetch(`/api/pos/recipes/${id}/cost`).then(r => r.json());
+      if (res.total_cost != null) {
+        setRecipes(prev => prev.map(r => r.id === id ? { ...r, total_cost: res.total_cost, margin: res.margin ?? r.margin } : r));
+      }
+    } catch { /* ignore */ }
+    setRecalculating(null);
+  }
+
   function updateIng(index: number, field: string, value: any) {
     setForm(f => ({ ...f, ingredients: f.ingredients.map((ing, i) => i === index ? { ...ing, [field]: value } : ing) }));
   }
@@ -253,15 +266,29 @@ export default function RecipesPage() {
         </div>
       )}
 
+      {/* Low margin alert */}
+      {activeTab === 'recipes' && recipes.some(r => {
+        const cost = r.total_cost ?? (r.cost_cents != null ? r.cost_cents / 100 : null);
+        const price = r.menu_price ?? (r.sell_price_cents != null ? r.sell_price_cents / 100 : null);
+        return cost != null && price != null && price > 0 && ((price - cost) / price) * 100 < 30;
+      }) && (
+        <div className="mb-4 rounded-xl px-4 py-3 flex items-center gap-3" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}>
+          <span className="text-lg">⚠️</span>
+          <p className="text-sm text-white">Some recipes have <strong style={{ color: '#ef4444' }}>low margin (&lt;30%)</strong> — check costs and pricing.</p>
+        </div>
+      )}
+
       {activeTab === 'recipes' && (
         recipes.length === 0 ? (
           <div className="rounded-xl p-10 text-center" style={{ background: '#13131a', border: '1px solid rgba(255,255,255,0.07)' }}>
             <div className="text-3xl mb-3">🍳</div>
             <p className="font-semibold text-white mb-1">No recipes yet</p>
-            <p className="text-sm mb-4" style={{ color: '#6b7280' }}>Add your first recipe or get Aria to suggest some based on your stock.</p>
-            <div className="flex items-center justify-center gap-2">
+            <p className="text-sm mb-4" style={{ color: '#6b7280' }}>Import your first recipe — CSV, PDF, or photo — or add manually.</p>
+            <div className="flex items-center justify-center gap-2 flex-wrap">
+              <button onClick={() => setActiveTab('import')}
+                className="px-4 py-2 rounded-xl text-sm font-medium text-white" style={{ background: '#1D9E75' }}>Import recipe</button>
               <button onClick={() => { setForm({ ...BLANK_RECIPE }); setShowForm(true); }}
-                className="px-4 py-2 rounded-xl text-sm font-medium text-white" style={{ background: '#1D9E75' }}>Add recipe</button>
+                className="px-4 py-2 rounded-xl text-sm font-medium" style={{ background: 'rgba(255,255,255,0.06)', color: '#9ca3af' }}>Add manually</button>
               <button onClick={getSuggestions} disabled={suggesting}
                 className="px-4 py-2 rounded-xl text-sm font-medium"
                 style={{ background: 'rgba(29,158,117,0.1)', color: '#1D9E75', border: '1px solid rgba(29,158,117,0.2)' }}>
@@ -297,6 +324,8 @@ export default function RecipesPage() {
                         </p>
                       )}
                     </div>
+                    <button onClick={() => setDetailModal(r)} className="text-xs px-2 py-1 rounded-lg" style={{ background: 'rgba(127,184,151,0.1)', color: '#7FB897' }}>Detail</button>
+                    <button onClick={() => recalcCost(r.id)} disabled={recalculating === r.id} className="text-xs px-2 py-1 rounded-lg disabled:opacity-40" style={{ background: 'rgba(29,158,117,0.1)', color: '#1D9E75' }}>{recalculating === r.id ? '…' : '↻ Costs'}</button>
                     <button onClick={() => setScaleModal(r)} className="text-xs px-2 py-1 rounded-lg" style={{ background: 'rgba(59,130,246,0.1)', color: '#3b82f6' }}>Scale</button>
                     <button onClick={() => setWasteModal(r)} className="text-xs px-2 py-1 rounded-lg" style={{ background: 'rgba(245,158,11,0.1)', color: '#f59e0b' }}>Log waste</button>
                     <button onClick={() => openEdit(r)} className="text-xs px-2 py-1 rounded-lg" style={{ background: 'rgba(255,255,255,0.06)', color: '#9ca3af' }}>Edit</button>
@@ -348,7 +377,7 @@ export default function RecipesPage() {
       )}
 
       {activeTab === 'import' && business?.id && (
-        <RecipeImportTab businessId={business.id} existingRecipes={recipes.map(r => ({ id: r.id, name: r.name }))} />
+        <RecipeImportTab businessId={business.id} existingRecipes={recipes.map(r => ({ id: r.id, name: r.name }))} onImported={load} />
       )}
 
       {activeTab === 'training' && business?.id && (
@@ -357,6 +386,60 @@ export default function RecipesPage() {
 
       {scaleModal && <ScaleModal recipe={scaleModal} businessId={business?.id ?? ''} onClose={() => setScaleModal(null)} />}
       {wasteModal && <WasteModal recipe={wasteModal} businessId={business?.id ?? ''} onClose={() => setWasteModal(null)} />}
+      {detailModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-start justify-center z-50 p-4 overflow-y-auto" onClick={() => setDetailModal(null)}>
+          <div className="bg-[#13131a] rounded-2xl p-6 w-full max-w-lg border border-[rgba(255,255,255,0.1)] my-8" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-white font-semibold text-lg">{detailModal.name}</h3>
+                {detailModal.yield_qty && <p className="text-xs mt-0.5" style={{ color: '#6b7280' }}>Yield: {detailModal.yield_qty} {detailModal.yield_unit ?? ''}</p>}
+              </div>
+              <button onClick={() => setDetailModal(null)} className="text-gray-400 hover:text-white text-xl leading-none">×</button>
+            </div>
+            {detailModal.recipe_ingredients.length > 0 ? (
+              <div className="rounded-xl overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.08)' }}>
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.07)', background: 'rgba(255,255,255,0.03)' }}>
+                      <th className="text-left px-3 py-2 text-xs font-medium" style={{ color: '#6b7280' }}>Ingredient</th>
+                      <th className="text-right px-3 py-2 text-xs font-medium" style={{ color: '#6b7280' }}>Qty</th>
+                      <th className="text-right px-3 py-2 text-xs font-medium" style={{ color: '#6b7280' }}>Unit cost</th>
+                      <th className="text-right px-3 py-2 text-xs font-medium" style={{ color: '#6b7280' }}>Line cost</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {detailModal.recipe_ingredients.map((ing, i) => {
+                      const cpu = ing.cost_per_unit ?? (ing.cost_cents != null ? ing.cost_cents / 100 : null);
+                      const line = cpu != null ? cpu * ing.quantity : null;
+                      return (
+                        <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                          <td className="px-3 py-2 text-white">{ing.ingredient_name}</td>
+                          <td className="px-3 py-2 text-right" style={{ color: '#9ca3af' }}>{ing.quantity} {ing.unit}</td>
+                          <td className="px-3 py-2 text-right" style={{ color: '#9ca3af' }}>{cpu != null ? `A$${cpu.toFixed(2)}` : '—'}</td>
+                          <td className="px-3 py-2 text-right" style={{ color: '#9ca3af' }}>{line != null ? `A$${line.toFixed(2)}` : '—'}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ) : <p className="text-sm text-center py-6" style={{ color: '#4b5563' }}>No ingredients recorded.</p>}
+            <div className="flex items-center justify-between mt-4 pt-4" style={{ borderTop: '1px solid rgba(255,255,255,0.07)' }}>
+              <div>
+                {detailModal.total_cost != null && <p className="text-sm text-white font-semibold">Total cost: A${detailModal.total_cost.toFixed(2)}</p>}
+                {detailModal.margin != null && (
+                  <p className="text-xs mt-0.5" style={{ color: detailModal.margin < 30 ? '#ef4444' : '#1D9E75' }}>Margin: {detailModal.margin.toFixed(1)}%{detailModal.margin < 30 ? ' ⚠ Low' : ''}</p>
+                )}
+              </div>
+              <button onClick={() => recalcCost(detailModal.id).then(() => setDetailModal(null))} disabled={recalculating === detailModal.id}
+                className="px-3 py-1.5 rounded-xl text-xs font-medium disabled:opacity-40"
+                style={{ background: 'rgba(29,158,117,0.1)', color: '#1D9E75', border: '1px solid rgba(29,158,117,0.2)' }}>
+                {recalculating === detailModal.id ? 'Recalculating…' : '↻ Recalculate costs'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Recipe form modal */}
       {showForm && (

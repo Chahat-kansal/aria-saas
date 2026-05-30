@@ -19,7 +19,7 @@ async function _GET() {
 
   const { data: recipes, error } = await supabase
     .from('recipes')
-    .select('*, recipe_ingredients(*)')
+    .select('*, recipe_ingredients(id, ingredient_name, quantity, unit, cost_cents, cost_per_unit, product_id)')
     .eq('business_id', bid)
     .eq('is_active', true)
     .order('name')
@@ -37,7 +37,7 @@ async function _POST(req: Request) {
   const bid = await getBid(supabase, user.id)
   if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
 
-  const { name, product_id, description, category, serves, prep_time_minutes, cost_cents, sell_price_cents, notes, ingredients } = await req.json()
+  const { name, product_id, description, category, serves, prep_time_minutes, cost_cents, sell_price_cents, notes, ingredients, yield_qty, yield_unit, total_cost, source } = await req.json()
   if (!name?.trim()) return NextResponse.json({ error: 'name required' }, { status: 400 })
 
   const { data: recipe, error } = await supabase.from('recipes').insert({
@@ -46,6 +46,8 @@ async function _POST(req: Request) {
     serves: serves ?? 1, prep_time_minutes: prep_time_minutes ?? null,
     cost_cents: cost_cents ?? null, sell_price_cents: sell_price_cents ?? null,
     notes: notes ?? null, is_active: true,
+    yield_qty: yield_qty ?? null, yield_unit: yield_unit ?? null,
+    total_cost: total_cost ?? null, source: source ?? 'manual',
     created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
   }).select().single()
 
@@ -54,12 +56,14 @@ async function _POST(req: Request) {
   // Insert ingredients if provided
   if (Array.isArray(ingredients) && ingredients.length > 0) {
     await supabase.from('recipe_ingredients').insert(
-      ingredients.map((ing: { product_id?: string; ingredient_name?: string; quantity?: number; unit?: string; cost_cents?: number; notes?: string }) => ({
+      ingredients.map((ing: { product_id?: string; ingredient_name?: string; quantity?: number; unit?: string; cost_cents?: number; cost_per_unit?: number; notes?: string }) => ({
         recipe_id: recipe.id, business_id: bid,
         product_id: ing.product_id ?? null,
         ingredient_name: ing.ingredient_name ?? '',
         quantity: ing.quantity ?? 1, unit: ing.unit ?? null,
-        cost_cents: ing.cost_cents ?? null, notes: ing.notes ?? null,
+        cost_cents: ing.cost_cents ?? null,
+        cost_per_unit: ing.cost_per_unit ?? null,
+        notes: ing.notes ?? null,
         created_at: new Date().toISOString(),
       }))
     )
