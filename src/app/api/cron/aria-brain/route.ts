@@ -61,7 +61,7 @@ export async function GET(req: Request) {
 
     // Compliance items past due date
     const { data: overdueItems } = await sb
-      .from('aria_compliance_items')
+      .from('compliance_items')
       .select('id, title, due_date')
       .eq('business_id', bid)
       .eq('is_completed', false)

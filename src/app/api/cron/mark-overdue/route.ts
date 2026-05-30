@@ -35,7 +35,7 @@ async function _GET() {
 
   // Compliance items: pending past due_date → overdue
   const { data: comp, error: compErr } = await supabaseAdmin
-    .from('aria_compliance_items')
+    .from('compliance_items')
     .update({ status: 'overdue' })
     .eq('status', 'pending')
     .lt('due_date', today)

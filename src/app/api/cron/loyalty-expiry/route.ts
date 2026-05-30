@@ -30,7 +30,7 @@ async function _GET() {
     for (const c of warnCusts ?? []) {
       // Log as transaction note (no actual deduction)
       try {
-        await supabaseAdmin.from('loyalty_transactions').insert({
+        await supabaseAdmin.from('pos_loyalty_transactions').insert({
           business_id: biz.id, customer_id: c.id, type: 'expiry_warning',
           points_delta: 0, reward_redeemed: `${c.points_balance} points expire in ~30 days`,
         });
@@ -50,7 +50,7 @@ async function _GET() {
       if (balance <= 0) continue;
       await supabaseAdmin.from('pos_customers').update({ points_balance: 0 }).eq('id', c.id);
       try {
-        await supabaseAdmin.from('loyalty_transactions').insert({
+        await supabaseAdmin.from('pos_loyalty_transactions').insert({
           business_id: biz.id, customer_id: c.id, type: 'expired',
           points_delta: -balance, reward_redeemed: 'Points expired (inactivity)',
         });

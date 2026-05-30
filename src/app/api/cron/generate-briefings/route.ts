@@ -88,7 +88,7 @@ async function generateMorning(
     business_id: biz.id,
     briefing_date: today,
     briefing_type: 'morning',
-    bullets,
+    insights: bullets,
     action_items: [],
     pace_vs_average_pct: null,
   }, { onConflict: 'business_id,briefing_date,briefing_type' })
@@ -129,7 +129,7 @@ async function generateEvening(
     business_id: biz.id,
     briefing_date: today,
     briefing_type: 'evening',
-    bullets,
+    insights: bullets,
     action_items: [],
     eod_reconciliation_status: 'pending',
   }, { onConflict: 'business_id,briefing_date,briefing_type' })
