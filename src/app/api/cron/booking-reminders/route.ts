@@ -22,9 +22,9 @@ export async function GET(req: Request) {
   const tomorrowStr = new Date(now.getTime() + 86400000).toISOString().slice(0, 10)
   const nowMin = now.getHours() * 60 + now.getMinutes()
 
-  let sent24h = 0, sent2h = 0, noShows = 0
+  let sent24h = 0, sent24hEmail = 0, sent2h = 0, noShows = 0
 
-  // 24h reminders — bookings tomorrow, status confirmed, has phone, not yet sent
+  // 24h SMS reminders — tomorrow, confirmed, has phone
   const { data: tomorrowBookings } = await supabaseAdmin
     .from('bookings')
     .select('id,customer_name,customer_phone,booking_time')
@@ -50,7 +50,56 @@ export async function GET(req: Request) {
       await supabaseAdmin.from('booking_reminder_log').insert({
         booking_id: b.id, reminder_type: '24h', channel: 'sms', sent_at: new Date().toISOString(),
       })
+      await supabaseAdmin.from('bookings').update({ reminder_sent_at: new Date().toISOString() }).eq('id', b.id)
       sent24h++
+    }
+  }
+
+  // 24h email fallback — tomorrow, confirmed, no phone but has email, reminder_sent_at IS NULL
+  const resendKey = process.env.RESEND_API_KEY
+  if (resendKey) {
+    const { data: emailBookings } = await supabaseAdmin
+      .from('bookings')
+      .select('id,customer_name,customer_email,booking_time,business_id,booking_token')
+      .eq('booking_date', tomorrowStr)
+      .eq('status', 'confirmed')
+      .is('customer_phone', null)
+      .not('customer_email', 'is', null)
+      .is('reminder_sent_at', null)
+
+    for (const b of emailBookings ?? []) {
+      const { data: already } = await supabaseAdmin
+        .from('booking_reminder_log')
+        .select('id')
+        .eq('booking_id', b.id)
+        .eq('reminder_type', '24h')
+        .maybeSingle()
+      if (already) continue
+
+      const { data: biz } = await supabaseAdmin.from('businesses').select('name').eq('id', b.business_id as string).maybeSingle()
+      const bizName = (biz as { name?: string } | null)?.name ?? 'your provider'
+      const timeStr = b.booking_time ? ' at ' + String(b.booking_time).slice(0, 5) : ''
+      const cancelUrl = (process.env.NEXT_PUBLIC_APP_URL ?? 'https://www.ariaos.site') + '/book/cancel/' + b.booking_token
+      const html = '<p>Hi ' + b.customer_name + ',</p><p>Reminder: you have a booking at <strong>' + bizName + '</strong> tomorrow' + timeStr + '.</p><p><a href="' + cancelUrl + '">Cancel your booking</a></p>'
+
+      const emailRes = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + resendKey, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          from: 'Bookings <bookings@' + (process.env.RESEND_FROM_DOMAIN ?? 'ariaos.site') + '>',
+          to: b.customer_email as string,
+          subject: 'Reminder: your booking tomorrow at ' + bizName,
+          html,
+        }),
+      }).catch(() => null)
+
+      if (emailRes?.ok) {
+        await supabaseAdmin.from('booking_reminder_log').insert({
+          booking_id: b.id, reminder_type: '24h', channel: 'email', sent_at: new Date().toISOString(),
+        })
+        await supabaseAdmin.from('bookings').update({ reminder_sent_at: new Date().toISOString() }).eq('id', b.id)
+        sent24hEmail++
+      }
     }
   }
 
@@ -110,5 +159,5 @@ export async function GET(req: Request) {
     noShows = idsToMark.length
   }
 
-  return NextResponse.json({ sent24h, sent2h, noShows })
+  return NextResponse.json({ sent24h, sent24hEmail, sent2h, noShows })
 }
