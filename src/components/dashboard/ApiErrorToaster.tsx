@@ -11,15 +11,38 @@ export default function ApiErrorToaster() {
   const [items, setItems] = useState<Item[]>([])
 
   useEffect(() => {
-    function onError(e: Event) {
-      const detail = (e as CustomEvent).detail as { message?: string } | undefined
-      const message = detail?.message ?? 'Something went wrong — please try again.'
+    function addToast(message: string) {
       const id = Date.now() + Math.random()
       setItems(prev => [...prev.slice(-3), { id, message }])
       setTimeout(() => setItems(prev => prev.filter(i => i.id !== id)), 6000)
     }
-    window.addEventListener(API_ERROR_EVENT, onError)
-    return () => window.removeEventListener(API_ERROR_EVENT, onError)
+
+    function onApiError(e: Event) {
+      const detail = (e as CustomEvent).detail as { message?: string } | undefined
+      addToast(detail?.message ?? 'Something went wrong — please try again.')
+    }
+
+    function onUnhandledRejection(e: PromiseRejectionEvent) {
+      const r = e.reason
+      // Only surface errors from internal API calls, not random third-party errors
+      if (!r || typeof r !== 'object') return
+      if ('url' in r && typeof (r as { url: unknown }).url === 'string') {
+        const url = (r as { url: string }).url
+        if (!url.startsWith('/')) return
+        e.preventDefault()
+        const msg = 'name' in r && (r as { name: unknown }).name === 'ApiError'
+          ? (r as { message: string }).message
+          : 'Request failed — please try again.'
+        addToast(msg)
+      }
+    }
+
+    window.addEventListener(API_ERROR_EVENT, onApiError)
+    window.addEventListener('unhandledrejection', onUnhandledRejection)
+    return () => {
+      window.removeEventListener(API_ERROR_EVENT, onApiError)
+      window.removeEventListener('unhandledrejection', onUnhandledRejection)
+    }
   }, [])
 
   if (items.length === 0) return null
