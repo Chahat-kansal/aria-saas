@@ -28,7 +28,7 @@ export async function fireKdsTickets(opts: FireOptions): Promise<{ fired_count: 
 
   const { data: products } = await supabase
     .from('pos_products')
-    .select('id, name, kds_station, prep_time_seconds, kds_skip_routing')
+    .select('id, name, kds_station, prep_time_seconds')
     .in('id', productIds)
     .eq('business_id', opts.business_id)
 
