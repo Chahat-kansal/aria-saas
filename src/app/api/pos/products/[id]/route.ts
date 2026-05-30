@@ -25,7 +25,7 @@ async function _GET(_req: NextRequest, { params }: Params) {
 
   const { data: product } = await supabase
     .from('pos_products')
-    .select('id,name,sku,barcode,description,price,cost_price,tax_rate,stock_quantity,low_stock_threshold,track_stock,is_active,image_url,category_id,supplier_id,case_quantity,is_age_restricted,container_type,brand_id,family_id,loyalty_earn_rate,show_online,is_weight_based,price_per_kg')
+    .select('id,name,sku,barcode,description,price,cost_price,tax_rate,stock_quantity,low_stock_threshold,track_stock,is_active,image_url,category_id,supplier_id,case_quantity,is_age_restricted,container_type,brand_id,family_id,loyalty_earn_rate,show_online,is_weight_based,price_per_kg,shelf_capacity,qty_backroom,reorder_point,reorder_qty')
     .eq('id', id).eq('business_id', bid).maybeSingle()
 
   if (!product) return NextResponse.json({ error: 'not_found' }, { status: 404 })
@@ -78,7 +78,8 @@ async function _PATCH(req: NextRequest, { params }: Params) {
       'storage_temp', 'ingredients', 'expiry_date', 'prep_time_seconds', 'course_type',
       'kds_station', 'is_gluten_free', 'is_vegan', 'is_vegetarian', 'is_weight_based',
       'price_per_kg', 'schedule_level', 'requires_script', 'is_schedule_drug',
-      'brand', 'notes', 'allergens', 'is_age_restricted', 'gst_exempt']
+      'brand', 'notes', 'allergens', 'is_age_restricted', 'gst_exempt',
+      'shelf_capacity', 'qty_backroom', 'reorder_point', 'reorder_qty']
     const payload: Record<string, unknown> = { updated_at: new Date().toISOString() }
     for (const k of allowed) if (k in body) payload[k] = body[k]
     const { data, error } = await supabase.from('pos_products').update(payload).eq('id', id).eq('business_id', bid).select().single()

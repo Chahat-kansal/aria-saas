@@ -9,6 +9,7 @@ import {
 import GeneralTab from './tabs/GeneralTab'
 import IndustryProductForm from '@/components/products/industry/IndustryProductForm'
 import type { ProductDraft } from '@/components/products/industry/CommonFields'
+import { inp, lbl } from './shared'
 import ClassificationsTab from './tabs/ClassificationsTab'
 import SellCostTab from './tabs/SellCostTab'
 import InventoryTab from './tabs/InventoryTab'
@@ -100,6 +101,9 @@ export default function ProductEditShell(props: Props) {
     case_quantity: product.case_quantity ?? 1,
     supplier_sku: product.supplier_sku ?? '',
     supplier_barcode: product.supplier_barcode ?? '',
+    shelf_capacity: product.shelf_capacity ?? null,
+    qty_backroom: product.qty_backroom ?? null,
+    expiry_date: product.expiry_date ?? null,
   })
 
   const [loyalty, setLoyalty] = useState({
@@ -188,6 +192,41 @@ export default function ProductEditShell(props: Props) {
             <GeneralTab data={general} onChange={(d) => setGeneral(d as typeof general)} />
             <div style={{ marginTop: 28 }}>
               <IndustryProductForm form={industryDraft} setForm={setIndustryDraft} />
+            </div>
+            {/* Warehouse fields */}
+            <div style={{ marginTop: 28, padding: '18px 20px', borderRadius: 12, background: 'var(--bg-surface)', border: '1px solid var(--divider)' }}>
+              <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 14 }}>Warehouse</p>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14 }}>
+                <div>
+                  <label style={lbl}>Shelf Capacity</label>
+                  <input type="number" min="0" style={inp} placeholder="0"
+                    value={industryDraft.shelf_capacity != null ? String(industryDraft.shelf_capacity) : ''}
+                    onChange={e => setIndustryDraft(f => ({ ...f, shelf_capacity: e.target.value === '' ? null : parseInt(e.target.value) }))} />
+                </div>
+                <div>
+                  <label style={lbl}>Backroom Qty</label>
+                  <input type="number" min="0" style={inp} placeholder="0"
+                    value={industryDraft.qty_backroom != null ? String(industryDraft.qty_backroom) : ''}
+                    onChange={e => setIndustryDraft(f => ({ ...f, qty_backroom: e.target.value === '' ? null : parseInt(e.target.value) }))} />
+                </div>
+                <div>
+                  <label style={lbl}>Expiry Date</label>
+                  <input type="date" style={inp}
+                    value={industryDraft.expiry_date ? String(industryDraft.expiry_date).split('T')[0] : ''}
+                    onChange={e => setIndustryDraft(f => ({ ...f, expiry_date: e.target.value || null }))} />
+                </div>
+              </div>
+              {Number(industryDraft.shelf_capacity ?? 0) > 0 && Number(industryDraft.stock_quantity ?? 0) >= 0 && (
+                <div style={{ marginTop: 12 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--text-tertiary)', marginBottom: 4 }}>
+                    <span>Floor fill</span>
+                    <span>{Math.round(Number(industryDraft.stock_quantity ?? 0) / Number(industryDraft.shelf_capacity) * 100)}%</span>
+                  </div>
+                  <div style={{ height: 6, borderRadius: 3, background: 'var(--bg-elevated)', overflow: 'hidden' }}>
+                    <div style={{ height: '100%', borderRadius: 3, background: 'var(--violet)', width: Math.min(Math.round(Number(industryDraft.stock_quantity ?? 0) / Number(industryDraft.shelf_capacity) * 100), 100) + '%', transition: 'width 0.3s' }} />
+                  </div>
+                </div>
+              )}
             </div>
           </>
         )}
