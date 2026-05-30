@@ -31,7 +31,7 @@ async function _POST(req: Request) {
       platform: r.platform.toLowerCase(),
       caption: r.caption,
       image_url: r.image_url || null,
-      scheduled_at,
+      scheduled_for: scheduled_at,
       status: 'scheduled',
     };
   });
