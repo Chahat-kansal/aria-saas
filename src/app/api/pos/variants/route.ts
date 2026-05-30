@@ -47,8 +47,8 @@ async function _GET(req: Request) {
       .eq('is_active', true)
       .order('sort_order'),
     supabase
-      .from('pos_product_modifiers')
-      .select('*, pos_modifiers(*)')
+      .from('pos_product_modifier_groups')
+      .select('*, pos_modifier_groups(*)')
       .eq('product_id', product_id)
       .eq('business_id', bid),
     supabase
