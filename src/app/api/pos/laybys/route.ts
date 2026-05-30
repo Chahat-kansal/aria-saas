@@ -20,7 +20,7 @@ async function _GET(req: Request) {
   if (!bid) return NextResponse.json({ laybys: [] });
   const { searchParams } = new URL(req.url);
   const status = searchParams.get('status') ?? 'active';
-  let q = supabase.from('pos_laybys').select('*,customers(name,phone)').eq('business_id', bid).order('created_at', { ascending: false }).limit(100);
+  let q = supabase.from('pos_laybys').select('*,pos_customers(name,phone)').eq('business_id', bid).order('created_at', { ascending: false }).limit(100);
   if (status !== 'all') q = q.eq('status', status);
   const { data } = await q;
   return NextResponse.json({ laybys: data ?? [] });
