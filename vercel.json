@@ -136,6 +136,10 @@
       "schedule": "0 3 * * *"
     },
     {
+      "path": "/api/cron/seo-verify-fixes",
+      "schedule": "0 2 * * *"
+    },
+    {
       "path": "/api/cron/competitor-monitor",
       "schedule": "0 22 * * *"
     },
