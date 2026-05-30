@@ -38,6 +38,39 @@ async function _GET() {
   }
 }
 
+const PROMO_TYPE_MAP: Record<string, string> = {
+  percent: 'percent_off',
+  percentage_discount: 'percent_off',
+  fixed: 'amount_off',
+  fixed_discount: 'amount_off',
+  multibuy: 'bogo',
+}
+
+function normPromoPayload(body: Record<string, unknown>, bid?: string): Record<string, unknown> {
+  const rawType = String(body.promotion_type ?? body.discount_type ?? body.type ?? 'percent_off')
+  const promotion_type = PROMO_TYPE_MAP[rawType] ?? rawType
+  const p: Record<string, unknown> = { ...body, promotion_type }
+  if (bid) p.business_id = bid
+  // cleanup legacy keys
+  delete p.type; delete p.discount_type; delete p.is_active
+  if (body.is_active !== undefined && p.active === undefined) p.active = body.is_active
+  // field aliases
+  if (body.stackable !== undefined) { if (p.stacks_with_others === undefined) p.stacks_with_others = body.stackable; delete p.stackable }
+  if (body.max_uses !== undefined) { if (p.max_total_uses === undefined) p.max_total_uses = body.max_uses; delete p.max_uses }
+  if (body.uses_count !== undefined) { if (p.current_uses === undefined) p.current_uses = body.uses_count; delete p.uses_count }
+  if (body.start_at !== undefined) { if (p.starts_at === undefined) p.starts_at = body.start_at; delete p.start_at }
+  if (body.end_at !== undefined) { if (p.ends_at === undefined) p.ends_at = body.end_at; delete p.end_at }
+  // unpack conditions object { min_spend, min_qty, customer_segment }
+  if (body.conditions && typeof body.conditions === 'object') {
+    const c = body.conditions as Record<string, unknown>
+    if (c.min_spend != null && p.min_spend === undefined) p.min_spend = c.min_spend
+    if (c.min_qty != null && p.buy_quantity === undefined) p.buy_quantity = c.min_qty
+    if (c.customer_segment != null && p.customer_group_id === undefined) p.customer_group_id = c.customer_segment
+    delete p.conditions
+  }
+  return p
+}
+
 async function _POST(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -46,26 +79,8 @@ async function _POST(req: Request) {
   if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 });
   try {
     const body = await req.json();
-    // DB column is promotion_type — accept that directly, or fall back to legacy keys
-    const promotion_type = body.promotion_type ?? body.discount_type ?? body.type ?? 'percentage_discount';
-    const payload: Record<string, unknown> = {
-      ...body,
-      business_id: bid,
-      promotion_type,
-    };
-    // Remove legacy/conflicting keys that don't exist in DB
-    delete payload.type;
-    delete payload.discount_type;
-    delete payload.is_active; // DB uses 'active', not 'is_active'
-    if (body.is_active !== undefined && payload.active === undefined) {
-      payload.active = body.is_active;
-    }
-
-    const { data, error } = await supabase
-      .from('pos_promotions')
-      .insert(payload)
-      .select()
-      .single();
+    const payload = normPromoPayload(body as Record<string, unknown>, bid)
+    const { data, error } = await supabase.from('pos_promotions').insert(payload).select().single();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({ promotion: data });
   } catch (err) {
@@ -83,17 +98,9 @@ async function _PATCH(req: Request) {
   const id = searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
   try {
-    const body = await req.json();
-    // Normalise field names: DB uses 'active' not 'is_active', 'promotion_type' not 'discount_type'
-    delete body.type;
-    delete body.discount_type;
-    if (body.is_active !== undefined && body.active === undefined) {
-      body.active = body.is_active;
-    }
-    delete body.is_active;
-    if (body.promotion_type === undefined && (body as Record<string, unknown>).discount_type) {
-      body.promotion_type = (body as Record<string, unknown>).discount_type;
-    }
+    const raw = await req.json();
+    const body = normPromoPayload(raw as Record<string, unknown>)
+    delete body.business_id
     const { error } = await supabase.from('pos_promotions').update(body).eq('id', id).eq('business_id', bid);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({ ok: true });

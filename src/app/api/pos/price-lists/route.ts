@@ -1,3 +1,4 @@
+export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
@@ -18,6 +19,27 @@ async function _GET(req: Request) {
   if (!bid) return NextResponse.json({ price_lists: [] });
   const { searchParams } = new URL(req.url);
   const listId = searchParams.get('list_id');
+  const exportCsv = searchParams.get('export') === 'csv'
+
+  if (exportCsv && listId) {
+    const [listQ, itemsQ] = await Promise.all([
+      supabase.from('pos_price_lists').select('name').eq('id', listId).maybeSingle(),
+      supabase.from('pos_price_list_items').select('override_price, pos_products(id, name, price)').eq('price_list_id', listId).order('created_at'),
+    ])
+    const listName = String(listQ.data?.name ?? 'price-list')
+    const rows = (itemsQ.data ?? []).map(item => {
+      const prod = (Array.isArray(item.pos_products) ? item.pos_products[0] : item.pos_products) as Record<string, unknown> | null
+      return ['"' + String(prod?.name ?? '') + '"', (Number(prod?.price) || 0).toFixed(2), (Number(item.override_price) || 0).toFixed(2)].join(',')
+    })
+    const csv = ['Product Name,Regular Price ($),Override Price ($)', ...rows].join('\n')
+    return new NextResponse(csv, {
+      headers: {
+        'Content-Type': 'text/csv; charset=utf-8',
+        'Content-Disposition': 'attachment; filename="' + listName.replace(/[^a-z0-9]/gi, '-').toLowerCase() + '-prices.csv"',
+      },
+    })
+  }
+
   if (listId) {
     const { data } = await supabase.from('pos_price_list_items')
       .select('*, pos_products(id, name, price)')

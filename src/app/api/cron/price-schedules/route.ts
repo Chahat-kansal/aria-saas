@@ -50,6 +50,28 @@ export async function GET(req: Request) {
     reverted++
   }
 
+  if (activated > 0) {
+    const bizIds = new Set((toActivate ?? []).map(r => String(r.business_id)))
+    for (const bizId of bizIds) {
+      const fired = (toActivate ?? []).filter(r => String(r.business_id) === bizId)
+      const names = fired.map(r => `product ${String(r.product_id).slice(0, 8)}`).join(', ')
+      try {
+        await supabaseAdmin.from('aria_actions').insert({
+          business_id: bizId,
+          category: 'pricing',
+          title: fired.length + ' scheduled price change' + (fired.length > 1 ? 's' : '') + ' applied today',
+          recommendation: 'Price updates applied: ' + names + '. Review your current prices.',
+          expected_impact: '0.00',
+          confidence: 'high',
+          status: 'completed',
+          source: 'cron:price-schedules',
+          priority: 'medium',
+          payload: { activated: fired.length, date: new Date().toISOString().slice(0, 10) },
+        })
+      } catch { /* non-fatal */ }
+    }
+  }
+
   console.log(`[price-schedules] activated=${activated} reverted=${reverted}`)
   return NextResponse.json({ activated, reverted, timestamp: now })
 }
