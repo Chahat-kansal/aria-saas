@@ -135,6 +135,17 @@ async function _GET(req: Request) {
       await supabase.from('competitor_businesses')
         .delete().eq('business_id', business_id)
       await supabase.from('competitor_businesses').insert(competitors)
+
+      // Also upsert into aria_competitor_watches so the cron picks them up for monitoring.
+      // Decision: scan → competitor_businesses AND aria_competitor_watches; page reads both tables.
+      const watchRows = competitors.map(c => ({
+        business_id,
+        competitor_name: c.competitor_name,
+        competitor_url: c.website ?? null,
+        is_active: true,
+      }))
+      await supabase.from('aria_competitor_watches')
+        .upsert(watchRows, { onConflict: 'business_id,competitor_name', ignoreDuplicates: true })
     }
 
     return NextResponse.json({ competitors, from_cache: false })
