@@ -32,14 +32,14 @@ async function fetchSales(businessId: string, period: string) {
 async function fetchInventory(businessId: string) {
   const { data } = await supabaseAdmin
     .from('pos_outlet_inventory')
-    .select('quantity_on_hand,reorder_point,pos_products(name,sku)')
+    .select('items_on_hand,items_reorder_level,pos_products(name,sku)')
     .eq('business_id', businessId)
     .limit(2000)
   return (data ?? []).map((r: Record<string, unknown>) => ({
     name: String((r.pos_products as Record<string,unknown> | null)?.name ?? ''),
     sku: String((r.pos_products as Record<string,unknown> | null)?.sku ?? ''),
-    qty: String(Number(r.quantity_on_hand) || 0),
-    reorder_point: r.reorder_point != null ? String(r.reorder_point) : '',
+    qty: String(Number(r.items_on_hand) || 0),
+    reorder_point: r.items_reorder_level != null ? String(r.items_reorder_level) : '',
   }))
 }
 

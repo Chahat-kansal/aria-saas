@@ -65,7 +65,7 @@ export async function buildAskAriaContext(
     supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', businessId).gte('created_at', todayStart.toISOString()),
     supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', businessId).gte('created_at', weekStart.toISOString()),
     supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', businessId).gte('created_at', monthStart.toISOString()),
-    supabaseAdmin.from('pos_outlet_inventory').select('id,product_id,quantity_on_hand,reorder_point,pos_products(name)').eq('business_id', businessId).lt('quantity_on_hand', 5).limit(10),
+    supabaseAdmin.from('pos_outlet_inventory').select('id,product_id,items_on_hand,items_reorder_level,pos_products(name)').eq('business_id', businessId).lt('items_on_hand', 5).limit(10),
     supabaseAdmin.from('pos_users').select('id', { count: 'exact', head: true }).eq('business_id', businessId),
     supabaseAdmin.from('support_tickets').select('id', { count: 'exact', head: true }).eq('business_id', businessId).eq('status', 'open'),
     supabaseAdmin.from('aria_actions').select('id', { count: 'exact', head: true }).eq('business_id', businessId).eq('status', 'pending'),
@@ -90,8 +90,8 @@ export async function buildAskAriaContext(
   const lowStock = (lowStockRes.data ?? []).map((r: Record<string, unknown>) => ({
     id: String(r.product_id ?? r.id),
     name: String((r.pos_products as Record<string,unknown> | null)?.name ?? 'Unknown'),
-    qty: Number(r.quantity_on_hand) || 0,
-    reorder_point: r.reorder_point != null ? Number(r.reorder_point) : null,
+    qty: Number(r.items_on_hand) || 0,
+    reorder_point: r.items_reorder_level != null ? Number(r.items_reorder_level) : null,
   }))
 
   const convHistory: Array<{ role: string; content: string }> = (() => {

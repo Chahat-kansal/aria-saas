@@ -44,9 +44,9 @@ export async function sendDailySummaryReport(
       .eq('business_id', businessId)
       .gte('created_at', yesterdayStart.toISOString())
       .lt('created_at', todayStart.toISOString()),
-    supabase.from('pos_outlet_inventory').select('quantity_on_hand,reorder_point,pos_products(name)')
+    supabase.from('pos_outlet_inventory').select('items_on_hand,items_reorder_level,pos_products(name)')
       .eq('business_id', businessId)
-      .lt('quantity_on_hand', 5)
+      .lt('items_on_hand', 5)
       .limit(10),
     supabase.from('businesses').select('name').eq('id', businessId).maybeSingle(),
   ])
@@ -75,7 +75,7 @@ export async function sendDailySummaryReport(
   ${lowStock.length > 0 ? `
   <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:16px;margin-bottom:16px;">
     <h3 style="font-size:14px;font-weight:600;color:#c2410c;margin:0 0 8px;">⚠ Low Stock Alert</h3>
-    ${(lowStock as Array<Record<string,unknown>>).map(p => `<div style="font-size:13px;padding:4px 0;border-bottom:1px solid #fed7aa;">${String((p.pos_products as Record<string,unknown> | null)?.name ?? '')} — ${Number(p.quantity_on_hand) || 0} remaining</div>`).join('')}
+    ${(lowStock as Array<Record<string,unknown>>).map(p => `<div style="font-size:13px;padding:4px 0;border-bottom:1px solid #fed7aa;">${String((p.pos_products as Record<string,unknown> | null)?.name ?? '')} — ${Number(p.items_on_hand) || 0} remaining</div>`).join('')}
   </div>` : ''}
   <div style="text-align:center;margin-top:24px;">
     <a href="https://ariaos.site/dashboard" style="background:#2D5240;color:white;padding:10px 24px;border-radius:6px;text-decoration:none;font-size:14px;">Open Aria Dashboard →</a>
