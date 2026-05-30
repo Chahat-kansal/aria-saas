@@ -1,16 +1,17 @@
 # Aria OS Audit State
 
 ## Last updated
-2026-05-30 — Session 1 complete (prompt 98)
+2026-05-31 — Session 2 Batch A complete
 
 ## Status
-IN PROGRESS — src/app/api/aria/ COMPLETE
+IN PROGRESS — src/app/api/pos/ Batch A complete (ad-campaigns → cart-line-actions)
 
 ## Completed sections
 - [x] src/app/api/aria/ — all ~47 route files audited
+- [x] src/app/api/pos/ Batch A — ad-campaigns, ad-impressions, agent-decisions (3 files), agents/[type], ask, audit-log, balances, bas-export, basket-analysis, business, cafe/seed-modifiers, cart-intelligence, cart-line-actions
 
 ## Current position
-Next: src/app/api/pos/ (~80 route files)
+Next: src/app/api/pos/ Batch B (cash-sessions → customers)
 
 ## Issues found (running log)
 | File | Type | Issue | Fixed? | Commit |
@@ -20,6 +21,8 @@ Next: src/app/api/pos/ (~80 route files)
 | src/app/api/aria/page-insight/route.ts | Wrong column | `staff_members.name` doesn't exist; select had `id, name, first_name, last_name, visa_expiry_date`. Fixed select + map to use first_name/last_name | YES | 1ee57b9 |
 | src/app/api/aria/page-insight/route.ts | Wrong table | `pos_customers.customer_segment, churn_risk` don't exist on pos_customers. Changed from('pos_customers') → from('customers') | YES | 1ee57b9 |
 | src/app/api/aria/roster/route.ts | Wrong column | `staff_members.name` in select caused PostgREST 400, staffRows null, always "No staff found". Removed `name` from select; simplified name-construction line to use first_name/last_name only | YES | af918e0 |
+| src/app/api/pos/agents/[type]/route.ts | Wrong column | `pos_staff.active` → `is_active` (in executeScheduleApproval — email to active staff) | YES | ca1cedd6 |
+| src/app/api/pos/balances/route.ts | Wrong column | `pos_customers.account_balance` → `balance` (select, gt filter, order, update — 4 occurrences) | YES | ca1cedd6 |
 
 ## Known already-fixed issues (do not re-fix)
 | File | Issue | Fixed in |
@@ -39,9 +42,15 @@ explain-metric, hypotheses, marketing-campaigns, page-insight (after fix), price
 recipe-suggestions, reorder-forecast, review-request, roster (after fix), shift-analysis,
 skills, social-suggest, studio, studio/upload, test, weekly-report, winback-compose
 
+## Routes confirmed CLEAN in src/app/api/pos/ Batch A (Session 2)
+ad-campaigns, ad-impressions, agent-decisions, agent-decisions/[id]/approve,
+agent-decisions/[id]/reject, agents/[type] (after fix), ask, audit-log,
+balances (after fix), bas-export, basket-analysis, business, cafe/seed-modifiers,
+cart-intelligence, cart-line-actions
+
 ## Sections remaining
 - [x] src/app/api/aria/ (~47 route files) ← DONE Session 1
-- [ ] src/app/api/pos/ (~80 route files) ← START HERE next session
+- [~] src/app/api/pos/ (~80 route files) — Batch A done, Batch B next (cash-sessions → customers)
 - [ ] src/app/api/public/ (~30 route files)
 - [ ] src/app/api/social/ (~20 route files)
 - [ ] src/app/api/reports/ (~10 route files)
