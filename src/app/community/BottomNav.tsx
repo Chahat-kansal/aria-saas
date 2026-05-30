@@ -2,11 +2,10 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { motion } from 'framer-motion'
-import { Home, Film, Store, Search, User } from 'lucide-react'
+import { Home, Film, Store, Search, User, PlusSquare } from 'lucide-react'
 import { PALETTE, BORDER, NAV_SHADOW, RADIUS, FONT, MAX_W } from './theme'
 
-// OPTION C — floating pill nav with a sliding lime indicator (Framer Motion layoutId).
-// feed · reels · market · search · profile
+// feed · reels · market · [+create] · search · profile
 const TABS = [
   { href: '/community',        label: 'feed',    icon: Home,   match: (p: string) => p === '/community' },
   { href: '/community/reels',  label: 'reels',   icon: Film,   match: (p: string) => p.startsWith('/community/reels') },
@@ -37,7 +36,7 @@ export function BottomNav() {
         boxShadow: NAV_SHADOW,
         pointerEvents: 'auto',
       }}>
-        {TABS.map((t, i) => {
+        {TABS.slice(0, 3).map((t, i) => {
           const active = i === activeIdx
           const Icon = t.icon
           return (
@@ -58,7 +57,50 @@ export function BottomNav() {
                 transition: 'flex 240ms cubic-bezier(0.22, 1, 0.36, 1)',
               }}
             >
-              {/* Sliding lime indicator behind the active tab */}
+              {active && (
+                <motion.div
+                  layoutId="community-nav-indicator"
+                  transition={{ type: 'spring', stiffness: 420, damping: 34 }}
+                  style={{ position: 'absolute', inset: 0, background: PALETTE.accent, borderRadius: 17 }}
+                />
+              )}
+              <span style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', gap: 6, padding: active ? '9px 13px' : '9px 0' }}>
+                <Icon size={active ? 16 : 18} strokeWidth={active ? 2.4 : 2} color={PALETTE.ink} />
+                {active && (
+                  <span style={{ fontSize: 11, fontWeight: 700, color: PALETTE.ink, letterSpacing: '-0.01em' }}>{t.label}</span>
+                )}
+              </span>
+            </Link>
+          )
+        })}
+        {/* Create post button */}
+        <Link href="/community/create" prefetch={false} aria-label="Create post"
+          style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 44, borderRadius: 17, textDecoration: 'none', position: 'relative' }}>
+          <div style={{ width: 34, height: 34, borderRadius: 11, background: PALETTE.accent, border: BORDER, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <PlusSquare size={17} strokeWidth={2.5} color={PALETTE.ink} />
+          </div>
+        </Link>
+        {TABS.slice(3).map((t, i) => {
+          const active = i + 3 === activeIdx
+          const Icon = t.icon
+          return (
+            <Link
+              key={t.href}
+              href={t.href}
+              prefetch={false}
+              aria-label={t.label}
+              aria-current={active ? 'page' : undefined}
+              style={{
+                position: 'relative',
+                flex: active ? 1.5 : 1,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                minHeight: 44,
+                borderRadius: 17,
+                textDecoration: 'none',
+                color: PALETTE.ink,
+                transition: 'flex 240ms cubic-bezier(0.22, 1, 0.36, 1)',
+              }}
+            >
               {active && (
                 <motion.div
                   layoutId="community-nav-indicator"
