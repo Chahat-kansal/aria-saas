@@ -77,8 +77,8 @@ export async function checkConditionAlerts(businessId: string): Promise<number> 
         const hours = Number(config.period_hours) || 24
         const since = new Date(Date.now() - hours * 3600_000).toISOString()
         const { data: sales } = await supabase.from('pos_sales')
-          .select('total_price').eq('business_id', businessId).gte('created_at', since)
-        const revenue = (sales ?? []).reduce((s, x: Record<string,unknown>) => s + (Number(x.total_price) || 0), 0)
+          .select('total_amount').eq('business_id', businessId).gte('created_at', since)
+        const revenue = (sales ?? []).reduce((s, x: Record<string,unknown>) => s + (Number(x.total_amount) || 0), 0)
         if (revenue < (Number(config.threshold) || 0)) {
           shouldFire = true
           message = `Revenue alert: only $${revenue.toFixed(2)} in last ${hours}h (target: $${(Number(config.threshold) || 0).toFixed(2)})`
