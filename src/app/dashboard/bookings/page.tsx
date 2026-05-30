@@ -1,377 +1,483 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
 import { AriaSays } from '@/components/dashboard/AriaSays'
+import { BookingCard } from './BookingCard'
+import type { Service, Booking, Availability } from './types'
 
 const C = { bg: 'var(--bg-base)', card: 'var(--bg-surface)', text: '#F0F4F0', muted: 'var(--text-secondary,#A8B5A8)', green: '#7FB897', darkGreen: '#2D5240', red: '#ef4444', amber: '#f59e0b', blue: '#60a5fa', border: 'rgba(127,184,151,0.15)' }
 const STATUS_COLOR: Record<string, string> = { confirmed: C.green, pending: C.amber, cancelled: C.red, no_show: '#6b7280', completed: C.muted }
-const STATUS_LABELS = ['confirmed','pending','cancelled','no_show','completed']
+const STATUS_LABELS = ['confirmed', 'pending', 'cancelled', 'no_show', 'completed']
+const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
-interface Service { id: string; name: string; duration_minutes: number; price: number | null; max_party_size: number; color: string; description: string | null }
-interface Booking { id: string; customer_name: string; customer_phone: string | null; customer_email: string | null; booking_date: string; booking_time: string | null; party_size: number; duration_minutes: number; status: string; notes: string | null; aria_notes: string | null; reminder_sent_at: string | null; service_id: string | null; no_show_score: number | null; booking_token: string | null; booking_services: { name: string; color: string; duration_minutes: number } | null }
+function dateStr(d: Date) { return d.toISOString().slice(0, 10) }
+function fmtDate(s: string) { return new Date(s + 'T12:00:00').toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' }) }
+function fmtTime(t: string | null) { if (!t) return '—'; const [h, m] = t.split(':'); const hr = parseInt(h); return `${hr > 12 ? hr - 12 : hr || 12}:${m}${hr >= 12 ? 'pm' : 'am'}` }
+function addDays(d: Date, n: number) { const r = new Date(d); r.setDate(r.getDate() + n); return r }
+function weekStart(d: Date) { const r = new Date(d); r.setDate(r.getDate() - ((r.getDay() + 6) % 7)); return r }
+function monthStart(d: Date) { return new Date(d.getFullYear(), d.getMonth(), 1) }
 
-function dateStr(d: Date) { return d.toISOString().slice(0,10) }
-function fmtDate(s: string) { return new Date(s+'T12:00:00').toLocaleDateString('en-AU',{weekday:'short',day:'numeric',month:'short'}) }
-function fmtTime(t: string|null) { if (!t) return '—'; const [h,m]=t.split(':'); const hr=parseInt(h); return `${hr>12?hr-12:hr||12}:${m}${hr>=12?'pm':'am'}` }
-function addDays(d: Date, n: number) { const r=new Date(d); r.setDate(r.getDate()+n); return r }
-function weekStart(d: Date) { const r=new Date(d); r.setDate(r.getDate()-r.getDay()+1); return r }
+const iStyle: React.CSSProperties = { background: 'rgba(255,255,255,0.05)', border: '1px solid ' + C.border, borderRadius: 8, padding: '8px 12px', color: C.text, fontSize: 13, width: '100%', boxSizing: 'border-box' }
+const btnPrimary: React.CSSProperties = { background: C.darkGreen, color: C.green, border: 'none', borderRadius: 8, padding: '8px 18px', cursor: 'pointer', fontSize: 13, fontWeight: 600, minHeight: 36 }
 
 export default function BookingsPage() {
-  const [bid, setBid]           = useState('')
+  const [bid, setBid] = useState('')
   const [bookings, setBookings] = useState<Booking[]>([])
   const [services, setServices] = useState<Service[]>([])
-  const [tab, setTab]           = useState<'calendar'|'list'|'services'>('calendar')
-  const [loading, setLoading]   = useState(true)
-  const [showAdd, setShowAdd]   = useState(false)
+  const [availability, setAvailability] = useState<Availability[]>([])
+  const [tab, setTab] = useState<'calendar' | 'list' | 'services' | 'availability'>('calendar')
+  const [calView, setCalView] = useState<'week' | 'month'>('week')
+  const [loading, setLoading] = useState(true)
+  const [showAdd, setShowAdd] = useState(false)
   const [selectedDate, setSelectedDate] = useState(dateStr(new Date()))
-  const [weekOf, setWeekOf]     = useState(() => weekStart(new Date()))
+  const [weekOf, setWeekOf] = useState(() => weekStart(new Date()))
+  const [monthOf, setMonthOf] = useState(() => monthStart(new Date()))
   const [statusFilter, setStatusFilter] = useState('all')
-  const [sending, setSending]   = useState<Record<string,boolean>>({})
-  const [saving, setSaving]     = useState(false)
-  const [form, setForm]         = useState({ customer_name:'', customer_email:'', customer_phone:'', booking_date: dateStr(new Date()), booking_time:'12:00', party_size:2, service_id:'', notes:'' })
-  const [svcForm, setSvcForm]   = useState({ name:'', duration_minutes:60, price:'', max_party_size:20, description:'', color:'#7FB897' })
-  const [insight, setInsight]   = useState<string|null>(null)
+  const [sending, setSending] = useState<Record<string, boolean>>({})
+  const [saving, setSaving] = useState(false)
+  const [form, setForm] = useState({ customer_name: '', customer_email: '', customer_phone: '', booking_date: dateStr(new Date()), booking_time: '12:00', party_size: 2, service_id: '', notes: '' })
+  const [svcForm, setSvcForm] = useState({ name: '', duration_minutes: 60, price: '', max_party_size: 20, description: '', color: '#7FB897' })
+  const [insight, setInsight] = useState<string | null>(null)
   const [insightDismissed, setInsightDismissed] = useState(false)
-  const [bizSlug, setBizSlug]   = useState('')
+  const [bizSlug, setBizSlug] = useState('')
   const [slugInput, setSlugInput] = useState('')
   const [slugSaving, setSlugSaving] = useState(false)
+  const [copied, setCopied] = useState(false)
+  const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null)
+  const [availSaving, setAvailSaving] = useState(false)
 
   const load = useCallback(async (businessId: string) => {
     const [bkRes, svcRes] = await Promise.all([
-      fetch(`/api/bookings?business_id=${businessId}`),
+      fetch('/api/bookings?business_id=' + businessId),
       fetch('/api/bookings/services'),
     ])
-    const bk = await bkRes.json().catch(()=>({}))
-    const sv = await svcRes.json().catch(()=>({}))
-    // Normalize booking_date to YYYY-MM-DD (DB stores as timestamptz '2026-05-23 00:00:00+00')
-    const normalized = (bk.bookings ?? []).map((b: Booking) => ({
-      ...b,
-      booking_date: b.booking_date ? b.booking_date.slice(0, 10) : b.booking_date
-    }))
-    setBookings(normalized)
+    const bk = await bkRes.json().catch(() => ({}))
+    const sv = await svcRes.json().catch(() => ({}))
+    setBookings((bk.bookings ?? []).map((b: Booking) => ({ ...b, booking_date: b.booking_date ? b.booking_date.slice(0, 10) : b.booking_date })))
     setServices(sv.services ?? [])
     setLoading(false)
   }, [])
 
   useEffect(() => {
-    fetch('/api/pos/products').then(r=>r.json()).then((d:Record<string,unknown>)=>{
+    fetch('/api/pos/products').then(r => r.json()).then((d: Record<string, unknown>) => {
       if (d.business_id) {
         setBid(d.business_id as string)
         load(d.business_id as string)
-        fetch('/api/aria/booking-insights').then(r=>r.json()).then(id=>{ if(id.insight) setInsight(id.insight) }).catch(()=>{})
-        fetch('/api/pos/business').then(r=>r.json()).then(bd=>{ if(bd.business?.booking_link_slug) { setBizSlug(bd.business.booking_link_slug); setSlugInput(bd.business.booking_link_slug) } }).catch(()=>{})
+        fetch('/api/aria/booking-insights').then(r => r.json()).then(id => { if (id.insight) setInsight(id.insight) }).catch(() => {})
+        fetch('/api/pos/business').then(r => r.json()).then(bd => {
+          if (bd.business?.booking_link_slug) { setBizSlug(bd.business.booking_link_slug); setSlugInput(bd.business.booking_link_slug) }
+        }).catch(() => {})
       } else setLoading(false)
-    }).catch(()=>setLoading(false))
+    }).catch(() => setLoading(false))
   }, [load])
+
+  async function loadAvailability() {
+    if (!bid) return
+    const res = await fetch('/api/bookings/availability-settings?business_id=' + bid).catch(() => null)
+    const d = await res?.json().catch(() => ({}))
+    if (d?.availability) setAvailability(d.availability)
+    else {
+      // Default: Mon-Fri 9am-5pm enabled, Sat-Sun disabled
+      setAvailability(Array.from({ length: 7 }, (_, i) => ({ day_of_week: i, start_time: '09:00', end_time: '17:00', is_available: i >= 1 && i <= 5, buffer_minutes: 15 })))
+    }
+  }
 
   async function addBooking() {
     if (!form.customer_name || !form.booking_date) return
     setSaving(true)
-    const res = await fetch('/api/bookings', { method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ ...form, business_id: bid, party_size: Number(form.party_size), service_id: form.service_id || null }) })
+    const res = await fetch('/api/bookings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...form, business_id: bid, party_size: Number(form.party_size), service_id: form.service_id || null }) })
     const d = await res.json()
-    if (d.booking) { const nb = {...d.booking, booking_date: d.booking.booking_date?.slice(0,10)}; setBookings(p=>[nb,...p]); setShowAdd(false); setForm({ customer_name:'', customer_email:'', customer_phone:'', booking_date: dateStr(new Date()), booking_time:'12:00', party_size:2, service_id:'', notes:'' }) }
+    if (d.booking) { setBookings(p => [{ ...d.booking, booking_date: d.booking.booking_date?.slice(0, 10) }, ...p]); setShowAdd(false); setForm({ customer_name: '', customer_email: '', customer_phone: '', booking_date: dateStr(new Date()), booking_time: '12:00', party_size: 2, service_id: '', notes: '' }) }
     setSaving(false)
   }
 
   async function updateStatus(id: string, status: string) {
-    await fetch('/api/bookings', { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id, business_id: bid, status }) })
-    setBookings(p=>p.map(b=>b.id===id?{...b,status}:b))
+    await fetch('/api/bookings', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, business_id: bid, status }) })
+    setBookings(p => p.map(b => b.id === id ? { ...b, status } : b))
+    if (selectedBooking?.id === id) setSelectedBooking(p => p ? { ...p, status } : p)
   }
 
   async function sendReminder(booking: Booking) {
     if (!booking.customer_phone) return alert('No phone number for this customer.')
-    setSending(p=>({...p,[booking.id]:true}))
-    const res = await fetch('/api/bookings/remind', { method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ booking_id: booking.id, business_id: bid }) })
+    setSending(p => ({ ...p, [booking.id]: true }))
+    const res = await fetch('/api/bookings/remind', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ booking_id: booking.id, business_id: bid }) })
     const d = await res.json()
-    if (d.ok) {
-      setBookings(p=>p.map(b=>b.id===booking.id?{...b,reminder_sent_at:new Date().toISOString()}:b))
-    } else alert(d.error || 'Could not send reminder.')
-    setSending(p=>({...p,[booking.id]:false}))
+    if (d.ok) setBookings(p => p.map(b => b.id === booking.id ? { ...b, reminder_sent_at: new Date().toISOString() } : b))
+    else alert(d.error || 'Could not send reminder.')
+    setSending(p => ({ ...p, [booking.id]: false }))
   }
 
   async function saveSlug() {
     if (!slugInput.trim()) return
     setSlugSaving(true)
-    const res = await fetch('/api/pos/business', { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ booking_link_slug: slugInput }) })
+    const res = await fetch('/api/pos/business', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ booking_link_slug: slugInput }) })
     const d = await res.json()
     if (d.business) setBizSlug(slugInput)
     setSlugSaving(false)
   }
 
   async function addService() {
-    const res = await fetch('/api/bookings/services', { method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ ...svcForm, price: parseFloat(svcForm.price)||null, business_id: bid }) })
+    const res = await fetch('/api/bookings/services', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...svcForm, price: parseFloat(svcForm.price) || null, business_id: bid }) })
     const d = await res.json()
-    if (d.service) { setServices(p=>[...p,d.service]); setSvcForm({ name:'', duration_minutes:60, price:'', max_party_size:20, description:'', color:'#7FB897' }) }
+    if (d.service) { setServices(p => [...p, d.service]); setSvcForm({ name: '', duration_minutes: 60, price: '', max_party_size: 20, description: '', color: '#7FB897' }) }
   }
 
-  // Calendar helpers
-  const weekDays = Array.from({length:7},(_,i)=>addDays(weekOf,i))
-  const filteredBookings = bookings.filter(b => statusFilter==='all' || b.status===statusFilter)
+  async function saveAvailability() {
+    setAvailSaving(true)
+    for (const a of availability) {
+      await fetch('/api/bookings/availability-settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ business_id: bid, ...a }) }).catch(() => {})
+    }
+    setAvailSaving(false)
+  }
 
-  const iStyle = { background:'rgba(255,255,255,0.05)', border:`1px solid ${C.border}`, borderRadius:8, padding:'8px 12px', color:C.text, fontSize:13, width:'100%' }
-  const btnPrimary = { background:C.darkGreen, color:C.green, border:'none', borderRadius:8, padding:'8px 18px', cursor:'pointer', fontSize:13, fontWeight:600 as const }
+  function copyLink() {
+    if (!bizSlug) return
+    navigator.clipboard.writeText(window.location.origin + '/book/' + bizSlug).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000) })
+  }
 
-  // Stats
   const today = dateStr(new Date())
-  const todayBookings = bookings.filter(b=>b.booking_date===today && b.status!=='cancelled')
-  const upcomingCount = bookings.filter(b=>b.booking_date>=today && b.status==='confirmed').length
-  const needReminder = bookings.filter(b=>b.status==='confirmed' && !b.reminder_sent_at && b.booking_date===dateStr(addDays(new Date(),1)))
+  const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekOf, i))
+  const filteredBookings = bookings.filter(b => statusFilter === 'all' || b.status === statusFilter)
+  const todayBookings = bookings.filter(b => b.booking_date === today && b.status !== 'cancelled')
+  const upcomingCount = bookings.filter(b => b.booking_date >= today && b.status === 'confirmed').length
+  const needReminder = bookings.filter(b => b.status === 'confirmed' && !b.reminder_sent_at && b.booking_date === dateStr(addDays(new Date(), 1)))
+
+  // Month view helpers
+  const monthDays = (() => {
+    const start = monthStart(monthOf)
+    const offset = (start.getDay() + 6) % 7
+    const days: (Date | null)[] = Array(offset).fill(null)
+    const daysInMonth = new Date(monthOf.getFullYear(), monthOf.getMonth() + 1, 0).getDate()
+    for (let i = 1; i <= daysInMonth; i++) days.push(new Date(monthOf.getFullYear(), monthOf.getMonth(), i))
+    while (days.length % 7 !== 0) days.push(null)
+    return days
+  })()
 
   return (
-    <div style={{padding:24,maxWidth:1100,color:C.text,fontFamily:'Inter,sans-serif'}}>
+    <div style={{ padding: 24, maxWidth: 1100, color: C.text, fontFamily: 'Inter,sans-serif' }}>
       <AriaSays businessId={bid || null} page="bookings" />
+
       {/* Header */}
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:20,flexWrap:'wrap',gap:10}}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: 10 }}>
         <div>
-          <h1 style={{fontSize:22,fontWeight:700}}>Bookings</h1>
-          <p style={{fontSize:13,color:C.muted,marginTop:2}}>Manage reservations, services, and reminders</p>
+          <h1 style={{ fontSize: 22, fontWeight: 700 }}>Bookings</h1>
+          <p style={{ fontSize: 13, color: C.muted, marginTop: 2 }}>Manage reservations, services, and reminders</p>
         </div>
-        <button onClick={()=>setShowAdd(p=>!p)} style={btnPrimary}>+ New booking</button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {bizSlug && (
+            <button onClick={copyLink} style={{ ...btnPrimary, background: copied ? 'rgba(127,184,151,0.2)' : 'transparent', color: copied ? C.green : C.muted, border: '1px solid ' + C.border }}>
+              {copied ? '✓ Copied!' : '🔗 Copy booking link'}
+            </button>
+          )}
+          <button onClick={() => setShowAdd(p => !p)} style={btnPrimary}>+ New booking</button>
+        </div>
       </div>
 
       {/* Stats */}
-      <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:10,marginBottom:20}}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10, marginBottom: 20 }}>
         {[
-          {label:"Today's bookings", value: todayBookings.length, color: C.green},
-          {label:'Upcoming confirmed', value: upcomingCount, color: C.blue},
-          {label:'Need reminder (tomorrow)', value: needReminder.length, color: needReminder.length>0 ? C.amber : C.muted},
-          {label:'Services offered', value: services.length, color: C.muted},
-        ].map(({label,value,color})=>(
-          <div key={label} style={{background:'var(--bg-surface)',borderRadius:12,padding:'14px 16px'}}>
-            <p style={{fontSize:22,fontWeight:700,fontFamily:'Fraunces,serif',fontStyle:'italic',color}}>{value}</p>
-            <p style={{fontSize:11,color:C.muted,marginTop:3}}>{label}</p>
+          { label: "Today's bookings", value: todayBookings.length, color: C.green },
+          { label: 'Upcoming confirmed', value: upcomingCount, color: C.blue },
+          { label: 'Need reminder (tomorrow)', value: needReminder.length, color: needReminder.length > 0 ? C.amber : C.muted },
+          { label: 'Services offered', value: services.length, color: C.muted },
+        ].map(({ label, value, color }) => (
+          <div key={label} style={{ background: C.card, borderRadius: 12, padding: '14px 16px' }}>
+            <p style={{ fontSize: 22, fontWeight: 700, fontFamily: 'Fraunces,serif', fontStyle: 'italic', color }}>{value}</p>
+            <p style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>{label}</p>
           </div>
         ))}
       </div>
 
-      {/* AI Insight Banner */}
+      {/* AI Insight */}
       {insight && !insightDismissed && (
-        <div style={{marginBottom:16,padding:'12px 16px',background:'rgba(45,82,64,0.08)',borderRadius:10,border:'1px solid rgba(45,82,64,0.2)',display:'flex',justifyContent:'space-between',alignItems:'center',gap:12}}>
-          <div style={{flex:1}}>
-            <p style={{fontSize:11,fontWeight:600,color:C.darkGreen,marginBottom:2,textTransform:'uppercase',letterSpacing:'0.5px'}}>AI Revenue Insight</p>
-            <p style={{fontSize:13,color:C.text,margin:0}}>{insight}</p>
+        <div style={{ marginBottom: 16, padding: '12px 16px', background: 'rgba(45,82,64,0.08)', borderRadius: 10, border: '1px solid rgba(45,82,64,0.2)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+          <div style={{ flex: 1 }}>
+            <p style={{ fontSize: 11, fontWeight: 600, color: C.darkGreen, marginBottom: 2, textTransform: 'uppercase', letterSpacing: '0.5px' }}>AI Revenue Insight</p>
+            <p style={{ fontSize: 13, color: C.text, margin: 0 }}>{insight}</p>
           </div>
-          <button onClick={()=>setInsightDismissed(true)} style={{background:'none',border:'none',cursor:'pointer',color:C.muted,fontSize:20,padding:4,lineHeight:1}}>×</button>
+          <button onClick={() => setInsightDismissed(true)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.muted, fontSize: 20, padding: 4 }}>×</button>
         </div>
       )}
 
       {/* Reminder alert */}
       {needReminder.length > 0 && (
-        <div style={{marginBottom:16,padding:'12px 16px',background:'rgba(245,158,11,0.08)',borderRadius:10,border:`1px solid rgba(245,158,11,0.25)`,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+        <div style={{ marginBottom: 16, padding: '12px 16px', background: 'rgba(245,158,11,0.08)', borderRadius: 10, border: '1px solid rgba(245,158,11,0.25)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
-            <p style={{fontSize:13,fontWeight:600,color:C.amber}}>⏰ {needReminder.length} booking{needReminder.length>1?'s':''} tomorrow without a reminder</p>
-            <p style={{fontSize:12,color:C.muted,marginTop:2}}>{needReminder.map(b=>b.customer_name).join(', ')}</p>
+            <p style={{ fontSize: 13, fontWeight: 600, color: C.amber }}>⏰ {needReminder.length} booking{needReminder.length > 1 ? 's' : ''} tomorrow without a reminder</p>
+            <p style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>{needReminder.map(b => b.customer_name).join(', ')}</p>
           </div>
-          <button onClick={()=>needReminder.forEach(b=>sendReminder(b))} style={{...btnPrimary,background:'rgba(245,158,11,0.15)',color:C.amber,border:`1px solid rgba(245,158,11,0.3)`}}>
-            Send all reminders
-          </button>
+          <button onClick={() => needReminder.forEach(b => sendReminder(b))} style={{ ...btnPrimary, background: 'rgba(245,158,11,0.15)', color: C.amber, border: '1px solid rgba(245,158,11,0.3)' }}>Send all reminders</button>
         </div>
       )}
 
       {/* Add booking form */}
       {showAdd && (
-        <div style={{background:'var(--bg-surface)',borderRadius:14,padding:20,marginBottom:20,border:`1px solid ${C.border}`}}>
-          <p style={{fontWeight:700,marginBottom:14}}>New booking</p>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-            <div><label style={{fontSize:11,color:C.muted,display:'block',marginBottom:4}}>Customer name *</label>
-              <input value={form.customer_name} onChange={e=>setForm(p=>({...p,customer_name:e.target.value}))} style={iStyle} placeholder="Jane Smith"/></div>
-            <div><label style={{fontSize:11,color:C.muted,display:'block',marginBottom:4}}>Phone (for SMS reminders)</label>
-              <input value={form.customer_phone} onChange={e=>setForm(p=>({...p,customer_phone:e.target.value}))} style={iStyle} placeholder="0412 345 678"/></div>
-            <div><label style={{fontSize:11,color:C.muted,display:'block',marginBottom:4}}>Email</label>
-              <input value={form.customer_email} onChange={e=>setForm(p=>({...p,customer_email:e.target.value}))} style={iStyle} placeholder="jane@email.com"/></div>
-            <div><label style={{fontSize:11,color:C.muted,display:'block',marginBottom:4}}>Service</label>
-              <select value={form.service_id} onChange={e=>setForm(p=>({...p,service_id:e.target.value}))} style={iStyle}>
+        <div style={{ background: C.card, borderRadius: 14, padding: 20, marginBottom: 20, border: '1px solid ' + C.border }}>
+          <p style={{ fontWeight: 700, marginBottom: 14 }}>New booking</p>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <div><label style={{ fontSize: 11, color: C.muted, display: 'block', marginBottom: 4 }}>Customer name *</label><input value={form.customer_name} onChange={e => setForm(p => ({ ...p, customer_name: e.target.value }))} style={iStyle} placeholder="Jane Smith" /></div>
+            <div><label style={{ fontSize: 11, color: C.muted, display: 'block', marginBottom: 4 }}>Phone (SMS reminders)</label><input value={form.customer_phone} onChange={e => setForm(p => ({ ...p, customer_phone: e.target.value }))} style={iStyle} placeholder="0412 345 678" /></div>
+            <div><label style={{ fontSize: 11, color: C.muted, display: 'block', marginBottom: 4 }}>Email</label><input value={form.customer_email} onChange={e => setForm(p => ({ ...p, customer_email: e.target.value }))} style={iStyle} placeholder="jane@email.com" /></div>
+            <div><label style={{ fontSize: 11, color: C.muted, display: 'block', marginBottom: 4 }}>Service</label>
+              <select value={form.service_id} onChange={e => setForm(p => ({ ...p, service_id: e.target.value }))} style={iStyle}>
                 <option value="">No specific service</option>
-                {services.map(s=><option key={s.id} value={s.id}>{s.name} ({s.duration_minutes}min{s.price?` · $${s.price}`:''})</option>)}
+                {services.map(s => <option key={s.id} value={s.id}>{s.name} ({s.duration_minutes}min{s.price ? ` · $${s.price}` : ''})</option>)}
               </select></div>
-            <div><label style={{fontSize:11,color:C.muted,display:'block',marginBottom:4}}>Date *</label>
-              <input type="date" value={form.booking_date} onChange={e=>setForm(p=>({...p,booking_date:e.target.value}))} style={iStyle}/></div>
-            <div><label style={{fontSize:11,color:C.muted,display:'block',marginBottom:4}}>Time</label>
-              <input type="time" value={form.booking_time} onChange={e=>setForm(p=>({...p,booking_time:e.target.value}))} style={iStyle}/></div>
-            <div><label style={{fontSize:11,color:C.muted,display:'block',marginBottom:4}}>Party size</label>
-              <input type="number" min={1} max={50} value={form.party_size} onChange={e=>setForm(p=>({...p,party_size:parseInt(e.target.value)||1}))} style={iStyle}/></div>
-            <div><label style={{fontSize:11,color:C.muted,display:'block',marginBottom:4}}>Notes</label>
-              <input value={form.notes} onChange={e=>setForm(p=>({...p,notes:e.target.value}))} style={iStyle} placeholder="Special requests…"/></div>
+            <div><label style={{ fontSize: 11, color: C.muted, display: 'block', marginBottom: 4 }}>Date *</label><input type="date" value={form.booking_date} onChange={e => setForm(p => ({ ...p, booking_date: e.target.value }))} style={iStyle} /></div>
+            <div><label style={{ fontSize: 11, color: C.muted, display: 'block', marginBottom: 4 }}>Time</label><input type="time" value={form.booking_time} onChange={e => setForm(p => ({ ...p, booking_time: e.target.value }))} style={iStyle} /></div>
+            <div><label style={{ fontSize: 11, color: C.muted, display: 'block', marginBottom: 4 }}>Party size</label><input type="number" min={1} max={50} value={form.party_size} onChange={e => setForm(p => ({ ...p, party_size: parseInt(e.target.value) || 1 }))} style={iStyle} /></div>
+            <div><label style={{ fontSize: 11, color: C.muted, display: 'block', marginBottom: 4 }}>Notes</label><input value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} style={iStyle} placeholder="Special requests…" /></div>
           </div>
-          <div style={{display:'flex',gap:10,marginTop:14}}>
-            <button onClick={addBooking} disabled={saving} style={btnPrimary}>{saving?'Saving…':'Save booking'}</button>
-            <button onClick={()=>setShowAdd(false)} style={{...btnPrimary,background:'transparent',color:C.muted,border:`1px solid ${C.border}`}}>Cancel</button>
+          <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
+            <button onClick={addBooking} disabled={saving} style={btnPrimary}>{saving ? 'Saving…' : 'Save booking'}</button>
+            <button onClick={() => setShowAdd(false)} style={{ ...btnPrimary, background: 'transparent', color: C.muted, border: '1px solid ' + C.border }}>Cancel</button>
           </div>
         </div>
       )}
 
       {/* Tabs */}
-      <div style={{display:'flex',gap:4,marginBottom:16,borderBottom:`1px solid ${C.border}`,paddingBottom:0}}>
-        {([['calendar','📅 Calendar'],['list','📋 List'],['services','🛎 Services']] as const).map(([t,label])=>(
-          <button key={t} onClick={()=>setTab(t)}
-            {...(t === 'services' ? { 'data-tour': 'add_service' } : {})}
-            style={{padding:'8px 16px',background:'none',border:'none',cursor:'pointer',fontSize:13,fontWeight:tab===t?700:400,color:tab===t?C.green:C.muted,borderBottom:`2px solid ${tab===t?C.green:'transparent'}`,marginBottom:-1}}>
+      <div style={{ display: 'flex', gap: 4, marginBottom: 16, borderBottom: '1px solid ' + C.border }}>
+        {([['calendar', '📅 Calendar'], ['list', '📋 List'], ['services', '🛎 Services'], ['availability', '⚙️ Availability']] as const).map(([t, label]) => (
+          <button key={t} onClick={() => { setTab(t); if (t === 'availability') loadAvailability() }}
+            style={{ padding: '8px 16px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: tab === t ? 700 : 400, color: tab === t ? C.green : C.muted, borderBottom: '2px solid ' + (tab === t ? C.green : 'transparent'), marginBottom: -1 }}>
             {label}
           </button>
         ))}
       </div>
 
       {/* CALENDAR TAB */}
-      {tab==='calendar' && (
+      {tab === 'calendar' && (
         <div>
-          <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:14}}>
-            <button onClick={()=>setWeekOf(p=>addDays(p,-7))} style={{...btnPrimary,padding:'6px 12px'}}>‹</button>
-            <span style={{fontSize:14,fontWeight:600}}>{fmtDate(dateStr(weekDays[0]))} – {fmtDate(dateStr(weekDays[6]))}</span>
-            <button onClick={()=>setWeekOf(p=>addDays(p,7))} style={{...btnPrimary,padding:'6px 12px'}}>›</button>
-            <button onClick={()=>setWeekOf(weekStart(new Date()))} style={{...btnPrimary,background:'transparent',color:C.muted,border:`1px solid ${C.border}`,fontSize:12}}>Today</button>
-          </div>
-          <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:6}}>
-            {weekDays.map(day=>{
-              const ds = dateStr(day)
-              const dayBookings = bookings.filter(b=>b.booking_date===ds && b.status!=='cancelled')
-              const isToday = ds===today
-              return (
-                <div key={ds} onClick={()=>setSelectedDate(ds)}
-                  style={{background: selectedDate===ds ? 'rgba(45,82,64,0.2)' : 'var(--bg-surface)', borderRadius:10, padding:10, cursor:'pointer', border:`1px solid ${isToday?C.green:selectedDate===ds?C.darkGreen:C.border}`, minHeight:120}}>
-                  <p style={{fontSize:11,color:isToday?C.green:C.muted,fontWeight:isToday?700:400,marginBottom:6}}>
-                    {day.toLocaleDateString('en-AU',{weekday:'short'})} {day.getDate()}
-                  </p>
-                  {dayBookings.length===0 ? <p style={{fontSize:10,color:C.border}}>—</p> :
-                    dayBookings.slice(0,3).map(b=>(
-                      <div key={b.id} style={{fontSize:10,padding:'2px 6px',borderRadius:4,background:`${STATUS_COLOR[b.status]}20`,color:STATUS_COLOR[b.status],marginBottom:3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
-                        {fmtTime(b.booking_time)} {b.customer_name}
-                      </div>
-                    ))
-                  }
-                  {dayBookings.length>3 && <p style={{fontSize:10,color:C.muted}}>+{dayBookings.length-3} more</p>}
-                </div>
-              )
-            })}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
+            {/* View toggle */}
+            <div style={{ display: 'flex', borderRadius: 8, overflow: 'hidden', border: '1px solid ' + C.border }}>
+              {(['week', 'month'] as const).map(v => (
+                <button key={v} onClick={() => setCalView(v)} style={{ padding: '5px 14px', background: calView === v ? C.darkGreen : 'transparent', color: calView === v ? C.green : C.muted, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>{v.charAt(0).toUpperCase() + v.slice(1)}</button>
+              ))}
+            </div>
+            {calView === 'week' && (
+              <>
+                <button onClick={() => setWeekOf(p => addDays(p, -7))} style={{ ...btnPrimary, padding: '5px 12px' }}>‹</button>
+                <span style={{ fontSize: 13, fontWeight: 600 }}>{fmtDate(dateStr(weekDays[0]))} – {fmtDate(dateStr(weekDays[6]))}</span>
+                <button onClick={() => setWeekOf(p => addDays(p, 7))} style={{ ...btnPrimary, padding: '5px 12px' }}>›</button>
+                <button onClick={() => setWeekOf(weekStart(new Date()))} style={{ ...btnPrimary, background: 'transparent', color: C.muted, border: '1px solid ' + C.border, fontSize: 12 }}>Today</button>
+              </>
+            )}
+            {calView === 'month' && (
+              <>
+                <button onClick={() => setMonthOf(p => new Date(p.getFullYear(), p.getMonth() - 1, 1))} style={{ ...btnPrimary, padding: '5px 12px' }}>‹</button>
+                <span style={{ fontSize: 13, fontWeight: 600 }}>{monthOf.toLocaleDateString('en-AU', { month: 'long', year: 'numeric' })}</span>
+                <button onClick={() => setMonthOf(p => new Date(p.getFullYear(), p.getMonth() + 1, 1))} style={{ ...btnPrimary, padding: '5px 12px' }}>›</button>
+                <button onClick={() => setMonthOf(monthStart(new Date()))} style={{ ...btnPrimary, background: 'transparent', color: C.muted, border: '1px solid ' + C.border, fontSize: 12 }}>Today</button>
+              </>
+            )}
           </div>
 
-          {/* Selected day detail */}
-          {selectedDate && (
-            <div style={{marginTop:16}}>
-              <p style={{fontSize:14,fontWeight:600,marginBottom:10}}>{fmtDate(selectedDate)}</p>
-              {bookings.filter(b=>b.booking_date===selectedDate && b.status!=='cancelled').length===0 ?
-                <p style={{color:C.muted,fontSize:13}}>No bookings this day.</p> :
-                bookings.filter(b=>b.booking_date===selectedDate && b.status!=='cancelled').map(b=>(
-                  <BookingCard key={b.id} b={b} onStatus={updateStatus} onRemind={sendReminder} sending={!!sending[b.id]}/>
-                ))
-              }
+          {/* Week grid */}
+          {calView === 'week' && (
+            <>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 6 }}>
+                {weekDays.map(day => {
+                  const ds = dateStr(day)
+                  const dayBookings = bookings.filter(b => b.booking_date === ds && b.status !== 'cancelled')
+                  const isToday = ds === today
+                  return (
+                    <div key={ds} onClick={() => setSelectedDate(ds)}
+                      style={{ background: selectedDate === ds ? 'rgba(45,82,64,0.2)' : C.card, borderRadius: 10, padding: 10, cursor: 'pointer', border: '1px solid ' + (isToday ? C.green : selectedDate === ds ? C.darkGreen : C.border), minHeight: 110 }}>
+                      <p style={{ fontSize: 11, color: isToday ? C.green : C.muted, fontWeight: isToday ? 700 : 400, marginBottom: 6 }}>{day.toLocaleDateString('en-AU', { weekday: 'short' })} {day.getDate()}</p>
+                      {dayBookings.slice(0, 3).map(b => (
+                        <div key={b.id} onClick={e => { e.stopPropagation(); setSelectedBooking(b) }} style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: STATUS_COLOR[b.status] + '20', color: STATUS_COLOR[b.status], marginBottom: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'pointer' }}>
+                          {fmtTime(b.booking_time)} {b.customer_name}
+                        </div>
+                      ))}
+                      {dayBookings.length > 3 && <p style={{ fontSize: 10, color: C.muted }}>+{dayBookings.length - 3} more</p>}
+                    </div>
+                  )
+                })}
+              </div>
+              {selectedDate && (
+                <div style={{ marginTop: 16 }}>
+                  <p style={{ fontSize: 14, fontWeight: 600, marginBottom: 10 }}>{fmtDate(selectedDate)}</p>
+                  {bookings.filter(b => b.booking_date === selectedDate && b.status !== 'cancelled').length === 0
+                    ? <p style={{ color: C.muted, fontSize: 13 }}>No bookings this day.</p>
+                    : bookings.filter(b => b.booking_date === selectedDate && b.status !== 'cancelled').map(b => (
+                      <BookingCard key={b.id} b={b} onStatus={updateStatus} onRemind={sendReminder} sending={!!sending[b.id]} onClick={setSelectedBooking} />
+                    ))}
+                </div>
+              )}
+            </>
+          )}
+
+          {/* Month grid */}
+          {calView === 'month' && (
+            <div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 4, marginBottom: 4 }}>
+                {DAY_NAMES.map(d => <div key={d} style={{ fontSize: 10, color: C.muted, textAlign: 'center', padding: '4px 0', fontWeight: 600 }}>{d}</div>)}
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 4 }}>
+                {monthDays.map((day, i) => {
+                  if (!day) return <div key={i} />
+                  const ds = dateStr(day)
+                  const cnt = bookings.filter(b => b.booking_date === ds && b.status !== 'cancelled').length
+                  const isToday = ds === today
+                  return (
+                    <div key={ds} onClick={() => { setSelectedDate(ds); setCalView('week'); setWeekOf(weekStart(day)) }}
+                      style={{ background: isToday ? 'rgba(45,82,64,0.2)' : C.card, borderRadius: 8, padding: '8px 6px', cursor: 'pointer', border: '1px solid ' + (isToday ? C.green : C.border), minHeight: 60, textAlign: 'center' }}>
+                      <p style={{ fontSize: 12, fontWeight: isToday ? 700 : 400, color: isToday ? C.green : C.text, marginBottom: 4 }}>{day.getDate()}</p>
+                      {cnt > 0 && <div style={{ fontSize: 10, background: C.green + '30', color: C.green, borderRadius: 10, padding: '1px 5px', display: 'inline-block' }}>{cnt}</div>}
+                    </div>
+                  )
+                })}
+              </div>
             </div>
           )}
         </div>
       )}
 
       {/* LIST TAB */}
-      {tab==='list' && (
+      {tab === 'list' && (
         <div>
-          <div style={{display:'flex',gap:8,marginBottom:14,flexWrap:'wrap'}}>
-            {['all',...STATUS_LABELS].map(s=>(
-              <button key={s} onClick={()=>setStatusFilter(s)} style={{padding:'4px 12px',borderRadius:20,border:`1px solid ${statusFilter===s?C.green:C.border}`,background:statusFilter===s?'rgba(127,184,151,0.1)':'transparent',color:statusFilter===s?C.green:C.muted,fontSize:12,cursor:'pointer',textTransform:'capitalize'}}>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
+            {['all', ...STATUS_LABELS].map(s => (
+              <button key={s} onClick={() => setStatusFilter(s)} style={{ padding: '4px 12px', borderRadius: 20, border: '1px solid ' + (statusFilter === s ? C.green : C.border), background: statusFilter === s ? 'rgba(127,184,151,0.1)' : 'transparent', color: statusFilter === s ? C.green : C.muted, fontSize: 12, cursor: 'pointer', textTransform: 'capitalize' }}>
                 {s}
               </button>
             ))}
           </div>
-          {loading ? <p style={{color:C.muted}}>Loading…</p> :
-            filteredBookings.length===0 ? <p style={{color:C.muted,fontSize:13}}>No bookings found.</p> :
-            filteredBookings.sort((a,b)=>a.booking_date.localeCompare(b.booking_date)).map(b=>(
-              <BookingCard key={b.id} b={b} onStatus={updateStatus} onRemind={sendReminder} sending={!!sending[b.id]}/>
-            ))
-          }
+          {loading ? <p style={{ color: C.muted }}>Loading…</p> :
+            filteredBookings.length === 0 ? <p style={{ color: C.muted, fontSize: 13 }}>No bookings found.</p> :
+              filteredBookings.sort((a, b) => a.booking_date.localeCompare(b.booking_date)).map(b => (
+                <BookingCard key={b.id} b={b} onStatus={updateStatus} onRemind={sendReminder} sending={!!sending[b.id]} onClick={setSelectedBooking} />
+              ))}
         </div>
       )}
 
       {/* SERVICES TAB */}
-      {tab==='services' && (
+      {tab === 'services' && (
         <div>
-          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(220px,1fr))',gap:10,marginBottom:20}}>
-            {services.map(s=>(
-              <div key={s.id} style={{background:'var(--bg-surface)',borderRadius:12,padding:'14px 16px',borderLeft:`3px solid ${s.color}`}}>
-                <p style={{fontWeight:600,fontSize:14}}>{s.name}</p>
-                <p style={{fontSize:12,color:C.muted,marginTop:3}}>{s.duration_minutes} min{s.price?` · $${s.price}`:''}</p>
-                {s.description && <p style={{fontSize:11,color:C.muted,marginTop:4}}>{s.description}</p>}
-                <p style={{fontSize:11,color:C.muted,marginTop:4}}>Max party: {s.max_party_size}</p>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(220px,1fr))', gap: 10, marginBottom: 20 }}>
+            {services.map(s => (
+              <div key={s.id} style={{ background: C.card, borderRadius: 12, padding: '14px 16px', borderLeft: '3px solid ' + s.color }}>
+                <p style={{ fontWeight: 600, fontSize: 14 }}>{s.name}</p>
+                <p style={{ fontSize: 12, color: C.muted, marginTop: 3 }}>{s.duration_minutes} min{s.price ? ` · $${s.price}` : ''}</p>
+                {s.description && <p style={{ fontSize: 11, color: C.muted, marginTop: 4 }}>{s.description}</p>}
+                <p style={{ fontSize: 11, color: C.muted, marginTop: 4 }}>Max party: {s.max_party_size}</p>
               </div>
             ))}
           </div>
-          <div style={{background:'var(--bg-surface)',borderRadius:14,padding:20,border:`1px solid ${C.border}`,marginBottom:16}}>
-            <p style={{fontWeight:700,marginBottom:4}}>Public booking link</p>
-            <p style={{fontSize:12,color:C.muted,marginBottom:12}}>Share this link so customers can book online.</p>
-            <div style={{display:'flex',gap:8,alignItems:'center'}}>
-              <span style={{fontSize:13,color:C.muted,whiteSpace:'nowrap' as const}}>/book/</span>
-              <input value={slugInput} onChange={e=>setSlugInput(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g,'-').replace(/-+/g,'-').slice(0,60))} style={iStyle} placeholder="your-business-name"/>
-              <button onClick={saveSlug} disabled={slugSaving} style={{...btnPrimary,whiteSpace:'nowrap' as const,padding:'8px 16px'}}>{slugSaving?'Saving…':'Save'}</button>
+          {/* Booking link */}
+          <div style={{ background: C.card, borderRadius: 14, padding: 20, border: '1px solid ' + C.border, marginBottom: 16 }}>
+            <p style={{ fontWeight: 700, marginBottom: 4 }}>Public booking link</p>
+            <p style={{ fontSize: 12, color: C.muted, marginBottom: 12 }}>Share this link so customers can book online.</p>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <span style={{ fontSize: 13, color: C.muted, whiteSpace: 'nowrap' as const }}>/book/</span>
+              <input value={slugInput} onChange={e => setSlugInput(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').slice(0, 60))} style={iStyle} placeholder="your-business-name" />
+              <button onClick={saveSlug} disabled={slugSaving} style={{ ...btnPrimary, whiteSpace: 'nowrap' as const }}>{slugSaving ? 'Saving…' : 'Save'}</button>
             </div>
             {bizSlug && (
-              <p style={{fontSize:12,color:C.muted,marginTop:8}}>
-                Share: <a href={`/book/${bizSlug}`} target="_blank" rel="noopener noreferrer" style={{color:C.green}}>/book/{bizSlug}</a>
-              </p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
+                <a href={'/book/' + bizSlug} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: C.green }}>→ /book/{bizSlug}</a>
+                <button onClick={copyLink} style={{ fontSize: 11, padding: '3px 10px', borderRadius: 6, background: copied ? 'rgba(127,184,151,0.15)' : 'transparent', color: copied ? C.green : C.muted, border: '1px solid ' + C.border, cursor: 'pointer' }}>{copied ? '✓ Copied' : 'Copy link'}</button>
+              </div>
             )}
           </div>
-          <div style={{background:'var(--bg-surface)',borderRadius:14,padding:20,border:`1px solid ${C.border}`}}>
-            <p style={{fontWeight:700,marginBottom:14}}>Add service</p>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-              <div><label style={{fontSize:11,color:C.muted,display:'block',marginBottom:4}}>Service name *</label>
-                <input value={svcForm.name} onChange={e=>setSvcForm(p=>({...p,name:e.target.value}))} style={iStyle} placeholder="e.g. Table reservation"/></div>
-              <div><label style={{fontSize:11,color:C.muted,display:'block',marginBottom:4}}>Duration (minutes)</label>
-                <input type="number" value={svcForm.duration_minutes} onChange={e=>setSvcForm(p=>({...p,duration_minutes:parseInt(e.target.value)||60}))} style={iStyle}/></div>
-              <div><label style={{fontSize:11,color:C.muted,display:'block',marginBottom:4}}>Price ($)</label>
-                <input value={svcForm.price} onChange={e=>setSvcForm(p=>({...p,price:e.target.value}))} style={iStyle} placeholder="Leave blank if free"/></div>
-              <div><label style={{fontSize:11,color:C.muted,display:'block',marginBottom:4}}>Max party size</label>
-                <input type="number" value={svcForm.max_party_size} onChange={e=>setSvcForm(p=>({...p,max_party_size:parseInt(e.target.value)||20}))} style={iStyle}/></div>
-              <div><label style={{fontSize:11,color:C.muted,display:'block',marginBottom:4}}>Description</label>
-                <input value={svcForm.description} onChange={e=>setSvcForm(p=>({...p,description:e.target.value}))} style={iStyle} placeholder="Optional"/></div>
-              <div><label style={{fontSize:11,color:C.muted,display:'block',marginBottom:4}}>Colour</label>
-                <input type="color" value={svcForm.color} onChange={e=>setSvcForm(p=>({...p,color:e.target.value}))} style={{...iStyle,padding:4,height:38}}/></div>
+          {/* Add service form */}
+          <div style={{ background: C.card, borderRadius: 14, padding: 20, border: '1px solid ' + C.border }}>
+            <p style={{ fontWeight: 700, marginBottom: 14 }}>Add service</p>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <div><label style={{ fontSize: 11, color: C.muted, display: 'block', marginBottom: 4 }}>Service name *</label><input value={svcForm.name} onChange={e => setSvcForm(p => ({ ...p, name: e.target.value }))} style={iStyle} placeholder="e.g. Table reservation" /></div>
+              <div><label style={{ fontSize: 11, color: C.muted, display: 'block', marginBottom: 4 }}>Duration (min)</label><input type="number" value={svcForm.duration_minutes} onChange={e => setSvcForm(p => ({ ...p, duration_minutes: parseInt(e.target.value) || 60 }))} style={iStyle} /></div>
+              <div><label style={{ fontSize: 11, color: C.muted, display: 'block', marginBottom: 4 }}>Price ($)</label><input value={svcForm.price} onChange={e => setSvcForm(p => ({ ...p, price: e.target.value }))} style={iStyle} placeholder="Leave blank if free" /></div>
+              <div><label style={{ fontSize: 11, color: C.muted, display: 'block', marginBottom: 4 }}>Max party size</label><input type="number" value={svcForm.max_party_size} onChange={e => setSvcForm(p => ({ ...p, max_party_size: parseInt(e.target.value) || 20 }))} style={iStyle} /></div>
+              <div><label style={{ fontSize: 11, color: C.muted, display: 'block', marginBottom: 4 }}>Description</label><input value={svcForm.description} onChange={e => setSvcForm(p => ({ ...p, description: e.target.value }))} style={iStyle} placeholder="Optional" /></div>
+              <div><label style={{ fontSize: 11, color: C.muted, display: 'block', marginBottom: 4 }}>Colour</label><input type="color" value={svcForm.color} onChange={e => setSvcForm(p => ({ ...p, color: e.target.value }))} style={{ ...iStyle, padding: 4, height: 38 }} /></div>
             </div>
-            <button onClick={addService} style={{...btnPrimary,marginTop:14}}>Add service</button>
+            <button onClick={addService} style={{ ...btnPrimary, marginTop: 14 }}>Add service</button>
           </div>
         </div>
       )}
-    </div>
-  )
-}
 
-function BookingCard({ b, onStatus, onRemind, sending }: { b: Booking; onStatus:(id:string,s:string)=>void; onRemind:(b:Booking)=>void; sending:boolean }) {
-  const C2 = { green:'#7FB897', darkGreen:'#2D5240', amber:'#f59e0b', red:'#ef4444', muted:'var(--text-secondary,#A8B5A8)', text:'#F0F4F0', border:'rgba(127,184,151,0.15)', card:'var(--bg-surface)' }
-  const sc = STATUS_COLOR[b.status] || '#888'
-  return (
-    <div style={{background:C2.card,borderRadius:12,padding:'14px 18px',marginBottom:8,borderLeft:`3px solid ${sc}`,display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:12,flexWrap:'wrap'}}>
-      <div style={{flex:1}}>
-        <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:4,flexWrap:'wrap'}}>
-          <p style={{fontWeight:700,fontSize:14,color:C2.text}}>{b.customer_name}</p>
-          <span style={{fontSize:10,padding:'2px 8px',borderRadius:10,background:`${sc}20`,color:sc,fontWeight:600,textTransform:'capitalize'}}>{b.status}</span>
-          {b.booking_services && <span style={{fontSize:10,padding:'2px 8px',borderRadius:10,background:`${b.booking_services.color}20`,color:b.booking_services.color}}>📋 {b.booking_services.name}</span>}
-          {b.no_show_score !== null && b.no_show_score !== undefined && b.no_show_score >= 70 && <span style={{fontSize:10,padding:'2px 8px',borderRadius:10,background:'rgba(239,68,68,0.08)',color:C2.red,fontWeight:600}}>⚠ No-show risk {b.no_show_score}%</span>}
-          {b.reminder_sent_at && <span style={{fontSize:10,color:C2.muted}}>✉️ reminder sent</span>}
+      {/* AVAILABILITY TAB */}
+      {tab === 'availability' && (
+        <div>
+          <p style={{ fontSize: 13, color: C.muted, marginBottom: 16 }}>Set your business hours. Customers can only book during available windows.</p>
+          <div style={{ background: C.card, borderRadius: 14, padding: 20, border: '1px solid ' + C.border, marginBottom: 16 }}>
+            {availability.map((a, i) => (
+              <div key={a.day_of_week} style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14, flexWrap: 'wrap' }}>
+                <div style={{ width: 80 }}>
+                  <label style={{ fontSize: 11, color: C.muted, display: 'block', marginBottom: 3 }}>{['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][a.day_of_week]}</label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <input type="checkbox" checked={a.is_available} onChange={e => setAvailability(p => p.map((x, j) => j === i ? { ...x, is_available: e.target.checked } : x))} style={{ accentColor: C.green }} />
+                    <span style={{ fontSize: 11, color: a.is_available ? C.green : C.muted }}>{a.is_available ? 'Open' : 'Closed'}</span>
+                  </div>
+                </div>
+                {a.is_available && (
+                  <>
+                    <div style={{ flex: 1, minWidth: 100 }}>
+                      <label style={{ fontSize: 11, color: C.muted, display: 'block', marginBottom: 3 }}>Open</label>
+                      <input type="time" value={a.start_time} onChange={e => setAvailability(p => p.map((x, j) => j === i ? { ...x, start_time: e.target.value } : x))} style={{ ...iStyle, width: 'auto' }} />
+                    </div>
+                    <div style={{ flex: 1, minWidth: 100 }}>
+                      <label style={{ fontSize: 11, color: C.muted, display: 'block', marginBottom: 3 }}>Close</label>
+                      <input type="time" value={a.end_time} onChange={e => setAvailability(p => p.map((x, j) => j === i ? { ...x, end_time: e.target.value } : x))} style={{ ...iStyle, width: 'auto' }} />
+                    </div>
+                    <div style={{ flex: 1, minWidth: 80 }}>
+                      <label style={{ fontSize: 11, color: C.muted, display: 'block', marginBottom: 3 }}>Buffer (min)</label>
+                      <input type="number" min={0} max={120} value={a.buffer_minutes} onChange={e => setAvailability(p => p.map((x, j) => j === i ? { ...x, buffer_minutes: parseInt(e.target.value) || 0 } : x))} style={{ ...iStyle, width: 70 }} />
+                    </div>
+                  </>
+                )}
+              </div>
+            ))}
+            <button onClick={saveAvailability} disabled={availSaving} style={btnPrimary}>{availSaving ? 'Saving…' : 'Save availability'}</button>
+          </div>
         </div>
-        <div style={{display:'flex',gap:12,flexWrap:'wrap',fontSize:12,color:C2.muted}}>
-          <span>📅 {new Date(b.booking_date+'T12:00:00').toLocaleDateString('en-AU',{weekday:'short',day:'numeric',month:'short'})}</span>
-          {b.booking_time && <span>🕐 {(() => { const [h,m]=b.booking_time.split(':'); const hr=parseInt(h); return `${hr>12?hr-12:hr||12}:${m}${hr>=12?'pm':'am'}` })()}</span>}
-          <span>👥 {b.party_size} {b.party_size===1?'person':'people'}</span>
-          {b.customer_phone && <span>📱 {b.customer_phone}</span>}
+      )}
+
+      {/* Booking detail modal */}
+      {selectedBooking && (
+        <div onClick={() => setSelectedBooking(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: 'var(--bg-surface)', borderRadius: 16, padding: 24, maxWidth: 480, width: '100%', maxHeight: '90vh', overflowY: 'auto', border: '1px solid ' + C.border }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+              <div>
+                <h2 style={{ fontSize: 17, fontWeight: 700, margin: 0 }}>{selectedBooking.customer_name}</h2>
+                <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 10, background: STATUS_COLOR[selectedBooking.status] + '20', color: STATUS_COLOR[selectedBooking.status], fontWeight: 600, textTransform: 'capitalize' as const, marginTop: 4, display: 'inline-block' }}>{selectedBooking.status}</span>
+              </div>
+              <button onClick={() => setSelectedBooking(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.muted, fontSize: 22, lineHeight: 1 }}>×</button>
+            </div>
+            <div style={{ fontSize: 13, color: C.muted, display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 16 }}>
+              {selectedBooking.booking_services && <span>📋 {selectedBooking.booking_services.name}</span>}
+              <span>📅 {fmtDate(selectedBooking.booking_date)}{selectedBooking.booking_time ? ' at ' + fmtTime(selectedBooking.booking_time) : ''}</span>
+              <span>👥 {selectedBooking.party_size} {selectedBooking.party_size === 1 ? 'person' : 'people'} · {selectedBooking.duration_minutes}min</span>
+              {selectedBooking.customer_phone && <span>📱 {selectedBooking.customer_phone}</span>}
+              {selectedBooking.customer_email && <span>✉️ {selectedBooking.customer_email}</span>}
+              {selectedBooking.notes && <span style={{ fontStyle: 'italic' }}>💬 "{selectedBooking.notes}"</span>}
+            </div>
+            {selectedBooking.aria_notes && (
+              <div style={{ padding: '10px 14px', background: 'rgba(45,82,64,0.1)', borderRadius: 8, marginBottom: 16, border: '1px solid rgba(45,82,64,0.2)' }}>
+                <p style={{ fontSize: 11, fontWeight: 600, color: C.darkGreen, marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Aria Notes</p>
+                <p style={{ fontSize: 12, color: C.text, margin: 0 }}>{selectedBooking.aria_notes}</p>
+              </div>
+            )}
+            {selectedBooking.reminder_sent_at && <p style={{ fontSize: 11, color: C.muted, marginBottom: 12 }}>✉️ Reminder sent {new Date(selectedBooking.reminder_sent_at).toLocaleDateString('en-AU')}</p>}
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {selectedBooking.status === 'confirmed' && (
+                <button onClick={() => updateStatus(selectedBooking.id, 'completed')} style={{ ...btnPrimary, fontSize: 12 }}>✓ Mark complete</button>
+              )}
+              {selectedBooking.status === 'confirmed' && !selectedBooking.reminder_sent_at && selectedBooking.customer_phone && (
+                <button onClick={() => sendReminder(selectedBooking)} disabled={!!sending[selectedBooking.id]} style={{ ...btnPrimary, background: 'rgba(96,165,250,0.1)', color: '#60a5fa', border: '1px solid rgba(96,165,250,0.25)', fontSize: 12 }}>
+                  {sending[selectedBooking.id] ? 'Sending…' : '📱 Send reminder'}
+                </button>
+              )}
+              {selectedBooking.status !== 'cancelled' && selectedBooking.status !== 'completed' && (
+                <button onClick={() => updateStatus(selectedBooking.id, 'cancelled')} style={{ ...btnPrimary, background: 'rgba(239,68,68,0.1)', color: C.red, border: '1px solid rgba(239,68,68,0.25)', fontSize: 12 }}>Cancel booking</button>
+              )}
+              {selectedBooking.booking_token && (
+                <a href={'/book/cancel/' + selectedBooking.booking_token} target="_blank" rel="noopener noreferrer" style={{ ...btnPrimary, background: 'transparent', color: C.muted, border: '1px solid ' + C.border, fontSize: 12, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>Self-cancel link ↗</a>
+              )}
+            </div>
+          </div>
         </div>
-        {b.notes && <p style={{fontSize:12,color:C2.muted,marginTop:4,fontStyle:'italic'}}>"{b.notes}"</p>}
-      </div>
-      <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center'}}>
-        {b.status==='confirmed' && !b.reminder_sent_at && b.customer_phone && (
-          <button onClick={()=>onRemind(b)} disabled={sending}
-            style={{fontSize:11,padding:'4px 10px',borderRadius:6,background:'rgba(96,165,250,0.1)',color:'#60a5fa',border:'1px solid rgba(96,165,250,0.25)',cursor:'pointer'}}>
-            {sending?'Sending…':'📱 Send reminder'}
-          </button>
-        )}
-        {b.status==='confirmed' && (
-          <button onClick={()=>onStatus(b.id,'completed')}
-            style={{fontSize:11,padding:'4px 10px',borderRadius:6,background:'rgba(127,184,151,0.1)',color:C2.green,border:`1px solid rgba(127,184,151,0.25)`,cursor:'pointer'}}>
-            ✓ Complete
-          </button>
-        )}
-        {b.status!=='cancelled' && b.status!=='completed' && (
-          <button onClick={()=>onStatus(b.id,'cancelled')}
-            style={{fontSize:11,padding:'4px 10px',borderRadius:6,background:'rgba(239,68,68,0.08)',color:C2.red,border:'1px solid rgba(239,68,68,0.2)',cursor:'pointer'}}>
-            Cancel
-          </button>
-        )}
-      </div>
+      )}
     </div>
   )
 }
