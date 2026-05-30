@@ -38,12 +38,9 @@ export async function GET(req: Request) {
       .order('published_at', { ascending: false })
       .limit(limit + 1) // +1 to detect next page
 
-    if (businessIds && businessIds.length > 0) {
-      q = q.in('business_id', businessIds)
-    } else if (member && businessIds && businessIds.length === 0) {
-      // Joined but no follows — fall through to discovery feed
-    }
-
+    // Always show all posts (discovery feed).
+    // Followed businesses are surfaced at the top via client-side sort.
+    // Never filter to followed-only — that would hide the rest of the community.
     if (before) {
       q = q.lt('published_at', before)
     }
@@ -94,12 +91,20 @@ export async function GET(req: Request) {
       published_at: p.published_at,
       counts: counts[p.id] ?? { like: 0, comment: 0, save: 0 },
       mine: mineMap[p.id] ?? { liked: false, saved: false },
+      followed: !!(businessIds && businessIds.includes(p.business_id)),
     }))
+
+    // Boost followed businesses to top, then sort by recency
+    posts.sort((a, b) => {
+      if (a.followed && !b.followed) return -1
+      if (!a.followed && b.followed) return 1
+      return new Date(b.published_at).getTime() - new Date(a.published_at).getTime()
+    })
 
     return NextResponse.json({
       posts,
       next_cursor: hasMore ? slice[slice.length - 1].published_at : null,
-      mode: businessIds && businessIds.length > 0 ? 'followed' : 'discovery',
+      mode: 'discovery',
       member: member ? { id: member.id, nickname: member.nickname } : null,
     })
   } catch (err) {
