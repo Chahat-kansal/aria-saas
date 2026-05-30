@@ -28,7 +28,7 @@ async function _GET(req: Request) {
 
   if (outletId) q = q.eq('outlet_id', outletId)
 
-  const { data, error } = await q.order('stock_quantity', { ascending: true })
+  const { data, error } = await q.order('items_on_hand', { ascending: true })
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ ok: true, data: data ?? [] })
 }
@@ -48,19 +48,19 @@ async function _PATCH(req: Request) {
 
   const { data: current } = await supabase
     .from('pos_outlet_inventory')
-    .select('stock_quantity')
+    .select('items_on_hand')
     .eq('business_id', bid)
     .eq('product_id', product_id)
     .eq('outlet_id', outlet_id)
     .maybeSingle()
 
-  const newQty = (current?.stock_quantity ?? 0) + adjustment
+  const newQty = (current?.items_on_hand ?? 0) + adjustment
 
   const { data, error } = await supabase
     .from('pos_outlet_inventory')
     .upsert({
       business_id: bid, product_id, outlet_id,
-      stock_quantity: newQty,
+      items_on_hand: newQty,
       updated_at: new Date().toISOString(),
     }, { onConflict: 'business_id,product_id,outlet_id' })
     .select()
