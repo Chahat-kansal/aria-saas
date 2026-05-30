@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 
 type Priority = 'info' | 'warning' | 'critical'
-interface InsightResult { insight: string | null; priority?: Priority; link?: string }
+interface InsightResult { insight: string | null; priority?: Priority; link?: string; no_data?: boolean }
 
 // Per-browser cache: 1 hour per business+page (null insights get a shorter 5-min TTL
 // so the banner retries once real data arrives).
@@ -87,7 +87,7 @@ export function AriaSays({ businessId, page, pageData, dismissable = true }: Pro
   // Task 16: if the first load returns no insight, auto-retry once with a fresh call
   // so pages that have real data but haven't generated an insight yet get one immediately.
   useEffect(() => {
-    if (loading || error || result?.insight || retriedRef.current) return
+    if (loading || error || result?.insight || result?.no_data || retriedRef.current) return
     // Insight is null — show "thinking" then fire a fresh fetch after 1.5s
     retriedRef.current = true
     retryTimerRef.current = setTimeout(() => load(true), 1500)
@@ -129,9 +129,8 @@ export function AriaSays({ businessId, page, pageData, dismissable = true }: Pro
     )
   }
 
-  // Determine the empty-state message based on whether we've retried.
-  const emptyMsg = retriedRef.current
-    ? 'Not enough transaction data yet — Aria will generate an insight once there\'s more to work with.'
+  const emptyMsg = result?.no_data
+    ? 'Not enough data yet — Aria will generate an insight once there\'s more to work with.'
     : 'Give me a moment, I\'m thinking about this…'
 
   return (

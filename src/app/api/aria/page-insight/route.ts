@@ -40,6 +40,7 @@ interface PageInsightResult {
   insight: string | null;
   priority?: Priority;
   link?: string;
+  no_data?: boolean;
 }
 
 async function callClaude(prompt: string, systemPrompt?: string): Promise<string> {
@@ -593,7 +594,7 @@ async function _POST(req: Request): Promise<Response> {
         .eq('business_id', business_id).order('week_starting', { ascending: false }).limit(4);
       type R = { week_starting: string; revenue: number | null; transaction_count: number | null; avg_ticket: number | null; new_customers: number | null; goal_attainment_pct: number | null };
       const list = (reps ?? []) as R[];
-      if (list.length === 0) return NextResponse.json({ insight: null, link: '/dashboard/weekly-reports' } satisfies PageInsightResult);
+      if (list.length === 0) return NextResponse.json({ insight: null, no_data: true, link: '/dashboard/weekly-reports' } satisfies PageInsightResult);
       const latest = list[0];
       const prior = list[1];
       const revDelta = prior?.revenue && Number(prior.revenue) > 0 ? ((Number(latest.revenue ?? 0) - Number(prior.revenue)) / Number(prior.revenue)) * 100 : null;
@@ -609,7 +610,7 @@ async function _POST(req: Request): Promise<Response> {
         .eq('business_id', business_id).gte('shift_start', thirtyDaysAgo).order('shift_start', { ascending: false }).limit(50);
       type S = { shift_start: string; total_revenue: number | null; variance_cents: number | null; labour_ratio_pct: number | null; revenue_per_hour: number | null };
       const list = (shifts ?? []) as S[];
-      if (list.length === 0) return NextResponse.json({ insight: null, link: '/dashboard/shift-reports' } satisfies PageInsightResult);
+      if (list.length === 0) return NextResponse.json({ insight: null, no_data: true, link: '/dashboard/shift-reports' } satisfies PageInsightResult);
       const variances = list.filter(s => Math.abs(Number(s.variance_cents ?? 0)) > 1000).length;
       const ratios = list.map(s => Number(s.labour_ratio_pct ?? 0)).filter(r => r > 0);
       const avgLabour = ratios.length ? ratios.reduce((a, b) => a + b, 0) / ratios.length : 0;
@@ -632,7 +633,7 @@ async function _POST(req: Request): Promise<Response> {
       const critical = list.filter(i => i.severity === 'critical' || i.severity === 'high').length;
       const total = list.length;
       const score = (audits ?? [])[0]?.health_score ?? null;
-      if (total === 0 && score == null) return NextResponse.json({ insight: null, link: '/dashboard/seo' } satisfies PageInsightResult);
+      if (total === 0 && score == null) return NextResponse.json({ insight: null, no_data: true, link: '/dashboard/seo' } satisfies PageInsightResult);
       const ctx = `SEO health score: ${score ?? 'not yet measured'}. ${total} open issues (${critical} high/critical priority).`;
       const insight = await callClaude(`In ONE sentence, give ${bizName} the most important SEO insight: ${ctx}. If critical issues exist, name the highest-impact fix.`, systemPrompt);
       const priority: Priority = critical > 3 ? 'warning' : 'info';
@@ -645,7 +646,7 @@ async function _POST(req: Request): Promise<Response> {
         .eq('business_id', business_id).gte('last_requested_at', thirtyDaysAgo).limit(200);
       type M = { product_name: string; times_requested: number | null; estimated_monthly_revenue_cents: number | null; status: string | null };
       const list = (items ?? []) as M[];
-      if (list.length === 0) return NextResponse.json({ insight: null, link: '/dashboard/missed-demand' } satisfies PageInsightResult);
+      if (list.length === 0) return NextResponse.json({ insight: null, no_data: true, link: '/dashboard/missed-demand' } satisfies PageInsightResult);
       const pending = list.filter(i => i.status === 'pending').length;
       const top = [...list].sort((a, b) => Number(b.times_requested ?? 0) - Number(a.times_requested ?? 0))[0];
       const revOpportunity = list.reduce((s, i) => s + Number(i.estimated_monthly_revenue_cents ?? 0), 0) / 100;
@@ -670,7 +671,7 @@ async function _POST(req: Request): Promise<Response> {
         byDow[dow].tx++;
       }
       const entries = Object.entries(byDow).map(([d, v]) => ({ dow: parseInt(d), avg: v.tx > 0 ? v.rev / v.tx : 0, total: v.rev }));
-      if (entries.length < 3) return NextResponse.json({ insight: null, link: '/dashboard/slow-day' } satisfies PageInsightResult);
+      if (entries.length < 3) return NextResponse.json({ insight: null, no_data: true, link: '/dashboard/slow-day' } satisfies PageInsightResult);
       const sorted = entries.sort((a, b) => a.total - b.total);
       const slowest = sorted[0];
       const best = sorted[sorted.length - 1];
