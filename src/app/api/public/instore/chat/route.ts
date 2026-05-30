@@ -222,10 +222,10 @@ export async function POST(req: Request) {
             console.warn('[instore/chat] stall detected, retrying', { business_id })
             await supabaseAdmin.from('aria_ai_calls').insert({
               business_id,
-              route: 'public/instore/chat',
-              model: 'claude-haiku-4-5-20251001',
-              purpose: 'instore-kiosk-stall-detected',
-              status: 'retry',
+              agent_key: 'public/instore/chat',
+              model_id: 'claude-haiku-4-5-20251001',
+              request_summary: 'instore-kiosk-stall-detected',
+              success: false,
             }).then(undefined, () => null)
 
             const correctedPrompt = systemPrompt + '\n\nYour previous reply contained a stall phrase. The product catalogue is RIGHT HERE. Answer the customer NOW using the catalogue. Never write "let me check" or "give me a sec".'
@@ -238,10 +238,10 @@ export async function POST(req: Request) {
               replyText = fallback
               await supabaseAdmin.from('aria_ai_calls').insert({
                 business_id,
-                route: 'public/instore/chat',
-                model: 'claude-haiku-4-5-20251001',
-                purpose: 'instore-kiosk-stall-fallback',
-                status: 'fallback',
+                agent_key: 'public/instore/chat',
+                model_id: 'claude-haiku-4-5-20251001',
+                request_summary: 'instore-kiosk-stall-fallback',
+                success: false,
               }).then(undefined, () => null)
             }
           }
