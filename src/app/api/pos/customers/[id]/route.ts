@@ -32,7 +32,7 @@ async function _GET(_req: Request, { params }: { params: Promise<{ id: string }>
   // Purchase history (last 20 sales)
   const { data: sales } = await supabase
     .from('pos_sales')
-    .select('id, total_amount, payment_method, points_earned, points_redeemed, created_at, pos_sale_items(product_name, quantity, unit_price)')
+    .select('id, total_amount, payment_method, created_at, pos_sale_items(product_name, quantity, unit_price)')
     .eq('business_id', bid)
     .eq('customer_id', id)
     .neq('status', 'voided')
