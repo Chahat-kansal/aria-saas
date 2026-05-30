@@ -351,6 +351,8 @@ function AiOptimizerTab({ businessId }: { businessId: string }) {
   const [generatingId, setGeneratingId] = useState<string | null>(null)
   const [applyModal, setApplyModal] = useState<{ id: string; fixText: string } | null>(null)
   const [applying, setApplying] = useState(false)
+  const [bulkFixing, setBulkFixing] = useState(false)
+  const [bulkProgress, setBulkProgress] = useState('')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -379,6 +381,25 @@ function AiOptimizerTab({ businessId }: { businessId: string }) {
       if (d.suggested_fix) setIssues(prev => prev.map(i => i.id === id ? { ...i, suggested_fix: d.suggested_fix, ai_fix_text: d.suggested_fix } : i))
     } catch { /* ignore */ }
     setGeneratingId(null)
+  }
+
+  async function bulkFixCritical() {
+    const targets = issues.filter(i => i.severity === 'critical' && AI_FIXABLE.has(i.issue_type) && (i.ai_fix_text || i.suggested_fix) && i.state !== 'applied' && i.state !== 'flagged')
+    if (targets.length === 0) return
+    setBulkFixing(true)
+    for (let idx = 0; idx < targets.length; idx++) {
+      const issue = targets[idx]
+      setBulkProgress(`Applying ${idx + 1} of ${targets.length}…`)
+      const fixText = (issue.ai_fix_text || issue.suggested_fix) as string
+      try {
+        const res = await fetch('/api/seo/apply-fix', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ issue_id: issue.id, fix_value: fixText }) }).then(r => r.json())
+        if (res.success) setIssues(prev => prev.map(i => i.id === issue.id ? { ...i, state: res.state, applied_at: new Date().toISOString() } : i))
+      } catch { /* continue */ }
+    }
+    setBulkProgress('Done! Triggering new audit…')
+    try { await fetch('/api/seo/crawl', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ business_id: businessId }) }) } catch { /* ignore */ }
+    setBulkFixing(false)
+    setBulkProgress('')
   }
 
   async function applyFix(id: string, fixText: string) {
@@ -425,6 +446,21 @@ function AiOptimizerTab({ businessId }: { businessId: string }) {
           </div>
         </div>
       )}
+      {(() => {
+        const bulkable = issues.filter(i => i.severity === 'critical' && AI_FIXABLE.has(i.issue_type) && (i.ai_fix_text || i.suggested_fix) && i.state !== 'applied' && i.state !== 'flagged')
+        return bulkable.length > 0 ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16, padding: '12px 16px', background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 12 }}>
+            <div style={{ flex: 1 }}>
+              <span style={{ color: '#fff', fontSize: 13, fontWeight: 600 }}>{bulkable.length} critical issue{bulkable.length > 1 ? 's' : ''} with AI fixes ready</span>
+              {bulkProgress && <span style={{ display: 'block', fontSize: 12, color: '#7FB897', marginTop: 2 }}>{bulkProgress}</span>}
+            </div>
+            <button onClick={bulkFixCritical} disabled={bulkFixing}
+              style={{ padding: '8px 18px', borderRadius: 8, border: 'none', background: '#ef4444', color: '#fff', fontSize: 12, fontWeight: 700, cursor: bulkFixing ? 'default' : 'pointer', fontFamily: 'inherit', opacity: bulkFixing ? 0.6 : 1, flexShrink: 0 }}>
+              {bulkFixing ? 'Fixing…' : 'Fix all critical issues'}
+            </button>
+          </div>
+        ) : null
+      })()}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {issues.map(issue => {
           const fix = issue.ai_fix_text || issue.suggested_fix
