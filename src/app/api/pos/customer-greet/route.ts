@@ -45,7 +45,7 @@ export const POST = withErrorCapture('pos/customer-greet', async (req: Request) 
   if (customer) {
     const { data: sales } = await supabaseAdmin
       .from('pos_sales')
-      .select('items, total_amount, created_at')
+      .select('id, total_amount, created_at')
       .eq('business_id', businessId)
       .eq('customer_id', customer.id)
       .neq('status', 'voided')
@@ -95,7 +95,7 @@ export const POST = withErrorCapture('pos/customer-greet', async (req: Request) 
     .from('pos_products')
     .select('name, category')
     .eq('business_id', businessId)
-    .eq('is_featured', true)
+    .eq('featured', true)
     .limit(5)
 
   const city     = biz?.city ?? biz?.suburb ?? 'Melbourne'
