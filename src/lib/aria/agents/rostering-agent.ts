@@ -54,7 +54,7 @@ export async function generateRosterDraft(
       .lte('start_date', weekEnd)
       .gte('end_date', weekStart),
     supabaseAdmin.from('staff_availability')
-      .select('staff_member_id,day_of_week,available,start_time,end_time')
+      .select('staff_member_id,day_of_week,unavailable_from,unavailable_until')
       .eq('business_id', businessId),
     supabaseAdmin.from('staff_members')
       .select('id,staff_member_skills(staff_skills(name))')
@@ -124,9 +124,9 @@ export async function generateRosterDraft(
   const days7 = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
   const availLines = [...new Set(avail.map(a => a.staff_member_id))].map(sid => {
     const rows = avail.filter(a => a.staff_member_id === sid)
-    const unavailDays = rows.filter(a => !a.available).map(a => days7[a.day_of_week]).join(',')
-    const partial = rows.filter(a => a.available && (a.start_time || a.end_time))
-      .map(a => `${days7[a.day_of_week]}(${a.start_time ?? ''}–${a.end_time ?? ''})`).join(',')
+    const unavailDays = rows.filter(a => !a.unavailable_from && !a.unavailable_until).map(a => days7[a.day_of_week]).join(',')
+    const partial = rows.filter(a => a.unavailable_from || a.unavailable_until)
+      .map(a => `${days7[a.day_of_week]}(${a.unavailable_from ?? ''}–${a.unavailable_until ?? ''})`).join(',')
     const parts: string[] = []
     if (unavailDays) parts.push(`unavailable: ${unavailDays}`)
     if (partial) parts.push(`limited: ${partial}`)
