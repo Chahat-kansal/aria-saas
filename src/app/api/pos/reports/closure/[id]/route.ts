@@ -40,7 +40,7 @@ async function _GET(_req: Request, { params }: { params: { id: string } }) {
 
   const saleIds = (sales || []).map((s: any) => s.id);
   const { data: items } = saleIds.length > 0
-    ? await supabase.from('pos_sale_items').select('sale_id,quantity,cost_price,unit_price,total_price').in('sale_id', saleIds)
+    ? await supabase.from('pos_sale_items').select('sale_id,quantity,cost_price,unit_price').in('sale_id', saleIds)
     : { data: [] };
 
   const itemsBySale = new Map<string, any[]>();
