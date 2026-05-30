@@ -256,9 +256,11 @@ async function _POST(req: Request) {
   }
 
   // 1b. Detect action intent not caught by classifier
+  // NOTE: only trigger if NOT a strategic/advisory question — those go to council
   const ACTION_KEYWORDS = /\b(update|change|mark|set|adjust|apply|create|make|give|reduce|increase)\b/i
   const ACTION_SUBJECTS = /\b(price|prices|stock|products?|inventory|staff|permission|discount)\b/i
-  if (ACTION_KEYWORDS.test(message) && ACTION_SUBJECTS.test(message) && intent.type === 'question') {
+  const isStrategicQuestion = /should|recommend|best|strategy|improve|why|how can|what would|advice|suggest|analyse|analyze|compare|forecast|plan|opportunity|risk|growth|optimise|optimize/i.test(message)
+  if (ACTION_KEYWORDS.test(message) && ACTION_SUBJECTS.test(message) && intent.type === 'question' && !isStrategicQuestion) {
     const planned = await planAction(message, bid)
     if (planned) {
       if (conversationId) {
@@ -284,40 +286,7 @@ async function _POST(req: Request) {
     }
   }
 
-  // ── IMAGE EARLY FAST-PATH ── check before loading context (saves 5-10s)
-  const msgForImageCheck = message.toLowerCase()
-  const isImageEarly = /poster|banner|flyer|graphic|generate.*image|create.*image|make.*image|design.*image|visual.*for/i.test(message)
-  if (isImageEarly) {
-    console.log('[aria/ask] image early fast-path for:', message.slice(0, 60))
-    const { generateImageDirect } = await import('@/lib/aria/image-direct')
-    const imgResult = await generateImageDirect(message, bid)
-    const responseText = imgResult.ok
-      ? `Here's your poster! Generated successfully.`
-      : `Sorry, I couldn't generate the image. ${imgResult.error ?? 'Please try again.'}`
-    let savedConvId = conversationId
-    try {
-      savedConvId = await upsertConversation(bid, user.id, conversationId, message, responseText, 'generate_image')
-    } catch { /* non-fatal */ }
-    const downloads = imgResult.ok && imgResult.download_url ? [{
-      filename: imgResult.filename ?? 'poster.png',
-      download_url: imgResult.download_url,
-      rows: 0,
-      format: 'png',
-    }] : []
-    if (savedConvId && downloads.length > 0) {
-      try {
-        const { data: conv } = await supabaseAdmin.from('aria_conversations').select('messages').eq('id', savedConvId).single()
-        const msgs = Array.isArray((conv as any)?.messages) ? (conv as any).messages : []
-        const lastMsg = msgs[msgs.length - 1]
-        if (lastMsg?.role === 'assistant') {
-          lastMsg.downloads = downloads
-          await supabaseAdmin.from('aria_conversations').update({ messages: msgs }).eq('id', savedConvId)
-        }
-      } catch { /* non-fatal */ }
-    }
-    return NextResponse.json({ response: responseText, conversation_id: savedConvId, intent: 'generate_image', downloads })
-  }
-  void msgForImageCheck
+  // Image requests are handled by the fast-path below after context is built
 
   // 2. Build context
   const ctx = await buildAskAriaContext(bid, conversationId ?? undefined)
@@ -327,7 +296,7 @@ async function _POST(req: Request) {
   if (isStrategic) {
     try {
       const bizCtx = await getBusinessContext(bid)
-      const council = await runAriaCouncil(bizCtx, bid, 'ask_aria')
+      const council = await runAriaCouncil(bizCtx + '\n\nOWNER_QUESTION: ' + message, bid, 'ask_aria')
       if (council?.final_briefing) {
         let savedConvId = conversationId
         try {
@@ -842,7 +811,7 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
 
   // Token limits by model — Haiku is fast, Sonnet has more capacity
   const maxTokens = routedModel === 'haiku'
-    ? (needsTools ? 2000 : 1500)
+    ? (needsTools ? 2500 : 2000)
     : routedModel === 'sonnet'
     ? (useThinking ? 4096 : 3500)
     : 4096
