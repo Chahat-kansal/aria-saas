@@ -105,20 +105,47 @@ async function _POST(req: Request) {
     .from('invoice_line_items').select('*').eq('invoice_id', invoiceId).order('position')
 
   const rawHtml = buildInvoiceHtml(biz, inv, lineRows ?? [])
-  const pixelUrl = `${process.env.NEXT_PUBLIC_APP_URL ?? ''}/api/invoices/track/${invoiceId}`
-  const html = rawHtml.replace('</body>', `<img src="${pixelUrl}" width="1" height="1" style="display:none;"><br></body>`)
+  const pixelUrl = (process.env.NEXT_PUBLIC_APP_URL ?? '') + '/api/invoices/track/' + invoiceId
+  const html = rawHtml.replace('</body>', '<img src="' + pixelUrl + '" width="1" height="1" style="display:none;"><br></body>')
 
-  // Upload HTML to Vercel Blob
+  // Generate real PDF via chromium; fall back to HTML blob
   let pdfUrl = inv.pdf_url as string | null
+  let pdfBuffer: Buffer | null = null
   try {
+    const chromium = (await import('@sparticuz/chromium')).default
+    const puppeteer = (await import('puppeteer-core')).default
+    const browser = await puppeteer.launch({
+      args: chromium.args,
+      executablePath: await chromium.executablePath(),
+      headless: true,
+      defaultViewport: { width: 1200, height: 1600 },
+    })
+    try {
+      const page = await browser.newPage()
+      await page.setContent(html, { waitUntil: 'networkidle0' as never })
+      const pdf = await page.pdf({ format: 'A4', printBackground: true, margin: { top: '15mm', bottom: '15mm', left: '15mm', right: '15mm' } })
+      pdfBuffer = Buffer.from(pdf)
+    } finally {
+      await browser.close()
+    }
     const blob = await put(
-      `invoices/${inv.business_id}/${invoiceId}.html`,
-      html,
-      { access: 'public', contentType: 'text/html' },
+      'invoices/' + inv.business_id + '/' + invoiceId + '.pdf',
+      pdfBuffer,
+      { access: 'public', contentType: 'application/pdf' },
     )
     pdfUrl = blob.url
   } catch {
-    // Non-fatal — proceed without blob URL
+    // Fall back to HTML blob
+    try {
+      const blob = await put(
+        'invoices/' + inv.business_id + '/' + invoiceId + '.html',
+        html,
+        { access: 'public', contentType: 'text/html' },
+      )
+      pdfUrl = blob.url
+    } catch {
+      // Non-fatal
+    }
   }
 
   // Send via chosen channel
@@ -129,17 +156,24 @@ async function _POST(req: Request) {
     const resendKey = process.env.RESEND_API_KEY
     if (!resendKey) return NextResponse.json({ error: 'Email not configured' }, { status: 503 })
 
+    const emailPayload: Record<string, unknown> = {
+      from: process.env.RESEND_FROM_DOMAIN
+        ? biz.name + ' <invoices@' + process.env.RESEND_FROM_DOMAIN + '>'
+        : biz.name + ' <onboarding@resend.dev>',
+      to: toEmail,
+      subject: 'Tax Invoice ' + inv.invoice_number + ' from ' + biz.name + ' — $' + (Number(inv.total) || 0).toFixed(2) + ' AUD',
+      html,
+    }
+    if (pdfBuffer) {
+      emailPayload.attachments = [{
+        filename: 'Invoice-' + inv.invoice_number + '.pdf',
+        content: pdfBuffer.toString('base64'),
+      }]
+    }
     const emailRes = await fetch('https://api.resend.com/emails', {
       method: 'POST',
-      headers: { Authorization: `Bearer ${resendKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        from: process.env.RESEND_FROM_DOMAIN
-        ? `${biz.name} <invoices@${process.env.RESEND_FROM_DOMAIN}>`
-        : `${biz.name} <onboarding@resend.dev>`,  // resend sandbox — works without domain verification
-        to: toEmail,
-        subject: `Tax Invoice ${inv.invoice_number} from ${biz.name} — $${(Number(inv.total) || 0).toFixed(2)} AUD`,
-        html,
-      }),
+      headers: { Authorization: 'Bearer ' + resendKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify(emailPayload),
     })
     if (!emailRes.ok) {
       const errText = await emailRes.text().catch(() => emailRes.statusText)
@@ -176,6 +210,7 @@ async function _POST(req: Request) {
     sent_at: new Date().toISOString(),
     send_method: sendMethod,
     pdf_url: pdfUrl,
+    auto_reminders: true,
     updated_at: new Date().toISOString(),
   }).eq('id', invoiceId).select('*').single()
 

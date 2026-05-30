@@ -1,5 +1,5 @@
 'use client'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useBusinessContext } from '@/components/providers/BusinessProvider'
 import { AriaSays, invalidateAriaInsight } from '@/components/dashboard/AriaSays'
 
@@ -21,6 +21,8 @@ const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
   sent: { bg: 'rgba(59,130,246,0.12)', color: '#3b82f6' },
   overdue: { bg: 'rgba(239,68,68,0.12)', color: '#ef4444' },
   paid: { bg: 'rgba(127,184,151,0.2)', color: '#2D5240' },
+  void: { bg: 'rgba(0,0,0,0.08)', color: '#6b7280' },
+  pending_payment_confirm: { bg: 'rgba(234,179,8,0.12)', color: '#ca8a04' },
 }
 function SBadge({ s }: { s: string }) {
   const c = STATUS_COLORS[s] ?? STATUS_COLORS.draft
@@ -69,7 +71,8 @@ export default function InvoicesPage() {
   const [recurringModal, setRecurringModal] = useState(false)
   const [recurringFreq, setRecurringFreq] = useState<'weekly' | 'monthly' | 'quarterly'>('monthly')
   const [recurringSaving, setRecurringSaving] = useState(false)
-  const notified = useRef(false)
+  const [customers, setCustomers] = useState<{id:string;name:string;email:string|null}[]>([])
+  const [actionLoading, setActionLoading] = useState<string|null>(null)
 
   const fetchInvoices = useCallback(async () => {
     if (!bid) return
@@ -87,8 +90,15 @@ export default function InvoicesPage() {
     setServices(r.services ?? [])
   }, [bid])
 
+  const fetchCustomers = useCallback(async () => {
+    if (!bid) return
+    const r = await fetch('/api/customers?business_id=' + bid + '&limit=200').then(x => x.json()).catch(() => ({}))
+    setCustomers(r.customers ?? [])
+  }, [bid])
+
   useEffect(() => { fetchInvoices() }, [fetchInvoices])
   useEffect(() => { fetchServices() }, [fetchServices])
+  useEffect(() => { fetchCustomers() }, [fetchCustomers])
 
   async function openInvoice(inv: Invoice) {
     setSelected(inv)
@@ -188,6 +198,22 @@ export default function InvoicesPage() {
     fetchServices()
   }
 
+  async function voidInvoice() {
+    if (!selected) return; setActionLoading('void')
+    const r = await fetch('/api/invoices/' + selected.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'void' }) }).then(x => x.json())
+    setActionLoading(null); if (r.invoice) { setSelected(r.invoice); fetchInvoices() }
+  }
+  async function duplicateInvoice() {
+    if (!selected || !bid) return; setActionLoading('dup')
+    await fetch('/api/invoices', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ business_id: bid, bill_to_name: selected.bill_to_name, bill_to_email: selected.bill_to_email ?? '', due_date: '', notes: selected.notes ?? '', lines: selLines.map(l => ({ description: l.description, quantity: l.quantity, unit_price: l.unit_price, gst_applicable: l.gst_applicable })) }) })
+    setActionLoading(null); fetchInvoices(); invalidateAriaInsight(bid, 'invoices')
+  }
+  async function xeroSync(invId: string) {
+    if (!bid) return; setActionLoading('xero-' + invId)
+    await fetch('/api/invoices/' + invId + '/xero', { method: 'POST' })
+    setActionLoading(null); fetchInvoices()
+  }
+
   const tots = calcTotals(bLines)
   const filtered = filter === 'all' ? invoices : invoices.filter(i => i.status === filter)
   const thisMonth = new Date().toISOString().slice(0, 7)
@@ -205,9 +231,10 @@ export default function InvoicesPage() {
         {(['bill_to_name', 'bill_to_email', 'due_date', 'notes'] as const).map(k => (
           <div key={k} style={{ gridColumn: k === 'notes' ? '1/-1' : undefined }}>
             <label style={{ fontSize: 11, color: C.muted, display: 'block', marginBottom: 4 }}>{k === 'bill_to_name' ? 'Customer name *' : k === 'bill_to_email' ? 'Email' : k === 'due_date' ? 'Due date' : 'Notes'}</label>
-            <input style={INP} type={k === 'due_date' ? 'date' : 'text'} value={bForm[k]} onChange={e => setBForm(f => ({ ...f, [k]: e.target.value }))} />
+            <input style={INP} type={k === 'due_date' ? 'date' : 'text'} list={k === 'bill_to_name' ? 'clist' : undefined} value={bForm[k]} onChange={e => { const v = e.target.value; if (k === 'bill_to_name') { const c = customers.find(x => x.name === v); setBForm(f => ({ ...f, bill_to_name: v, ...(c?.email ? { bill_to_email: c.email } : {}) })) } else setBForm(f => ({ ...f, [k]: v })) }} />
           </div>
         ))}
+        <datalist id="clist">{customers.map(c => <option key={c.id} value={c.name} />)}</datalist>
       </div>
 
       <div style={{ background: C.card, borderRadius: 12, padding: 16, marginBottom: 16 }}>
@@ -385,6 +412,11 @@ export default function InvoicesPage() {
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   <button onClick={toggleAutoReminders} style={{ ...BTN(selected.auto_reminders ? 'p' : 'g'), fontSize: 11 }}>Auto reminders: {selected.auto_reminders ? 'ON' : 'OFF'}</button>
                   <button style={{ ...BTN('g'), fontSize: 11 }} onClick={() => setRecurringModal(true)}>↻ Recurring</button>
+                </div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <button style={{ ...BTN('g'), fontSize: 11 }} onClick={duplicateInvoice} disabled={actionLoading === 'dup'}>{actionLoading === 'dup' ? '…' : 'Duplicate'}</button>
+                  {(selected.status === 'sent' || selected.status === 'overdue') && <button style={{ ...BTN('d'), fontSize: 11 }} onClick={voidInvoice} disabled={actionLoading === 'void'}>{actionLoading === 'void' ? '…' : 'Void'}</button>}
+                  {!!(business as unknown as Record<string, unknown>)?.xero_connected_at && <button style={{ ...BTN('g'), fontSize: 11 }} onClick={() => xeroSync(selected.id)} disabled={actionLoading === 'xero-' + selected.id}>{actionLoading === 'xero-' + selected.id ? '…' : 'Xero sync'}</button>}
                 </div>
               </div>
             </div>
