@@ -11,6 +11,7 @@ interface Reel {
   title: string | null
   body: string | null
   video_url: string | null
+  thumbnail_url: string | null
   published_at: string
   counts: { like: number; comment: number; save: number }
   mine: { liked: boolean; saved: boolean }
@@ -169,6 +170,45 @@ export default function ReelsPage() {
   )
 }
 
+function VideoPlayer({ videoRef, src, muted, onToggleMute, poster }: {
+  videoRef: (el: HTMLVideoElement | null) => void
+  src: string
+  muted: boolean
+  onToggleMute: () => void
+  poster?: string
+}) {
+  const [failed, setFailed] = useState(false)
+
+  if (failed) {
+    return (
+      <div onClick={onToggleMute} style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#111', cursor: 'pointer', gap: 12 }}>
+        {poster && <img src={poster} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', opacity: 0.4 }} />}
+        <div style={{ position: 'relative', zIndex: 1, textAlign: 'center' }}>
+          <div style={{ fontSize: 48, marginBottom: 8 }}>🎬</div>
+          <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: 13, margin: 0 }}>Video unavailable</p>
+          <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11, margin: '4px 0 0' }}>Upload via Aria dashboard</p>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <video
+      ref={videoRef}
+      src={src}
+      loop
+      muted={muted}
+      playsInline
+      crossOrigin="anonymous"
+      poster={poster}
+      preload="metadata"
+      onError={() => setFailed(true)}
+      onClick={onToggleMute}
+      style={{ width: '100%', height: '100%', objectFit: 'cover', cursor: 'pointer' }}
+    />
+  )
+}
+
 function ReelItem({ reel, videoRef, onLike, onSave, onShare }: {
   reel: Reel
   videoRef: (el: HTMLVideoElement | null) => void
@@ -183,17 +223,15 @@ function ReelItem({ reel, videoRef, onLike, onSave, onShare }: {
       position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center',
       background: '#000',
     }}>
-      {reel.video_url && (
-        <video
-          ref={videoRef}
+      {reel.video_url ? (
+        <VideoPlayer
+          videoRef={videoRef}
           src={reel.video_url}
-          loop
           muted={muted}
-          playsInline
-          onClick={() => setMuted(m => !m)}
-          style={{ width: '100%', height: '100%', objectFit: 'contain', cursor: 'pointer' }}
+          onToggleMute={() => setMuted(m => !m)}
+          poster={reel.thumbnail_url ?? undefined}
         />
-      )}
+      ) : null}
 
       {/* Right-side action stack */}
       <div style={{
