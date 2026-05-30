@@ -18,9 +18,8 @@ async function _GET(_req: Request) {
   const bid = await getBid(supabase, user.id)
   if (!bid) return NextResponse.json({ transfers: [] })
 
-  // Try pos_stock_transfers first
-  const { data, error: e } = await supabase.from('pos_stock_transfers')
-    .select('*, pos_products(name), pos_outlets!from_outlet_id(name), pos_outlets!to_outlet_id(name)')
+  const { data, error: e } = await supabase.from('pos_inventory_transfers')
+    .select('*, pos_outlets!from_outlet_id(name), pos_outlets!to_outlet_id(name)')
     .eq('business_id', bid)
     .order('created_at', { ascending: false })
     .limit(100)
