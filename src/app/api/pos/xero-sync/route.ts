@@ -67,7 +67,7 @@ async function _POST(req: Request) {
 
   const { data: sales } = await supabaseAdmin
     .from('pos_sales')
-    .select('id, total, tax_total, subtotal, payment_method, status')
+    .select('id, total_amount, tax_total, subtotal, payment_method, status')
     .eq('business_id', bid)
     .neq('status', 'voided')
     .gte('created_at', dayStart)
@@ -76,13 +76,13 @@ async function _POST(req: Request) {
   if (!sales?.length) return NextResponse.json({ ok: true, synced: 0, message: 'No sales found for this date' })
 
   // Summarise
-  const totalRevenue = sales.reduce((s, x) => s + Number(x.total ?? 0), 0)
+  const totalRevenue = sales.reduce((s, x) => s + Number(x.total_amount ?? 0), 0)
   const totalTax     = sales.reduce((s, x) => s + Number(x.tax_total ?? 0), 0)
   const totalEx      = totalRevenue - totalTax
   const byMethod: Record<string, number> = {}
   for (const s of sales) {
     const m = String(s.payment_method ?? 'other')
-    byMethod[m] = (byMethod[m] ?? 0) + Number(s.total ?? 0)
+    byMethod[m] = (byMethod[m] ?? 0) + Number(s.total_amount ?? 0)
   }
 
   // Push to Xero as a manual journal entry (daily sales summary)
