@@ -76,8 +76,8 @@ const nextConfig = {
               "img-src 'self' data: blob: https: http:",
               // Media: allow blob for voice
               "media-src 'self' blob: https://*.supabase.co https://nxfzippunqvqsvkmwtjv.supabase.co https://*.public.blob.vercel-storage.com",
-              // API connections — includes Sentry ingest (region-specific subdomains)
-              "connect-src 'self' blob: https://api.anthropic.com https://api.openai.com https://emkc.org https://api.openweathermap.org https://api.open-meteo.com https://geocoding-api.open-meteo.com https://www.alphavantage.co https://www.googleapis.com https://gmail.googleapis.com https://calendar.googleapis.com https://*.supabase.co wss://*.supabase.co https://api.stripe.com https://js.stripe.com https://*.sentry.io https://*.ingest.sentry.io https://*.ingest.us.sentry.io https://*.ingest.de.sentry.io https://eu.i.posthog.com https://us.i.posthog.com https://eu-assets.i.posthog.com https://us-assets.i.posthog.com https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://unpkg.com https://raw.githubusercontent.com https://www.gstatic.com https://*.public.blob.vercel-storage.com",
+              // API connections — external AI/weather/finance APIs are server-side only (not listed here)
+              "connect-src 'self' blob: https://www.googleapis.com https://*.supabase.co wss://*.supabase.co https://api.stripe.com https://js.stripe.com https://*.sentry.io https://*.ingest.sentry.io https://*.ingest.us.sentry.io https://*.ingest.de.sentry.io https://eu.i.posthog.com https://us.i.posthog.com https://eu-assets.i.posthog.com https://us-assets.i.posthog.com https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://unpkg.com https://raw.githubusercontent.com https://www.gstatic.com https://*.public.blob.vercel-storage.com",
               // Frames: allow blob + data + any origin for srcdoc previews
               "frame-src 'self' blob: data: https: http:",
               // Workers
