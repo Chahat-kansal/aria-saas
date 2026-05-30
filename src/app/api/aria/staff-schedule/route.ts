@@ -35,6 +35,16 @@ async function _POST(req: Request) {
     .gte('created_at', fourWeeksAgo)
     .limit(2000)
 
+  // Count distinct calendar weeks to detect thin data
+  const weekKeys = new Set<string>()
+  for (const s of sales ?? []) {
+    const dt = new Date(s.created_at as string)
+    const weekStart = new Date(dt)
+    weekStart.setDate(dt.getDate() - dt.getDay())
+    weekKeys.add(weekStart.toISOString().slice(0, 10))
+  }
+  const hasEnoughData = weekKeys.size >= 4
+
   // Aggregate by day-of-week + hour
   const byDayHour: Record<number, Record<number, number>> = {}
   for (let d = 0; d < 7; d++) byDayHour[d] = {}
@@ -45,10 +55,12 @@ async function _POST(req: Request) {
     byDayHour[dow][hour] = (byDayHour[dow][hour] ?? 0) + Number(s.total_amount ?? 0)
   }
 
-  // Average over 4 weeks per day
+  // Average over 4 weeks per day (or use even staffing if not enough data)
   const dayRevenue: Record<number, number> = {}
   for (let d = 0; d < 7; d++) {
-    dayRevenue[d] = Object.values(byDayHour[d]).reduce((a, b) => a + b, 0) / 4
+    dayRevenue[d] = hasEnoughData
+      ? Object.values(byDayHour[d]).reduce((a, b) => a + b, 0) / 4
+      : AVG_REV_PER_STAFF_HOUR * 4 // even staffing default
   }
 
   // Next week Mon–Sun
@@ -80,8 +92,12 @@ async function _POST(req: Request) {
 
   const staffNames = (staffList ?? []).map(s => `${s.first_name} ${s.last_name} (${s.position ?? 'staff'})`).join(', ')
 
-  const prompt = `You are scheduling staff for ${biz.name} next week. Generate a practical weekly schedule.
+  const dataNote = hasEnoughData
+    ? ''
+    : '\n⚠ IMPORTANT: Less than 4 weeks of sales data — use even staffing across all days. Do NOT recommend closing any days.'
 
+  const prompt = `You are scheduling staff for ${biz.name} next week. Generate a practical weekly schedule.
+${dataNote}
 Forecast & recommended staff:
 ${forecast.map(f => `${f.day} ${f.date}: $${f.predicted_revenue} predicted revenue → ${f.recommended_staff} staff`).join('\n')}
 
@@ -93,7 +109,11 @@ Return ONLY valid JSON array:
   {"staff_name":"name","shift_date":"YYYY-MM-DD","start_time":"09:00","end_time":"17:00","role":"staff","notes":""},
   ...
 ]
-Rules: spread staff across days, give each person ~3-4 days/week for casual staff.`
+Rules:
+- Spread staff across days, give each person ~3-4 days/week for casual staff.
+- NEVER recommend closing more than 2 days per week (no shifts at all on a day counts as a closure).
+- On low-revenue days, use reduced hours (e.g. 10am–2pm) instead of closure.
+- If data is insufficient, use even staffing — do not recommend any closures.`
 
   const msg = await trackAICall(
     { route: 'aria/staff-schedule', model: 'claude-haiku-4-5-20251001', businessId: business_id, purpose: 'staff-schedule' },
@@ -112,7 +132,31 @@ Rules: spread staff across days, give each person ~3-4 days/week for casual staf
     suggestedShifts = jsonMatch ? JSON.parse(jsonMatch[0]) : []
   } catch { suggestedShifts = [] }
 
-  return NextResponse.json({ forecast, suggested_shifts: suggestedShifts })
+  // Post-validate: if AI closed more than 2 days, add reduced-hours shifts for excess closed days
+  const scheduledDates = new Set(suggestedShifts.map(s => s.shift_date))
+  const forecastDates = forecast.map(f => f.date)
+  const closedDates = forecastDates.filter(d => !scheduledDates.has(d))
+
+  if (closedDates.length > 2) {
+    // Keep the 2 lowest-revenue days as genuinely closed; add reduced shifts for the rest
+    const sortedByRevAsc = [...forecast].sort((a, b) => a.predicted_revenue - b.predicted_revenue)
+    const allowedClosed = new Set(sortedByRevAsc.slice(0, 2).map(f => f.date))
+    for (const date of closedDates) {
+      if (!allowedClosed.has(date)) {
+        // Add a single reduced-hours shift for the day
+        suggestedShifts.push({
+          staff_name: staffNames ? staffNames.split(',')[0].trim().split('(')[0].trim() : 'Staff',
+          shift_date: date,
+          start_time: '10:00',
+          end_time: '14:00',
+          role: 'staff',
+          notes: 'Reduced hours (auto-added — AI exceeded 2-day closure limit)',
+        })
+      }
+    }
+  }
+
+  return NextResponse.json({ forecast, suggested_shifts: suggestedShifts, has_enough_data: hasEnoughData })
 }
 
 export const POST = withErrorCapture('aria/staff-schedule', _POST)
