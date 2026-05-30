@@ -116,7 +116,7 @@ async function executeScheduleApproval(supabase: Supa, bid: string, dec: Record<
   const resendKey = process.env.RESEND_API_KEY;
   if (resendKey) {
     try {
-      const { data: staffList } = await supabase.from('pos_staff').select('name,email').eq('business_id', bid).eq('active', true).not('email', 'is', null);
+      const { data: staffList } = await supabase.from('pos_staff').select('name,email').eq('business_id', bid).eq('is_active', true).not('email', 'is', null);
       const { data: biz } = await supabase.from('businesses').select('name').eq('id', bid).single();
       for (const staff of (staffList ?? []) as Array<{ name: string; email: string }>) {
         if (!staff.email) continue;

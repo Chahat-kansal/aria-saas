@@ -20,10 +20,10 @@ async function _GET(_req: Request) {
 
   const { data } = await supabase
     .from('pos_customers')
-    .select('id, name, email, phone, account_balance, loyalty_points, total_spent, last_visit')
+    .select('id, name, email, phone, balance, loyalty_points, total_spent, last_visit')
     .eq('business_id', bid)
-    .gt('account_balance', 0)
-    .order('account_balance', { ascending: false })
+    .gt('balance', 0)
+    .order('balance', { ascending: false })
     .limit(100)
   return NextResponse.json({ customers: data ?? [] })
 }
@@ -38,12 +38,12 @@ async function _POST(req: Request) {
   const { customer_id, amount, type, note } = await req.json()
   if (!customer_id || !amount || !type) return NextResponse.json({ error: 'customer_id, amount, type required' }, { status: 400 })
 
-  const { data: customer } = await supabase.from('pos_customers').select('account_balance').eq('id', customer_id).eq('business_id', bid).maybeSingle()
+  const { data: customer } = await supabase.from('pos_customers').select('balance').eq('id', customer_id).eq('business_id', bid).maybeSingle()
   if (!customer) return NextResponse.json({ error: 'Customer not found' }, { status: 404 })
 
   const delta = type === 'credit' ? Math.abs(amount) : -Math.abs(amount)
-  const newBalance = (customer.account_balance ?? 0) + delta
-  await supabase.from('pos_customers').update({ account_balance: newBalance }).eq('id', customer_id)
+  const newBalance = (customer.balance ?? 0) + delta
+  await supabase.from('pos_customers').update({ balance: newBalance }).eq('id', customer_id)
   return NextResponse.json({ ok: true, new_balance: newBalance })
 }
 
