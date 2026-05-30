@@ -1,17 +1,19 @@
 # Aria OS Audit State
 
 ## Last updated
-2026-05-31 — Session 2 Batch A complete
+2026-05-31 — Session 2 Batch C complete
 
 ## Status
-IN PROGRESS — src/app/api/pos/ Batch A complete (ad-campaigns → cart-line-actions)
+IN PROGRESS — src/app/api/pos/ Batch C complete (daily-summary → gift-cards)
 
 ## Completed sections
 - [x] src/app/api/aria/ — all ~47 route files audited
 - [x] src/app/api/pos/ Batch A — ad-campaigns, ad-impressions, agent-decisions (3 files), agents/[type], ask, audit-log, balances, bas-export, basket-analysis, business, cafe/seed-modifiers, cart-intelligence, cart-line-actions
+- [x] src/app/api/pos/ Batch B — cash-movements, cash-sessions (2 files), categories, classifications, commission-rules, commissions, custom-roles (2 files), customer-greet, customer-groups, customers (10 files)
+- [x] src/app/api/pos/ Batch C — daily-summary, dashboard, dead-stock, display-suggestions, email-log, email-receipt, enterprise-policies, eod-markdown, expiry/alerts (2 files), expiry/batches, expiry-alerts, fitting-room, future-prices, gift-cards (3 files)
 
 ## Current position
-Next: src/app/api/pos/ Batch B (cash-sessions → customers)
+Next: src/app/api/pos/ Batch D (hardware-devices → modifiers)
 
 ## Issues found (running log)
 | File | Type | Issue | Fixed? | Commit |
@@ -23,6 +25,9 @@ Next: src/app/api/pos/ Batch B (cash-sessions → customers)
 | src/app/api/aria/roster/route.ts | Wrong column | `staff_members.name` in select caused PostgREST 400, staffRows null, always "No staff found". Removed `name` from select; simplified name-construction line to use first_name/last_name only | YES | af918e0 |
 | src/app/api/pos/agents/[type]/route.ts | Wrong column | `pos_staff.active` → `is_active` (in executeScheduleApproval — email to active staff) | YES | ca1cedd6 |
 | src/app/api/pos/balances/route.ts | Wrong column | `pos_customers.account_balance` → `balance` (select, gt filter, order, update — 4 occurrences) | YES | ca1cedd6 |
+| src/app/api/pos/customer-greet/route.ts | Wrong column | `pos_sales.items` doesn't exist → changed to `id` (needed for sale ID extraction in fallback) | YES | 6c4f4e8e |
+| src/app/api/pos/customer-greet/route.ts | Wrong column | `pos_products.is_featured` → `featured` (trending product query always returned empty) | YES | 6c4f4e8e |
+| src/app/api/pos/customers/[id]/route.ts | Wrong columns | `pos_sales.points_earned, points_redeemed` don't exist → removed from select | YES | dd2988e9 |
 
 ## Known already-fixed issues (do not re-fix)
 | File | Issue | Fixed in |
@@ -48,9 +53,23 @@ agent-decisions/[id]/reject, agents/[type] (after fix), ask, audit-log,
 balances (after fix), bas-export, basket-analysis, business, cafe/seed-modifiers,
 cart-intelligence, cart-line-actions
 
+## Routes confirmed CLEAN in src/app/api/pos/ Batch B (Session 2)
+cash-movements, cash-sessions, cash-sessions/[id], categories, classifications,
+commission-rules, commissions, custom-roles, custom-roles/[id],
+customer-greet (after fix), customer-groups,
+customers, customers/[id] (after fix), customers/lookup, customers/performance,
+customers/rfm-trigger, customers/segments, customers/sms-draft, customers/insight,
+customers/[id]/activity, customers/sms
+
+## Routes confirmed CLEAN in src/app/api/pos/ Batch C (Session 2)
+daily-summary, dashboard, dead-stock, display-suggestions, email-log, email-receipt,
+enterprise-policies, eod-markdown, expiry/alerts, expiry/alerts/[id], expiry/batches,
+expiry-alerts, fitting-room, future-prices, gift-cards, gift-cards/aria-check,
+gift-cards/receipt
+
 ## Sections remaining
 - [x] src/app/api/aria/ (~47 route files) ← DONE Session 1
-- [~] src/app/api/pos/ (~80 route files) — Batch A done, Batch B next (cash-sessions → customers)
+- [~] src/app/api/pos/ (~80 route files) — Batches A+B+C done, Batch D next (hardware-devices → modifiers)
 - [ ] src/app/api/public/ (~30 route files)
 - [ ] src/app/api/social/ (~20 route files)
 - [ ] src/app/api/reports/ (~10 route files)
