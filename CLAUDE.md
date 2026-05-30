@@ -1,5 +1,9 @@
 # Ruflo — Claude Code Configuration
 
+## Skills
+
+- **ALWAYS apply `aria-coding-rules` skill on every UI/TSX task** — run `/skill aria-coding-rules` before editing any `.tsx` or `.ts` component file. The rules cover JSX template literal restrictions, DB column names, model IDs, vercel.json limits, and protected files.
+
 ## Rules
 
 - Do what has been asked; nothing more, nothing less
