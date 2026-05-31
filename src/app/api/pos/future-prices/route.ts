@@ -54,10 +54,12 @@ async function _DELETE(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const bid = await getBid(supabase, user.id);
+  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 });
   const { searchParams } = new URL(req.url);
   const id = searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
-  await supabase.from('pos_future_prices').delete().eq('id', id);
+  await supabase.from('pos_future_prices').delete().eq('id', id).eq('business_id', bid);
   return NextResponse.json({ ok: true });
 }
 

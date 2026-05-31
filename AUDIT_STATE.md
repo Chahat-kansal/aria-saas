@@ -1,10 +1,10 @@
 # Aria OS Audit State
 
 ## Last updated
-2026-05-31 — Session 5 ALL BATCHES COMPLETE. FULL CODEBASE AUDIT COMPLETE.
+2026-05-31 — Session 6 IN PROGRESS. Silent-failure + security sweep. CHECKs 1/3/4/5/7/8/9 complete. CHECKs 2/6 in progress.
 
 ## Push Status
-ALL COMMITS PUSHED — origin/main is current as of cb9fe6d4
+ALL COMMITS PUSHED — origin/main is current as of d18dc68c
 
 ## LIVE DB SCHEMA — pos_products (confirmed 2026-05-31)
 Both `track_stock` AND `track_inventory` exist (separate boolean columns).
@@ -231,6 +231,39 @@ All integrations/ and cron/ routes audited — all clean (per session 3 audit co
 - [ ] src/app/in-store/ (all page.tsx — ~8 files)
 - [ ] src/lib/aria/ (all lib files — ~30 files)
 - [ ] src/components/dashboard/ (all components — ~40 files)
+
+## Session 6 — Silent-failure & security sweep (2026-05-31)
+16 bugs fixed across CHECKs 1, 7, 8.
+
+| File | Type | Issue | Fixed? | Commit |
+|------|------|-------|--------|--------|
+| src/app/api/cron/[task]/route.ts | RLS | anon client on cross-business cron queries | YES | (session 6) |
+| src/app/api/cron/generate-briefings/route.ts | RLS | anon client on businesses/pos_sales/pos_products | YES | (session 6) |
+| src/app/api/cron/rfm-daily/route.ts | RLS | anon client on customers/pos_sales | YES | (session 6) |
+| src/app/api/cron/run-scheduled-reorders/route.ts | RLS | anon client on pos_reorder_schedules/businesses | YES | (session 6) |
+| src/app/api/share/[token]/route.ts | RLS | public share endpoint — conversations table needs supabaseAdmin | YES | (session 6) |
+| src/app/api/feature-roadmap/route.ts | RLS | global table needs supabaseAdmin | YES | (session 6) |
+| src/lib/aria/ask/action-executor.ts | RLS | createServerSupabaseClient inside lib function | YES | (session 6) |
+| src/lib/aria/ask/action-planner.ts | RLS | createServerSupabaseClient inside lib function | YES | (session 6) |
+| src/lib/aria/ask/action-rollback.ts | RLS | createServerSupabaseClient inside lib function | YES | (session 6) |
+| vercel.json | Deploy | parcel-insights cron sub-daily (0 */6 * * *) → daily (0 6 * * *) | YES | (session 6) |
+| src/app/api/staff/payroll/approve/route.ts | SECURITY | no business ownership check — any user could approve any payroll run | YES | (session 6) |
+| src/app/api/staff/payroll/aba/route.ts | SECURITY | no ownership check — ABA files expose bank details | YES | (session 6) |
+| src/app/api/pos/customers/[id]/activity/route.ts | SECURITY | GET returned activity for any customer_id with no ownership check | YES | (session 6) |
+| src/app/api/pos/customers/performance/route.ts | SECURITY | unscoped business_id in POST body — cross-business data leak | YES | (session 6) |
+| src/app/api/staff/leave/balances/route.ts | SECURITY | no ownership check on business_id query param | YES | (session 6) |
+| src/app/api/pos/splits/[id]/void/route.ts | SECURITY | voiding split without verifying business ownership | YES | (session 6) |
+
+### Session 6 CHECK STATUS
+- ✅ CHECK 1: RLS/anon-key — 9 files fixed
+- ✅ CHECK 3: Missing awaits — clean (fire-and-forget telemetry acceptable)
+- ✅ CHECK 4: .single() vs .maybeSingle() — standard ownership pattern acceptable
+- ✅ CHECK 5: Error-swallowing try/catch — all empty catches are telemetry (acceptable)
+- ✅ CHECK 7: Ownership gaps — 6 critical security bugs fixed
+- ✅ CHECK 8: vercel.json — parcel-insights cron fixed
+- ✅ CHECK 9: New code (community routes, aria/ask libs) — clean or fixed
+- ❌ CHECK 2: Unchecked Supabase errors — IN PROGRESS
+- ❌ CHECK 6: Silent update no-ops — IN PROGRESS
 
 ## Total DB tables (341)
 Key tables: businesses, staff_members, pos_staff, pos_products, pos_sales,

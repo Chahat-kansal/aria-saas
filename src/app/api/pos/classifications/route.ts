@@ -68,7 +68,10 @@ async function _PATCH(req: Request) {
   const table = TABLE_MAP[type];
   if (!table || !id) return NextResponse.json({ error: 'type and id required' }, { status: 400 });
 
-  const { error } = await supabase.from(table).update({ name }).eq('id', id);
+  const bid = await getBid(supabase, user.id);
+  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 404 });
+
+  const { error } = await supabase.from(table).update({ name }).eq('id', id).eq('business_id', bid);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });
 }
@@ -84,7 +87,10 @@ async function _DELETE(req: Request) {
   const table = TABLE_MAP[type];
   if (!table || !id) return NextResponse.json({ error: 'type and id required' }, { status: 400 });
 
-  const { error } = await supabase.from(table).delete().eq('id', id);
+  const bid = await getBid(supabase, user.id);
+  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 404 });
+
+  const { error } = await supabase.from(table).delete().eq('id', id).eq('business_id', bid);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });
 }
