@@ -240,5 +240,9 @@ export function BlockRenderer({ block, onChoice }: Props) {
     )
   }
 
-  return null
+    return null
+  } catch (e) {
+    console.error('[BlockRenderer] render error:', block?.type, e)
+    return null
+  }
 }
