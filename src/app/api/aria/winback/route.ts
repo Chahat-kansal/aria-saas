@@ -3,6 +3,8 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
 import * as Sentry from '@sentry/nextjs';
+import { z } from 'zod';
+import { validateBody } from '@/lib/api/validate';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import Anthropic from '@anthropic-ai/sdk';
 import { ARIA_VOICE } from '@/lib/aria-voice-guide';
@@ -15,6 +17,14 @@ import { getSystemPrompt } from '@/lib/aria/get-system-prompt'
 import { writeAriaOutcome } from '@/lib/aria/write-outcome'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+const WinbackSchema = z.object({
+  business_id: z.string().uuid().optional(),
+  businessId: z.string().uuid().optional(),
+  customer_ids: z.array(z.string().uuid()).optional(),
+  customerId: z.string().uuid().optional(),
+  message: z.string().max(1600).optional(),
+})
 
 async function sendTwilio(from: string, to: string, body: string, sid: string, token: string) {
   const url = `https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`;
@@ -38,7 +48,9 @@ async function _POST(req: Request) {
   const rl = await checkRateLimit('messaging', user.id);
   if (!rl.ok) return NextResponse.json({ error: 'Rate limit exceeded. Try again later.' }, { status: 429 });
 
-  const body = await req.json();
+  const parsed = await validateBody(req, WinbackSchema)
+  if ('error' in parsed) return parsed.error
+  const body = parsed.data
   // Support both batch (customer_ids) and single (customerId) modes
   const business_id = body.business_id ?? body.businessId;
   const isBatch = Array.isArray(body.customer_ids);
@@ -56,8 +68,8 @@ async function _POST(req: Request) {
 
   // === BATCH MODE ===
   if (isBatch) {
-    const customerIds: string[] = body.customer_ids;
-    const message: string = body.message;
+    const customerIds: string[] = body.customer_ids ?? [];
+    const message: string = body.message ?? '';
     if (!message?.trim()) return NextResponse.json({ error: 'message required' }, { status: 400 });
 
     const { data: customers } = await supabase.from('pos_customers')

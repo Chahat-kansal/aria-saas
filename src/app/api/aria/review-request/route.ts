@@ -1,6 +1,8 @@
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
+import { z } from 'zod';
+import { validateBody } from '@/lib/api/validate';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { sendSMS } from '@/lib/clicksend'
@@ -15,6 +17,12 @@ import { writeAriaOutcome } from '@/lib/aria/write-outcome'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
+const ReviewRequestSchema = z.object({
+  customerId: z.string().uuid().optional(),
+  businessId: z.string().uuid().optional(),
+  review_id: z.string().uuid().optional(),
+})
+
 async function _POST(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -23,9 +31,12 @@ async function _POST(req: Request) {
   const rl = await checkRateLimit('messaging', user.id);
   if (!rl.ok) return NextResponse.json({ error: 'Rate limit exceeded. Try again later.' }, { status: 429 });
 
-  const body = await req.json();
-  let customerId = body.customerId;
-  let businessId = body.businessId;
+  const parsed = await validateBody(req, ReviewRequestSchema)
+  if ('error' in parsed) return parsed.error
+  const body = parsed.data
+
+  let customerId = body.customerId
+  let businessId = body.businessId
 
   // Support review_id lookup — fetch customer from review record
   if (!customerId && body.review_id) {

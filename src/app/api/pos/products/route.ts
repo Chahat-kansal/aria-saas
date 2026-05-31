@@ -7,6 +7,10 @@ import { NextResponse } from 'next/server';
 export const maxDuration = 30;
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { autoFetchProductImage } from '@/lib/pos/auto-fetch-image'
+import { z } from 'zod'
+import { validateBody } from '@/lib/api/validate'
+
+const ProductBodySchema = z.object({ name: z.string().min(1).max(500) }).passthrough()
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
   const { data: active } = await supabase
@@ -100,11 +104,9 @@ async function _POST(req: Request) {
   const bid = await getBid(supabase, user.id);
   if (!bid) return NextResponse.json({ error: 'No business found' }, { status: 400 });
 
-  const body = await req.json() as Record<string, unknown>;
-
-  if (!body.name || !(body.name as string).trim()) {
-    return NextResponse.json({ error: 'name_required' }, { status: 400 });
-  }
+  const parsed = await validateBody(req, ProductBodySchema)
+  if ('error' in parsed) return parsed.error
+  const body = parsed.data as Record<string, unknown>
 
   // Price validation — block $0 products (prevents silent $0 duplicates)
   const priceVal = body.price !== undefined && body.price !== null && body.price !== ''
@@ -260,7 +262,9 @@ async function _PATCH(req: Request) {
   const id = searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
 
-  const body = await req.json() as Record<string, unknown>;
+  const rawBody = await req.json().catch(() => null)
+  if (!rawBody || typeof rawBody !== 'object') return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
+  const body = rawBody as Record<string, unknown>
 
   // Explicit allowlist — same set as POST. Raw body spread is rejected by Supabase
   // when any key doesn't map to a real column, so we pick only known columns.
