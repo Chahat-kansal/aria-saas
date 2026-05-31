@@ -296,7 +296,7 @@ async function _POST(req: Request) {
   if (isStrategic) {
     try {
       const bizCtx = await getBusinessContext(bid)
-      const council = await runAriaCouncil(bizCtx + '\n\nOWNER_QUESTION: ' + message, bid, 'ask_aria')
+      const council = await runAriaCouncil(bizCtx + '\n\nOWNER_QUESTION: ' + message, bid, 'ask_aria', message)
       if (council?.final_briefing) {
         let savedConvId = conversationId
         try {

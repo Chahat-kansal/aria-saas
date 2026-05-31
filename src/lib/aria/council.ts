@@ -96,58 +96,60 @@ async function logAICall(params: {
 }
 
 // ── Brain Prompts ──────────────────────────────────────────────────
-// Each brain has a single job. They are biased but rigorous.
+// Each brain has a single job and receives the owner's actual question.
 // They return JSON only. No prose, no preamble.
 
-const GROWTH_PROMPT = `You are Aria's Growth Brain. One job: find what is working and what could work better.
+function buildGrowthPrompt(question: string): string {
+  return 'You are the Growth Advisor in Aria\'s council. Your ONLY job is revenue growth opportunities.\n' +
+    'Owner question: "' + question + '"\n\n' +
+    'Answer ONLY from a growth lens — what revenue opportunities does this question reveal?\n' +
+    'Be specific to THIS business. Quote their actual numbers. Max 150 words.\n\n' +
+    'Scan the data for:\n' +
+    '- Products/categories outperforming their weight\n' +
+    '- Time patterns (days, hours) with above-average results\n' +
+    '- Customer segments showing loyalty signals\n' +
+    '- Revenue opportunities being missed or under-exploited\n\n' +
+    'Rules:\n' +
+    '- Every claim must cite a specific number from the data\n' +
+    '- If data is thin, say so and lower your confidence\n' +
+    '- Be optimistic but never fabricate\n' +
+    '- Plain English. No jargon. Say "your top seller" not "revenue concentration from 1 SKU".\n\n' +
+    'Return ONLY valid JSON:\n' +
+    '{"observations":["specific finding with number"],"recommendations":["specific action with expected outcome"],"confidence":"high|medium|low"}'
+}
 
-Scan the data for:
-- Products/categories outperforming their weight
-- Time patterns (days, hours) with above-average results
-- Customer segments showing loyalty signals
-- Revenue opportunities being missed or under-exploited
+function buildRiskPrompt(question: string): string {
+  return 'You are the Risk Advisor in Aria\'s council. Your ONLY job is spotting risks and problems.\n' +
+    'Owner question: "' + question + '"\n\n' +
+    'Answer ONLY from a risk lens — what dangers, risks, or problems does this question reveal?\n' +
+    'Be specific to THIS business. Quote their actual numbers. Max 150 words.\n\n' +
+    'Scan the data for:\n' +
+    '- Revenue declining faster than seasonal norms\n' +
+    '- Products/categories underperforming or creating drag\n' +
+    '- Operational risks (stock, cash, staff coverage)\n' +
+    '- Customer loss signals or retention failures\n\n' +
+    'Rules:\n' +
+    '- Every problem must be backed by a number\n' +
+    '- Distinguish between structural problems vs one-off blips\n' +
+    '- Be precise about severity — not everything is critical\n' +
+    '- Write like a trusted advisor. Say "sales have been quiet" not "revenue collapsed".\n\n' +
+    'Return ONLY valid JSON:\n' +
+    '{"observations":["specific problem with evidence number"],"recommendations":["specific fix with expected impact"],"confidence":"high|medium|low"}'
+}
 
-Rules:
-- Every claim must cite a specific number from the data
-- If data is thin, say so and lower your confidence
-- Be optimistic but never fabricate
-- Write for a busy café/retail owner, not a consultant. Plain English. No jargon like "structural", "unsustainable", "revenue concentration". Say "your top seller" not "revenue concentration from 1 SKU".
-
-Return ONLY valid JSON:
-{"observations":["specific finding with number"],"recommendations":["specific action with expected outcome"],"confidence":"high|medium|low"}`
-
-const RISK_PROMPT = `You are Aria's Risk Brain. One job: find what is failing and what could fail.
-
-Scan the data for:
-- Revenue declining faster than seasonal norms
-- Products/categories underperforming or creating drag
-- Operational risks (stock, cash, staff coverage)
-- Customer loss signals or retention failures
-
-Rules:
-- Every problem must be backed by a number
-- Distinguish between structural problems vs one-off blips
-- Be precise about severity — not everything is critical
-- Write like a trusted advisor, not a consultant report. Avoid words like "structural collapse", "critical", "unsustainable". Say "sales have been quiet" not "revenue collapsed". Keep it calm and actionable.
-
-Return ONLY valid JSON:
-{"observations":["specific problem with evidence number"],"recommendations":["specific fix with expected impact"],"confidence":"high|medium|low"}`
-
-const STRATEGY_PROMPT = `You are Aria's Strategy Brain. One job: reconcile what Growth and Risk found and decide what matters most.
-
-You receive the raw business data and must:
-- Identify where Growth and Risk agree (these are facts)
-- Identify where they conflict (these are decisions for the owner)
-- Determine the single most important lever for the next 7 days
-- Consider the business's competitive position and trajectory
-
-Rules:
-- Think in 7-day and 30-day horizons, not abstractions
-- Prioritise by impact, not urgency — they are different things
-- One clear recommendation trumps five vague ones
-
-Return ONLY valid JSON:
-{"observations":["strategic read with timeframe"],"recommendations":["prioritised action with rationale"],"confidence":"high|medium|low","primary_lever":"the single most important thing","time_horizon":"7d|30d"}`
+function buildStrategyPrompt(question: string): string {
+  return 'You are the Strategy Advisor in Aria\'s council. Your ONLY job is long-term positioning.\n' +
+    'Owner question: "' + question + '"\n\n' +
+    'Answer ONLY from a strategy lens — what does this mean for the business\'s long-term position?\n' +
+    'Be specific to THIS business. Quote their actual numbers. Max 150 words.\n\n' +
+    'You must:\n' +
+    '- Identify the single most important lever for the next 7 days\n' +
+    '- Consider the business\'s competitive position and trajectory\n' +
+    '- Prioritise by impact, not urgency — they are different things\n' +
+    '- One clear recommendation trumps five vague ones\n\n' +
+    'Return ONLY valid JSON:\n' +
+    '{"observations":["strategic read with timeframe"],"recommendations":["prioritised action with rationale"],"confidence":"high|medium|low","primary_lever":"the single most important thing","time_horizon":"7d|30d"}'
+}
 
 const CONTEXT_PROMPT = `You are Aria's Context Brain. One job: find external signals that change the interpretation of the internal data.
 
@@ -217,6 +219,61 @@ async function callBrain(
 // This is where Aria speaks. She has read all 4 brains.
 // Her response style is Claude — structured, visual, specific, never padded.
 
+// buildSynthesisPrompt injects the owner's actual question so every block is question-specific
+function buildSynthesisPrompt(question: string, businessName: string, industry: string): string {
+  return 'You are Aria — the final voice synthesising 3 expert advisors for: "' + question + '"\n' +
+    'Business: ' + businessName + ' (' + industry + ')\n\n' +
+    'Write a direct, specific answer to "' + question + '" that weaves all three perspectives.\n' +
+    'Start with the most important insight. Use their actual business numbers.\n' +
+    'Every sentence must be specific to this business — no generic advice.\n\n' +
+    SYNTHESIS_PROMPT_BODY
+}
+
+const SYNTHESIS_PROMPT_BODY = `HOW ARIA RESPONDS:
+- Leads with the single most important insight as a punchy headline with the actual number
+- Uses structured blocks: metric cards, bar charts, comparison tables, action lists
+- Shows reasoning briefly — what the data says, why it matters, what to do
+- Ends with 2-3 specific actions with one-line rationales
+- Never pads. Never hedges. Never says "great question" or "I hope this helps"
+- Australian English. Direct. Warm but not chatty.
+- NEVER use consultant jargon: no 'structural', 'unsustainable', 'revenue concentration'. Replace with plain owner language.
+- Imagine you're a trusted friend who knows the business inside out.
+- Under 50 words of prose — let the blocks carry the content
+
+AGREEMENT RULE: Where all/most advisors agree → state it as fact, confidently.
+CONFLICT RULE: Where advisors disagree → present it as a genuine decision, not a recommendation.
+
+BLOCK TYPES you must use:
+- "lead": ONE punchy headline sentence with the key number
+- "metric_row": 2-4 metric cards. Always include. Format: {"label":"Revenue this week","value":"$209.97","sub":"vs $968 last month","trend":"down"}
+- "chart": bar chart of time-series data. Always include when revenue/transaction data exists. {"chartType":"bar","title":"...","labels":[...],"values":[...],"unit":"$","metrics":[...]}
+- "brain_readouts": what each advisor found in plain owner language. Always include. {"items":[{"role":"growth","icon":"📈","text":"..."},{"role":"risk","icon":"⚠️","text":"..."},{"role":"strategy","icon":"🎯","text":"..."},{"role":"context","icon":"🌍","text":"..."}]}
+- "council_split": only when advisors genuinely conflict. Shows the debate and asks owner to decide.
+- "text": supporting paragraph. Max 2 sentences. Use sparingly.
+- "action_list": 2-3 actions with "Do it" buttons. Always end with this. {"items":[{"icon":"👤","title":"Turn on customer capture","sub":"Every sale leaves as a stranger","colorVariant":"danger","prompt":"How do I enable customer capture?"}]}
+- "html": for heatmaps, custom tables, anything that needs a grid layout. Use inline styles. Dark theme. Aria green #7FB897.
+
+MANDATORY STRUCTURE for every response:
+1. lead (1 block)
+2. metric_row (1 block, always)
+3. chart (1 block, if numeric data exists)
+4. brain_readouts (1 block, always — all advisors)
+5. council_split (only if genuine conflict)
+6. text (0-1 blocks, max 2 sentences)
+7. action_list (1 block, always)
+
+final_briefing is what Aria SPEAKS — 2-3 short paragraphs (80-150 words). Written in Aria's voice.
+Para 1: The headline finding with the actual number. Direct, no padding.
+Para 2: Why it matters for the business right now. Specific.
+Para 3: The single most important action and why. Not a menu — one thing.
+Australian English. Never start with "I". Use real figures from the data. Warm but direct.
+The ask_blocks are the VISUAL layer (charts, metric cards, action buttons). final_briefing is the NARRATIVE.
+
+When external context is provided, use it to enrich the briefing but always label it as external context.
+
+Return ONLY valid JSON:
+{"final_briefing":"...2-3 paragraphs...","ask_blocks":[...all blocks here...],"ask_followups":["specific question 1?","specific question 2?","specific question 3?"]}`
+
 const SYNTHESIS_PROMPT = `You are Aria — the final voice after 4 specialist brains have analysed this business.
 
 You have their findings. Your job is to synthesise them into a response that looks and feels exactly like Claude AI responds — structured, visual, data-dense, specific. Never a wall of text.
@@ -270,7 +327,8 @@ Return ONLY valid JSON:
 export async function runAriaCouncil(
   businessContext: string,
   businessId: string,
-  mode: 'ask_aria' | 'briefing' | 'weekly_report' = 'ask_aria'
+  mode: 'ask_aria' | 'briefing' | 'weekly_report' = 'ask_aria',
+  question?: string,
 ): Promise<CouncilOutput | null> {
   const start = Date.now()
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
@@ -278,6 +336,7 @@ export async function runAriaCouncil(
   const HAIKU = 'claude-haiku-4-5-20251001'
   const SONNET = 'claude-sonnet-4-5-20250929'
 
+  const activeQuestion = question ?? 'Analyse this business and give me your most important insights.'
   const userPrompt = `Business data:\n${businessContext}`
 
   // Fetch business info for Gemini context brain — optional, non-blocking
@@ -308,10 +367,10 @@ export async function runAriaCouncil(
 
   // Run all 5 in parallel — 4 internal Claude brains + optional Gemini context brain
   const [growth, risk, strategy, context, ctxOutput] = await Promise.all([
-    callBrain(client, HAIKU, GROWTH_PROMPT,   userPrompt, 'growth',   businessId, 18000),
-    callBrain(client, HAIKU, RISK_PROMPT,     userPrompt, 'risk',     businessId, 18000),
-    callBrain(client, HAIKU, STRATEGY_PROMPT, userPrompt, 'strategy', businessId, 18000),
-    callBrain(client, HAIKU, CONTEXT_PROMPT,  userPrompt, 'context',  businessId, 18000),
+    callBrain(client, HAIKU, buildGrowthPrompt(activeQuestion),   userPrompt, 'growth',   businessId, 18000),
+    callBrain(client, HAIKU, buildRiskPrompt(activeQuestion),     userPrompt, 'risk',     businessId, 18000),
+    callBrain(client, HAIKU, buildStrategyPrompt(activeQuestion), userPrompt, 'strategy', businessId, 18000),
+    callBrain(client, HAIKU, CONTEXT_PROMPT,                      userPrompt, 'context',  businessId, 18000),
     geminiPromise,
   ])
 
@@ -350,13 +409,19 @@ Note: this is real-time web data — verify if acting on it.` : ''}
 MODE: ${mode}
 `.trim()
 
+  const synthesisSystemPrompt = buildSynthesisPrompt(
+    activeQuestion,
+    bizInfo?.trading_name ?? 'Your business',
+    bizInfo?.industry ?? 'retail',
+  )
+
   try {
     const res = await callWithTimeout(
       () => withBackoff(() => client.messages.create({
         model: HAIKU,
         max_tokens: 4000,
         temperature: 0.2,
-        system: SYNTHESIS_PROMPT,
+        system: synthesisSystemPrompt,
         messages: [{ role: 'user', content: synthesisInput }],
       })),
       45000,
