@@ -58,13 +58,13 @@ async function _POST(req: Request) {
   if (from_outlet_id) {
     const { data: srcInv } = await supabaseAdmin
       .from('pos_outlet_inventory')
-      .select('qty_on_hand')
+      .select('items_on_hand')
       .eq('business_id', business_id)
       .eq('outlet_id', from_outlet_id)
       .eq('product_id', product_id)
       .maybeSingle()
 
-    const availableQty = Number(srcInv?.qty_on_hand ?? 0)
+    const availableQty = Number(srcInv?.items_on_hand ?? 0)
     if (availableQty < qty) {
       return NextResponse.json({ error: 'Insufficient stock at source outlet (' + availableQty + ' available)' }, { status: 400 })
     }
@@ -81,7 +81,7 @@ async function _POST(req: Request) {
       // Fallback: upsert approach
       const newQty = Math.max(0, availableQty - qty)
       await supabaseAdmin.from('pos_outlet_inventory').upsert({
-        business_id, outlet_id: from_outlet_id, product_id, qty_on_hand: newQty,
+        business_id, outlet_id: from_outlet_id, product_id, items_on_hand: newQty,
       }, { onConflict: 'business_id,outlet_id,product_id' })
     }
   }
@@ -89,7 +89,7 @@ async function _POST(req: Request) {
   // Add to destination outlet
   const { data: dstInv } = await supabaseAdmin
     .from('pos_outlet_inventory')
-    .select('qty_on_hand')
+    .select('items_on_hand')
     .eq('business_id', business_id)
     .eq('outlet_id', to_outlet_id)
     .eq('product_id', product_id)
@@ -97,7 +97,7 @@ async function _POST(req: Request) {
 
   await supabaseAdmin.from('pos_outlet_inventory').upsert({
     business_id, outlet_id: to_outlet_id, product_id,
-    qty_on_hand: Number(dstInv?.qty_on_hand ?? 0) + qty,
+    items_on_hand: Number(dstInv?.items_on_hand ?? 0) + qty,
     updated_at: new Date().toISOString(),
   }, { onConflict: 'business_id,outlet_id,product_id' })
 
