@@ -150,7 +150,7 @@ export default function KitchenPage() {
   };
 
   return (
-    <div style={{ minHeight: '100vh', background: '#f8f9fa', fontFamily: 'system-ui, sans-serif' }}>
+    <div style={{ minHeight: '100vh', background: '#f8f9fa', fontFamily: 'Inter, system-ui, sans-serif' }}>
       {/* Top bar */}
       <div style={{ background: '#1a1a1a', padding: '12px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
@@ -180,7 +180,9 @@ export default function KitchenPage() {
       <div style={{ background: '#f8f9fa', borderBottom: '1px solid #e5e7eb', padding: '6px 20px', display: 'flex', gap: 6 }}>
         {STATIONS.map(s => (
           <button key={s} onClick={() => setStation(s)}
-            style={{ padding: '4px 12px', borderRadius: 20, fontSize: 12, fontWeight: station === s ? 700 : 400, cursor: 'pointer', border: 'none',
+            aria-label={'Filter by ' + s + ' station'}
+            aria-pressed={station === s}
+            style={{ padding: '0 12px', minHeight: 44, borderRadius: 20, fontSize: 12, fontWeight: station === s ? 700 : 400, cursor: 'pointer', border: 'none',
               background: station === s ? '#1a1a1a' : 'rgba(0,0,0,0.06)',
               color: station === s ? '#fff' : '#6b7280', fontFamily: 'inherit' }}>
             {s}
@@ -251,7 +253,7 @@ export default function KitchenPage() {
                   justifyContent: 'space-between',
                 }}>
                   <div>
-                    <span style={{ fontSize: 28, fontWeight: 800, color: 'var(--bg-surface)' }}>
+                    <span style={{ fontSize: 28, fontWeight: 800, color: '#1a1a1a' }}>
                       #{order.ticket_number ?? '—'}
                     </span>
                     {order.table_label && (
@@ -275,10 +277,10 @@ export default function KitchenPage() {
                   {order.items.map((item, i) => (
                     <div key={i} style={{ marginBottom: 8 }}>
                       <div style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}>
-                        <span style={{ fontWeight: 800, fontSize: 16, color: 'var(--bg-surface)', minWidth: 24 }}>
+                        <span style={{ fontWeight: 800, fontSize: 16, color: '#1a1a1a', minWidth: 24 }}>
                           {item.qty}×
                         </span>
-                        <span style={{ fontWeight: 600, fontSize: 14, color: 'var(--bg-surface)' }}>{item.name}</span>
+                        <span style={{ fontWeight: 600, fontSize: 14, color: '#1a1a1a' }}>{item.name}</span>
                         {item.course && item.course !== 'main' && (
                           <span style={{ fontSize: 10, background: '#f3f4f6', padding: '1px 6px', borderRadius: 4, color: '#6b7280' }}>
                             {item.course}
@@ -305,8 +307,9 @@ export default function KitchenPage() {
                     <button
                       onClick={() => advanceStatus(order)}
                       disabled={isUpdating}
+                      aria-label={action.label + ' order #' + (order.ticket_number ?? order.id)}
                       style={{
-                        flex: 1, padding: '10px 0', borderRadius: 8, border: 'none',
+                        flex: 1, minHeight: 44, padding: '0', borderRadius: 8, border: 'none',
                         background: action.color, color: '#fff',
                         fontWeight: 800, fontSize: 14, cursor: isUpdating ? 'wait' : 'pointer',
                         opacity: isUpdating ? 0.6 : 1,
@@ -317,8 +320,9 @@ export default function KitchenPage() {
                   <button
                     onClick={() => voidOrder(order.id)}
                     disabled={isUpdating}
+                    aria-label={'Void order #' + (order.ticket_number ?? order.id)}
                     style={{
-                      padding: '10px 14px', borderRadius: 8, border: '1px solid #e5e7eb',
+                      minHeight: 44, padding: '0 14px', borderRadius: 8, border: '1px solid #e5e7eb',
                       background: '#fff', color: '#9ca3af', fontWeight: 600, fontSize: 12,
                       cursor: isUpdating ? 'wait' : 'pointer',
                     }}>
