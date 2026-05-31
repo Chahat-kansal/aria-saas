@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
+import { checkRateLimit } from '@/lib/rate-limit';
 import { trackUsage } from '@/lib/track-usage';
 import { collectBusinessData } from '@/lib/aria/business-data';
 import { getWeatherContext } from '@/lib/aria/get-weather-context';
@@ -119,6 +120,9 @@ export const POST = withErrorCapture('aria/business-brain', async (req: Request)
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  const rl = await checkRateLimit('ai', user.id);
+  if (!rl.ok) return NextResponse.json({ error: 'Rate limit exceeded. Try again later.' }, { status: 429 });
 
   const body = await req.json().catch(() => ({}));
   const businessId = typeof body.business_id === 'string' ? body.business_id : '';

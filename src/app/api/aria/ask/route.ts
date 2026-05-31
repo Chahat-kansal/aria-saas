@@ -6,6 +6,7 @@ import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { checkRateLimit } from '@/lib/rate-limit'
 import { callAnthropic, callAnthropicWithTools } from '@/lib/aria/providers/anthropic'
 import { ARIA_POS_TOOLS, executePOSTool } from '@/lib/aria-tools'
 import { classifyIntent, detectOutputFormat } from '@/lib/aria/ask/intent'
@@ -118,6 +119,9 @@ async function _POST(req: Request) {
   const supabase = createServerSupabaseClient()
   const { data: { user }, error: authError } = await supabase.auth.getUser()
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const rl = await checkRateLimit('ai', user.id)
+  if (!rl.ok) return NextResponse.json({ error: 'Rate limit exceeded. Try again later.' }, { status: 429 })
 
   const bid = await getBid(supabase, user.id)
   if (!bid) return NextResponse.json({ error: 'No business found' }, { status: 404 })
