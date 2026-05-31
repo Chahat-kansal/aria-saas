@@ -181,10 +181,13 @@ NEVER refuse on schema errors — system has self-healing fallback.`,
   },
   {
     name: 'fetch_url',
-    description: 'Fetch and read the content of a specific URL. Use when user gives you a link, or to read full articles from supplier/competitor sites. Returns plain text.',
+    description: 'Fetch the FULL content of any web page. Use after web_search to read a specific result in depth, or when the user gives a URL. Returns full text, not just a snippet.',
     input_schema: {
       type: 'object',
-      properties: { url: { type: 'string' } },
+      properties: {
+        url: { type: 'string', description: 'Full URL including https://' },
+        extract: { type: 'string', enum: ['full_text', 'main_content', 'links', 'tables'], description: 'What to extract: full_text = entire page, main_content = first 8000 chars (default), links = all URLs on page, tables = table data only' },
+      },
       required: ['url'],
     },
   },
@@ -313,6 +316,21 @@ NEVER refuse on schema errors — system has self-healing fallback.`,
         metric: { type: 'string', enum: ['balance', 'transactions', 'summary', 'cashflow'], description: 'balance = total + per account, transactions = last 10, summary = month income/expenses/net, cashflow = top expense categories' },
       },
       required: ['metric'],
+    },
+  },
+  {
+    name: 'save_extracted_receipt',
+    description: 'After analysing a receipt or invoice image, save it as a business expense. Use immediately after extracting receipt data from an image to save the owner time.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        vendor: { type: 'string', description: 'Vendor/supplier name from the receipt' },
+        total: { type: 'number', description: 'Total amount in dollars (not cents)' },
+        date: { type: 'string', description: 'Date of the receipt (YYYY-MM-DD)' },
+        category: { type: 'string', description: 'Expense category (e.g. supplies, food, equipment, utilities)' },
+        line_items: { type: 'array', items: { type: 'object' }, description: 'Individual line items if visible' },
+      },
+      required: ['vendor', 'total', 'date'],
     },
   },
 ];
@@ -704,47 +722,72 @@ async function generateReport(input: Record<string, unknown>, businessId: string
   return { ok: true, filename, rows: filtered.length, download_url: signed?.signedUrl, format, preview: filtered.slice(0, 5) };
 }
 
+async function saveExtractedReceipt(input: Record<string, unknown>, businessId: string): Promise<unknown> {
+  const vendor = String(input.vendor ?? '').trim();
+  const total = Number(input.total ?? 0);
+  const date = String(input.date ?? '').trim();
+  const category = String(input.category ?? 'general').trim();
+  if (!vendor || total <= 0 || !date) return { error: 'vendor, total (>0), and date are required' };
+
+  const { data, error } = await supabaseAdmin.from('business_expenses').insert({
+    business_id: businessId,
+    label: vendor,
+    amount: total,
+    sort_order: 0,
+    created_at: new Date(date).toISOString(),
+  }).select('id').single();
+
+  if (error) return { error: error.message };
+  return { ok: true, id: (data as Record<string, unknown>)?.id, vendor, amount: total, date, category };
+}
+
 async function fetchUrl(input: Record<string, unknown>): Promise<unknown> {
   const url = String(input.url ?? '');
+  const extract = String(input.extract ?? 'main_content');
   if (!url) return { error: 'url required' };
+  if (!/^https?:\/\//.test(url)) return { error: 'Invalid URL — must start with https://' };
+
   try {
-    // Use realistic browser headers to avoid bot detection
     const res = await fetch(url, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
         'Accept-Language': 'en-AU,en;q=0.9',
-        'Accept-Encoding': 'gzip, deflate, br',
         'Cache-Control': 'no-cache',
-        'Pragma': 'no-cache',
-        'Sec-Ch-Ua': '"Chromium";v="131", "Not_A Brand";v="24"',
-        'Sec-Ch-Ua-Mobile': '?0',
-        'Sec-Ch-Ua-Platform': '"macOS"',
         'Sec-Fetch-Dest': 'document',
         'Sec-Fetch-Mode': 'navigate',
-        'Sec-Fetch-Site': 'none',
-        'Sec-Fetch-User': '?1',
         'Upgrade-Insecure-Requests': '1',
       },
-      signal: AbortSignal.timeout(15_000),
+      signal: AbortSignal.timeout(10_000),
       redirect: 'follow',
     });
 
     if (!res.ok) {
-      // Many sites (Dan Murphy's, Coles, big retailers) block server-side scraping
-      // Suggest using web_search instead which respects robots.txt
       if (res.status === 403 || res.status === 429 || res.status === 503) {
         return {
-          error: `Site blocks automated access (HTTP ${res.status}). Suggestion: use web_search with the site name to find publicly indexed pricing, or check the supplier portal directly.`,
+          error: `Site blocks automated access (HTTP ${res.status}). Use web_search with the site name instead.`,
           blocked: true,
           status: res.status,
         };
       }
-      return { error: `HTTP ${res.status}` };
+      return { error: `Page returned ${res.status}` };
     }
 
-    const text = await res.text();
-    const stripped = text
+    const html = await res.text();
+
+    if (extract === 'links') {
+      const links = [...html.matchAll(/href="(https?:\/\/[^"]+)"/g)].map(m => m[1]).slice(0, 50);
+      return { url, links, count: links.length };
+    }
+
+    if (extract === 'tables') {
+      const tables = [...html.matchAll(/<table[\s\S]*?<\/table>/gi)].map(m =>
+        m[0].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+      ).slice(0, 10);
+      return { url, tables };
+    }
+
+    const cleaned = html
       .replace(/<script[\s\S]*?<\/script>/gi, '')
       .replace(/<style[\s\S]*?<\/style>/gi, '')
       .replace(/<[^>]+>/g, ' ')
@@ -753,11 +796,12 @@ async function fetchUrl(input: Record<string, unknown>): Promise<unknown> {
       .replace(/&lt;/g, '<')
       .replace(/&gt;/g, '>')
       .replace(/\s+/g, ' ')
-      .trim()
-      .slice(0, 10000);
-    return { ok: true, url, content: stripped };
+      .trim();
+
+    const text = extract === 'full_text' ? cleaned : cleaned.slice(0, 8000);
+    return { url, content: text, length: cleaned.length, truncated: cleaned.length > text.length };
   } catch (e) {
-    return { error: String(e) };
+    return { error: `Failed to fetch: ${(e as Error).message}` };
   }
 }
 
@@ -1166,6 +1210,9 @@ export async function executePOSTool(name: string, input: unknown, businessId: s
       }))
       return { date_range, cashiers, total_cashiers: cashiers.length }
     }
+
+    case 'save_extracted_receipt':
+      return saveExtractedReceipt(inp, businessId);
 
     default:
       throw new Error(`Unknown tool: ${name}`);
