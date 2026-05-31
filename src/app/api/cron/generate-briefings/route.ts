@@ -2,7 +2,6 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { generateInsight } from '@/lib/aria-insights'
 import { checkBriefingTrigger, localDateString, BriefingBusiness } from '@/lib/aria/timezone'
@@ -16,7 +15,6 @@ function authOk(req: NextRequest): boolean {
 }
 
 async function generateMorning(
-  supabase: ReturnType<typeof createServerSupabaseClient>,
   biz: BriefingBusiness,
   today: string
 ) {
@@ -24,7 +22,7 @@ async function generateMorning(
   yesterday.setDate(yesterday.getDate() - 1)
   const yday = yesterday.toISOString().slice(0, 10)
 
-  const { data: sales } = await supabase
+  const { data: sales } = await supabaseAdmin
     .from('pos_sales')
     .select('total_amount, served_by')
     .eq('business_id', biz.id)
@@ -35,7 +33,7 @@ async function generateMorning(
   const revenue = (sales ?? []).reduce((s, r) => s + (r.total_amount ?? 0), 0)
   const txCount = (sales ?? []).length
 
-  const { data: lowStock } = await supabase
+  const { data: lowStock } = await supabaseAdmin
     .from('pos_products')
     .select('name, stock_quantity')
     .eq('business_id', biz.id)
@@ -84,7 +82,7 @@ async function generateMorning(
     realtime: true,
   })
 
-  await supabase.from('pos_daily_briefings').upsert({
+  await supabaseAdmin.from('pos_daily_briefings').upsert({
     business_id: biz.id,
     briefing_date: today,
     briefing_type: 'morning',
@@ -94,7 +92,7 @@ async function generateMorning(
   }, { onConflict: 'business_id,briefing_date,briefing_type' })
 
   // Also keep legacy cache in sync
-  const { error: cacheErr } = await supabase.from('aria_briefings_cache').upsert({
+  const { error: cacheErr } = await supabaseAdmin.from('aria_briefings_cache').upsert({
     business_id: biz.id,
     briefing_date: today,
     bullets,
@@ -103,11 +101,10 @@ async function generateMorning(
 }
 
 async function generateEvening(
-  supabase: ReturnType<typeof createServerSupabaseClient>,
   biz: BriefingBusiness,
   today: string
 ) {
-  const { data: sales } = await supabase
+  const { data: sales } = await supabaseAdmin
     .from('pos_sales')
     .select('total_amount, served_by, created_at')
     .eq('business_id', biz.id)
@@ -125,7 +122,7 @@ async function generateEvening(
     realtime: true,
   })
 
-  await supabase.from('pos_daily_briefings').upsert({
+  await supabaseAdmin.from('pos_daily_briefings').upsert({
     business_id: biz.id,
     briefing_date: today,
     briefing_type: 'evening',
@@ -140,9 +137,7 @@ async function _GET(req: NextRequest) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
 
-  const supabase = createServerSupabaseClient()
-
-  const { data: bizList, error } = await supabase
+  const { data: bizList, error } = await supabaseAdmin
     .from('businesses')
     .select('id, timezone, closing_hour_local, evening_briefing_lead_hours, evening_briefing_enabled, morning_briefing_enabled')
     .eq('is_active', true)
@@ -164,10 +159,10 @@ async function _GET(req: NextRequest) {
 
     try {
       if (trigger === 'morning') {
-        await generateMorning(supabase, biz, today)
+        await generateMorning(biz, today)
         morning++
       } else {
-        await generateEvening(supabase, biz, today)
+        await generateEvening(biz, today)
         evening++
       }
     } catch (err) {

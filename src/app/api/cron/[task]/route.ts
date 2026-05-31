@@ -6,7 +6,7 @@ export const maxDuration = 300;
 // Phase 2: add timezone per business from businesses table.
 
 import { NextResponse } from 'next/server';
-import { createServerSupabaseClient } from '@/lib/supabase-server';
+import { supabaseAdmin } from '@/lib/supabase-admin';
 import { runAgent } from '@/lib/agents/orchestrator';
 import { generateInsight } from '@/lib/aria-insights';
 import type { AgentType } from '@/lib/agents/types';
@@ -36,7 +36,7 @@ async function _GET(req: Request, { params }: Params) {
   }
 
   const agentType = TASK_TO_AGENT[task];
-  const supabase = createServerSupabaseClient();
+  const supabase = supabaseAdmin;
 
   if (task === 'promo-cleanup') {
     const now = new Date().toISOString();
