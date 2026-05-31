@@ -63,6 +63,7 @@ async function _PATCH(req: Request, { params }: { params: Promise<{ id: string }
   if (status === 'in_progress') ordersUpdate.started_at = now
   if (status === 'ready' || status === 'bumped') ordersUpdate.bumped_at = now
   if (status === 'delivered') { ordersUpdate.bumped_at = now; ordersUpdate.completed_at = now }
+  if (status === 'void') ordersUpdate.bumped_at = now
 
   // supabaseAdmin bypasses RLS — pos_kds_orders has RLS enabled with no policies
   const { error: e1, data: d1 } = await supabaseAdmin
