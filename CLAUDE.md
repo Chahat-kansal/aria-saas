@@ -1,180 +1,138 @@
-# Ruflo — Claude Code Configuration
+# CLAUDE.md — Aria OS Build Rules (READ FIRST, EVERY SESSION)
 
-## Skills
+This file is automatically loaded into every Claude Code session. These rules are
+BINDING and override any task instruction that conflicts with them.
 
-- **ALWAYS apply `aria-coding-rules` skill on every UI/TSX task** — run `/skill aria-coding-rules` before editing any `.tsx` or `.ts` component file. The rules cover JSX template literal restrictions, DB column names, model IDs, vercel.json limits, and protected files.
-- **ALWAYS apply `ui-ux-pro-max` skill on every UI/TSX task** — run `/skill ui-ux-pro-max` before building any UI. Covers accessibility, touch targets, color palettes, typography, animation timing, responsive layout, and UX quality checklist.
+---
 
-## Rules
+## 🔒 RULE 0 — UPGRADE ONLY, NEVER DOWNGRADE (overrides everything)
 
-- Do what has been asked; nothing more, nothing less
-- NEVER create files unless absolutely necessary — prefer editing existing files
-- NEVER create documentation files unless explicitly requested
-- NEVER save working files or tests to root — use `/src`, `/tests`, `/docs`, `/config`, `/scripts`
-- ALWAYS read a file before editing it
-- NEVER commit secrets, credentials, or .env files
-- Keep files under 500 lines
-- Validate input at system boundaries
+Every change must ONLY upgrade, improve, or add. NEVER downgrade, remove, simplify away,
+stub, disable, or weaken any existing feature — not even accidentally, not even temporarily,
+not even to fix a build error.
 
-## Agent Comms (SendMessage-First Coordination)
+- ❌ NEVER remove/comment-out/stub working code to fix an error → fix the actual error
+- ❌ NEVER delete a feature, tab, button, field, tool, or capability
+- ❌ NEVER reduce limits, outputs, max_tokens, or returned fields
+- ❌ NEVER replace a rich implementation with a simpler one
+- ✅ If refactoring, the result must do EVERYTHING the original did, plus the improvement
+- ✅ Every feature present today must still work tomorrow
 
-Named agents coordinate via `SendMessage`, not polling or shared state.
+**If a task seems to require a downgrade: STOP. Do not proceed. Output:**
+`⚠️ BLOCKED: [task] appears to require downgrading [feature]. Not proceeding per RULE 0. Need guidance.`
 
+Full detail: see UPGRADE_ONLY_RULE.md
+
+---
+
+## 🔒 RULE 1 — PUSH AND VERIFY AFTER EVERY COMMIT
+
+After EVERY commit:
 ```
-Lead (you) ←→ architect ←→ developer ←→ tester ←→ reviewer
-              (named agents message each other directly)
+git push origin main
+git log origin/main..HEAD   # MUST be empty — confirms push landed
 ```
+Never end a session with unpushed commits. (Lesson: 31 commits once sat unpushed locally.)
 
-### Spawning a Coordinated Team
+---
 
-```javascript
-// ALL agents in ONE message, each knows WHO to message next
-Agent({ prompt: "Research the codebase. SendMessage findings to 'architect'.",
-  subagent_type: "researcher", name: "researcher", run_in_background: true })
-Agent({ prompt: "Wait for 'researcher'. Design solution. SendMessage to 'coder'.",
-  subagent_type: "system-architect", name: "architect", run_in_background: true })
-Agent({ prompt: "Wait for 'architect'. Implement it. SendMessage to 'tester'.",
-  subagent_type: "coder", name: "coder", run_in_background: true })
-Agent({ prompt: "Wait for 'coder'. Write tests. SendMessage results to 'reviewer'.",
-  subagent_type: "tester", name: "tester", run_in_background: true })
-Agent({ prompt: "Wait for 'tester'. Review code quality and security.",
-  subagent_type: "reviewer", name: "reviewer", run_in_background: true })
+## 🔒 RULE 2 — READ BEFORE EDIT
 
-// Kick off the pipeline
-SendMessage({ to: "researcher", summary: "Start", message: "[task context]" })
+Before changing any code:
+1. Read the full file you're editing
+2. Read the DB schema for any table involved (see AUDIT_STATE.md)
+3. Trace the A→B→C dependency chain (what calls this, what this calls)
+Never edit blind.
+
+---
+
+## 🔒 RULE 3 — VALIDATE BEFORE COMMIT
+
+Before EVERY commit:
 ```
-
-### Patterns
-
-| Pattern | Flow | Use When |
-|---------|------|----------|
-| **Pipeline** | A → B → C → D | Sequential dependencies (feature dev) |
-| **Fan-out** | Lead → A, B, C → Lead | Independent parallel work (research) |
-| **Supervisor** | Lead ↔ workers | Ongoing coordination (complex refactor) |
-
-### Rules
-
-- ALWAYS name agents — `name: "role"` makes them addressable
-- ALWAYS include comms instructions in prompts — who to message, what to send
-- Spawn ALL agents in ONE message with `run_in_background: true`
-- After spawning: STOP, tell user what's running, wait for results
-- NEVER poll status — agents message back or complete automatically
-
-## Swarm & Routing
-
-### Config
-- **Topology**: hierarchical-mesh (anti-drift)
-- **Max Agents**: 15
-- **Memory**: hybrid
-- **HNSW**: Enabled
-- **Neural**: Enabled
-
-```bash
-npx @claude-flow/cli@latest swarm init --topology hierarchical --max-agents 8 --strategy specialized
+npx tsc --noEmit   # must be zero errors
+npm run build      # must pass
 ```
+If the build breaks, FIX THE ERROR — never remove the feature causing it (see RULE 0).
 
-### Agent Routing
+---
 
-| Task | Agents | Topology |
-|------|--------|----------|
-| Bug Fix | researcher, coder, tester | hierarchical |
-| Feature | architect, coder, tester, reviewer | hierarchical |
-| Refactor | architect, coder, reviewer | hierarchical |
-| Performance | perf-engineer, coder | hierarchical |
-| Security | security-architect, auditor | hierarchical |
+## 🔒 RULE 4 — VERCEL CONSTRAINTS
 
-### When to Swarm
-- **YES**: 3+ files, new features, cross-module refactoring, API changes, security, performance
-- **NO**: single file edits, 1-2 line fixes, docs updates, config changes, questions
+- vercel.json: keep at 22 function configs max
+- Crons: DAILY MAXIMUM (e.g. "0 9 * * *"). Sub-daily schedules silently break Vercel Pro deploys.
+  (Known issue to fix: parcel-insights is currently "0 */6 * * *" — must go daily)
+- Cron count: verify against plan limit before adding new crons
 
-### 3-Tier Model Routing
+---
 
-| Tier | Handler | Use Cases |
-|------|---------|-----------|
-| 1 | Agent Booster (WASM) | Simple transforms — skip LLM, use Edit directly |
-| 2 | Haiku | Simple tasks, low complexity |
-| 3 | Sonnet/Opus | Architecture, security, complex reasoning |
+## 🔒 RULE 5 — NEVER TOUCH THESE FILES
 
-## Memory & Learning
+AnimatedBg, FlyToCart, CursorGlow, pos-sfx.ts, aria-voice-guide.ts
+(Locked design/UX assets — leave exactly as they are)
 
-### Before Any Task
-```bash
-npx @claude-flow/cli@latest memory search --query "[task keywords]" --namespace patterns
-npx @claude-flow/cli@latest hooks route --task "[task description]"
-```
+---
 
-### After Success
-```bash
-npx @claude-flow/cli@latest memory store --namespace patterns --key "[name]" --value "[what worked]"
-npx @claude-flow/cli@latest hooks post-task --task-id "[id]" --success true --store-results true
-```
+## 🔒 RULE 6 — DATA CORRECTNESS (from the audit)
 
-### MCP Tools (use `ToolSearch("keyword")` to discover)
+Confirmed column/table traps — use the CORRECT name:
+- staff_members: first_name + last_name (NO `name`)
+- pos_sales: total_amount (NO `total`); status filter `!= 'voided'`
+- pos_sale_items: line_total (NO `total_price`)
+- pos_timesheets (NOT pos_timesheet_sessions); hours_worked (NO `total_minutes`)
+- pos_inventory_transfers (NOT pos_stock_transfers)
+- pos_outlet_inventory: items_on_hand (NOT qty_on_hand / stock_quantity)
+- pos_product_modifier_groups + pos_modifier_groups (NOT pos_product_modifiers / pos_modifiers)
+- pos_customers: NO customer_segment / churn_risk (those are on `customers`)
+- pos_products: price (NO retail_price / selling_price); NO kds_skip_routing
+- pos_products VALID new cols: shelf_capacity, qty_backroom, expiry_date
+- pos_outlets (NOT `outlets`); pos_staff.is_active (NOT `active`)
+- google_reviews.has_reply (NOT reviews.response)
+- business_expenses: label (NO `name`); amount in dollars
+- community_live_streams: cf_stream_uid, cf_playback_hls, cf_whip_url
+- THREE briefing tables (different columns): daily_briefings, aria_daily_briefings, pos_daily_briefings
+- All amounts DOLLARS (numeric) except columns named *_cents
+  (exception: staff_members.pay_rate_cents IS cents)
 
-| Category | Key Tools |
-|----------|-----------|
-| **Memory** | `memory_store`, `memory_search`, `memory_search_unified` |
-| **Bridge** | `memory_import_claude`, `memory_bridge_status` |
-| **Swarm** | `swarm_init`, `swarm_status`, `swarm_health` |
-| **Agents** | `agent_spawn`, `agent_list`, `agent_status` |
-| **Hooks** | `hooks_route`, `hooks_post-task`, `hooks_worker-dispatch` |
-| **Security** | `aidefence_scan`, `aidefence_is_safe`, `aidefence_has_pii` |
-| **Hive-Mind** | `hive-mind_init`, `hive-mind_consensus`, `hive-mind_spawn` |
+---
 
-### Background Workers
+## 🔒 RULE 7 — SILENT FAILURE PREVENTION
 
-| Worker | When |
-|--------|------|
-| `audit` | After security changes |
-| `optimize` | After performance work |
-| `testgaps` | After adding features |
-| `map` | Every 5+ file changes |
-| `document` | After API changes |
+- RLS-protected tables: use supabaseAdmin for server/cron/admin reads (anon key returns silent empty [])
+- Always check the `error` from Supabase destructuring — never ignore it
+- await every insert/update/delete/upsert
+- .single() crashes on 0 rows → use .maybeSingle() unless the row is guaranteed
+- Never swallow errors as empty results (no `catch { return [] }`)
+- Every business-data route must verify the user owns the business_id (cross-business leak = critical)
 
-```bash
-npx @claude-flow/cli@latest hooks worker dispatch --trigger audit
-```
+---
 
-## Agents
+## 🔒 RULE 8 — AI / MODEL IDs
 
-**Core**: `coder`, `reviewer`, `tester`, `planner`, `researcher`
-**Architecture**: `system-architect`, `backend-dev`, `mobile-dev`
-**Security**: `security-architect`, `security-auditor`
-**Performance**: `performance-engineer`, `perf-analyzer`
-**Coordination**: `hierarchical-coordinator`, `mesh-coordinator`, `adaptive-coordinator`
-**GitHub**: `pr-manager`, `code-review-swarm`, `issue-tracker`, `release-manager`
+Use exactly:
+- claude-haiku-4-5-20251001
+- claude-sonnet-4-5-20250929
+- claude-opus-4-5-20251101
 
-Any string works as a custom agent type.
+Aria Intelligence Rule: every feature should feed data into briefing/business-brain,
+log to aria_ai_calls, and verify aria_autopilot_actions where relevant.
 
-## Build & Test
+---
 
-- ALWAYS run tests after code changes
-- ALWAYS verify build succeeds before committing
+## 🔒 RULE 9 — FULL-SAAS-DEPTH
 
-```bash
-npm run build && npm test
-```
+Every feature must match ~80% of the category leader + AI differentiation. No scaffolds,
+no placeholders, no "coming soon" stubs shipped as if complete.
 
-## CLI Quick Reference
+---
 
-```bash
-npx @claude-flow/cli@latest init --wizard           # Setup
-npx @claude-flow/cli@latest swarm init --v3-mode     # Start swarm
-npx @claude-flow/cli@latest memory search --query "" # Vector search
-npx @claude-flow/cli@latest hooks route --task ""    # Route to agent
-npx @claude-flow/cli@latest doctor --fix             # Diagnostics
-npx @claude-flow/cli@latest security scan            # Security scan
-npx @claude-flow/cli@latest performance benchmark    # Benchmarks
-```
+## Design system (Aria POS)
+- Palette: deep forest green #2D5240 + sage #7FB897
+- Fraunces italic for branding/totals, Inter for body
+- Borderless glass/aurora surfaces
+- Terminal page edits: additive str_replace only
 
-26 commands, 140+ subcommands. Use `--help` on any command for details.
+---
 
-## Setup
-
-```bash
-claude mcp add claude-flow -- npx -y @claude-flow/cli@latest
-npx @claude-flow/cli@latest daemon start
-npx @claude-flow/cli@latest doctor --fix
-```
-
-**Agent tool** handles execution (agents, files, code, git). **MCP tools** handle coordination (swarm, memory, hooks). **CLI** is the same via Bash.
+## The prime directive
+**Aria only ever gets better. Build up, never tear down.**
