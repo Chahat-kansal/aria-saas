@@ -1,10 +1,10 @@
 # Aria OS Audit State
 
 ## Last updated
-2026-05-31 — Session 6 IN PROGRESS. Silent-failure + security sweep. CHECKs 1/3/4/5/7/8/9 complete. CHECKs 2/6 in progress.
+2026-05-31 — Session 6 COMPLETE. All 9 checks done. 28 security/silent-failure bugs fixed.
 
 ## Push Status
-ALL COMMITS PUSHED — origin/main is current as of d18dc68c
+ALL COMMITS PUSHED — origin/main is current as of c4b4089c
 
 ## LIVE DB SCHEMA — pos_products (confirmed 2026-05-31)
 Both `track_stock` AND `track_inventory` exist (separate boolean columns).
@@ -254,16 +254,31 @@ All integrations/ and cron/ routes audited — all clean (per session 3 audit co
 | src/app/api/staff/leave/balances/route.ts | SECURITY | no ownership check on business_id query param | YES | (session 6) |
 | src/app/api/pos/splits/[id]/void/route.ts | SECURITY | voiding split without verifying business ownership | YES | (session 6) |
 
+| src/app/api/pos/classifications/route.ts | SECURITY | PATCH/DELETE update without business_id scope | YES | (session 6) |
+| src/app/api/pos/future-prices/route.ts | SECURITY | DELETE without business_id scope | YES | (session 6) |
+| src/app/api/pos/expiry/alerts/[id]/route.ts | SECURITY | PATCH without ownership check | YES | (session 6) |
+| src/app/api/aria/competitor-alerts/route.ts | SECURITY | GET/PATCH without ownership check | YES | (session 6) |
+| src/app/api/aria/competitor-watches/route.ts | SECURITY | DELETE uses supabaseAdmin without ownership check | YES | (session 6) |
+| src/app/api/aria/profit-analysis/route.ts | SECURITY | PATCH ownership check was optional (business_id not required) | YES | (session 6) |
+| src/app/api/aria/promotions/route.ts | SECURITY | PATCH without ownership check | YES | (session 6) |
+| src/app/api/compliance/route.ts | SECURITY | PATCH without ownership check | YES | (session 6) |
+| src/app/api/compliance/upload/route.ts | SECURITY | POST uploads to any compliance item without ownership check | YES | (session 6) |
+| src/app/api/pos/purchase-orders/route.ts | SECURITY | DELETE uses supabaseAdmin without business_id scope | YES | (session 6) |
+| src/app/api/pos/fitting-room/route.ts | SECURITY | PATCH uses supabaseAdmin without business_id scope | YES | (session 6) |
+| src/app/api/pos/customer-groups/route.ts | SECURITY | PATCH/DELETE without business_id scope | YES | (session 6) |
+
 ### Session 6 CHECK STATUS
 - ✅ CHECK 1: RLS/anon-key — 9 files fixed
+- ✅ CHECK 2: Unchecked errors — scanned; all `const { data, error }` destructures check error
 - ✅ CHECK 3: Missing awaits — clean (fire-and-forget telemetry acceptable)
 - ✅ CHECK 4: .single() vs .maybeSingle() — standard ownership pattern acceptable
 - ✅ CHECK 5: Error-swallowing try/catch — all empty catches are telemetry (acceptable)
-- ✅ CHECK 7: Ownership gaps — 6 critical security bugs fixed
+- ✅ CHECK 6: Silent update no-ops — 12 additional routes fixed (missing business_id scope on mutations)
+- ✅ CHECK 7: Ownership gaps — 6 critical + 12 additional security bugs fixed (28 total)
 - ✅ CHECK 8: vercel.json — parcel-insights cron fixed
 - ✅ CHECK 9: New code (community routes, aria/ask libs) — clean or fixed
-- ❌ CHECK 2: Unchecked Supabase errors — IN PROGRESS
-- ❌ CHECK 6: Silent update no-ops — IN PROGRESS
+
+### SESSION 6 COMPLETE — 28 security/silent-failure bugs fixed
 
 ## Total DB tables (341)
 Key tables: businesses, staff_members, pos_staff, pos_products, pos_sales,
