@@ -32,6 +32,7 @@ COMPLETE — src/app/api/community/ all ~25 route files audited — all clean (c
 COMPLETE — src/app/api/integrations/ audited — all clean (f900ae2c)
 COMPLETE — src/app/api/cron/ audited — all clean (f900ae2c)
 COMPLETE — src/app/dashboard/ ~100 pages audited (Session 5 Batch A) — ALL CLEAN
+COMPLETE — src/app/pos/ ~60 pages audited (Session 5 Batch B) — 1 bug fixed (aefd211d)
 
 ## Prompt-113 (Ask Aria 110%) Status — ALL DONE
 - [x] Task 1: Deep context pre-loaded (top products, customers, loyalty, comparison, avg daily revenue) → 2dc8b3fb
@@ -81,6 +82,7 @@ Prompt-113 COMPLETE. Next prompts available: PRR-1 (API hardening), audit sessio
 | src/lib/pos/kds-fire.ts | Wrong column | `pos_products.kds_skip_routing` doesn't exist — 400 on every KDS fire | YES | 030142e2 + f2b6573d |
 | src/lib/aria-tools.ts | Wrong column | `pos_products.retail_price/selling_price` → `price` | YES | 76e0b824 |
 | Various aria routes | Wrong handler signature | `NextRequest` → `Request` in withErrorCapture handlers | YES | 63a61301 |
+| src/app/pos/customers/[id]/page.tsx | Wrong column | `pos_customers.customer_segment` → `segment` (3 occurrences) | YES | aefd211d |
 
 ## Known already-fixed issues (do not re-fix)
 | File | Issue | Fixed in |

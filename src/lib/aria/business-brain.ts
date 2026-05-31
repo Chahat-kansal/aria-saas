@@ -172,7 +172,7 @@ function compactData(data: AriaBusinessData) {
     raw_counts: data.raw_counts,
     sales: compactRows(data.sales, ['id', 'total_amount', 'total_cents', 'subtotal', 'discount_amount', 'created_at', 'sold_at', 'status'], 120),
     products: compactRows(data.products, ['id', 'name', 'sku', 'price', 'price_cents', 'cost_price', 'cost_cents', 'stock_quantity', 'current_stock', 'low_stock_threshold', 'reorder_point', 'is_active'], 120),
-    sale_items: compactRows(data.sale_items, ['product_id', 'product_name', 'quantity', 'unit_price', 'total_price', 'created_at'], 200),
+    sale_items: compactRows(data.sale_items, ['product_id', 'product_name', 'quantity', 'unit_price', 'line_total', 'created_at'], 200),
     inventory: compactRows(data.inventory, ['item_id', 'product_id', 'item_name', 'quantity_added', 'quantity_remaining', 'movement_type', 'expiry_date', 'created_at'], 120),
     suppliers: compactRows(data.suppliers, ['id', 'name', 'email', 'phone', 'lead_time_days', 'created_at'], 80),
     supplier_costs: compactRows(data.supplier_costs, ['supplier_id', 'supplier_name', 'total_cost_cents', 'status', 'created_at', 'on_time_rate', 'fill_rate'], 80),
