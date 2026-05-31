@@ -1,57 +1,70 @@
 # Aria OS Audit State
 
 ## Last updated
-2026-05-31 — Session 3 Batch C complete (seo/ + reports/ done)
+2026-05-31 — All audit commits pushed to origin/main. Prompt-113 tasks 1–3 live.
 
-## Status
-COMPLETE — src/app/api/pos/ all ~120 route files audited (Batches A–G)
-COMPLETE — src/app/api/public/ all ~19 route files audited (Batch A)
-COMPLETE — src/app/api/social/ all ~31 route files audited (Batch B)
-COMPLETE — src/app/api/seo/ all ~12 route files audited (Batch C)
-COMPLETE — src/app/api/reports/ all ~3 route files audited (Batch C)
+## Push Status
+ALL COMMITS PUSHED — origin/main is current as of cdd15c3d
 
-## Completed sections
-- [x] src/app/api/aria/ — all ~47 route files audited
-- [x] src/app/api/pos/ Batch A — ad-campaigns, ad-impressions, agent-decisions (3 files), agents/[type], ask, audit-log, balances, bas-export, basket-analysis, business, cafe/seed-modifiers, cart-intelligence, cart-line-actions
-- [x] src/app/api/pos/ Batch B — cash-movements, cash-sessions (2 files), categories, classifications, commission-rules, commissions, custom-roles (2 files), customer-greet, customer-groups, customers (10 files)
-- [x] src/app/api/pos/ Batch C — daily-summary, dashboard, dead-stock, display-suggestions, email-log, email-receipt, enterprise-policies, eod-markdown, expiry/alerts (2 files), expiry/batches, expiry-alerts, fitting-room, future-prices, gift-cards (3 files)
-- [x] src/app/api/pos/ Batch D — hardware-devices (2 files), image-credits (2 files), import (2 files), integrations, integrations-status, inventory (after fix), kds (3 files), laybys (after fix), loyalty/redeem, manager-verify, media, migrate/[source], missed-demand, mobile-session/[id]/submit, modifiers (2 files)
-- [x] src/app/api/pos/ Batch E — online, orders (3 files), orders/receive, orders/schedule, orders/[id]/lines (2 files), outlet-tax-overrides, outlets/[id], park, permissions/outlet-overlay, price-points, price-tickets, product-batches, product-intelligence, products/backfill-images, products/[id] (3 files)
+## Audit Status
+COMPLETE — src/app/api/aria/ all ~47 route files audited (Session 1)
+COMPLETE — src/app/api/pos/ all ~120 route files audited (Batches A–G, Session 2)
+COMPLETE — src/app/api/public/ all ~19 route files audited (Batch A, Session 3)
+COMPLETE — src/app/api/social/ all ~31 route files audited (Batch B, Session 3)
+COMPLETE — src/app/api/seo/ all ~12 route files audited (Batch C, Session 3)
+COMPLETE — src/app/api/reports/ all ~3 route files audited (Batch C, Session 3)
+COMPLETE — src/app/api/community/ all ~25 route files audited — all clean (ce9827d5)
+COMPLETE — src/app/api/integrations/ audited — all clean (f900ae2c)
+COMPLETE — src/app/api/cron/ audited — all clean (f900ae2c)
 
-## Current position
-Next: src/app/api/community/ (~25 route files)
+## Prompt-113 (Ask Aria 110%) Status
+- [x] Task 1: Deep context pre-loaded (top products, customers, loyalty, comparison, avg daily revenue) → 2dc8b3fb
+- [x] Task 2: Council personalisation — each brain gets the actual owner question → b7c74c5b
+- [x] Task 3: Route handler signatures fixed (NextRequest → Request) → 63a61301
+- [ ] Task 4: Enforce web search for benchmark questions on Haiku (needsBenchmark pre-search)
+- [ ] Task 5: Memory integration — surface memories at top of system prompt + auto-write
+- [ ] Task 6: Technical help capability — debug errors, explain code, write SQL, read Vercel logs
+- [ ] Task 7: Long document processing — map-reduce over 100+ page PDFs + large spreadsheets
+- [ ] Task 8: Full URL fetching — complete page content, tables, links, multi-page navigation
+- [ ] Task 9: Deep image analysis — receipts, invoices, products, charts, handwriting + auto-expense
+
+## Current Position
+Next: Prompt-113 Task 4 — enforce web search for benchmark questions on all models including Haiku
 
 ## Issues found (running log)
 | File | Type | Issue | Fixed? | Commit |
 |------|------|-------|--------|--------|
-| src/app/api/aria/daily-briefing/route.ts | Wrong table + column | `reviews.response` doesn't exist; query was from('reviews').is('response', null). Fixed to from('google_reviews').eq('has_reply', false).gte('review_date', ...) | YES | 1ee57b9 |
-| src/app/api/aria/page-insight/route.ts | Wrong table + column | Same `reviews.response` bug (unanswered reviews count). Fixed to google_reviews.has_reply | YES | 1ee57b9 |
-| src/app/api/aria/page-insight/route.ts | Wrong column | `staff_members.name` doesn't exist; select had `id, name, first_name, last_name, visa_expiry_date`. Fixed select + map to use first_name/last_name | YES | 1ee57b9 |
-| src/app/api/aria/page-insight/route.ts | Wrong table | `pos_customers.customer_segment, churn_risk` don't exist on pos_customers. Changed from('pos_customers') → from('customers') | YES | 1ee57b9 |
-| src/app/api/aria/roster/route.ts | Wrong column | `staff_members.name` in select caused PostgREST 400, staffRows null, always "No staff found". Removed `name` from select; simplified name-construction line to use first_name/last_name only | YES | af918e0 |
-| src/app/api/pos/agents/[type]/route.ts | Wrong column | `pos_staff.active` → `is_active` (in executeScheduleApproval — email to active staff) | YES | ca1cedd6 |
-| src/app/api/pos/balances/route.ts | Wrong column | `pos_customers.account_balance` → `balance` (select, gt filter, order, update — 4 occurrences) | YES | ca1cedd6 |
-| src/app/api/pos/customer-greet/route.ts | Wrong column | `pos_sales.items` doesn't exist → changed to `id` (needed for sale ID extraction in fallback) | YES | 6c4f4e8e |
-| src/app/api/pos/customer-greet/route.ts | Wrong column | `pos_products.is_featured` → `featured` (trending product query always returned empty) | YES | 6c4f4e8e |
-| src/app/api/pos/customers/[id]/route.ts | Wrong columns | `pos_sales.points_earned, points_redeemed` don't exist → removed from select | YES | dd2988e9 |
-| src/app/api/pos/laybys/route.ts | Wrong table join + missing FK | `customers(name,phone)` → `pos_customers(name,phone)`; added FK pos_laybys.customer_id → pos_customers.id | YES | 0630d77c |
-| src/app/api/pos/inventory/route.ts | Wrong column | `pos_outlet_inventory.stock_quantity` doesn't exist → `items_on_hand` (4 occurrences: order, select, read, upsert) | YES | 12971389 |
-| src/app/api/pos/reports/closure/[id]/route.ts | Wrong column | `pos_sale_items.total_price` doesn't exist → removed from select (correct column is `line_total`) | YES | 447a71c1 |
-| src/app/api/pos/shift-reports/route.ts | Wrong table + column | `pos_timesheet_sessions` doesn't exist → `pos_timesheets`; `total_minutes` doesn't exist → `hours_worked` (already in hours, removed /60 conversion) | YES | 5e694eaf |
-| src/app/api/pos/transfer-reports/route.ts | Wrong table + invalid join | `pos_stock_transfers` doesn't exist → `pos_inventory_transfers`; removed `pos_products(name)` join (no FK from pos_inventory_transfers to pos_products) | YES | b1f41112 |
-| src/app/api/pos/xero-sync/route.ts | Wrong column | `pos_sales.total` doesn't exist → `total_amount` (2 occurrences: select + reduce) | YES | 3aaaba87 |
-| src/app/api/pos/variants/route.ts | Wrong table + invalid join | `pos_product_modifiers` doesn't exist → `pos_product_modifier_groups`; `pos_modifiers(*)` → `pos_modifier_groups(*)` (FK is group_id → pos_modifier_groups) | YES | 78338351 |
-| src/app/api/public/widget/chat/route.ts | Wrong table | `products` table doesn't exist → `pos_products` | YES | 71e7e496 |
-| src/app/api/public/widget/chat/route.ts | Wrong column | `aria_autopilot_actions.suggested_action` doesn't exist → `action_data` (wrapped in object) | YES | 71e7e496 |
-| src/app/api/public/instore/chat/route.ts | Wrong columns | `aria_ai_calls.route/model/purpose/status` don't exist → `agent_key/model_id/request_summary/success` (2 stall telemetry inserts) | YES | 339e8800 |
-| src/app/api/social/analytics/route.ts | Missing columns | `social_posts.impressions/reach/likes/comments/shares` didn't exist; added via migration `social_posts_analytics_and_publish_columns` | YES (migration) | — |
-| src/app/api/social/posts/[id]/publish/route.ts | Missing columns | `social_posts.platform_url` and `publish_error` didn't exist; added via same migration | YES (migration) | — |
-| src/app/api/social/bulk-schedule/route.ts | Wrong column | `scheduled_at` → `scheduled_for` in insert | YES | 7e78ac11 |
-| src/app/api/social/owner-request/route.ts | Wrong columns | `image_urls/ai_generated/ai_prompt/post_type` don't exist on `social_posts`; fixed to `image_url` and removed non-existent fields | YES | 7e78ac11 |
-| src/app/api/seo/local/route.ts | Missing columns | `seo_local.gbp_listed/review_count/review_avg/scanned_at` didn't exist; added via migration `add_missing_seo_local_columns` | YES (migration) | e871aac9 |
-| src/app/api/seo/local/scan/route.ts | Missing columns | Same `seo_local` missing columns; fixed by same migration | YES (migration) | e871aac9 |
-| src/app/api/seo/recommendations/route.ts | Missing columns + wrong model | Selected `gbp_listed/review_count/review_avg` (now added); model `claude-sonnet-4-6` → `claude-sonnet-4-5-20250929` | YES | e871aac9 |
-| src/app/api/seo/generate-fix/route.ts | Wrong columns | `aria_ai_calls.model/prompt_summary/tokens_used/feature/issue_type` don't exist → `model_id/request_summary/input_tokens+output_tokens/agent_key`; removed `response_summary` | YES | e871aac9 |
+| src/app/api/aria/daily-briefing/route.ts | Wrong table + column | `reviews.response` doesn't exist; fixed to `google_reviews.has_reply` | YES | 1ee57b9 |
+| src/app/api/aria/page-insight/route.ts | Wrong table + column | Same `reviews.response` bug; fixed to `google_reviews.has_reply` | YES | 1ee57b9 |
+| src/app/api/aria/page-insight/route.ts | Wrong column | `staff_members.name` doesn't exist; fixed to use first_name/last_name | YES | 1ee57b9 |
+| src/app/api/aria/page-insight/route.ts | Wrong table | `pos_customers.customer_segment, churn_risk` don't exist; changed to `customers` | YES | 1ee57b9 |
+| src/app/api/aria/roster/route.ts | Wrong column | `staff_members.name` in select → use first_name/last_name | YES | af918e0 |
+| src/app/api/pos/agents/[type]/route.ts | Wrong column | `pos_staff.active` → `is_active` | YES | ca1cedd6 |
+| src/app/api/pos/balances/route.ts | Wrong column | `pos_customers.account_balance` → `balance` (4 occurrences) | YES | ca1cedd6 |
+| src/app/api/pos/customer-greet/route.ts | Wrong column | `pos_sales.items` → `id` + `pos_products.is_featured` → `featured` | YES | 6c4f4e8e |
+| src/app/api/pos/customers/[id]/route.ts | Wrong columns | `pos_sales.points_earned, points_redeemed` removed | YES | dd2988e9 |
+| src/app/api/pos/laybys/route.ts | Wrong table join | `customers` → `pos_customers`; added FK | YES | 0630d77c |
+| src/app/api/pos/inventory/route.ts | Wrong column | `pos_outlet_inventory.stock_quantity` → `items_on_hand` (4 occurrences) | YES | 12971389 |
+| src/app/api/pos/reports/closure/[id]/route.ts | Wrong column | `pos_sale_items.total_price` removed (correct: `line_total`) | YES | 447a71c1 |
+| src/app/api/pos/shift-reports/route.ts | Wrong table + column | `pos_timesheet_sessions` → `pos_timesheets`; `total_minutes` → `hours_worked` | YES | 5e694eaf |
+| src/app/api/pos/transfer-reports/route.ts | Wrong table + join | `pos_stock_transfers` → `pos_inventory_transfers`; removed invalid join | YES | b1f41112 |
+| src/app/api/pos/xero-sync/route.ts | Wrong column | `pos_sales.total` → `total_amount` (2 occurrences) | YES | 3aaaba87 |
+| src/app/api/pos/variants/route.ts | Wrong table + join | `pos_product_modifiers` → `pos_product_modifier_groups` | YES | 78338351 |
+| src/app/api/public/widget/chat/route.ts | Wrong table + column | `products` → `pos_products`; `suggested_action` → `action_data` | YES | 71e7e496 |
+| src/app/api/public/instore/chat/route.ts | Wrong columns | `aria_ai_calls.route/model/purpose/status` → `agent_key/model_id/request_summary/success` | YES | 339e8800 |
+| src/app/api/social/analytics/route.ts | Missing columns | `social_posts.impressions/reach/likes/comments/shares` added via migration | YES (migration) | — |
+| src/app/api/social/posts/[id]/publish/route.ts | Missing columns | `social_posts.platform_url` and `publish_error` added via migration | YES (migration) | — |
+| src/app/api/social/bulk-schedule/route.ts | Wrong column | `scheduled_at` → `scheduled_for` | YES | 7e78ac11 |
+| src/app/api/social/owner-request/route.ts | Wrong columns | `image_urls/ai_generated/ai_prompt/post_type` → `image_url` + removed non-existent | YES | 7e78ac11 |
+| src/app/api/seo/local/route.ts | Missing columns | `seo_local.gbp_listed/review_count/review_avg/scanned_at` added via migration | YES (migration) | e871aac9 |
+| src/app/api/seo/local/scan/route.ts | Missing columns | Same `seo_local` missing columns | YES (migration) | e871aac9 |
+| src/app/api/seo/recommendations/route.ts | Missing columns + wrong model | `gbp_listed/review_count/review_avg`; model `claude-sonnet-4-6` → correct ID | YES | e871aac9 |
+| src/app/api/seo/generate-fix/route.ts | Wrong columns | `aria_ai_calls.model/prompt_summary/tokens_used/feature` → correct columns | YES | e871aac9 |
+| src/components/dashboard/BlockRenderer.tsx | Unclosed try block | TS1472 — try with no catch/finally, broke build | YES | af00d3b3 |
+| src/app/api/pos/outlet-transfers/route.ts | Wrong column | `pos_outlet_inventory.qty_on_hand` → `items_on_hand` | YES | 41805ade + 58f224d6 |
+| src/lib/pos/kds-fire.ts | Wrong column | `pos_products.kds_skip_routing` doesn't exist — 400 on every KDS fire | YES | 030142e2 + f2b6573d |
+| src/lib/aria-tools.ts | Wrong column | `pos_products.retail_price/selling_price` → `price` | YES | 76e0b824 |
+| Various aria routes | Wrong handler signature | `NextRequest` → `Request` in withErrorCapture handlers | YES | 63a61301 |
 
 ## Known already-fixed issues (do not re-fix)
 | File | Issue | Fixed in |
@@ -91,19 +104,19 @@ enterprise-policies, eod-markdown, expiry/alerts, expiry/alerts/[id], expiry/bat
 expiry-alerts, fitting-room, future-prices, gift-cards, gift-cards/aria-check,
 gift-cards/receipt
 
-## Routes confirmed CLEAN in src/app/api/pos/ Batch E (Session 2)
-online, orders, orders/[id], orders/receive, orders/schedule, orders/[id]/lines,
-orders/[id]/lines/[lineId], outlet-tax-overrides, outlets/[id], park,
-permissions/outlet-overlay, price-points, price-tickets, product-batches,
-product-intelligence, products/backfill-images, products/[id]/init-inventory,
-products/[id]/modifiers, products/[id]/variations
-
 ## Routes confirmed CLEAN in src/app/api/pos/ Batch D (Session 2)
 hardware-devices, hardware-devices/[id], image-credits, image-credits/purchase,
 import/barcode-lookup, import/deduplicate, integrations, integrations-status,
 inventory, kds, kds/all-day, kds/tickets/[id]/refire, laybys (after fix),
 loyalty/redeem, manager-verify, media, migrate/[source], missed-demand,
 mobile-session/[id]/submit, modifiers, modifiers/[id]
+
+## Routes confirmed CLEAN in src/app/api/pos/ Batch E (Session 2)
+online, orders, orders/[id], orders/receive, orders/schedule, orders/[id]/lines,
+orders/[id]/lines/[lineId], outlet-tax-overrides, outlets/[id], park,
+permissions/outlet-overlay, price-points, price-tickets, product-batches,
+product-intelligence, products/backfill-images, products/[id]/init-inventory,
+products/[id]/modifiers, products/[id]/variations
 
 ## Routes confirmed CLEAN in src/app/api/pos/ Batch F (Session 2)
 promotions, promotions/[id], purchase-orders (2 files), receipts, register-close,
@@ -168,16 +181,22 @@ generate-image, generate-video, generate-voiceover, video-status,
 data-deletion, callback/google, callback/facebook,
 connect/google, connect/facebook, google/connect, google/callback, google/post
 
+## Routes confirmed CLEAN in src/app/api/community/ (Session 3 — ce9827d5)
+All ~25 routes confirmed clean — no wrong table/column bugs found
+
+## Routes confirmed CLEAN in src/app/api/integrations/ + cron/ (Session 3 — f900ae2c)
+All integrations/ and cron/ routes audited — all clean (per session 3 audit commit)
+
 ## Sections remaining
-- [x] src/app/api/aria/ (~47 route files) ← DONE Session 1
-- [x] src/app/api/pos/ (~120 route files) ← DONE Session 2 (Batches A–G)
-- [x] src/app/api/public/ (~19 route files) ← DONE Session 3 Batch A
-- [x] src/app/api/social/ (~31 route files) ← DONE Session 3 Batch B
-- [x] src/app/api/reports/ (~3 route files) ← DONE Session 3 Batch C
-- [x] src/app/api/seo/ (~12 route files) ← DONE Session 3 Batch C
-- [ ] src/app/api/community/ (~25 route files)
-- [ ] src/app/api/integrations/ (~15 route files)
-- [ ] src/app/api/cron/ (~15 route files)
+- [x] src/app/api/aria/ (~47 route files) ← DONE
+- [x] src/app/api/pos/ (~120 route files) ← DONE
+- [x] src/app/api/public/ (~19 route files) ← DONE
+- [x] src/app/api/social/ (~31 route files) ← DONE
+- [x] src/app/api/reports/ (~3 route files) ← DONE
+- [x] src/app/api/seo/ (~12 route files) ← DONE
+- [x] src/app/api/community/ (~25 route files) ← DONE
+- [x] src/app/api/integrations/ (~15 route files) ← DONE
+- [x] src/app/api/cron/ (~15 route files) ← DONE
 - [ ] src/app/api/market-prices/ (new)
 - [ ] src/app/api/site-preview/ (new)
 - [ ] src/app/dashboard/ (all page.tsx — ~50 files)
@@ -187,7 +206,6 @@ connect/google, connect/facebook, google/connect, google/callback, google/post
 - [ ] src/components/dashboard/ (all components — ~40 files)
 
 ## Total DB tables (341)
-(For cross-referencing .from() calls — full list in Supabase)
 Key tables: businesses, staff_members, pos_staff, pos_products, pos_sales,
 pos_sale_items, pos_customers, customers, pos_purchase_orders, social_connections,
 social_posts, community_posts, community_members, instore_conversations,
@@ -208,6 +226,10 @@ seo_issues, seo_keywords, business_expenses, pos_parcel_tracking
 - businesses.slug DOES exist (added prompt 89)
 - businesses.website DOES exist
 - instore_kiosk_configs.scan_and_go_enabled DOES exist
+- staff_members has NO `name` column — always use first_name + last_name
+- pos_outlet_inventory uses `items_on_hand` NOT `stock_quantity` or `qty_on_hand`
+- pos_sale_items.business_id DOES exist (direct column, no join needed for that field)
+- pos_sale_items has NO direct business_id on pos_sales join for products — join via pos_sales!inner(business_id)
 
 
 ## COMPLETE TABLE + COLUMN REFERENCE (ground truth from live DB)
@@ -224,7 +246,7 @@ If a table or column is NOT in this list, the code is wrong.
 
 **pos_sale_items**: id, sale_id, product_id, variant_id, product_name, product_sku, quantity, unit_price, discount_percent, tax_rate, line_total, modifiers, notes, cost_price, margin_percent, business_id, created_at, returned_quantity, price_overridden, original_unit_price, price_override_reason
 
-**staff_members** (NOT pos_staff for team management): id, business_id, first_name, last_name, preferred_name, date_of_birth, position, department, employment_type, start_date, end_date, status, pay_type, pay_rate_cents, pay_per_annum_cents, pay_frequency, superannuation_rate, visa_type, visa_subclass, visa_expiry_date, visa_work_restrictions, notes, created_at, updated_at, user_id, pos_staff_id, portal_enabled, color, hourly_rate. **NO `name` column** (confirmed from migration 20260428000007; pre-existing AUDIT_STATE entry was wrong) — always use first_name + last_name
+**staff_members** (NOT pos_staff for team management): id, business_id, first_name, last_name, preferred_name, date_of_birth, position, department, employment_type, start_date, end_date, status, pay_type, pay_rate_cents, pay_per_annum_cents, pay_frequency, superannuation_rate, visa_type, visa_subclass, visa_expiry_date, visa_work_restrictions, notes, created_at, updated_at, user_id, pos_staff_id, portal_enabled, color, hourly_rate. **NO `name` column** — always use first_name + last_name
 
 **pos_staff** (register login table — NOT team management): id, business_id, name, email, pin, role, is_active, color, permissions, created_at
 
@@ -258,7 +280,7 @@ If a table or column is NOT in this list, the code is wrong.
 
 **pos_product_modifier_groups** (join table): id, product_id, group_id, business_id, override_required, override_min, override_max, display_order, created_at
 
-**pos_timesheets**: id, business_id, staff_id, staff_name, clock_in, clock_out, break_minutes, pay_rate_cents, notes, created_at, **staff_member_id** (also has staff_id — check which the code uses), outlet_id, shift_id, total_pay_cents, status, approved, hours_worked
+**pos_timesheets**: id, business_id, staff_id, staff_name, clock_in, clock_out, break_minutes, pay_rate_cents, notes, created_at, **staff_member_id**, outlet_id, shift_id, total_pay_cents, status, approved, hours_worked
 
 **pos_rosters**: id, business_id, outlet_id, week_start, shifts (jsonb), total_hours, total_cost_cents, published, published_at, generated_by_agent, created_at, status, aria_reasoning, approved_by, updated_at
 
@@ -272,7 +294,7 @@ If a table or column is NOT in this list, the code is wrong.
 
 **marketplace_chats**: id, listing_id, member_id, business_id, messages (jsonb), last_message_at, unread_for_owner, unread_for_member, created_at
 
-**competitor_businesses**: id, business_id, competitor_name, competitor_address, competitor_place_id, distance_m, category, phone, website, google_rating, last_checked, **name** (also has name column)
+**competitor_businesses**: id, business_id, competitor_name, competitor_address, competitor_place_id, distance_m, category, phone, website, google_rating, last_checked, **name**
 
 **competitor_price_cache**: id, business_id, product_name, competitor_name, competitor_address, competitor_distance_m, **competitor_price_cents** (cents), source, confidence, found_url, searched_at, expires_at
 
@@ -316,12 +338,12 @@ Note: THREE briefing tables exist. Code that reads briefings must use the right 
 
 **pos_product_barcodes**: id, business_id, product_id, barcode, is_primary, barcode_type, notes, created_at
 
-**staff_shifts**: id, business_id, outlet_id, **staff_id** (uuid), start_time, end_time, role, status, notes, created_at, **staff_member_id** (also has staff_member_id), area_id, break_minutes, cost_cents, is_recurring, confirmed_by_staff, ai_generated, updated_at, shift_date, staff_name
+**staff_shifts**: id, business_id, outlet_id, **staff_id** (uuid), start_time, end_time, role, status, notes, created_at, **staff_member_id**, area_id, break_minutes, cost_cents, is_recurring, confirmed_by_staff, ai_generated, updated_at, shift_date, staff_name
 
 ### CRITICAL MONETARY RULE
 All amounts stored in the DB as plain dollars (numeric) EXCEPT:
 - competitor_price_cents (integer, cents)
-- pos_sale_payments.amount_cents (integer, cents)  
+- pos_sale_payments.amount_cents (integer, cents)
 - Any column explicitly named *_cents (integer, cents)
 - Everything else: dollars (numeric)
 
