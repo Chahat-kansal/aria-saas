@@ -13,8 +13,9 @@ export type AgentKey =
   | 'rostering' | 'hypothesis_engine'
   | 'signal_engine_synth' | 'memory_extractor' | 'customer_insight' | 'document_vision'
   | 'marketing_ai_generate' | 'review_reputation'
+  | 'long_doc_map' | 'long_doc_reduce'
 
-export type AgentRole = 'agent' | 'judge' | 'data' | 'narrative' | 'classify' | 'chat' | 'export' | 'analysis' | 'other'
+export type AgentRole = 'agent' | 'judge' | 'data' | 'narrative' | 'classify' | 'chat' | 'export' | 'analysis' | 'other' | 'document'
 
 export interface ProductContext {
   id: string

@@ -10,6 +10,8 @@ export interface ParsedAttachment {
   base64?: string         // for images
   extracted_text?: string // for PDFs, spreadsheets, text
   bytes: number
+  page_count?: number     // for PDFs — used to detect long docs
+  row_count?: number      // for spreadsheets — used to detect large datasets
 }
 
 const MAX_IMAGE_MB = 5
@@ -42,7 +44,29 @@ export async function parseAttachment(
       // pdf-parse v2 ESM
       const pdfModule = await import('pdf-parse')
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const pdfParse = ((pdfModule as any).default ?? pdfModule) as (buf: Buffer, opts?: { max?: number }) => Promise<{ text: string }>
+      const pdfParse = ((pdfModule as any).default ?? pdfModule) as (buf: Buffer, opts?: { max?: number }) => Promise<{ text: string; numpages: number; pages?: string[] }>
+      // First pass: count pages (no limit) to decide routing
+      const full = await pdfParse(buffer, { max: 0 })
+      const pageCount = full.numpages ?? 0
+
+      if (pageCount > 10) {
+        // Long doc — extract per-page text for map-reduce processing
+        const pages: string[] = []
+        for (let p = 1; p <= pageCount; p++) {
+          try {
+            const pg = await pdfParse(buffer, { max: p })
+            pages.push(String(pg.text ?? ''))
+          } catch { pages.push('') }
+        }
+        return {
+          kind: 'pdf_text',
+          filename: file.name,
+          extracted_text: pages.join('\n\n--- PAGE BREAK ---\n\n').slice(0, MAX_TEXT_CHARS),
+          bytes,
+          page_count: pageCount,
+        }
+      }
+
       const result = await pdfParse(buffer, { max: MAX_PDF_PAGES })
       const text = String(result.text ?? '').slice(0, MAX_TEXT_CHARS)
       return {
@@ -50,6 +74,7 @@ export async function parseAttachment(
         filename: file.name,
         extracted_text: text,
         bytes,
+        page_count: pageCount,
       }
     } catch (e) {
       return { error: `Could not read PDF: ${String(e)}` }
@@ -97,6 +122,21 @@ export async function parseAttachment(
   }
 
   return { error: `Unsupported file type: ${file.type || file.name}` }
+}
+
+export function buildImageAnalysisPrompt(userMessage: string, imageCount: number): string {
+  return `Analyse ${imageCount > 1 ? `all ${imageCount} images` : 'this image'} in full detail.
+
+If it's a RECEIPT or INVOICE: extract every line item, quantity, price, tax, total, vendor, date, invoice number. Return structured data.
+If it's a PRODUCT PHOTO: identify the product, brand, condition, any visible pricing or labels.
+If it's a SCREENSHOT: read all visible text, identify the app/page, describe any errors or data shown.
+If it's a CHART/GRAPH: extract the data points, axes, trends, and what it shows.
+If it's HANDWRITTEN: transcribe the text accurately.
+If it's a DOCUMENT: extract all text and structure.
+
+Owner's question: "${userMessage}"
+
+Be exhaustive. Extract every number, name, date, and detail visible.`
 }
 
 // Convert parsed attachments to Anthropic message content blocks

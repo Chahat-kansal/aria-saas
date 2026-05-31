@@ -64,6 +64,8 @@ Return ONLY valid JSON. No prose. No code fences.`
     document_vision:       `Schema: { "type": "insight", "title": "document read", "description": "extracted content", "rationale": "n/a", "confidence": "high", "estimated_impact_dollars": 0, "payload": {} }`,
     marketing_ai_generate: `Schema: { "type": "insight", "title": "campaign suggestion", "description": "SMS campaign recommendation", "rationale": "1 sentence", "confidence": "high", "estimated_impact_dollars": number, "payload": {} }`,
     review_reputation:     `Schema: { "type": "insight", "title": "reputation score", "description": "reputation analysis", "rationale": "1 sentence", "confidence": "high", "estimated_impact_dollars": 0, "payload": {} }`,
+    long_doc_map:    `Schema: { "type": "insight", "title": "document section", "description": "extracted content", "rationale": "n/a", "confidence": "high", "estimated_impact_dollars": 0, "payload": {} }`,
+    long_doc_reduce: `Schema: { "type": "insight", "title": "document synthesis", "description": "synthesised answer", "rationale": "n/a", "confidence": "high", "estimated_impact_dollars": 0, "payload": {} }`,
   }
 
   return `${baseRules}\n\n${schemas[agentKey] ?? schemas.generic}`
@@ -106,6 +108,7 @@ export async function runAgent(
     signal_engine_synth: 'haiku', memory_extractor: 'haiku',
     customer_insight: 'haiku', document_vision: 'haiku',
     marketing_ai_generate: 'sonnet', review_reputation: 'haiku',
+    long_doc_map: 'haiku', long_doc_reduce: 'sonnet',
   }
 
   const result = await callAnthropic<Recommendation>({
