@@ -898,7 +898,8 @@ export default function MobileTerminal() {
                     style={{ background: 'rgba(255,255,255,0.1)' }}>−</button>
                   <span className="text-white font-bold w-6 text-center">{item.scanned_qty}</span>
                   <button onClick={() => setInvItems(prev => prev.map(i => i.product_id === item.product_id ? { ...i, scanned_qty: i.scanned_qty + 1 } : i))}
-                    className="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold"
+                    aria-label={'Increment count for ' + item.product_name}
+                    className="w-11 h-11 rounded-full flex items-center justify-center text-white font-bold"
                     style={{ background: '#1D9E75' }}>+</button>
                 </div>
               </div>
@@ -1033,11 +1034,13 @@ export default function MobileTerminal() {
                 {/* Qty controls */}
                 <div className="flex items-center gap-2.5 flex-shrink-0">
                   <button onClick={() => updateQty(item.id, -1)}
-                    className="w-9 h-9 rounded-full flex items-center justify-center text-white font-bold text-lg active:scale-90 transition-transform"
+                    aria-label={'Decrease quantity of ' + item.name}
+                    className="w-11 h-11 rounded-full flex items-center justify-center text-white font-bold text-lg active:scale-90 transition-transform"
                     style={{ background: 'rgba(255,255,255,0.1)' }}>−</button>
                   <span className="text-white font-bold w-5 text-center">{item.quantity}</span>
                   <button onClick={() => updateQty(item.id, 1)}
-                    className="w-9 h-9 rounded-full flex items-center justify-center text-white font-bold text-lg active:scale-90 transition-transform"
+                    aria-label={'Increase quantity of ' + item.name}
+                    className="w-11 h-11 rounded-full flex items-center justify-center text-white font-bold text-lg active:scale-90 transition-transform"
                     style={{ background: '#1D9E75' }}>+</button>
                 </div>
                 {/* Line total */}
