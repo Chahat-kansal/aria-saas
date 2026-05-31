@@ -262,8 +262,8 @@ export function RetailDashboard({ business }: { business: Business }) {
             )}
           </div>
           <Link href="/dashboard/ask-aria"
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white transition-colors flex-shrink-0"
-            style={{ background: '#1D9E75' }}>
+            className="inline-flex items-center gap-2 px-4 rounded-xl text-sm font-semibold text-white transition-colors flex-shrink-0"
+            style={{ background: '#1D9E75', minHeight: 44 }}>
             <span>✦</span> Ask Aria
           </Link>
         </div>
@@ -282,7 +282,7 @@ export function RetailDashboard({ business }: { business: Business }) {
                   style={{ background: '#0d0d14', border: '1px solid rgba(255,255,255,0.08)' }}>
                   <div className="flex items-center gap-2 mb-2">
                     <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${rec.priority === 'high' || rec.priority === 'urgent' ? 'bg-red-400' : rec.priority === 'medium' ? 'bg-amber-400' : 'bg-[#1D9E75]'}`} />
-                    <span className="text-[10px] uppercase tracking-wider text-[rgba(255,255,255,0.3)]">
+                    <span className="text-[10px] uppercase tracking-wider text-[rgba(255,255,255,0.45)]">
                       {CATEGORY_ICON[rec.category] ?? '💡'} {rec.category}
                     </span>
                   </div>
@@ -466,7 +466,7 @@ export function RetailDashboard({ business }: { business: Business }) {
       <div className="rounded-xl p-5" style={{ background: '#13131a', border: '1px solid rgba(255,255,255,0.07)' }}>
         <div className="flex items-center justify-between mb-4">
           <p className="text-sm font-semibold text-white">Activity today</p>
-          <span className="text-[10px] uppercase tracking-wider text-[rgba(255,255,255,0.3)]">Aria narrates</span>
+          <span className="text-[10px] uppercase tracking-wider text-[rgba(255,255,255,0.45)]">Aria narrates</span>
         </div>
         {activityLoading ? (
           <div className="space-y-3 animate-pulse">
@@ -484,7 +484,7 @@ export function RetailDashboard({ business }: { business: Business }) {
           <div className="py-6 text-center">
             <p className="text-3xl mb-2">🌅</p>
             <p className="text-sm text-[rgba(255,255,255,0.5)]">No activity yet today.</p>
-            <p className="text-xs text-[rgba(255,255,255,0.3)] mt-1">Start by opening the register or recording a sale.</p>
+            <p className="text-xs text-[rgba(255,255,255,0.45)] mt-1">Start by opening the register or recording a sale.</p>
           </div>
         ) : (
           <div className="space-y-3">
@@ -497,7 +497,7 @@ export function RetailDashboard({ business }: { business: Business }) {
                 <div className="flex-1 min-w-0">
                   <p className="text-xs text-[rgba(255,255,255,0.7)] leading-snug">{event.narrative}</p>
                   <div className="flex items-center gap-2 mt-0.5">
-                    <span className="text-[10px] text-[rgba(255,255,255,0.3)]">{event.time}</span>
+                    <span className="text-[10px] text-[rgba(255,255,255,0.45)]">{event.time}</span>
                     {event.link && (
                       <Link href={event.link} className="text-[10px] text-[#1D9E75] hover:text-[#8ff1c9] transition-colors">View →</Link>
                     )}
@@ -511,7 +511,7 @@ export function RetailDashboard({ business }: { business: Business }) {
 
       {/* ─── Section 6: Quick Actions Bar ────────────────────── */}
       <div className="rounded-xl p-4" style={{ background: '#13131a', border: '1px solid rgba(255,255,255,0.07)' }}>
-        <p className="text-[10px] uppercase tracking-wider text-[rgba(255,255,255,0.3)] mb-3">Quick actions</p>
+        <p className="text-[10px] uppercase tracking-wider text-[rgba(255,255,255,0.45)] mb-3">Quick actions</p>
         <div className="flex gap-2 overflow-x-auto pb-1">
           {QUICK_ACTIONS.filter(action => business.pos_enabled !== false || !action.href.startsWith('/pos')).map(action => {
             const count = action.badgeKey ? (badgeCounts[action.badgeKey] ?? 0) : 0;
