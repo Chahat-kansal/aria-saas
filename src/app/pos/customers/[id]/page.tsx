@@ -9,7 +9,7 @@ interface Customer {
   id: string; name: string; email: string | null; phone: string | null;
   loyalty_points: number; total_spent: number; created_at: string;
   address: string | null; notes: string | null;
-  rfm_score?: string | null; customer_segment?: string | null;
+  rfm_score?: string | null; segment?: string | null;
   churn_risk?: number | null; predicted_next_visit?: string | null;
   group_name?: string | null;
   abn?: string | null;
@@ -82,7 +82,7 @@ export default function CustomerDetailPage() {
           ltv: ltvComp,
           avg_order: avgOrd,
           days_since_last_visit: daysSince,
-          segment: custRef.customer_segment ?? 'New',
+          segment: custRef.segment ?? 'New',
           churn_risk: custRef.churn_risk ?? 0,
           predicted_next_visit_days: predictedDays,
         }),
@@ -114,7 +114,7 @@ export default function CustomerDetailPage() {
     try {
       const res = await fetch('/api/pos/customers/sms-draft', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ customer_name: customer.name, segment: customer.customer_segment ?? 'New', days_since: daysSinceLast, ltv }),
+        body: JSON.stringify({ customer_name: customer.name, segment: customer.segment ?? 'New', days_since: daysSinceLast, ltv }),
       });
       const d = await res.json();
       if (d.message) setSmsText(d.message.slice(0, 160));
@@ -163,7 +163,7 @@ export default function CustomerDetailPage() {
     </div>
   );
 
-  const seg = customer.customer_segment ?? 'New';
+  const seg = customer.segment ?? 'New';
   const segColor = SEGMENT_COLORS[seg] ?? '#94A3B8';
   const churnRisk = customer.churn_risk ?? 0;
   const churnCssVar = churnRisk > 60 ? 'var(--destructive)' : churnRisk > 30 ? 'var(--warning)' : 'var(--success)';
