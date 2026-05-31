@@ -2,6 +2,22 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 import { checkRateLimit } from '@/lib/rate-limit'
 
+const SECURITY_HEADERS: Record<string, string> = {
+  'X-Frame-Options': 'DENY',
+  'X-Content-Type-Options': 'nosniff',
+  'Referrer-Policy': 'strict-origin-when-cross-origin',
+  // camera/microphone kept for Go Live feature; geolocation for store locator
+  'Permissions-Policy': 'camera=(self), microphone=(self), geolocation=(self)',
+  'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
+}
+
+function applySecurityHeaders(res: NextResponse): NextResponse {
+  for (const [key, value] of Object.entries(SECURITY_HEADERS)) {
+    res.headers.set(key, value)
+  }
+  return res
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
@@ -13,10 +29,10 @@ export async function middleware(request: NextRequest) {
     const ip = request.headers.get('x-forwarded-for') ?? request.ip ?? 'anon'
     const rl = await checkRateLimit('public', ip)
     if (!rl.ok) {
-      return NextResponse.json(
+      return applySecurityHeaders(NextResponse.json(
         { error: 'Rate limit exceeded. Try again later.' },
         { status: 429, headers: { 'Retry-After': String(Math.ceil((rl.reset - Date.now()) / 1000)) } }
-      )
+      ))
     }
   }
 
@@ -49,13 +65,13 @@ export async function middleware(request: NextRequest) {
   // ── ADMIN ROUTES — require Supabase auth + admin email ──────────────────────
   if (pathname.startsWith('/admin')) {
     const { data: { user } } = await makeSupabase().auth.getUser()
-    if (!user) return NextResponse.redirect(new URL('/login', request.url))
+    if (!user) return applySecurityHeaders(NextResponse.redirect(new URL('/login', request.url)))
     const adminEmails = (process.env.ADMIN_EMAILS || '')
       .split(',').map(e => e.trim()).filter(Boolean)
     if (adminEmails.length > 0 && !adminEmails.includes(user.email || '')) {
-      return NextResponse.redirect(new URL('/dashboard', request.url))
+      return applySecurityHeaders(NextResponse.redirect(new URL('/dashboard', request.url)))
     }
-    return response
+    return applySecurityHeaders(response)
   }
 
   // ── PROTECTED ROUTES — require Supabase auth ────────────────────────────────
@@ -74,12 +90,12 @@ export async function middleware(request: NextRequest) {
       if (posEmp?.value && ['cashier', 'supervisor'].includes(posEmp.value)) {
         const { data: { user } } = await makeSupabase().auth.getUser()
         if (!user) {
-          return NextResponse.redirect(new URL('/pos', request.url))
+          return applySecurityHeaders(NextResponse.redirect(new URL('/pos', request.url)))
         }
         const ownerCheck = await makeSupabase().from('businesses')
           .select('id').eq('user_id', user.id).limit(1).maybeSingle()
         if (!ownerCheck.data) {
-          return NextResponse.redirect(new URL('/pos', request.url))
+          return applySecurityHeaders(NextResponse.redirect(new URL('/pos', request.url)))
         }
         response.cookies.delete('pos_emp')
       }
@@ -89,9 +105,9 @@ export async function middleware(request: NextRequest) {
     if (!user) {
       const loginUrl = new URL('/login', request.url)
       loginUrl.searchParams.set('redirectTo', pathname)
-      return NextResponse.redirect(loginUrl)
+      return applySecurityHeaders(NextResponse.redirect(loginUrl))
     }
-    return response
+    return applySecurityHeaders(response)
   }
 
   // ── AUTH PAGES — redirect already-logged-in owners away ─────────────────────
@@ -105,22 +121,22 @@ export async function middleware(request: NextRequest) {
     const { data: { user } } = await makeSupabase().auth.getUser()
     if (user) {
       const redirectTo = request.nextUrl.searchParams.get('redirectTo') || '/dashboard'
-      return NextResponse.redirect(new URL(redirectTo, request.url))
+      return applySecurityHeaders(NextResponse.redirect(new URL(redirectTo, request.url)))
     }
-    return response
+    return applySecurityHeaders(response)
   }
 
   // ── ROOT — authenticated owners → POS; unauthenticated → landing page ───────
   if (pathname === '/') {
     const { data: { user } } = await makeSupabase().auth.getUser()
     if (user) {
-      return NextResponse.redirect(new URL('/pos/terminal', request.url))
+      return applySecurityHeaders(NextResponse.redirect(new URL('/pos/terminal', request.url)))
     }
     // Unauthenticated: serve the marketing landing page — no redirect
-    return response
+    return applySecurityHeaders(response)
   }
 
-  return response
+  return applySecurityHeaders(response)
 }
 
 export const config = {

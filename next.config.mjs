@@ -74,10 +74,10 @@ const nextConfig = {
               "font-src 'self' data: https://fonts.gstatic.com https://unpkg.com https://cdnjs.cloudflare.com",
               // Images: allow everything (previews can load any image)
               "img-src 'self' data: blob: https: http:",
-              // Media: allow blob for voice
-              "media-src 'self' blob: https://*.supabase.co https://nxfzippunqvqsvkmwtjv.supabase.co https://*.public.blob.vercel-storage.com",
-              // API connections — external AI/weather/finance APIs are server-side only (not listed here)
-              "connect-src 'self' blob: https://www.googleapis.com https://*.supabase.co wss://*.supabase.co https://api.stripe.com https://js.stripe.com https://*.sentry.io https://*.ingest.sentry.io https://*.ingest.us.sentry.io https://*.ingest.de.sentry.io https://eu.i.posthog.com https://us.i.posthog.com https://eu-assets.i.posthog.com https://us-assets.i.posthog.com https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://unpkg.com https://raw.githubusercontent.com https://www.gstatic.com https://*.public.blob.vercel-storage.com",
+              // Media: blob for voice/audio, Bunny Stream + Cloudflare Stream for Go Live/reels
+              "media-src 'self' blob: https://*.supabase.co https://nxfzippunqvqsvkmwtjv.supabase.co https://*.public.blob.vercel-storage.com https://*.b-cdn.net https://*.cloudflarestream.com https://videodelivery.net",
+              // API connections — Bunny/CF Stream for Go Live; Upstash for Redis; external AI/payment APIs are server-side
+              "connect-src 'self' blob: https://www.googleapis.com https://*.supabase.co wss://*.supabase.co https://api.stripe.com https://js.stripe.com https://*.sentry.io https://*.ingest.sentry.io https://*.ingest.us.sentry.io https://*.ingest.de.sentry.io https://eu.i.posthog.com https://us.i.posthog.com https://eu-assets.i.posthog.com https://us-assets.i.posthog.com https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://unpkg.com https://raw.githubusercontent.com https://www.gstatic.com https://*.public.blob.vercel-storage.com https://*.b-cdn.net https://*.cloudflarestream.com https://videodelivery.net https://video.bunnycdn.com https://*.upstash.io",
               // Frames: allow blob + data + any origin for srcdoc previews
               "frame-src 'self' blob: data: https: http:",
               // Workers
