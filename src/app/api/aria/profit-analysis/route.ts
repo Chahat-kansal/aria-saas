@@ -94,14 +94,12 @@ async function _PATCH(req: Request) {
 
   const body = await req.json().catch(() => ({}))
   const { id, business_id } = body
-  if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
+  if (!id || !business_id) return NextResponse.json({ error: 'id and business_id required' }, { status: 400 })
 
-  if (business_id) {
-    const { data: biz } = await supabase.from('businesses').select('id').eq('id', business_id).eq('user_id', user.id).single()
-    if (!biz) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  }
+  const { data: biz } = await supabase.from('businesses').select('id').eq('id', business_id).eq('user_id', user.id).maybeSingle()
+  if (!biz) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  await supabaseAdmin.from('profit_leaks').update({ status: 'fixed' }).eq('id', id)
+  await supabaseAdmin.from('profit_leaks').update({ status: 'fixed' }).eq('id', id).eq('business_id', business_id)
 
   if (business_id) {
     const { data: latest } = await supabaseAdmin

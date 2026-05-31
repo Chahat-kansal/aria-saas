@@ -164,6 +164,13 @@ async function _DELETE(req: Request) {
   const { searchParams } = new URL(req.url)
   const id = searchParams.get('id')
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
+
+  // Verify ownership before deactivating
+  const { data: watch } = await supabaseAdmin.from('aria_competitor_watches').select('business_id').eq('id', id).maybeSingle()
+  if (!watch) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  const { data: biz } = await supabase.from('businesses').select('id').eq('id', watch.business_id).eq('user_id', user.id).maybeSingle()
+  if (!biz) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
   await supabaseAdmin.from('aria_competitor_watches').update({ is_active: false }).eq('id', id)
   return NextResponse.json({ ok: true })
 }
