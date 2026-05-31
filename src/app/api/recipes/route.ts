@@ -12,6 +12,10 @@ async function _GET(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
 
+  // Ownership check
+  const { data: biz } = await supabase.from('businesses').select('id').eq('id', business_id).eq('user_id', user.id).maybeSingle();
+  if (!biz) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+
   const { data: recipes, error } = await supabase
     .from('recipes')
     .select('*, recipe_ingredients(*), recipe_training_assets(*)')
@@ -27,9 +31,13 @@ async function _POST(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
 
-  const body = await req.json();
+  const body = await req.json().catch(() => ({}));
   const { business_id, name, description, category, serves, prep_time_minutes, sell_price_cents, menu_price, cost_per_serve, margin_percent, allergens, linked_product_id, notes, ingredients } = body;
   if (!business_id || !name) return NextResponse.json({ error: 'business_id and name required' }, { status: 400 });
+
+  // Ownership check
+  const { data: biz } = await supabase.from('businesses').select('id').eq('id', business_id).eq('user_id', user.id).maybeSingle();
+  if (!biz) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
   const { data: recipe, error } = await supabase
     .from('recipes')
