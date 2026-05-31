@@ -26,11 +26,19 @@ phase's checklist is 100% green. This is how real PRRs work — gates, not vibes
 - 40 crons — verify plan limit (PRR-4)
 - Sentry set up but unverified (PRR-3)
 - Only 1 e2e test exists (PRR-6)
-- No rate limiting (PRR-1)
-- No systematic input validation (PRR-1)
+
+## PRR-1 Exit Checklist
+- [x] Rate limiting on all AI + messaging + public routes (src/lib/rate-limit.ts — graceful fallback if Upstash not configured)
+- [ ] Upstash env vars set in Vercel: UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN — **USER ACTION REQUIRED**
+- [x] Zod input validation on priority mutation routes (invoices, customers, pos/products, review-request, winback, basiq/connect)
+- [x] Standard error contract: src/lib/api/errors.ts created; validateBody helper in src/lib/api/validate.ts
+- [x] npx tsc --noEmit clean
+- [x] npm run build passes
+- [x] All commits pushed (git log origin/main..HEAD empty)
+- [ ] Deploy is green on Vercel — verify after Upstash vars are added
 
 ## Progress
-- [ ] PRR-1 API hardening
+- [~] PRR-1 API hardening (code complete; Upstash env vars + Vercel deploy pending user action)
 - [ ] PRR-2 Security
 - [ ] PRR-3 Observability
 - [ ] PRR-4 Reliability
