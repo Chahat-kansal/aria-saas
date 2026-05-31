@@ -155,7 +155,7 @@ export function PostCard({ post, onAfterAction, onHideBusiness, showHide = true 
         </Link>
         <div style={{ position: 'relative' }}>
           <button onClick={() => setShowMenu(v => !v)} aria-label="Post menu"
-            style={{ background: 'transparent', border: 'none', color: PALETTE.ink, padding: 8, cursor: 'pointer', display: 'flex', minWidth: 36, minHeight: 36, alignItems: 'center', justifyContent: 'center' }}>
+            style={{ background: 'transparent', border: 'none', color: PALETTE.ink, padding: 8, cursor: 'pointer', display: 'flex', minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' }}>
             <MoreHorizontal size={18} />
           </button>
           {showMenu && (
@@ -245,7 +245,7 @@ export function PostCard({ post, onAfterAction, onHideBusiness, showHide = true 
             marginLeft: 'auto',
             background: saved ? PALETTE.accent : PALETTE.surface,
             color: PALETTE.ink, border: BORDER, borderRadius: RADIUS.pill,
-            fontSize: 12, fontWeight: 700, padding: '7px 16px', cursor: 'pointer', minHeight: 36,
+            fontSize: 12, fontWeight: 700, padding: '7px 16px', cursor: 'pointer', minHeight: 44,
           }}>
           {saved ? 'saved' : 'save'}
         </button>
@@ -264,11 +264,11 @@ export function PostCard({ post, onAfterAction, onHideBusiness, showHide = true 
               style={{
                 flex: 1, padding: '10px 14px', borderRadius: RADIUS.pill,
                 background: PALETTE.surfaceAlt, border: BORDER,
-                color: PALETTE.ink, fontSize: 13, outline: 'none', fontFamily: 'inherit', fontWeight: 500, minHeight: 40,
+                color: PALETTE.ink, fontSize: 13, outline: 'none', fontFamily: 'inherit', fontWeight: 500, minHeight: 44,
               }}
             />
             <button onClick={postComment} disabled={commentBusy || !commentInput.trim()}
-              style={{ padding: '0 16px', borderRadius: RADIUS.pill, border: BORDER, background: PALETTE.accent, color: PALETTE.ink, fontSize: 12, fontWeight: 700, cursor: 'pointer', minHeight: 40, opacity: commentBusy || !commentInput.trim() ? 0.5 : 1 }}>
+              style={{ padding: '0 16px', borderRadius: RADIUS.pill, border: BORDER, background: PALETTE.accent, color: PALETTE.ink, fontSize: 12, fontWeight: 700, cursor: 'pointer', minHeight: 44, opacity: commentBusy || !commentInput.trim() ? 0.5 : 1 }}>
               post
             </button>
           </div>
@@ -285,7 +285,7 @@ export function PostCard({ post, onAfterAction, onHideBusiness, showHide = true 
 
 const iconAction: React.CSSProperties = {
   display: 'inline-flex', alignItems: 'center', gap: 7,
-  background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, minHeight: 36,
+  background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, minHeight: 44,
 }
 
 const menuItem: React.CSSProperties = {
