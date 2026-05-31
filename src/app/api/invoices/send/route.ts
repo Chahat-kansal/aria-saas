@@ -7,6 +7,8 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { checkRateLimit } from '@/lib/rate-limit'
+import { z } from 'zod'
+import { validateBody } from '@/lib/api/validate'
 
 function buildInvoiceHtml(
   biz: { name: string; abn?: string | null; address?: string | null; phone?: string | null },
@@ -85,6 +87,11 @@ function buildInvoiceHtml(
 </html>`
 }
 
+const SendInvoiceSchema = z.object({
+  invoiceId: z.string().uuid(),
+  sendMethod: z.enum(['email', 'sms']),
+})
+
 async function _POST(req: Request) {
   const supabase = createServerSupabaseClient()
   const { data: { user }, error: authErr } = await supabase.auth.getUser()
@@ -93,10 +100,9 @@ async function _POST(req: Request) {
   const rl = await checkRateLimit('messaging', user.id)
   if (!rl.ok) return NextResponse.json({ error: 'Rate limit exceeded. Try again later.' }, { status: 429 })
 
-  const body = await req.json().catch(() => ({}))
-  const { invoiceId, sendMethod } = body
-  if (!invoiceId || !sendMethod) return NextResponse.json({ error: 'invoiceId and sendMethod required' }, { status: 400 })
-  if (!['email', 'sms'].includes(sendMethod)) return NextResponse.json({ error: 'sendMethod must be email or sms' }, { status: 400 })
+  const parsed = await validateBody(req, SendInvoiceSchema)
+  if ('error' in parsed) return parsed.error
+  const { invoiceId, sendMethod } = parsed.data
 
   const { data: inv } = await supabaseAdmin.from('invoices').select('*').eq('id', invoiceId).maybeSingle()
   if (!inv) return NextResponse.json({ error: 'Not found' }, { status: 404 })

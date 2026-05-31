@@ -2,6 +2,8 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 import { NextResponse } from 'next/server'
+import { z } from 'zod'
+import { validateBody } from '@/lib/api/validate'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
@@ -87,28 +89,41 @@ async function _GET(req: Request) {
   return NextResponse.json({ customers: merged, page, page_size: PAGE_SIZE })
 }
 
+const CreateCustomerSchema = z.object({
+  business_id: z.string().uuid(),
+  name: z.string().min(1).max(200).transform(s => s.trim()),
+  email: z.string().email().optional().nullable(),
+  phone: z.string().max(50).optional().nullable(),
+  company: z.string().max(200).optional().nullable(),
+  address: z.string().max(500).optional().nullable(),
+  city: z.string().max(100).optional().nullable(),
+  postcode: z.string().max(20).optional().nullable(),
+  tags: z.array(z.string()).optional().default([]),
+  notes: z.string().max(2000).optional().nullable(),
+})
+
 async function _POST(req: Request) {
   const supabase = createServerSupabaseClient()
   const { data: { user }, error: authErr } = await supabase.auth.getUser()
   if (authErr || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const body = await req.json().catch(() => ({}))
-  const { business_id, name, email, phone, company, address, city, postcode, tags, notes } = body
-  if (!business_id || !name?.trim()) return NextResponse.json({ error: 'business_id and name required' }, { status: 400 })
+  const parsed = await validateBody(req, CreateCustomerSchema)
+  if ('error' in parsed) return parsed.error
+  const { business_id, name, email, phone, company, address, city, postcode, tags, notes } = parsed.data
 
-  const { data: biz } = await supabase.from('businesses').select('id').eq('id', business_id).eq('user_id', user.id).single()
+  const { data: biz } = await supabase.from('businesses').select('id').eq('id', business_id).eq('user_id', user.id).maybeSingle()
   if (!biz) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   const { data, error } = await supabaseAdmin.from('customers').insert({
     business_id,
-    name: name.trim(),
+    name,
     email: email?.trim() || null,
     phone: phone?.trim() || null,
     company: company?.trim() || null,
     address: address?.trim() || null,
     city: city?.trim() || null,
     postcode: postcode?.trim() || null,
-    tags: Array.isArray(tags) ? tags : [],
+    tags: tags ?? [],
     notes: notes?.trim() || null,
     source: 'manual',
     archived: false,
