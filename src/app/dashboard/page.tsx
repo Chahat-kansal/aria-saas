@@ -76,7 +76,7 @@ async function RetailCafeDashboard({ business }: { business: any }) {
     supabase.from('bookings').select('amount').eq('business_id', business.id).gte('booking_date', startOfMonth),
     supabase.from('pos_sales').select('total_amount').eq('business_id', business.id).gte('created_at', `${today}T00:00:00`).eq('status', 'completed'),
     supabase.from('pos_sales').select('total_amount').eq('business_id', business.id).gte('created_at', `${yesterday}T00:00:00`).lt('created_at', `${today}T00:00:00`).eq('status', 'completed'),
-    supabase.from('pos_products').select('id, name, stock_quantity, reorder_point').eq('business_id', business.id).eq('track_inventory', true).lte('stock_quantity', 5),
+    supabase.from('pos_products').select('id, name, stock_quantity, low_stock_threshold').eq('business_id', business.id).eq('track_stock', true).lte('stock_quantity', 5),
   ]);
 
   const revenueThisMonth = (bookings ?? []).reduce((s: number, b: any) => s + (b.amount || 0), 0);
