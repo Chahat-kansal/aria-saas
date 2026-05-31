@@ -37,9 +37,24 @@ phase's checklist is 100% green. This is how real PRRs work — gates, not vibes
 - [x] All commits pushed (git log origin/main..HEAD empty)
 - [ ] Deploy is green on Vercel — verify after Upstash vars are added
 
+## PRR-2 Exit Checklist
+- [x] npm audit: 0 critical, 11 high addressed where safe (26 remaining documented as accepted in SECURITY.md)
+- [x] No hardcoded secrets in code
+- [x] No NEXT_PUBLIC_ prefix on any real secret
+- [x] Security headers live in middleware (X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy, HSTS)
+- [x] CSP active in next.config.mjs (Bunny Stream + Cloudflare Stream domains added; Go Live camera works)
+- [x] Every business-data route has an ownership check (PRR-2 sweep fixed ~15 additional routes on top of Session 6's ~28)
+- [x] PII scrubbed from logs (no console.log with email/phone) + Sentry beforeSend scrubs PII fields
+- [x] Customer deletion path: soft-delete default + ?permanent=true for GDPR hard-delete
+- [x] SECURITY.md created
+- [x] npx tsc --noEmit clean
+- [ ] npm run build — verify after next deploy
+- [x] All commits pushed (git log origin/main..HEAD empty)
+- [ ] Deploy green on Vercel — verify after push
+
 ## Progress
 - [~] PRR-1 API hardening (code complete; Upstash env vars + Vercel deploy pending user action)
-- [ ] PRR-2 Security
+- [~] PRR-2 Security (code complete; Vercel deploy pending)
 - [ ] PRR-3 Observability
 - [ ] PRR-4 Reliability
 - [ ] PRR-5 Data safety
