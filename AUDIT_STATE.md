@@ -1,7 +1,7 @@
 # Aria OS Audit State
 
 ## Last updated
-2026-05-31 — Session 5 Batch A (dashboard pages) COMPLETE — all clean. Live DB schema queried.
+2026-05-31 — Session 5 ALL BATCHES COMPLETE. FULL CODEBASE AUDIT COMPLETE.
 
 ## Push Status
 ALL COMMITS PUSHED — origin/main is current as of cb9fe6d4
@@ -33,6 +33,14 @@ COMPLETE — src/app/api/integrations/ audited — all clean (f900ae2c)
 COMPLETE — src/app/api/cron/ audited — all clean (f900ae2c)
 COMPLETE — src/app/dashboard/ ~100 pages audited (Session 5 Batch A) — ALL CLEAN
 COMPLETE — src/app/pos/ ~60 pages audited (Session 5 Batch B) — 1 bug fixed (aefd211d)
+COMPLETE — src/lib/aria/ ~70 lib files audited (Session 5 Batch C) — 1 bug fixed (a9d8a780)
+COMPLETE — src/components/dashboard/ + src/components/pos/ audited (Session 5 Batch D) — ALL CLEAN
+COMPLETE — src/app/in-store/ ~8 pages audited — ALL CLEAN
+
+## ✅ FULL CODEBASE AUDIT COMPLETE — 2026-05-31
+Total bugs found across all 5 sessions: 22
+Sessions 1-4: 20 bugs (API routes, DB column/table errors, missing columns via migrations)
+Session 5: 2 bugs (customer_segment → segment; sale_items total_price → line_total)
 
 ## Prompt-113 (Ask Aria 110%) Status — ALL DONE
 - [x] Task 1: Deep context pre-loaded (top products, customers, loyalty, comparison, avg daily revenue) → 2dc8b3fb
@@ -46,7 +54,7 @@ COMPLETE — src/app/pos/ ~60 pages audited (Session 5 Batch B) — 1 bug fixed 
 - [x] Task 9: Deep image analysis — receipts, invoices, products, charts, handwriting + auto-expense → 5846ca76
 
 ## Current Position
-Prompt-113 COMPLETE. Next prompts available: PRR-1 (API hardening), audit session 5 (frontend/lib), audit session 6 (silent failures/safety).
+FULL AUDIT COMPLETE. Next prompts available: PRR-1 (API hardening), audit session 6 (silent failures/safety).
 
 ## Issues found (running log)
 | File | Type | Issue | Fixed? | Commit |
@@ -83,6 +91,7 @@ Prompt-113 COMPLETE. Next prompts available: PRR-1 (API hardening), audit sessio
 | src/lib/aria-tools.ts | Wrong column | `pos_products.retail_price/selling_price` → `price` | YES | 76e0b824 |
 | Various aria routes | Wrong handler signature | `NextRequest` → `Request` in withErrorCapture handlers | YES | 63a61301 |
 | src/app/pos/customers/[id]/page.tsx | Wrong column | `pos_customers.customer_segment` → `segment` (3 occurrences) | YES | aefd211d |
+| src/lib/aria/business-brain.ts | Wrong column | `sale_items total_price` → `line_total` — AI was getting undefined for all item totals | YES | a9d8a780 |
 
 ## Known already-fixed issues (do not re-fix)
 | File | Issue | Fixed in |
