@@ -710,7 +710,8 @@ export default function AskAriaPage() {
             <button
               onClick={() => setShowHistory(v => !v)}
               title="Chat history"
-              className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors"
+              aria-label="Toggle chat history"
+            className="w-11 h-11 rounded-lg flex items-center justify-center transition-colors"
               style={{ background: showHistory ? 'rgba(127,184,151,0.15)' : 'rgba(255,255,255,0.05)', color: showHistory ? '#7FB897' : 'rgba(255,255,255,0.5)' }}
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-4 h-4">
@@ -731,15 +732,15 @@ export default function AskAriaPage() {
           </div>
           <div className="flex items-center gap-2">
             <Link href="/dashboard/ask-aria/intelligence"
-              className="text-xs px-3 py-1.5 rounded-lg transition-colors"
-              style={{ color: 'rgba(255,255,255,0.35)', background: 'rgba(255,255,255,0.05)' }}
+              className="text-xs px-3 rounded-lg transition-colors inline-flex items-center"
+              style={{ color: 'rgba(255,255,255,0.35)', background: 'rgba(255,255,255,0.05)', minHeight: 36 }}
               title="Intelligence settings">
               ✦ Intel
             </Link>
             {messages.length > 0 && (
               <button onClick={newConversation}
-                className="text-xs px-3 py-1.5 rounded-lg transition-colors"
-                style={{ color: 'rgba(255,255,255,0.35)', background: 'rgba(255,255,255,0.05)' }}>
+                className="text-xs px-3 rounded-lg transition-colors inline-flex items-center"
+                style={{ color: 'rgba(255,255,255,0.35)', background: 'rgba(255,255,255,0.05)', minHeight: 36 }}>
                 New chat
               </button>
             )}
@@ -811,7 +812,7 @@ export default function AskAriaPage() {
                             <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 8 }}>
                               {(m.followups ?? []).map((fup, fi) => (
                                 <button key={fi} onClick={() => { send(fup) }}
-                                  style={{ padding: '4px 10px', borderRadius: 14, border: '0.5px solid rgba(127,184,151,0.2)', background: 'rgba(127,184,151,0.05)', color: '#7FB897', fontSize: 10.5, cursor: 'pointer', fontFamily: 'inherit' }}>
+                                  style={{ padding: '6px 10px', minHeight: 32, borderRadius: 14, border: '0.5px solid rgba(127,184,151,0.2)', background: 'rgba(127,184,151,0.05)', color: '#7FB897', fontSize: 10.5, cursor: 'pointer', fontFamily: 'inherit' }}>
                                   {fup}
                                 </button>
                               ))}
@@ -964,7 +965,8 @@ export default function AskAriaPage() {
               onClick={() => fileInputRef.current?.click()}
               disabled={sending}
               title="Attach files (images, PDFs, spreadsheets) — Aria will analyse them"
-              className="flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center transition-all disabled:opacity-40 relative"
+              aria-label="Attach files"
+            className="flex-shrink-0 w-11 h-11 rounded-xl flex items-center justify-center transition-all disabled:opacity-40 relative"
               style={{ background: attachedFiles.length > 0 ? 'rgba(127,184,151,0.15)' : 'rgba(255,255,255,0.06)', border: `1px solid ${attachedFiles.length > 0 ? 'rgba(127,184,151,0.4)' : 'rgba(255,255,255,0.1)'}`, color: attachedFiles.length > 0 ? '#7FB897' : 'rgba(255,255,255,0.5)' }}
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-4 h-4">
