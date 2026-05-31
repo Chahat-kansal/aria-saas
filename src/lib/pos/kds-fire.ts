@@ -41,7 +41,6 @@ export async function fireKdsTickets(opts: FireOptions): Promise<{ fired_count: 
     if (!item.product_id) continue
     const product = productMap.get(item.product_id)
     if (!product) continue
-    if (product.kds_skip_routing) continue
 
     const station = String(product.kds_station ?? '').trim() || 'kitchen'
     const prep_time = Number(product.prep_time_seconds) || null
