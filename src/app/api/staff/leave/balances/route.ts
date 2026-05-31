@@ -13,6 +13,9 @@ async function _GET(req: Request) {
   const bid = new URL(req.url).searchParams.get('business_id')
   if (!bid) return NextResponse.json({ balances: [] })
 
+  const { data: biz } = await supabase.from('businesses').select('id').eq('id', bid).eq('user_id', user.id).maybeSingle()
+  if (!biz) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
   const year = new Date().getFullYear()
 
   // Auto-create balances for staff who don't have them yet
