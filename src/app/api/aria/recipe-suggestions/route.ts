@@ -16,6 +16,10 @@ async function _POST(req: Request) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
 
+    // Ownership check
+    const { data: ownerBiz } = await supabase.from('businesses').select('id').eq('id', business_id).eq('user_id', user.id).maybeSingle();
+    if (!ownerBiz) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+
     const [bizRes, productsRes, salesRes] = await Promise.all([
       supabase.from('businesses').select('name, industry').eq('id', business_id).maybeSingle(),
       supabase.from('pos_products').select('name, category, price, stock_quantity').eq('business_id', business_id).limit(100),

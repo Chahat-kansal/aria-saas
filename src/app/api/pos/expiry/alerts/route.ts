@@ -11,6 +11,10 @@ export async function GET(req: Request) {
   const bid = searchParams.get('business_id')
   if (!bid) return NextResponse.json({ alerts: [] })
 
+  // Ownership check
+  const { data: biz } = await supabase.from('businesses').select('id').eq('id', bid).eq('user_id', user.id).maybeSingle()
+  if (!biz) return NextResponse.json({ alerts: [] })
+
   const { data } = await supabase
     .from('pos_expiry_alerts')
     .select('*')

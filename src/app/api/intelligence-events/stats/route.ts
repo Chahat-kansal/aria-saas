@@ -14,6 +14,10 @@ async function _GET(req: Request) {
   const business_id = new URL(req.url).searchParams.get('business_id');
   if (!business_id) return NextResponse.json({ error: 'business_id required' }, { status: 400 });
 
+  // Ownership check
+  const { data: biz } = await supabase.from('businesses').select('id').eq('id', business_id).eq('user_id', user.id).maybeSingle();
+  if (!biz) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+
   const since = new Date(Date.now() - 30 * 86400_000).toISOString();
   const { data } = await supabase.from('intelligence_events')
     .select('severity, event_type, acknowledged, triggered_at, acknowledged_at')

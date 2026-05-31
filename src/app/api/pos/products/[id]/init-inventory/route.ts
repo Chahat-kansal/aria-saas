@@ -21,6 +21,10 @@ async function _POST(_req: Request, { params }: Params) {
 
   const bid = product.business_id as string
 
+  // Ownership check
+  const { data: biz } = await supabase.from('businesses').select('id').eq('id', bid).eq('user_id', user.id).maybeSingle()
+  if (!biz) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
   const { data: outlets } = await supabase
     .from('pos_outlets')
     .select('id')

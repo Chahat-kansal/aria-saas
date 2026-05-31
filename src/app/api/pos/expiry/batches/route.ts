@@ -11,6 +11,10 @@ export async function GET(req: Request) {
   const bid = searchParams.get('business_id')
   if (!bid) return NextResponse.json({ batches: [] })
 
+  // Ownership check
+  const { data: biz } = await supabase.from('businesses').select('id').eq('id', bid).eq('user_id', user.id).maybeSingle()
+  if (!biz) return NextResponse.json({ batches: [] })
+
   // Get batches expiring in next 90 days (or already expired in last 7)
   const cutoff = new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0]
   const future = new Date(Date.now() + 90 * 86400000).toISOString().split('T')[0]

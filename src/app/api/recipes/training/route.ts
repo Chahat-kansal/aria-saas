@@ -14,6 +14,10 @@ async function _GET(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
 
+  // Ownership check
+  const { data: biz } = await supabase.from('businesses').select('id').eq('id', business_id).eq('user_id', user.id).maybeSingle();
+  if (!biz) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+
   let query = supabase
     .from('staff_recipe_training')
     .select('*, recipes(name, category), staff_members(name)')
@@ -34,6 +38,10 @@ async function _POST(req: NextRequest) {
 
   const { business_id, staff_member_id, recipe_id, status, notes, signed_off_by } = await req.json();
   if (!business_id || !recipe_id) return NextResponse.json({ error: 'business_id and recipe_id required' }, { status: 400 });
+
+  // Ownership check
+  const { data: biz } = await supabase.from('businesses').select('id').eq('id', business_id).eq('user_id', user.id).maybeSingle();
+  if (!biz) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
   const payload: Record<string, any> = {
     business_id,

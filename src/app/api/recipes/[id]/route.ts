@@ -9,6 +9,12 @@ async function _PATCH(req: NextRequest, { params }: { params: { id: string } }) 
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
 
+  // Ownership check: fetch recipe → verify user owns the business
+  const { data: existing } = await supabase.from('recipes').select('id, business_id').eq('id', params.id).maybeSingle();
+  if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  const { data: biz } = await supabase.from('businesses').select('id').eq('id', existing.business_id).eq('user_id', user.id).maybeSingle();
+  if (!biz) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+
   const body = await req.json();
   const { ingredients, ...fields } = body;
 
@@ -48,6 +54,12 @@ async function _DELETE(req: NextRequest, { params }: { params: { id: string } })
   const supabase = createServerSupabaseClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
+
+  // Ownership check
+  const { data: existing } = await supabase.from('recipes').select('id, business_id').eq('id', params.id).maybeSingle();
+  if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  const { data: biz } = await supabase.from('businesses').select('id').eq('id', existing.business_id).eq('user_id', user.id).maybeSingle();
+  if (!biz) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
   const { error } = await supabase.from('recipes').delete().eq('id', params.id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

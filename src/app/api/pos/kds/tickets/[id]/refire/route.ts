@@ -16,6 +16,10 @@ async function _POST(_req: Request, { params }: Params) {
     .eq('id', id).maybeSingle()
   if (!original) return NextResponse.json({ error: 'Ticket not found' }, { status: 404 })
 
+  // Ownership check
+  const { data: biz } = await supabase.from('businesses').select('id').eq('id', original.business_id).eq('user_id', user.id).maybeSingle()
+  if (!biz) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
   // Mark original as refired; create a fresh clone
   const now = new Date().toISOString()
   await supabase.from('pos_kds_tickets').update({ status: 'refired', updated_at: now }).eq('id', id)

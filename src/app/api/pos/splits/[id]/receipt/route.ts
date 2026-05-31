@@ -22,6 +22,10 @@ async function _POST(req: Request, ctx: Ctx) {
     .eq('id', id).maybeSingle()
   if (!split) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
+  // Ownership check
+  const { data: ownerBiz } = await supabase.from('businesses').select('id').eq('id', split.business_id).eq('user_id', user.id).maybeSingle()
+  if (!ownerBiz) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
   const { data: sale } = await supabase.from('pos_sales').select('sale_number, created_at').eq('id', split.sale_id).maybeSingle()
   const { data: biz } = await supabase.from('businesses').select('name, city, email, phone').eq('id', split.business_id).maybeSingle()
 

@@ -12,6 +12,10 @@ export async function GET(req: Request) {
   const business_id = searchParams.get('business_id')
   if (!product_id || !business_id) return NextResponse.json({ batches: [] })
 
+  // Ownership check
+  const { data: biz } = await supabase.from('businesses').select('id').eq('id', business_id).eq('user_id', user.id).maybeSingle()
+  if (!biz) return NextResponse.json({ batches: [] })
+
   const { data } = await supabase
     .from('pos_product_batches')
     .select('id, expiry_date, quantity_remaining, expiry_tracked')
@@ -30,6 +34,13 @@ export async function POST(req: Request) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await req.json()
+  const { business_id } = body
+  if (!business_id) return NextResponse.json({ error: 'business_id required' }, { status: 400 })
+
+  // Ownership check
+  const { data: biz } = await supabase.from('businesses').select('id').eq('id', business_id).eq('user_id', user.id).maybeSingle()
+  if (!biz) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
   const { data, error } = await supabase.from('pos_product_batches').insert({
     business_id: body.business_id,
     product_id: body.product_id,
