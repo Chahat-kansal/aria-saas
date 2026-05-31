@@ -482,6 +482,13 @@ Low stock items (under 5 on hand): ${ctx.low_stock_items.length ? ctx.low_stock_
 Staff (POS users): ${ctx.staff_count}
 Pending Aria actions: ${ctx.pending_aria_actions}
 Open support tickets: ${ctx.open_support_tickets}
+Top products this month: ${ctx.top_products_month.map(p => `${p.name} ($${p.revenue.toFixed(2)})`).join(', ') || 'no data'}
+Top customers this month: ${ctx.top_customers_month.map(c => `${c.name} ($${c.total_spent.toFixed(2)}, ${c.visits} visits)`).join(', ') || 'no data'}
+Month vs last month: ${ctx.monthly_comparison.change_pct > 0 ? '+' : ''}${ctx.monthly_comparison.change_pct.toFixed(1)}% ($${(ctx.monthly_comparison.this_month/100).toFixed(2)} vs $${(ctx.monthly_comparison.last_month/100).toFixed(2)})
+Avg daily revenue: $${ctx.avg_daily_revenue.toFixed(2)}
+Loyalty members: ${ctx.loyalty_stats.total_members} (${ctx.loyalty_stats.active_last_30d} active last 30d)
+Pending purchase orders: ${ctx.pending_purchase_orders.length > 0 ? ctx.pending_purchase_orders.map(o => `${o.supplier} $${o.total}`).join(', ') : 'none'}
+Subscription: ${ctx.subscription_tier ?? 'unknown'}
 
 FRESH SIGNALS (from monitoring engine, last 30 min):
 ${ctx.fresh_signals.filter(s => ['alert','critical','watch'].includes(String((s.payload?.severity ?? 'info')))).map(s => `- ${s.signal_type} (${s.payload.severity}): ${JSON.stringify(s.payload)}`).join('\n') || 'no anomalies detected'}

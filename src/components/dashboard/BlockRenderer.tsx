@@ -241,4 +241,5 @@ export function BlockRenderer({ block, onChoice }: Props) {
   }
 
   return null
+  } catch { return null }
 }

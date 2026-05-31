@@ -41,6 +41,17 @@ export interface AskAriaContext {
   advice_weights: Record<string, number>
   competitor_intelligence: Array<{ name: string; last_checked: string | null; data: unknown }>
   prediction: { today_predicted: number; tomorrow_predicted: number; today_dow: string; tomorrow_dow: string; pattern: Record<string, number> }
+  // Pre-loaded top data (avoids tool calls for common questions)
+  top_products_month: Array<{ name: string; revenue: number; qty: number }>
+  top_customers_month: Array<{ name: string; total_spent: number; visits: number }>
+  recent_transactions: Array<{ amount: number; payment_method: string; created_at: string; items_count: number }>
+  staff_on_shift_today: Array<{ name: string; role: string; hours: number }>
+  pending_purchase_orders: Array<{ supplier: string; total: number; expected_date: string | null }>
+  loyalty_stats: { total_members: number; active_last_30d: number; points_outstanding: number }
+  monthly_comparison: { this_month: number; last_month: number; change_pct: number }
+  busiest_hour: { hour: string; avg_revenue: number }
+  avg_daily_revenue: number
+  subscription_tier: string | null
 }
 
 export async function buildAskAriaContext(
@@ -50,7 +61,9 @@ export async function buildAskAriaContext(
   const now = new Date()
   const todayStart = new Date(now); todayStart.setHours(0,0,0,0)
   const weekStart = new Date(now); weekStart.setDate(now.getDate() - 7)
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1) // first of current month
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+  const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+  const thirtyDaysAgo = new Date(now); thirtyDaysAgo.setDate(now.getDate() - 30)
 
   const competitorRes = supabaseAdmin
     .from('aria_competitor_watches')
@@ -60,7 +73,10 @@ export async function buildAskAriaContext(
     .order('last_checked_at', { ascending: false })
     .limit(3)
 
-  const [bizRes, salesTodayRes, salesWeekRes, salesMonthRes, lowStockRes, staffRes, ticketsRes, actionsRes, convHistRes, recentConvsRes, competitorsRes] = await Promise.all([
+  const [
+    bizRes, salesTodayRes, salesWeekRes, salesMonthRes, lowStockRes, staffRes, ticketsRes, actionsRes, convHistRes, recentConvsRes, competitorsRes,
+    saleItemsRes, topCustomersRes, recentTxnsRes, pendingPOsRes, loyaltyRes, activeCustomersRes, lastMonthSalesRes, subscriptionRes,
+  ] = await Promise.all([
     supabaseAdmin.from('businesses').select('name,industry,owner_name,city,address,phone,abn,google_average_rating,google_total_reviews').eq('id', businessId).maybeSingle(),
     supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', businessId).gte('created_at', todayStart.toISOString()),
     supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', businessId).gte('created_at', weekStart.toISOString()),
@@ -74,6 +90,54 @@ export async function buildAskAriaContext(
       : Promise.resolve({ data: null }),
     supabaseAdmin.from('aria_conversations').select('id,title,last_message_at,message_count,last_intent').eq('business_id', businessId).order('last_message_at', { ascending: false }).limit(10),
     competitorRes,
+    // Top products this month (via sale items join)
+    supabaseAdmin.from('pos_sale_items')
+      .select('product_name, line_total, quantity, pos_sales!inner(business_id, status, created_at)')
+      .eq('pos_sales.business_id', businessId)
+      .neq('pos_sales.status', 'voided')
+      .gte('pos_sales.created_at', monthStart.toISOString())
+      .limit(500),
+    // Top customers by total spent
+    supabaseAdmin.from('pos_customers')
+      .select('name, total_spent, visit_count')
+      .eq('business_id', businessId)
+      .order('total_spent', { ascending: false })
+      .limit(5),
+    // Recent 10 transactions
+    supabaseAdmin.from('pos_sales')
+      .select('total_amount, payment_method, created_at')
+      .eq('business_id', businessId)
+      .neq('status', 'voided')
+      .order('created_at', { ascending: false })
+      .limit(10),
+    // Pending purchase orders
+    supabaseAdmin.from('pos_purchase_orders')
+      .select('supplier_name, total_amount, expected_delivery_date')
+      .eq('business_id', businessId)
+      .eq('status', 'pending')
+      .limit(5),
+    // Loyalty stats — all customers with loyalty_points
+    supabaseAdmin.from('pos_customers')
+      .select('loyalty_points', { count: 'exact' })
+      .eq('business_id', businessId),
+    // Active customers last 30 days
+    supabaseAdmin.from('pos_customers')
+      .select('id', { count: 'exact', head: true })
+      .eq('business_id', businessId)
+      .gte('last_visit_at', thirtyDaysAgo.toISOString()),
+    // Last month sales for comparison
+    supabaseAdmin.from('pos_sales')
+      .select('total_amount')
+      .eq('business_id', businessId)
+      .neq('status', 'voided')
+      .gte('created_at', lastMonthStart.toISOString())
+      .lt('created_at', monthStart.toISOString()),
+    // Subscription tier
+    supabaseAdmin.from('business_subscriptions')
+      .select('tier')
+      .eq('business_id', businessId)
+      .eq('status', 'active')
+      .maybeSingle(),
   ])
 
   const biz = bizRes.data
@@ -108,7 +172,71 @@ export async function buildAskAriaContext(
     last_intent: r.last_intent ? String(r.last_intent) : null,
   }))
 
-  // Fetch fresh signals separately (non-blocking, best-effort)
+  // ── Process new deep context fields ──────────────────────────────────────
+
+  // Top products this month — aggregate by product_name
+  const productMap: Record<string, { name: string; revenue: number; qty: number }> = {}
+  for (const item of (saleItemsRes.data ?? []) as Array<{ product_name: string | null; line_total: number | null; quantity: number | null }>) {
+    const name = item.product_name ?? 'Unknown'
+    if (!productMap[name]) productMap[name] = { name, revenue: 0, qty: 0 }
+    productMap[name].revenue += Number(item.line_total ?? 0)
+    productMap[name].qty += Number(item.quantity ?? 1)
+  }
+  const topProductsMonth = Object.values(productMap)
+    .sort((a, b) => b.revenue - a.revenue)
+    .slice(0, 5)
+    .map(p => ({ ...p, revenue: Math.round(p.revenue * 100) / 100 }))
+
+  // Top customers this month
+  const topCustomersMonth = (topCustomersRes.data ?? []).map((c: Record<string, unknown>) => ({
+    name: String(c.name ?? 'Unknown'),
+    total_spent: Number(c.total_spent ?? 0),
+    visits: Number(c.visit_count ?? 0),
+  }))
+
+  // Recent transactions
+  const recentTransactions = (recentTxnsRes.data ?? []).map((t: Record<string, unknown>) => ({
+    amount: Number(t.total_amount ?? 0),
+    payment_method: String(t.payment_method ?? 'unknown'),
+    created_at: String(t.created_at ?? ''),
+    items_count: 0,
+  }))
+
+  // Pending purchase orders
+  const pendingPOs = (pendingPOsRes.data ?? []).map((o: Record<string, unknown>) => ({
+    supplier: String(o.supplier_name ?? 'Unknown'),
+    total: Number(o.total_amount ?? 0),
+    expected_date: o.expected_delivery_date ? String(o.expected_delivery_date) : null,
+  }))
+
+  // Loyalty stats
+  const loyaltyRows = (loyaltyRes.data ?? []) as Array<{ loyalty_points: number | null }>
+  const totalMembers = loyaltyRes.count ?? loyaltyRows.length
+  const pointsOutstanding = loyaltyRows.reduce((s, r) => s + Number(r.loyalty_points ?? 0), 0)
+  const activeCustomersCount = activeCustomersRes.count ?? 0
+  const loyaltyStats = {
+    total_members: totalMembers,
+    active_last_30d: activeCustomersCount,
+    points_outstanding: pointsOutstanding,
+  }
+
+  // Monthly comparison (in cents)
+  const lastMonthCents = sumCents(lastMonthSalesRes.data)
+  const rawChangePct = lastMonthCents > 0 ? ((monthCents - lastMonthCents) / lastMonthCents) * 100 : 0
+  const monthlyComparison = {
+    this_month: monthCents,
+    last_month: lastMonthCents,
+    change_pct: Math.round(rawChangePct * 10) / 10,
+  }
+
+  // Avg daily revenue (dollars)
+  const daysElapsed = Math.max(1, now.getDate())
+  const avgDailyRevenue = (monthCents / 100) / daysElapsed
+
+  // Subscription tier
+  const subscriptionTier = (subscriptionRes.data as { tier?: string } | null)?.tier ?? null
+
+  // ── Fetch fresh signals separately (non-blocking, best-effort) ─────────
   const { data: signalRows } = await supabaseAdmin
     .from('aria_signal_cache')
     .select('signal_type,payload,created_at')
@@ -155,9 +283,7 @@ export async function buildAskAriaContext(
     })()
   }
 
-
-  // Sales prediction — last 30 days pattern by day of week
-  const thirtyDaysAgo = new Date(now); thirtyDaysAgo.setDate(now.getDate() - 30)
+  // Sales prediction — last 30 days pattern by day of week + busiest hour
   const { data: salesPattern } = await supabaseAdmin
     .from('pos_sales')
     .select('total_amount, created_at')
@@ -166,13 +292,18 @@ export async function buildAskAriaContext(
     .order('created_at', { ascending: false })
     .limit(200)
 
-  // Group by day of week, calculate average
   const dayTotals: Record<number, number[]> = {}
+  const hourTotals: Record<number, number[]> = {}
   for (const s of salesPattern ?? []) {
-    const day = new Date(String(s.created_at)).getDay()
+    const d = new Date(String(s.created_at))
+    const day = d.getDay()
+    const hour = d.getHours()
     if (!dayTotals[day]) dayTotals[day] = []
     dayTotals[day].push(Number(s.total_amount) || 0)
+    if (!hourTotals[hour]) hourTotals[hour] = []
+    hourTotals[hour].push(Number(s.total_amount) || 0)
   }
+
   const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
   const todayDow = now.getDay()
   const tomorrowDow = (todayDow + 1) % 7
@@ -187,6 +318,18 @@ export async function buildAskAriaContext(
       dayNames[Number(day)],
       Math.round(amounts.reduce((a,b) => a+b,0) / amounts.length)
     ]))
+  }
+
+  // Compute busiest hour from sales pattern
+  let busiestHour = { hour: 'unknown', avg_revenue: 0 }
+  for (const [hr, amounts] of Object.entries(hourTotals)) {
+    const avg = amounts.reduce((a,b) => a+b,0) / amounts.length
+    if (avg > busiestHour.avg_revenue) {
+      const h = Number(hr)
+      const ampm = h >= 12 ? 'pm' : 'am'
+      const h12 = h % 12 === 0 ? 12 : h % 12
+      busiestHour = { hour: h12 + ampm, avg_revenue: Math.round(avg * 100) / 100 }
+    }
   }
 
   return {
@@ -216,5 +359,15 @@ export async function buildAskAriaContext(
     advice_weights: adviceWeights,
     competitor_intelligence: [],
     prediction,
+    top_products_month: topProductsMonth,
+    top_customers_month: topCustomersMonth,
+    recent_transactions: recentTransactions,
+    staff_on_shift_today: [],
+    pending_purchase_orders: pendingPOs,
+    loyalty_stats: loyaltyStats,
+    monthly_comparison: monthlyComparison,
+    busiest_hour: busiestHour,
+    avg_daily_revenue: avgDailyRevenue,
+    subscription_tier: subscriptionTier,
   }
 }
