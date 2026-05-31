@@ -1,11 +1,24 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import { checkRateLimit } from '@/lib/rate-limit'
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
   // Public tunnel routes — must never be intercepted by auth checks
   if (pathname.startsWith('/monitoring')) return NextResponse.next()
+
+  // ── PUBLIC API ROUTES — rate limit by IP (unauthenticated, open to abuse) ──
+  if (pathname.startsWith('/api/public/')) {
+    const ip = request.headers.get('x-forwarded-for') ?? request.ip ?? 'anon'
+    const rl = await checkRateLimit('public', ip)
+    if (!rl.ok) {
+      return NextResponse.json(
+        { error: 'Rate limit exceeded. Try again later.' },
+        { status: 429, headers: { 'Retry-After': String(Math.ceil((rl.reset - Date.now()) / 1000)) } }
+      )
+    }
+  }
 
   // Forward pathname for server components that need it (e.g. pos/layout.tsx)
   const requestHeaders = new Headers(request.headers)
@@ -126,6 +139,7 @@ export const config = {
     '/visa/:path*',
     '/chat/:path*',
     '/settings/:path*',
+    '/api/public/:path*',
     // NOTE: /pos is deliberately NOT here — POSAuthGate handles staff auth client-side
     // NOTE: /monitoring is deliberately NOT here — public Sentry tunnel proxy, no auth needed
   ],
