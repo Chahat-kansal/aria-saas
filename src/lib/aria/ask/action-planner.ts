@@ -1,5 +1,5 @@
 import { callAnthropic } from '@/lib/aria/providers/anthropic'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { supabaseAdmin } from '@/lib/supabase-admin'
 import { parseLLMJsonOr } from '@/lib/ai-json'
 
 export type ActionType =
@@ -59,13 +59,11 @@ export async function planAction(
   userMessage: string,
   businessId: string,
 ): Promise<PlannedAction | null> {
-  const supabase = createServerSupabaseClient()
-
   const [productsQ, staffQ] = await Promise.all([
-    supabase.from('pos_products')
+    supabaseAdmin.from('pos_products')
       .select('id,name,category,brand,price,cost_price,stock_quantity,is_active,age_restricted')
       .eq('business_id', businessId).eq('is_active', true).limit(200),
-    supabase.from('staff_members')
+    supabaseAdmin.from('staff_members')
       .select('id,first_name,last_name,position')
       .eq('business_id', businessId).eq('status', 'active').limit(50),
   ])

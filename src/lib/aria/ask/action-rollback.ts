@@ -1,13 +1,11 @@
-import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { supabaseAdmin } from '@/lib/supabase-admin'
 
 export async function rollbackAction(
   logId: string,
   businessId: string,
   userId: string,
 ): Promise<{ ok: boolean; error?: string; reverted_count: number }> {
-  const supabase = createServerSupabaseClient()
-
-  const { data: log } = await supabase.from('aria_action_log')
+  const { data: log } = await supabaseAdmin.from('aria_action_log')
     .select('*').eq('id', logId).eq('business_id', businessId).maybeSingle()
   if (!log) return { ok: false, error: 'Action log not found', reverted_count: 0 }
   if (log.rolled_back_at) return { ok: false, error: 'Already rolled back', reverted_count: 0 }
@@ -23,14 +21,14 @@ export async function rollbackAction(
   try {
     if (log.action_type === 'bulk_price_update' && Array.isArray(before.products)) {
       for (const p of before.products as Array<{ id: string; price: number }>) {
-        await supabase.from('pos_products')
+        await supabaseAdmin.from('pos_products')
           .update({ price: Number(p.price), updated_at: new Date().toISOString() })
           .eq('id', p.id).eq('business_id', businessId)
         revertedCount++
       }
     } else if (log.action_type === 'adjust_stock' && Array.isArray(before.products)) {
       for (const p of before.products as Array<{ id: string; stock: number }>) {
-        await supabase.from('pos_products')
+        await supabaseAdmin.from('pos_products')
           .update({ stock_quantity: Number(p.stock), updated_at: new Date().toISOString() })
           .eq('id', p.id).eq('business_id', businessId)
         revertedCount++
@@ -39,7 +37,7 @@ export async function rollbackAction(
       const field = String(before.field ?? '')
       const prevValue = before.previous_value as boolean
       if (field && Array.isArray(log.entity_ids) && log.entity_ids.length) {
-        await supabase.from('pos_products')
+        await supabaseAdmin.from('pos_products')
           .update({ [field]: prevValue, updated_at: new Date().toISOString() })
           .in('id', log.entity_ids as string[]).eq('business_id', businessId)
         revertedCount = (log.entity_ids as string[]).length
@@ -48,7 +46,7 @@ export async function rollbackAction(
       return { ok: false, error: `Rollback not supported for "${log.action_type}"`, reverted_count: 0 }
     }
 
-    await supabase.from('aria_action_log')
+    await supabaseAdmin.from('aria_action_log')
       .update({ rolled_back_at: new Date().toISOString(), rollback_by: userId })
       .eq('id', logId)
 

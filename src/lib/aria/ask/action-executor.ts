@@ -1,4 +1,4 @@
-import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { supabaseAdmin } from '@/lib/supabase-admin'
 import type { PlannedAction } from './action-planner'
 
 export interface ExecutionResult {
@@ -17,7 +17,7 @@ export async function executeAction(
   conversationId?: string,
   messageExcerpt?: string,
 ): Promise<ExecutionResult> {
-  const supabase = createServerSupabaseClient()
+  const supabase = supabaseAdmin
   let affectedCount = 0
   let beforeState: Record<string, unknown> = {}
   let afterState: Record<string, unknown> = {}

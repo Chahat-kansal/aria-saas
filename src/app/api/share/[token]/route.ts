@@ -1,11 +1,9 @@
-import { createServerSupabaseClient } from '@/lib/supabase-server';
+import { supabaseAdmin } from '@/lib/supabase-admin';
 import { NextResponse } from 'next/server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 async function _GET(_: Request, { params }: { params: { token: string } }) {
-  const supabase = createServerSupabaseClient();
-
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from('conversations')
     .select('id,title,messages,aimodel,created_at')
     .eq('share_token', params.token)

@@ -1,6 +1,6 @@
 export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 async function _GET(req: NextRequest) {
@@ -11,7 +11,7 @@ async function _GET(req: NextRequest) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
 
-  const supabase = createServerSupabaseClient()
+  const supabase = supabaseAdmin
   const nowUtc = new Date()
   const currentDay = nowUtc.getUTCDay()   // 0=Sun, 6=Sat
   const currentHour = nowUtc.getUTCHours()
