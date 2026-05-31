@@ -81,7 +81,7 @@ async function _PATCH(req: Request, { params }: Params) {
   return NextResponse.json({ customer: data })
 }
 
-async function _DELETE(_req: Request, { params }: Params) {
+async function _DELETE(req: Request, { params }: Params) {
   const supabase = createServerSupabaseClient()
   const { data: { user }, error: authErr } = await supabase.auth.getUser()
   if (authErr || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -92,7 +92,13 @@ async function _DELETE(_req: Request, { params }: Params) {
   const { data: biz } = await supabase.from('businesses').select('id').eq('id', customer.business_id).eq('user_id', user.id).single()
   if (!biz) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  await supabaseAdmin.from('customers').update({ archived: true, updated_at: new Date().toISOString() }).eq('id', params.id)
+  const permanent = new URL(req.url).searchParams.get('permanent') === 'true'
+  if (permanent) {
+    // Hard-delete for GDPR/Privacy Act right to erasure
+    await supabaseAdmin.from('customers').delete().eq('id', params.id)
+  } else {
+    await supabaseAdmin.from('customers').update({ archived: true, updated_at: new Date().toISOString() }).eq('id', params.id)
+  }
   return NextResponse.json({ ok: true })
 }
 
