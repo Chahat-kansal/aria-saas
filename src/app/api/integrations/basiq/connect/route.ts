@@ -2,11 +2,15 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
 
+import { z } from 'zod';
+import { validateBody } from '@/lib/api/validate';
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { withErrorCapture } from '@/lib/api/with-error-capture';
 import { createUser, createAuthLink, isConfigured } from '@/lib/integrations/basiq';
+
+const ConnectSchema = z.object({ business_id: z.string().uuid() })
 
 async function _POST(req: Request) {
   const supabase = createServerSupabaseClient();
@@ -15,8 +19,9 @@ async function _POST(req: Request) {
 
   if (!isConfigured()) return NextResponse.json({ error: 'BASIQ_API_KEY not configured' }, { status: 500 });
 
-  const { business_id } = await req.json();
-  if (!business_id) return NextResponse.json({ error: 'business_id required' }, { status: 400 });
+  const parsed = await validateBody(req, ConnectSchema)
+  if ('error' in parsed) return parsed.error
+  const { business_id } = parsed.data
 
   const { data: biz } = await supabase.from('businesses')
     .select('id, basiq_user_id, email').eq('id', business_id).eq('user_id', user.id).maybeSingle();

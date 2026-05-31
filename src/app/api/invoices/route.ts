@@ -1,10 +1,32 @@
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
+import { z } from 'zod'
+import { validateBody } from '@/lib/api/validate'
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+
+const LineSchema = z.object({
+  description: z.string().max(500).optional().default(''),
+  quantity: z.number().positive().optional().default(1),
+  unit_price: z.number().min(0),
+  gst_applicable: z.boolean().optional().default(true),
+})
+
+const CreateInvoiceSchema = z.object({
+  business_id: z.string().uuid(),
+  customer_id: z.string().uuid().optional().nullable(),
+  bill_to_name: z.string().min(1).max(300),
+  bill_to_email: z.string().email().optional().nullable(),
+  bill_to_address: z.string().max(500).optional().nullable(),
+  notes: z.string().max(2000).optional().nullable(),
+  issue_date: z.string().optional().nullable(),
+  due_date: z.string().optional().nullable(),
+  lines: z.array(LineSchema).min(1),
+  ai_generated: z.boolean().optional().default(false),
+})
 
 function calcLine(qty: number, unitPrice: number, gstApplicable: boolean) {
   const line_subtotal = qty * unitPrice
@@ -53,11 +75,10 @@ async function _POST(req: Request) {
   const { data: { user }, error: authErr } = await supabase.auth.getUser()
   if (authErr || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const body = await req.json().catch(() => ({}))
+  const parsed = await validateBody(req, CreateInvoiceSchema)
+  if ('error' in parsed) return parsed.error
   const { business_id, customer_id, bill_to_name, bill_to_email, bill_to_address, notes,
-          issue_date, due_date, lines, ai_generated } = body
-  if (!business_id || !bill_to_name) return NextResponse.json({ error: 'business_id and bill_to_name required' }, { status: 400 })
-  if (!Array.isArray(lines) || lines.length === 0) return NextResponse.json({ error: 'lines required' }, { status: 400 })
+          issue_date, due_date, lines, ai_generated } = parsed.data
 
   const { data: biz } = await supabase.from('businesses').select('id').eq('id', business_id).eq('user_id', user.id).single()
   if (!biz) return NextResponse.json({ error: 'Not found' }, { status: 404 })

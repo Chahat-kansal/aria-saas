@@ -61,7 +61,9 @@ async function _PATCH(req: Request, { params }: { params: Promise<{ id: string }
   const bid = await getBid(supabase, user.id)
   if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
 
-  const body = await req.json()
+  const rawBody = await req.json().catch(() => null)
+  if (!rawBody || typeof rawBody !== 'object') return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
+  const body = rawBody as Record<string, unknown>
   const allowed: Record<string, unknown> = { updated_at: new Date().toISOString() }
   const SAFE = ['name','phone','email','birthday','notes','tags','marketing_consent','points_balance','stamps_count','abn','tax_exempt','tax_exempt_type','tax_exempt_certificate','tax_exempt_expires_at'] as const
   for (const k of SAFE) {

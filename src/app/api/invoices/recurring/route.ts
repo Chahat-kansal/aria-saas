@@ -1,10 +1,17 @@
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
+import { z } from 'zod'
+import { validateBody } from '@/lib/api/validate'
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+
+const RecurringSchema = z.object({
+  invoiceId: z.string().uuid(),
+  frequency: z.enum(['weekly', 'monthly', 'quarterly']),
+})
 
 function nextDueDate(frequency: string): string {
   const d = new Date()
@@ -19,9 +26,9 @@ async function _POST(req: Request) {
   const { data: { user }, error: authErr } = await supabase.auth.getUser()
   if (authErr || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { invoiceId, frequency } = await req.json().catch(() => ({}))
-  if (!invoiceId || !['weekly', 'monthly', 'quarterly'].includes(frequency))
-    return NextResponse.json({ error: 'invoiceId and valid frequency required' }, { status: 400 })
+  const parsed = await validateBody(req, RecurringSchema)
+  if ('error' in parsed) return parsed.error
+  const { invoiceId, frequency } = parsed.data
 
   const { data: inv } = await supabaseAdmin.from('invoices').select('id, business_id').eq('id', invoiceId).maybeSingle()
   if (!inv) return NextResponse.json({ error: 'Not found' }, { status: 404 })
