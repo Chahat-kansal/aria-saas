@@ -23,6 +23,7 @@ import type { PlannedAction } from '@/lib/aria/ask/action-planner'
 import { runAriaCouncil } from '@/lib/aria/council'
 import type { CouncilOutput } from '@/lib/aria/council'
 import { getBusinessContext } from '@/lib/aria/get-business-context'
+import { maybeWriteMemory } from '@/lib/aria/ask/memory-writer'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
   const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
@@ -495,8 +496,7 @@ Subscription: ${ctx.subscription_tier ?? 'unknown'}
 FRESH SIGNALS (from monitoring engine, last 30 min):
 ${ctx.fresh_signals.filter(s => ['alert','critical','watch'].includes(String((s.payload?.severity ?? 'info')))).map(s => `- ${s.signal_type} (${s.payload.severity}): ${JSON.stringify(s.payload)}`).join('\n') || 'no anomalies detected'}
 
-WHAT I KNOW ABOUT THIS BUSINESS (from prior conversations and outcomes — use to personalise responses, never contradict):
-${ctx.memories.length > 0 ? ctx.memories.map(m => `- [${m.kind}${m.topic ? '/' + m.topic : ''}] ${m.content}`).join('\n') : 'no memories yet — this is one of our first conversations'}
+ADVICE CONFIDENCE — calibrate based on outcome learning only (memories are at top of prompt):
 
 ADVICE CONFIDENCE BY CATEGORY (from outcome learning — calibrate confidence accordingly):
 ${Object.keys(ctx.advice_weights).length > 0
@@ -649,6 +649,14 @@ ALWAYS give detailed answers:
 - Bold key figures and recommendations
 
 NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth with the advantage of having the owner's actual live data.`
+
+  // Inject memories at top of prompt so they frame every response
+  if (ctx.memories.length > 0) {
+    const memoryBlock = '\n\nWHAT I KNOW ABOUT ' + ctx.business_name.toUpperCase() + ' (from our history — use this to personalise every response):\n' +
+      ctx.memories.map((m: { kind: string; content: string }) => '• [' + m.kind + '] ' + m.content).join('\n') +
+      '\n\nThese are facts about this specific business. Reference them naturally — don\'t say "I remember" just use the knowledge.'
+    systemPrompt = systemPrompt.replace('You are Aria', memoryBlock + '\n\nYou are Aria')
+  }
 
   // 4. Add troubleshoot addendum if needed
   if (intent.type === 'troubleshoot' || intent.type === 'escalate') {
@@ -915,6 +923,9 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
   } catch (e) {
     console.error('[aria/ask] upsertConversation failed:', (e as Error).message, 'conv_id:', conversationId)
   }
+
+  // Write any new memories from this conversation — non-blocking
+  maybeWriteMemory(bid, message, historyContent).catch(() => {})
 
   // Track actual spend in DB for cost guard
   try {
