@@ -12,6 +12,7 @@ const trendColor = (t?: string, c?: string) => c ?? (t === 'up' ? G : t === 'dow
 
 export function BlockRenderer({ block, onChoice }: Props) {
   if (!block || !block.type) return null
+  try {
 
 
   if (block.type === 'lead') return (
@@ -27,7 +28,7 @@ export function BlockRenderer({ block, onChoice }: Props) {
   )
 
   if (block.type === 'chart') {
-    const max = Math.max(...block.values, 1)
+    const max = Math.max(...(block.values ?? []), 1)
     const u = block.unit ?? ''
     return (
       <div style={{ borderRadius: 12, border: '0.5px solid rgba(255,255,255,0.09)', marginBottom: 12, overflow: 'hidden' }}>
@@ -45,12 +46,12 @@ export function BlockRenderer({ block, onChoice }: Props) {
               </div>
             ))}
           </div>
-          <div style={{ display: 'flex', gap: 3, marginBottom: block.metrics.length ? 12 : 0 }}>
+          <div style={{ display: 'flex', gap: 3, marginBottom: (block.metrics ?? []).length ? 12 : 0 }}>
             {(block.labels ?? []).map((l, i) => (
               <div key={i} style={{ flex: 1, textAlign: 'center', fontSize: 9, color: 'rgba(255,255,255,0.22)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l}</div>
             ))}
           </div>
-          {block.metrics.length > 0 && (
+          {(block.metrics ?? []).length > 0 && (
             <div style={{ display: 'flex', gap: 6 }}>
               {(block.metrics ?? []).map((m, i) => (
                 <div key={i} style={{ flex: 1, background: 'rgba(255,255,255,0.04)', borderRadius: 8, padding: '7px 10px' }}>
@@ -90,7 +91,7 @@ export function BlockRenderer({ block, onChoice }: Props) {
         {(block.items ?? []).map((item, i) => {
           const c = item.role === 'growth' ? G : item.role === 'risk' ? R : item.role === 'context' ? B : V
           return (
-            <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '8px 0', borderBottom: i < block.items.length - 1 ? '0.5px solid rgba(255,255,255,0.05)' : 'none' }}>
+            <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '8px 0', borderBottom: i < block.items?.length - 1 ? '0.5px solid rgba(255,255,255,0.05)' : 'none' }}>
               <div style={{ width: 24, height: 24, borderRadius: 7, background: `${c}18`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, flexShrink: 0 }}>{item.icon}</div>
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 8, fontWeight: 600, color: c, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 3 }}>{item.role}</div>
@@ -145,7 +146,7 @@ export function BlockRenderer({ block, onChoice }: Props) {
         {(block.items ?? []).map((item, i) => {
           const c = item.colorVariant === 'danger' ? R : item.colorVariant === 'warning' ? A : G
           return (
-            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: i < block.items.length-1 ? 10 : 0 }}>
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: i < block.items?.length-1 ? 10 : 0 }}>
               <div style={{ width: 30, height: 30, borderRadius: 8, background: `${c}18`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: c, fontSize: 14, flexShrink: 0 }}>{item.icon}</div>
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 12, fontWeight: 500, color: 'rgba(255,255,255,0.88)' }}>{item.title}</div>
