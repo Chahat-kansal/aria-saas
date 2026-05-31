@@ -14,16 +14,19 @@ interface KDSOrder {
   table_label: string | null;
   ticket_number: number | null;
   items: KDSItem[];
-  status: 'new' | 'in_progress' | 'ready' | 'delivered' | 'void';
+  status: 'new' | 'in_progress' | 'ready' | 'delivered' | 'void' | 'bumped';
   created_at: string;
   bumped_at: string | null;
 }
 
-function elapsedSeconds(created_at: string) {
-  return Math.floor((Date.now() - new Date(created_at).getTime()) / 1000);
+function elapsedSeconds(order: KDSOrder) {
+  // Freeze the clock once an order has been bumped/readied/delivered
+  const end = order.bumped_at ? new Date(order.bumped_at).getTime() : Date.now();
+  return Math.max(0, Math.floor((end - new Date(order.created_at).getTime()) / 1000));
 }
 
 function formatElapsed(secs: number) {
+  if (secs >= 86400) return '24h+';
   const m = Math.floor(secs / 60);
   const s = secs % 60;
   return `${m}:${String(s).padStart(2, '0')}`;
@@ -128,7 +131,7 @@ export default function KitchenPage() {
   }
 
   const active = orders.filter(o => {
-    if (o.status === 'delivered' || o.status === 'void') return false;
+    if (o.status === 'delivered' || o.status === 'void' || o.status === 'bumped') return false;
     if (station === 'All') return true;
     const stLower = station.toLowerCase();
     return o.items.some(i =>
@@ -137,7 +140,7 @@ export default function KitchenPage() {
     );
   });
   const avgWait = active.length > 0
-    ? Math.floor(active.reduce((s, o) => s + elapsedSeconds(o.created_at), 0) / active.length)
+    ? Math.floor(active.reduce((s, o) => s + elapsedSeconds(o), 0) / active.length)
     : 0;
 
   const statusBorder: Record<string, string> = {
@@ -226,7 +229,7 @@ export default function KitchenPage() {
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 16 }}>
           {active.map(order => {
-            const elapsed = elapsedSeconds(order.created_at);
+            const elapsed = elapsedSeconds(order);
             const action = STATUS_ACTIONS[order.status];
             const isUpdating = updating === order.id;
 
