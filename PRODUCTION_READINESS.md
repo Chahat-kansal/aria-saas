@@ -52,9 +52,28 @@ phase's checklist is 100% green. This is how real PRRs work — gates, not vibes
 - [x] All commits pushed (git log origin/main..HEAD empty)
 - [ ] Deploy green on Vercel — verify after push
 
+## KDS Fix + UI/UX Sweep (Prompt 204) Exit Checklist
+- [x] KDS timer freezes on bump (uses bumped_at as end time)
+- [x] Bumped orders leave board + persist to DB (status constraint expanded; delivered/void now valid)
+- [x] Stale 56-order backlog cleared (migration + API 24h window filter)
+- [x] AVG WAIT shows sane values (formatElapsed caps at 24h+)
+- [x] ui-ux-pro-max applied to all 8 surfaces:
+  - [x] Kitchen Display — contrast (#var(--bg-surface) → #1a1a1a) + 44px station/action buttons + aria-labels
+  - [x] POS Terminal home — contrast (#3D5A73 → var(--text-tertiary)) + 44px close button
+  - [x] Dashboard RetailDashboard — Ask Aria min-height 44px + timestamp opacity 0.3 → 0.45
+  - [x] Ask Aria — history toggle/attach 44px, header buttons 36px, follow-up chips 32px
+  - [x] Community PostCard — like/comment/save/post buttons 36 → 44px
+  - [x] Mobile Scanner — cart +/- buttons 36 → 44px, stocktake + button 32 → 44px
+  - [x] Checkout/payment — cash tender buttons 32 → 44px
+  - [x] Onboarding — all inputs/selects py-2 → py-3 (44px), challenge chips py-2.5
+- [x] Locked design system intact (AnimatedBg/FlyToCart/CursorGlow untouched)
+- [x] npx tsc --noEmit + npm run build pass
+- [x] All pushed (git log origin/main..HEAD empty)
+
 ## Progress
 - [~] PRR-1 API hardening (code complete; Upstash env vars + Vercel deploy pending user action)
 - [~] PRR-2 Security (code complete; Vercel deploy pending)
+- [x] KDS Fix + UI/UX Sweep (Prompt 204) — complete
 - [ ] PRR-3 Observability
 - [ ] PRR-4 Reliability
 - [ ] PRR-5 Data safety
