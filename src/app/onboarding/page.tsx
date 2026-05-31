@@ -205,7 +205,7 @@ function Field({ label, value, onChange, type = 'text', placeholder }: {
     <div>
       <label className="block text-xs font-medium text-[#2D5240] mb-1">{label}</label>
       <input type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder}
-        className="w-full border border-[rgba(45,82,64,0.2)] rounded-lg px-3 py-2 text-sm text-[#1a1a16] placeholder-[rgba(0,0,0,0.3)] focus:outline-none focus:border-[#2D5240] focus:ring-1 focus:ring-[rgba(45,82,64,0.3)]" />
+        className="w-full border border-[rgba(45,82,64,0.2)] rounded-lg px-3 py-3 text-sm text-[#1a1a16] placeholder-[rgba(0,0,0,0.3)] focus:outline-none focus:border-[#2D5240] focus:ring-1 focus:ring-[rgba(45,82,64,0.3)]" />
     </div>
   );
 }
@@ -217,7 +217,7 @@ function Sel({ label, value, onChange, options, placeholder }: {
     <div>
       <label className="block text-xs font-medium text-[#2D5240] mb-1">{label}</label>
       <select value={value} onChange={e => onChange(e.target.value)}
-        className="w-full border border-[rgba(45,82,64,0.2)] rounded-lg px-3 py-2 text-sm text-[#1a1a16] focus:outline-none focus:border-[#2D5240] focus:ring-1 focus:ring-[rgba(45,82,64,0.3)] bg-white">
+        className="w-full border border-[rgba(45,82,64,0.2)] rounded-lg px-3 py-3 text-sm text-[#1a1a16] focus:outline-none focus:border-[#2D5240] focus:ring-1 focus:ring-[rgba(45,82,64,0.3)] bg-white">
         <option value="">{placeholder || 'Select…'}</option>
         {options.map(o => <option key={o} value={o}>{o}</option>)}
       </select>
@@ -272,9 +272,9 @@ function ABN({ form, set, abnState, onABNBlur }: { form: FD; set: Setter; abnSta
         <div className="flex gap-2">
           <input type="text" value={form.abn} onChange={e => set('abn', e.target.value)} onBlur={onABNBlur}
             placeholder="XX XXX XXX XXX"
-            className="flex-1 border border-[rgba(45,82,64,0.2)] rounded-lg px-3 py-2 text-sm text-[#1a1a16] placeholder-[rgba(0,0,0,0.3)] focus:outline-none focus:border-[#2D5240] focus:ring-1 focus:ring-[rgba(45,82,64,0.3)]" />
+            className="flex-1 border border-[rgba(45,82,64,0.2)] rounded-lg px-3 py-3 text-sm text-[#1a1a16] placeholder-[rgba(0,0,0,0.3)] focus:outline-none focus:border-[#2D5240] focus:ring-1 focus:ring-[rgba(45,82,64,0.3)]" />
           <button type="button" onClick={verifyABN} disabled={!canVerify || verifying}
-            className="px-3 py-2 rounded-lg bg-[#2D5240] text-white text-xs font-semibold disabled:opacity-40 whitespace-nowrap hover:bg-[#1e3d2e] transition-colors">
+            className="px-3 py-3 rounded-lg bg-[#2D5240] text-white text-xs font-semibold disabled:opacity-40 whitespace-nowrap hover:bg-[#1e3d2e] transition-colors">
             {verifying ? 'Checking…' : 'Verify with ABR'}
           </button>
         </div>
@@ -364,7 +364,7 @@ function Operations({ form, set }: { form: FD; set: Setter }) {
         <div className="flex gap-2">
           <input type="url" value={form.website} onChange={e => { set('website', e.target.value); setPreview(null); setConfirmed(false); }}
             placeholder="https://yourbusiness.com.au"
-            className="flex-1 border border-[rgba(45,82,64,0.2)] rounded-lg px-3 py-2 text-sm text-[#1a1a16] placeholder-[rgba(0,0,0,0.3)] focus:outline-none focus:border-[#2D5240] focus:ring-1 focus:ring-[rgba(45,82,64,0.3)]" />
+            className="flex-1 border border-[rgba(45,82,64,0.2)] rounded-lg px-3 py-3 text-sm text-[#1a1a16] placeholder-[rgba(0,0,0,0.3)] focus:outline-none focus:border-[#2D5240] focus:ring-1 focus:ring-[rgba(45,82,64,0.3)]" />
           <button type="button" onClick={startPreview} disabled={previewing || !form.website.trim()}
             className="px-4 rounded-lg bg-[#2D5240] text-white text-sm font-medium whitespace-nowrap disabled:opacity-50">
             {previewing ? 'Checking…' : confirmed ? 'Confirmed ✓' : 'Preview'}
@@ -400,7 +400,7 @@ function Goals({ form, set }: { form: FD; set: Setter }) {
         <div className="flex flex-wrap gap-2">
           {CHALLENGES.map(c => (
             <button key={c} type="button" onClick={() => toggle(c)}
-              className={"px-3 py-1.5 rounded-full text-sm border transition-colors " + (form.biggest_challenge.includes(c) ? 'bg-[#2D5240] text-white border-[#2D5240]' : 'bg-white text-[#2D5240] border-[rgba(45,82,64,0.3)] hover:border-[#2D5240]')}>
+              className={"px-3 py-2.5 min-h-[40px] rounded-full text-sm border transition-colors " + (form.biggest_challenge.includes(c) ? 'bg-[#2D5240] text-white border-[#2D5240]' : 'bg-white text-[#2D5240] border-[rgba(45,82,64,0.3)] hover:border-[#2D5240]')}>
               {c}
             </button>
           ))}
@@ -410,7 +410,7 @@ function Goals({ form, set }: { form: FD; set: Setter }) {
         <label className="block text-xs font-medium text-[#2D5240] mb-1">Anything else? (optional)</label>
         <textarea value={form.goals_notes} onChange={e => set('goals_notes', e.target.value)} rows={3}
           placeholder="Tell us more about your goals or challenges…"
-          className="w-full border border-[rgba(45,82,64,0.2)] rounded-lg px-3 py-2 text-sm text-[#1a1a16] placeholder-[rgba(0,0,0,0.3)] focus:outline-none focus:border-[#2D5240] focus:ring-1 focus:ring-[rgba(45,82,64,0.3)] resize-none" />
+          className="w-full border border-[rgba(45,82,64,0.2)] rounded-lg px-3 py-3 text-sm text-[#1a1a16] placeholder-[rgba(0,0,0,0.3)] focus:outline-none focus:border-[#2D5240] focus:ring-1 focus:ring-[rgba(45,82,64,0.3)] resize-none" />
       </div>
     </div>
   );
