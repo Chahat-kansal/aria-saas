@@ -335,16 +335,18 @@ DATA TOOLS (read live business data):
 EXPORT TOOLS (create downloadable files):
 • generate_report: create Excel (.xlsx) or CSV file. ALWAYS use this when user says "in excel", "export", "download", "as a file", "create a report"
 
-WEB TOOLS (external information — USE PROACTIVELY):
-• web_search: USE THIS for EVERY question about prices, performance, benchmarks, competitors, regulations, trends. Don't just answer from your training data — search first.
-  ALWAYS search for: competitor prices, industry benchmarks, AU regulations, award rates, supplier pricing, Google reviews, market trends, weather affecting trade
-  Examples of when to ALWAYS web_search:
-  - "how are my sales?" → search "[industry] average revenue [city] 2025" to benchmark
-  - "is my margin good?" → search "[product type] wholesale price Australia" to compare
-  - "what should I charge?" → search current market rates
-  - Any question about competitors → search "[competitor name] [city]"
-  - Any question about regulations → search ATO/Fair Work/state gov sites
-• fetch_url: only when web_search returns a SPECIFIC URL you need full content from.
+WEB SEARCH — MANDATORY FOR THESE QUESTION TYPES (do not skip):
+• web_search — MUST use for:
+  - Any question about revenue/sales performance → MUST search "[industry] average revenue [city] 2025"
+  - Any question about pricing → MUST search current competitor pricing
+  - Any question about costs/margins → MUST search industry margin benchmarks
+  - Any question about staff wages → MUST search Fair Work award rates
+  - Any question about regulations → MUST search ATO/Fair Work/state gov
+  - Any "is this good/normal/typical" question → MUST search industry benchmarks
+  - Any competitor question → MUST search "[competitor name] [city]"
+  - Any question about market trends, weather, events affecting trade → MUST search
+  NEVER answer a benchmarking question from training data alone — always search first.
+• fetch_url: read full content of any URL — use after web_search to go deeper on a specific result.
 
 ACTION TOOLS (do things on behalf of user — confirm first):
 • send_email_now: send email via Resend
@@ -763,6 +765,16 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
     intent: intent.type,
     complexity: intent.complexity,
   })
+
+  // Pre-fetch benchmark data for Haiku on business performance questions
+  const needsBenchmark = /revenue|sales|margin|profit|good|bad|average|normal|benchmark|industry|compare|how am i doing|is this|too (high|low)|enough/i.test(message)
+  if (needsBenchmark && routedModel === 'haiku') {
+    try {
+      const searchQuery = (ctx.industry || 'small business') + ' ' + (ctx.city ?? 'Australia') + ' average revenue benchmark 2025'
+      const searchResult = await executePOSTool('web_search', { query: searchQuery }, bid)
+      systemPrompt += '\n\nLIVE BENCHMARK DATA (just fetched):\n' + JSON.stringify(searchResult).slice(0, 800) + '\nUse these benchmarks to contextualise the owner\'s numbers. Do not say "based on the search" — weave it in naturally.'
+    } catch { /* non-fatal */ }
+  }
 
   // Haiku does not support extended thinking — only enable it for Sonnet/Opus.
   const useThinking = routedModel !== 'haiku' && (intent.complexity === 'complex' || intent.type === 'troubleshoot' || intent.type === 'escalate')
