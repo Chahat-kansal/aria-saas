@@ -14,6 +14,9 @@ async function _POST(req: Request) {
     const { business_id, customer_ids } = await req.json() as { business_id: string; customer_ids: string[] }
     if (!customer_ids?.length) return NextResponse.json({})
 
+    const { data: biz } = await supabase.from('businesses').select('id').eq('id', business_id).eq('user_id', user.id).maybeSingle()
+    if (!biz) return NextResponse.json({}, { status: 404 })
+
     const result: Record<string, number[]> = {}
     const since = new Date(Date.now() - 365 * 24 * 3600 * 1000).toISOString()
 

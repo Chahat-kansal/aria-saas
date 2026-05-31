@@ -19,6 +19,11 @@ export async function GET(req: Request) {
     .eq('id', runId).maybeSingle()
   if (!run) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
+  // Verify the authenticated user owns this business
+  const { data: ownership } = await supabase.from('businesses')
+    .select('id').eq('id', run.business_id).eq('user_id', user.id).maybeSingle()
+  if (!ownership) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
   const { data: biz } = await supabaseAdmin.from('businesses')
     .select('name, abn, bank_bsb, bank_account').eq('id', run.business_id).maybeSingle()
 

@@ -17,6 +17,11 @@ export async function POST(req: Request) {
     .select('id, business_id, line_items').eq('id', run_id).maybeSingle()
   if (!run) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
+  // Verify the authenticated user owns this business
+  const { data: biz } = await supabase.from('businesses')
+    .select('id').eq('id', run.business_id).eq('user_id', user.id).maybeSingle()
+  if (!biz) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
   // Update run status
   await supabaseAdmin.from('payroll_runs').update({
     status: 'approved',
