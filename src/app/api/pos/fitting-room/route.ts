@@ -44,12 +44,14 @@ async function _PATCH(req: Request) {
   const supabase = createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const bid = await getBid(supabase, user.id)
+  if (!bid) return NextResponse.json({ error: 'No business' }, { status: 404 })
   const body = await req.json()
   const update: Record<string, unknown> = {}
   if (body.items !== undefined) update.items = body.items
   if (body.status !== undefined) { update.status = body.status; if (body.status !== 'active') update.closed_at = new Date().toISOString() }
   if (body.customer_name !== undefined) update.customer_name = body.customer_name
-  await supabaseAdmin.from('pos_fitting_room_sessions').update(update).eq('id', body.id)
+  await supabaseAdmin.from('pos_fitting_room_sessions').update(update).eq('id', body.id).eq('business_id', bid)
   return NextResponse.json({ ok: true })
 }
 
