@@ -37,6 +37,11 @@ async function _PATCH(req: Request) {
   const { id, was_successful } = body
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
 
+  const { data: promo } = await supabaseAdmin.from('aria_promotions').select('business_id').eq('id', id).maybeSingle()
+  if (!promo) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  const { data: biz } = await supabase.from('businesses').select('id').eq('id', promo.business_id).eq('user_id', user.id).maybeSingle()
+  if (!biz) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
   await supabaseAdmin.from('aria_promotions').update({ was_successful }).eq('id', id)
   return NextResponse.json({ ok: true })
 }

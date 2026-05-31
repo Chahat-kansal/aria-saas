@@ -74,6 +74,11 @@ async function _PATCH(req: Request) {
   const { id, ...rest } = body
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
 
+  const { data: item } = await supabaseAdmin.from('compliance_items').select('business_id').eq('id', id).maybeSingle()
+  if (!item) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  const { data: biz } = await supabase.from('businesses').select('id').eq('id', item.business_id).eq('user_id', user.id).maybeSingle()
+  if (!biz) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
   const allowed = ['status', 'evidence_note', 'evidence_url', 'document_url', 'reminder_enabled']
   const update: Record<string, unknown> = {}
   for (const k of allowed) if (k in rest) update[k] = rest[k]
