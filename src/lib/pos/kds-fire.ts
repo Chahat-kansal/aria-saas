@@ -28,7 +28,7 @@ export async function fireKdsTickets(opts: FireOptions): Promise<{ fired_count: 
 
   const { data: products } = await supabase
     .from('pos_products')
-    .select('id, name, kds_station, prep_time_seconds, kds_skip_routing')
+    .select('id, name, kds_station, prep_time_seconds')
     .in('id', productIds)
     .eq('business_id', opts.business_id)
 
@@ -41,7 +41,6 @@ export async function fireKdsTickets(opts: FireOptions): Promise<{ fired_count: 
     if (!item.product_id) continue
     const product = productMap.get(item.product_id)
     if (!product) continue
-    if (product.kds_skip_routing) continue
 
     const station = String(product.kds_station ?? '').trim() || 'kitchen'
     const prep_time = Number(product.prep_time_seconds) || null
