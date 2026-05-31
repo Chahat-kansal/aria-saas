@@ -1,10 +1,10 @@
 # Aria OS Audit State
 
 ## Last updated
-2026-05-31 — All audit commits pushed to origin/main. Prompt-113 tasks 1–3 live.
+2026-05-31 — Prompt-113 ALL 9 TASKS COMPLETE. All commits pushed to origin/main (4971a48a).
 
 ## Push Status
-ALL COMMITS PUSHED — origin/main is current as of cdd15c3d
+ALL COMMITS PUSHED — origin/main is current as of 4971a48a
 
 ## Audit Status
 COMPLETE — src/app/api/aria/ all ~47 route files audited (Session 1)
@@ -17,19 +17,19 @@ COMPLETE — src/app/api/community/ all ~25 route files audited — all clean (c
 COMPLETE — src/app/api/integrations/ audited — all clean (f900ae2c)
 COMPLETE — src/app/api/cron/ audited — all clean (f900ae2c)
 
-## Prompt-113 (Ask Aria 110%) Status
+## Prompt-113 (Ask Aria 110%) Status — ALL DONE
 - [x] Task 1: Deep context pre-loaded (top products, customers, loyalty, comparison, avg daily revenue) → 2dc8b3fb
 - [x] Task 2: Council personalisation — each brain gets the actual owner question → b7c74c5b
 - [x] Task 3: Route handler signatures fixed (NextRequest → Request) → 63a61301
-- [ ] Task 4: Enforce web search for benchmark questions on Haiku (needsBenchmark pre-search)
-- [ ] Task 5: Memory integration — surface memories at top of system prompt + auto-write
-- [ ] Task 6: Technical help capability — debug errors, explain code, write SQL, read Vercel logs
-- [ ] Task 7: Long document processing — map-reduce over 100+ page PDFs + large spreadsheets
-- [ ] Task 8: Full URL fetching — complete page content, tables, links, multi-page navigation
-- [ ] Task 9: Deep image analysis — receipts, invoices, products, charts, handwriting + auto-expense
+- [x] Task 4: Enforce web search for benchmark questions on Haiku (needsBenchmark pre-search) → 306fe623
+- [x] Task 5: Memory integration — surface memories at top of system prompt + auto-write → ac471b93
+- [x] Task 6: Technical help capability — debug errors, explain code, write SQL, read Vercel logs → 40537ee4
+- [x] Task 7: Long document processing — map-reduce over 100+ page PDFs + large spreadsheets → 60dc6a5b
+- [x] Task 8: Full URL fetching — complete page content, tables, links, multi-page navigation → 5846ca76
+- [x] Task 9: Deep image analysis — receipts, invoices, products, charts, handwriting + auto-expense → 5846ca76
 
 ## Current Position
-Next: Prompt-113 Task 4 — enforce web search for benchmark questions on all models including Haiku
+Prompt-113 COMPLETE. Next prompts available: PRR-1 (API hardening), audit session 5 (frontend/lib), audit session 6 (silent failures/safety).
 
 ## Issues found (running log)
 | File | Type | Issue | Fixed? | Commit |
