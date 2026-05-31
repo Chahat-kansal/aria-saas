@@ -1952,7 +1952,7 @@ export default function TerminalPage() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10, width: 280 }}>
                   <div style={{ display: 'flex', gap: 6 }}>
                     {[...new Set([roundedTotal, Math.ceil(roundedTotal/5)*5, Math.ceil(roundedTotal/10)*10, 50, 100].filter(a=>a>=roundedTotal))].slice(0,4).map(a => (
-                      <button key={a} onClick={() => setCashTendered(a.toFixed(2))} style={{ flex: 1, height: 32, borderRadius: 8, border: '1px solid var(--border-default)', background: 'var(--bg-ghost)', color: 'var(--text-primary)', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: "'JetBrains Mono',monospace" }}>A${a.toFixed(0)}</button>
+                      <button key={a} onClick={() => setCashTendered(a.toFixed(2))} aria-label={'Tender A$' + a.toFixed(0)} style={{ flex: 1, height: 44, borderRadius: 8, border: '1px solid var(--border-default)', background: 'var(--bg-ghost)', color: 'var(--text-primary)', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: "'JetBrains Mono',monospace" }}>A${a.toFixed(0)}</button>
                     ))}
                   </div>
                   <div style={{ background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(0,106,255,0.10)', borderRadius: 12, padding: '10px 14px', textAlign: 'right' }}>
