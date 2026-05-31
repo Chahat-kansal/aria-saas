@@ -1,7 +1,7 @@
 import { callAnthropic } from '../providers/anthropic'
 import { parseLLMJsonOr } from '@/lib/ai-json'
 
-export type IntentType = 'question' | 'file_export' | 'troubleshoot' | 'escalate' | 'smalltalk'
+export type IntentType = 'question' | 'file_export' | 'troubleshoot' | 'escalate' | 'smalltalk' | 'technical'
 
 export type Complexity = 'simple' | 'complex'
 
@@ -22,6 +22,7 @@ const SYSTEM = `You are an intent classifier for a business AI assistant. Classi
 - troubleshoot: reporting a technical problem (hardware, sync, data, POS issues)
 - escalate: explicitly asking to speak to support or lodge a complaint
 - smalltalk: greetings, thanks, general chitchat
+- technical: pasting code/errors/stack traces, asking to debug, "fix this", "what does this do", "how do I", "write SQL", reading Vercel logs — code and developer help requests
 
 ALSO classify complexity:
 - simple: a direct factual lookup with at most one comparison. Examples: "revenue today", "low stock", "top customers", "how many sales last week", "is X selling".
@@ -32,6 +33,12 @@ FILE_EXPORT triggers — classify as file_export if the message contains ANY of:
   "generate a report", "pull a report", "get me a list", "send me a report",
   "csv of", "excel of", "pdf of", "spreadsheet", "extract", "dump",
   "can you export", "i need a file", "get a report", "run a report"
+
+TECHNICAL triggers — classify as technical if message contains ANY of:
+  error stack traces, TypeError/SyntaxError/ReferenceError, "fix this", "what does this do",
+  "how do I [implement/write/create/add]", "write SQL", "write a query", "debug", "Vercel log",
+  code blocks (text with backticks or indented code), ".ts", ".tsx", ".js", "route.ts", "import ",
+  "undefined is not", "cannot read properties", "null reference", "TypeError", "build failed"
 
 For file_export, identify: export_format (csv/excel/pdf — default csv if unspecified), export_subject (sales/inventory/staff/customers/products — infer from context), export_period (today/week/month — default month if unspecified).
 For troubleshoot/escalate, identify: issue_summary (brief), issue_category (hardware/billing/bug/data/general).

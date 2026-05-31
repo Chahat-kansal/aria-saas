@@ -627,10 +627,36 @@ ADVICE TASKS:
 - "What are my GST obligations?" → explain in plain English
 - "Is my labour cost too high?" → benchmark against industry standards (AU retail: 25-35%)
 
-TECHNICAL HELP:
-- "How do I connect my Square account?" → walk them through the steps
-- "The kiosk isn't working" → ask diagnostic questions, troubleshoot
-- "How do I set up loyalty rewards?" → step-by-step instructions
+TECHNICAL HELP (you CAN do this — do not refuse):
+You have full knowledge of the Aria OS tech stack and can help with:
+
+CODE & DEBUGGING:
+- Paste any error → diagnose root cause + give exact fix
+- Explain what any Next.js route, component, or lib file does
+- Write TypeScript/SQL/shell commands for Aria OS patterns
+- Identify common bugs: null access, missing awaits, wrong column names, RLS blocks
+
+ARIA OS ARCHITECTURE YOU KNOW:
+- Routes: src/app/api/{area}/route.ts — always export const POST/GET/PATCH/DELETE = withErrorCapture(...)
+- DB: Supabase Postgres, service role in supabaseAdmin, anon key in createServerSupabaseClient()
+- RLS: 28+ tables block anon key silently — use supabaseAdmin for server routes
+- Vercel: 22 function limit in vercel.json, crons max daily (0 9 * * *), maxDuration 60s
+- Column names: pos_sales.total_amount (not total), staff_members.first_name+last_name (not name),
+  pos_sale_items.line_total (not total_price), pos_timesheets (not pos_timesheet_sessions)
+- Model IDs: claude-haiku-4-5-20251001, claude-sonnet-4-5-20250929, claude-opus-4-5-20251101
+
+VERCEL LOG READING:
+When user pastes a Vercel error or runtime log:
+1. Identify the route (from the path in the log)
+2. Diagnose the specific error (null access, timeout, DB error, import error)
+3. Give the exact file path + line to fix
+4. Provide the corrected code snippet
+
+SQL HELP:
+Write Supabase-compatible SQL using the correct table/column names above.
+Always use service role for admin queries. Never use RLS-blocked tables with anon key.
+
+When asked a technical question: ANSWER IT. Never say "I can't help with code."
 
 For ALL of these: just answer in the text field. No block needed.
 The owner is talking to an AI business co-owner who knows everything about running an Australian small business and can help with anything.
@@ -714,11 +740,35 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
     }
   }
 
+  // Detect image attachments before model routing so we can upgrade the model
+  const hasImages = attachments.some(a => a.kind === 'image')
+
   // Build multimodal user prompt — text + images + extracted document text
   let userPrompt: string | unknown[] = message
   if (attachments.length > 0) {
-    const { attachmentsToContentBlocks } = await import('@/lib/aria/attachments')
-    userPrompt = attachmentsToContentBlocks(message, attachments)
+    const { attachmentsToContentBlocks, buildImageAnalysisPrompt } = await import('@/lib/aria/attachments')
+
+    // Long document processing — map-reduce for PDFs > 10 pages
+    const longDoc = attachments.find(a => a.kind === 'pdf_text' && (a.page_count ?? 0) > 10)
+    if (longDoc?.extracted_text) {
+      try {
+        const { processLongDocument } = await import('@/lib/aria/documents/long-doc-processor')
+        const pages = longDoc.extracted_text.split('--- PAGE BREAK ---')
+        const docResult = await processLongDocument(pages, message, bid)
+        systemPrompt += '\n\nLONG DOCUMENT SYNTHESIS (map-reduce across ' + docResult.page_count + ' pages):\n' + docResult.full_synthesis.slice(0, 4000)
+        if (docResult.key_facts.length > 0) {
+          systemPrompt += '\n\nKEY FACTS EXTRACTED:\n' + docResult.key_facts.slice(0, 20).join('\n')
+        }
+      } catch (e) {
+        console.error('[aria/ask] long doc processing failed:', (e as Error).message)
+      }
+    }
+
+    // Build the image analysis prompt if images present
+    const imageCount = attachments.filter(a => a.kind === 'image').length
+    const effectiveMessage = hasImages ? buildImageAnalysisPrompt(message, imageCount) : message
+
+    userPrompt = attachmentsToContentBlocks(effectiveMessage, attachments)
   }
 
   // ── Cost-optimised model routing ─────────────────────────────────────────
@@ -743,6 +793,8 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
   const needsSonnet =
     intent.complexity === 'complex' ||
     intent.type === 'troubleshoot' ||
+    intent.type === 'technical' ||
+    hasImages ||
     attachments.length > 0 ||
     /(live.?render|generate.?html|heatmap|complex.?chart|analysis|compare.*week|profit.*if|what.*happen|should.*hire|strategy|forecast|predict|multi.?step|deep.?dive|breakdown|reconcil|cash.?flow.*analysis)/i.test(message)
 
