@@ -3,7 +3,7 @@ import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { trackUsage } from '@/lib/track-usage';
 import { getBusinessSales, getBusinessCustomers, getBusinessItems } from '@/lib/business-data';
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { getWeatherForecast, getUpcomingHolidays, getABSRetailBenchmarks, getRBAData } from '@/lib/external-apis';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { trackAICall } from '@/lib/aria/ai-telemetry'
@@ -51,7 +51,7 @@ async function fetchGeminiExternalContext(business: { city?: string | null; indu
   }
 }
 
-async function _POST(req: NextRequest) {
+async function _POST(req: Request) {
   // Rate limit BEFORE auth — cheap guard against retry storms
   const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown';
   if (!checkRateLimit(ip)) {
@@ -518,7 +518,7 @@ Generate 3-5 actionable briefing items from this real data. If invoice_status sh
   });
 }
 
-async function _PATCH(req: NextRequest) {
+async function _PATCH(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

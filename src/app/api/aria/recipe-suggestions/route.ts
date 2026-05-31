@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { runAriaModel } from '@/lib/aria/model-router';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
@@ -7,7 +7,7 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
 
-async function _POST(req: NextRequest) {
+async function _POST(req: Request) {
   try {
     const { business_id } = await req.json();
     if (!business_id) return NextResponse.json({ error: 'business_id required' }, { status: 400 });

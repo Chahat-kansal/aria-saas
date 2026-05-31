@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { ariaInvoke } from '@/lib/aria/invoke'
@@ -16,7 +16,7 @@ async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, u
 }
 
 // Sprint Intel v2: route through full 4-layer architecture (judge + rate limit + observability)
-async function _POST(req: NextRequest) {
+async function _POST(req: Request) {
   const supabase = createServerSupabaseClient()
   const { data: { user }, error: authError } = await supabase.auth.getUser()
   if (authError || !user) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
@@ -63,7 +63,7 @@ async function _POST(req: NextRequest) {
   })
 }
 
-async function _GET(_req: NextRequest) {
+async function _GET(_req: Request) {
   const supabase = createServerSupabaseClient()
   const { data: { user }, error: authError } = await supabase.auth.getUser()
   if (authError || !user) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
