@@ -223,14 +223,16 @@ export default function POSHomePage() {
             <span style={{ marginLeft: 12, color: 'var(--text-tertiary)' }}>
               · 👤 {(posUser as { name: string }).name}
               <button onClick={() => { localStorage.removeItem('aria_pos_user'); setPosUser(null); }}
-                style={{ marginLeft: 6, color: '#006AFF', background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, textDecoration: 'underline' }}>
+                aria-label="Switch POS user"
+                style={{ marginLeft: 6, minHeight: 36, padding: '0 4px', color: '#006AFF', background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, textDecoration: 'underline' }}>
                 switch
               </button>
             </span>
           )}
         </p>
         <button onClick={() => router.push('/pos/close')}
-          style={{ fontSize: 13, padding: '6px 14px', borderRadius: 9, border: '1px solid rgba(239,68,68,0.25)', color: '#EF4444', background: 'rgba(239,68,68,0.06)', cursor: 'pointer' }}>
+          aria-label="Close register"
+          style={{ fontSize: 13, minHeight: 44, padding: '0 14px', borderRadius: 9, border: '1px solid rgba(239,68,68,0.25)', color: '#EF4444', background: 'rgba(239,68,68,0.06)', cursor: 'pointer' }}>
           Close Register
         </button>
       </div>
@@ -282,11 +284,11 @@ export default function POSHomePage() {
             <div style={{ width: 44, height: 44, borderRadius: 12, background: 'rgba(139,92,246,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>📱</div>
             <div>
               <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>Mobile selling</p>
-              <p style={{ fontSize: 12, color: '#3D5A73' }}>Camera barcode scanning · Works offline</p>
+              <p style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>Camera barcode scanning · Works offline</p>
             </div>
             <span style={{ marginLeft: 'auto', fontSize: 13, color: '#006AFF', fontWeight: 600 }}>Open →</span>
           </div>
-          <p style={{ fontSize: 12, color: '#3D5A73', lineHeight: 1.5 }}>
+          <p style={{ fontSize: 12, color: 'var(--text-tertiary)', lineHeight: 1.5 }}>
             Point your phone camera at any product barcode to add it to a sale instantly. Sales are queued offline when there&apos;s no internet.
           </p>
         </a>
