@@ -1,10 +1,25 @@
 # Aria OS Audit State
 
 ## Last updated
-2026-05-31 — Prompt-113 ALL 9 TASKS COMPLETE. All commits pushed to origin/main (4971a48a).
+2026-05-31 — Session 5 Batch A (dashboard pages) COMPLETE — all clean. Live DB schema queried.
 
 ## Push Status
-ALL COMMITS PUSHED — origin/main is current as of 4971a48a
+ALL COMMITS PUSHED — origin/main is current as of cb9fe6d4
+
+## LIVE DB SCHEMA — pos_products (confirmed 2026-05-31)
+Both `track_stock` AND `track_inventory` exist (separate boolean columns).
+Both `low_stock_threshold` AND `reorder_point` exist (separate integer columns).
+Also confirmed valid: stock_quantity, cost_price, barcode, is_active, featured, shelf_life_days,
+expiry_date, shelf_capacity, qty_backroom, rrp, min_price, max_discount_pct, kds_station.
+DO NOT treat track_stock/low_stock_threshold as wrong — they are real columns.
+
+## LIVE DB SCHEMA — staff_members (confirmed 2026-05-31)
+HAS `name` column in addition to `first_name`/`last_name`. All three exist.
+Prior fixes to use first/last were semantic improvements, not wrong-column fixes.
+
+## LIVE DB SCHEMA — pos_sales (confirmed 2026-05-31)
+HAS `points_earned` and `points_redeemed` columns. (Session 2 removal of these may have been overzealous.)
+HAS `payment_method` (different from pos_sale_payments.method — both tables exist).
 
 ## Audit Status
 COMPLETE — src/app/api/aria/ all ~47 route files audited (Session 1)
@@ -16,6 +31,7 @@ COMPLETE — src/app/api/reports/ all ~3 route files audited (Batch C, Session 3
 COMPLETE — src/app/api/community/ all ~25 route files audited — all clean (ce9827d5)
 COMPLETE — src/app/api/integrations/ audited — all clean (f900ae2c)
 COMPLETE — src/app/api/cron/ audited — all clean (f900ae2c)
+COMPLETE — src/app/dashboard/ ~100 pages audited (Session 5 Batch A) — ALL CLEAN
 
 ## Prompt-113 (Ask Aria 110%) Status — ALL DONE
 - [x] Task 1: Deep context pre-loaded (top products, customers, loyalty, comparison, avg daily revenue) → 2dc8b3fb
