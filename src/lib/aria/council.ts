@@ -334,6 +334,43 @@ final_briefing is what Aria SPEAKS — 2-3 short sentences (40-80 words). The ke
 Return ONLY valid JSON:
 {"final_briefing":"...2-3 sentences...","ask_blocks":[...only blocks that fit the question...],"ask_followups":["follow-up 1?","follow-up 2?","follow-up 3?"]}`
 
+// ── Council Cache ──────────────────────────────────────────────────
+const STOP_WORDS = new Set(['a','an','the','is','are','was','were','be','been','being','have','has','had','do','does','did','will','would','could','should','may','might','shall','can','need','dare','ought','used','my','your','our','their','its','this','that','these','those','i','we','you','he','she','they','it','me','us','him','her','them','and','or','but','for','so','yet','nor','at','by','in','of','on','to','up','with','from','into','about'])
+
+function intentHash(question: string): string {
+  const tokens = question.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(t => t.length > 1 && !STOP_WORDS.has(t)).sort()
+  const joined = tokens.join(' ')
+  // djb2 hash → 8-char hex
+  let h = 5381
+  for (let i = 0; i < joined.length; i++) h = ((h << 5) + h) ^ joined.charCodeAt(i)
+  return (h >>> 0).toString(16).padStart(8, '0')
+}
+
+async function readCouncilCache(businessId: string, hash: string): Promise<CouncilOutput | null> {
+  try {
+    const { data } = await supabaseAdmin
+      .from('council_cache')
+      .select('result')
+      .eq('business_id', businessId)
+      .eq('intent_hash', hash)
+      .gt('expires_at', new Date().toISOString())
+      .maybeSingle()
+    return data ? (data.result as CouncilOutput) : null
+  } catch { return null }
+}
+
+async function writeCouncilCache(businessId: string, hash: string, result: CouncilOutput): Promise<void> {
+  const expires = new Date(Date.now() + 30 * 60 * 1000).toISOString()
+  try {
+    await supabaseAdmin.from('council_cache').upsert({
+      business_id: businessId,
+      intent_hash: hash,
+      result: result as unknown as Record<string, unknown>,
+      expires_at: expires,
+    }, { onConflict: 'business_id,intent_hash' })
+  } catch { /* non-fatal */ }
+}
+
 // ── Main Export ────────────────────────────────────────────────────
 export async function runAriaCouncil(
   businessContext: string,
@@ -349,6 +386,13 @@ export async function runAriaCouncil(
 
   const activeQuestion = question ?? 'Analyse this business and give me your most important insights.'
   const userPrompt = `Business data:\n${businessContext}`
+
+  // Cache check — skip for briefing/weekly_report modes (always fresh data)
+  const hash = intentHash(activeQuestion)
+  if (mode === 'ask_aria') {
+    const cached = await readCouncilCache(businessId, hash)
+    if (cached) return cached
+  }
 
   const now = new Date()
   const weekStart = new Date(now)
@@ -460,7 +504,7 @@ MODE: ${mode}
       }
     }
 
-    return {
+    const councilResult: CouncilOutput = {
       final_briefing: typeof parsed.final_briefing === 'string' ? parsed.final_briefing : text.slice(0, 200),
       ask_blocks: (mode === 'ask_aria' || mode === 'briefing') && Array.isArray(parsed.ask_blocks) ? (parsed.ask_blocks as AskBlock[]).filter(b => {
         if (!b || !b.type) return false
@@ -477,6 +521,10 @@ MODE: ${mode}
       context_brain_output: ctxOutput ?? null,
       meta: { brains_succeeded: succeeded.length, brains_failed: 4 - succeeded.length, synthesis_succeeded: true, fell_back: false, duration_ms: Date.now() - start },
     }
+
+    // Write to cache for ask_aria mode (fire-and-forget)
+    if (mode === 'ask_aria') void writeCouncilCache(businessId, hash, councilResult)
+    return councilResult
   } catch (e) {
     // Synthesis failed — build fallback from brain outputs directly
     const fallbackBriefing = [
