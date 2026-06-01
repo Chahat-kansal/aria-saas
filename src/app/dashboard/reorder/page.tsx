@@ -2,7 +2,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { AriaIntelligencePanel } from '@/components/dashboard/AriaIntelligencePanel';
 import DeliveryAlertWidget from '@/components/dashboard/DeliveryAlertWidget';
-import DeliveryAlertWidget from '@/components/dashboard/DeliveryAlertWidget';
 import { useBusinessContext } from '@/components/providers/BusinessProvider';
 
 interface ForecastItem {
