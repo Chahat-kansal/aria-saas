@@ -15,29 +15,38 @@ const CHECKS = [
 export default function SmartPOSScene() {
   return (
     <>
-      <div className="scene-label" style={{ textAlign: 'center' }}>POS</div>
-      <h2 style={{ textAlign: 'center' }}>The only POS that gets <em>smarter every day</em></h2>
+      <div className="scene-label" style={{ textAlign: 'center' }}>Point of sale</div>
+      <h2>The only POS that gets <em>smarter every day</em></h2>
       <div style={{
-        display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.5rem',
-        width: '100%', maxWidth: 900, marginInline: 'auto', marginTop: '2rem', alignItems: 'center',
+        display: 'grid',
+        gridTemplateColumns: '1fr 1fr',
+        gap: '2.5rem',
+        width: '100%',
+        maxWidth: 860,
+        alignItems: 'center',
       }}>
-        {/* Checklist */}
-        <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: '0.7rem' }}>
+        <ul style={{ listStyle: 'none', margin: 0, padding: 0,
+          display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
           {CHECKS.map(c => (
-            <li key={c} style={{ display: 'flex', alignItems: 'center', gap: '0.7rem', fontSize: '0.95rem', color: '#cdd6cf' }}>
-              <span style={{ width: 22, height: 22, borderRadius: '50%', background: 'rgba(127,184,151,0.15)', border: '1px solid rgba(127,184,151,0.4)', color: '#7FB897', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, flexShrink: 0 }}>✓</span>
+            <li key={c} style={{ display: 'flex', alignItems: 'center',
+              gap: '0.7rem', fontSize: '0.9rem', color: '#cdd6cf' }}>
+              <span style={{ width: 20, height: 20, borderRadius: '50%',
+                background: 'rgba(127,184,151,0.15)',
+                border: '1px solid rgba(127,184,151,0.4)',
+                color: '#7FB897', display: 'flex', alignItems: 'center',
+                justifyContent: 'center', fontSize: 11, flexShrink: 0 }}>✓</span>
               {c}
             </li>
           ))}
         </ul>
-        {/* Animated POS checkout */}
         <Player
           component={POSCheckoutComp}
           durationInFrames={150}
           fps={30}
-          compositionWidth={560}
-          compositionHeight={300}
-          style={{ width: '100%', maxWidth: 360, borderRadius: 16, overflow: 'hidden', border: '1px solid rgba(127,184,151,0.15)', marginInline: 'auto' }}
+          compositionWidth={400}
+          compositionHeight={340}
+          style={{ width: '100%', borderRadius: 16, overflow: 'hidden',
+            border: '1px solid rgba(127,184,151,0.18)' }}
           loop
           autoPlay
         />
