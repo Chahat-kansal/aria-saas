@@ -155,23 +155,33 @@ async function _GET(req: NextRequest) {
   const businesses = (bizList ?? []) as BriefingBusiness[]
   let morning = 0, evening = 0, errors = 0
 
+  // Build work items (skip businesses with no trigger)
+  const work: Array<{ biz: BriefingBusiness; trigger: 'morning' | 'evening'; today: string }> = []
   for (const biz of businesses) {
     const trigger = checkBriefingTrigger(biz)
     if (!trigger) continue
+    work.push({ biz, trigger, today: localDateString(biz.timezone || 'Australia/Melbourne') })
+  }
 
-    const today = localDateString(biz.timezone || 'Australia/Melbourne')
-
-    try {
-      if (trigger === 'morning') {
-        await generateMorning(biz, today)
-        morning++
+  // Process in batches of 5 — failure of one doesn't block others
+  const BATCH = 5
+  for (let i = 0; i < work.length; i += BATCH) {
+    const batch = work.slice(i, i + BATCH)
+    const results = await Promise.allSettled(
+      batch.map(({ biz, trigger, today }) =>
+        trigger === 'morning'
+          ? generateMorning(biz, today).then(() => trigger)
+          : generateEvening(biz, today).then(() => trigger)
+      )
+    )
+    for (let j = 0; j < results.length; j++) {
+      const r = results[j]
+      if (r.status === 'fulfilled') {
+        if (r.value === 'morning') morning++; else evening++
       } else {
-        await generateEvening(biz, today)
-        evening++
+        console.error(`[generate-briefings] ${batch[j].trigger} failed for ${batch[j].biz.id}:`, r.reason)
+        errors++
       }
-    } catch (err) {
-      console.error(`[generate-briefings] ${trigger} failed for ${biz.id}:`, err)
-      errors++
     }
   }
 
