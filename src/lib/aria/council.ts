@@ -419,7 +419,7 @@ MODE: ${mode}
     const res = await callWithTimeout(
       () => withBackoff(() => client.messages.create({
         model: HAIKU,
-        max_tokens: 4000,
+        max_tokens: 6000,
         temperature: 0.2,
         system: synthesisSystemPrompt,
         messages: [{ role: 'user', content: synthesisInput }],
@@ -447,7 +447,16 @@ MODE: ${mode}
 
     return {
       final_briefing: typeof parsed.final_briefing === 'string' ? parsed.final_briefing : text.slice(0, 200),
-      ask_blocks: (mode === 'ask_aria' || mode === 'briefing') && Array.isArray(parsed.ask_blocks) ? parsed.ask_blocks as AskBlock[] : undefined,
+      ask_blocks: (mode === 'ask_aria' || mode === 'briefing') && Array.isArray(parsed.ask_blocks) ? (parsed.ask_blocks as AskBlock[]).filter(b => {
+        if (!b || !b.type) return false
+        if (b.type === 'chart') return Array.isArray((b as {values?:unknown[]}).values) && (b as {values?:unknown[]}).values!.length > 0
+        if (b.type === 'brain_readouts') return Array.isArray((b as {items?:unknown[]}).items) && (b as {items?:unknown[]}).items!.length > 0
+        if (b.type === 'metric_row') return Array.isArray((b as {items?:unknown[]}).items) && (b as {items?:unknown[]}).items!.length > 0
+        if (b.type === 'action_list') return Array.isArray((b as {items?:unknown[]}).items) && (b as {items?:unknown[]}).items!.length > 0
+        if (b.type === 'council_split') return !!(b as {question?:string}).question && !!(b as {growth?:string}).growth
+        if (b.type === 'lead' || b.type === 'text') return !!(b as {content?:string}).content
+        return true
+      }) : undefined,
       ask_followups: mode === 'ask_aria' && Array.isArray(parsed.ask_followups) ? parsed.ask_followups as string[] : undefined,
       raw_brain_outputs: brains,
       context_brain_output: ctxOutput ?? null,
