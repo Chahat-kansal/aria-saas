@@ -1,41 +1,60 @@
 import { test, expect } from '@playwright/test'
-
-const EMAIL = process.env.TEST_EMAIL ?? ''
-const PASSWORD = process.env.TEST_PASSWORD ?? ''
-
-async function login(page: import('@playwright/test').Page) {
-  await page.goto('/login')
-  await page.locator('input[type="email"]').fill(EMAIL)
-  await page.locator('input[type="password"]').fill(PASSWORD)
-  await page.getByRole('button', { name: /sign in/i }).click()
-  await expect(page).toHaveURL(/dashboard/, { timeout: 20_000 })
-}
+import { login, hasCredentials } from './helpers/auth'
 
 test.describe('Authentication', () => {
+  test.skip(!hasCredentials, 'Set TEST_EMAIL and TEST_PASSWORD to run auth tests')
+
   test('login with valid credentials redirects to dashboard', async ({ page }) => {
     await login(page)
     await expect(page).toHaveURL(/dashboard/)
   })
 
-  test('login with wrong password shows error', async ({ page }) => {
+  test('login with invalid credentials shows error message', async ({ page }) => {
     await page.goto('/login')
-    await page.locator('input[type="email"]').fill(EMAIL)
-    await page.locator('input[type="password"]').fill('wrong-password-123')
+    await page.locator('input[type="email"]').fill('invalid@example.com')
+    await page.locator('input[type="password"]').fill('wrong-password-xyz-123!')
     await page.getByRole('button', { name: /sign in/i }).click()
-    await expect(page.getByText(/invalid|incorrect|wrong|error/i)).toBeVisible({ timeout: 10_000 })
+    await expect(page.getByText(/invalid|incorrect|wrong|error|credentials/i)).toBeVisible({
+      timeout: 10_000,
+    })
+    await expect(page).not.toHaveURL(/dashboard/)
   })
 
-  test('protected route redirects unauthenticated user to login', async ({ page }) => {
-    await page.goto('/dashboard')
-    await expect(page).toHaveURL(/login|auth/, { timeout: 10_000 })
-  })
-
-  test('logout returns user to login page', async ({ page }) => {
+  test('logout redirects to login page', async ({ page }) => {
     await login(page)
-    const logoutBtn = page.getByRole('button', { name: /log out|sign out/i })
-    if (await logoutBtn.isVisible()) {
-      await logoutBtn.click()
-      await expect(page).toHaveURL(/login|^\/$/, { timeout: 10_000 })
+    // Open user menu if needed to find logout
+    const logoutBtn = page
+      .getByRole('button', { name: /log out|sign out/i })
+      .or(page.getByText(/log out|sign out/i))
+    // Some layouts hide it behind a menu — try to open a user menu first
+    const userMenuTrigger = page
+      .getByRole('button', { name: /account|profile|menu/i })
+      .or(page.locator('[data-testid="user-menu"]'))
+    if (await userMenuTrigger.isVisible({ timeout: 2_000 })) {
+      await userMenuTrigger.click()
     }
+    await expect(logoutBtn.first()).toBeVisible({ timeout: 8_000 })
+    await logoutBtn.first().click()
+    await expect(page).toHaveURL(/login|^\/$/, { timeout: 15_000 })
+  })
+
+  test('accessing /dashboard without auth redirects to login', async ({ page }) => {
+    // Fresh context — no cookies
+    await page.goto('/dashboard')
+    await expect(page).toHaveURL(/login|auth/, { timeout: 15_000 })
+  })
+
+  test('accessing /pos/terminal without auth redirects to login', async ({ page }) => {
+    await page.goto('/pos/terminal')
+    await expect(page).toHaveURL(/login|auth/, { timeout: 15_000 })
+  })
+
+  test('accessing /community without auth shows public feed', async ({ page }) => {
+    await page.goto('/community')
+    // Public community feed should load (not redirect to login)
+    await expect(page).not.toHaveURL(/login/, { timeout: 10_000 })
+    // Should show some content — header, feed, or empty state
+    await expect(page.locator('body')).toBeVisible()
+    await expect(page.getByText(/application error|500|crashed/i)).not.toBeVisible()
   })
 })

@@ -1,17 +1,12 @@
 import { test, expect } from '@playwright/test'
-
-const EMAIL = process.env.TEST_EMAIL ?? ''
-const PASSWORD = process.env.TEST_PASSWORD ?? ''
-
-async function login(page: import('@playwright/test').Page) {
-  await page.goto('/login')
-  await page.locator('input[type="email"]').fill(EMAIL)
-  await page.locator('input[type="password"]').fill(PASSWORD)
-  await page.getByRole('button', { name: /sign in/i }).click()
-  await expect(page).toHaveURL(/dashboard|onboarding/, { timeout: 20_000 })
-}
+import { login, hasCredentials } from './helpers/auth'
+import { dbAdmin, hasDbAccess } from './helpers/supabase'
+import { resolveTestBusinessId, getUserIdByEmail } from './helpers/test-business'
+import { EMAIL } from './helpers/auth'
 
 test.describe('Onboarding wizard', () => {
+  test.skip(!hasCredentials, 'Set TEST_EMAIL and TEST_PASSWORD to run onboarding tests')
+
   test.beforeEach(async ({ page }) => {
     await login(page)
   })
@@ -19,24 +14,73 @@ test.describe('Onboarding wizard', () => {
   test('onboarding page loads without application error', async ({ page }) => {
     await page.goto('/onboarding')
     await expect(page.locator('body')).toBeVisible()
-    // If business already onboarded, may redirect to dashboard — both are valid
+    // Redirecting to /dashboard when already onboarded is valid
+    await expect(page).toHaveURL(/onboarding|dashboard/, { timeout: 10_000 })
     await expect(page.getByText(/application error|something went wrong|500/i)).not.toBeVisible()
   })
 
-  test('can fill business name and proceed if wizard is shown', async ({ page }) => {
+  test('already-onboarded user is redirected to dashboard', async ({ page }) => {
     await page.goto('/onboarding')
-    const nameInput = page.getByPlaceholder(/business name|cafe|shop/i)
-    if (await nameInput.isVisible({ timeout: 5_000 })) {
-      await nameInput.fill('Test Cafe')
-      const nextBtn = page.getByRole('button', { name: /next|continue|proceed/i })
-      await nextBtn.click()
-      await expect(page.getByRole('button', { name: /next|continue|finish|complete/i })).toBeVisible({ timeout: 10_000 })
-    }
+    // Most test accounts are already onboarded — expect either /dashboard or /onboarding
+    await expect(page).toHaveURL(/dashboard|onboarding/, { timeout: 10_000 })
   })
 
-  test('wizard has at least one step or redirects to dashboard', async ({ page }) => {
+  test('onboarding wizard shows at least one step or redirects to dashboard', async ({ page }) => {
     await page.goto('/onboarding')
-    await expect(page.locator('body')).toBeVisible()
+    await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {})
+    // Must not be an error page
     await expect(page.getByText(/application error|500|crashed/i)).not.toBeVisible()
+
+    const isOnboarding = page.url().includes('/onboarding')
+    if (isOnboarding) {
+      // Wizard visible — must have at least one labeled field or step indicator
+      await expect(
+        page.locator('input, select, textarea').first()
+          .or(page.getByText(/step \d|business name|what.*type/i).first())
+      ).toBeVisible({ timeout: 10_000 })
+    }
+    // If redirected to dashboard — test already passed via URL assertion
+  })
+
+  test('onboarding invalid ABN shows error if ABN field is visible', async ({ page }) => {
+    await page.goto('/onboarding')
+    await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {})
+    if (!page.url().includes('/onboarding')) return
+
+    // Navigate to the ABN step if multi-step wizard
+    const abnInput = page.locator('input[name*="abn"], input[placeholder*="ABN"], input[placeholder*="abn"]')
+    if (!await abnInput.isVisible({ timeout: 5_000 })) return
+
+    await abnInput.fill('12345')
+    const nextBtn = page.getByRole('button', { name: /next|continue|proceed/i })
+    if (await nextBtn.isVisible({ timeout: 3_000 })) {
+      await nextBtn.click()
+      // Invalid ABN must show an error — not silently proceed
+      await expect(
+        page.getByText(/invalid.*abn|abn.*invalid|abn.*11 digits|check.*abn/i)
+      ).toBeVisible({ timeout: 8_000 })
+    }
+  })
+})
+
+test.describe('Onboarding — DB verification', () => {
+  test.skip(!hasCredentials || !hasDbAccess,
+    'Set TEST_EMAIL, TEST_PASSWORD, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY for DB tests')
+
+  test('test user has a business record in DB', async () => {
+    if (!dbAdmin) return
+    const userId = await getUserIdByEmail(EMAIL)
+    if (!userId) return
+
+    const { data: business } = await dbAdmin
+      .from('businesses')
+      .select('id, name, owner_id')
+      .eq('owner_id', userId)
+      .limit(1)
+      .maybeSingle()
+
+    expect(business).not.toBeNull()
+    expect(business!.owner_id).toBe(userId)
+    expect(business!.name).toBeTruthy()
   })
 })

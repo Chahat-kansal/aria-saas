@@ -1,15 +1,5 @@
 import { test, expect } from '@playwright/test'
-
-const EMAIL = process.env.TEST_EMAIL ?? ''
-const PASSWORD = process.env.TEST_PASSWORD ?? ''
-
-async function login(page: import('@playwright/test').Page) {
-  await page.goto('/login')
-  await page.locator('input[type="email"]').fill(EMAIL)
-  await page.locator('input[type="password"]').fill(PASSWORD)
-  await page.getByRole('button', { name: /sign in/i }).click()
-  await expect(page).toHaveURL(/dashboard/, { timeout: 20_000 })
-}
+import { login, hasCredentials } from './helpers/auth'
 
 const SIDEBAR_PATHS = [
   '/dashboard/sales',
@@ -19,6 +9,8 @@ const SIDEBAR_PATHS = [
 ]
 
 test.describe('Dashboard', () => {
+  test.skip(!hasCredentials, 'Set TEST_EMAIL and TEST_PASSWORD to run dashboard tests')
+
   test.beforeEach(async ({ page }) => {
     await login(page)
   })
@@ -51,7 +43,7 @@ test.describe('Dashboard', () => {
   })
 
   for (const path of SIDEBAR_PATHS) {
-    test(`${path} page loads without 500`, async ({ page }) => {
+    test(path + ' page loads without 500', async ({ page }) => {
       await page.goto(path)
       await expect(page.locator('body')).toBeVisible()
       await expect(page.getByText(/application error|500 internal/i)).not.toBeVisible()

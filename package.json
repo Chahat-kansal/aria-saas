@@ -11,6 +11,7 @@
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:report": "playwright show-report",
+    "test:e2e:ci": "playwright test --reporter=github",
     "seed:cafe-images": "tsx scripts/fetch-cafe-images.ts",
     "seed:dalle-images": "tsx scripts/generate-dalle-cafe-images.ts"
   },
@@ -98,3 +99,4 @@
   },
   "_buildTime": 1779333939
 }
+
