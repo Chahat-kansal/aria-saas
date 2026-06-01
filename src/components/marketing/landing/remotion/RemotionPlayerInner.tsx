@@ -1,5 +1,4 @@
 'use client'
-import { Player } from '@remotion/player'
 import type { ComponentType } from 'react'
 
 interface Props {
@@ -13,17 +12,14 @@ interface Props {
   autoPlay?: boolean
 }
 
-export default function RemotionPlayerInner(props: Props) {
+export default function RemotionPlayerInner({ component: Component, style, compositionWidth, compositionHeight }: Props) {
   return (
-    <Player
-      component={props.component}
-      durationInFrames={props.durationInFrames}
-      fps={props.fps}
-      compositionWidth={props.compositionWidth}
-      compositionHeight={props.compositionHeight}
-      style={props.style}
-      loop={props.loop}
-      autoPlay={props.autoPlay}
-    />
+    <div style={{
+      ...style,
+      position: 'relative',
+      overflow: 'hidden',
+    }}>
+      <Component />
+    </div>
   )
 }
