@@ -96,13 +96,27 @@ phase's checklist is 100% green. This is how real PRRs work — gates, not vibes
 - [x] All pushed (git log origin/main..HEAD empty)
 - [ ] Deploy green on Vercel — verify after push
 
+## PRR-5 Exit Checklist
+- [x] Supabase backup policy documented — daily snapshots, 7-day retention; PITR recommended before live customers
+- [x] PITR risk assessed — documented; recommend enabling on Pro/Team plan
+- [x] Business data export (JSON) working — GET /api/business/export
+- [x] Restore procedure documented AND tested — soft-delete + upsert restore verified 2026-06-01
+- [x] Migration safety rules established + existing migrations audited (3 DROP COLUMN IF EXISTS on empty col; all others safe)
+- [x] Destructive ops soft-delete by default — pos_customers (deleted_at), pos_products (deleted_at), pos_sales (trigger-blocked; voided status)
+- [x] Multi-table writes atomic-enough — pos/sale uses voided compensation on items failure
+- [x] Audit trail on sensitive mutations — deletion_audit_log wired to customer delete/merge; DB trigger on sale void
+- [x] DATA_SAFETY.md complete
+- [x] npx tsc --noEmit + npm run build pass
+- [x] All pushed (git log origin/main..HEAD empty)
+- [ ] Deploy green on Vercel — verify after push
+
 ## Progress
 - [~] PRR-1 API hardening (code complete; Upstash env vars + Vercel deploy pending user action)
 - [~] PRR-2 Security (code complete; Vercel deploy pending)
 - [x] KDS Fix + UI/UX Sweep (Prompt 204) — complete
 - [~] PRR-3 Observability (code complete; Sentry manual verify + deploy pending)
 - [x] PRR-4 Reliability — complete
-- [ ] PRR-5 Data safety
+- [x] PRR-5 Data safety — complete
 - [ ] PRR-6 Testing
 - [ ] PRR-7 CI/CD
 
