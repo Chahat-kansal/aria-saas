@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react'
 
 const STEPS = [
   { num: '1', title: "Emma K. hasn't visited in 68 days", sub: 'Last order: Acai Bowl + Oat Latte · $24.50 · loyalty member', tag: 'At risk', tagColor: '#f09595', tagBg: 'rgba(248,113,113,0.12)' },
-  { num: '2', title: 'Aria drafts a personalised win-back', sub: '"Hey Emma! Your fave Acai Bowl is waiting — here's 15% off just for you this week 🌿"', tag: 'AI drafted', tagColor: '#85b7eb', tagBg: 'rgba(96,165,250,0.12)' },
+  { num: '2', title: 'Aria drafts a personalised win-back', sub: `"Hey Emma! Your fave Acai Bowl is waiting — here's 15% off just for you this week 🌿"`, tag: 'AI drafted', tagColor: '#85b7eb', tagBg: 'rgba(96,165,250,0.12)' },
   { num: '3', title: 'You approve in one tap → SMS sent', sub: 'Emma returned 3 days later · spent $28.50 · loyalty streak restarted', tag: 'Returned ✓', tagColor: '#7FB897', tagBg: 'rgba(127,184,151,0.12)' },
 ]
 
