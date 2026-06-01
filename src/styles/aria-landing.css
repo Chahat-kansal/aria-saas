@@ -261,7 +261,7 @@ html:has(.landing-v3) { scroll-behavior: auto; }
 .landing-v3 .hero-h1 {
   font-family: var(--font-display);
   font-weight: 400;
-  font-size: clamp(48px, 9vw, 110px);
+  font-size: clamp(52px, 9.8vw, 120px);
   line-height: 1;
   letter-spacing: -0.035em;
   margin-bottom: 24px;

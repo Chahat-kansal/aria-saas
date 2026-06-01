@@ -210,8 +210,9 @@ html, body { height: 100%; }
   80%     { transform: translateX(5px)  }
 }
 
-.font-ui      { font-family: 'Manrope', system-ui, sans-serif; }
-.font-display { font-family: 'Instrument Serif', Georgia, serif; }
+body          { font-family: var(--font-body, 'Outfit', system-ui, sans-serif); }
+.font-ui      { font-family: var(--font-body, 'Outfit', system-ui, sans-serif); }
+.font-display { font-family: var(--font-display, 'Cormorant', Georgia, serif); }
 .font-pos     { font-family: 'JetBrains Mono', monospace; }
 
 

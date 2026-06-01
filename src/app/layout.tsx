@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { Sora, JetBrains_Mono, Fraunces, Inter } from 'next/font/google';
+import { Cormorant, Outfit, JetBrains_Mono } from 'next/font/google';
 import './globals.css';
 import '@/styles/aria-tokens.css';
 import '@/styles/aria-landing.css';
@@ -7,19 +7,24 @@ import { Providers } from './providers';
 import { ThemeProvider } from '@/components/ThemeProvider';
 import PostHogProvider from '@/components/PostHogProvider';
 
-const sora = Sora({ subsets: ['latin'], variable: '--font-sora' });
-const mono = JetBrains_Mono({ subsets: ['latin'], variable: '--font-mono' });
-const fraunces = Fraunces({
+const cormorant = Cormorant({
   subsets: ['latin'],
-  variable: '--font-display',
+  weight: ['300', '400', '500', '600', '700'],
   style: ['normal', 'italic'],
-  weight: ['400', '500', '600', '700', '900'],
+  variable: '--font-display',
   display: 'swap',
 });
-const inter = Inter({
+
+const outfit = Outfit({
   subsets: ['latin'],
+  weight: ['300', '400', '500', '600'],
   variable: '--font-body',
-  weight: ['300', '400', '500', '600', '700'],
+  display: 'swap',
+});
+
+const mono = JetBrains_Mono({
+  subsets: ['latin'],
+  variable: '--font-mono',
   display: 'swap',
 });
 
@@ -63,7 +68,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           }
         }) }} />
       </head>
-      <body className={`${sora.variable} ${mono.variable} ${fraunces.variable} ${inter.variable} font-sans antialiased`}>
+      <body className={`${cormorant.variable} ${outfit.variable} ${mono.variable} font-sans antialiased`}>
         {/* Anti-flash: restore theme before paint */}
         <script dangerouslySetInnerHTML={{ __html: `(function(){try{var t=localStorage.getItem('pos_theme');if(t==='light')document.documentElement.setAttribute('data-theme','light');}catch(e){}})()` }} />
         <PostHogProvider>
