@@ -162,6 +162,7 @@ async function callOpenRouter(input: RunInput) {
       ...(process.env.OPENROUTER_SITE_URL ? { 'HTTP-Referer': process.env.OPENROUTER_SITE_URL } : {}),
       ...(process.env.OPENROUTER_APP_NAME ? { 'X-Title': process.env.OPENROUTER_APP_NAME } : {}),
     },
+    signal: AbortSignal.timeout(30_000),
     body: JSON.stringify({
       model: SMART_TASKS.has(input.task) ? 'anthropic/claude-sonnet-4-5-20250929' : 'openai/gpt-4o-mini',
       temperature: input.temperature ?? 0.2,

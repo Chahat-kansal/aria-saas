@@ -22,6 +22,7 @@ export async function getServerToken(scope: 'SERVER_ACCESS' | 'CLIENT_ACCESS' = 
       'basiq-version': '3.0',
     },
     body: `scope=${scope}`,
+    signal: AbortSignal.timeout(15_000),
   });
   if (!res.ok) {
     const tokenText = await res.text();
@@ -45,6 +46,7 @@ async function basiqFetch<T>(path: string, init?: RequestInit): Promise<T> {
       ...(hasBody ? { 'Content-Type': 'application/json' } : {}),
       ...(init?.headers ?? {}),
     },
+    signal: AbortSignal.timeout(15_000),
   });
   if (!res.ok) {
     const text = await res.text();
@@ -88,6 +90,7 @@ export async function deleteUser(userId: string): Promise<void> {
   await fetch(`${BASIQ_BASE}/users/${userId}`, {
     method: 'DELETE',
     headers: { 'Authorization': `Bearer ${token}`, 'basiq-version': '3.0' },
+    signal: AbortSignal.timeout(15_000),
   });
 }
 
@@ -105,6 +108,7 @@ export async function createAuthLink(userId: string, businessId: string): Promis
       'basiq-version': '3.0',
     },
     body: `scope=CLIENT_ACCESS&userId=${userId}`,
+    signal: AbortSignal.timeout(15_000),
   });
   if (!res.ok) {
     const t = await res.text();

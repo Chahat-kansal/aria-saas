@@ -34,6 +34,7 @@ export async function sendSMS(to: string, body: string): Promise<ClickSendResult
         'Content-Type': 'application/json',
         Authorization: `Basic ${auth}`,
       },
+      signal: AbortSignal.timeout(10_000),
       body: JSON.stringify({
         messages: [{
           source: 'aria_os',

@@ -64,6 +64,7 @@ async function _POST(req: Request) {
         method: 'POST',
         headers: { Authorization: 'Basic ' + Buffer.from(sid + ':' + tok).toString('base64'), 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({ From: from, To: customer.phone, Body: messageText }),
+        signal: AbortSignal.timeout(10_000),
       })
       sendStatus = res.ok ? 'sent' : 'failed'
       if (!res.ok) { const d = await res.json() as any; errorMsg = d?.message ?? 'Twilio error' }

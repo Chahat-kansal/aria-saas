@@ -89,6 +89,7 @@ async function _POST(req: Request) {
       method: 'POST',
       headers: { Authorization: 'Basic ' + Buffer.from(`${accountSid}:${authToken}`).toString('base64'), 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({ To: phone, From: twilioFrom, Body: body }).toString(),
+      signal: AbortSignal.timeout(10_000),
     })
     if (r.ok) sent++; else skipped++
   }

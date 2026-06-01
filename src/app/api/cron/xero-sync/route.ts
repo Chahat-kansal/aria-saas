@@ -24,6 +24,7 @@ async function sendSms(to: string, body: string): Promise<void> {
     method: 'POST',
     headers: { 'Authorization': `Basic ${credentials}`, 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({ To: to, From: TWILIO_FROM_NUMBER, Body: body }),
+    signal: AbortSignal.timeout(10_000),
   })
 }
 

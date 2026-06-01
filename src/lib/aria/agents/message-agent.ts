@@ -58,6 +58,7 @@ async function sendEmail(to: string, subject: string, body: string): Promise<boo
     method: 'POST',
     headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ from: 'Aria <aria@ariaos.site>', to, subject, html: body }),
+    signal: AbortSignal.timeout(10_000),
   })
   return res.ok
 }

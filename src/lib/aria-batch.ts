@@ -23,6 +23,7 @@ export async function submitBatch(requests: BatchRequest[]): Promise<string> {
     method: 'POST',
     headers: BATCH_HEADERS,
     body: JSON.stringify({ requests }),
+    signal: AbortSignal.timeout(30_000),
   })
   const data = await res.json() as { id?: string; error?: { message: string } }
   if (!res.ok) {
@@ -40,6 +41,7 @@ export async function pollBatchResults(batchId: string): Promise<unknown[] | nul
       'anthropic-version': '2023-06-01',
       'anthropic-beta': 'message-batches-2024-09-24',
     },
+    signal: AbortSignal.timeout(15_000),
   })
   const data = await res.json() as { processing_status?: string; results_url?: string }
   if (data.processing_status !== 'ended') return null
@@ -49,6 +51,7 @@ export async function pollBatchResults(batchId: string): Promise<unknown[] | nul
       'x-api-key': process.env.ANTHROPIC_API_KEY!,
       'anthropic-version': '2023-06-01',
     },
+    signal: AbortSignal.timeout(30_000),
   })
   const text = await resultsRes.text()
   return text.split('\n').filter(Boolean).map(line => JSON.parse(line))

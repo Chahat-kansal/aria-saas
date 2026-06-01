@@ -10,6 +10,7 @@ async function sendEmail(to: string[], subject: string, html: string): Promise<b
         'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
       },
+      signal: AbortSignal.timeout(10_000),
       body: JSON.stringify({
         from: 'Aria OS <aria@ariaos.site>',
         to,
