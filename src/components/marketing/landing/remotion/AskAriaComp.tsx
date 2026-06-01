@@ -1,75 +1,161 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useState, useEffect } from 'react'
 
 const QA = [
-  { q: "How's my revenue?", a: "Up 18% — $2,847 so far. Acai Bowl is leading. Best week this month." },
-  { q: "Any risks I should know?", a: "3 items: oat milk critically low, BAS due 14 days, competitor undercut flat white." },
-  { q: "How to increase profit?", a: "Bundle Flat White + food. Cafés using bundles see 15-22% higher ticket sizes." },
+  {
+    label: '📈 Revenue?',
+    q: "How's my revenue this week?",
+    a: "Up 18% on last week — $2,847 so far. Tuesday was your strongest day. Acai Bowl is your top earner. At this pace you'll finish around $4,200 — your best week this month.",
+    chips: ['↑ 18% week-on-week', '$4,200 projected', 'Acai Bowl leading'],
+    chipColors: ['#7FB897', '#85b7eb', '#fbbf24'],
+  },
+  {
+    label: '👥 Top customers?',
+    q: "Who are my top customers?",
+    a: "Your top 5 regulars represent 12% of total revenue. Emma K. is your highest spender but hasn't visited in 68 days — I've drafted a win-back message ready for your approval.",
+    chips: ['Top 5 = 12% revenue', 'Emma K. at risk', 'Win-back drafted'],
+    chipColors: ['#7FB897', '#f09595', '#85b7eb'],
+  },
+  {
+    label: '⚠️ Any risks?',
+    q: "Any risks I should know about?",
+    a: "3 things need attention: oat milk is critically low (2 units), BAS is due in 14 days, and Bench Coffee just dropped their flat white below yours.",
+    chips: ['3 active risks', 'Stock critical', 'BAS due soon'],
+    chipColors: ['#f09595', '#f59e0b', '#f59e0b'],
+  },
+  {
+    label: '💡 Increase profit?',
+    q: "How can I increase profit?",
+    a: "Biggest opportunity: bundle Flat White + food item. Cafés using bundle pricing see 15–22% higher ticket sizes. Also, Acai Bowl can absorb a $1 price rise — competitors charge $19.50.",
+    chips: ['+$340/week possible', 'Bundle pricing', '3 margin leaks'],
+    chipColors: ['#7FB897', '#85b7eb', '#f59e0b'],
+  },
 ]
 
-const style = `
+const STYLE = `
 @keyframes fadeSlideUp {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
 }
+@keyframes chipIn {
+  from { opacity: 0; transform: scale(0.92); }
+  to { opacity: 1; transform: scale(1); }
+}
 `
 
 export function AskAriaComp() {
-  const [phase, setPhase] = useState(0)
-  const [qIdx, setQIdx] = useState(0)
-  const [displayQ, setDisplayQ] = useState('')
+  const [activeIdx, setActiveIdx] = useState(0)
   const [displayA, setDisplayA] = useState('')
-  const [showA, setShowA] = useState(false)
+  const [showChips, setShowChips] = useState(false)
+  const [typing, setTyping] = useState(false)
+  const [key, setKey] = useState(0)
 
   useEffect(() => {
-    const qa = QA[qIdx]
-    setDisplayQ('')
+    const qa = QA[activeIdx]
     setDisplayA('')
-    setShowA(false)
+    setShowChips(false)
+    setTyping(true)
 
-    // Type question
-    let qi = 0
-    const qTimer = setInterval(() => {
-      qi++
-      setDisplayQ(qa.q.slice(0, qi))
-      if (qi >= qa.q.length) {
-        clearInterval(qTimer)
-        // Pause then show answer
-        setTimeout(() => {
-          setShowA(true)
-          let ai = 0
-          const aTimer = setInterval(() => {
-            ai++
-            setDisplayA(qa.a.slice(0, ai))
-            if (ai >= qa.a.length) {
-              clearInterval(aTimer)
-              // Pause then next question
-              setTimeout(() => {
-                setQIdx(prev => (prev + 1) % QA.length)
-              }, 2500)
-            }
-          }, 22)
-        }, 600)
+    let i = 0
+    const timer = setInterval(() => {
+      i++
+      setDisplayA(qa.a.slice(0, i))
+      if (i >= qa.a.length) {
+        clearInterval(timer)
+        setTyping(false)
+        setTimeout(() => setShowChips(true), 200)
       }
-    }, 38)
+    }, 18)
+    return () => clearInterval(timer)
+  }, [activeIdx, key])
 
-    return () => clearInterval(qTimer)
-  }, [qIdx])
+  const qa = QA[activeIdx]
+
+  const selectQ = (idx: number) => {
+    setActiveIdx(idx)
+    setKey(prev => prev + 1)
+  }
 
   return (
-    <div style={{ background: '#0E1411', fontFamily: "'Outfit', system-ui, sans-serif", padding: '28px 32px', display: 'flex', flexDirection: 'column', height: '100%', borderRadius: 16 }}>
-      <style>{style}</style>
-      <div style={{ fontSize: 11, color: '#7FB897', textTransform: 'uppercase', letterSpacing: '0.16em', marginBottom: 24, opacity: 0.8 }}>Ask Aria</div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 14, flex: 1 }}>
-        <div style={{ alignSelf: 'flex-end', maxWidth: '80%', background: 'rgba(127,184,151,0.1)', border: '1px solid rgba(127,184,151,0.2)', borderRadius: '14px 14px 4px 14px', padding: '11px 14px', fontSize: 13, color: '#e8ede9', lineHeight: 1.45, minHeight: 44 }}>
-          {displayQ}<span style={{ opacity: displayQ.length < QA[qIdx].q.length ? 1 : 0, borderRight: '2px solid #7FB897' }}>&nbsp;</span>
+    <div style={{ background: '#0E1411', fontFamily: "'Outfit', system-ui, sans-serif", padding: '20px 24px', display: 'flex', flexDirection: 'column', height: '100%', borderRadius: 16, gap: 14 }}>
+      <style>{STYLE}</style>
+
+      {/* Question tabs */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+        {QA.map((item, i) => (
+          <button
+            key={i}
+            onClick={() => selectQ(i)}
+            style={{
+              fontSize: 11,
+              padding: '5px 12px',
+              borderRadius: 99,
+              border: `1px solid ${i === activeIdx ? 'rgba(127,184,151,0.4)' : 'rgba(255,255,255,0.1)'}`,
+              background: i === activeIdx ? 'rgba(127,184,151,0.15)' : 'rgba(255,255,255,0.04)',
+              color: i === activeIdx ? '#7FB897' : 'rgba(255,255,255,0.5)',
+              cursor: 'pointer',
+              fontFamily: "'Outfit', system-ui",
+              transition: 'all 0.15s',
+            }}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Chat area */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {/* User bubble */}
+        <div style={{
+          alignSelf: 'flex-end',
+          maxWidth: '80%',
+          background: 'rgba(127,184,151,0.12)',
+          border: '1px solid rgba(127,184,151,0.22)',
+          borderRadius: '14px 14px 4px 14px',
+          padding: '10px 14px',
+          fontSize: 12,
+          color: '#e8ede9',
+          lineHeight: 1.5,
+          animation: 'fadeSlideUp 0.25s ease',
+        }}>
+          {qa.q}
         </div>
-        {showA && (
-          <div style={{ alignSelf: 'flex-start', maxWidth: '85%', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '4px 14px 14px 14px', padding: '11px 14px', animation: 'fadeSlideUp 0.3s ease' }}>
-            <div style={{ fontSize: 10, color: '#7FB897', textTransform: 'uppercase', letterSpacing: '0.14em', marginBottom: 6 }}>Aria</div>
-            <div style={{ fontSize: 13, color: '#cdd6cf', lineHeight: 1.5 }}>
-              {displayA}<span style={{ opacity: displayA.length < QA[qIdx].a.length ? 1 : 0, borderRight: '2px solid rgba(127,184,151,0.6)' }}>&nbsp;</span>
-            </div>
+
+        {/* Aria bubble */}
+        <div style={{
+          alignSelf: 'flex-start',
+          maxWidth: '88%',
+          background: 'rgba(255,255,255,0.04)',
+          border: '1px solid rgba(255,255,255,0.08)',
+          borderRadius: '4px 14px 14px 14px',
+          padding: '10px 14px',
+          animation: 'fadeSlideUp 0.3s ease 0.1s both',
+        }}>
+          <div style={{ fontSize: 9, color: '#7FB897', textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div style={{ width: 16, height: 16, borderRadius: '50%', background: 'linear-gradient(135deg,#7FB897,#2D5240)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, fontWeight: 700, color: '#fff' }}>A</div>
+            Aria
+          </div>
+          <div style={{ fontSize: 12, color: '#cdd6cf', lineHeight: 1.6, minHeight: 40 }}>
+            {displayA}
+            {typing && <span style={{ borderRight: '2px solid rgba(127,184,151,0.7)', marginLeft: 1 }}>&nbsp;</span>}
+          </div>
+        </div>
+
+        {/* Chips */}
+        {showChips && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, paddingLeft: 4 }}>
+            {qa.chips.map((chip, i) => (
+              <span key={i} style={{
+                fontSize: 9,
+                fontWeight: 600,
+                padding: '3px 10px',
+                borderRadius: 99,
+                background: qa.chipColors[i] + '1a',
+                color: qa.chipColors[i],
+                fontFamily: "'JetBrains Mono', monospace",
+                animation: `chipIn 0.25s ease ${i * 0.08}s both`,
+              }}>{chip}</span>
+            ))}
           </div>
         )}
       </div>
