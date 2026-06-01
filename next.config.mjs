@@ -9,6 +9,8 @@ const nextConfig = {
   },
   productionBrowserSourceMaps: false,
   experimental: {
+    workerThreads: false,
+    cpus: 2,
     serverComponentsExternalPackages: ['mongoose'],
     serverSourceMaps: false,
     outputFileTracingExcludes: {
