@@ -85,21 +85,22 @@ async function generateMorning(
     realtime: true,
   })
 
-  await supabaseAdmin.from('pos_daily_briefings').upsert({
-    business_id: biz.id,
-    briefing_date: today,
-    briefing_type: 'morning',
-    insights: bullets,
-    action_items: [],
-    pace_vs_average_pct: null,
-  }, { onConflict: 'business_id,briefing_date,briefing_type' })
-
-  // Also keep legacy cache in sync
-  const { error: cacheErr } = await supabaseAdmin.from('aria_briefings_cache').upsert({
-    business_id: biz.id,
-    briefing_date: today,
-    bullets,
-  }, { onConflict: 'business_id,briefing_date' })
+  // Both writes are independent — run in parallel
+  const [, { error: cacheErr }] = await Promise.all([
+    supabaseAdmin.from('pos_daily_briefings').upsert({
+      business_id: biz.id,
+      briefing_date: today,
+      briefing_type: 'morning',
+      insights: bullets,
+      action_items: [],
+      pace_vs_average_pct: null,
+    }, { onConflict: 'business_id,briefing_date,briefing_type' }),
+    supabaseAdmin.from('aria_briefings_cache').upsert({
+      business_id: biz.id,
+      briefing_date: today,
+      bullets,
+    }, { onConflict: 'business_id,briefing_date' }),
+  ])
   if (cacheErr) console.warn('[generate-briefings] aria_briefings_cache upsert:', cacheErr.message)
 }
 
