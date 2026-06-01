@@ -5,6 +5,36 @@ BINDING and override any task instruction that conflicts with them.
 
 ---
 
+## 🚨 MANDATORY COMMIT PROTOCOL — follow for EVERY commit, NO EXCEPTIONS
+
+This is the #1 cause of broken deploys. A build has broken and sat broken across multiple
+commits THREE times — every single time because code was committed/pushed WITHOUT building first.
+
+**Before EVERY git commit, in this exact order:**
+```
+1. npx tsc --noEmit        # MUST show zero errors. If errors → fix them, do NOT commit.
+2. npm run build           # MUST complete successfully. If it fails → fix it, do NOT commit.
+3. git add -A && git commit -m "..."
+4. git push origin main
+5. git log origin/main..HEAD   # MUST be empty. If not empty → push again.
+```
+
+**NEVER:**
+- ❌ Commit without running `npm run build` first
+- ❌ Push a commit that hasn't passed `npm run build`
+- ❌ Build on top of a commit you haven't verified builds
+- ❌ Batch multiple commits and build only at the end — build before EACH commit
+
+**At the END of every task/session:**
+- Run `npm run build` one final time to confirm the whole thing is green
+- Confirm `git log origin/main..HEAD` is empty (everything pushed)
+- State explicitly: "Build verified green, all commits pushed."
+
+If `npm run build` fails and you cannot fix it: STOP, do not commit, report the exact error.
+A broken build that reaches `main` blocks ALL deploys including unrelated work.
+
+---
+
 ## 🔒 RULE 0 — UPGRADE ONLY, NEVER DOWNGRADE (overrides everything)
 
 Every change must ONLY upgrade, improve, or add. NEVER downgrade, remove, simplify away,
