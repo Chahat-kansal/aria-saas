@@ -2,6 +2,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useBusinessContext } from '@/components/providers/BusinessProvider'
 import { AriaIntelligencePanel } from '@/components/dashboard/AriaIntelligencePanel'
+import dynamic from 'next/dynamic'
+const SupplierOrderModal = dynamic(() => import('@/components/warehouse/SupplierOrderModal'), { ssr: false })
 
 type Tab = 'overview' | 'orders' | 'schedule' | 'prices' | 'settings'
 
@@ -128,6 +130,7 @@ export default function SuppliersPage() {
   const [aiSummary, setAiSummary] = useState('')
   const [loadingAI, setLoadingAI] = useState(false)
   const [showAIPanel, setShowAIPanel] = useState(false)
+  const [showOrderModal, setShowOrderModal] = useState(false)
   const [settingsForm, setSettingsForm] = useState({ ...BLANK_SETTINGS })
   const [savingSettings, setSavingSettings] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
@@ -299,10 +302,10 @@ export default function SuppliersPage() {
             </>
           )}
           {activeTab === 'orders' && selectedSupplierId && (
-            <button onClick={getAISuggestions} disabled={loadingAI}
-              className="px-3 py-2 rounded-xl text-xs font-medium disabled:opacity-40 flex items-center gap-1"
+            <button onClick={() => setShowOrderModal(true)}
+              className="px-3 py-2 rounded-xl text-xs font-medium flex items-center gap-1"
               style={{ background: 'rgba(29,158,117,0.1)', color: '#1D9E75', border: '1px solid rgba(29,158,117,0.2)' }}>
-              {loadingAI ? <><span className="inline-block w-2.5 h-2.5 border border-[#1D9E75] border-t-transparent rounded-full animate-spin" />Thinking…</> : '✦ AI suggest order'}
+              ✦ AI suggest order
             </button>
           )}
         </div>
@@ -734,6 +737,21 @@ export default function SuppliersPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* SUPPLIER ORDER MODAL */}
+      {showOrderModal && selectedSupplierId && selectedSupplier && (
+        <SupplierOrderModal
+          supplierId={selectedSupplierId}
+          supplierName={selectedSupplier.name}
+          shortCode={selectedSupplier.short_code}
+          businessId={business?.id ?? ''}
+          deliveryDays={selectedSupplier.delivery_days}
+          leadTimeDays={selectedSupplier.lead_time_days}
+          defaultTab="suggestions"
+          onClose={() => setShowOrderModal(false)}
+          onSaved={() => { setShowOrderModal(false); load() }}
+        />
       )}
 
       {/* DELETE CONFIRM MODAL */}
