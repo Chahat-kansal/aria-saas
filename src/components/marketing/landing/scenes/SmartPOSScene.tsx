@@ -16,7 +16,7 @@ export default function SmartPOSScene() {
   return (
     <>
       <div className="scene-label" style={{ textAlign: 'center' }}>Point of sale</div>
-      <h2 dangerouslySetInnerHTML={{ __html: 'The only POS that gets <em>smarter every day</em>' }} />
+      <h2>The only POS that gets <em>smarter every day</em></h2>
       <div style={{
         display: 'grid',
         gridTemplateColumns: '1fr 1fr',
@@ -38,7 +38,7 @@ export default function SmartPOSScene() {
           durationInFrames={150}
           fps={30}
           compositionWidth={400}
-          compositionHeight={340}
+          compositionHeight={320}
           style={{ width: '100%', borderRadius: 16, overflow: 'hidden', border: '1px solid rgba(127,184,151,0.18)' }}
           loop
           autoPlay

@@ -233,15 +233,13 @@ html:has(.landing-v3) { scroll-behavior: auto; }
 
 /* ── HERO DASHBOARD STAGE ───────────────────────────────────────────────── */
 .landing-v3 .hero-dashboard-stage {
-  position: absolute;
-  top: 50%; left: 50%;
-  transform: translate(-50%, -30%);
-  width: min(900px, 92vw);
-  opacity: clamp(0, calc(var(--hero-progress, 0) * 3.5), 1);
-  transform: translate(-50%, calc(-30% + (1 - var(--hero-progress, 0)) * 40px));
-  transition: opacity 80ms linear, transform 80ms linear;
-  z-index: 2;
-  pointer-events: none;
+  width: 100%;
+  max-width: 900px;
+  margin: 2rem auto 0;
+  border-radius: 16px 16px 0 0;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-bottom: none;
 }
 
 .landing-v3 .hero-dashboard {
@@ -687,8 +685,8 @@ html:has(.landing-v3) { scroll-behavior: auto; }
 
 /*  SHARED SCENE CONTENT  */
 .landing-v3 .scene-label { font-family: var(--font-mono); font-size: 13px; color: var(--sage); letter-spacing: 0.18em; text-transform: uppercase; margin-bottom: 20px; }
-.landing-v3 .scene h2 { font-family: var(--font-display); font-weight: 500; font-size: clamp(28px, 4vw, 52px); line-height: 1.06; letter-spacing: -0.022em; margin-bottom: 28px; text-align: center; }
-.landing-v3 .scene h2 em { font-style: italic; background: linear-gradient(135deg, var(--sage-light), var(--sage)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+.landing-v3 .scene h2 { font-family: var(--font-display); font-weight: 600; font-size: clamp(2rem, 4.5vw, 3.5rem); line-height: 1.08; letter-spacing: -0.02em; color: var(--text-primary, #E8EDE7); margin-bottom: 1.5rem; text-align: center; }
+.landing-v3 .scene h2 em { color: var(--sage, #7FB897); font-style: italic; font-weight: 300; }
 .landing-v3 .body-copy { font-family: var(--font-body); font-size: 17px; font-weight: 300; line-height: 1.6; color: var(--text-secondary); max-width: 540px; }
 
 /*  Scene 02: Problem  */
