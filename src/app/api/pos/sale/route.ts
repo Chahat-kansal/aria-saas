@@ -244,7 +244,9 @@ async function _POST(req: Request) {
 
   const { error: itemsErr } = await supabase.from('pos_sale_items').insert(saleItems);
   if (itemsErr) {
-    await supabase.from('pos_sales').delete().eq('id', sale.id);
+    // Compensate: void the orphaned sale record (hard-delete blocked by DB trigger)
+    await supabase.from('pos_sales').update({ status: 'voided', notes: 'system:items_insert_failed' }).eq('id', sale.id)
+    logger.error('pos/sale items insert failed — sale voided', { route: 'pos/sale', saleId: sale.id, error: itemsErr.message })
     return NextResponse.json({ error: itemsErr.message }, { status: 500 });
   }
 

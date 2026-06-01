@@ -44,6 +44,7 @@ async function _GET(req: Request) {
       .select('*')
       .eq('id', id)
       .eq('business_id', bid)
+      .is('deleted_at', null)
       .maybeSingle();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({ customer: customer ?? null });
@@ -59,6 +60,7 @@ async function _GET(req: Request) {
     .from('pos_customers')
     .select('id, name, phone, email, birthday, tags, points_balance, stamps_count, loyalty_points, total_spent, visit_count, last_visit_at, last_visit, marketing_consent, notes, created_at')
     .eq('business_id', bid)
+    .is('deleted_at', null)
     .range(offset, offset + limit - 1);
 
   if (sortBy === 'total_spent') query = query.order('total_spent', { ascending: false });

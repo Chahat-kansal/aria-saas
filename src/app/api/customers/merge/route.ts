@@ -57,8 +57,17 @@ async function _POST(req: Request) {
     updated_at: new Date().toISOString(),
   }).eq('id', primary_id)
 
-  // Delete secondary
-  await supabaseAdmin.from('pos_customers').delete().eq('id', secondary_id).eq('business_id', business_id)
+  // Soft-delete secondary — preserves audit trail; data already merged into primary
+  await supabaseAdmin.from('pos_customers').update({ deleted_at: new Date().toISOString() }).eq('id', secondary_id).eq('business_id', business_id)
+  await Promise.resolve(supabaseAdmin.from('deletion_audit_log').insert({
+    table_name: 'pos_customers',
+    row_id: secondary_id,
+    action: 'soft_delete_merged',
+    old_data: secondary,
+    performed_by: user.id,
+    business_id: business_id,
+    reason: 'merged_into:' + primary_id,
+  })).catch(() => {})
 
   const { data: merged } = await supabaseAdmin.from('pos_customers').select('*').eq('id', primary_id).single()
   return NextResponse.json({ merged })

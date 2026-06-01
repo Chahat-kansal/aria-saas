@@ -1,5 +1,6 @@
 export const dynamic = 'force-dynamic'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { supabaseAdmin } from '@/lib/supabase-admin'
 import { NextResponse } from 'next/server'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 
@@ -86,8 +87,24 @@ async function _DELETE(_req: Request, { params }: { params: Promise<{ id: string
   const bid = await getBid(supabase, user.id)
   if (!bid) return NextResponse.json({ error: 'No business' }, { status: 400 })
 
-  const { error } = await supabase.from('pos_customers').delete().eq('id', id).eq('business_id', bid)
+  // Soft-delete: preserve customer data, just hide from active lists
+  const { data: existing } = await supabase.from('pos_customers').select('id, name, email, phone').eq('id', id).eq('business_id', bid).maybeSingle()
+  if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+  const { error } = await supabase.from('pos_customers').update({ deleted_at: new Date().toISOString() }).eq('id', id).eq('business_id', bid)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // Audit log — non-fatal
+  await Promise.resolve(supabaseAdmin.from('deletion_audit_log').insert({
+    table_name: 'pos_customers',
+    row_id: id,
+    action: 'soft_delete',
+    old_data: existing,
+    performed_by: user.id,
+    business_id: bid,
+    reason: 'owner_deleted',
+  })).catch(() => {})
+
   return NextResponse.json({ ok: true })
 }
 
