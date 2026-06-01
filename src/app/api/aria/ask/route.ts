@@ -291,14 +291,8 @@ async function _POST(req: Request) {
     }
   }
 
-  // Image requests are handled by the fast-path below after context is built
-
-  // 2. Build context
-  const ctx = await buildAskAriaContext(bid, conversationId ?? undefined)
-
-  // 2b. Strategic council path — multi-brain analysis for advisory questions
-  const isStrategic = /should|recommend|best|strategy|improve|why|how can|what would|advice|suggest|analyse|analyze|compare|forecast|plan|opportunity|risk|growth|optimise|optimize/i.test(message)
-  if (isStrategic) {
+  // 2b. Strategic council path — skip buildAskAriaContext (19 DB queries wasted) for council requests
+  if (isStrategicQuestion) {
     try {
       const bizCtx = await getBusinessContext(bid)
       const council = await runAriaCouncil(bizCtx + '\n\nOWNER_QUESTION: ' + message, bid, 'ask_aria', message)
@@ -326,6 +320,11 @@ async function _POST(req: Request) {
       console.error('[aria/ask] council failed, falling back to single-model:', (e as Error).message)
     }
   }
+
+  // Image requests are handled by the fast-path below after context is built
+
+  // 2. Build context — only reached for non-strategic questions
+  const ctx = await buildAskAriaContext(bid, conversationId ?? undefined)
 
   // 3. Build system prompt
   let systemPrompt = `You are Aria, the autonomous AI business co-pilot for Aria OS — for Australian small businesses.

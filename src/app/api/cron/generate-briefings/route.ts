@@ -22,36 +22,39 @@ async function generateMorning(
   yesterday.setDate(yesterday.getDate() - 1)
   const yday = yesterday.toISOString().slice(0, 10)
 
-  const { data: sales } = await supabaseAdmin
-    .from('pos_sales')
-    .select('total_amount, served_by')
-    .eq('business_id', biz.id)
-    .neq('status', 'voided')
-    .gte('created_at', `${yday}T00:00:00Z`)
-    .lte('created_at', `${yday}T23:59:59Z`)
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+
+  // All three are independent — run in parallel
+  const [{ data: sales }, { data: lowStock }, { data: marketScan }] = await Promise.all([
+    supabaseAdmin
+      .from('pos_sales')
+      .select('total_amount, served_by')
+      .eq('business_id', biz.id)
+      .neq('status', 'voided')
+      .gte('created_at', `${yday}T00:00:00Z`)
+      .lte('created_at', `${yday}T23:59:59Z`),
+    supabaseAdmin
+      .from('pos_products')
+      .select('name, stock_quantity')
+      .eq('business_id', biz.id)
+      .eq('is_active', true)
+      .lte('stock_quantity', 5)
+      .limit(5),
+    supabaseAdmin
+      .from('market_price_scans')
+      .select('overpriced_count, underpriced_count, potential_revenue_gain_cents, finished_at')
+      .eq('business_id', biz.id)
+      .eq('status', 'complete')
+      .gte('started_at', sevenDaysAgo)
+      .order('started_at', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ])
 
   const revenue = (sales ?? []).reduce((s, r) => s + (r.total_amount ?? 0), 0)
   const txCount = (sales ?? []).length
 
-  const { data: lowStock } = await supabaseAdmin
-    .from('pos_products')
-    .select('name, stock_quantity')
-    .eq('business_id', biz.id)
-    .eq('is_active', true)
-    .lte('stock_quantity', 5)
-    .limit(5)
-
   // Market price intelligence — include if a scan ran within 7 days
-  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
-  const { data: marketScan } = await supabaseAdmin
-    .from('market_price_scans')
-    .select('overpriced_count, underpriced_count, potential_revenue_gain_cents, finished_at')
-    .eq('business_id', biz.id)
-    .eq('status', 'complete')
-    .gte('started_at', sevenDaysAgo)
-    .order('started_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
 
   let biggestGapName: string | null = null
   let biggestGapMarketPrice: number | null = null

@@ -53,5 +53,5 @@ async function _PATCH(req: Request) {
   return NextResponse.json({ ok: true })
 }
 
-export const GET = withErrorCapture(_GET)
-export const PATCH = withErrorCapture(_PATCH)
+export const GET = withErrorCapture('aria/supplier-ai-suggestions', _GET)
+export const PATCH = withErrorCapture('aria/supplier-ai-suggestions', _PATCH)

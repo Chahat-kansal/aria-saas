@@ -350,39 +350,43 @@ export async function runAriaCouncil(
   const activeQuestion = question ?? 'Analyse this business and give me your most important insights.'
   const userPrompt = `Business data:\n${businessContext}`
 
-  // Fetch business info for Gemini context brain — optional, non-blocking
-  let bizInfo: { trading_name: string; industry: string; city: string; state: string } | null = null
-  try {
-    const { data: bd } = await supabaseAdmin.from('businesses')
-      .select('trading_name, name, industry, city, suburb, state')
-      .eq('id', businessId).single()
-    if (bd) {
-      const d = bd as Record<string, string | null>
-      bizInfo = {
-        trading_name: d.trading_name ?? d.name ?? 'this business',
-        industry: d.industry ?? 'retail',
-        city: d.city ?? d.suburb ?? 'Australia',
-        state: d.state ?? 'AU',
-      }
-    }
-  } catch { /* non-fatal — context brain is optional */ }
-
   const now = new Date()
   const weekStart = new Date(now)
   weekStart.setDate(now.getDate() - ((now.getDay() + 6) % 7)) // Monday
   weekStart.setHours(0, 0, 0, 0)
 
-  const geminiPromise: Promise<ContextBrainOutput | null> = bizInfo
-    ? runContextBrain(bizInfo, weekStart, businessId).catch(() => null)
-    : Promise.resolve(null)
+  type BizInfo = { trading_name: string; industry: string; city: string; state: string }
 
-  // Run all 5 in parallel — 4 internal Claude brains + optional Gemini context brain
-  const [growth, risk, strategy, context, ctxOutput] = await Promise.all([
+  // Start bizInfo fetch immediately alongside the 4 brains — don't serialize
+  const bizInfoPromise: Promise<BizInfo | null> = Promise.resolve(
+    supabaseAdmin.from('businesses')
+      .select('trading_name, name, industry, city, suburb, state')
+      .eq('id', businessId).single()
+  ).then(({ data: bd }): BizInfo | null => {
+    if (!bd) return null
+    const d = bd as Record<string, string | null>
+    return {
+      trading_name: d.trading_name ?? d.name ?? 'this business',
+      industry: d.industry ?? 'retail',
+      city: d.city ?? d.suburb ?? 'Australia',
+      state: d.state ?? 'AU',
+    }
+  }).catch((): null => null)
+
+  // Gemini chains from bizInfo — starts as soon as the DB call resolves (~50ms), not after brains
+  const geminiPromise: Promise<ContextBrainOutput | null> = bizInfoPromise.then(
+    (bi: BizInfo | null): Promise<ContextBrainOutput | null> =>
+      bi ? runContextBrain(bi, weekStart, businessId).catch((): null => null) : Promise.resolve(null)
+  )
+
+  // Run all 6 in parallel — 4 brains + bizInfo fetch + gemini chain
+  const [growth, risk, strategy, context, ctxOutput, bizInfo] = await Promise.all([
     callBrain(client, HAIKU, buildGrowthPrompt(activeQuestion),   userPrompt, 'growth',   businessId, 18000),
     callBrain(client, HAIKU, buildRiskPrompt(activeQuestion),     userPrompt, 'risk',     businessId, 18000),
     callBrain(client, HAIKU, buildStrategyPrompt(activeQuestion), userPrompt, 'strategy', businessId, 18000),
     callBrain(client, HAIKU, CONTEXT_PROMPT,                      userPrompt, 'context',  businessId, 18000),
     geminiPromise,
+    bizInfoPromise,
   ])
 
   const brains = [growth, risk, strategy, context]
