@@ -7,6 +7,17 @@ import { setSentryContext } from '@/lib/api/with-error-capture';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2024-06-20' });
 
+async function syncSubscription(
+  stripeSubId: string,
+  status: string,
+  extra: Record<string, unknown> = {}
+) {
+  await supabaseAdmin
+    .from('business_subscriptions')
+    .update({ status, updated_at: new Date().toISOString(), ...extra })
+    .eq('stripe_subscription_id', stripeSubId)
+}
+
 export async function POST(req: Request) {
   const body = await req.text();
   const sig = req.headers.get('stripe-signature')!;
@@ -40,25 +51,33 @@ export async function POST(req: Request) {
     const userId = session.metadata?.userId;
     const businessId = session.metadata?.business_id;
     const plan = (session.metadata?.plan as 'starter' | 'growth' | 'pro') || 'starter';
+    const stripeSubId = session.subscription as string;
+    const customerId = session.customer as string;
 
     if (userId && businessId) {
-      // Target the specific business from checkout metadata
       await supabaseAdmin
         .from('businesses')
-        .update({
-          plan,
-          stripe_subscription_id: session.subscription as string,
-          stripe_customer_id: session.customer as string,
-        })
+        .update({ plan, stripe_subscription_id: stripeSubId, stripe_customer_id: customerId })
         .eq('id', businessId)
         .eq('user_id', userId);
+
+      // Sync business_subscriptions — clear trial, set active
+      await supabaseAdmin
+        .from('business_subscriptions')
+        .upsert({
+          business_id: businessId,
+          stripe_subscription_id: stripeSubId,
+          stripe_customer_id: customerId,
+          tier: plan,
+          status: 'active',
+          trial_ends_at: null,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'business_id' })
     } else if (userId) {
-      // Fallback: update by customer ID if business_id not in metadata
-      const customerId = session.customer as string;
       if (customerId) {
         await supabaseAdmin
           .from('businesses')
-          .update({ plan, stripe_subscription_id: session.subscription as string })
+          .update({ plan, stripe_subscription_id: stripeSubId })
           .eq('stripe_customer_id', customerId)
           .eq('user_id', userId);
       }
@@ -67,10 +86,18 @@ export async function POST(req: Request) {
 
   if (event.type === 'customer.subscription.updated') {
     const sub = event.data.object as Stripe.Subscription;
+    const plan = (sub.metadata?.plan as string) || 'starter';
     await supabaseAdmin
       .from('businesses')
-      .update({ plan: sub.metadata?.plan || 'starter' })
+      .update({ plan })
       .eq('stripe_subscription_id', sub.id);
+
+    await syncSubscription(sub.id, sub.status, {
+      tier: plan,
+      current_period_start: new Date(sub.current_period_start * 1000).toISOString(),
+      current_period_end: new Date(sub.current_period_end * 1000).toISOString(),
+      cancel_at_period_end: sub.cancel_at_period_end,
+    })
   }
 
   if (event.type === 'customer.subscription.deleted') {
@@ -79,6 +106,29 @@ export async function POST(req: Request) {
       .from('businesses')
       .update({ plan: 'starter', stripe_subscription_id: null })
       .eq('stripe_subscription_id', sub.id);
+
+    await syncSubscription(sub.id, 'canceled', {
+      cancelled_at: new Date().toISOString(),
+    })
+  }
+
+  if (event.type === 'invoice.payment_failed') {
+    const invoice = event.data.object as Stripe.Invoice;
+    const stripeSubId = typeof invoice.subscription === 'string' ? invoice.subscription : null
+    if (stripeSubId) {
+      await syncSubscription(stripeSubId, 'past_due')
+      logger.warn('stripe invoice payment failed — subscription set past_due', {
+        route: 'stripe/webhook', subscriptionId: stripeSubId,
+      })
+    }
+  }
+
+  if (event.type === 'invoice.payment_succeeded') {
+    const invoice = event.data.object as Stripe.Invoice;
+    const stripeSubId = typeof invoice.subscription === 'string' ? invoice.subscription : null
+    if (stripeSubId) {
+      await syncSubscription(stripeSubId, 'active')
+    }
   }
 
   // Mark event as processed after all handlers complete
