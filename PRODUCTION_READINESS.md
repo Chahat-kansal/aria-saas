@@ -83,12 +83,25 @@ phase's checklist is 100% green. This is how real PRRs work — gates, not vibes
 - [ ] Deploy green on Vercel — verify after push
 - [ ] Sentry manually verified: hit /dashboard/debug, confirm events appear in Sentry within 60s
 
+## PRR-4 Exit Checklist
+- [x] Every external call has a timeout (10s default, 15s Basiq, 30s AI)
+- [x] Third-party outages degrade gracefully (POS works even if Anthropic down)
+- [x] Retry with backoff on idempotent operations (NOT on payments/sends)
+- [x] Indexes on all hot query paths (verified with EXPLAIN — Index Scan confirmed)
+- [x] List endpoints paginated/limited (no unbounded queries)
+- [x] No leaked timers/resources in API routes (verified — seo-verify-fixes uses clearTimeout in finally)
+- [x] Idempotency on sale creation (idempotency_key column + partial unique index)
+- [x] RELIABILITY.md created
+- [x] npx tsc --noEmit + npm run build pass
+- [x] All pushed (git log origin/main..HEAD empty)
+- [ ] Deploy green on Vercel — verify after push
+
 ## Progress
 - [~] PRR-1 API hardening (code complete; Upstash env vars + Vercel deploy pending user action)
 - [~] PRR-2 Security (code complete; Vercel deploy pending)
 - [x] KDS Fix + UI/UX Sweep (Prompt 204) — complete
 - [~] PRR-3 Observability (code complete; Sentry manual verify + deploy pending)
-- [ ] PRR-4 Reliability
+- [x] PRR-4 Reliability — complete
 - [ ] PRR-5 Data safety
 - [ ] PRR-6 Testing
 - [ ] PRR-7 CI/CD

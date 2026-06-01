@@ -31,7 +31,21 @@ async function _POST(req: Request) {
     split_cash, split_card, outlet_id, served_by, pos_user_id,
     session_id: bodySessionId, age_verified,
     table_id, order_type, applied_discounts,
+    idempotency_key,
   } = body;
+
+  // Idempotency: if client supplies a key and we've already processed it, return the existing sale
+  if (idempotency_key && typeof idempotency_key === 'string') {
+    const { data: existing } = await supabase.from('pos_sales')
+      .select('*')
+      .eq('business_id', business.id)
+      .eq('idempotency_key', idempotency_key)
+      .maybeSingle()
+    if (existing) {
+      logger.info('pos/sale idempotent replay', { route: 'pos/sale', businessId: business.id, saleId: existing.id, idempotency_key })
+      return NextResponse.json({ sale: existing })
+    }
+  }
 
   setSentryContext({ businessId: business.id, userId: user.id, operation: 'sale_complete', route: 'pos/sale' })
   logger.info('pos/sale start', { route: 'pos/sale', userId: user.id, businessId: business.id })
@@ -172,6 +186,7 @@ async function _POST(req: Request) {
       served_by: served_by ?? null,
       age_verified: age_verified ?? false,
       status: 'completed',
+      idempotency_key: (idempotency_key && typeof idempotency_key === 'string') ? idempotency_key : null,
     })
     .select()
     .single();
