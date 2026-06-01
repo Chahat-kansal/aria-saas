@@ -33,36 +33,47 @@ async function _GET(req: Request) {
   }
 
   const userId = biz.basiq_user_id as string;
-  const accounts = await listAccounts(userId);
+
   let accountsSynced = 0, txnsSynced = 0;
+  try {
+    const accounts = await listAccounts(userId);
 
-  // Map basiq_account_id → our internal id
-  const idMap: Record<string, string> = {};
-  for (const a of accounts) {
-    const { data: row } = await supabaseAdmin.from('bank_accounts').upsert({
-      business_id, basiq_account_id: a.id, account_name: a.name,
-      account_type: a.class?.type ?? null, institution_name: a.institution,
-      balance: Number(a.balance ?? 0), available_balance: Number(a.availableFunds ?? 0),
-      currency: a.currency ?? 'AUD', last_synced_at: new Date().toISOString(), is_active: true,
-    }, { onConflict: 'basiq_account_id' }).select('id, basiq_account_id').single();
-    if (row?.id) idMap[a.id] = row.id as string;
-    accountsSynced++;
-  }
+    // Map basiq_account_id → our internal id
+    const idMap: Record<string, string> = {};
+    for (const a of accounts) {
+      const { data: row } = await supabaseAdmin.from('bank_accounts').upsert({
+        business_id, basiq_account_id: a.id, account_name: a.name,
+        account_type: a.class?.type ?? null, institution_name: a.institution,
+        balance: Number(a.balance ?? 0), available_balance: Number(a.availableFunds ?? 0),
+        currency: a.currency ?? 'AUD', last_synced_at: new Date().toISOString(), is_active: true,
+      }, { onConflict: 'basiq_account_id' }).select('id, basiq_account_id').single();
+      if (row?.id) idMap[a.id] = row.id as string;
+      accountsSynced++;
+    }
 
-  const txns = await listTransactions(userId, 90);
-  for (const t of txns) {
-    const internal = idMap[t.account];
-    try {
-      await supabaseAdmin.from('bank_transactions').upsert({
-        business_id, account_id: internal ?? null,
-        basiq_transaction_id: t.id,
-        description: t.description, amount: Number(t.amount ?? 0),
-        balance: Number(t.balance ?? 0),
-        transaction_date: t.postDate ?? t.transactionDate ?? null,
-        category: t.subClass?.title ?? t.class ?? null,
-      }, { onConflict: 'basiq_transaction_id' });
-      txnsSynced++;
-    } catch { /* dedup conflict — skip */ }
+    const txns = await listTransactions(userId, 90);
+    for (const t of txns) {
+      const internal = idMap[t.account];
+      try {
+        await supabaseAdmin.from('bank_transactions').upsert({
+          business_id, account_id: internal ?? null,
+          basiq_transaction_id: t.id,
+          description: t.description, amount: Number(t.amount ?? 0),
+          balance: Number(t.balance ?? 0),
+          transaction_date: t.postDate ?? t.transactionDate ?? null,
+          category: t.subClass?.title ?? t.class ?? null,
+        }, { onConflict: 'basiq_transaction_id' });
+        txnsSynced++;
+      } catch { /* dedup conflict — skip */ }
+    }
+  } catch (syncErr) {
+    console.error('[basiq/sync] Basiq API unreachable — serving cached data:', syncErr);
+    return NextResponse.json({
+      ok: true,
+      cached: true,
+      degraded: true,
+      message: "Couldn't refresh from Basiq — showing last synced data",
+    });
   }
 
   return NextResponse.json({ ok: true, accounts: accountsSynced, transactions: txnsSynced });

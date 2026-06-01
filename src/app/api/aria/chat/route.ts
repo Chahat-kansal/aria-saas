@@ -35,7 +35,15 @@ async function _POST(req: Request) {
     });
   } catch (error) {
     console.error('[aria/chat] failed', error);
-    return new Response(JSON.stringify({ error: 'Aria could not answer from business data right now.' }), { status: 500 });
+    const isProviderDown = error instanceof Error && (
+      error.name === 'AbortError' ||
+      /timeout|ECONNREFUSED|ETIMEDOUT|ENETUNREACH/i.test(error.message)
+    )
+    return new Response(JSON.stringify({
+      error: isProviderDown
+        ? 'Aria is temporarily unavailable, try again shortly'
+        : 'Aria could not answer from business data right now.',
+    }), { status: isProviderDown ? 503 : 500 })
   }
 }
 
