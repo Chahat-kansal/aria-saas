@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { AriaIntelligencePanel } from '@/components/dashboard/AriaIntelligencePanel';
 import DeliveryAlertWidget from '@/components/dashboard/DeliveryAlertWidget';
+import DeliveryAlertWidget from '@/components/dashboard/DeliveryAlertWidget';
 import { useBusinessContext } from '@/components/providers/BusinessProvider';
 
 interface ForecastItem {
@@ -220,6 +221,17 @@ export default function ReorderPage() {
                   {h.name} · {h.date.slice(5)} · {h.days_away}d away
                 </div>
               ))}
+            </div>
+          )}
+
+          {/* Aria Reorder Suggestions from reorder agent */}
+          {business?.id && (
+            <div className="mb-5">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs font-semibold text-[rgba(255,255,255,0.5)] uppercase tracking-wider">Aria suggestions</p>
+                <span className="text-[10px] text-[rgba(255,255,255,0.25)]">From last forecast run</span>
+              </div>
+              <DeliveryAlertWidget businessId={business.id} />
             </div>
           )}
 
