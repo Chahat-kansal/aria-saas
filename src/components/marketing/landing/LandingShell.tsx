@@ -100,7 +100,7 @@ export default function LandingShell() {
 
   return (
     <div className="landing-v3">
-      <StickyOverlay counterNum={counterNum} hasScrolled={hasScrolled} />
+      <StickyOverlay hasScrolled={hasScrolled} />
       <ProgressBar ref={progressRef} />
 
       <div className="viewport">

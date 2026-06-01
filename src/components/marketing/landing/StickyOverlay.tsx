@@ -1,16 +1,11 @@
 'use client'
 import Link from 'next/link'
-import { SCENES } from './scene-data'
 
 interface Props {
-  counterNum: string
   hasScrolled: boolean
 }
 
-// Self-maintaining denominator: hero (01) + every registered scene.
-const TOTAL = String(SCENES.length + 1).padStart(2, '0')
-
-export default function StickyOverlay({ counterNum, hasScrolled }: Props) {
+export default function StickyOverlay({ hasScrolled }: Props) {
   return (
     <>
       <header className="overlay-top">
@@ -21,27 +16,20 @@ export default function StickyOverlay({ counterNum, hasScrolled }: Props) {
         >
           Aria
         </button>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <Link href="/login" className="overlay-login">Log in</Link>
-          <div className="scene-counter">
-            <span className="num">{counterNum}</span>
-            <span style={{ opacity: 0.4 }}>/</span>
-            <span className="num" style={{ color: 'var(--text-tertiary)' }}>{TOTAL}</span>
-          </div>
-        </div>
+        <Link href="/login" className="overlay-login">Log in</Link>
       </header>
 
       <aside className="overlay-bottom">
         <Link
           href="/login"
-          className={`cta-pill login-pill ${hasScrolled ? 'visible' : ''}`}
+          className={'cta-pill login-pill ' + (hasScrolled ? 'visible' : '')}
           style={{ background: 'transparent', border: '1px solid rgba(127,184,151,0.3)', color: 'var(--text-secondary, #9BA8A0)' }}
         >
           <span>Log in</span>
         </Link>
         <Link
           href="/signup?utm_source=landing&utm_medium=sticky_pill&utm_campaign=v3"
-          className={`cta-pill ${hasScrolled ? 'visible' : ''}`}
+          className={'cta-pill ' + (hasScrolled ? 'visible' : '')}
           onClick={() => {
             try {
               const ev = new CustomEvent('aria-landing-cta', { detail: { source: 'sticky_pill' } })
