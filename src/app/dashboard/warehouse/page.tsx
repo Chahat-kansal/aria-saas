@@ -2,6 +2,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useBusinessContext } from '@/components/providers/BusinessProvider'
 import Link from 'next/link'
+import dynamic from 'next/dynamic'
+const DeliveryAlertWidget = dynamic(() => import('@/components/warehouse/DeliveryAlertWidget'), { ssr: false })
 
 const C = {
   bg: 'var(--bg-base)', card: 'var(--bg-surface)', text: 'var(--text-primary)',
@@ -143,6 +145,9 @@ export default function WarehousePage() {
         </div>
         <Link href="/dashboard/warehouse/stock" style={{ fontSize: 12, color: C.muted, textDecoration: 'none', padding: '7px 14px', borderRadius: 9, border: '1px solid ' + C.border }}>Stock detail →</Link>
       </div>
+
+      {/* Delivery alerts */}
+      {bid && <DeliveryAlertWidget businessId={bid} />}
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid ' + C.border, marginBottom: 24, overflowX: 'auto' }}>
