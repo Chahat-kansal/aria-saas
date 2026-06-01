@@ -131,7 +131,7 @@ Generate up to 5 hypotheses. Avoid categories with weight < 0.7 (previous sugges
 
   const result = await callAnthropic<GeneratedHypothesis[]>(
     {
-      model: 'sonnet',
+      model: 'haiku',
       systemPrompt: HYPOTHESIS_SYSTEM,
       userPrompt: prompt,
       maxTokens: 2048,

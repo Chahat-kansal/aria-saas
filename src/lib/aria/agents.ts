@@ -101,10 +101,10 @@ export async function runAgent(
   const modelByAgent: Record<AgentKey, 'haiku' | 'sonnet' | 'opus'> = {
     promo: 'sonnet', pricing: 'sonnet', inventory: 'haiku',
     compliance: 'sonnet', product_lookup: 'haiku', hardware: 'haiku',
-    ops_narrative: 'sonnet', generic: 'haiku',
+    ops_narrative: 'haiku', generic: 'haiku',
     intent_classifier: 'haiku', ask_aria: 'sonnet', ask_suggestions: 'haiku',
     ask_files: 'haiku', ask_troubleshoot: 'sonnet',
-    rostering: 'sonnet', hypothesis_engine: 'sonnet',
+    rostering: 'sonnet', hypothesis_engine: 'haiku',
     signal_engine_synth: 'haiku', memory_extractor: 'haiku',
     customer_insight: 'haiku', document_vision: 'haiku',
     marketing_ai_generate: 'sonnet', review_reputation: 'haiku',

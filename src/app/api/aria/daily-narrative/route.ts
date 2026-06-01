@@ -54,7 +54,7 @@ async function _POST(req: Request) {
 
   // Fall back to direct Anthropic call for the structured narrative
   const msg = await anthropic.messages.create({
-    model: 'claude-sonnet-4-5-20250929',
+    model: 'claude-haiku-4-5-20251001',
     max_tokens: 400,
     system: NARRATIVE_SYSTEM,
     messages: [{ role: 'user', content: `Today summary:\n${JSON.stringify(summary ?? {}, null, 2)}${agentResult?.recommendation ? `\nAria context: ${agentResult.recommendation.description}` : ''}` }],
