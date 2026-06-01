@@ -246,7 +246,7 @@ html:has(.landing-v3) { scroll-behavior: auto; }
   border: 1px solid rgba(255,255,255,0.1);
   border-bottom: none;
   z-index: 4;
-  opacity: calc(0.1 + var(--hero-progress, 0) * 0.9);
+  opacity: calc(var(--hero-progress, 0) * 1);
   transition: opacity 80ms linear;
 }
 
