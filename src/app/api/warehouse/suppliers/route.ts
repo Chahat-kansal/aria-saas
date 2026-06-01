@@ -19,33 +19,47 @@ async function _GET(req: Request) {
   if (!business_id) return NextResponse.json({ error: 'business_id required' }, { status: 400 });
   if (!await verifyBiz(supabase, user.id, business_id)) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-  // Aggregate from warehouse_supplier_performance
   const [perfRes, posSupplierRes] = await Promise.all([
     supabase.from('warehouse_supplier_performance')
       .select('*')
       .eq('business_id', business_id)
       .order('actual_delivery_date', { ascending: false }),
     supabase.from('pos_suppliers')
-      .select('id, name')
+      .select('id, name, email, phone, lead_time_days, delivery_days, order_cutoff_days, short_code, order_email, custom_columns, region, notes, is_active')
       .eq('business_id', business_id),
   ]);
 
   // Map pos_suppliers by name
-  const posSupplierMap: Record<string, string> = {};
-  for (const s of posSupplierRes.data ?? []) posSupplierMap[s.name] = s.id;
+  const posSupplierMap: Record<string, {
+    id: string; email: string | null; phone: string | null; lead_time_days: number | null;
+    delivery_days: number[] | null; order_cutoff_days: number[] | null;
+    short_code: string | null; order_email: string | null; custom_columns: unknown;
+    region: string | null; notes: string | null; is_active: boolean;
+  }> = {};
+  for (const s of posSupplierRes.data ?? []) posSupplierMap[s.name] = s;
 
   const suppMap: Record<string, {
-    id: string | null; name: string; total_orders: number; on_time: number;
+    id: string | null; name: string; email: string | null; phone: string | null;
+    lead_time_days: number | null; delivery_days: number[]; order_cutoff_days: number[];
+    short_code: string | null; order_email: string | null; custom_columns: unknown;
+    region: string | null; notes: string | null;
+    total_orders: number; on_time: number;
     total_ordered: number; total_received: number; discrepancies: number;
     lead_days: number[]; last_order: string;
   }> = {};
 
   for (const p of perfRes.data ?? []) {
     const name = p.supplier_name ?? 'Unknown';
+    const ps = posSupplierMap[name];
     if (!suppMap[name]) {
       suppMap[name] = {
-        id: posSupplierMap[name] ?? null,
-        name,
+        id: ps?.id ?? null, name,
+        email: ps?.email ?? null, phone: ps?.phone ?? null,
+        lead_time_days: ps?.lead_time_days ?? null,
+        delivery_days: ps?.delivery_days ?? [], order_cutoff_days: ps?.order_cutoff_days ?? [],
+        short_code: ps?.short_code ?? null, order_email: ps?.order_email ?? null,
+        custom_columns: ps?.custom_columns ?? [], region: ps?.region ?? null,
+        notes: ps?.notes ?? null,
         total_orders: 0, on_time: 0,
         total_ordered: 0, total_received: 0,
         discrepancies: 0, lead_days: [],
@@ -63,16 +77,27 @@ async function _GET(req: Request) {
     if (lastDate > s.last_order) s.last_order = lastDate;
   }
 
-  // Also include pos_suppliers that have no performance records yet
+  // Include pos_suppliers with no performance records yet
   for (const s of posSupplierRes.data ?? []) {
     if (!suppMap[s.name]) {
-      suppMap[s.name] = { id: s.id, name: s.name, total_orders: 0, on_time: 0, total_ordered: 0, total_received: 0, discrepancies: 0, lead_days: [], last_order: '' };
+      suppMap[s.name] = {
+        id: s.id, name: s.name,
+        email: s.email ?? null, phone: s.phone ?? null, lead_time_days: s.lead_time_days ?? null,
+        delivery_days: s.delivery_days ?? [], order_cutoff_days: s.order_cutoff_days ?? [],
+        short_code: s.short_code ?? null, order_email: s.order_email ?? null,
+        custom_columns: s.custom_columns ?? [], region: s.region ?? null, notes: s.notes ?? null,
+        total_orders: 0, on_time: 0, total_ordered: 0, total_received: 0,
+        discrepancies: 0, lead_days: [], last_order: '',
+      };
     }
   }
 
   const suppliers = Object.values(suppMap).map(s => ({
-    id: s.id,
-    name: s.name,
+    id: s.id, name: s.name,
+    email: s.email, phone: s.phone, lead_time_days: s.lead_time_days,
+    delivery_days: s.delivery_days, order_cutoff_days: s.order_cutoff_days,
+    short_code: s.short_code, order_email: s.order_email,
+    custom_columns: s.custom_columns, region: s.region, notes: s.notes,
     total_orders: s.total_orders,
     on_time_pct: s.total_orders > 0 ? Math.round((s.on_time / s.total_orders) * 100) : null,
     fill_rate_pct: s.total_ordered > 0 ? Math.round((s.total_received / s.total_ordered) * 100) : null,
@@ -94,7 +119,23 @@ async function _POST(req: Request) {
   if (!await verifyBiz(supabase, user.id, business_id)) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
   const { data, error: e } = await supabase.from('pos_suppliers')
-    .insert({ business_id, name, contact_name: body.contact_name ?? null, email: body.email ?? null, phone: body.phone ?? null, payment_terms: body.payment_terms ?? 'net30', lead_time_days: body.lead_time_days ?? null, minimum_order_cents: body.minimum_order_cents ?? null, is_active: true })
+    .insert({
+      business_id, name,
+      contact_name: body.contact_name ?? null,
+      email: body.email ?? null,
+      phone: body.phone ?? null,
+      payment_terms: body.payment_terms ?? 'net30',
+      lead_time_days: body.lead_time_days ?? null,
+      minimum_order_cents: body.minimum_order_cents ?? null,
+      delivery_days: body.delivery_days ?? [],
+      order_cutoff_days: body.order_cutoff_days ?? [],
+      short_code: body.short_code ?? null,
+      order_email: body.order_email ?? null,
+      custom_columns: body.custom_columns ?? [],
+      region: body.region ?? null,
+      notes: body.notes ?? null,
+      is_active: true,
+    })
     .select()
     .single();
 
