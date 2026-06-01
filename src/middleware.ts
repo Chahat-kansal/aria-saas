@@ -107,6 +107,43 @@ export async function middleware(request: NextRequest) {
       loginUrl.searchParams.set('redirectTo', pathname)
       return applySecurityHeaders(NextResponse.redirect(loginUrl))
     }
+
+    // ── TRIAL GATE — dashboard only, skip billing/settings pages ────────────
+    const TRIAL_GATE_EXCEPTIONS = ['/dashboard/billing', '/dashboard/settings']
+    const isDashboard = pathname.startsWith('/dashboard')
+    const isException = TRIAL_GATE_EXCEPTIONS.some(p => pathname.startsWith(p))
+
+    if (isDashboard && !isException) {
+      const supabase = makeSupabase()
+      const { data: biz } = await supabase
+        .from('businesses')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('is_active', true)
+        .limit(1)
+        .maybeSingle()
+
+      if (biz?.id) {
+        const { data: sub } = await supabase
+          .from('business_subscriptions')
+          .select('status, trial_ends_at')
+          .eq('business_id', biz.id)
+          .maybeSingle()
+
+        const trialExpired = sub?.status === 'trialing' &&
+          sub.trial_ends_at &&
+          new Date(sub.trial_ends_at) < new Date()
+
+        const noActiveSub = !sub || (sub.status !== 'active' && sub.status !== 'trialing')
+
+        if (trialExpired || noActiveSub) {
+          return applySecurityHeaders(
+            NextResponse.redirect(new URL('/billing?reason=trial_expired', request.url))
+          )
+        }
+      }
+    }
+
     return applySecurityHeaders(response)
   }
 
