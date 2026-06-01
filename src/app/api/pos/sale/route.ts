@@ -4,7 +4,7 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { computeSaleTax, type TaxableLine } from '@/lib/pos/tax-engine';
-import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { withErrorCapture, setSentryContext } from '@/lib/api/with-error-capture'
 import { logger } from '@/lib/observability/logger'
 
 async function _POST(req: Request) {
@@ -33,6 +33,7 @@ async function _POST(req: Request) {
     table_id, order_type, applied_discounts,
   } = body;
 
+  setSentryContext({ businessId: business.id, userId: user.id, operation: 'sale_complete', route: 'pos/sale' })
   logger.info('pos/sale start', { route: 'pos/sale', userId: user.id, businessId: business.id })
 
   if (!items?.length) return NextResponse.json({ error: 'No items' }, { status: 400 });

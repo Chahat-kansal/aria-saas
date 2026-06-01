@@ -5,7 +5,7 @@ export const maxDuration = 60;
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { withErrorCapture } from '@/lib/api/with-error-capture';
+import { withErrorCapture, setSentryContext } from '@/lib/api/with-error-capture';
 import { listAccounts, listTransactions, isConfigured } from '@/lib/integrations/basiq';
 
 async function _GET(req: Request) {
@@ -21,6 +21,7 @@ async function _GET(req: Request) {
   const { data: biz } = await supabase.from('businesses')
     .select('id, basiq_user_id').eq('id', business_id).eq('user_id', user.id).maybeSingle();
   if (!biz?.basiq_user_id) return NextResponse.json({ error: 'No Basiq user — connect bank first' }, { status: 400 });
+  setSentryContext({ businessId: business_id, userId: user.id, operation: 'basiq_sync', route: 'integrations/basiq/sync' });
 
   // Rate limit: max one sync every 4 hours
   const { data: recent } = await supabaseAdmin.from('bank_accounts')

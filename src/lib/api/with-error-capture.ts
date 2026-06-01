@@ -4,6 +4,14 @@ import { logger } from '@/lib/observability/logger'
 
 type RouteHandler = (req: any, context?: any) => Promise<Response> | Response
 
+/** Call inside a route handler to attach businessId + operation to the active Sentry scope. */
+export function setSentryContext(opts: { businessId?: string; userId?: string; operation?: string; route?: string }) {
+  if (opts.businessId) Sentry.setTag('business_id', opts.businessId)
+  if (opts.userId)     Sentry.setTag('user_id', opts.userId)
+  if (opts.operation)  Sentry.setTag('operation', opts.operation)
+  if (opts.route)      Sentry.setTag('route', opts.route)
+}
+
 export function withErrorCapture(
   routeName: string,
   handler: RouteHandler

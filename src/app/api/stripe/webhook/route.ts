@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { supabaseAdmin } from '@/lib/supabase';
 import { logger } from '@/lib/observability/logger';
+import { setSentryContext } from '@/lib/api/with-error-capture';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2024-06-20' });
 
@@ -31,6 +32,7 @@ export async function POST(req: Request) {
     .from('stripe_events')
     .upsert({ id: event.id, type: event.type, processed: false, created_at: new Date().toISOString() }, { onConflict: 'id' });
 
+  setSentryContext({ operation: event.type, route: 'stripe/webhook' })
   logger.info('stripe webhook received', { route: 'stripe/webhook', eventType: event.type, eventId: event.id })
 
   if (event.type === 'checkout.session.completed') {

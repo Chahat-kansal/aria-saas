@@ -52,6 +52,8 @@ export function withCronRetry(
 ) {
   return async (req: Request): Promise<Response> => {
     const start = Date.now()
+    Sentry.setTag('cron', cronName)
+    Sentry.setTag('route', 'cron/' + cronName)
     logger.info('cron start', { route: 'cron/' + cronName })
 
     try {
