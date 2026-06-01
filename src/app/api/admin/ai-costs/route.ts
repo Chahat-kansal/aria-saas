@@ -41,7 +41,7 @@ async function _GET(req: Request) {
     db.from('aria_monthly_spend').select('total_cents').eq('year_month', lastYm),
     db.from('businesses').select('id, name'),
     db.from('business_subscriptions').select('business_id, tier, sonnet_monthly_budget_cents').eq('status', 'active'),
-    db.from('aria_ai_calls').select('business_id, agent_key, model_id, cost_usd_cents, created_at').gte('created_at', thirtyDaysAgo.toISOString()).gt('cost_usd_cents', 0),
+    db.from('aria_ai_calls').select('business_id, agent_key, model_id, cost_usd_cents, created_at').gte('created_at', thirtyDaysAgo.toISOString()).gt('cost_usd_cents', 0).limit(10000),
   ])
 
   const nameOf = new Map((businesses ?? []).map(b => [b.id as string, b.name as string]))

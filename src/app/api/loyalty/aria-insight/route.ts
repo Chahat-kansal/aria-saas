@@ -26,7 +26,7 @@ async function _POST(req: Request) {
     supabaseAdmin.from('pos_customers').select('id', { count: 'exact', head: true }).eq('business_id', business_id).gt('points_balance', 0),
     supabaseAdmin.from('pos_loyalty_transactions').select('customer_id').eq('business_id', business_id).eq('type', 'earn').gte('created_at', d30),
     supabaseAdmin.from('pos_loyalty_config').select('*').eq('business_id', business_id).maybeSingle(),
-    supabaseAdmin.from('pos_loyalty_transactions').select('type, reward_redeemed').eq('business_id', business_id),
+    supabaseAdmin.from('pos_loyalty_transactions').select('type, reward_redeemed').eq('business_id', business_id).limit(5000),
     supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', business_id).not('customer_id', 'is', null).neq('status', 'voided').gte('created_at', d30),
     supabaseAdmin.from('pos_sales').select('total_amount').eq('business_id', business_id).is('customer_id', null).neq('status', 'voided').gte('created_at', d30),
   ])
@@ -34,7 +34,7 @@ async function _POST(req: Request) {
   const enrolled = enrolledRes.count ?? 0
   const activePct = enrolled > 0 ? Math.round(((new Set((activeRes.data ?? []).map((t: { customer_id: string }) => t.customer_id))).size / enrolled) * 100) : 0
 
-  const allCusts = (await supabaseAdmin.from('pos_customers').select('points_balance, loyalty_points').eq('business_id', business_id)).data ?? []
+  const allCusts = (await supabaseAdmin.from('pos_customers').select('points_balance, loyalty_points').eq('business_id', business_id).limit(10000)).data ?? []
   const totalPoints = allCusts.reduce((s, c) => s + Number(c.points_balance ?? c.loyalty_points ?? 0), 0)
   const liability = ((totalPoints * Number(configRes.data?.point_value_cents ?? 1)) / 100).toFixed(2)
 

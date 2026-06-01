@@ -32,7 +32,7 @@ async function _GET() {
     ] = await Promise.all([
       db.from('pos_sales').select('*', { count: 'exact', head: true }).eq('business_id', biz.id),
       db.from('pos_products').select('*', { count: 'exact', head: true }).eq('business_id', biz.id),
-      db.from('pos_sales').select('total_amount').eq('business_id', biz.id),
+      db.from('pos_sales').select('total_amount').eq('business_id', biz.id).limit(10000),
       db.from('pos_sales').select('created_at').eq('business_id', biz.id).order('created_at', { ascending: false }).limit(1),
     ]);
     const totalRevenue = (revenueRows || []).reduce((s, r) => s + ((r.total_amount as number) || 0), 0);
