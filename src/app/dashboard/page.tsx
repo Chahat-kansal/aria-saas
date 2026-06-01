@@ -36,6 +36,18 @@ export default async function DashboardPage() {
 
   if (!business) redirect('/onboarding/industry');
 
+  // Incomplete-onboarding gate — only for new users (< 3 days), don't annoy established ones
+  const userCreatedAt = user!.created_at ? new Date(user!.created_at) : null
+  const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000)
+  const isNewUser = userCreatedAt ? userCreatedAt > threeDaysAgo : false
+
+  if (isNewUser) {
+    const required = [business.name, business.industry, business.abn ?? business.phone]
+    if (required.some((f: unknown) => !f)) {
+      redirect('/onboarding?step=business-details&from=dashboard')
+    }
+  }
+
   const industry = business.industry ?? 'professional';
 
   if (industry === 'visa') return <VisaDashboard business={business} />;
