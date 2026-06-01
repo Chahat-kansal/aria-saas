@@ -1,15 +1,6 @@
 'use client'
 import { forwardRef } from 'react'
 
-const TILES = [
-  { color: '#B8854A', name: 'Carlton Dry', price: '$58.99' },
-  { color: '#94795E', name: 'Wild Turkey', price: '$72.00' },
-  { color: '#9C9560', name: 'Wakefield SB', price: '$17.49' },
-  { color: '#7B4754', name: 'Penfolds 389', price: '$89.00' },
-  { color: '#6B4423', name: 'Coopers Pale', price: '$22.50' },
-  { color: '#B8854A', name: 'VB 6-pack', price: '$24.99' },
-]
-
 const HeroAct = forwardRef<HTMLDivElement>((_, ref) => (
   <div className="hero-act" ref={ref}>
     <div className="hero-aurora" />
@@ -27,39 +18,39 @@ const HeroAct = forwardRef<HTMLDivElement>((_, ref) => (
       <p className="hero-subhead">Daily briefings, customer win-back, reviews, profit-leak analysis, compliance, competitor tracking, marketing, bookings — and point-of-sale among them.</p>
     </div>
 
-    <div className="hero-ipad-stage">
-      <div className="hero-ipad">
-        <div className="hero-ipad-frame">
-          <div className="hero-ipad-content">
-            <div className="hero-ipad-topbar">
-              <span className="hero-live-dot" />
-              <span style={{ color: 'var(--text-secondary)' }}>Bentleigh Cellars · Reg 1</span>
-              <span style={{ marginLeft: 'auto' }}>$2,847.20 today</span>
-            </div>
-            <div className="hero-ipad-sidebar">
-              <div className="hero-sidebar-icon active">A</div>
-              <div className="hero-sidebar-icon">▦</div>
-              <div className="hero-sidebar-icon">◯</div>
-              <div className="hero-sidebar-icon">⊞</div>
-            </div>
-            <div className="hero-ipad-grid">
-              {TILES.map((t, i) => (
-                <div key={i} className="hero-product-tile">
-                  <div className="swatch" style={{ background: t.color }} />
-                  <div className="name">{t.name}</div>
-                  <div className="price">{t.price}</div>
-                </div>
-              ))}
-            </div>
-            <div className="hero-ipad-cart">
-              <div className="hero-cart-header">Cart · 3 items</div>
-              <div className="hero-cart-line"><span>Carlton Dry × 2</span><span>$117.98</span></div>
-              <div className="hero-cart-line"><span>Wakefield SB</span><span>$17.49</span></div>
-              <div className="hero-cart-line"><span>Coopers Pale</span><span>$22.50</span></div>
-              <div style={{ marginTop: 'auto' }}>
-                <div style={{ fontSize: 10, color: 'var(--text-tertiary)', textAlign: 'right' }}>Trade −10%</div>
-                <div className="hero-cart-total">$142.17</div>
-                <div className="hero-charge-btn">Charge</div>
+    <div className="hero-dashboard-stage">
+      <div className="hero-dashboard">
+        <div className="hero-dash-sidebar">
+          <div className="hero-dash-logo">Aria</div>
+          {['Morning Briefing', 'Ask Aria', 'Customers', 'Point of Sale', 'Marketing', 'Compliance', 'Bookings'].map((item, i) => (
+            <div key={item} className={'hero-dash-nav' + (i === 0 ? ' active' : '')}>{item}</div>
+          ))}
+        </div>
+        <div className="hero-dash-main">
+          <div className="hero-dash-topbar">
+            <span className="hero-dash-greeting">Good morning, Chahat</span>
+            <span className="hero-dash-date">Monday, 2 June · 8:04 AM</span>
+          </div>
+          <div className="hero-dash-kpis">
+            {[
+              { label: 'Revenue today', val: '$2,847', delta: '↑ 18% vs last Mon' },
+              { label: 'At-risk customers', val: '3', delta: 'Win-backs drafted' },
+              { label: 'Compliance alerts', val: '1', delta: 'BAS due in 14 days' },
+            ].map(k => (
+              <div key={k.label} className="hero-kpi-card">
+                <div className="hero-kpi-label">{k.label}</div>
+                <div className="hero-kpi-val">{k.val}</div>
+                <div className="hero-kpi-delta">{k.delta}</div>
+              </div>
+            ))}
+          </div>
+          <div className="hero-aria-briefing">
+            <div className="hero-aria-av">A</div>
+            <div>
+              <div className="hero-aria-name">Aria says</div>
+              <div className="hero-aria-text">
+                Your Tuesday revenue is running 18% above last week. Acai Bowl is your top product.
+                3 customers have not returned in 60+ days — win-back messages ready for approval.
               </div>
             </div>
           </div>
