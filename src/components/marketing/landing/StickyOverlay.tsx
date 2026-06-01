@@ -16,7 +16,6 @@ export default function StickyOverlay({ hasScrolled }: Props) {
         >
           Aria
         </button>
-        <Link href="/login" className="overlay-login">Log in</Link>
       </header>
 
       <aside className="overlay-bottom">
