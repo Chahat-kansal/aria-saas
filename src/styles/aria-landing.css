@@ -516,15 +516,19 @@ html:has(.landing-v3) { scroll-behavior: auto; }
   width: 100%;
   height: 100%;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
-  padding: 80px 32px;
+  padding: 0 32px;
   opacity: 0;
   visibility: hidden;
   transition: opacity 700ms cubic-bezier(0.4, 0, 0.2, 1), visibility 0ms linear 700ms;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
   z-index: 2;
 }
+.landing-v3 .scene::-webkit-scrollbar { display: none; }
 .landing-v3 .scene.active {
   opacity: 1;
   visibility: visible;
@@ -533,13 +537,19 @@ html:has(.landing-v3) { scroll-behavior: auto; }
 }
 .landing-v3 .scene-inner {
   width: 100%;
-  max-width: 1200px;
+  max-width: 960px;
   position: relative;
   z-index: 3;
   transform: translateY(40px);
   opacity: 0;
   transition: transform 900ms cubic-bezier(0.16, 1, 0.3, 1) 150ms,
               opacity 900ms cubic-bezier(0.16, 1, 0.3, 1) 150ms;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 60px 0 60px;
+  min-height: 100vh;
+  justify-content: center;
 }
 .landing-v3 .scene.active .scene-inner { transform: translateY(0); opacity: 1; }
 .landing-v3 .scene::before {
@@ -677,7 +687,7 @@ html:has(.landing-v3) { scroll-behavior: auto; }
 
 /*  SHARED SCENE CONTENT  */
 .landing-v3 .scene-label { font-family: var(--font-mono); font-size: 13px; color: var(--sage); letter-spacing: 0.18em; text-transform: uppercase; margin-bottom: 20px; }
-.landing-v3 .scene h2 { font-family: var(--font-display); font-weight: 400; font-size: clamp(40px, 6vw, 72px); line-height: 1.04; letter-spacing: -0.025em; margin-bottom: 24px; }
+.landing-v3 .scene h2 { font-family: var(--font-display); font-weight: 500; font-size: clamp(28px, 4vw, 52px); line-height: 1.06; letter-spacing: -0.022em; margin-bottom: 28px; text-align: center; }
 .landing-v3 .scene h2 em { font-style: italic; background: linear-gradient(135deg, var(--sage-light), var(--sage)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
 .landing-v3 .body-copy { font-family: var(--font-body); font-size: 17px; font-weight: 300; line-height: 1.6; color: var(--text-secondary); max-width: 540px; }
 
