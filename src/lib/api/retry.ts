@@ -1,4 +1,5 @@
 import * as Sentry from '@sentry/nextjs'
+import { logger } from '@/lib/observability/logger'
 
 interface RetryOptions {
   attempts?: number      // max attempts (default: 3)
@@ -51,7 +52,7 @@ export function withCronRetry(
 ) {
   return async (req: Request): Promise<Response> => {
     const start = Date.now()
-    console.log(`[cron:${cronName}] Starting`)
+    logger.info('cron start', { route: 'cron/' + cronName })
 
     try {
       const result = await withRetry(() => handler(req), {
@@ -66,12 +67,12 @@ export function withCronRetry(
       })
 
       const duration = Date.now() - start
-      console.log(`[cron:${cronName}] Completed in ${duration}ms`)
+      logger.info('cron complete', { route: 'cron/' + cronName, ms: duration })
       return result
     } catch (err: unknown) {
       const duration = Date.now() - start
       const error = err instanceof Error ? err : new Error(String(err))
-      console.error(`[cron:${cronName}] Failed after ${options.attempts ?? 3} attempts in ${duration}ms: ${error.message}`)
+      logger.error('cron failed', { route: 'cron/' + cronName, error: error.message, ms: duration })
       Sentry.captureException(error, { tags: { cron: cronName }, extra: { duration } })
       return Response.json({ error: error.message, cron: cronName }, { status: 500 })
     }

@@ -5,6 +5,7 @@ import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { computeSaleTax, type TaxableLine } from '@/lib/pos/tax-engine';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { logger } from '@/lib/observability/logger'
 
 async function _POST(req: Request) {
   const supabase = createServerSupabaseClient();
@@ -31,6 +32,8 @@ async function _POST(req: Request) {
     session_id: bodySessionId, age_verified,
     table_id, order_type, applied_discounts,
   } = body;
+
+  logger.info('pos/sale start', { route: 'pos/sale', userId: user.id, businessId: business.id })
 
   if (!items?.length) return NextResponse.json({ error: 'No items' }, { status: 400 });
 
@@ -173,6 +176,7 @@ async function _POST(req: Request) {
     .single();
 
   if (saleErr || !sale) {
+    logger.error('pos/sale failed', { route: 'pos/sale', businessId: business.id, error: saleErr?.message })
     return NextResponse.json({ error: saleErr?.message ?? 'Failed to create sale' }, { status: 500 });
   }
 
@@ -389,6 +393,7 @@ async function _POST(req: Request) {
     }
   }).catch(() => {})
 
+  logger.info('pos/sale completed', { route: 'pos/sale', businessId: business.id, saleId: sale.id, total: total_amount })
   return NextResponse.json({ sale });
 }
 

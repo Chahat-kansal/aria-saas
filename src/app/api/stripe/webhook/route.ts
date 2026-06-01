@@ -2,6 +2,7 @@ import * as Sentry from '@sentry/nextjs';
 import { NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { supabaseAdmin } from '@/lib/supabase';
+import { logger } from '@/lib/observability/logger';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2024-06-20' });
 
@@ -29,6 +30,8 @@ export async function POST(req: Request) {
   await supabaseAdmin
     .from('stripe_events')
     .upsert({ id: event.id, type: event.type, processed: false, created_at: new Date().toISOString() }, { onConflict: 'id' });
+
+  logger.info('stripe webhook received', { route: 'stripe/webhook', eventType: event.type, eventId: event.id })
 
   if (event.type === 'checkout.session.completed') {
     const session = event.data.object as Stripe.Checkout.Session;
@@ -82,7 +85,9 @@ export async function POST(req: Request) {
       .from('stripe_events')
       .update({ processed: true, processed_at: new Date().toISOString() })
       .eq('id', event.id);
+    logger.info('stripe webhook processed', { route: 'stripe/webhook', eventType: event.type, eventId: event.id })
   } catch (err) {
+    logger.error('stripe webhook mark-processed failed', { route: 'stripe/webhook', eventType: event.type, eventId: event.id, error: (err as Error).message })
     Sentry.captureException(err, { tags: { route: 'stripe/webhook' }, extra: { event_id: event.id, event_type: event.type } });
   }
 

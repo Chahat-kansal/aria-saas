@@ -5,6 +5,7 @@ export const maxDuration = 300
 import { NextResponse } from 'next/server'
 import { withCronRetry } from '@/lib/api/retry'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { logger } from '@/lib/observability/logger'
 
 const CRON_SECRET = process.env.CRON_SECRET ?? ''
 
@@ -122,13 +123,15 @@ async function _GET(req: Request) {
         } catch { /* non-fatal */ }
       }
 
+      logger.info('xero-sync business done', { route: 'cron/xero-sync', businessId: biz.id })
       processed++
     } catch (e) {
-      console.error(`[xero-sync] business ${biz.id}:`, (e as Error).message)
+      logger.error('xero-sync business failed', { route: 'cron/xero-sync', businessId: biz.id, error: (e as Error).message })
       errors++
     }
   }
 
+  logger.info('xero-sync complete', { route: 'cron/xero-sync', processed, errors })
   return NextResponse.json({ ok: true, date: dateStr, processed, errors })
 }
 

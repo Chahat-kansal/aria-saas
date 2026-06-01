@@ -1,3 +1,5 @@
+import { logger } from '@/lib/observability/logger'
+
 interface BatchRequest {
   custom_id: string
   params: {
@@ -16,13 +18,18 @@ const BATCH_HEADERS = {
 }
 
 export async function submitBatch(requests: BatchRequest[]): Promise<string> {
+  logger.info('anthropic batch submit', { count: requests.length })
   const res = await fetch('https://api.anthropic.com/v1/messages/batches', {
     method: 'POST',
     headers: BATCH_HEADERS,
     body: JSON.stringify({ requests }),
   })
   const data = await res.json() as { id?: string; error?: { message: string } }
-  if (!res.ok) throw new Error(data.error?.message ?? 'Batch submit failed')
+  if (!res.ok) {
+    logger.error('anthropic batch submit failed', { error: data.error?.message, count: requests.length })
+    throw new Error(data.error?.message ?? 'Batch submit failed')
+  }
+  logger.info('anthropic batch submitted', { batchId: data.id, count: requests.length })
   return data.id!
 }
 

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import * as Sentry from '@sentry/nextjs'
+import { logger } from '@/lib/observability/logger'
 
 type RouteHandler = (req: any, context?: any) => Promise<Response> | Response
 
@@ -8,12 +9,16 @@ export function withErrorCapture(
   handler: RouteHandler
 ): RouteHandler {
   return async (req, context) => {
+    const start = Date.now()
     try {
-      return await handler(req, context)
+      const result = await handler(req, context)
+      logger.info(routeName + ' ok', { route: routeName, ms: Date.now() - start })
+      return result
     } catch (err: any) {
       if (err instanceof Response) return err
 
       const requestId = req.headers.get('x-vercel-id') ?? undefined
+      logger.error(routeName + ' error', { route: routeName, error: err?.message, ms: Date.now() - start })
       Sentry.captureException(err, {
         tags: { route: routeName, method: req.method },
         extra: { url: req.url, requestId },
