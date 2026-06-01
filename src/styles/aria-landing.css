@@ -676,10 +676,10 @@ html:has(.landing-v3) { scroll-behavior: auto; }
 }
 
 /*  SHARED SCENE CONTENT  */
-.landing-v3 .scene-label { font-family: var(--font-display); font-style: italic; font-size: 13px; color: var(--sage); letter-spacing: 0.18em; text-transform: uppercase; margin-bottom: 20px; }
+.landing-v3 .scene-label { font-family: var(--font-mono); font-size: 13px; color: var(--sage); letter-spacing: 0.18em; text-transform: uppercase; margin-bottom: 20px; }
 .landing-v3 .scene h2 { font-family: var(--font-display); font-weight: 400; font-size: clamp(40px, 6vw, 72px); line-height: 1.04; letter-spacing: -0.025em; margin-bottom: 24px; }
 .landing-v3 .scene h2 em { font-style: italic; background: linear-gradient(135deg, var(--sage-light), var(--sage)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
-.landing-v3 .body-copy { font-size: 17px; font-weight: 300; line-height: 1.6; color: var(--text-secondary); max-width: 540px; }
+.landing-v3 .body-copy { font-family: var(--font-body); font-size: 17px; font-weight: 300; line-height: 1.6; color: var(--text-secondary); max-width: 540px; }
 
 /*  Scene 02: Problem  */
 .landing-v3 .scene-problem { background: var(--bg-deeper); }
