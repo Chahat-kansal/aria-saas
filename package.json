@@ -27,6 +27,7 @@
     "@react-email/render": "^2.0.8",
     "@react-three/drei": "^9.122.0",
     "@react-three/fiber": "^8.17.10",
+    "@remotion/player": "^4.0.470",
     "@sentry/nextjs": "^10.52.0",
     "@sparticuz/chromium": "^149.0.0",
     "@stripe/react-stripe-js": "^6.3.0",
@@ -68,6 +69,7 @@
     "react-zxing": "^2.1.0",
     "recharts": "^3.8.1",
     "remark-gfm": "^4.0.0",
+    "remotion": "^4.0.470",
     "resend": "^6.12.3",
     "stripe": "^16.2.0",
     "tailwind-merge": "^2.5.2",
@@ -99,4 +101,3 @@
   },
   "_buildTime": 1779333939
 }
-
