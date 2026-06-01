@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import dynamic from 'next/dynamic';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { BusinessProvider } from '@/components/providers/BusinessProvider';
 import { DashboardShell } from '@/components/dashboard/DashboardShell';
@@ -6,6 +7,8 @@ import { DailyBriefingModal } from '@/components/dashboard/DailyBriefingModal';
 import AriaBrainPanel from '@/components/aria/AriaBrainPanel';
 import AnnouncementBanner from '@/components/dashboard/AnnouncementBanner';
 import ApiErrorToaster from '@/components/dashboard/ApiErrorToaster';
+
+const WarmupPinger = dynamic(() => import('@/components/dashboard/WarmupPinger'), { ssr: false })
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const supabase = createServerSupabaseClient();
@@ -47,6 +50,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
       <DailyBriefingModal />
       <AriaBrainPanel />
       <ApiErrorToaster />
+      <WarmupPinger />
     </BusinessProvider>
   );
 }
