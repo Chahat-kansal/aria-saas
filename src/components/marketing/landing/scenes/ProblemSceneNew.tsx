@@ -1,4 +1,7 @@
+'use client'
 import { LayoutGrid, AlertTriangle, Clock } from 'lucide-react'
+import { Player } from '@remotion/player'
+import { RevenueChartComp } from '../remotion/RevenueChartComp'
 
 const CARDS = [
   { Icon: LayoutGrid, title: 'Six apps, one headache', body: 'You check 6 different apps for sales, stock, reviews, and staff.' },
@@ -20,7 +23,7 @@ export default function ProblemSceneNew() {
           <div key={title} style={{
             background: '#1A2620', border: '1px solid rgba(127,184,151,0.15)', borderRadius: 14,
             padding: '1.5rem 1.4rem', textAlign: 'left',
-            animation: `l-cardUp 700ms cubic-bezier(0.16,1,0.3,1) ${0.1 + i * 0.1}s both`,
+            animation: 'l-cardUp 700ms cubic-bezier(0.16,1,0.3,1) ' + (0.1 + i * 0.1) + 's both',
           }}>
             <div style={{ width: 42, height: 42, borderRadius: 11, background: 'rgba(127,184,151,0.12)', border: '1px solid rgba(127,184,151,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '0.9rem' }}>
               <Icon size={20} color="#7FB897" strokeWidth={1.75} />
@@ -30,6 +33,16 @@ export default function ProblemSceneNew() {
           </div>
         ))}
       </div>
+      <Player
+        component={RevenueChartComp}
+        durationInFrames={120}
+        fps={30}
+        compositionWidth={560}
+        compositionHeight={240}
+        style={{ width: '100%', maxWidth: 500, borderRadius: 16, overflow: 'hidden', border: '1px solid rgba(127,184,151,0.15)', marginInline: 'auto', marginTop: '1.5rem' }}
+        loop
+        autoPlay
+      />
     </>
   )
 }

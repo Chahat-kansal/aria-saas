@@ -1,3 +1,7 @@
+'use client'
+import { Player } from '@remotion/player'
+import { BrainOrbComp } from '../remotion/BrainOrbComp'
+
 const CAPABILITIES = [
   { label: 'Daily Briefings',       icon: '☀' },
   { label: 'Customer Win-back',     icon: '↩' },
@@ -16,16 +20,16 @@ export default function BrainScene() {
     <>
       <div className="scene-label" style={{ textAlign: 'center' }}>02 · One operating system</div>
       <h2 style={{ textAlign: 'center' }}>Ten dashboards. <em>One brain. Yours.</em></h2>
-      <div className="brain-system">
-        <div className="brain-core" />
-        <div className="orbit-ring">
-          <div className="orbit-orb">Daily</div>
-          <div className="orbit-orb">Customers</div>
-          <div className="orbit-orb">Reviews</div>
-          <div className="orbit-orb">Finance</div>
-          <div className="orbit-orb">POS</div>
-        </div>
-      </div>
+      <Player
+        component={BrainOrbComp}
+        durationInFrames={200}
+        fps={30}
+        compositionWidth={560}
+        compositionHeight={280}
+        style={{ width: '100%', maxWidth: 500, borderRadius: 16, overflow: 'hidden', border: '1px solid rgba(127,184,151,0.15)', marginInline: 'auto' }}
+        loop
+        autoPlay
+      />
       <div style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
