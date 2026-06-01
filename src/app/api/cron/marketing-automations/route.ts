@@ -5,6 +5,7 @@ export const maxDuration = 300
 import { NextResponse } from 'next/server'
 import { withCronRetry } from '@/lib/api/retry'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { trackCron } from '@/app/api/cron/_lib/track-cron'
 
 async function _GET(req: Request) {
   if (req.headers.get('authorization') !== `Bearer ${process.env.CRON_SECRET}`) {
@@ -159,4 +160,7 @@ async function _GET(req: Request) {
   }
 }
 
-export const GET = withCronRetry('marketing-automations', _GET)
+async function _GETTracked(req: Request) {
+  return trackCron('marketing-automations', async () => _GET(req))
+}
+export const GET = withCronRetry('marketing-automations', _GETTracked)

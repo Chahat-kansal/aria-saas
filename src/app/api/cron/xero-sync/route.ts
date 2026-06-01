@@ -6,6 +6,7 @@ import { NextResponse } from 'next/server'
 import { withCronRetry } from '@/lib/api/retry'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { logger } from '@/lib/observability/logger'
+import { trackCron } from '@/app/api/cron/_lib/track-cron'
 
 const CRON_SECRET = process.env.CRON_SECRET ?? ''
 
@@ -135,4 +136,7 @@ async function _GET(req: Request) {
   return NextResponse.json({ ok: true, date: dateStr, processed, errors })
 }
 
-export const GET = withCronRetry('xero-sync', _GET)
+async function _GETTracked(req: Request) {
+  return trackCron('xero-sync', async () => _GET(req))
+}
+export const GET = withCronRetry('xero-sync', _GETTracked)

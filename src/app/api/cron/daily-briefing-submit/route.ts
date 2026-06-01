@@ -7,6 +7,7 @@ import { withCronRetry } from '@/lib/api/retry'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { submitBatch } from '@/lib/aria-batch'
 import { ARIA_SYSTEM_PROMPT } from '@/lib/aria-system-prompt'
+import { trackCron } from '@/app/api/cron/_lib/track-cron'
 
 interface MarketCtx {
   overpricedCount: number
@@ -163,4 +164,7 @@ async function _GET(req: Request) {
   }
 }
 
-export const GET = withCronRetry('daily-briefing-submit', _GET)
+async function _GETTracked(req: Request) {
+  return trackCron('daily-briefing-submit', async () => _GET(req))
+}
+export const GET = withCronRetry('daily-briefing-submit', _GETTracked)

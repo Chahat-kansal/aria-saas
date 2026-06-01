@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { trackCron } from '@/app/api/cron/_lib/track-cron'
 
 async function _GET(req: NextRequest) {
   // Verify cron secret
@@ -116,4 +117,7 @@ async function _GET(req: NextRequest) {
   return NextResponse.json({ processed, errors, day: currentDay, hour: currentHour })
 }
 
-export const GET = withErrorCapture('cron/run-scheduled-reorders', _GET)
+async function _GETTracked(req: NextRequest) {
+  return trackCron('run-scheduled-reorders', async () => _GET(req))
+}
+export const GET = withErrorCapture('cron/run-scheduled-reorders', _GETTracked)

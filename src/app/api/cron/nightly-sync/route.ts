@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { withRetry } from '@/lib/api/retry'
+import { trackCron } from '@/app/api/cron/_lib/track-cron'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -261,4 +262,7 @@ async function _GET(req: Request) {
   }, { attempts: 3, delayMs: 3000 })
 }
 
-export const GET = withErrorCapture('cron/nightly-sync', _GET)
+async function _GETTracked(req: Request) {
+  return trackCron('nightly-sync', async () => _GET(req))
+}
+export const GET = withErrorCapture('cron/nightly-sync', _GETTracked)
