@@ -70,11 +70,24 @@ phase's checklist is 100% green. This is how real PRRs work — gates, not vibes
 - [x] npx tsc --noEmit + npm run build pass
 - [x] All pushed (git log origin/main..HEAD empty)
 
+## PRR-3 Exit Checklist
+- [~] Sentry VERIFIED capturing both client + server errors in production — routes created; deploy + manual verify required (see /dashboard/debug + OBSERVABILITY.md)
+- [x] Structured logger (src/lib/observability/logger.ts) on all critical paths: withErrorCapture (all AI/API), withCronRetry (all 40 crons), aria-batch, pos/sale, stripe/webhook, xero-sync
+- [x] /api/health (public ping) + /api/health/deep (Supabase + Anthropic + Upstash) live
+- [x] Critical flows capture errors to Sentry with context tags: setSentryContext() in sale, stripe/webhook, basiq/sync; cron name tag in withCronRetry
+- [x] Cron jobs tracked: cron_runs table (migration 20260601000002) + trackCron() helper applied to 5 key crons
+- [x] OBSERVABILITY.md documents uptime + alert setup
+- [x] System health dashboard (/dashboard/system-health) live for owner
+- [x] npx tsc --noEmit + npm run build pass
+- [x] All pushed (git log origin/main..HEAD empty)
+- [ ] Deploy green on Vercel — verify after push
+- [ ] Sentry manually verified: hit /dashboard/debug, confirm events appear in Sentry within 60s
+
 ## Progress
 - [~] PRR-1 API hardening (code complete; Upstash env vars + Vercel deploy pending user action)
 - [~] PRR-2 Security (code complete; Vercel deploy pending)
 - [x] KDS Fix + UI/UX Sweep (Prompt 204) — complete
-- [ ] PRR-3 Observability
+- [~] PRR-3 Observability (code complete; Sentry manual verify + deploy pending)
 - [ ] PRR-4 Reliability
 - [ ] PRR-5 Data safety
 - [ ] PRR-6 Testing
