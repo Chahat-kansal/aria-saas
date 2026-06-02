@@ -21,6 +21,16 @@ const LEAK_CATEGORIES: Record<string, { label: string; icon: string; color: stri
   churn:       { label: 'Customer Churn Cost', icon: '🟣', color: '#A855F7', bg: 'rgba(168,85,247,0.08)', matches: ['churn', 'retention', 'lost_customer', 'customer', 'returning'] },
 }
 
+function getCategoryTrend(history: HistoryPoint[]): { direction: 'up'|'down'|'flat'; pct: number } | null {
+  if (history.length < 2) return null
+  const curr = history[0]?.total_leak_cents ?? 0
+  const prev = history[1]?.total_leak_cents ?? 0
+  if (prev === 0) return null
+  const pct = Math.round(((curr - prev) / prev) * 100)
+  if (Math.abs(pct) < 5) return { direction: 'flat', pct: 0 }
+  return { direction: pct > 0 ? 'up' : 'down', pct: Math.abs(pct) }
+}
+
 function getCatKey(category: string): string {
   const cat = (category ?? '').toLowerCase()
   for (const [key, cfg] of Object.entries(LEAK_CATEGORIES)) {
@@ -31,10 +41,10 @@ function getCatKey(category: string): string {
 
 function fmtAgo(iso: string): string {
   const m = Math.floor((Date.now() - new Date(iso).getTime()) / 60000)
-  if (m < 60) return `${m} minute${m !== 1 ? 's' : ''} ago`
+  if (m < 60) return m + ' minute' + (m !== 1 ? 's' : '') + ' ago'
   const h = Math.floor(m / 60)
-  if (h < 24) return `${h} hour${h !== 1 ? 's' : ''} ago`
-  return `${Math.floor(h / 24)} day${Math.floor(h / 24) !== 1 ? 's' : ''} ago`
+  if (h < 24) return h + ' hour' + (h !== 1 ? 's' : '') + ' ago'
+  return Math.floor(h / 24) + ' day' + (Math.floor(h / 24) !== 1 ? 's' : '') + ' ago'
 }
 
 export default function ProfitLeaksPage() {
@@ -46,6 +56,9 @@ export default function ProfitLeaksPage() {
   const [lastRunAt, setLastRunAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [fixingId, setFixingId] = useState<string | null>(null);
+  const [fixToast, setFixToast] = useState('');
+  const [shiftData, setShiftData] = useState<Array<{date: string; staff: string; hours: number; labour_cost: number; revenue: number; efficiency: number; status: string}>>([]);
 
   useEffect(() => {
     if (!business?.id) return;
@@ -53,14 +66,14 @@ export default function ProfitLeaksPage() {
     async function init() {
       setLoading(true);
       try {
-        const res = await fetch(`/api/aria/profit-analysis?business_id=${business!.id}`);
+        const res = await fetch('/api/aria/profit-analysis?business_id=' + business!.id);
         const d = await res.json();
         if (cancelled) return;
         setLeaks(d.leaks ?? []);
         setHistory(d.history ?? []);
         if (d.last_run_at) setLastRunAt(d.last_run_at);
         setLoading(false);
-        const stale = !d.last_run_at || Date.now() - new Date(d.last_run_at).getTime() > 24 * 3600_000;
+        const stale = !d.last_run_at || Date.now() - new Date(d.last_run_at).getTime() > 24 * 3600000;
         if (stale) {
           const pr = await fetch('/api/aria/profit-analysis', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -74,6 +87,10 @@ export default function ProfitLeaksPage() {
             setLastRunAt(new Date().toISOString());
           }
         }
+        fetch('/api/aria/staff-profitability?business_id=' + business!.id + '&days=14')
+          .then(r => r.json())
+          .then(sd => { if (sd.shifts && !cancelled) setShiftData(sd.shifts); })
+          .catch(() => null);
       } catch { /* ignore */ }
       if (!cancelled) setLoading(false);
     }
@@ -110,6 +127,51 @@ export default function ProfitLeaksPage() {
       updated[0] = { ...updated[0], fixed_count: (updated[0].fixed_count ?? 0) + 1 };
       return updated;
     });
+  }
+
+  async function handleLeakFix(leak: Leak, catKey: string) {
+    if (!business?.id) return;
+    setFixingId(leak.id);
+    try {
+      if (catKey === 'pricing_gap') {
+        const suggestedPrice = (leak as unknown as { data?: { suggested_price?: number } }).data?.suggested_price;
+        if (suggestedPrice) {
+          await fetch('/api/pos/products/' + leak.id, {
+            method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ price: suggestedPrice }),
+          }).catch(() => null);
+        } else {
+          router.push('/dashboard/products');
+          setFixingId(null);
+          return;
+        }
+      } else if (catKey === 'waste' || catKey === 'expiry') {
+        router.push('/dashboard/warehouse?tab=expiry');
+        setFixingId(null);
+        return;
+      } else if (catKey === 'labour') {
+        router.push('/dashboard/staff?tab=performance');
+        setFixingId(null);
+        return;
+      } else if (catKey === 'lost_sales') {
+        await fetch('/api/pos/purchase-orders', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ business_id: business.id, notes: 'Auto-created from profit leak: ' + leak.title }),
+        }).catch(() => null);
+      } else {
+        router.push('/dashboard/ask-aria?q=' + encodeURIComponent('Fix profit leak: ' + leak.title));
+        setFixingId(null);
+        return;
+      }
+      await markFixed(leak.id);
+      setFixToast('Fix applied!');
+      setTimeout(() => setFixToast(''), 2500);
+      fetch('/api/aria/autopilot-actions', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ business_id: business.id, action_type: 'profit_leak_fixed', payload: { category: catKey, title: leak.title } }),
+      }).catch(() => null);
+    } catch { /* ignore */ }
+    setFixingId(null);
   }
 
   const activeLeaks = leaks.filter(l => l.status !== 'fixed');
@@ -164,8 +226,8 @@ export default function ProfitLeaksPage() {
         <div style={{ background: fixedLeaks.length > 0 ? 'rgba(34,197,94,0.08)' : 'rgba(255,255,255,0.04)', border: '1px solid ' + (fixedLeaks.length > 0 ? 'rgba(34,197,94,0.2)' : 'rgba(255,255,255,0.07)'), borderRadius: 12, padding: '14px 18px', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 13, fontWeight: 700, color: fixedLeaks.length > 0 ? '#22C55E' : 'var(--text-primary)' }}>
             {fixedLeaks.length > 0
-              ? `✅ You've fixed ${fixedLeaks.length} of ${leaks.length} leaks — saving an estimated $${fixedSavings.toFixed(0)}/month`
-              : `${leaks.length} profit leak${leaks.length !== 1 ? 's' : ''} identified`}
+              ? '✅ You\'ve fixed ' + fixedLeaks.length + ' of ' + leaks.length + ' leaks — saving an estimated $' + fixedSavings.toFixed(0) + '/month'
+              : leaks.length + ' profit leak' + (leaks.length !== 1 ? 's' : '') + ' identified'}
           </span>
           <div style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--text-secondary)' }}>
             Est. monthly loss: <strong style={{ color: '#EF4444', fontSize: 16 }}>${totalLoss.toFixed(0)}</strong>
@@ -202,8 +264,8 @@ export default function ProfitLeaksPage() {
             <LineChart data={chartData} margin={{ top: 4, right: 12, bottom: 0, left: -20 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
               <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#6b7280' }} />
-              <YAxis tick={{ fontSize: 10, fill: '#6b7280' }} tickFormatter={v => `$${v}`} />
-              <Tooltip formatter={(v) => [`$${v}`, 'Monthly leaks']} contentStyle={{ background: '#1a1a2e', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, fontSize: 12 }} />
+              <YAxis tick={{ fontSize: 10, fill: '#6b7280' }} tickFormatter={v => '$' + v} />
+              <Tooltip formatter={(v) => ['$' + v, 'Monthly leaks']} contentStyle={{ background: '#1a1a2e', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, fontSize: 12 }} />
               <Line type="monotone" dataKey="leaks" stroke="#EF4444" strokeWidth={2} dot={false} />
             </LineChart>
           </ResponsiveContainer>
@@ -212,8 +274,14 @@ export default function ProfitLeaksPage() {
 
       {aiSummary && (
         <div style={{ marginBottom: 20, borderRadius: 14, padding: 18, background: 'linear-gradient(135deg,rgba(29,158,117,0.12),rgba(29,158,117,0.05))', border: '1px solid rgba(29,158,117,0.25)' }}>
-          <p style={{ fontSize: 11, fontWeight: 700, color: '#1D9E75', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 8 }}>✦ Aria's Analysis</p>
+          <p style={{ fontSize: 11, fontWeight: 700, color: '#1D9E75', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 8 }}>✦ Aria&apos;s Analysis</p>
           <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.8)', lineHeight: 1.6, margin: 0 }}>{aiSummary}</p>
+        </div>
+      )}
+
+      {trend !== null && (
+        <div style={{ marginBottom: 16, padding: '10px 16px', borderRadius: 10, background: trend > 0 ? 'rgba(34,197,94,0.06)' : trend < 0 ? 'rgba(239,68,68,0.06)' : 'rgba(255,255,255,0.04)', border: '1px solid ' + (trend > 0 ? 'rgba(34,197,94,0.15)' : trend < 0 ? 'rgba(239,68,68,0.15)' : 'rgba(255,255,255,0.07)'), fontSize: 13, color: trend > 0 ? '#22C55E' : trend < 0 ? '#ef4444' : 'rgba(255,255,255,0.6)' }}>
+          {trend > 0 ? 'Leaks are down ' + trend + '% — your fixes are working.' : trend < 0 ? 'Profit leaks grew ' + Math.abs(trend) + '% — prioritise the top categories below.' : 'Leak profile is stable this period.'}
         </div>
       )}
 
@@ -233,6 +301,14 @@ export default function ProfitLeaksPage() {
               <span style={{ fontSize: 18 }}>{cfg.icon}</span>
               <h2 style={{ fontSize: 13, fontWeight: 700, color: cfg.color, margin: 0 }}>{cfg.label}</h2>
               <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 99, background: cfg.bg, color: cfg.color, fontWeight: 700 }}>{items.length}</span>
+              {(() => {
+                const tr = getCategoryTrend(history)
+                if (!tr) return null
+                const col = tr.direction === 'up' ? '#ef4444' : tr.direction === 'down' ? '#22C55E' : '#f59e0b'
+                const arrow = tr.direction === 'up' ? '↑' : tr.direction === 'down' ? '↓' : '→'
+                const label = tr.direction === 'flat' ? 'stable' : (tr.pct + '% vs last run')
+                return <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 99, background: col + '18', color: col, fontWeight: 700 }}>{arrow} {label}</span>
+              })()}
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {items.map(leak => (
@@ -249,9 +325,13 @@ export default function ProfitLeaksPage() {
                   )}
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                     <button
-                      onClick={() => router.push(`/dashboard/ask-aria?q=${encodeURIComponent('How do I fix: ' + leak.title)}`)}
+                      onClick={() => router.push('/dashboard/ask-aria?q=' + encodeURIComponent('How do I fix: ' + leak.title))}
                       style={{ padding: '6px 14px', borderRadius: 8, background: '#1D9E75', color: '#fff', fontSize: 11, fontWeight: 700, border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
                       Fix with Aria →
+                    </button>
+                    <button onClick={() => handleLeakFix(leak, key)} disabled={fixingId === leak.id}
+                      style={{ padding: '6px 14px', borderRadius: 8, background: cfg.color, color: '#fff', fontSize: 11, fontWeight: 700, border: 'none', cursor: fixingId === leak.id ? 'default' : 'pointer', fontFamily: 'inherit', opacity: fixingId === leak.id ? 0.6 : 1 }}>
+                      {fixingId === leak.id ? '…' : 'Fix this →'}
                     </button>
                     <button onClick={() => markFixed(leak.id)}
                       style={{ padding: '6px 14px', borderRadius: 8, background: 'rgba(255,255,255,0.06)', color: 'var(--text-secondary, rgba(255,255,255,0.55))', fontSize: 11, fontWeight: 700, border: '1px solid rgba(255,255,255,0.08)', cursor: 'pointer', fontFamily: 'inherit' }}>
@@ -276,6 +356,54 @@ export default function ProfitLeaksPage() {
               <span style={{ fontSize: 11, color: '#22C55E', marginLeft: 'auto' }}>+${(Number(leak.monthly_loss) || 0).toFixed(0)}/mo saved</span>
             </div>
           ))}
+        </div>
+      )}
+
+      {shiftData.length > 0 && (
+        <div style={{ marginTop: 28 }}>
+          <h2 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>Staff Profitability by Shift</h2>
+          <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 12 }}>
+            {shiftData.filter(s => s.status === 'loss').length > 0
+              ? shiftData.filter(s => s.status === 'loss').length + ' loss-making shift' + (shiftData.filter(s => s.status === 'loss').length > 1 ? 's' : '') + ' in the last 14 days — review staffing levels.'
+              : 'All shifts profitable in the last 14 days — great work!'}
+          </p>
+          <div style={{ background: 'var(--bg-surface)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 14, overflow: 'hidden' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
+                  {['Date', 'Staff', 'Hours', 'Labour cost', 'Revenue', 'Efficiency', 'Status'].map(h => (
+                    <th key={h} style={{ padding: '10px 14px', textAlign: 'left', color: 'rgba(255,255,255,0.4)', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {shiftData.slice(0, 14).map((s, i) => {
+                  const col = s.status === 'profitable' ? '#22C55E' : s.status === 'breakeven' ? '#f59e0b' : '#EF4444'
+                  return (
+                    <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                      <td style={{ padding: '10px 14px', color: 'rgba(255,255,255,0.7)' }}>{s.date}</td>
+                      <td style={{ padding: '10px 14px', color: '#fff', fontWeight: 500 }}>{s.staff}</td>
+                      <td style={{ padding: '10px 14px', color: 'rgba(255,255,255,0.6)' }}>{s.hours}h</td>
+                      <td style={{ padding: '10px 14px', color: 'rgba(255,255,255,0.6)' }}>${s.labour_cost.toFixed(2)}</td>
+                      <td style={{ padding: '10px 14px', color: 'rgba(255,255,255,0.6)' }}>${s.revenue.toFixed(2)}</td>
+                      <td style={{ padding: '10px 14px', color: col, fontWeight: 700 }}>{s.efficiency}x</td>
+                      <td style={{ padding: '10px 14px' }}>
+                        <span style={{ padding: '3px 8px', borderRadius: 12, background: col + '18', color: col, fontSize: 10, fontWeight: 700 }}>
+                          {s.status === 'profitable' ? 'Profitable' : s.status === 'breakeven' ? 'Break-even' : 'Loss-making'}
+                        </span>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {fixToast && (
+        <div style={{ position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', padding: '10px 18px', borderRadius: 10, background: '#13131a', border: '1px solid #7FB897', color: '#7FB897', fontSize: 13, fontWeight: 600, zIndex: 60, boxShadow: '0 8px 24px rgba(0,0,0,0.5)' }}>
+          ✓ {fixToast}
         </div>
       )}
     </div>
