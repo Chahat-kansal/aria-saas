@@ -197,20 +197,29 @@ function parseAriaResponse(text: string): Segment[] {
   return segments
 }
 
-function AriaSpeechBubble({ business }: { business: { name?: string; trading_name?: string } | null }) {
-  const [visible, setVisible] = useState(true)
+function AriaSpeechBubble({ business, show }: { business: { name?: string; trading_name?: string } | null; show: boolean }) {
+  const [visible, setVisible] = useState(false)
   const name = business?.trading_name ?? business?.name ?? null
+
+  // Only become visible once show=true (after avatar wave completes)
   useEffect(() => {
+    if (!show) return
+    setVisible(true)
+    // Auto-hide after 30 seconds
     const t = setTimeout(() => setVisible(false), 30000)
     return () => clearTimeout(t)
-  }, [])
-  if (!visible) return null
+  }, [show])
+
   return (
     <div style={{
       maxWidth: 180, background: 'rgba(20,20,30,0.96)',
       border: '1px solid rgba(127,184,151,0.35)', borderRadius: '14px 14px 4px 14px',
       padding: '10px 13px', fontSize: 12, color: 'rgba(255,255,255,0.9)',
       lineHeight: 1.5, boxShadow: '0 4px 20px rgba(0,0,0,0.4)',
+      opacity: visible ? 1 : 0,
+      transform: visible ? 'translateY(0) scale(1)' : 'translateY(6px) scale(0.96)',
+      transition: 'opacity 0.5s ease, transform 0.5s ease',
+      pointerEvents: visible ? 'auto' : 'none',
     }}>
       <span style={{ color: '#7FB897', fontWeight: 700 }}>Hi{name ? `, ${name}` : ''}! 👋</span>
       {' '}I&apos;m Aria — your AI business co-operator. What can I help you with today?
@@ -981,7 +990,7 @@ export default function AskAriaPage() {
 
         {/* Aria avatar */}
         <div style={{ position: 'fixed', bottom: 0, right: 0, width: 160, zIndex: 50, pointerEvents: 'none', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
-          <AriaSpeechBubble business={business} />
+          <AriaSpeechBubble business={business} show={greetingReady} />
           <div style={{ width: 160, height: 200, opacity: avatarMounted ? 1 : 0, transition: 'opacity 0.4s ease' }}>
             <AriaTalkingHead mode={isAriaActive ? 'talking' : 'idle'} replyText={ariaResponseText ?? ''} />
           </div>
