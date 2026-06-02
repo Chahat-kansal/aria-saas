@@ -1,6 +1,7 @@
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
+import { waitUntil } from '@vercel/functions'
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
@@ -74,12 +75,12 @@ async function _PATCH(req: Request, { params }: { params: { id: string } }) {
   // Trigger outcome learning baseline snapshot (fire-and-forget)
   const actionId = (action as Record<string, unknown> | null)?.id as string | undefined
   if (actionId) {
-    void (async () => {
+    waitUntil((async () => {
       try {
         const { onActionApproved } = await import('@/lib/aria/hypothesis/outcome-learning')
         await onActionApproved(actionId, h.business_id as string)
       } catch { /* non-fatal */ }
-    })()
+    })())
   }
 
   return NextResponse.json({ ok: true, action_id: actionId ?? null })

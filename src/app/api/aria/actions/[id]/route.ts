@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
+import { waitUntil } from '@vercel/functions'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { onActionApproved } from '@/lib/aria/hypothesis/outcome-learning'
 
@@ -51,13 +52,13 @@ async function _PATCH(req: Request, { params }: { params: { id: string } }) {
 
   // Trigger outcome learning when owner approves (fire-and-forget — never block the response)
   if (body.status === 'approved' && existing?.business_id) {
-    void (async () => {
+    waitUntil((async () => {
       try {
         await onActionApproved(params.id, String(existing.business_id))
       } catch (e) {
         console.error('[aria/actions] onActionApproved failed:', (e as Error).message)
       }
-    })()
+    })())
   }
 
   return NextResponse.json({ action: data });
