@@ -155,14 +155,37 @@ export async function getBusinessContext(businessId: string): Promise<string> {
     weather: weather ?? { _note: 'Weather data unavailable — proceeding without weather context.' },
     seo: await (async () => {
       try {
-        const { data: seo } = await db.from('aria_seo_context').select('health_score, critical_issues, top_keyword, top_keyword_rank, updated_at').eq('business_id', businessId).maybeSingle()
-        if (!seo) return null
+        const [seoCtx, kwRankings] = await Promise.all([
+          db.from('aria_seo_context').select('health_score, critical_issues, top_keyword, top_keyword_rank, updated_at').eq('business_id', businessId).maybeSingle(),
+          db.from('seo_keyword_rankings').select('keyword, current_position, position_history, last_checked_at').eq('business_id', businessId).order('current_position', { ascending: true }).limit(10),
+        ])
+        const seo = seoCtx.data
+        const rankings = (kwRankings.data ?? []) as Array<{ keyword: string; current_position: number | null; position_history: unknown; last_checked_at: string | null }>
+
+        const top5 = rankings
+          .filter(r => r.current_position != null)
+          .slice(0, 5)
+          .map(r => ({ keyword: r.keyword, position: r.current_position }))
+
+        const movers: Array<{ keyword: string; from: number; to: number; change: number }> = []
+        for (const r of rankings) {
+          if (r.current_position == null) continue
+          const hist = Array.isArray(r.position_history) ? (r.position_history as Array<{ position: number | null }>) : []
+          if (hist.length < 2) continue
+          const prev = hist[hist.length - 2].position
+          if (prev == null) continue
+          const change = prev - r.current_position
+          if (Math.abs(change) > 3) movers.push({ keyword: r.keyword, from: prev, to: r.current_position, change })
+        }
+
         return {
-          health_score: seo.health_score,
-          critical_issues: seo.critical_issues,
-          top_keyword: seo.top_keyword,
-          top_keyword_rank: seo.top_keyword_rank,
-          last_audit: seo.updated_at,
+          health_score: seo?.health_score ?? null,
+          critical_issues: seo?.critical_issues ?? null,
+          top_keyword: seo?.top_keyword ?? (top5[0]?.keyword ?? null),
+          top_keyword_rank: seo?.top_keyword_rank ?? (top5[0]?.position ?? null),
+          last_audit: seo?.updated_at ?? null,
+          top_keywords: top5,
+          ranking_movers: movers.slice(0, 5),
         }
       } catch { return null }
     })(),

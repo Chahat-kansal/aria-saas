@@ -211,6 +211,9 @@ function LocalSeoTab({ businessId }: { businessId: string }) {
   const [local, setLocal] = useState<SeoLocal | null>(null)
   const [loading, setLoading] = useState(true)
   const [scanning, setScanning] = useState(false)
+  const [scanIssues, setScanIssues] = useState<string[]>([])
+  const [scanOpportunities, setScanOpportunities] = useState<string[]>([])
+  const [scanScore, setScanScore] = useState<number | null>(null)
 
   async function loadLocal() {
     const { data } = await supabase.from('seo_local').select('*').eq('business_id', businessId).maybeSingle()
@@ -223,7 +226,11 @@ function LocalSeoTab({ businessId }: { businessId: string }) {
   async function scanNow() {
     setScanning(true)
     try {
-      await fetch('/api/seo/local', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ business_id: businessId }) })
+      const res = await fetch('/api/seo/local-scan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ business_id: businessId }) })
+      const d = await res.json().catch(() => ({}))
+      if (d.issues) setScanIssues(d.issues as string[])
+      if (d.opportunities) setScanOpportunities(d.opportunities as string[])
+      if (typeof d.score === 'number') setScanScore(d.score)
       await loadLocal()
     } catch { /* ignore */ }
     setScanning(false)
@@ -276,6 +283,40 @@ function LocalSeoTab({ businessId }: { businessId: string }) {
           </div>
         </div>
       )}
+
+      {scanIssues.length > 0 && (
+        <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 12, padding: '20px 24px' }}>
+          <div style={{ color: '#ef4444', fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Issues found</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {scanIssues.map((issue, i) => (
+              <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#ef4444', flexShrink: 0, marginTop: 5 }} />
+                <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)' }}>{issue}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {scanOpportunities.length > 0 && (
+        <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 12, padding: '20px 24px' }}>
+          <div style={{ color: '#7FB897', fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Opportunities</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {scanOpportunities.map((opp, i) => (
+              <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#7FB897', flexShrink: 0, marginTop: 5 }} />
+                <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)' }}>{opp}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {scanScore !== null && (
+        <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', textAlign: 'center' }}>
+          Aria local SEO score: <strong style={{ color: scanScore >= 70 ? '#7FB897' : scanScore >= 40 ? '#f59e0b' : '#ef4444' }}>{scanScore}/100</strong>
+        </div>
+      )}
     </div>
   )
 }
@@ -299,6 +340,10 @@ function KeywordsTab({ businessId, businessName, businessIndustry }: { businessI
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [historyMap, setHistoryMap] = useState<Record<string, Array<{ rank: number; date: string }>>>({})
   const [removing, setRemoving] = useState<string | null>(null)
+  const [scanning, setScanning] = useState(false)
+  const [aiSuggestions, setAiSuggestions] = useState<Array<{ keyword: string; difficulty: string; relevance: string; intent: string; reason: string }>>([])
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false)
+  const [seedInput, setSeedInput] = useState('')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -349,6 +394,26 @@ function KeywordsTab({ businessId, businessName, businessIndustry }: { businessI
     setRemoving(null)
   }
 
+  async function refreshPositions() {
+    setScanning(true)
+    try {
+      const res = await fetch('/api/seo/keyword-tracking', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ business_id: businessId }) }).then(r => r.json())
+      if (res.ok) await load()
+    } catch { /* ignore */ }
+    setScanning(false)
+  }
+
+  async function fetchSuggestions() {
+    setLoadingSuggestions(true)
+    try {
+      const body: Record<string, string> = { business_id: businessId }
+      if (seedInput.trim()) body.seed_keyword = seedInput.trim()
+      const res = await fetch('/api/seo/keyword-suggestions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(r => r.json())
+      if (Array.isArray(res.suggestions)) setAiSuggestions(res.suggestions)
+    } catch { /* ignore */ }
+    setLoadingSuggestions(false)
+  }
+
   if (loading) return <p style={{ color: 'rgba(255,255,255,0.4)', textAlign: 'center', padding: 40 }}>Loading…</p>
 
   const suggestions = (INDUSTRY_KEYWORDS[businessIndustry ?? 'default'] ?? INDUSTRY_KEYWORDS.default)
@@ -365,6 +430,21 @@ function KeywordsTab({ businessId, businessName, businessIndustry }: { businessI
         <button onClick={addKeyword} disabled={adding || !addInput.trim()}
           style={{ padding: '9px 18px', borderRadius: 8, border: 'none', background: '#7FB897', color: '#0E1411', fontSize: 13, fontWeight: 700, cursor: adding || !addInput.trim() ? 'default' : 'pointer', fontFamily: 'inherit', opacity: adding || !addInput.trim() ? 0.5 : 1, flexShrink: 0 }}>
           {adding ? 'Adding…' : 'Track keyword'}
+        </button>
+      </div>
+
+      {/* Scan positions + AI keyword suggestions */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap', alignItems: 'center' }}>
+        <button onClick={refreshPositions} disabled={scanning}
+          style={{ padding: '7px 16px', borderRadius: 8, border: '1px solid rgba(127,184,151,0.3)', background: 'transparent', color: '#7FB897', fontSize: 12, fontWeight: 700, cursor: scanning ? 'default' : 'pointer', fontFamily: 'inherit', opacity: scanning ? 0.6 : 1, flexShrink: 0 }}>
+          {scanning ? 'Scanning positions…' : 'Scan positions now'}
+        </button>
+        <input value={seedInput} onChange={e => setSeedInput(e.target.value)}
+          placeholder="AI suggestions seed (optional)"
+          style={{ flex: 1, minWidth: 140, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, padding: '7px 12px', color: '#fff', fontSize: 12, fontFamily: 'inherit', outline: 'none' }} />
+        <button onClick={fetchSuggestions} disabled={loadingSuggestions}
+          style={{ padding: '7px 16px', borderRadius: 8, border: 'none', background: '#2D5240', color: '#7FB897', fontSize: 12, fontWeight: 700, cursor: loadingSuggestions ? 'default' : 'pointer', fontFamily: 'inherit', opacity: loadingSuggestions ? 0.6 : 1, flexShrink: 0 }}>
+          {loadingSuggestions ? 'Generating…' : 'Get AI suggestions'}
         </button>
       </div>
 
@@ -447,6 +527,30 @@ function KeywordsTab({ businessId, businessName, businessIndustry }: { businessI
               })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {aiSuggestions.length > 0 && (
+        <div style={{ marginTop: 20, background: 'rgba(255,255,255,0.03)', borderRadius: 12, border: '1px solid rgba(127,184,151,0.15)', padding: '20px 22px' }}>
+          <div style={{ color: '#7FB897', fontSize: 14, fontWeight: 600, marginBottom: 14 }}>AI keyword suggestions</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {aiSuggestions.map((s, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', background: 'rgba(255,255,255,0.04)', borderRadius: 10 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ color: '#fff', fontSize: 13, fontWeight: 500 }}>{s.keyword}</div>
+                  <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12, marginTop: 2 }}>{s.reason}</div>
+                </div>
+                <div style={{ display: 'flex', gap: 6, flexShrink: 0, alignItems: 'center' }}>
+                  <span style={{ fontSize: 11, padding: '3px 8px', borderRadius: 12, background: 'rgba(255,255,255,0.06)', color: s.difficulty === 'low' ? '#7FB897' : s.difficulty === 'high' ? '#ef4444' : '#f59e0b' }}>{s.difficulty}</span>
+                  <span style={{ fontSize: 11, padding: '3px 8px', borderRadius: 12, background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.5)' }}>{s.intent}</span>
+                  <button onClick={() => { setAddInput(s.keyword); setAiSuggestions(prev => prev.filter((_, j) => j !== i)) }}
+                    style={{ padding: '5px 12px', borderRadius: 8, border: 'none', background: '#7FB897', color: '#0E1411', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                    Track
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>
