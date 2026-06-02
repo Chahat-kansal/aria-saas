@@ -243,6 +243,49 @@ function AriaGreeting({ business }: { business: { name?: string; trading_name?: 
   )
 }
 
+// Renders Aria's plain-text responses — handles bold/italic/lists cleanly
+function AriaMarkdown({ text }: { text: string }) {
+  const lines = text.split('\n')
+  return (
+    <span className="whitespace-pre-wrap">
+      {lines.map((line, li) => {
+        // Render inline: **bold** and *italic* — strip the markers, apply styling
+        const parts: React.ReactNode[] = []
+        let remaining = line
+        let key = 0
+
+        while (remaining.length > 0) {
+          const boldMatch = remaining.match(/^(.*?)\*\*(.+?)\*\*/)
+          const italicMatch = remaining.match(/^(.*?)\*(.+?)\*/)
+
+          const bIdx = boldMatch ? boldMatch[0].indexOf('**') : Infinity
+          const iIdx = italicMatch ? italicMatch[0].indexOf('*') : Infinity
+
+          if (boldMatch && bIdx <= iIdx) {
+            if (boldMatch[1]) parts.push(<span key={key++}>{boldMatch[1]}</span>)
+            parts.push(<strong key={key++} style={{ fontWeight: 600, color: '#fff' }}>{boldMatch[2]}</strong>)
+            remaining = remaining.slice(boldMatch[0].length)
+          } else if (italicMatch && iIdx < Infinity) {
+            if (italicMatch[1]) parts.push(<span key={key++}>{italicMatch[1]}</span>)
+            parts.push(<em key={key++} style={{ fontStyle: 'italic', color: 'rgba(255,255,255,0.8)' }}>{italicMatch[2]}</em>)
+            remaining = remaining.slice(italicMatch[0].length)
+          } else {
+            parts.push(<span key={key++}>{remaining}</span>)
+            remaining = ''
+          }
+        }
+
+        return (
+          <span key={li}>
+            {parts}
+            {li < lines.length - 1 && '\n'}
+          </span>
+        )
+      })}
+    </span>
+  )
+}
+
 export default function AskAriaPage() {
   const { business, loading } = useBusinessContext()
   const [messages, setMessages] = useState<Message[]>([])
@@ -834,7 +877,7 @@ export default function AskAriaPage() {
                             .replace(/\n\s*\n\s*\n/g, '\n\n').trim()
                         ).map((seg, si) =>
                           seg.kind === 'text'
-                            ? <span key={si} className="whitespace-pre-wrap">{seg.content}</span>
+                            ? <AriaMarkdown key={si} text={seg.content} />
                             : <AriaArtifact key={si} type={seg.type} title={seg.title} data={seg.data} />
                         )
                       : m.content}
