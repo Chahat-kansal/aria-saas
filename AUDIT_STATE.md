@@ -1,10 +1,10 @@
 # Aria OS Audit State
 
 ## Last updated
-2026-06-02 — Prompt 202 COMPLETE. Fire-and-forget sweep done. 29 routes fixed with waitUntil.
+2026-06-02 — Prompt 203 COMPLETE. Consolidated silent-failure sweep done. All 10 pattern classes checked.
 
 ## Push Status
-ALL COMMITS PUSHED — origin/main is current as of 3fa11d63
+ALL COMMITS PUSHED — origin/main is current as of Prompt 203 final commit
 
 ## Prompt 202 — Fire-and-Forget Fix (2026-06-02)
 Installed `@vercel/functions`. Replaced all `void (async () => { ... })()` patterns with
@@ -285,6 +285,46 @@ All integrations/ and cron/ routes audited — all clean (per session 3 audit co
 - ✅ CHECK 9: New code (community routes, aria/ask libs) — clean or fixed
 
 ### SESSION 6 COMPLETE — 28 security/silent-failure bugs fixed
+
+## Prompt 202 — Fire-and-Forget Fix (2026-06-02) — COMPLETE
+Replaced all `void (async () => { ... })()` IIFEs with `waitUntil(...)` from `@vercel/functions`
+across 29 API routes. Background DB writes now survive Vercel serverless function freeze.
+Commits: 260c3647, 6650d24d, 430f3cc7, 3fa11d63
+
+## Prompt 203 — Consolidated Silent-Failure Sweep (2026-06-02) — COMPLETE
+All 10 pattern-detectable silent-failure classes checked across src/app/api/ and src/lib/.
+
+### CHECK STATUS
+- ✅ CHECK 1 (fire-and-forget / waitUntil): 0 IIFEs remain — 29 fixed in Prompt 202
+- ✅ CHECK 2 (RLS / anon client): 9 files fixed in Session 6, no new gaps found
+- ✅ CHECK 3 (missing await on mutations): 0 unawaited mutations — clean
+- ✅ CHECK 4 (.single() → .maybeSingle()): standard ownership pattern acceptable — clean
+- ✅ CHECK 5 (error-swallowing catches): 7 remaining empty catches, all confirmed non-critical telemetry
+- ✅ CHECK 6 (unawaited insert/update/delete): 0 unawaited mutations — clean
+- ✅ CHECK 7 (ownership gaps / cross-business leaks): 28 bugs fixed in Session 6, no new gaps
+- ✅ CHECK 8 (race conditions — read-modify-write): migration + 7 commits; atomic RPCs for
+     loyalty_points, total_spent, visit_count, stock_quantity, items_on_hand on every sale path
+     New RPCs: increment_numeric, decrement_numeric, decrement_stock_quantity
+     Files fixed: loyalty/earn, pos/sale, pos/sales, pos/sales/[id]/refund,
+     pos/sales/[id]/void, pos/orders/receive
+- ✅ CHECK 9 (external API error handling): 2 critical fixes committed (17d9c1ae)
+     staff-portal/auth: swallowed Resend failure → OTP users could not log in
+     aria/quote-followup: falsely returned sent=true on email failure
+- ✅ CHECK 10 (no-op update detection): 1 fix committed (c9037e43)
+     stripe/webhook syncSubscription: silently did nothing if stripe_sub_id not found
+
+### Prompt 203 commits
+- 72828f0b — migration: atomic counter functions (increment_numeric, decrement_numeric, decrement_stock_quantity)
+- bd2d0e58 — loyalty/earn: atomic RPC replaces read-modify-write
+- fafd1d28 — pos/sale: atomic RPCs for stock, loyalty, session totals, ingredients
+- 9052a486 — pos/sales: atomic RPCs for stock_quantity + items_on_hand
+- 5609cfbe — pos/sales/[id]/refund + void: atomic RPC for stock restore
+- 7b34bff1 — pos/orders/receive: atomic RPC for stock receive
+- 17d9c1ae — staff-portal/auth + aria/quote-followup: external API error surface
+- c9037e43 — stripe/webhook: no-op detection on syncSubscription
+
+### NEW bugs found this sweep: 10
+(8 race conditions + 2 silent external API failures + 1 no-op Stripe update)
 
 ## Total DB tables (341)
 Key tables: businesses, staff_members, pos_staff, pos_products, pos_sales,
