@@ -13,6 +13,9 @@ export interface ProductForTerminal {
   description?: string | null
   track_inventory?: boolean
   active?: boolean
+  agent_bundle_product_id?: string | null
+  agent_bundle_price?: number | null
+  performance_tier?: string | null
 }
 
 export interface LayoutProps {

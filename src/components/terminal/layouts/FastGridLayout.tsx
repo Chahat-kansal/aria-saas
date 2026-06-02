@@ -150,6 +150,25 @@ export const FastGridLayout = React.memo(function FastGridLayout({
           width: '100%',
         }}
       >
+        {/* Performance tier dot — owner-facing indicator */}
+        {p.performance_tier && (
+          <span style={{
+            position: 'absolute', top: 8, left: 8,
+            width: 7, height: 7, borderRadius: '50%',
+            background: p.performance_tier === 'star' ? '#F59E0B' : p.performance_tier === 'puzzle' ? '#3B82F6' : p.performance_tier === 'plowhouse' ? '#7FB897' : '#6B7280',
+            boxShadow: '0 0 6px ' + (p.performance_tier === 'star' ? '#F59E0B88' : p.performance_tier === 'puzzle' ? '#3B82F688' : '#7FB89788'),
+          }} title={'Performance: ' + p.performance_tier} />
+        )}
+        {/* Bundle badge */}
+        {p.agent_bundle_product_id && (
+          <span style={{
+            position: 'absolute', top: 7, right: 7,
+            fontSize: 8, fontWeight: 800, letterSpacing: '0.04em',
+            padding: '2px 5px', borderRadius: 4,
+            background: 'rgba(59,130,246,0.15)', border: '1px solid rgba(59,130,246,0.3)',
+            color: '#60A5FA', textTransform: 'uppercase',
+          }}>Bundle</span>
+        )}
         <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'flex-end', height: 88, position: 'relative' }}>
           <ProductImage product={productForImage} size={88} showShadow={!isOut} />
         </div>

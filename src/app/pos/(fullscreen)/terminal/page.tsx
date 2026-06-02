@@ -73,6 +73,12 @@ interface Product {
   is_schedule_drug?: boolean;
   schedule_level?: string | null;
   requires_script?: boolean;
+  grid_position?: number | null;
+  agent_hidden?: boolean | null;
+  agent_upsell_product_id?: string | null;
+  agent_bundle_product_id?: string | null;
+  agent_bundle_price?: number | null;
+  performance_tier?: string | null;
 }
 interface GlobalProductHit {
   name: string; brand?: string; category?: string;
@@ -263,6 +269,7 @@ export default function TerminalPage() {
   const [displaySuggestion, setDisplaySuggestion] = useState<{ id: string; offer_text: string; discount_pct: number } | null>(null);
   const [suggestionLoading, setSuggestionLoading] = useState(false);
   const [lastAddedId,    setLastAddedId]    = useState<string | null>(null);
+  const [agentUpsellProduct, setAgentUpsellProduct] = useState<Product | null>(null);
   const [discountMode,   setDiscountMode]   = useState<'pct' | 'amt' | null>(null);
   const [discountVal,    setDiscountVal]    = useState('');
 
@@ -914,7 +921,7 @@ export default function TerminalPage() {
   }, [products]);
 
   const displayedProducts = useMemo(() => {
-    let ps = products.filter(p => p.is_active);
+    let ps = products.filter(p => p.is_active && !p.agent_hidden);
     if (activeCategory) ps = ps.filter(p => p.pos_categories?.name === activeCategory);
     if (search.trim()) {
       const q = search.toLowerCase();
@@ -976,6 +983,9 @@ export default function TerminalPage() {
     description: (p as any).description ?? null,
     track_inventory: p.track_stock,
     active: p.is_active,
+    agent_bundle_product_id: p.agent_bundle_product_id ?? null,
+    agent_bundle_price: p.agent_bundle_price ?? null,
+    performance_tier: p.performance_tier ?? null,
   })), [orderedProducts]);
 
   const cartForAria = useMemo(
@@ -1064,6 +1074,11 @@ export default function TerminalPage() {
     SFX.add();
     setSelectedItem(p.id);
     setLastAddedId(p.id);
+    // Surface agent upsell if the added product has one and it's not already in cart
+    if (p.agent_upsell_product_id) {
+      const upsell = products.find(pr => pr.id === p.agent_upsell_product_id && !cart.some(c => c.product.id === pr.id));
+      setAgentUpsellProduct(upsell ?? null);
+    }
     // Track recent for SearchFirstLayout — additive
     setRecentProductIds(prev => [p.id, ...prev.filter(id => id !== p.id)].slice(0, 8));
     setSearch('');
@@ -2888,6 +2903,23 @@ export default function TerminalPage() {
                   );
                 })}
               </div>
+
+              {/* Agent upsell prompt — shown after adding a product with a linked upsell */}
+              {agentUpsellProduct && (
+                <div style={{ flexShrink: 0, margin: '4px 12px 0', padding: '8px 12px', borderRadius: 10, background: 'rgba(127,184,151,0.06)', border: '1px solid rgba(127,184,151,0.15)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 10, color: '#7FB897', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>Aria suggests</div>
+                      <div style={{ fontSize: 12, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Add {agentUpsellProduct.name}?</div>
+                      <div style={{ fontSize: 10, color: 'var(--text-tertiary)', fontFamily: "'JetBrains Mono',monospace" }}>${agentUpsellProduct.price.toFixed(2)}</div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 5, flexShrink: 0 }}>
+                      <button onClick={() => { checkAndAddToCart(agentUpsellProduct); setAgentUpsellProduct(null); }} style={{ padding: '5px 10px', borderRadius: 7, border: 'none', background: '#7FB897', color: '#1D2E25', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>Add</button>
+                      <button onClick={() => setAgentUpsellProduct(null)} style={{ padding: '5px 8px', borderRadius: 7, border: '1px solid rgba(255,255,255,0.1)', background: 'none', color: 'rgba(255,255,255,0.3)', fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' }}>Skip</button>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Fixed bottom: discount pills + aria card + totals + charge */}
               <div style={{ flexShrink: 0 }}>
