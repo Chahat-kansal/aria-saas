@@ -7,15 +7,38 @@ import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { trackAICall } from '@/lib/aria/ai-telemetry'
 import Anthropic from '@anthropic-ai/sdk'
-// pdf-parse loaded dynamically to avoid serverless bundle issues
+// PDF text extraction using Claude's native PDF vision support
+// No native binaries needed — works in Vercel serverless
 async function parsePdf(buf: Buffer): Promise<string> {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const pdfParse = require('pdf-parse')
-    const result = await pdfParse(buf)
-    return result.text ?? ''
+    // Send PDF directly to Claude as a document block
+    // Claude can read PDFs natively without any PDF parsing library
+    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+    const response = await client.messages.create({
+      model: MODEL,
+      max_tokens: 2000,
+      messages: [{
+        role: 'user',
+        content: [
+          {
+            type: 'document',
+            source: {
+              type: 'base64',
+              media_type: 'application/pdf',
+              data: buf.toString('base64'),
+            },
+          },
+          {
+            type: 'text',
+            text: 'Extract all text from this PDF document. Return the raw text only, no commentary.',
+          },
+        ],
+      }],
+    })
+    const textBlock = response.content.find(b => b.type === 'text')
+    return textBlock && 'text' in textBlock ? textBlock.text : ''
   } catch {
-    return '' // graceful fallback — AI will get empty text and return parse error
+    return '' // graceful fallback
   }
 }
 
