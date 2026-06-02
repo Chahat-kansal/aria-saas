@@ -1,6 +1,7 @@
 'use client'
 import Link from 'next/link'
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 
 const PLANS = [
   {
@@ -38,6 +39,7 @@ export default function BillingPage({
   searchParams: { reason?: string; error?: string }
 }) {
   const isExpired = searchParams?.reason === 'trial_expired'
+  const router = useRouter()
   const [loading, setLoading] = useState('')
   const [error, setError] = useState(searchParams?.error || '')
 
@@ -49,17 +51,28 @@ export default function BillingPage({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ plan }),
+        credentials: 'include',
       })
       const data = await res.json()
+
       if (data.url) {
         window.location.href = data.url
-      } else if (data.error === 'billing_not_configured') {
-        setError('Stripe is not yet configured. Add price IDs to Vercel env vars.')
+        return
+      }
+
+      // Not logged in — send to login then back here
+      if (res.status === 401 || data.error === 'unauthenticated') {
+        router.push(data.redirect ?? `/login?redirectTo=/billing`)
+        return
+      }
+
+      if (data.error === 'billing_not_configured') {
+        setError('Stripe price IDs are not configured yet. Add STRIPE_PRICE_ID_STARTER/GROWTH/PRO to Vercel env vars.')
       } else {
-        setError(data.message || data.error || 'Something went wrong')
+        setError(data.message || data.error || 'Something went wrong. Try again.')
       }
     } catch {
-      setError('Could not connect to payment system. Try again.')
+      setError('Could not connect. Check your connection and try again.')
     }
     setLoading('')
   }
@@ -91,7 +104,10 @@ export default function BillingPage({
           </>
         )}
         {error && (
-          <p className="mt-4 text-xs text-red-400 bg-red-400/10 rounded-lg px-4 py-2">{error}</p>
+          <p className="mt-4 text-xs rounded-lg px-4 py-2"
+            style={{ color: '#f87171', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.15)' }}>
+            {error}
+          </p>
         )}
       </div>
 
@@ -122,7 +138,8 @@ export default function BillingPage({
             </p>
             <ul className="flex flex-col gap-2 mb-6 flex-1">
               {plan.features.map((f) => (
-                <li key={f} className="flex items-start gap-2 text-xs" style={{ color: 'rgba(255,255,255,0.7)' }}>
+                <li key={f} className="flex items-start gap-2 text-xs"
+                  style={{ color: 'rgba(255,255,255,0.7)' }}>
                   <span style={{ color: '#7FB897', flexShrink: 0 }}>✓</span>
                   {f}
                 </li>
@@ -131,7 +148,7 @@ export default function BillingPage({
             <button
               onClick={() => checkout(plan.plan)}
               disabled={loading !== ''}
-              className="block text-center py-2.5 rounded-lg text-sm font-semibold transition-opacity hover:opacity-90 disabled:opacity-50"
+              className="block w-full text-center py-2.5 rounded-lg text-sm font-semibold transition-opacity hover:opacity-90 disabled:opacity-50 cursor-pointer"
               style={
                 plan.highlight
                   ? { background: '#7FB897', color: '#0E1411' }
@@ -165,7 +182,8 @@ export default function BillingPage({
         </div>
       )}
 
-      <div className="flex flex-wrap justify-center gap-4 text-xs" style={{ color: 'rgba(255,255,255,0.35)' }}>
+      <div className="flex flex-wrap justify-center gap-4 text-xs"
+        style={{ color: 'rgba(255,255,255,0.35)' }}>
         <Link href="/dashboard" className="hover:text-white transition-colors">Back to dashboard</Link>
         <span>·</span>
         <Link href="/dashboard/settings" className="hover:text-white transition-colors">Manage subscription</Link>

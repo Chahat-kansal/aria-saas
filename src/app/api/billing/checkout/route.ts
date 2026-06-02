@@ -11,7 +11,14 @@ export async function POST(req: Request) {
 
   const supabase = createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  // Not logged in — tell the client to redirect to login
+  if (!user) {
+    return NextResponse.json(
+      { error: 'unauthenticated', redirect: '/login?redirectTo=/billing' },
+      { status: 401 }
+    )
+  }
 
   const body = await req.json().catch(() => ({}))
   const tier = (body.tier || body.plan) as 'starter' | 'growth' | 'pro'
@@ -27,7 +34,6 @@ export async function POST(req: Request) {
 
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2024-06-20' })
 
-  // Get the user's business
   const { data: business } = await supabase
     .from('businesses')
     .select('id, name, email')
@@ -39,7 +45,6 @@ export async function POST(req: Request) {
 
   if (!business) return NextResponse.json({ error: 'Business not found' }, { status: 404 })
 
-  // Get or create Stripe customer
   const { data: sub } = await supabase
     .from('business_subscriptions')
     .select('stripe_customer_id')
@@ -54,7 +59,6 @@ export async function POST(req: Request) {
       metadata: { business_id: business.id, user_id: user.id },
     })
     customerId = customer.id
-    // Store customer ID
     await supabase.from('business_subscriptions').upsert(
       { business_id: business.id, stripe_customer_id: customerId, updated_at: new Date().toISOString() },
       { onConflict: 'business_id' }
@@ -78,28 +82,4 @@ export async function POST(req: Request) {
   })
 
   return NextResponse.json({ url: session.url })
-}
-
-// GET: redirect-based flow (used by plain <a href> links on /billing page)
-export async function GET(req: Request) {
-  const url = new URL(req.url)
-  const plan = url.searchParams.get('plan') as 'starter' | 'growth' | 'pro' | null
-  if (!plan) return NextResponse.redirect(new URL('/billing', req.url))
-
-  // Re-use POST logic by constructing a synthetic request
-  const fakeReq = new Request(req.url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', cookie: req.headers.get('cookie') ?? '' },
-    body: JSON.stringify({ plan }),
-  })
-
-  const result = await POST(fakeReq)
-  const data = await result.json()
-
-  if (data.url) {
-    return NextResponse.redirect(data.url)
-  }
-
-  // Fallback if stripe not configured or error
-  return NextResponse.redirect(new URL('/billing?error=payment_failed', req.url))
 }
