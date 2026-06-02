@@ -7,8 +7,17 @@ import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { trackAICall } from '@/lib/aria/ai-telemetry'
 import Anthropic from '@anthropic-ai/sdk'
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const pdfParse: (buf: Buffer) => Promise<{ text: string }> = require('pdf-parse')
+// pdf-parse loaded dynamically to avoid serverless bundle issues
+async function parsePdf(buf: Buffer): Promise<string> {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const pdfParse = require('pdf-parse')
+    const result = await parsePdf(buf)
+    return result.text ?? ''
+  } catch {
+    return '' // graceful fallback — AI will get empty text and return parse error
+  }
+}
 
 const MODEL = 'claude-haiku-4-5-20251001'
 
@@ -245,7 +254,7 @@ async function _POST(req: Request) {
       parsed = parseCSV(text)
     } else if (mimeType === 'application/pdf' || fileName.endsWith('.pdf')) {
       const buf = Buffer.from(await file.arrayBuffer())
-      const data = await pdfParse(buf)
+      const data = await parsePdf(buf)
       parsed = await aiParseText(data.text, businessId)
     } else if (mimeType.startsWith('image/')) {
       const buf = Buffer.from(await file.arrayBuffer())
