@@ -6,6 +6,7 @@ import { sendSMS } from '@/lib/clicksend'
 import Anthropic from '@anthropic-ai/sdk'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { waitUntil } from '@vercel/functions'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 async function _POST(req: Request) {
@@ -105,7 +106,7 @@ Return ONLY the reminder text, no subject line, no preamble.`
     console.error('[reminder] failed:', (err as Error).message)
   }
 
-  void (async () => {
+  waitUntil((async () => {
     try {
       await supabaseAdmin.from('aria_ai_calls').insert({
         business_id: inv.business_id, agent_key: 'invoice_reminder', provider: 'anthropic',
@@ -113,7 +114,7 @@ Return ONLY the reminder text, no subject line, no preamble.`
         input_tokens: inputTokens, output_tokens: outputTokens, success,
       })
     } catch { /* non-fatal */ }
-  })()
+  })())
 
   if (!success || !reminderText) return NextResponse.json({ error: 'Failed to generate reminder' }, { status: 500 })
 

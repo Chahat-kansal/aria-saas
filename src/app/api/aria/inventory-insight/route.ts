@@ -6,6 +6,7 @@ import { NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { waitUntil } from '@vercel/functions';
 import { withErrorCapture } from '@/lib/api/with-error-capture';
 
 interface Product { id: string; name: string; stock_quantity: number | null; cost_price: number | null; low_stock_threshold: number | null }
@@ -73,7 +74,7 @@ async function _POST() {
     inputTokens = res.usage.input_tokens; outputTokens = res.usage.output_tokens; success = true;
   } catch (e) { console.error('[inventory-insight] AI failed:', (e as Error).message); }
 
-  void (async () => {
+  waitUntil((async () => {
     try {
       await supabaseAdmin.from('aria_ai_calls').insert({
         business_id: bid, agent_key: 'inventory_insight', provider: 'anthropic',
@@ -81,7 +82,7 @@ async function _POST() {
         input_tokens: inputTokens, output_tokens: outputTokens, success,
       });
     } catch { /* non-fatal */ }
-  })();
+  })());
 
   return NextResponse.json({
     metrics: { sku_count: prods.length, total_value: Math.round(totalValue * 100) / 100, dead_value: Math.round(deadValue * 100) / 100, dead_count: dead.length, low_stock: lowStock },

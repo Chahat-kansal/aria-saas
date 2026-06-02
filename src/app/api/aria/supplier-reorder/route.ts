@@ -6,6 +6,7 @@ import { NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { waitUntil } from '@vercel/functions';
 import { withErrorCapture } from '@/lib/api/with-error-capture';
 
 interface Product { id: string; name: string; stock_quantity: number | null; low_stock_threshold: number | null; cost_price: number | null; supplier_id: string | null }
@@ -93,7 +94,7 @@ async function _POST(req: Request) {
     success = true;
   } catch (e) { console.error('[supplier-reorder] AI failed:', (e as Error).message); }
 
-  void (async () => {
+  waitUntil((async () => {
     try {
       await supabaseAdmin.from('aria_ai_calls').insert({
         business_id: bid, agent_key: 'supplier_reorder', provider: 'anthropic',
@@ -101,7 +102,7 @@ async function _POST(req: Request) {
         input_tokens: inputTokens, output_tokens: outputTokens, success,
       });
     } catch { /* non-fatal */ }
-  })();
+  })());
 
   return NextResponse.json({ supplier: { id: supplier.id, name: supplier.name }, draft, total_cents: totalCents, ai_note: aiNote });
 }

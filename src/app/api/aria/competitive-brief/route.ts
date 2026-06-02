@@ -6,6 +6,7 @@ import { NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { waitUntil } from '@vercel/functions';
 import { withErrorCapture } from '@/lib/api/with-error-capture';
 
 interface CacheRow { brief: string; generated_at: string }
@@ -60,7 +61,7 @@ async function _GET(req: Request) {
     success = true;
   } catch (e) { console.error('[competitive-brief] AI failed:', (e as Error).message); }
 
-  void (async () => {
+  waitUntil((async () => {
     try {
       await supabaseAdmin.from('aria_ai_calls').insert({
         business_id, agent_key: 'competitive_brief', provider: 'anthropic',
@@ -68,7 +69,7 @@ async function _GET(req: Request) {
         input_tokens: inputTokens, output_tokens: outputTokens, success,
       });
     } catch { /* non-fatal */ }
-  })();
+  })());
 
   const generated_at = new Date().toISOString();
   if (brief) _cache.set(business_id, { brief, generated_at });

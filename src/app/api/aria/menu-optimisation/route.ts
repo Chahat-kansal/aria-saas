@@ -6,6 +6,7 @@ import { NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { waitUntil } from '@vercel/functions';
 import { withErrorCapture } from '@/lib/api/with-error-capture';
 
 interface RecipeRow { id: string; name: string; cost_per_serve: number | null; menu_price: number | null; margin_percent: number | null; linked_product_id: string | null; }
@@ -70,7 +71,7 @@ async function _POST(req: Request) {
     } catch (e) { console.error('[menu-optimisation] AI failed:', (e as Error).message); }
   }
 
-  void (async () => {
+  waitUntil((async () => {
     try {
       await supabaseAdmin.from('aria_ai_calls').insert({
         business_id, agent_key: 'menu_optimisation', provider: 'anthropic',
@@ -78,7 +79,7 @@ async function _POST(req: Request) {
         input_tokens: inputTokens, output_tokens: outputTokens, success: aiSuccess,
       });
     } catch { /* non-fatal */ }
-  })();
+  })());
 
   return NextResponse.json({ analysis, insight });
 }

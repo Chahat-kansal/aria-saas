@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { waitUntil } from '@vercel/functions'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { runAriaCouncil } from '@/lib/aria/council'
 
@@ -73,7 +74,7 @@ Business: ${biz.name}, ${biz.industry ?? 'retail'}, ${biz.city ?? 'AU'}`
     }).eq('id', params.id)
   }
 
-  void (async () => {
+  waitUntil((async () => {
     try {
       await supabaseAdmin.from('aria_ai_calls').insert({
         business_id: customer.business_id,
@@ -86,7 +87,7 @@ Business: ${biz.name}, ${biz.industry ?? 'retail'}, ${biz.city ?? 'AU'}`
         success,
       })
     } catch { /* non-fatal */ }
-  })()
+  })())
 
   return NextResponse.json({ summary })
 }

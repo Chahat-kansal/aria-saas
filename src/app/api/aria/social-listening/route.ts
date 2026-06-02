@@ -6,6 +6,7 @@ import { NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { waitUntil } from '@vercel/functions';
 import { withErrorCapture } from '@/lib/api/with-error-capture';
 
 interface Mention { text: string; source: string; sentiment: 'positive' | 'negative' | 'neutral' }
@@ -51,7 +52,7 @@ async function _POST(req: Request) {
     }
   } catch (e) { console.error('[social-listening] AI failed:', (e as Error).message); }
 
-  void (async () => {
+  waitUntil((async () => {
     try {
       await supabaseAdmin.from('aria_ai_calls').insert({
         business_id, agent_key: 'social_listening', provider: 'anthropic',
@@ -59,7 +60,7 @@ async function _POST(req: Request) {
         input_tokens: inputTokens, output_tokens: outputTokens, success,
       });
     } catch { /* non-fatal */ }
-  })();
+  })());
 
   const negCount = tagged.filter(m => m.sentiment === 'negative').length;
   return NextResponse.json({

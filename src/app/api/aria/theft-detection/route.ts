@@ -6,6 +6,7 @@ import { NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { waitUntil } from '@vercel/functions';
 import { withErrorCapture } from '@/lib/api/with-error-capture';
 
 interface SessionRow { variance_cents: number | null; closed_at: string | null; closed_by: string | null; total_cash_sales: number | null; total_card_sales: number | null }
@@ -74,7 +75,7 @@ async function _POST() {
     } catch (e) { console.error('[theft-detection] AI failed:', (e as Error).message); }
   }
 
-  void (async () => {
+  waitUntil((async () => {
     try {
       await supabaseAdmin.from('aria_ai_calls').insert({
         business_id: bid, agent_key: 'theft_detection', provider: 'anthropic',
@@ -82,7 +83,7 @@ async function _POST() {
         input_tokens: inputTokens, output_tokens: outputTokens, success,
       });
     } catch { /* non-fatal */ }
-  })();
+  })());
 
   return NextResponse.json({ pattern_detected: patternDetected, weekly: ratios, analysis });
 }

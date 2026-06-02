@@ -6,6 +6,7 @@ import { NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { waitUntil } from '@vercel/functions';
 import { withErrorCapture } from '@/lib/api/with-error-capture';
 import { trackAICall } from '@/lib/aria/ai-telemetry';
 
@@ -255,7 +256,7 @@ async function _POST(req: Request): Promise<Response> {
     .eq('id', issue_id);
 
   // Log to aria_ai_calls
-  void (async () => {
+  waitUntil((async () => {
     try {
       await supabaseAdmin.from('aria_ai_calls').insert({
         business_id: biz.id,
@@ -267,7 +268,7 @@ async function _POST(req: Request): Promise<Response> {
         success: true,
       });
     } catch { /* non-fatal */ }
-  })();
+  })());
 
   return NextResponse.json({ suggested_fix: suggestedFix, fix_format: fixFormat });
 }

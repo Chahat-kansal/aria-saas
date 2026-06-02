@@ -6,6 +6,7 @@ import { NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { waitUntil } from '@vercel/functions';
 import { withErrorCapture } from '@/lib/api/with-error-capture';
 
 interface SaleItem { product_name: string | null; quantity: number | null; unit_price: number | null; line_total?: number | null }
@@ -67,7 +68,7 @@ async function _POST(req: Request) {
     inputTokens = res.usage.input_tokens; outputTokens = res.usage.output_tokens; success = true;
   } catch (e) { console.error('[sale-insight] AI failed:', (e as Error).message); }
 
-  void (async () => {
+  waitUntil((async () => {
     try {
       await supabaseAdmin.from('aria_ai_calls').insert({
         business_id: bid, agent_key: 'sale_insight', provider: 'anthropic',
@@ -75,7 +76,7 @@ async function _POST(req: Request) {
         input_tokens: inputTokens, output_tokens: outputTokens, success,
       });
     } catch { /* non-fatal */ }
-  })();
+  })());
 
   return NextResponse.json({ insight, customer_history: customerHistory });
 }

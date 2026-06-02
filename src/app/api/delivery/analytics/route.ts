@@ -4,6 +4,7 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
+import { waitUntil } from '@vercel/functions'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
@@ -50,7 +51,7 @@ async function _GET(req: Request) {
       messages: [{ role: 'user', content: `You are Aria, advisor for ${biz?.name} (Australian business). Delivery platform data last ${days} days:\n${summary}\nTotal commission paid: $${totalCommission.toFixed(2)} (${avgRate}% avg). Give 2 specific actionable insights — best margin platform and one way to reduce commission costs. Direct, Australian tone, under 80 words.` }],
     })
     ariaInsight = (resp.content[0] as { type: string; text: string }).text
-    void (async () => { try { await supabaseAdmin.from('aria_ai_calls').insert({ business_id: bid, model: 'claude-haiku-4-5-20251001', prompt_summary: 'delivery_analytics', response_summary: ariaInsight!.slice(0, 200), tokens_used: resp.usage.input_tokens + resp.usage.output_tokens }) } catch {} })()
+    waitUntil((async () => { try { await supabaseAdmin.from('aria_ai_calls').insert({ business_id: bid, model: 'claude-haiku-4-5-20251001', prompt_summary: 'delivery_analytics', response_summary: ariaInsight!.slice(0, 200), tokens_used: resp.usage.input_tokens + resp.usage.output_tokens }) } catch {} })())
   }
 
   return NextResponse.json({

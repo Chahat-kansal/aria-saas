@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { waitUntil } from '@vercel/functions'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 
 export async function POST(req: Request) {
@@ -56,7 +57,7 @@ export async function POST(req: Request) {
     console.error('[import-map] AI failed:', (err as Error).message)
   }
 
-  void (async () => {
+  waitUntil((async () => {
     try {
       await supabaseAdmin.from('aria_ai_calls').insert({
         business_id: businessId,
@@ -69,7 +70,7 @@ export async function POST(req: Request) {
         success,
       })
     } catch { /* non-fatal */ }
-  })()
+  })())
 
   if (jobId) {
     await supabaseAdmin.from('customer_import_jobs').update({ column_mapping: mapping }).eq('id', jobId)

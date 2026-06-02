@@ -6,6 +6,7 @@ import { NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { waitUntil } from '@vercel/functions';
 import { withErrorCapture } from '@/lib/api/with-error-capture';
 
 interface ParcelRow { carrier: string | null; created_at: string; delivered_at: string | null }
@@ -60,7 +61,7 @@ async function _POST(req: Request) {
     success = true;
   } catch (e) { console.error('[delivery-prediction] AI failed:', (e as Error).message); }
 
-  void (async () => {
+  waitUntil((async () => {
     try {
       await supabaseAdmin.from('aria_ai_calls').insert({
         business_id: bid, agent_key: 'delivery_prediction', provider: 'anthropic',
@@ -68,7 +69,7 @@ async function _POST(req: Request) {
         input_tokens: inputTokens, output_tokens: outputTokens, success,
       });
     } catch { /* non-fatal */ }
-  })();
+  })());
 
   return NextResponse.json({ prediction, baseline_days: Math.round(avgDays * 10) / 10, sample_size: days.length });
 }

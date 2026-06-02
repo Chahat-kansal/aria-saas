@@ -6,6 +6,7 @@ import { NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { waitUntil } from '@vercel/functions';
 import { withErrorCapture } from '@/lib/api/with-error-capture';
 
 interface Sale { total_amount: number | null; created_at: string; status: string | null }
@@ -65,7 +66,7 @@ async function _POST(req: Request) {
     success = true;
   } catch (e) { console.error('[shift-analysis] AI failed:', (e as Error).message); }
 
-  void (async () => {
+  waitUntil((async () => {
     try {
       await supabaseAdmin.from('aria_ai_calls').insert({
         business_id: bid, agent_key: 'shift_analysis', provider: 'anthropic',
@@ -73,7 +74,7 @@ async function _POST(req: Request) {
         input_tokens: inputTokens, output_tokens: outputTokens, success,
       });
     } catch { /* non-fatal */ }
-  })();
+  })());
 
   return NextResponse.json({ analysis, hourly_revenue: hourly, staff_count: staffCount, total_hours: totalHours });
 }

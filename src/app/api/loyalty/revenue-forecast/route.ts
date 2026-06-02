@@ -6,6 +6,7 @@ import { NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { waitUntil } from '@vercel/functions';
 import { withErrorCapture } from '@/lib/api/with-error-capture';
 
 interface CustRow { id: string; total_lifetime_spend: number | null; total_spent: number | null; points_balance: number | null; loyalty_points: number | null; last_visit_at: string | null; loyalty_tier: string | null }
@@ -77,7 +78,7 @@ async function _POST() {
     success = true;
   } catch (e) { console.error('[revenue-forecast] AI failed:', (e as Error).message); }
 
-  void (async () => {
+  waitUntil((async () => {
     try {
       await supabaseAdmin.from('aria_ai_calls').insert({
         business_id: bid, agent_key: 'loyalty_revenue_forecast', provider: 'anthropic',
@@ -85,7 +86,7 @@ async function _POST() {
         input_tokens: inputTokens, output_tokens: outputTokens, success,
       });
     } catch { /* non-fatal */ }
-  })();
+  })());
 
   return NextResponse.json({ summary, insight });
 }

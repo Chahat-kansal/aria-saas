@@ -6,6 +6,7 @@ import { NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { waitUntil } from '@vercel/functions';
 import { withErrorCapture } from '@/lib/api/with-error-capture';
 
 async function _POST(req: Request) {
@@ -48,7 +49,7 @@ async function _POST(req: Request) {
     }
   } catch (e) { console.error('[recipe-scale] AI failed:', (e as Error).message); }
 
-  void (async () => {
+  waitUntil((async () => {
     try {
       await supabaseAdmin.from('aria_ai_calls').insert({
         business_id, agent_key: 'recipe_scale', provider: 'anthropic',
@@ -56,7 +57,7 @@ async function _POST(req: Request) {
         input_tokens: inputTokens, output_tokens: outputTokens, success: aiSuccess,
       });
     } catch { /* non-fatal */ }
-  })();
+  })());
 
   return NextResponse.json({ scaled, factor, warnings });
 }
