@@ -64,6 +64,7 @@ const ALL_ITEMS: Record<string, NavItemDef> = {
   'suppliers':                  { href: '/dashboard/suppliers',                label: 'Supplier prices',   icon: SearchIcon,         section: 'Inventory'    },
   'churn':                      { href: '/dashboard/churn',                    label: 'Churn prevention',  icon: TrendingDownIcon,   section: 'Intelligence' },
   'invoices':                   { href: '/dashboard/invoices',                 label: 'Invoices',          icon: FileTextIcon,       badge: 'AI', section: 'Revenue' },
+  'wholesale':                  { href: '/dashboard/wholesale',                label: 'Wholesale orders',  icon: ClipboardIcon,      badge: 'AI', section: 'Revenue' },
   'bookings':                   { href: '/dashboard/bookings',                 label: 'Bookings + sales',  icon: CalendarIcon,       section: 'Revenue'      },
   'quote-builder':              { href: '/dashboard/quote-builder',            label: 'Quote builder',     icon: FileTextIcon,       section: 'Pro tools'    },
   'compliance':                 { href: '/dashboard/compliance',               label: 'Compliance',        icon: CheckSquareIcon,    section: 'Pro tools'    },
