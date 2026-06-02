@@ -178,6 +178,10 @@
     {
       "path": "/api/cron/xero-auto-sync",
       "schedule": "0 1 * * *"
+    },
+    {
+      "path": "/api/cron/trial-warnings",
+      "schedule": "0 9 * * *"
     }
   ]
 }
