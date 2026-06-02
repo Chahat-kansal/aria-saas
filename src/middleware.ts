@@ -6,7 +6,6 @@ const SECURITY_HEADERS: Record<string, string> = {
   'X-Frame-Options': 'DENY',
   'X-Content-Type-Options': 'nosniff',
   'Referrer-Policy': 'strict-origin-when-cross-origin',
-  // camera/microphone kept for Go Live feature; geolocation for store locator
   'Permissions-Policy': 'camera=(self), microphone=(self), geolocation=(self)',
   'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
 }
@@ -21,10 +20,9 @@ function applySecurityHeaders(res: NextResponse): NextResponse {
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
-  // Public tunnel routes — must never be intercepted by auth checks
   if (pathname.startsWith('/monitoring')) return NextResponse.next()
 
-  // ── PUBLIC API ROUTES — rate limit by IP (unauthenticated, open to abuse) ──
+  // ── PUBLIC API ROUTES — rate limit by IP ──────────────────────────────────
   if (pathname.startsWith('/api/public/')) {
     const ip = request.headers.get('x-forwarded-for') ?? request.ip ?? 'anon'
     const rl = await checkRateLimit('public', ip)
@@ -36,13 +34,11 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  // Forward pathname for server components that need it (e.g. pos/layout.tsx)
   const requestHeaders = new Headers(request.headers)
   requestHeaders.set('x-next-pathname', pathname)
 
   let response = NextResponse.next({ request: { headers: requestHeaders } })
 
-  // One shared factory — recreates response with refreshed cookies when needed
   function makeSupabase() {
     return createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -62,7 +58,7 @@ export async function middleware(request: NextRequest) {
     )
   }
 
-  // ── ADMIN ROUTES — require Supabase auth + admin email ──────────────────────
+  // ── ADMIN ROUTES ──────────────────────────────────────────────────────────
   if (pathname.startsWith('/admin')) {
     const { data: { user } } = await makeSupabase().auth.getUser()
     if (!user) return applySecurityHeaders(NextResponse.redirect(new URL('/login', request.url)))
@@ -74,7 +70,7 @@ export async function middleware(request: NextRequest) {
     return applySecurityHeaders(response)
   }
 
-  // ── PROTECTED ROUTES — require Supabase auth ────────────────────────────────
+  // ── PROTECTED ROUTES — require auth ───────────────────────────────────────
   const isProtected =
     pathname.startsWith('/dashboard') ||
     pathname.startsWith('/onboarding') ||
@@ -84,7 +80,7 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith('/settings')
 
   if (isProtected) {
-    // Block POS employees from the owner dashboard
+    // Block POS employees from owner dashboard
     if (pathname.startsWith('/dashboard') || pathname.startsWith('/settings')) {
       const posEmp = request.cookies.get('pos_emp')
       if (posEmp?.value && ['cashier', 'supervisor'].includes(posEmp.value)) {
@@ -108,12 +104,67 @@ export async function middleware(request: NextRequest) {
       return applySecurityHeaders(NextResponse.redirect(loginUrl))
     }
 
-    // ── TRIAL GATE — dashboard only, skip billing/settings pages ────────────
-    const TRIAL_GATE_EXCEPTIONS = ['/dashboard/billing', '/dashboard/settings']
-    const isDashboard = pathname.startsWith('/dashboard')
-    const isException = TRIAL_GATE_EXCEPTIONS.some(p => pathname.startsWith(p))
+    // ── TRIAL / SUBSCRIPTION CHECK ─────────────────────────────────────────
+    // Always allow: billing, settings, data export (owner must access their data)
+    const ALWAYS_ALLOWED = [
+      '/dashboard/billing',
+      '/dashboard/settings',
+      '/dashboard/export',
+      '/api/business/export',
+    ]
+    const isAlwaysAllowed = ALWAYS_ALLOWED.some(p => pathname.startsWith(p))
 
-    if (isDashboard && !isException) {
+    if (!isAlwaysAllowed && pathname.startsWith('/dashboard')) {
+      const supabase = makeSupabase()
+      const { data: biz } = await supabase
+        .from('businesses')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('is_active', true)
+        .limit(1)
+        .maybeSingle()
+
+      if (biz?.id) {
+        const { data: sub } = await supabase
+          .from('business_subscriptions')
+          .select('status, trial_ends_at')
+          .eq('business_id', biz.id)
+          .maybeSingle()
+
+        const now = new Date()
+        const trialEnd = sub?.trial_ends_at ? new Date(sub.trial_ends_at) : null
+        const trialExpired = sub?.status === 'trialing' && trialEnd && trialEnd < now
+        const noSub = !sub || (sub.status !== 'active' && sub.status !== 'trialing')
+        const isExpired = trialExpired || noSub
+
+        // Days remaining in trial (for warning banner)
+        const daysLeft = trialEnd && !trialExpired
+          ? Math.ceil((trialEnd.getTime() - now.getTime()) / 86400000)
+          : null
+
+        if (isExpired) {
+          // Pass a header so the dashboard page renders a frozen/upgrade banner
+          // instead of redirecting — owner keeps access to their data
+          response.headers.set('x-trial-expired', '1')
+          response.headers.set('x-subscription-status', sub?.status ?? 'none')
+        } else if (daysLeft !== null && daysLeft <= 3) {
+          // Pass warning header so dashboard shows 3-day countdown banner
+          response.headers.set('x-trial-days-left', String(daysLeft))
+        }
+      }
+    }
+
+    return applySecurityHeaders(response)
+  }
+
+  // ── POS TERMINAL — block transactions when trial expired ──────────────────
+  // /pos/terminal and /api/pos/sale are blocked on expired trial
+  const isPOSTerminal = pathname === '/pos/terminal' || pathname.startsWith('/pos/terminal')
+  const isPOSSaleAPI = pathname === '/api/pos/sale' || pathname.startsWith('/api/pos/sale')
+
+  if (isPOSTerminal || isPOSSaleAPI) {
+    const { data: { user } } = await makeSupabase().auth.getUser()
+    if (user) {
       const supabase = makeSupabase()
       const { data: biz } = await supabase
         .from('businesses')
@@ -131,23 +182,26 @@ export async function middleware(request: NextRequest) {
           .maybeSingle()
 
         const trialExpired = sub?.status === 'trialing' &&
-          sub.trial_ends_at &&
-          new Date(sub.trial_ends_at) < new Date()
+          sub.trial_ends_at && new Date(sub.trial_ends_at) < new Date()
+        const noSub = !sub || (sub.status !== 'active' && sub.status !== 'trialing')
 
-        const noActiveSub = !sub || (sub.status !== 'active' && sub.status !== 'trialing')
-
-        if (trialExpired || noActiveSub) {
+        if (trialExpired || noSub) {
+          if (isPOSSaleAPI) {
+            return applySecurityHeaders(NextResponse.json(
+              { error: 'Trial expired. Upgrade your plan to continue taking payments.', trial_expired: true },
+              { status: 402 }
+            ))
+          }
+          // POS terminal — redirect to billing
           return applySecurityHeaders(
             NextResponse.redirect(new URL('/billing?reason=trial_expired', request.url))
           )
         }
       }
     }
-
-    return applySecurityHeaders(response)
   }
 
-  // ── AUTH PAGES — redirect already-logged-in owners away ─────────────────────
+  // ── AUTH PAGES — redirect logged-in owners away ───────────────────────────
   const isAuthPage =
     pathname === '/login' ||
     pathname === '/signup' ||
@@ -163,13 +217,12 @@ export async function middleware(request: NextRequest) {
     return applySecurityHeaders(response)
   }
 
-  // ── ROOT — authenticated owners → POS; unauthenticated → landing page ───────
+  // ── ROOT ──────────────────────────────────────────────────────────────────
   if (pathname === '/') {
     const { data: { user } } = await makeSupabase().auth.getUser()
     if (user) {
       return applySecurityHeaders(NextResponse.redirect(new URL('/pos/terminal', request.url)))
     }
-    // Unauthenticated: serve the marketing landing page — no redirect
     return applySecurityHeaders(response)
   }
 
@@ -193,7 +246,7 @@ export const config = {
     '/chat/:path*',
     '/settings/:path*',
     '/api/public/:path*',
-    // NOTE: /pos is deliberately NOT here — POSAuthGate handles staff auth client-side
-    // NOTE: /monitoring is deliberately NOT here — public Sentry tunnel proxy, no auth needed
+    '/pos/terminal',
+    '/api/pos/sale',
   ],
 }

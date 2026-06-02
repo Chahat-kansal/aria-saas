@@ -51,8 +51,9 @@ export default function BillingPage({
               Trial ended
             </div>
             <h1 className="text-2xl font-semibold text-white mb-3">Your 14-day trial has ended</h1>
-            <p style={{ color: 'rgba(255,255,255,0.5)' }} className="text-sm">
-              Choose a plan to continue using Aria OS. Your data is safe and waiting.
+            <p style={{ color: 'rgba(255,255,255,0.5)' }} className="text-sm leading-relaxed">
+              Upgrade to continue using Aria&apos;s AI features. Your data is safe — you can still
+              view your dashboard and download your data below.
             </p>
           </>
         ) : (
@@ -118,8 +119,30 @@ export default function BillingPage({
         ))}
       </div>
 
+      {/* Data access — always visible when trial expired */}
+      {isExpired && (
+        <div className="w-full max-w-5xl mb-8 p-4 rounded-xl"
+          style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
+          <p className="text-xs text-center mb-3" style={{ color: 'rgba(255,255,255,0.45)' }}>
+            Your data is safe. You can still access your dashboard and download everything.
+          </p>
+          <div className="flex flex-wrap justify-center gap-3">
+            <Link href="/dashboard"
+              className="px-4 py-2 rounded-lg text-xs font-medium transition-opacity hover:opacity-80"
+              style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.7)', border: '1px solid rgba(255,255,255,0.1)' }}>
+              View dashboard (read-only)
+            </Link>
+            <a href="/api/business/export"
+              className="px-4 py-2 rounded-lg text-xs font-medium transition-opacity hover:opacity-80"
+              style={{ background: 'rgba(127,184,151,0.1)', color: '#7FB897', border: '1px solid rgba(127,184,151,0.25)' }}>
+              Download all my data ↓
+            </a>
+          </div>
+        </div>
+      )}
+
       {/* Footer links */}
-      <div className="flex gap-6 text-xs" style={{ color: 'rgba(255,255,255,0.35)' }}>
+      <div className="flex flex-wrap justify-center gap-4 text-xs" style={{ color: 'rgba(255,255,255,0.35)' }}>
         <Link href="/dashboard" className="hover:text-white transition-colors">
           Back to dashboard
         </Link>
