@@ -31,7 +31,7 @@ async function _GET(req: Request) {
     // Only active statuses; exclude orders older than 24h (stale multi-day orders)
     const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
     query = query
-      .in('status', ['new', 'in_progress', 'ready'])
+      .in('status', ['new', 'bumped', 'in_progress', 'ready'])
       .gte('created_at', cutoff);
   }
 
