@@ -78,6 +78,8 @@ export default function IntelligencePage() {
   const [acking, setAcking] = useState<string | null>(null)
   const [actionFiring, setActionFiring] = useState<Record<string, boolean>>({})
   const [verdictFiring, setVerdictFiring] = useState<Record<string, boolean>>({})
+  const [patterns, setPatterns] = useState<Array<{ id: string; title: string; body: string; triggered_at: string; acknowledged: boolean }>>([])
+  const [patternsLoading, setPatternsLoading] = useState(false)
 
   const load = useCallback(async () => {
     if (!business?.id) return
@@ -107,6 +109,20 @@ export default function IntelligencePage() {
       .subscribe()
     return () => { supabase.removeChannel(channel) }
   }, [business?.id])
+
+  // Fetch pattern history when an event is selected
+  useEffect(() => {
+    if (!selected || !business?.id) {
+      setPatterns([])
+      return
+    }
+    setPatternsLoading(true)
+    fetch('/api/intelligence-events/patterns?event_type=' + encodeURIComponent(selected.event_type) + '&business_id=' + business.id)
+      .then(r => r.json())
+      .then(d => { setPatterns(d.patterns ?? []) })
+      .catch(() => setPatterns([]))
+      .finally(() => setPatternsLoading(false))
+  }, [selected?.id, business?.id])
 
   const [clearingAll, setClearingAll] = useState(false)
   const [toast, setToast] = useState('')
@@ -466,6 +482,32 @@ export default function IntelligencePage() {
                 </div>
               </>
             )}
+
+            {/* Pattern history */}
+            <div style={{ marginBottom: 16 }}>
+              <p style={{ fontSize: 10, color: C.dim, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>Pattern history</p>
+              {patternsLoading ? (
+                <p style={{ fontSize: 11, color: C.muted }}>Loading pattern history…</p>
+              ) : patterns.length === 0 ? (
+                <p style={{ fontSize: 11, color: C.muted }}>First time we&apos;ve seen this</p>
+              ) : (
+                <div style={{ padding: 10, borderRadius: 8, background: 'rgba(255,255,255,0.02)', border: '1px solid ' + C.border }}>
+                  <p style={{ fontSize: 11, color: C.green, fontWeight: 600, marginBottom: 6 }}>
+                    This happened {patterns.length} time{patterns.length === 1 ? '' : 's'} before
+                  </p>
+                  {patterns.map(p => (
+                    <p key={p.id} style={{ fontSize: 11, color: C.dim, margin: '2px 0' }}>
+                      · {new Date(p.triggered_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}
+                    </p>
+                  ))}
+                  {patterns.length >= 2 && (
+                    <p style={{ fontSize: 11, color: '#f59e0b', marginTop: 8 }}>
+                      Recurring {selected.event_type.replace(/_/g, ' ')} pattern detected — this appears to be a systemic issue.
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
 
             <p style={{ fontSize: 10, color: C.dim, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>Take action</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
