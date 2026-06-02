@@ -9,140 +9,180 @@ import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 function buildWholesaleInvoiceHtml(
-  biz: { name: string; abn?: string | null; address?: string | null; phone?: string | null; logo_url?: string | null },
+  biz: { name: string; abn?: string | null; address?: string | null; phone?: string | null; email?: string | null; website?: string | null; logo_url?: string | null },
   inv: Record<string, unknown>,
   order: Record<string, unknown>,
   customer: Record<string, unknown> | null,
   items: Record<string, unknown>[],
 ): string {
-  const issueDate = inv.issue_date ? new Date(inv.issue_date as string).toLocaleDateString('en-AU') : ''
-  const dueDate = inv.due_date ? new Date(inv.due_date as string).toLocaleDateString('en-AU') : ''
+  const issueDate = inv.issue_date ? new Date(inv.issue_date as string).toLocaleDateString('en-AU', { day: '2-digit', month: 'short', year: 'numeric' }) : ''
+  const dueDate = inv.due_date ? new Date(inv.due_date as string).toLocaleDateString('en-AU', { day: '2-digit', month: 'short', year: 'numeric' }) : ''
   const subtotal = (Number(order.subtotal) || 0).toFixed(2)
   const discountTotal = (Number(order.discount_total) || 0).toFixed(2)
   const freight = (Number(order.freight) || 0).toFixed(2)
   const gstTotal = (Number(order.gst_total) || 0).toFixed(2)
   const total = (Number(order.total) || 0).toFixed(2)
   const bizInitial = (biz.name || 'A').charAt(0).toUpperCase()
-
-  const itemRows = items.map(i => {
-    const discPct = Number(i.discount_pct) || 0
-    return '<tr>' +
-      '<td style="padding:8px 12px;border-bottom:1px solid #e8f0eb;font-size:13px;">' +
-        (i.sku ? '<span style="font-family:monospace;font-size:11px;color:#666;margin-right:6px;">' + i.sku + '</span>' : '') +
-        (i.name as string) +
-        (i.description ? '<br><span style="font-size:11px;color:#888;">' + i.description + '</span>' : '') +
-      '</td>' +
-      '<td style="padding:8px 12px;border-bottom:1px solid #e8f0eb;font-size:13px;text-align:center;">' + (i.quantity as number) + '</td>' +
-      '<td style="padding:8px 12px;border-bottom:1px solid #e8f0eb;font-size:13px;text-align:right;">$' + (Number(i.retail_price) || 0).toFixed(2) + '</td>' +
-      '<td style="padding:8px 12px;border-bottom:1px solid #e8f0eb;font-size:13px;text-align:right;">$' + (Number(i.unit_price) || 0).toFixed(2) + '</td>' +
-      '<td style="padding:8px 12px;border-bottom:1px solid #e8f0eb;font-size:13px;text-align:center;">' + (discPct > 0 ? discPct.toFixed(0) + '%' : '—') + '</td>' +
-      '<td style="padding:8px 12px;border-bottom:1px solid #e8f0eb;font-size:13px;text-align:right;">$' + (Number(i.line_total) || 0).toFixed(2) + '</td>' +
-    '</tr>'
-  }).join('')
-
   const shippingAddress = (customer?.shipping_address as string | null) || (order.delivery_address as string | null) || '—'
   const billingAddress = (customer?.billing_address as string | null) || shippingAddress
 
-  return '<!DOCTYPE html>' +
-'<html lang="en">' +
-'<head>' +
-'<meta charset="utf-8">' +
-'<title>Tax Invoice ' + (inv.invoice_number as string) + '</title>' +
-'<style>' +
-'* { box-sizing: border-box; margin: 0; padding: 0; }' +
-'body { font-family: Arial, sans-serif; padding: 40px; color: #1a1a1a; background: #fff; }' +
-'.header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 32px; border-bottom: 3px solid #2D5240; padding-bottom: 20px; }' +
-'.logo-circle { width: 56px; height: 56px; border-radius: 50%; background: #2D5240; color: #7FB897; font-size: 26px; font-weight: 700; display: flex; align-items: center; justify-content: center; margin-bottom: 8px; }' +
-'.grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 24px; }' +
-'.grid-cell { background: #f5faf7; border-radius: 6px; padding: 14px; }' +
-'.grid-cell-title { font-size: 10px; font-weight: 700; color: #2D5240; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }' +
-'.grid-cell p { font-size: 12px; color: #444; margin-bottom: 2px; }' +
-'table { width: 100%; border-collapse: collapse; margin-bottom: 24px; }' +
-'thead tr { background: #2D5240; color: #fff; }' +
-'th, td { padding: 10px 12px; }' +
-'th { font-size: 12px; }' +
-'.totals { margin-left: auto; width: 280px; border: 1px solid #e8f0eb; border-radius: 8px; padding: 16px; }' +
-'.tot-row { display: flex; justify-content: space-between; padding: 5px 0; font-size: 13px; color: #555; }' +
-'.tot-grand { display: flex; justify-content: space-between; padding: 10px 0 0 0; font-size: 16px; font-weight: 700; border-top: 2px solid #2D5240; margin-top: 8px; }' +
-'.payment-block { margin-top: 24px; background: #f5faf7; border-radius: 8px; padding: 20px; }' +
-'.payment-title { font-size: 13px; font-weight: 700; color: #2D5240; margin-bottom: 12px; }' +
-'.footer { margin-top: 28px; font-size: 10px; color: #999; text-align: center; border-top: 1px solid #e8e8e8; padding-top: 12px; }' +
-'</style>' +
-'</head>' +
-'<body>' +
-'<div class="header">' +
-'<div>' +
-'<div class="logo-circle">' + bizInitial + '</div>' +
-'<h1 style="font-size:22px;font-weight:700;color:#2D5240;margin-bottom:4px;">TAX INVOICE</h1>' +
-'<p style="font-size:16px;font-weight:600;">' + biz.name + '</p>' +
-(biz.abn ? '<p style="font-size:12px;color:#666;margin-top:2px;">ABN: ' + biz.abn + '</p>' : '') +
-(biz.address ? '<p style="font-size:12px;color:#666;">' + biz.address + '</p>' : '') +
-(biz.phone ? '<p style="font-size:12px;color:#666;">' + biz.phone + '</p>' : '') +
-'</div>' +
-'<div style="text-align:right;">' +
-'<p style="font-size:22px;font-weight:700;color:#2D5240;font-family:monospace;">' + (inv.invoice_number as string) + '</p>' +
-'<p style="font-size:12px;color:#666;margin-top:4px;">Order: ' + (order.order_number as string) + '</p>' +
-'<p style="font-size:12px;color:#666;">Issue date: ' + issueDate + '</p>' +
-(dueDate ? '<p style="font-size:12px;color:#ef4444;font-weight:600;">Due: ' + dueDate + '</p>' : '') +
-'</div>' +
-'</div>' +
+  const itemRows = items.map(i => {
+    const discPct = Number(i.discount_pct) || 0
+    const lineTotal = (Number(i.line_total) || 0).toFixed(2)
+    return `<tr>
+      <td style="padding:10px 12px;border-bottom:1px solid #eef2ee;font-size:11px;color:#888;font-family:monospace;">${i.sku || '—'}</td>
+      <td style="padding:10px 12px;border-bottom:1px solid #eef2ee;">
+        <span style="font-size:13px;font-weight:500;">${i.name as string}</span>
+        ${i.description ? `<div style="font-size:11px;color:#888;margin-top:2px;">${i.description as string}</div>` : ''}
+      </td>
+      <td style="padding:10px 12px;border-bottom:1px solid #eef2ee;text-align:right;font-size:13px;">${i.quantity as number}</td>
+      <td style="padding:10px 12px;border-bottom:1px solid #eef2ee;text-align:right;font-size:13px;">$${(Number(i.unit_price) || 0).toFixed(2)}</td>
+      <td style="padding:10px 12px;border-bottom:1px solid #eef2ee;text-align:right;font-size:13px;color:${discPct > 0 ? '#166534' : '#888'};">${discPct > 0 ? discPct.toFixed(0) + '%' : '—'}</td>
+      <td style="padding:10px 12px;border-bottom:1px solid #eef2ee;text-align:right;font-size:13px;font-weight:500;">$${lineTotal}</td>
+    </tr>`
+  }).join('')
 
-'<div class="grid-3">' +
-'<div class="grid-cell">' +
-'<div class="grid-cell-title">Bill To</div>' +
-(customer?.business_name ? '<p style="font-weight:600;">' + (customer.business_name as string) + '</p>' : '') +
-(customer?.name ? '<p>' + (customer.name as string) + '</p>' : '') +
-(customer?.email ? '<p>' + (customer.email as string) + '</p>' : '') +
-(billingAddress !== '—' ? '<p style="margin-top:4px;">' + billingAddress + '</p>' : '') +
-'</div>' +
-'<div class="grid-cell">' +
-'<div class="grid-cell-title">Ship To</div>' +
-'<p>' + shippingAddress + '</p>' +
-(order.delivery_notes ? '<p style="margin-top:4px;font-style:italic;">' + (order.delivery_notes as string) + '</p>' : '') +
-'</div>' +
-'<div class="grid-cell">' +
-'<div class="grid-cell-title">Order Details</div>' +
-'<p><strong>Terms:</strong> ' + (order.payment_terms as string || 'Net 14') + '</p>' +
-(order.po_ref ? '<p><strong>PO Ref:</strong> ' + (order.po_ref as string) + '</p>' : '') +
-(order.delivery_date ? '<p><strong>Delivery:</strong> ' + new Date(order.delivery_date as string).toLocaleDateString('en-AU') + '</p>' : '') +
-(customer?.abn ? '<p><strong>ABN:</strong> ' + (customer.abn as string) + '</p>' : '') +
-'</div>' +
-'</div>' +
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Tax Invoice ${inv.invoice_number as string}</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, 'Helvetica Neue', Arial, sans-serif; padding: 40px 44px; color: #111; background: #fff; font-size: 13px; }
+.header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 28px; }
+.biz-logo { width: 48px; height: 48px; border-radius: 10px; background: #2D5240; color: #7FB897; font-size: 22px; font-weight: 600; display: flex; align-items: center; justify-content: center; margin-bottom: 10px; font-style: italic; }
+.biz-name { font-size: 17px; font-weight: 600; margin-bottom: 3px; }
+.biz-meta { font-size: 11px; color: #666; line-height: 1.7; }
+.inv-number { font-size: 19px; font-weight: 600; text-align: right; margin-bottom: 6px; }
+.inv-badge { display: inline-block; font-size: 11px; padding: 3px 10px; border-radius: 99px; background: #fef9c3; color: #854d0e; font-weight: 500; }
+.divider { height: 1px; background: #e5e7eb; margin: 20px 0; }
+.meta-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; margin-bottom: 24px; }
+.meta-cell-label { font-size: 10px; font-weight: 600; color: #888; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 7px; }
+.meta-cell p { font-size: 12px; color: #444; line-height: 1.65; }
+.meta-cell strong { color: #111; font-weight: 500; }
+table { width: 100%; border-collapse: collapse; margin-bottom: 24px; }
+thead tr { background: #f8faf8; border-top: 1px solid #e5e7eb; border-bottom: 1px solid #e5e7eb; }
+th { font-size: 10px; font-weight: 600; color: #666; text-transform: uppercase; letter-spacing: 0.06em; padding: 8px 12px; }
+.bottom-block { display: flex; justify-content: space-between; gap: 32px; padding-top: 8px; }
+.notes-block { flex: 1; font-size: 12px; color: #555; line-height: 1.6; }
+.notes-label { font-size: 10px; font-weight: 600; color: #888; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 7px; }
+.totals-block { width: 240px; font-size: 12px; }
+.tot-row { display: flex; justify-content: space-between; padding: 4px 0; color: #555; }
+.tot-row.discount { color: #166534; }
+.tot-grand { display: flex; justify-content: space-between; padding: 9px 0 0; font-size: 14px; font-weight: 600; border-top: 1px solid #e5e7eb; margin-top: 8px; }
+.amount-due { display: flex; justify-content: space-between; padding: 6px 10px; margin-top: 10px; background: #fef9c3; border-radius: 6px; }
+.amount-due span { font-size: 13px; font-weight: 600; color: #854d0e; }
+.payment-block { margin-top: 28px; background: #f8faf8; border-radius: 8px; padding: 18px 20px; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; }
+.pay-label { font-size: 10px; font-weight: 600; color: #888; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 7px; }
+.pay-val { font-size: 11px; color: #444; line-height: 1.7; font-family: monospace; }
+.footer { margin-top: 24px; font-size: 10px; color: #aaa; display: flex; justify-content: space-between; border-top: 1px solid #e5e7eb; padding-top: 12px; }
+</style>
+</head>
+<body>
 
-'<table>' +
-'<thead><tr>' +
-'<th style="text-align:left;">Product</th>' +
-'<th style="text-align:center;">Qty</th>' +
-'<th style="text-align:right;">RRP</th>' +
-'<th style="text-align:right;">Wholesale</th>' +
-'<th style="text-align:center;">Disc</th>' +
-'<th style="text-align:right;">Line Total</th>' +
-'</tr></thead>' +
-'<tbody>' + itemRows + '</tbody>' +
-'</table>' +
+<!-- Header -->
+<div class="header">
+  <div>
+    <div class="biz-logo">${bizInitial}</div>
+    <div class="biz-name">${biz.name}</div>
+    <div class="biz-meta">
+      ${biz.abn ? `ABN ${biz.abn}` : ''}${biz.abn && biz.address ? ' · ' : ''}${biz.address || ''}<br>
+      ${[biz.email, biz.phone, biz.website].filter(Boolean).join(' · ')}
+    </div>
+  </div>
+  <div style="text-align:right;">
+    <div style="font-size:10px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px;">Tax invoice</div>
+    <div class="inv-number">${inv.invoice_number as string}</div>
+    <span class="inv-badge">Awaiting payment</span>
+  </div>
+</div>
 
-'<div style="display:flex;justify-content:flex-end;">' +
-'<div class="totals">' +
-'<div class="tot-row"><span>Subtotal</span><span>$' + subtotal + '</span></div>' +
-(Number(discountTotal) > 0 ? '<div class="tot-row" style="color:#2D5240;"><span>Customer Discount</span><span>−$' + discountTotal + '</span></div>' : '') +
-(Number(freight) > 0 ? '<div class="tot-row"><span>Freight</span><span>$' + freight + '</span></div>' : '') +
-'<div class="tot-row"><span>GST (10%)</span><span>$' + gstTotal + '</span></div>' +
-'<div class="tot-grand"><span>Total AUD</span><span>$' + total + '</span></div>' +
-'</div>' +
-'</div>' +
+<div class="divider"></div>
 
-'<div class="payment-block">' +
-'<div class="payment-title">Payment Information</div>' +
-'<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">' +
-'<div><p style="font-size:12px;font-weight:600;margin-bottom:6px;">Bank Transfer</p><p style="font-size:12px;color:#555;">Please reference invoice number ' + (inv.invoice_number as string) + ' when paying.</p></div>' +
-'<div><p style="font-size:12px;font-weight:600;margin-bottom:6px;">Terms</p><p style="font-size:12px;color:#555;">' + (order.payment_terms as string || 'Net 14') + '. Payment due by ' + dueDate + '.</p></div>' +
-'</div>' +
-(order.notes ? '<p style="font-size:12px;color:#555;margin-top:12px;border-top:1px solid #ddd;padding-top:10px;"><strong>Notes:</strong> ' + (order.notes as string) + '</p>' : '') +
-'</div>' +
+<!-- Bill to / Ship to / Details -->
+<div class="meta-grid">
+  <div class="meta-cell">
+    <div class="meta-cell-label">Bill to</div>
+    ${customer?.business_name ? `<p><strong>${customer.business_name as string}</strong></p>` : ''}
+    ${customer?.abn ? `<p>ABN ${customer.abn as string}</p>` : ''}
+    ${customer?.name ? `<p>Attn: ${customer.name as string}</p>` : ''}
+    ${billingAddress !== '—' ? `<p>${billingAddress}</p>` : ''}
+    ${customer?.email ? `<p>${customer.email as string}</p>` : ''}
+  </div>
+  <div class="meta-cell">
+    <div class="meta-cell-label">Ship to</div>
+    <p>${shippingAddress}</p>
+    ${order.delivery_notes ? `<p style="margin-top:4px;font-style:italic;">${order.delivery_notes as string}</p>` : ''}
+  </div>
+  <div class="meta-cell">
+    <div class="meta-cell-label">Details</div>
+    <table style="width:100%;margin:0;border:none;">
+      <tr><td style="padding:2px 0;color:#888;font-size:11px;border:none;">Issued</td><td style="padding:2px 0;text-align:right;font-size:11px;border:none;">${issueDate}</td></tr>
+      <tr><td style="padding:2px 0;color:#888;font-size:11px;border:none;">Due</td><td style="padding:2px 0;text-align:right;font-size:11px;font-weight:600;border:none;">${dueDate}</td></tr>
+      <tr><td style="padding:2px 0;color:#888;font-size:11px;border:none;">Terms</td><td style="padding:2px 0;text-align:right;font-size:11px;border:none;">${order.payment_terms as string || 'Net 14'}</td></tr>
+      ${order.po_ref ? `<tr><td style="padding:2px 0;color:#888;font-size:11px;border:none;">PO ref</td><td style="padding:2px 0;text-align:right;font-size:11px;border:none;">${order.po_ref as string}</td></tr>` : ''}
+      <tr><td style="padding:2px 0;color:#888;font-size:11px;border:none;">Order ID</td><td style="padding:2px 0;text-align:right;font-size:11px;border:none;">${order.order_number as string}</td></tr>
+    </table>
+  </div>
+</div>
 
-'<p class="footer">This is a tax invoice for GST purposes. ' + biz.name + ' ABN: ' + (biz.abn ?? 'N/A') + ' — Generated by Aria OS</p>' +
-'</body></html>'
+<!-- Line items -->
+<table>
+  <thead>
+    <tr>
+      <th style="text-align:left;width:72px;">SKU</th>
+      <th style="text-align:left;">Description</th>
+      <th style="text-align:right;width:40px;">Qty</th>
+      <th style="text-align:right;width:80px;">Unit price</th>
+      <th style="text-align:right;width:50px;">Disc.</th>
+      <th style="text-align:right;width:80px;">Line total</th>
+    </tr>
+  </thead>
+  <tbody>${itemRows}</tbody>
+</table>
+
+<!-- Notes + Totals -->
+<div class="bottom-block">
+  <div class="notes-block">
+    <div class="notes-label">Notes</div>
+    <p>${order.notes as string || 'Thank you for your order.'}</p>
+  </div>
+  <div class="totals-block">
+    <div class="tot-row"><span>Subtotal (excl. GST)</span><span>$${subtotal}</span></div>
+    ${Number(discountTotal) > 0 ? `<div class="tot-row discount"><span>Discount</span><span>−$${discountTotal}</span></div>` : ''}
+    ${Number(freight) > 0 ? `<div class="tot-row"><span>Freight</span><span>$${freight}</span></div>` : `<div class="tot-row"><span>Freight</span><span>$0.00</span></div>`}
+    <div class="tot-row"><span>GST (10%)</span><span>$${gstTotal}</span></div>
+    <div class="tot-grand"><span>Total inc. GST</span><span>$${total}</span></div>
+    <div class="amount-due"><span>Amount due</span><span>$${total}</span></div>
+  </div>
+</div>
+
+<!-- Payment block -->
+<div class="payment-block">
+  <div>
+    <div class="pay-label">Bank transfer</div>
+    <div class="pay-val">Reference: ${inv.invoice_number as string}<br>Due by: ${dueDate}</div>
+  </div>
+  <div>
+    <div class="pay-label">Pay online</div>
+    <div class="pay-val" style="font-family:sans-serif;">Card or PayID — secure link sent via email with this invoice.</div>
+  </div>
+  <div>
+    <div class="pay-label">Terms</div>
+    <div class="pay-val" style="font-family:sans-serif;">${order.payment_terms as string || 'Net 14'}. 2% late fee per month after due date. Goods remain ${biz.name}\'s property until paid in full.</div>
+  </div>
+</div>
+
+<div class="footer">
+  <span>Thank you for your order — questions: ${biz.email || 'hello@' + biz.name.toLowerCase().replace(/\s+/g, '') + '.com'}</span>
+  <span>Generated by Aria · ariaos.site</span>
+</div>
+
+</body>
+</html>`
 }
+
 
 async function _POST(req: Request, { params }: { params: { id: string } }) {
   const supabase = createServerSupabaseClient()
