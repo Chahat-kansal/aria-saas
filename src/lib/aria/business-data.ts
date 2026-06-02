@@ -18,6 +18,13 @@ export type AriaDataStatus = {
   missing_required_data: string[];
 };
 
+export type WholesaleContext = {
+  revenue_this_month: number;
+  outstanding_receivables: number;
+  top_customers: Array<{ customer_id: string; name: string; revenue: number }>;
+  reorder_reminders: Array<{ customer_id: string; name: string; message: string }>;
+};
+
 export type AriaBusinessData = {
   business: Row | null;
   data_status: AriaDataStatus;
@@ -41,6 +48,7 @@ export type AriaBusinessData = {
     imports: number;
     actions: number;
   };
+  wholesale?: WholesaleContext;
 };
 
 const RECENT_LIMIT = 500;
@@ -218,6 +226,100 @@ export async function collectBusinessData(
     ...imports,
   ]);
 
+  // Fetch wholesale context
+  const wholesaleCtx = await (async (): Promise<WholesaleContext> => {
+    try {
+      const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
+      const since90 = daysAgo(90);
+
+      const [monthOrders, outstandingOrders, allOrders90] = await Promise.all([
+        db.from('wholesale_orders').select('total').eq('business_id', businessId)
+          .in('status', ['confirmed', 'invoiced', 'sent', 'partial', 'paid'])
+          .gte('created_at', monthStart),
+        db.from('wholesale_orders').select('total').eq('business_id', businessId)
+          .in('status', ['sent', 'partial']),
+        db.from('wholesale_orders').select('customer_id, total, created_at').eq('business_id', businessId)
+          .in('status', ['confirmed', 'invoiced', 'sent', 'partial', 'paid'])
+          .gte('created_at', since90),
+      ]);
+
+      const revenue_this_month = (monthOrders.data ?? []).reduce((s: number, o: Row) => s + (Number(o.total) || 0), 0);
+      const outstanding_receivables = (outstandingOrders.data ?? []).reduce((s: number, o: Row) => s + (Number(o.total) || 0), 0);
+
+      // Top 3 customers by revenue in last 90d
+      const custRevMap: Record<string, number> = {};
+      for (const o of (allOrders90.data ?? [])) {
+        if (!o.customer_id) continue;
+        custRevMap[o.customer_id] = (custRevMap[o.customer_id] ?? 0) + (Number(o.total) || 0);
+      }
+      const topCustIds = Object.entries(custRevMap).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([id]) => id);
+
+      let top_customers: Array<{ customer_id: string; name: string; revenue: number }> = [];
+      if (topCustIds.length > 0) {
+        const { data: custData } = await db.from('customers').select('id, name, business_name').in('id', topCustIds);
+        top_customers = topCustIds.map(id => {
+          const c = (custData ?? []).find((x: Row) => x.id === id);
+          return { customer_id: id, name: (c?.business_name ?? c?.name ?? id) as string, revenue: custRevMap[id] ?? 0 };
+        });
+      }
+
+      // Reorder reminders: customers with avg cycle < 30d and last order > avg ago
+      const reorder_reminders: Array<{ customer_id: string; name: string; message: string }> = [];
+      try {
+        const { data: allCustOrders } = await db.from('wholesale_orders')
+          .select('customer_id, created_at')
+          .eq('business_id', businessId)
+          .in('status', ['confirmed', 'invoiced', 'sent', 'partial', 'paid'])
+          .order('created_at', { ascending: true });
+
+        const custOrderDates: Record<string, string[]> = {};
+        for (const o of (allCustOrders ?? [])) {
+          if (!o.customer_id) continue;
+          if (!custOrderDates[o.customer_id]) custOrderDates[o.customer_id] = [];
+          custOrderDates[o.customer_id].push(o.created_at);
+        }
+
+        const nowMs = Date.now();
+        for (const [custId, dates] of Object.entries(custOrderDates)) {
+          if (dates.length < 2) continue;
+          const gaps: number[] = [];
+          for (let i = 1; i < dates.length; i++) {
+            gaps.push(new Date(dates[i]).getTime() - new Date(dates[i - 1]).getTime());
+          }
+          const avgGapMs = gaps.reduce((a, b) => a + b, 0) / gaps.length;
+          const avgGapDays = avgGapMs / 86400000;
+          if (avgGapDays >= 30) continue;
+
+          const lastOrderMs = new Date(dates[dates.length - 1]).getTime();
+          const daysSinceLast = (nowMs - lastOrderMs) / 86400000;
+          if (daysSinceLast < avgGapDays) continue;
+
+          const custInfo = top_customers.find(c => c.customer_id === custId);
+          const custName = custInfo?.name ?? custId;
+          reorder_reminders.push({
+            customer_id: custId,
+            name: custName,
+            message: custName + ' is due to reorder based on their usual ' + Math.round(avgGapDays) + '-day cycle (last ordered ' + Math.round(daysSinceLast) + ' days ago)',
+          });
+
+          // Write to aria_notifications if table exists
+          try {
+            await db.from('aria_notifications').insert({
+              type: 'wholesale_reorder_due',
+              business_id: businessId,
+              message: custName + ' is due to reorder based on their usual cycle',
+              customer_id: custId,
+            });
+          } catch { /* table may not exist — skip */ }
+        }
+      } catch { /* non-fatal */ }
+
+      return { revenue_this_month, outstanding_receivables, top_customers, reorder_reminders };
+    } catch {
+      return { revenue_this_month: 0, outstanding_receivables: 0, top_customers: [], reorder_reminders: [] };
+    }
+  })();
+
   return {
     business,
     data_status: {
@@ -253,6 +355,7 @@ export async function collectBusinessData(
       imports: imports.length,
       actions: previousActions.length,
     },
+    wholesale: wholesaleCtx,
   };
 }
 
@@ -291,6 +394,12 @@ export function emptyBusinessData(business: Row | null): AriaBusinessData {
       staff: 0,
       imports: 0,
       actions: 0,
+    },
+    wholesale: {
+      revenue_this_month: 0,
+      outstanding_receivables: 0,
+      top_customers: [],
+      reorder_reminders: [],
     },
   };
 }

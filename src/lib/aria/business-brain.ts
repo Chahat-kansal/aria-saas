@@ -189,6 +189,12 @@ function compactData(data: AriaBusinessData) {
       rows_preview: Array.isArray(file.rows) ? file.rows.slice(0, 25) : [],
     })),
     previous_actions: compactRows(data.previous_actions, ['id', 'title', 'category', 'priority', 'status', 'reason', 'expected_impact', 'created_at', 'reviewed_at', 'completed_at'], 50),
+    wholesale: {
+      revenue_this_month: data.wholesale?.revenue_this_month ?? 0,
+      outstanding_receivables: data.wholesale?.outstanding_receivables ?? 0,
+      top_customers: data.wholesale?.top_customers ?? [],
+      reorder_reminders: data.wholesale?.reorder_reminders ?? [],
+    },
   };
 }
 
