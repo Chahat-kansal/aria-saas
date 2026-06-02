@@ -17,13 +17,10 @@ async function _POST(req: Request) {
 
   const pts = points_earned ?? Math.floor((sale_total ?? 0))
 
-  const { data: customer } = await supabaseAdmin
-    .from('pos_customers').select('loyalty_points').eq('id', customer_id).maybeSingle()
-  if (!customer) return NextResponse.json({ error: 'Customer not found' }, { status: 404 })
-
-  const newPoints = (Number(customer.loyalty_points) || 0) + pts
-  await supabaseAdmin.from('pos_customers')
-    .update({ loyalty_points: newPoints }).eq('id', customer_id)
+  const { data: newPoints, error: rpcErr } = await supabaseAdmin
+    .rpc('increment_numeric', { p_table: 'pos_customers', p_id: customer_id, p_column: 'loyalty_points', p_amount: pts })
+  if (rpcErr) return NextResponse.json({ error: rpcErr.message }, { status: 500 })
+  if (newPoints === null || newPoints === undefined) return NextResponse.json({ error: 'Customer not found' }, { status: 404 })
 
   return NextResponse.json({ ok: true, points_earned: pts, total_points: newPoints })
 }
