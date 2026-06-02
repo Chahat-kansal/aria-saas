@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic'
 
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 const MANUAL_TYPES = new Set(['slow_page', 'broken_link', 'broken_page'])
@@ -50,11 +51,23 @@ async function _POST(req: Request): Promise<Response> {
   const isManual = MANUAL_TYPES.has(issueType)
   const newState = isManual ? 'flagged' : 'applied'
 
+  const appliedAt = new Date().toISOString()
+
   await supabase.from('seo_issues').update({
     state: newState,
-    applied_at: new Date().toISOString(),
+    applied_at: appliedAt,
     ai_fix_text: fix_value ?? null,
   }).eq('id', issue_id)
+
+  // Log to seo_fixes for Fix History tab
+  await supabaseAdmin.from('seo_fixes').insert({
+    business_id: issue.business_id,
+    issue_id: issue.id,
+    issue_type: issueType,
+    fix_applied: fix_value ?? null,
+    state: newState,
+    applied_at: appliedAt,
+  })
 
   const baseStep = NEXT_STEPS[issueType] ?? (
     isManual
