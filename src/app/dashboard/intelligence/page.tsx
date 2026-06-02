@@ -77,6 +77,7 @@ export default function IntelligencePage() {
   const [newCount, setNewCount] = useState(0)
   const [acking, setAcking] = useState<string | null>(null)
   const [actionFiring, setActionFiring] = useState<Record<string, boolean>>({})
+  const [verdictFiring, setVerdictFiring] = useState<Record<string, boolean>>({})
 
   const load = useCallback(async () => {
     if (!business?.id) return
@@ -146,6 +147,26 @@ export default function IntelligencePage() {
   async function updateHypothesis(id: string, status: string) {
     await fetch('/api/aria/hypotheses?id=' + id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) })
     setHypotheses(hs => hs.map(h => h.id === id ? { ...h, status } : h))
+  }
+
+  async function submitVerdict(h: Hypothesis, verdict: 'worked' | 'failed' | 'inconclusive') {
+    if (!business?.id) return
+    setVerdictFiring(prev => ({ ...prev, [h.id]: true }))
+    try {
+      await fetch('/api/aria/hypotheses/' + h.id + '/outcome', {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ verdict }),
+      }).catch(() => null)
+      setHypotheses(hs => hs.map(item => item.id === h.id ? { ...item, outcome_verdict: verdict, status: 'closed' } : item))
+      fetch('/api/aria/autopilot-actions', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ business_id: business.id, action_type: 'intelligence_action_taken', payload: { event_type: 'hypothesis_verdict', verdict } }),
+      }).catch(() => null)
+      setToast('Outcome recorded')
+      setTimeout(() => setToast(''), 2500)
+    } finally {
+      setVerdictFiring(prev => ({ ...prev, [h.id]: false }))
+    }
   }
 
   async function handleEventAction(e: IntelligenceEvent) {
@@ -309,20 +330,63 @@ export default function IntelligencePage() {
                   <div style={{ marginBottom: 22 }}>
                     <p style={{ fontSize: 10, color: C.violet, textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, marginBottom: 10 }}>✦ Aria is testing</p>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      {hypotheses.filter(h => h.status === 'testing' || !h.status).slice(0, 3).map(h => (
-                        <div key={h.id} style={{ padding: '14px 16px', borderRadius: 10, background: 'rgba(167,139,250,0.06)', border: '1px solid rgba(167,139,250,0.2)' }}>
-                          <p style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>{h.title}</p>
-                          {h.description && <p style={{ fontSize: 12, color: C.dim, marginBottom: 6 }}>{h.description}</p>}
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                            {h.predicted_impact_label && <span style={{ fontSize: 11, color: C.green, fontWeight: 600 }}>+{h.predicted_impact_label}</span>}
-                            {h.confidence != null && <span style={{ fontSize: 10, color: C.dim }}>{Math.round(Number(h.confidence) * 100)}% confidence</span>}
-                            <div style={{ marginLeft: 'auto', display: 'flex', gap: 4 }}>
-                              <button onClick={() => updateHypothesis(h.id, 'accepted')} style={{ fontSize: 10, padding: '3px 10px', borderRadius: 6, border: 'none', background: 'rgba(127,184,151,0.15)', color: C.green, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>Confirm</button>
-                              <button onClick={() => updateHypothesis(h.id, 'rejected')} style={{ fontSize: 10, padding: '3px 10px', borderRadius: 6, border: 'none', background: 'rgba(239,68,68,0.1)', color: '#ef4444', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>Reject</button>
+                      {hypotheses.filter(h => h.status === 'testing' || !h.status).slice(0, 3).map(h => {
+                        const daysOld = Math.floor((Date.now() - new Date(h.generated_at).getTime()) / 86400000)
+                        const showVerdict = h.status === 'active' || (daysOld > 14 && h.status !== 'closed')
+                        return (
+                          <div key={h.id} style={{ padding: '14px 16px', borderRadius: 10, background: 'rgba(167,139,250,0.06)', border: '1px solid rgba(167,139,250,0.2)' }}>
+                            <p style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>{h.title}</p>
+                            {h.description && <p style={{ fontSize: 12, color: C.dim, marginBottom: 6 }}>{h.description}</p>}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                              {h.predicted_impact_label && <span style={{ fontSize: 11, color: C.green, fontWeight: 600 }}>+{h.predicted_impact_label}</span>}
+                              {h.confidence != null && <span style={{ fontSize: 10, color: C.dim }}>{Math.round(Number(h.confidence) * 100)}% confidence</span>}
+                              <div style={{ marginLeft: 'auto', display: 'flex', gap: 4 }}>
+                                <button onClick={() => updateHypothesis(h.id, 'accepted')} style={{ fontSize: 10, padding: '3px 10px', borderRadius: 6, border: 'none', background: 'rgba(127,184,151,0.15)', color: C.green, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>Confirm</button>
+                                <button onClick={() => updateHypothesis(h.id, 'rejected')} style={{ fontSize: 10, padding: '3px 10px', borderRadius: 6, border: 'none', background: 'rgba(239,68,68,0.1)', color: '#ef4444', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>Reject</button>
+                              </div>
                             </div>
+                            {showVerdict && (
+                              <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+                                <p style={{ fontSize: 10, color: C.dim, marginBottom: 6 }}>Did this work?</p>
+                                <div style={{ display: 'flex', gap: 6 }}>
+                                  <button onClick={() => submitVerdict(h, 'worked')} disabled={verdictFiring[h.id]}
+                                    style={{ fontSize: 10, padding: '4px 10px', borderRadius: 6, border: 'none', background: 'rgba(34,197,94,0.15)', color: '#22C55E', fontWeight: 700, cursor: verdictFiring[h.id] ? 'default' : 'pointer', fontFamily: 'inherit', opacity: verdictFiring[h.id] ? 0.5 : 1 }}>
+                                    ✓ Yes, worked
+                                  </button>
+                                  <button onClick={() => submitVerdict(h, 'failed')} disabled={verdictFiring[h.id]}
+                                    style={{ fontSize: 10, padding: '4px 10px', borderRadius: 6, border: 'none', background: 'rgba(239,68,68,0.12)', color: '#ef4444', fontWeight: 700, cursor: verdictFiring[h.id] ? 'default' : 'pointer', fontFamily: 'inherit', opacity: verdictFiring[h.id] ? 0.5 : 1 }}>
+                                    ✗ Didn&apos;t work
+                                  </button>
+                                  <button onClick={() => submitVerdict(h, 'inconclusive')} disabled={verdictFiring[h.id]}
+                                    style={{ fontSize: 10, padding: '4px 10px', borderRadius: 6, border: 'none', background: 'rgba(245,158,11,0.12)', color: '#f59e0b', fontWeight: 700, cursor: verdictFiring[h.id] ? 'default' : 'pointer', fontFamily: 'inherit', opacity: verdictFiring[h.id] ? 0.5 : 1 }}>
+                                    ~ Inconclusive
+                                  </button>
+                                </div>
+                              </div>
+                            )}
                           </div>
-                        </div>
-                      ))}
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {hypotheses.filter(h => h.status === 'closed').length > 0 && (
+                  <div style={{ marginBottom: 22 }}>
+                    <p style={{ fontSize: 10, color: C.dim, textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, marginBottom: 10 }}>✓ Validated hypotheses</p>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      {hypotheses.filter(h => h.status === 'closed').slice(0, 5).map(h => {
+                        const vColor = h.outcome_verdict === 'worked' ? '#22C55E' : h.outcome_verdict === 'failed' ? '#ef4444' : '#f59e0b'
+                        const vLabel = h.outcome_verdict === 'worked' ? '✓ Worked' : h.outcome_verdict === 'failed' ? '✗ Didn\'t work' : '~ Inconclusive'
+                        return (
+                          <div key={h.id} style={{ padding: '10px 14px', borderRadius: 8, background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+                            <p style={{ fontSize: 12, color: C.dim, margin: 0 }}>{h.title}</p>
+                            {h.outcome_verdict && (
+                              <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 99, background: vColor + '18', color: vColor, fontWeight: 700, flexShrink: 0 }}>{vLabel}</span>
+                            )}
+                          </div>
+                        )
+                      })}
                     </div>
                   </div>
                 )}
