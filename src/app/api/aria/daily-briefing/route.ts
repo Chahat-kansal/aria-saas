@@ -30,6 +30,30 @@ function checkRateLimit(ip: string): boolean {
   return true;
 }
 
+async function fetchWeatherForecast7Day(lat: number, lng: number) {
+  try {
+    const url = 'https://api.open-meteo.com/v1/forecast?latitude=' + lat + '&longitude=' + lng + '&daily=weathercode,temperature_2m_max,precipitation_sum&timezone=Australia/Sydney&forecast_days=7'
+    const res = await fetch(url, { signal: AbortSignal.timeout(5000) })
+    if (!res.ok) return []
+    const d = await res.json()
+    const codeToDesc = (c: number) => c === 0 ? 'Sunny' : c <= 3 ? 'Mostly sunny' : c <= 48 ? 'Cloudy' : c <= 67 ? 'Rainy' : c <= 82 ? 'Showers' : 'Stormy'
+    const times: string[] = d.daily?.time ?? []
+    return times.map((date: string, i: number) => {
+      const code = d.daily.weathercode[i]
+      const maxTemp = d.daily.temperature_2m_max[i]
+      const day = new Date(date).getDay()
+      const isWeekend = day === 0 || day === 6
+      const isSunny = code <= 3
+      const isRainy = code >= 51
+      const demand_impact = isSunny && isWeekend ? '+30% foot traffic expected'
+        : isRainy ? '-15% foot traffic'
+        : isSunny ? '+10% foot traffic'
+        : 'Normal foot traffic'
+      return { date, code, maxTemp, description: codeToDesc(code), demand_impact }
+    })
+  } catch { return [] }
+}
+
 async function fetchGeminiExternalContext(business: { city?: string | null; industry?: string | null }) {
   const location = (business.city as string | null) ?? 'Melbourne'
   const industry = (business.industry as string | null) ?? 'retail'
@@ -69,7 +93,7 @@ async function _POST(req: Request) {
   // Verify ownership + get business details
   const { data: business } = await supabase
     .from('businesses')
-    .select('id, name, owner_name, industry, city, monthly_revenue, staff_count, biggest_challenge, data_source, square_connected, requires_briefing_refresh')
+    .select('id, name, owner_name, industry, city, monthly_revenue, staff_count, biggest_challenge, data_source, square_connected, requires_briefing_refresh, latitude, longitude')
     .eq('id', business_id)
     .eq('user_id', user.id)
     .single();
@@ -125,18 +149,22 @@ async function _POST(req: Request) {
 
   // Fetch external context in parallel with business data
   const city = (business.city as string | null) ?? 'Melbourne';
+  const bizLat = (business as { latitude?: number }).latitude ?? -33.8688
+  const bizLng = (business as { longitude?: number }).longitude ?? 151.2093
   const [
     weatherForecast,
     upcomingHolidays,
     absData,
     rbaData,
     geminiContext,
+    weatherForecast7Day,
   ] = await Promise.all([
     getWeatherForecast(city).catch(() => []),
     Promise.resolve(getUpcomingHolidays(60, 'VIC')),
     getABSRetailBenchmarks().catch(() => null),
     getRBAData().catch(() => null),
     fetchGeminiExternalContext(business).catch(() => null),
+    fetchWeatherForecast7Day(bizLat, bizLng).catch(() => []),
   ]);
 
   const [
@@ -283,6 +311,57 @@ async function _POST(req: Request) {
   const sgAvgCents = sgCount > 0 ? Math.round((sgCarts ?? []).reduce((n, c) => n + (c.subtotal_cents ?? 0), 0) / sgCount) : 0;
   const normalAvgCents = salesToday.length > 0 ? Math.round(revToday / salesToday.length) : 0;
 
+  // Competitor price drops (E4) — must be fetched before context object is built
+  let priceDropRecs: Array<{comp: string; product: string; drop_pct: number}> = []
+  try {
+    const { data: compSnapsCtx } = await supabaseAdmin
+      .from('competitor_snapshots')
+      .select('competitor_name, product_name, price, previous_price, created_at')
+      .eq('business_id', business_id)
+      .gte('created_at', new Date(Date.now() - 7 * 86400000).toISOString())
+      .not('previous_price', 'is', null)
+      .limit(10)
+    priceDropRecs = ((compSnapsCtx ?? []) as Array<{competitor_name: string; product_name: string; price: number; previous_price: number}>).filter(s => {
+      if (!s.previous_price || s.previous_price === 0) return false
+      return (s.previous_price - s.price) / s.previous_price * 100 > 5
+    }).slice(0, 2).map(d => ({
+      comp: d.competitor_name,
+      product: d.product_name,
+      drop_pct: Math.round(((d.previous_price - d.price) / d.previous_price) * 100),
+    }))
+  } catch { /* competitor_snapshots may not exist */ }
+
+  // School holidays signal (VIC 2026)
+  const VIC_SCHOOL_BREAKS_2026 = [
+    { label: 'Term 1 break', start: new Date('2026-03-28'), end: new Date('2026-04-13') },
+    { label: 'Term 2 break', start: new Date('2026-06-27'), end: new Date('2026-07-13') },
+    { label: 'Term 3 break', start: new Date('2026-09-19'), end: new Date('2026-10-05') },
+    { label: 'Term 4 break', start: new Date('2026-12-18'), end: new Date('2027-01-31') },
+  ]
+  const todayDateObj = new Date()
+  const upcomingBreakPre = VIC_SCHOOL_BREAKS_2026.find(b => {
+    const daysUntil = Math.floor((b.start.getTime() - todayDateObj.getTime()) / 86400000)
+    return daysUntil >= 0 && daysUntil <= 7
+  })
+  const inBreakPre = VIC_SCHOOL_BREAKS_2026.find(b => todayDateObj >= b.start && todayDateObj <= b.end)
+  const schoolHolidayPeriodPre = upcomingBreakPre || inBreakPre
+
+  // Quiet day detection using DOW
+  const dowRevMapPre: Record<number, number[]> = {}
+  for (const sale of sales14daily) {
+    const dow = sale.soldAt.getDay()
+    if (!dowRevMapPre[dow]) dowRevMapPre[dow] = []
+    dowRevMapPre[dow].push(sale.totalCents)
+  }
+  const todayDowIdxPre = todayDateObj.getDay()
+  const dowAvgArrPre = Object.entries(dowRevMapPre).map(([d, vals]) => ({ dow: Number(d), avg: vals.reduce((s, v) => s + v, 0) / vals.length }))
+  const allAvgValsPre = dowAvgArrPre.map(d => d.avg)
+  const isQuietDaySignalPre = allAvgValsPre.length >= 3 && (() => {
+    const todayAvg = dowAvgArrPre.find(d => d.dow === todayDowIdxPre)?.avg ?? 0
+    const threshold = Math.min(...allAvgValsPre) + (Math.max(...allAvgValsPre) - Math.min(...allAvgValsPre)) * 0.2
+    return todayAvg <= threshold
+  })()
+
   const context = {
     business_name: business.name,
     industry: business.industry,
@@ -367,6 +446,7 @@ async function _POST(req: Request) {
         weeks_of_runway: outflows > 0 ? Math.round((total / outflows) * 10) / 10 : null,
       };
     })(),
+    weather_forecast: weatherForecast7Day,
     external_context: {
       weather_next_3_days: weatherForecast.slice(0, 3).map(d => ({
         date: d.date,
@@ -385,6 +465,24 @@ async function _POST(req: Request) {
       rba_outlook: rbaData?.economic_outlook ?? null,
       gemini_context: geminiContext ?? null,
     },
+    school_holiday_signal: schoolHolidayPeriodPre ? {
+      period: schoolHolidayPeriodPre.label,
+      in_progress: !!inBreakPre,
+      days_until: upcomingBreakPre ? Math.floor((upcomingBreakPre.start.getTime() - todayDateObj.getTime()) / 86400000) : 0,
+      message: inBreakPre
+        ? 'School holidays in progress — expect more families and different shopping patterns.'
+        : 'School holidays start in ' + Math.floor((upcomingBreakPre!.start.getTime() - todayDateObj.getTime()) / 86400000) + ' days — prep for family traffic.',
+    } : null,
+    quiet_day_signal: isQuietDaySignalPre ? {
+      today_dow: ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][todayDowIdxPre],
+      message: ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][todayDowIdxPre] + ' is historically one of your slower days — consider running a day-specific promotion.',
+    } : null,
+    competitor_price_drops: priceDropRecs.length > 0 ? priceDropRecs.map(d => ({
+      competitor: d.comp,
+      product: d.product,
+      drop_pct: d.drop_pct,
+      message: d.comp + ' dropped ' + d.product + ' by ' + d.drop_pct + '% — consider a competitive response.',
+    })) : null,
   };
 
   const hasActionableData =

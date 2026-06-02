@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import { useBusiness } from '@/components/providers/BusinessProvider'
 import { supabase } from '@/lib/supabase'
 
@@ -34,6 +35,13 @@ interface Snap {
   }
 }
 
+interface WeatherDay {
+  date: string
+  description: string
+  maxTemp: number
+  demand_impact: string
+}
+
 interface BriefingResponse {
   recommendations: Rec[]
   generated_at: string
@@ -41,6 +49,7 @@ interface BriefingResponse {
   cached: boolean
   no_data?: boolean
   no_data_message?: string
+  weather_forecast?: WeatherDay[]
 }
 
 interface HistoryEntry {
@@ -86,12 +95,16 @@ function MetricCard({ label, value, sub, trend, loading }: { label: string; valu
 
 export default function DailyBriefingPage() {
   const business = useBusiness()
+  const router = useRouter()
   const [briefing, setBriefing] = useState<BriefingResponse | null>(null)
   const [history, setHistory] = useState<HistoryEntry[]>([])
   const [historyView, setHistoryView] = useState<HistoryEntry | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [dismissed, setDismissed] = useState<Set<string>>(new Set())
+  const [actionFiring, setActionFiring] = useState<Record<string, boolean>>({})
+  const [actionToast, setActionToast] = useState('')
+  const [weatherForecast, setWeatherForecast] = useState<WeatherDay[]>([])
 
   const fetchBriefing = useCallback(async (force = false) => {
     if (!business?.id) return
@@ -102,7 +115,13 @@ export default function DailyBriefingPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ business_id: business.id, force_refresh: force }),
       })
-      if (res.ok) setBriefing(await res.json())
+      if (res.ok) {
+        const data = await res.json()
+        setBriefing(data)
+        if (Array.isArray(data.weather_forecast) && data.weather_forecast.length > 0) {
+          setWeatherForecast(data.weather_forecast)
+        }
+      }
     } finally {
       setRefreshing(false)
       setLoading(false)
@@ -120,6 +139,42 @@ export default function DailyBriefingPage() {
       .limit(7)
       .then(({ data }: { data: HistoryEntry[] | null }) => { if (data) setHistory(data) })
   }, [business?.id, fetchBriefing])
+
+  async function handleRecAction(rec: Rec, idx: number) {
+    if (!business?.id) return
+    const key = String(idx)
+    setActionFiring(prev => ({ ...prev, [key]: true }))
+    try {
+      const actionType = (rec as { action_type?: string }).action_type
+      if (actionType === 'reorder' || rec.action_label?.toLowerCase().includes('reorder')) {
+        await fetch('/api/pos/purchase-orders', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ business_id: business.id, notes: 'Auto from briefing: ' + rec.title }),
+        }).catch(() => null)
+      } else if (actionType === 'winback' || rec.action_label?.toLowerCase().includes('winback')) {
+        await fetch('/api/aria/winback', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ business_id: business.id, customer_ids: [] }),
+        }).catch(() => null)
+      } else if ((rec as unknown as { action_href?: string }).action_href?.includes('/promotions')) {
+        router.push('/dashboard/promotions?prefill=flash_deal')
+        setActionFiring(prev => ({ ...prev, [key]: false })); return
+      } else if ((rec as unknown as { action_href?: string }).action_href?.includes('/reviews')) {
+        router.push('/dashboard/reviews')
+        setActionFiring(prev => ({ ...prev, [key]: false })); return
+      } else if ((rec as unknown as { action_href?: string }).action_href) {
+        router.push((rec as unknown as { action_href: string }).action_href)
+        setActionFiring(prev => ({ ...prev, [key]: false })); return
+      }
+      fetch('/api/aria/autopilot-actions', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ business_id: business.id, action_type: 'briefing_rec_actioned', payload: { title: rec.title } }),
+      }).catch(() => null)
+      setActionToast('Done!')
+      setTimeout(() => setActionToast(''), 2500)
+    } catch { /* ignore */ }
+    setActionFiring(prev => ({ ...prev, [key]: false }))
+  }
 
   const snap: Snap = historyView?.data_snapshot ?? briefing?.data_snapshot ?? {}
   const recs: Rec[] = (historyView?.recommendations ?? briefing?.recommendations ?? []).filter(r => !dismissed.has(r.id))
@@ -209,6 +264,28 @@ export default function DailyBriefingPage() {
           )}
         </div>
 
+        {/* Weather this week */}
+        {weatherForecast.length > 0 && (
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 10 }}>Weather this week</div>
+            <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4 }}>
+              {weatherForecast.map(w => {
+                const icon = w.description.includes('Sunny') ? '☀️' : w.description.includes('Rainy') ? '🌧️' : w.description.includes('Storm') ? '⛈️' : w.description.includes('Shower') ? '🌦️' : '⛅'
+                const dayName = new Date(w.date).toLocaleDateString('en-AU', { weekday: 'short' })
+                return (
+                  <div key={w.date} style={{ flexShrink: 0, textAlign: 'center', padding: '10px 14px', background: 'rgba(255,255,255,0.04)', borderRadius: 10, border: '1px solid rgba(255,255,255,0.07)', minWidth: 80 }}>
+                    <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginBottom: 4 }}>{dayName}</div>
+                    <div style={{ fontSize: 20, marginBottom: 4 }}>{icon}</div>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: '#fff' }}>{Math.round(w.maxTemp)}°</div>
+                    <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', marginTop: 4 }}>{w.description}</div>
+                    <div style={{ fontSize: 9, color: w.demand_impact.startsWith('+') ? '#7FB897' : w.demand_impact.startsWith('-') ? '#ef4444' : 'rgba(255,255,255,0.3)', marginTop: 3, fontWeight: 600 }}>{w.demand_impact}</div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
         {/* Metric cards */}
         <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 24 }}>
           <MetricCard label="Yesterday Revenue" value={fmtCurrency(snap.sales_yesterday_aud)} loading={loading} />
@@ -296,9 +373,15 @@ export default function DailyBriefingPage() {
                         </div>
                       )}
                     </div>
-                    <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-                      <a href={`/dashboard/ask-aria?q=${encodeURIComponent(r.title + ': ' + r.description)}`}
-                        style={{ padding: '7px 14px', borderRadius: 10, background: `${G}18`, border: `1px solid ${G}44`, color: G, fontSize: 12, fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>
+                    <div style={{ display: 'flex', gap: 8, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                      {r.action_label && (
+                        <button onClick={() => handleRecAction(r, recs.indexOf(r))} disabled={actionFiring[String(recs.indexOf(r))]}
+                          style={{ padding: '7px 14px', borderRadius: 10, background: G + '22', border: '1px solid ' + G + '66', color: G, fontSize: 12, fontWeight: 600, cursor: actionFiring[String(recs.indexOf(r))] ? 'wait' : 'pointer', whiteSpace: 'nowrap', opacity: actionFiring[String(recs.indexOf(r))] ? 0.6 : 1, fontFamily: 'inherit' }}>
+                          {actionFiring[String(recs.indexOf(r))] ? '…' : r.action_label}
+                        </button>
+                      )}
+                      <a href={'/dashboard/ask-aria?q=' + encodeURIComponent(r.title + ': ' + r.description)}
+                        style={{ padding: '7px 14px', borderRadius: 10, background: G + '18', border: '1px solid ' + G + '44', color: G, fontSize: 12, fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>
                         Ask Aria
                       </a>
                       <button onClick={() => setDismissed(d => new Set([...d, r.id]))}
@@ -322,6 +405,12 @@ export default function DailyBriefingPage() {
           </div>
         )}
       </div>
+
+      {actionToast && (
+        <div style={{ position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', padding: '10px 18px', borderRadius: 10, background: '#1D9E75', color: '#fff', fontSize: 13, fontWeight: 600, zIndex: 60 }}>
+          ✓ {actionToast}
+        </div>
+      )}
 
       {/* History sidebar */}
       <div style={{ width: 210, borderLeft: BORDER, padding: '32px 14px', flexShrink: 0, overflowY: 'auto' }}>
