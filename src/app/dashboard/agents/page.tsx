@@ -26,6 +26,45 @@ interface AgentCard {
   icon: string
 }
 
+interface FlashIntervention {
+  id: string
+  triggered_by: string
+  intervention_type: string
+  channel: string
+  target_count: number
+  revenue_in_2h_before: number
+  revenue_in_2h_after: number
+  revenue_lift_pct: number | null
+  executed_at: string
+  expires_at: string | null
+  cancelled_at: string | null
+  message_text: string | null
+  target_segment: string | null
+}
+
+interface FlashData {
+  stats_7d: {
+    total_interventions: number
+    measured_count: number
+    avg_lift_pct: number | null
+    by_trigger: Record<string, number>
+  }
+  active_intervention: {
+    id: string
+    intervention_type: string
+    channel: string
+    message_text: string | null
+    target_count: number
+    executed_at: string
+    expires_at: string | null
+    triggered_by: string
+  } | null
+  interventions: FlashIntervention[]
+  success_rates: Record<string, number>
+  agent_enabled: boolean
+  mode: string
+}
+
 type TabId = 'today' | 'agents' | 'history' | 'performance'
 type Priority = 'growth' | 'margin' | 'retention' | 'balanced'
 
@@ -129,6 +168,11 @@ export default function AgentsPage() {
   const [resetDone, setResetDone] = useState(false)
   const [currentMenuMode, setCurrentMenuMode] = useState<string>('normal')
 
+  // Flash Revenue widget state
+  const [flashData, setFlashData] = useState<FlashData | null>(null)
+  const [flashLoading, setFlashLoading] = useState(false)
+  const [cancellingFlash, setCancellingFlash] = useState<string | null>(null)
+
   const bid = business?.id
 
   const loadCouncil = useCallback(async () => {
@@ -197,6 +241,19 @@ export default function AgentsPage() {
     setMenuLoading(false)
   }, [bid]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  const loadFlashData = useCallback(async () => {
+    if (!bid) return
+    setFlashLoading(true)
+    try {
+      const r = await fetch('/api/agents/flash-revenue')
+      if (r.ok) {
+        const d = await r.json() as FlashData
+        setFlashData(d)
+      }
+    } catch { /* non-fatal */ }
+    setFlashLoading(false)
+  }, [bid])
+
   useEffect(() => {
     void loadCouncil()
     void loadHistory()
@@ -204,8 +261,11 @@ export default function AgentsPage() {
   }, [loadCouncil, loadHistory, loadSettings])
 
   useEffect(() => {
-    if (tab === 'agents') void loadMenuData()
-  }, [tab, loadMenuData])
+    if (tab === 'agents') {
+      void loadMenuData()
+      void loadFlashData()
+    }
+  }, [tab, loadMenuData, loadFlashData])
 
   const savePriority = async (p: Priority) => {
     setPriority(p)
@@ -290,6 +350,17 @@ export default function AgentsPage() {
     setMenuScores([])
     setMenuActions([])
     setTimeout(() => setResetDone(false), 4000)
+  }
+
+  const cancelFlashIntervention = async (id: string) => {
+    setCancellingFlash(id)
+    await fetch('/api/agents/flash-revenue/cancel', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id }),
+    }).catch(() => {})
+    setCancellingFlash(null)
+    void loadFlashData()
   }
 
   const surface = 'rgba(255,255,255,0.04)'
@@ -666,6 +737,131 @@ export default function AgentsPage() {
             )}
           </div>
         </div>
+
+        {/* ── Flash Revenue Widget ─────────────────────────────────────────── */}
+        <div style={{ marginTop: 24, background: surface, border, borderRadius: 16, overflow: 'hidden' }}>
+          <div style={{ padding: '18px 24px', borderBottom: border, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <h3 style={{ color: '#fff', fontSize: 16, fontWeight: 600, margin: 0 }}>⚡ Flash Revenue Intelligence</h3>
+              <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12, margin: '4px 0 0' }}>Live triggers · intervention log · learning panel</p>
+            </div>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+              {flashData && (
+                <span style={{ fontSize: 12, fontWeight: 700, padding: '4px 12px', borderRadius: 99, border: '1px solid rgba(249,115,22,0.3)', background: 'rgba(249,115,22,0.1)', color: '#F97316' }}>
+                  {flashData.mode === 'auto' ? '⚡ Auto mode' : '✋ Suggest mode'}
+                </span>
+              )}
+              <button onClick={() => bid && fetch('/api/agents/flash-revenue', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ business_id: bid }) }).then(() => void loadFlashData())} style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid rgba(249,115,22,0.3)', background: 'transparent', color: '#F97316', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                Run now
+              </button>
+            </div>
+          </div>
+
+          <div style={{ padding: 24 }}>
+            {flashLoading ? (
+              <div style={{ color: 'rgba(255,255,255,0.3)', textAlign: 'center', padding: 32 }}>Loading flash intelligence...</div>
+            ) : !flashData || flashData.stats_7d.total_interventions === 0 ? (
+              <div style={{ textAlign: 'center', padding: 40 }}>
+                <div style={{ fontSize: 36, marginBottom: 12 }}>⚡</div>
+                <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: 14 }}>No interventions yet — the agent fires automatically every 15 min during trading hours</p>
+              </div>
+            ) : (
+              <div>
+                {/* Active intervention banner */}
+                {flashData.active_intervention && (
+                  <div style={{ background: 'rgba(249,115,22,0.12)', border: '1px solid rgba(249,115,22,0.3)', borderRadius: 12, padding: '14px 20px', marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: '#F97316', background: 'rgba(249,115,22,0.15)', padding: '2px 8px', borderRadius: 99, textTransform: 'capitalize' }}>
+                          LIVE · {flashData.active_intervention.intervention_type.replace(/_/g, ' ')}
+                        </span>
+                        <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>
+                          triggered by {flashData.active_intervention.triggered_by.replace(/_/g, ' ')}
+                        </span>
+                      </div>
+                      <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: 13, margin: 0 }}>
+                        {flashData.active_intervention.message_text ?? '—'} · {flashData.active_intervention.target_count} targets
+                      </p>
+                      <p style={{ color: 'rgba(255,255,255,0.35)', fontSize: 11, margin: '4px 0 0' }}>
+                        Started {new Date(flashData.active_intervention.executed_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        {flashData.active_intervention.expires_at && ' · expires ' + new Date(flashData.active_intervention.expires_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </p>
+                    </div>
+                    <button onClick={() => void cancelFlashIntervention(flashData.active_intervention!.id)} disabled={cancellingFlash === flashData.active_intervention.id} style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.08)', color: '#EF4444', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                      {cancellingFlash === flashData.active_intervention.id ? 'Cancelling...' : 'Cancel'}
+                    </button>
+                  </div>
+                )}
+
+                {/* 7-day stats */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 24 }}>
+                  {[
+                    { label: 'Interventions (7d)', value: String(flashData.stats_7d.total_interventions) },
+                    { label: 'Measured', value: String(flashData.stats_7d.measured_count) },
+                    { label: 'Avg Revenue Lift', value: flashData.stats_7d.avg_lift_pct !== null ? flashData.stats_7d.avg_lift_pct + '%' : '—' },
+                    { label: 'Top Trigger', value: Object.entries(flashData.stats_7d.by_trigger).sort((a, b) => b[1] - a[1])[0]?.[0]?.replace(/_/g, ' ') ?? '—' },
+                  ].map(m => (
+                    <div key={m.label} style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 10, padding: '12px 14px', textAlign: 'center' }}>
+                      <div style={{ fontFamily: 'Fraunces, Georgia, serif', fontStyle: 'italic', fontSize: 22, color: '#F97316', margin: '0 0 4px' }}>{m.value}</div>
+                      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', textTransform: 'capitalize' }}>{m.label}</div>
+                    </div>
+                  ))}
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
+                  {/* Intervention log */}
+                  <div>
+                    <h4 style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 10px' }}>Recent Interventions</h4>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 260, overflowY: 'auto' }}>
+                      {flashData.interventions.slice(0, 10).map(inv => (
+                        <div key={inv.id} style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 8, padding: '10px 12px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
+                            <span style={{ fontSize: 12, fontWeight: 600, color: '#F97316', textTransform: 'capitalize' }}>
+                              {inv.intervention_type.replace(/_/g, ' ')}
+                            </span>
+                            {inv.revenue_lift_pct !== null && (
+                              <span style={{ fontSize: 11, fontWeight: 700, color: (inv.revenue_lift_pct ?? 0) >= 0 ? '#7FB897' : '#EF4444' }}>
+                                {(inv.revenue_lift_pct ?? 0) >= 0 ? '+' : ''}{inv.revenue_lift_pct}% lift
+                              </span>
+                            )}
+                          </div>
+                          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>
+                            {inv.triggered_by.replace(/_/g, ' ')} · {inv.target_count} targets · {new Date(inv.executed_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })} {new Date(inv.executed_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Learning panel */}
+                  <div>
+                    <h4 style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 10px' }}>Learning — Success Rates</h4>
+                    {Object.keys(flashData.success_rates).length === 0 ? (
+                      <p style={{ color: 'rgba(255,255,255,0.25)', fontSize: 12 }}>Not enough data yet — rates update as outcomes are measured</p>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        {Object.entries(flashData.success_rates).sort((a, b) => b[1] - a[1]).map(([type, rate]) => (
+                          <div key={type}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
+                              <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', textTransform: 'capitalize' }}>{type.replace(/_/g, ' ')}</span>
+                              <span style={{ fontSize: 12, fontWeight: 700, color: rate >= 0 ? '#7FB897' : '#EF4444' }}>
+                                {rate >= 0 ? '+' : ''}{rate}%
+                              </span>
+                            </div>
+                            <div style={{ height: 4, background: 'rgba(255,255,255,0.08)', borderRadius: 2, overflow: 'hidden' }}>
+                              <div style={{ width: Math.min(100, Math.abs(rate)) + '%', height: '100%', background: rate >= 0 ? '#7FB897' : '#EF4444', borderRadius: 2 }} />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
         </div>
       )}
 
