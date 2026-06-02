@@ -120,6 +120,15 @@ export default function AgentsPage() {
   const [showAutoModal, setShowAutoModal] = useState(false)
   const [savingPriority, setSavingPriority] = useState(false)
 
+  // Menu engineering widget state
+  const [menuScores, setMenuScores] = useState<Array<{ product_id: string; bcg_quadrant: string; composite_score: number; scored_at: string; pos_products: { name: string; price: number } | null }>>([])
+  const [menuActions, setMenuActions] = useState<Array<{ id: string; action_type: string; reasoning: string | null; actioned_at: string }>>([])
+  const [menuLoading, setMenuLoading] = useState(false)
+  const [showResetModal, setShowResetModal] = useState(false)
+  const [resetting, setResetting] = useState(false)
+  const [resetDone, setResetDone] = useState(false)
+  const [currentMenuMode, setCurrentMenuMode] = useState<string>('normal')
+
   const bid = business?.id
 
   const loadCouncil = useCallback(async () => {
@@ -165,11 +174,38 @@ export default function AgentsPage() {
     }
   }, [bid])
 
+  const loadMenuData = useCallback(async () => {
+    if (!bid) return
+    setMenuLoading(true)
+    try {
+      const [scoresRes, actionsRes] = await Promise.all([
+        fetch('/api/agents/menu-engineering/scores'),
+        fetch('/api/agents/menu-engineering/actions?limit=20'),
+      ])
+      if (scoresRes.ok) {
+        const d = await scoresRes.json() as { scores: typeof menuScores }
+        setMenuScores(d.scores ?? [])
+      }
+      if (actionsRes.ok) {
+        const d = await actionsRes.json() as { actions: typeof menuActions }
+        setMenuActions(d.actions ?? [])
+        // Infer current mode from latest mode action
+        const modeAction = (d.actions ?? []).find((a: typeof menuActions[0]) => a.action_type.startsWith('activate_'))
+        if (modeAction) setCurrentMenuMode(modeAction.action_type.replace('activate_', '').replace('_mode', ''))
+      }
+    } catch { /* non-fatal */ }
+    setMenuLoading(false)
+  }, [bid]) // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     void loadCouncil()
     void loadHistory()
     void loadSettings()
   }, [loadCouncil, loadHistory, loadSettings])
+
+  useEffect(() => {
+    if (tab === 'agents') void loadMenuData()
+  }, [tab, loadMenuData])
 
   const savePriority = async (p: Priority) => {
     setPriority(p)
@@ -238,6 +274,22 @@ export default function AgentsPage() {
     setRunningAgents(prev => ({ ...prev, [agentType]: false }))
     setAgentRunResults(prev => ({ ...prev, [agentType]: 'Done' }))
     setTimeout(() => setAgentRunResults(prev => { const n = { ...prev }; delete n[agentType]; return n }), 5000)
+  }
+
+  const resetMenuAgent = async () => {
+    if (!bid) return
+    setResetting(true)
+    await fetch('/api/agents/menu-engineering/reset', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ business_id: bid }),
+    }).catch(() => {})
+    setResetting(false)
+    setShowResetModal(false)
+    setResetDone(true)
+    setMenuScores([])
+    setMenuActions([])
+    setTimeout(() => setResetDone(false), 4000)
   }
 
   const surface = 'rgba(255,255,255,0.04)'
@@ -426,6 +478,7 @@ export default function AgentsPage() {
 
       {/* ── ALL AGENTS TAB ───────────────────────────────────────────────────── */}
       {tab === 'agents' && (
+        <div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16 }}>
           {AGENT_CARDS.map(agent => {
             const settings = agentSettings[agent.type] ?? { enabled: true, mode: 'suggest', config: {} }
@@ -474,6 +527,145 @@ export default function AgentsPage() {
               </div>
             )
           })}
+        </div>
+
+        {/* ── Menu Engineering Widget ─────────────────────────────────────── */}
+        <div style={{ marginTop: 24, background: surface, border, borderRadius: 16, overflow: 'hidden' }}>
+          <div style={{ padding: '18px 24px', borderBottom: border, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <h3 style={{ color: '#fff', fontSize: 16, fontWeight: 600, margin: 0 }}>🍽️ Menu Engineering Intelligence</h3>
+              <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12, margin: '4px 0 0' }}>BCG matrix · current mode · today's changes</p>
+            </div>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+              {/* Current mode badge */}
+              <span style={{ fontSize: 12, fontWeight: 700, padding: '4px 12px', borderRadius: 99, border: '1px solid',
+                background: currentMenuMode === 'peak' ? 'rgba(239,68,68,0.12)' : currentMenuMode === 'quiet' ? 'rgba(59,130,246,0.12)' : 'rgba(127,184,151,0.12)',
+                borderColor: currentMenuMode === 'peak' ? 'rgba(239,68,68,0.3)' : currentMenuMode === 'quiet' ? 'rgba(59,130,246,0.3)' : 'rgba(127,184,151,0.3)',
+                color: currentMenuMode === 'peak' ? '#EF4444' : currentMenuMode === 'quiet' ? '#60A5FA' : '#7FB897',
+              }}>
+                {currentMenuMode === 'peak' ? '🔥 Peak mode' : currentMenuMode === 'quiet' ? '🌙 Quiet mode' : '📊 Normal mode'}
+              </span>
+              {resetDone && <span style={{ fontSize: 12, color: '#7FB897' }}>✓ Reset complete</span>}
+              <button onClick={() => setShowResetModal(true)} style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.08)', color: '#EF4444', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                Reset
+              </button>
+            </div>
+          </div>
+
+          <div style={{ padding: 24 }}>
+            {menuLoading ? (
+              <div style={{ color: 'rgba(255,255,255,0.3)', textAlign: 'center', padding: 32 }}>Loading menu intelligence...</div>
+            ) : menuScores.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: 40 }}>
+                <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: 14, marginBottom: 16 }}>No scores yet — run the agent to analyse your menu</p>
+                <button onClick={() => bid && fetch('/api/agents/menu-engineering/actions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ business_id: bid }) }).then(() => void loadMenuData())} style={{ padding: '8px 20px', borderRadius: 8, border: 'none', background: '#2D5240', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                  Run Menu Analysis
+                </button>
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
+
+                {/* BCG 2×2 Matrix */}
+                <div>
+                  <h4 style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 12px' }}>BCG Matrix</h4>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gridTemplateRows: '1fr 1fr', gap: 4, height: 240 }}>
+                    {[
+                      { q: 'star', label: '⭐ Stars', desc: 'High velocity · High margin', color: '#F59E0B', bg: 'rgba(245,158,11,0.08)' },
+                      { q: 'puzzle', label: '🔵 Puzzles', desc: 'Low velocity · High margin', color: '#3B82F6', bg: 'rgba(59,130,246,0.08)' },
+                      { q: 'plowhouse', label: '🟢 Plowhouses', desc: 'High velocity · Low margin', color: '#7FB897', bg: 'rgba(127,184,151,0.08)' },
+                      { q: 'dog', label: '⚫ Dogs', desc: 'Low velocity · Low margin', color: '#6B7280', bg: 'rgba(107,114,128,0.08)' },
+                    ].map(cell => {
+                      const items = menuScores.filter(s => s.bcg_quadrant === cell.q)
+                      return (
+                        <div key={cell.q} style={{ background: cell.bg, border: '1px solid ' + cell.color + '22', borderRadius: 10, padding: 10, overflow: 'hidden' }}>
+                          <div style={{ fontSize: 11, fontWeight: 700, color: cell.color, marginBottom: 4 }}>{cell.label}</div>
+                          <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', marginBottom: 8 }}>{cell.desc}</div>
+                          <div style={{ fontSize: 11, fontWeight: 600, color: cell.color }}>{items.length} items</div>
+                          <div style={{ marginTop: 4, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                            {items.slice(0, 3).map(s => (
+                              <div key={s.product_id} style={{ fontSize: 10, color: 'rgba(255,255,255,0.5)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {s.pos_products?.name ?? s.product_id.slice(0, 8)}
+                              </div>
+                            ))}
+                            {items.length > 3 && <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.25)' }}>+{items.length - 3} more</div>}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                  {/* Axis labels */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6 }}>
+                    <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.25)' }}>← Low margin</span>
+                    <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.25)' }}>High margin →</span>
+                  </div>
+                </div>
+
+                {/* Today's changes + 7-day bar chart */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+                  {/* Today's changes timeline */}
+                  <div>
+                    <h4 style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 10px' }}>Today's Changes</h4>
+                    {menuActions.length === 0 ? (
+                      <p style={{ color: 'rgba(255,255,255,0.25)', fontSize: 12 }}>No actions yet today</p>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 140, overflowY: 'auto' }}>
+                        {menuActions.slice(0, 8).map(a => (
+                          <div key={a.id} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                            <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', whiteSpace: 'nowrap', marginTop: 1 }}>
+                              {new Date(a.actioned_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                            <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.6)' }}>
+                              {a.action_type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+                              {a.reasoning ? (' — ' + a.reasoning.slice(0, 60) + (a.reasoning.length > 60 ? '...' : '')) : ''}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 7-day score distribution mini chart */}
+                  <div>
+                    <h4 style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 8px' }}>Score Distribution</h4>
+                    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: 56 }}>
+                      {(() => {
+                        const buckets = Array.from({ length: 10 }, (_, i) => ({
+                          min: i * 0.1, max: (i + 1) * 0.1,
+                          count: menuScores.filter(s => s.composite_score >= i * 0.1 && s.composite_score < (i + 1) * 0.1).length,
+                        }))
+                        const maxCount = Math.max(1, ...buckets.map(b => b.count))
+                        return buckets.map((b, i) => (
+                          <div key={i} title={(b.min * 100).toFixed(0) + '–' + (b.max * 100).toFixed(0) + ': ' + b.count + ' items'} style={{ flex: 1, background: b.count > 0 ? '#7FB897' : 'rgba(255,255,255,0.06)', borderRadius: 3, height: Math.max(4, (b.count / maxCount) * 52) + 'px', transition: 'height 0.3s', cursor: b.count > 0 ? 'help' : 'default' }} />
+                        ))
+                      })()}
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
+                      <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.25)' }}>0</span>
+                      <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.25)' }}>Score →</span>
+                      <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.25)' }}>1.0</span>
+                    </div>
+                  </div>
+
+                  {/* Summary stats */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+                    {[
+                      { label: 'Scored', value: String(menuScores.length) },
+                      { label: 'Stars', value: String(menuScores.filter(s => s.bcg_quadrant === 'star').length) },
+                      { label: 'Puzzles', value: String(menuScores.filter(s => s.bcg_quadrant === 'puzzle').length) },
+                      { label: 'Dogs', value: String(menuScores.filter(s => s.bcg_quadrant === 'dog').length) },
+                    ].map(m => (
+                      <div key={m.label} style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 8, padding: '8px 10px', textAlign: 'center' }}>
+                        <div style={{ fontSize: 16, fontWeight: 700, color: '#fff', fontFamily: 'Fraunces, Georgia, serif', fontStyle: 'italic' }}>{m.value}</div>
+                        <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)' }}>{m.label}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
         </div>
       )}
 
@@ -609,6 +801,29 @@ export default function AgentsPage() {
                 })}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* Reset menu agent confirmation modal */}
+      {showResetModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div style={{ background: '#0d1f18', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 16, padding: 32, maxWidth: 460, width: '90%' }}>
+            <h3 style={{ color: '#fff', fontSize: 18, fontWeight: 600, margin: '0 0 12px' }}>Reset Menu Engineering Agent?</h3>
+            <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 14, lineHeight: 1.6, margin: '0 0 8px' }}>
+              This will clear all BCG scores, grid positions, upsell/bundle assignments, and learned weights.
+            </p>
+            <p style={{ color: 'rgba(239,68,68,0.7)', fontSize: 13, lineHeight: 1.5, margin: '0 0 24px' }}>
+              ⚠ Your POS product grid will return to alphabetical order.
+            </p>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={resetMenuAgent} disabled={resetting} style={{ flex: 1, padding: '10px 0', borderRadius: 10, border: 'none', background: '#7F1D1D', color: '#fff', fontSize: 14, fontWeight: 600, cursor: resetting ? 'default' : 'pointer', opacity: resetting ? 0.7 : 1 }}>
+                {resetting ? 'Resetting...' : 'Yes, reset'}
+              </button>
+              <button onClick={() => setShowResetModal(false)} style={{ flex: 1, padding: '10px 0', borderRadius: 10, border: '1px solid rgba(255,255,255,0.15)', background: 'transparent', color: 'rgba(255,255,255,0.6)', fontSize: 14, cursor: 'pointer' }}>
+                Cancel
+              </button>
+            </div>
           </div>
         </div>
       )}
