@@ -230,6 +230,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
     ALL_ITEMS['dashboard'],
     ALL_ITEMS['customers'],
     ALL_ITEMS['invoices'],
+    ALL_ITEMS['wholesale'],
     { href: '/dashboard/ask-aria', label: 'Ask Aria', icon: ChatIcon, badge: 'AI', section: 'Overview' },
     { href: '/dashboard/integrations', label: 'Integrations', icon: PlugIcon, badge: business?.square_connected ? '●' : undefined, section: 'Overview' },
   ];
