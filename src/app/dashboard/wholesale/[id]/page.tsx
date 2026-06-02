@@ -51,6 +51,9 @@ interface WholesaleOrder {
   items: OrderItem[]
   customer: Customer | null
   business_id: string
+  business_name: string | null
+  business_abn: string | null
+  invoice_number: string | null
 }
 
 interface AriaIntel {
