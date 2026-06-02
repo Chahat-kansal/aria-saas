@@ -91,6 +91,13 @@ export default function SocialPage() {
   const [bulkResult, setBulkResult] = useState<string>('')
   const [mediaLibrary, setMediaLibrary] = useState<Array<{ id: string; url: string; filename: string; aria_description: string | null; tags: string[]; used_in_posts: number; uploaded_at: string }>>([]);
   const [uploadingMedia, setUploadingMedia] = useState(false);
+  const [communityStats, setCommunityStats] = useState<{ by_type: Array<{type: string; avg_engagement: number; count: number}>; top_posts: Array<{id: string; caption: string; engagement: number; likes_count: number; comments_count: number; created_at: string}>; total_engagement: number; post_count: number } | null>(null)
+  const [metricsModal, setMetricsModal] = useState<{ postId: string } | null>(null)
+  const [metricsForm, setMetricsForm] = useState({ impressions: '', likes: '', comments: '', shares: '', saves: '' })
+  const [savingMetrics, setSavingMetrics] = useState(false)
+  const [savedMetrics, setSavedMetrics] = useState<Record<string, Record<string, number>>>({})
+  const [socialIntelligence, setSocialIntelligence] = useState<{ insights: string[]; top_content_type: string | null; best_day: string | null; best_hour: number | null } | null>(null)
+  const [loadingIntelligence, setLoadingIntelligence] = useState(false)
   const [generatingCalendar, setGeneratingCalendar] = useState(false);
   const [calendarMonth, setCalendarMonth] = useState(() => new Date().toISOString().slice(0, 7));
   const [postsPerWeek, setPostsPerWeek] = useState(3);
@@ -184,6 +191,12 @@ export default function SocialPage() {
   useEffect(() => {
     if (!bid || activeTab !== 'analytics') return
     fetch('/api/social/analytics').then(r => r.json()).then(d => setAnalytics(d)).catch(() => {})
+    fetch('/api/social/community-analytics?business_id=' + bid).then(r => r.json()).then(d => { if (!d.error) setCommunityStats(d) }).catch(() => {})
+    if (!socialIntelligence && !loadingIntelligence) {
+      setLoadingIntelligence(true)
+      fetch('/api/aria/social-learning?business_id=' + bid).then(r => r.json()).then(d => { setSocialIntelligence(d); setLoadingIntelligence(false) }).catch(() => { setLoadingIntelligence(false) })
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bid, activeTab])
 
   // Library assets loader (saved captions/hashtag sets)
@@ -277,9 +290,18 @@ export default function SocialPage() {
   async function generate() {
     if (!bid || connectedPlatforms.length === 0) return;
     setGenerating(true);
+    // Trigger intelligence fetch in background if not yet loaded
+    if (!socialIntelligence && !loadingIntelligence) {
+      setLoadingIntelligence(true)
+      fetch('/api/aria/social-learning?business_id=' + bid).then(r => r.json()).then(d => { setSocialIntelligence(d); setLoadingIntelligence(false) }).catch(() => { setLoadingIntelligence(false) })
+    }
+    const generateBody: Record<string, unknown> = { business_id: bid, platforms: connectedPlatforms, count: 3 }
+    if (socialIntelligence?.top_content_type) generateBody.preferred_type = socialIntelligence.top_content_type
+    if (socialIntelligence?.best_day) generateBody.best_day = socialIntelligence.best_day
+    if (socialIntelligence?.best_hour !== null && socialIntelligence?.best_hour !== undefined) generateBody.best_hour = socialIntelligence.best_hour
     const res = await fetch('/api/aria/social-suggest', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ business_id: bid, platforms: connectedPlatforms, count: 3 }),
+      body: JSON.stringify(generateBody),
     });
     const d = await res.json();
     if (d.posts?.length) {
@@ -707,6 +729,65 @@ export default function SocialPage() {
                   </button>
                 </div>
               )}
+
+              {communityStats && (
+                <div style={{ marginTop: 24 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: 'rgba(255,255,255,0.7)', marginBottom: 14 }}>Community Post Performance</div>
+                  {communityStats.by_type.length > 0 && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
+                      {communityStats.by_type.map(t => {
+                        const maxEng = Math.max(...communityStats.by_type.map(x => x.avg_engagement), 1)
+                        const pct = Math.round((t.avg_engagement / maxEng) * 100)
+                        return (
+                          <div key={t.type} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', width: 60, textTransform: 'capitalize' }}>{t.type}</span>
+                            <div style={{ flex: 1, height: 8, background: 'rgba(255,255,255,0.06)', borderRadius: 4, overflow: 'hidden' }}>
+                              <div style={{ height: '100%', width: pct + '%', background: '#7FB897', borderRadius: 4 }} />
+                            </div>
+                            <span style={{ fontSize: 12, color: '#7FB897', fontWeight: 600, width: 40, textAlign: 'right' }}>{t.avg_engagement}</span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                  {communityStats.top_posts.length > 0 && (
+                    <div>
+                      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Top posts</div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        {communityStats.top_posts.map(p => (
+                          <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: 'rgba(255,255,255,0.04)', borderRadius: 8 }}>
+                            <div style={{ flex: 1, fontSize: 12, color: 'rgba(255,255,255,0.7)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.caption || '(no caption)'}</div>
+                            <span style={{ fontSize: 11, color: '#7FB897', fontWeight: 600, flexShrink: 0 }}>{p.engagement} eng</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {communityStats.by_type.length >= 2 && communityStats.by_type[0].avg_engagement > communityStats.by_type[1].avg_engagement * 1.5 && (
+                    <div style={{ marginTop: 12, padding: '10px 14px', borderRadius: 10, background: 'rgba(127,184,151,0.08)', border: '1px solid rgba(127,184,151,0.2)', fontSize: 12, color: '#7FB897' }}>
+                      Your {communityStats.by_type[0].type} posts get {Math.round(communityStats.by_type[0].avg_engagement / Math.max(communityStats.by_type[1].avg_engagement, 0.1))}x more engagement — Aria will prioritise this format.
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {socialIntelligence && (
+                <div style={{ marginTop: 20 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: '#7FB897', marginBottom: 12 }}>✦ What Aria learned</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {socialIntelligence.insights.map((insight, i) => (
+                      <div key={i} style={{ padding: '12px 14px', borderRadius: 10, background: 'rgba(127,184,151,0.08)', border: '1px solid rgba(127,184,151,0.2)', fontSize: 13, color: 'rgba(255,255,255,0.8)', lineHeight: 1.55 }}>
+                        {insight}
+                      </div>
+                    ))}
+                  </div>
+                  {socialIntelligence.best_day && (
+                    <div style={{ marginTop: 10, fontSize: 12, color: 'rgba(255,255,255,0.4)' }}>
+                      Best time to post: {socialIntelligence.best_day}{socialIntelligence.best_hour !== null ? ' at ' + socialIntelligence.best_hour + ':00' : ''}
+                    </div>
+                  )}
+                </div>
+              )}
             </>
           )}
         </div>
@@ -1014,11 +1095,20 @@ export default function SocialPage() {
           <h2 style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 12 }}>Published (last 14 days)</h2>
           <div style={{ background: C.card, border: ('1px solid ' + C.border), borderRadius: 14, overflow: 'hidden' }}>
             {publishedPosts.map((post, i) => (
-              <div key={post.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', borderBottom: i < publishedPosts.length - 1 ? ('1px solid ' + C.border) : 'none' }}>
+              <div key={post.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', borderBottom: i < publishedPosts.length - 1 ? ('1px solid ' + C.border) : 'none', flexWrap: 'wrap' }}>
                 <PlatformBadge platform={post.platform} />
-                <p style={{ flex: 1, fontSize: 12, color: C.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{post.caption.slice(0, 60)}</p>
+                <p style={{ flex: 1, fontSize: 12, color: C.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 80 }}>{post.caption.slice(0, 60)}</p>
+                {savedMetrics[post.id] && (
+                  <span style={{ fontSize: 10, color: '#7FB897', flexShrink: 0 }}>
+                    {savedMetrics[post.id].impressions ? savedMetrics[post.id].impressions + ' imp · ' : ''}{savedMetrics[post.id].likes || 0}♥
+                  </span>
+                )}
                 <span style={{ fontSize: 11, color: C.dim, flexShrink: 0 }}>{post.published_at ? new Date(post.published_at).toLocaleDateString('en-AU') : '—'}</span>
-                <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 99, background: 'rgba(34,197,94,0.1)', color: C.green }}>Published ✓</span>
+                <button onClick={() => { setMetricsModal({ postId: post.id }); setMetricsForm({ impressions: '', likes: '', comments: '', shares: '', saves: '' }); }}
+                  style={{ fontSize: 10, padding: '3px 8px', borderRadius: 6, border: '1px solid rgba(127,184,151,0.3)', background: 'rgba(127,184,151,0.06)', color: '#7FB897', cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}>
+                  Log metrics
+                </button>
+                <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 99, background: 'rgba(34,197,94,0.1)', color: C.green, flexShrink: 0 }}>Published ✓</span>
               </div>
             ))}
           </div>
@@ -1093,6 +1183,58 @@ export default function SocialPage() {
         )}
       </section>
     </div>
+      )}
+
+      {metricsModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
+          onClick={() => !savingMetrics && setMetricsModal(null)}>
+          <div style={{ background: '#13131a', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 16, padding: 24, width: '100%', maxWidth: 400 }}
+            onClick={e => e.stopPropagation()}>
+            <p style={{ color: '#fff', fontSize: 14, fontWeight: 700, marginBottom: 16 }}>Log post metrics</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {([['impressions', 'Impressions'], ['likes', 'Likes'], ['comments', 'Comments'], ['shares', 'Shares'], ['saves', 'Saves']] as [string, string][]).map(([field, label]) => (
+                <div key={field} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <label style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', width: 90 }}>{label}</label>
+                  <input type="number" min="0"
+                    value={metricsForm[field as keyof typeof metricsForm]}
+                    onChange={e => setMetricsForm(prev => ({ ...prev, [field]: e.target.value }))}
+                    style={{ flex: 1, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, padding: '7px 12px', color: '#fff', fontSize: 13, fontFamily: 'inherit', outline: 'none' }} />
+                </div>
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
+              <button disabled={savingMetrics} onClick={async () => {
+                setSavingMetrics(true)
+                try {
+                  await fetch('/api/social/posts/' + metricsModal.postId + '/metrics', {
+                    method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      impressions: metricsForm.impressions ? parseInt(metricsForm.impressions) : undefined,
+                      likes: metricsForm.likes ? parseInt(metricsForm.likes) : undefined,
+                      comments: metricsForm.comments ? parseInt(metricsForm.comments) : undefined,
+                      shares: metricsForm.shares ? parseInt(metricsForm.shares) : undefined,
+                      saves: metricsForm.saves ? parseInt(metricsForm.saves) : undefined,
+                    }),
+                  })
+                  setSavedMetrics(prev => ({ ...prev, [metricsModal.postId]: {
+                    impressions: parseInt(metricsForm.impressions) || 0,
+                    likes: parseInt(metricsForm.likes) || 0,
+                    comments: parseInt(metricsForm.comments) || 0,
+                  }}))
+                  setMetricsModal(null)
+                  setMetricsForm({ impressions: '', likes: '', comments: '', shares: '', saves: '' })
+                } catch { /* ignore */ }
+                setSavingMetrics(false)
+              }} style={{ flex: 1, padding: '10px', borderRadius: 10, border: 'none', background: '#7FB897', color: '#0E1411', fontSize: 13, fontWeight: 700, cursor: savingMetrics ? 'default' : 'pointer', fontFamily: 'inherit', opacity: savingMetrics ? 0.6 : 1 }}>
+                {savingMetrics ? 'Saving…' : 'Save metrics'}
+              </button>
+              <button onClick={() => setMetricsModal(null)} disabled={savingMetrics}
+                style={{ padding: '10px 16px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.15)', background: 'transparent', color: 'rgba(255,255,255,0.5)', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
