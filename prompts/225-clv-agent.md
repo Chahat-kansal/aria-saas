@@ -1,37 +1,28 @@
 # Prompt 225 — Customer Lifetime Value Prediction + Intervention Agent
 # What Salesforce Agentforce charges $500+/seat/month for.
-# ENV: TWILIO (set ✅), RESEND (set ✅), no new vars needed.
+# ENV: TWILIO ✅, RESEND_API_KEY ✅. No new env vars needed.
 
 ## SKILLS — READ BEFORE ANY CODE
-Before writing any frontend code, read these IN FULL:
 - /mnt/skills/user/ui-ux-pro-max/SKILL.md
 - /mnt/skills/public/frontend-design/SKILL.md
-Apply silently. Aria Financial Trust palette (#2D5240 + #7FB897), Inter body, Fraunces italic for key numbers.
 
-## EXISTING INFRASTRUCTURE — DO NOT RECREATE
-- src/lib/agents/base-agent.ts — BaseAgent class
-- src/lib/agents/types.ts — AgentType, AgentDecision, AgentRunResult
-- src/lib/agents/orchestrator.ts — runAgent(), routeIntent()
-- src/lib/agents/reorder-agent.ts, pricing-agent.ts, schedule-agent.ts — already built
-- DB: agent_settings, agent_decisions, agent_runs, aria_autopilot_actions
-- Extend AgentType union in types.ts for each new agent type
-- All agents extend BaseAgent. Use this.supabase, this.anthropic, this.getSettings(), this.saveDecisions(), this.logRun()
+## EXISTING INFRASTRUCTURE
+Read src/lib/agents/base-agent.ts, types.ts. Add 'clv' to AgentType.
+EXISTING pos_customers columns include: id, business_id, name, email, phone,
+total_spend, visit_count, last_visited_at, loyalty_points, tier, birthday,
+marketing_opt_in, rfm_score, rfm_segment, churn_risk_score, churn_risk_updated_at
+Check actual columns before assuming any exist.
 
 ## RULES
 Read CLAUDE.md first. One commit per task. npx tsc --noEmit + npm run build before every commit.
-UPGRADE-ONLY. Amounts in dollars. haiku for fast calls, sonnet for complex reasoning.
+UPGRADE-ONLY. haiku for personalised messages (batched). No AI for scoring maths.
 State "Build verified green, all commits pushed." when done.
 
-## EXISTING CUSTOMER DATA
-pos_customers columns include: id, business_id, name, email, phone, total_spend,
-visit_count, last_visited_at, loyalty_points, tier, birthday, marketing_opt_in,
-rfm_score, rfm_segment, churn_risk_score
-
-## WHAT THIS AGENT DOES
-Runs weekly. Builds an individual CLV model per customer. Scores everyone.
-Computes the MINIMUM EFFECTIVE offer per customer (not flat 20% off for everyone).
-Generates personalised messages using actual purchase history.
-Executes surgical interventions targeting the right person with the right offer.
+## THE KEY INNOVATION
+Every other tool gives everyone a flat 20% off. This agent computes the MINIMUM
+EFFECTIVE offer per customer based on their individual price sensitivity score.
+A price-insensitive high-value customer gets a free item (no discount needed).
+A price-sensitive at-risk customer gets 15% off. Personalised = more effective + less margin waste.
 
 ## TASK 1 — DB migrations
 Commit: "feat(clv-agent): DB migrations — customer_clv_scores + clv_portfolio_summary"
@@ -42,28 +33,58 @@ CREATE TABLE IF NOT EXISTS customer_clv_scores (
   business_id uuid REFERENCES businesses(id) ON DELETE CASCADE NOT NULL,
   customer_id uuid REFERENCES pos_customers(id) ON DELETE CASCADE NOT NULL,
   scored_at timestamptz DEFAULT now(),
-  avg_basket_size numeric DEFAULT 0,
-  visit_frequency_per_month numeric DEFAULT 0,
-  months_as_customer numeric DEFAULT 0,
-  product_diversity_score numeric DEFAULT 0,
-  price_sensitivity_score numeric DEFAULT 0,
-  seasonal_consistency_score numeric DEFAULT 0,
+
+  -- === INPUT FEATURES ===
+  -- These are the inputs to the CLV model
+  avg_basket_size numeric DEFAULT 0,        -- average transaction value
+  visit_frequency_per_month numeric DEFAULT 0, -- visits / months_as_customer
+  months_as_customer numeric DEFAULT 0,     -- how long they've been a customer
+  product_diversity_score numeric DEFAULT 0, -- 0-1: 1=buys many different things, 0=always same item
+  price_sensitivity_score numeric DEFAULT 0, -- 0-1: 1=very price sensitive, 0=buys regardless of price
+  seasonal_consistency_score numeric DEFAULT 0, -- 0-1: 1=visits evenly year-round, 0=only in one season
+
+  -- === CLV OUTPUTS ===
   predicted_monthly_revenue numeric DEFAULT 0,
   predicted_annual_revenue numeric DEFAULT 0,
-  predicted_3yr_clv numeric DEFAULT 0,
+  predicted_3yr_clv numeric DEFAULT 0, -- accounts for churn probability
+
+  -- === TIER CLASSIFICATION ===
   clv_tier text CHECK (clv_tier IN ('champion','loyal','potential','at_risk','dormant','lost')),
+  -- champion: visits > 4x/month AND basket > 1.2x business average
+  -- loyal: visits > 2x/month AND stable/growing trend
+  -- potential: < 2x/month BUT accelerating trend OR high basket
+  -- at_risk: was loyal/champion BUT decelerating AND >21 days since visit
+  -- dormant: 60-180 days since last visit
+  -- lost: > 180 days since last visit
+
+  -- === TREND SIGNALS ===
   visit_trend text CHECK (visit_trend IN ('accelerating','stable','decelerating','dormant')),
+  -- accelerating: last 4 months rate > prior 4 months rate by >20%
   spend_trend text CHECK (spend_trend IN ('growing','stable','declining')),
   days_since_last_visit integer DEFAULT 0,
+
+  -- === INTERVENTION RECOMMENDATION ===
   intervention_priority text CHECK (intervention_priority IN ('urgent','high','medium','low','none')),
-  recommended_offer_type text CHECK (recommended_offer_type IN ('percentage_discount','free_item','points_bonus','exclusive_access','vip_upgrade','none')),
-  recommended_offer_value numeric,
-  recommended_message text,
-  intervention_rationale text,
+  -- urgent: at_risk champion (immediate revenue at risk)
+  -- high: at_risk loyal OR dormant with history of high spend
+  -- medium: potential not yet converted to loyal
+  -- low: monitoring only
+  -- none: champion or stable loyal (don't disturb)
+
+  recommended_offer_type text CHECK (recommended_offer_type IN (
+    'percentage_discount','free_item','points_bonus',
+    'exclusive_access','vip_upgrade','none'
+  )),
+  recommended_offer_value numeric, -- the MINIMUM effective value (not maximum)
+  recommended_message text, -- personalised message generated by haiku
+  intervention_rationale text, -- why this offer type and value
+
+  -- === OUTCOME TRACKING ===
   intervention_sent_at timestamptz,
-  intervention_responded boolean,
-  revenue_in_30d_after numeric,
+  intervention_responded boolean, -- did they visit/buy within 30 days?
+  revenue_in_30d_after numeric, -- actual revenue generated in 30 days post-intervention
   visit_count_in_30d_after integer,
+
   UNIQUE(business_id, customer_id, date_trunc('week', scored_at))
 );
 ALTER TABLE customer_clv_scores ENABLE ROW LEVEL SECURITY;
@@ -71,21 +92,31 @@ CREATE POLICY "owner_clv" ON customer_clv_scores
   FOR ALL USING (business_id IN (SELECT id FROM businesses WHERE user_id = auth.uid()));
 CREATE INDEX ON customer_clv_scores (business_id, clv_tier, scored_at DESC);
 CREATE INDEX ON customer_clv_scores (business_id, intervention_priority, scored_at DESC);
+CREATE INDEX ON customer_clv_scores (business_id, customer_id, scored_at DESC);
 
+-- Portfolio-level summary (one row per business, updated weekly)
 CREATE TABLE IF NOT EXISTS clv_portfolio_summary (
   business_id uuid PRIMARY KEY REFERENCES businesses(id) ON DELETE CASCADE,
   scored_at timestamptz DEFAULT now(),
   total_customer_count integer DEFAULT 0,
-  champion_count integer DEFAULT 0, loyal_count integer DEFAULT 0,
-  potential_count integer DEFAULT 0, at_risk_count integer DEFAULT 0,
-  dormant_count integer DEFAULT 0, lost_count integer DEFAULT 0,
+  champion_count integer DEFAULT 0,
+  loyal_count integer DEFAULT 0,
+  potential_count integer DEFAULT 0,
+  at_risk_count integer DEFAULT 0,
+  dormant_count integer DEFAULT 0,
+  lost_count integer DEFAULT 0,
   total_predicted_annual_revenue numeric DEFAULT 0,
-  at_risk_annual_revenue numeric DEFAULT 0,
-  top_20_pct_revenue_share numeric DEFAULT 0,
-  if_rising_stars_add_1_visit numeric DEFAULT 0,
+  at_risk_annual_revenue numeric DEFAULT 0, -- revenue at risk from at_risk + dormant tiers
+  top_20_pct_revenue_share numeric DEFAULT 0, -- what % of revenue comes from top 20% customers
+  if_rising_stars_add_1_visit numeric DEFAULT 0, -- "potential customers visiting once more/month = +$X"
   avg_clv_champion numeric DEFAULT 0,
   avg_clv_loyal numeric DEFAULT 0,
-  avg_clv_potential numeric DEFAULT 0
+  avg_clv_potential numeric DEFAULT 0,
+  -- Intervention performance this month
+  interventions_sent integer DEFAULT 0,
+  interventions_responded integer DEFAULT 0,
+  response_rate_pct numeric DEFAULT 0,
+  revenue_attributed_to_interventions numeric DEFAULT 0
 );
 ALTER TABLE clv_portfolio_summary ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "owner_clv_portfolio" ON clv_portfolio_summary
@@ -93,73 +124,292 @@ CREATE POLICY "owner_clv_portfolio" ON clv_portfolio_summary
 ```
 
 ## TASK 2 — CLVAgent class
-Commit: "feat(clv-agent): CLVAgent — full feature scoring + minimum effective offer"
+Commit: "feat(clv-agent): CLVAgent — full feature scoring + minimum effective offer + portfolio summary"
 
-Create: src/lib/agents/clv-agent.ts (AgentType: 'clv')
+Create: src/lib/agents/clv-agent.ts. Add 'clv' to AgentType. Extends BaseAgent.
 
-run(business_id):
-1. FETCH all customers with >= 1 purchase in last 12 months. Build PurchaseHistory per customer.
-2. COMPUTE FEATURES per customer:
-   avg_basket = AVG(sale.total_amount)
-   visit_frequency = COUNT(sales) / months_as_customer
-   months_as_customer = (now - first_sale) / 30
-   product_diversity = DISTINCT(products) / total_products (0-1)
-   price_sensitivity = (discount_purchase_rate * 0.6) + (promo_response_rate * 0.4)
-   seasonal_consistency = 1 - (STD_DEV(monthly_visits) / AVG(monthly_visits))
-   visit_trend: last_4m_rate vs prior_4m_rate → accelerating if ratio > 1.2, decelerating < 0.8
-   spend_trend: same logic on total_amount
-3. PREDICT CLV:
-   predicted_monthly = avg_basket * visit_frequency
-   predicted_annual = predicted_monthly * 12 * trend_adj (growing=+0.1, declining=-0.1)
-   churn_prob = days_since / 365 * (1 - seasonal_consistency) — clamp 0-0.9
-   predicted_3yr = predicted_annual * 3 * (1 - churn_prob)
-4. CLV TIER:
-   champion: frequency > 4/month AND basket > business_avg * 1.2
-   loyal: frequency > 2/month AND stable/growing
-   potential: frequency < 2/month BUT accelerating OR high basket
-   at_risk: was loyal/champion BUT decelerating AND days_since > 21
-   dormant: days_since 60-180
-   lost: days_since > 180
-5. MINIMUM EFFECTIVE OFFER:
-   price_insensitive (< 0.3): free_item or points_bonus (no discount)
-   price_sensitive (> 0.6): percentage_discount 10-15%
-   moderate (0.3-0.6): points_bonus or 10%
-   at_risk champion: exclusive_access + 15%
-   potential high basket: vip_upgrade (no discount, recognition)
-6. PERSONALISED MESSAGE for urgent/high priority customers via haiku (batch 20 at a time):
-   "Write a personalised SMS for {name}. They last visited {N} days ago. 
-    Their favourite: {most_purchased_product}. Offer: {offer}. 
-    2 sentences max. Warm, personal, not corporate. Use their first name."
-7. PORTFOLIO SUMMARY: aggregate all scores into clv_portfolio_summary
-   if_rising_stars_add_1_visit = SUM(potential_customers.avg_basket * 1 extra visit)
-8. UPSERT customer_clv_scores + clv_portfolio_summary
-9. Update pos_customers.rfm_segment + churn_risk_score from new CLV data
-10. EXECUTE INTERVENTIONS (if mode=auto) for urgent/high via Twilio/Resend
+```typescript
+export class CLVAgent extends BaseAgent {
+  type: AgentType = 'clv'
 
-Weekly cron: "0 19 * * 0" (Sunday 7am AEST)
-Outcome cron: "0 19 * * 1" — fills revenue_in_30d_after for 30-day-old interventions
+  async run(business_id: string): Promise<AgentRunResult> {
+    // STEP 1: FETCH ALL CUSTOMERS WITH PURCHASE HISTORY
+    // Get pos_customers WHERE business_id, has at least 1 purchase in last 12 months
+    // For each customer, get their pos_sales (last 12 months minimum):
+    //   sale_id, created_at, total_amount, payment_method
+    // For each sale, get pos_sale_items:
+    //   product_id, quantity, unit_price, discount_percent
+    // Build a PurchaseHistory object per customer
 
-## TASK 3 — API routes + Dashboard widget
-Commit: "feat(clv-agent): API routes + CLV dashboard widget"
+    // STEP 2: COMPUTE FEATURES PER CUSTOMER
+    // For each customer with ≥2 purchases (min for meaningful scoring):
+    //
+    // avg_basket_size = AVG(sale.total_amount) across all their sales
+    // months_as_customer = GREATEST(
+    //   EXTRACT(EPOCH FROM (now() - MIN(sale.created_at))) / (30 * 86400),
+    //   0.1 // minimum 0.1 months to avoid division by zero
+    // )
+    // visit_frequency_per_month = COUNT(sales) / months_as_customer
+    //
+    // product_diversity_score:
+    //   distinct_products = COUNT(DISTINCT product_id across all their sale_items)
+    //   total_business_products = COUNT(DISTINCT product_id in pos_products WHERE business_id AND is_active)
+    //   diversity = LEAST(distinct_products / NULLIF(total_business_products, 0), 1.0)
+    //
+    // price_sensitivity_score:
+    //   discount_purchase_rate = COUNT(sales where any item had discount_percent > 0) / COUNT(all sales)
+    //   promo_response_rate: did visits increase during promotion periods?
+    //     Check pos_promotions active dates vs customer visit dates
+    //     promo_months = months where a promotion was active
+    //     visits_during_promo = COUNT(sales WHERE created_at in promo_month ranges)
+    //     visits_expected_during_promo = visit_frequency_per_month * promo_months.length
+    //     promo_lift = visits_during_promo / NULLIF(visits_expected_during_promo, 0) - 1
+    //     promo_lift_score = LEAST(GREATEST(promo_lift, 0), 1)
+    //   price_sensitivity = (discount_purchase_rate * 0.6) + (promo_lift_score * 0.4)
+    //
+    // seasonal_consistency_score:
+    //   Group sales by month (1-12), get count per month
+    //   Fill missing months with 0
+    //   monthly_counts = [visits_in_jan, visits_in_feb, ..., visits_in_dec]
+    //   avg = AVG(monthly_counts)
+    //   stddev = STDDEV(monthly_counts)
+    //   consistency = GREATEST(1 - (stddev / NULLIF(avg, 0)), 0) // 1=perfectly even, 0=all in one month
+    //
+    // visit_trend:
+    //   last_4m = COUNT(sales WHERE created_at > now()-4m)
+    //   prior_4m = COUNT(sales WHERE created_at BETWEEN now()-8m AND now()-4m)
+    //   ratio = last_4m / NULLIF(prior_4m, 0)
+    //   if last_4m = 0 AND prior_4m = 0: 'dormant'
+    //   elif ratio > 1.2: 'accelerating'
+    //   elif ratio < 0.8: 'decelerating'
+    //   else: 'stable'
+    //
+    // spend_trend: same calculation but on total_amount instead of count
 
-GET /api/agents/clv → portfolio summary + tier breakdown + top intervention opportunities
-GET /api/agents/clv/customers → paginated scores with tier/priority filters
-POST /api/agents/clv/trigger → manual run
-POST /api/agents/clv/send/[id] → manually send intervention for a specific customer
+    // STEP 3: PREDICT CLV
+    // predicted_monthly_revenue = avg_basket_size * visit_frequency_per_month
+    // trend_adj = if spend_trend='growing': 0.10, 'stable': 0, 'declining': -0.10
+    // predicted_annual_revenue = predicted_monthly_revenue * 12 * (1 + trend_adj)
+    //
+    // churn_probability:
+    //   base_churn = days_since_last_visit / 365
+    //   adjusted_churn = base_churn * (1 - seasonal_consistency_score)
+    //   // seasonal customers naturally have long gaps but aren't churning
+    //   churn_probability = LEAST(adjusted_churn, 0.90) // never >90%
+    //
+    // predicted_3yr_clv = predicted_annual_revenue * 3 * (1 - churn_probability)
 
-Dashboard "Customer Intelligence" section:
-- Portfolio cards: Champions (${annual_rev}) | At risk (${at_risk_rev}) | "If rising stars visit once more: +${X}/month"
-- Tier rings visualisation (recharts pie/donut): champion/loyal/potential/at-risk/dormant/lost
-- Intervention queue: customer name + tier + days since visit + message preview + "Send now" button
-- Learning: response rate, best-performing offer type, avg lift
+    // STEP 4: CLV TIER ASSIGNMENT
+    // business_avg_basket = AVG(avg_basket_size) across all scored customers
+    //
+    // champion:  visit_frequency_per_month > 4.0
+    //            AND avg_basket_size > business_avg_basket * 1.2
+    // loyal:     visit_frequency_per_month > 2.0
+    //            AND visit_trend IN ('accelerating', 'stable')
+    //            AND NOT (was_champion AND decelerating)
+    // potential: visit_frequency_per_month < 2.0
+    //            AND (visit_trend = 'accelerating' OR avg_basket_size > business_avg_basket * 1.5)
+    // at_risk:   (previous_tier IN ('champion','loyal') based on last 3 months data)
+    //            AND visit_trend = 'decelerating'
+    //            AND days_since_last_visit > 21
+    // dormant:   days_since_last_visit BETWEEN 60 AND 180
+    // lost:      days_since_last_visit > 180
+
+    // STEP 5: COMPUTE MINIMUM EFFECTIVE OFFER
+    // The innovation: compute the CHEAPEST offer that will actually work for each customer
+    //
+    // If clv_tier = 'champion': intervention_priority = 'none' (don't disturb loyal champions)
+    //   Except: if visit_trend = 'decelerating' → priority = 'urgent'
+    //
+    // If clv_tier = 'loyal': intervention_priority = 'low' (monitoring only unless decelerating)
+    //   If decelerating: priority = 'medium'
+    //
+    // If clv_tier = 'potential': intervention_priority = 'medium'
+    //   Goal: convert to loyal by encouraging more frequent visits
+    //
+    // If clv_tier = 'at_risk': intervention_priority = 'urgent' (was champion) or 'high' (was loyal)
+    //   This is the most important intervention
+    //
+    // If clv_tier = 'dormant': intervention_priority = 'high'
+    //   If they were previously high-value: 'urgent'
+    //
+    // OFFER SELECTION by price_sensitivity_score:
+    // price_insensitive (score < 0.25):
+    //   → recommended_offer_type = 'free_item' or 'exclusive_access'
+    //   → recommended_offer_value = null (no discount needed)
+    //   Rationale: these customers buy regardless of price. Discounts waste margin.
+    //   Giving them a VIP experience or complimentary item feels special.
+    //
+    // price_moderate (score 0.25 - 0.55):
+    //   → recommended_offer_type = 'points_bonus'
+    //   → recommended_offer_value = 3.0 (3x points multiplier, e.g.)
+    //   Or for at_risk: 'percentage_discount' at 10%
+    //
+    // price_sensitive (score > 0.55):
+    //   → recommended_offer_type = 'percentage_discount'
+    //   → recommended_offer_value:
+    //     if at_risk champion: 15% (worth spending more to save a high-CLV customer)
+    //     if at_risk loyal: 10%
+    //     if dormant: 20% (need a bigger hook to reactivate)
+    //     if potential: 5% (just a nudge to try coming back more)
+    //
+    // vip_upgrade for potential customers with high basket but low frequency:
+    //   → recommended_offer_type = 'vip_upgrade'
+    //   → recommended_offer_value = null
+    //   Message: "You're one of our best customers. We'd love to offer you our VIP tier..."
+    //   This costs nothing but increases perceived value and loyalty
+
+    // STEP 6: PERSONALISED MESSAGE GENERATION via haiku (batched 20 at a time)
+    // Only for customers with intervention_priority IN ('urgent', 'high')
+    //
+    // Build a batch of 20 customers with their context
+    // Single haiku call per batch:
+    // System: "Generate personalised {SMS|email} messages for these customers.
+    //   Each message MUST: use their first name, mention their actual most-purchased product,
+    //   reference how long they've been a customer, feel warm and personal (not corporate),
+    //   be max 160 characters for SMS / 3 sentences for email.
+    //   Do NOT say 'valued customer', 'we miss you' generically, or 'check out our deals'.
+    //   The offer is included at the end of the message naturally."
+    // User: JSON array of 20 customer contexts + their recommended_offer
+    // Response: JSON array of 20 messages in same order
+    //
+    // Example good message: "Hi Sarah! Your flat whites have been missed at Sip ☕ 
+    //   As a 2-year regular, here's a little something from us: free almond croissant 
+    //   with your next visit (valid 7 days). — The Sip team"
+    //
+    // Example bad message: "Hi valued customer, we miss you! Come back for 10% off."
+    //
+    // Store recommended_message on customer_clv_scores
+
+    // STEP 7: COMPUTE PORTFOLIO SUMMARY
+    // Aggregate all scored customers into clv_portfolio_summary:
+    // total_customer_count = COUNT(all scored customers)
+    // champion_count = COUNT WHERE clv_tier='champion'
+    // ... etc for all tiers
+    // total_predicted_annual_revenue = SUM(predicted_annual_revenue)
+    // at_risk_annual_revenue = SUM(predicted_annual_revenue WHERE clv_tier IN ('at_risk','dormant'))
+    //
+    // top_20_pct_revenue_share:
+    //   Sort customers by predicted_annual_revenue DESC
+    //   top_20_count = CEIL(total_customer_count * 0.2)
+    //   top_20_revenue = SUM(predicted_annual_revenue ORDER BY DESC LIMIT top_20_count)
+    //   top_20_pct_revenue_share = top_20_revenue / total_predicted_annual_revenue * 100
+    //
+    // if_rising_stars_add_1_visit:
+    //   potential_customers = WHERE clv_tier='potential'
+    //   SUM(potential.avg_basket_size * 1) // what if each visited once more per month?
+    //
+    // UPSERT clv_portfolio_summary for this business_id
+
+    // STEP 8: BULK UPSERT customer_clv_scores
+    // Use Supabase upsert with onConflict: 'business_id,customer_id,scored_week'
+    // Also update pos_customers: rfm_segment = clv_tier, churn_risk_score = churn_probability
+
+    // STEP 9: EXECUTE INTERVENTIONS (if mode='auto')
+    // For customers with intervention_priority='urgent' or 'high' AND recommended_message IS NOT NULL:
+    //   Check: has this customer received a message in the last 7 days?
+    //     (check review_requests + flash_interventions + previous clv_scores.intervention_sent_at)
+    //   If no recent message:
+    //     If customer.phone: send SMS via Twilio with recommended_message
+    //     Else if customer.email: send email via Resend
+    //     Update clv_scores.intervention_sent_at = now()
+    //     Log to aria_autopilot_actions
+
+    // STEP 10: SAVE AGENT DECISIONS
+    // For top 10 intervention opportunities: save as AgentDecision for council
+    // Include: customer_id, tier, predicted_annual_revenue, recommended_offer, message preview
+    await this.logRun(business_id, result, 'weekly_cron')
+  }
+}
+```
+
+## TASK 3 — Outcome tracking cron
+Commit: "feat(clv-agent): outcome tracking — measures 30-day response per intervention"
+
+Create: src/app/api/cron/clv-outcomes/route.ts
+Combine into existing Monday cron if possible. Else: "0 19 * * 1" (Monday 7am AEST)
+
+Handler:
+1. Find customer_clv_scores WHERE:
+   intervention_sent_at IS NOT NULL
+   AND revenue_in_30d_after IS NULL
+   AND intervention_sent_at < now()-30d
+2. For each:
+   revenue_in_30d_after = SUM(pos_sales.total_amount)
+     WHERE customer_id = score.customer_id
+     AND created_at BETWEEN score.intervention_sent_at AND score.intervention_sent_at + INTERVAL '30 days'
+   visit_count_in_30d_after = COUNT(pos_sales) same window
+   intervention_responded = (revenue_in_30d_after > score.predicted_monthly_revenue * 0.5)
+   UPDATE customer_clv_scores SET revenue_in_30d_after, visit_count_in_30d_after, intervention_responded
+3. Update clv_portfolio_summary:
+   interventions_sent = COUNT WHERE intervention_sent_at IS NOT NULL
+   interventions_responded = COUNT WHERE intervention_responded = true
+   response_rate_pct = responded / sent * 100
+   revenue_attributed = SUM(revenue_in_30d_after) WHERE intervention_responded = true
+
+Also: the weekly CLV run cron "0 19 * * 0" (Sunday 7am AEST)
+
+## TASK 4 — API routes + Dashboard widget
+Commit: "feat(clv-agent): API routes + customer intelligence dashboard widget"
+
+Create: src/app/api/agents/clv/route.ts
+GET: { portfolio: clv_portfolio_summary, tier_breakdown: {...}, top_opportunities: CLVScore[] }
+
+Create: src/app/api/agents/clv/customers/route.ts
+GET: paginated customer_clv_scores with pos_customers join
+Params: ?tier=at_risk&priority=urgent&limit=20&offset=0
+Sort: by intervention_priority (urgent first) then predicted_annual_revenue DESC
+
+Create: src/app/api/agents/clv/send/[id]/route.ts
+POST: manually send the intervention for a specific customer_clv_score.id
+→ sends SMS or email using recommended_message
+→ updates intervention_sent_at
+
+Create: src/app/api/agents/clv/trigger/route.ts
+POST: manually trigger a full CLV run for this business
+
+Dashboard "Customer Intelligence" section on /dashboard/agents:
+
+Portfolio summary row (4 cards):
+  Champions: "X customers · $Y/year" (gold tint)
+  At risk: "X customers · $Y at risk" (red tint with ⚠)
+  Potential: "X customers · if visited once more: +$Z/month" (purple tint with ↑)
+  Dormant: "X customers · last active 60-180 days" (grey tint)
+
+Tier visualisation (recharts PieChart or donut):
+  Segments: champion/loyal/potential/at_risk/dormant/lost
+  Click segment → filters the intervention queue below
+  Legend shows revenue % per tier
+
+"Rising stars" callout:
+  "If your {potential_count} potential customers visited once more per month: +${if_rising_stars}/month"
+  This is the most motivating metric for owners — specific and actionable
+
+Intervention queue (the main actionable section):
+  Each row is a customer needing intervention, sorted by priority:
+  [Tier badge] [Customer name] "Last visited X days ago · avg basket $Y"
+  [Recommended offer preview] (truncated, expandable)
+  "Send now" button → POST /api/agents/clv/send/{id} (loading state)
+  "Preview message" → shows full recommended_message in a tooltip/popover
+  "Skip" → marks intervention_priority = 'none' for this customer this week
+
+Intervention performance:
+  "This month: {sent} messages sent · {responded} responded ({rate}%) · ${revenue} attributed"
+  Small bar chart of response rate trend by week
 
 ## COMPLETION CHECKLIST
-- [ ] 2 tables with RLS + indexes
-- [ ] All CLV features computed correctly
-- [ ] Minimum effective offer logic (not flat discount)
-- [ ] Personalised messages via haiku (batched)
-- [ ] Portfolio summary + if_rising_stars_add_1_visit computed
-- [ ] Outcome tracking after 30 days
-- [ ] Dashboard: portfolio cards, tier visualisation, intervention queue
-- [ ] npx tsc --noEmit + npm run build pass
+- [ ] 2 tables with RLS + all indexes
+- [ ] All 7 features computed correctly (avg_basket, frequency, diversity, price_sensitivity, seasonal, trends)
+- [ ] CLV prediction: 3yr CLV with churn_probability formula
+- [ ] BCG-style tier assignment with correct thresholds
+- [ ] Minimum effective offer: price_insensitive gets free_item/exclusive, sensitive gets % discount
+- [ ] Offer values are MINIMUM not maximum (no waste)
+- [ ] haiku personalised messages reference actual purchase history (batched 20 at a time)
+- [ ] Portfolio summary: if_rising_stars_add_1_visit computed
+- [ ] Outcome tracking: 30-day revenue measurement per intervention
+- [ ] Weekly cron Sunday 7am AEST
+- [ ] API: portfolio, customers (paginated), send, trigger
+- [ ] Dashboard: portfolio cards, tier donut chart, rising stars callout, intervention queue
+- [ ] Customer fatigue: 7-day gap enforced
+- [ ] npx tsc --noEmit passes, npm run build passes
 State "Build verified green, all commits pushed." when done.
