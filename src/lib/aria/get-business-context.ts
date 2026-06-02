@@ -26,6 +26,8 @@ export async function getBusinessContext(businessId: string): Promise<string> {
     saleItems7,
     customers, reviews, outcomes, lowStock,
     hypothesisOutcomes,
+    topLeakRaw,
+    expenses7Raw,
   ] = await Promise.allSettled([
     db.from('businesses').select('*').eq('id', businessId).single(),
     db.from('pos_sales').select('total_amount, created_at')
@@ -61,6 +63,17 @@ export async function getBusinessContext(businessId: string): Promise<string> {
       .eq('business_id', businessId)
       .eq('status', 'closed')
       .gte('generated_at', monthStart),
+    db.from('profit_leaks')
+      .select('title, monthly_loss, recommendation, status')
+      .eq('business_id', businessId)
+      .neq('status', 'fixed')
+      .order('monthly_loss', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    db.from('business_expenses')
+      .select('amount')
+      .eq('business_id', businessId)
+      .gte('date', d7),
   ])
 
   // SKU aggregation from sale_items
@@ -97,6 +110,14 @@ export async function getBusinessContext(businessId: string): Promise<string> {
   const revs  = reviews.status   === 'fulfilled' ? reviews.value.data    ?? [] : []
   const outs  = outcomes.status  === 'fulfilled' ? outcomes.value.data   ?? [] : []
   const alts  = lowStock.status  === 'fulfilled' ? lowStock.value.data   ?? [] : []
+
+  const topLeakData = topLeakRaw.status === 'fulfilled' ? (topLeakRaw.value.data as { title: string; monthly_loss: number; recommendation: string; status: string } | null) : null
+
+  const expenses7Total = expenses7Raw.status === 'fulfilled'
+    ? ((expenses7Raw.value.data ?? []) as Array<{ amount: number }>).reduce((s, e) => s + (e.amount ?? 0), 0)
+    : 0
+  const net7 = (rev7 ?? 0) - expenses7Total
+  const dailyNet = net7 / 7
 
   const outcomeData = hypothesisOutcomes.status === 'fulfilled' ? (hypothesisOutcomes.value.data ?? []) : []
   const outcomes_arr = (outcomeData) as Array<{ outcome_verdict: string | null }>
@@ -174,6 +195,18 @@ export async function getBusinessContext(businessId: string): Promise<string> {
         ? 'Aria suggestions this month: ' + hyp_worked + ' worked, ' + hyp_failed + " didn't (" + hyp_successRate + '% success rate)'
         : 'No closed hypotheses this month yet',
     },
+    cash_position: {
+      estimated_net_7d: Math.round(net7 * 100) / 100,
+      daily_net: Math.round(dailyNet * 100) / 100,
+      runway_signal: dailyNet < 0 ? 'Spending exceeds revenue — monitor cash closely' : 'Revenue exceeding expenses — healthy position',
+      summary: 'Estimated 7-day net position: $' + net7.toFixed(0) + '. Daily net: $' + dailyNet.toFixed(2) + '/day.',
+    },
+    top_profit_leak: topLeakData ? {
+      title: topLeakData.title,
+      monthly_loss: topLeakData.monthly_loss,
+      recommendation: topLeakData.recommendation,
+      summary: 'Top profit leak: ' + topLeakData.title + ' — costing $' + Number(topLeakData.monthly_loss ?? 0).toFixed(0) + '/month. ' + (topLeakData.recommendation ?? ''),
+    } : null,
     weather: weather ?? { _note: 'Weather data unavailable — proceeding without weather context.' },
     seo: await (async () => {
       try {
