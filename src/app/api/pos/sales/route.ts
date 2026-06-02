@@ -297,28 +297,24 @@ async function _POST(req: Request) {
       const { data: prod } = await supabase.from('pos_products')
         .select('stock_quantity').eq('id', item.product_id).maybeSingle();
       if (prod?.stock_quantity != null) {
-        const newQty = Math.max(0, prod.stock_quantity - item.quantity);
-        await supabase.from('pos_products')
-          .update({ stock_quantity: newQty })
-          .eq('id', item.product_id);
+        const { data: newQty } = await supabase.rpc('decrement_stock_quantity', { p_product_id: item.product_id, p_amount: item.quantity });
         // Observe low stock for Aria Brain (fire-and-forget)
-        if (newQty <= 5) {
+        if ((newQty ?? 0) <= 5) {
           const { data: prodInfo } = await supabase.from('pos_products').select('name, reorder_point').eq('id', item.product_id).maybeSingle();
-          ariaObserve({ business_id: bid, category: 'inventory', event_type: 'low_stock', data: { product_id: item.product_id, product_name: prodInfo?.name ?? item.product_id, quantity: newQty, reorder_point: prodInfo?.reorder_point } }).catch(() => {});
+          ariaObserve({ business_id: bid, category: 'inventory', event_type: 'low_stock', data: { product_id: item.product_id, product_name: prodInfo?.name ?? item.product_id, quantity: newQty ?? 0, reorder_point: prodInfo?.reorder_point } }).catch(() => {});
         }
       }
 
-      // pos_outlet_inventory.items_on_hand (source of truth)
+      // pos_outlet_inventory.items_on_hand — atomic decrement to prevent concurrent-sale race
       if (resolvedOutletId) {
         const { data: inv } = await supabase.from('pos_outlet_inventory')
-          .select('id, items_on_hand')
+          .select('id')
           .eq('product_id', item.product_id)
           .eq('outlet_id', resolvedOutletId)
           .maybeSingle();
         if (inv) {
-          await supabase.from('pos_outlet_inventory')
-            .update({ items_on_hand: Math.max(0, (inv.items_on_hand ?? 0) - item.quantity), updated_at: new Date().toISOString() })
-            .eq('id', inv.id);
+          await supabase.rpc('decrement_numeric', { p_table: 'pos_outlet_inventory', p_id: inv.id, p_column: 'items_on_hand', p_amount: item.quantity });
+          await supabase.from('pos_outlet_inventory').update({ updated_at: new Date().toISOString() }).eq('id', inv.id);
         }
       }
     }
