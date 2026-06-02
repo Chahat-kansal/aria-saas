@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
+import { waitUntil } from '@vercel/functions'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { ariaObserve } from '@/lib/aria/brain'
 
@@ -186,9 +187,9 @@ async function _POST(req: Request) {
 
   if (itemsError) return NextResponse.json({ error: itemsError.message }, { status: 500 });
 
-  // ── KDS ticket creation (fire-and-forget — never blocks the sale response) ──
+  // ── KDS ticket creation (waitUntil — keeps function alive, never blocks response) ──
   if (!salePayload.is_training) {
-    ;(async () => {
+    waitUntil((async () => {
       try {
         // Fetch the inserted items with their IDs + KDS fields
         const { data: saleItems } = await supabase
@@ -225,7 +226,7 @@ async function _POST(req: Request) {
       } catch (kdsErr) {
         console.error('[pos/sales] KDS ticket creation failed (non-fatal):', (kdsErr as Error).message)
       }
-    })()
+    })())
   }
 
   // Deduct from gift card balance
@@ -325,9 +326,9 @@ async function _POST(req: Request) {
     console.error('[pos/sales] stock decrement failed (non-fatal):', (stockErr as Error).message);
   }
 
-  // ── KDS order creation for cafe (fire-and-forget) ──────────────────────────
+  // ── KDS order creation for cafe (waitUntil — keeps function alive, never blocks response) ──
   if (!salePayload.is_training) {
-    ;(async () => {
+    waitUntil((async () => {
       try {
         const { data: bizInfo } = await supabase.from('businesses').select('industry').eq('id', bid).maybeSingle();
         if (bizInfo?.industry === 'cafe') {
@@ -351,11 +352,11 @@ async function _POST(req: Request) {
       } catch (kdsErr) {
         console.error('[pos/sales] KDS order creation failed (non-fatal):', (kdsErr as Error).message);
       }
-    })();
+    })());
   }
 
-  // ── Recipe ingredient deduction for cafe (fire-and-forget) ──────────────────
-  ;(async () => {
+  // ── Recipe ingredient deduction for cafe (waitUntil — keeps function alive, never blocks response) ──
+  waitUntil((async () => {
     try {
       const { data: bizInfo } = await supabase.from('businesses').select('industry').eq('id', bid).maybeSingle();
       if (bizInfo?.industry === 'cafe') {
@@ -379,7 +380,7 @@ async function _POST(req: Request) {
         }
       }
     } catch { /* non-fatal — ingredient tracking never blocks a sale */ }
-  })();
+  })());
 
   // Log to activity_log (fire-and-forget — non-blocking)
   supabase.from('activity_log').insert({

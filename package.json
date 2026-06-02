@@ -39,6 +39,7 @@
     "@upstash/ratelimit": "^2.0.8",
     "@upstash/redis": "^1.38.0",
     "@vercel/blob": "^0.23.4",
+    "@vercel/functions": "^3.6.1",
     "@zxing/library": "^0.23.0",
     "ai": "^3.3.0",
     "bcryptjs": "^2.4.3",

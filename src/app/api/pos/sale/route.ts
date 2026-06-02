@@ -2,6 +2,7 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
+import { waitUntil } from '@vercel/functions'
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { computeSaleTax, type TaxableLine } from '@/lib/pos/tax-engine';
 import { withErrorCapture, setSentryContext } from '@/lib/api/with-error-capture'
@@ -307,22 +308,24 @@ async function _POST(req: Request) {
     }).eq('id', openSession.id));
   }
 
-  // Update customer loyalty + stats (fire-and-forget — ~100-200ms saved off critical path)
+  // Update customer loyalty + stats (waitUntil — keeps function alive, doesn't block response)
   if (customer_id) {
-    ;(async () => {
-      const { data: cust } = await supabase.from('pos_customers').select('loyalty_points, total_spent, visit_count').eq('id', customer_id).maybeSingle();
-      if (!cust) return;
-      await supabase.from('pos_customers').update({
-        loyalty_points: (cust.loyalty_points ?? 0) + Math.floor(total_amount),
-        total_spent: (cust.total_spent ?? 0) + total_amount,
-        visit_count: (cust.visit_count ?? 0) + 1,
-        last_visit: new Date().toISOString(),
-      }).eq('id', customer_id);
-    })();
+    waitUntil((async () => {
+      try {
+        const { data: cust } = await supabase.from('pos_customers').select('loyalty_points, total_spent, visit_count').eq('id', customer_id).maybeSingle();
+        if (!cust) return;
+        await supabase.from('pos_customers').update({
+          loyalty_points: (cust.loyalty_points ?? 0) + Math.floor(total_amount),
+          total_spent: (cust.total_spent ?? 0) + total_amount,
+          visit_count: (cust.visit_count ?? 0) + 1,
+          last_visit: new Date().toISOString(),
+        }).eq('id', customer_id);
+      } catch (e) { console.error('[sale] loyalty update failed:', e) }
+    })())
   }
 
-  // Cafe KDS + ingredient deduction (non-blocking)
-  ;(async () => {
+  // Cafe KDS + ingredient deduction (waitUntil — keeps function alive, doesn't block response)
+  waitUntil((async () => {
     try {
       const { data: biz } = await supabase.from('businesses').select('industry').eq('id', business.id).maybeSingle()
       if (biz?.industry !== 'cafe') return
@@ -363,7 +366,7 @@ async function _POST(req: Request) {
         }
       }
     } catch { /* non-fatal */ }
-  })()
+  })())
 
   // Aria Brain — observe sale + low stock + activity log (non-blocking dynamic import)
   const bid = business.id
