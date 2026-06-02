@@ -12,7 +12,7 @@ async function parsePdf(buf: Buffer): Promise<string> {
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const pdfParse = require('pdf-parse')
-    const result = await parsePdf(buf)
+    const result = await pdfParse(buf)
     return result.text ?? ''
   } catch {
     return '' // graceful fallback — AI will get empty text and return parse error
@@ -255,7 +255,7 @@ async function _POST(req: Request) {
     } else if (mimeType === 'application/pdf' || fileName.endsWith('.pdf')) {
       const buf = Buffer.from(await file.arrayBuffer())
       const data = await parsePdf(buf)
-      parsed = await aiParseText(data.text, businessId)
+      parsed = await aiParseText(data, businessId)
     } else if (mimeType.startsWith('image/')) {
       const buf = Buffer.from(await file.arrayBuffer())
       const base64 = buf.toString('base64')
