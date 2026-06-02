@@ -813,7 +813,201 @@ function AiOptimizerTab({ businessId }: { businessId: string }) {
   )
 }
 
-// ── Tab 6: Competitors ────────────────────────────────────────────────────────
+// ── Tab 6: Technical Audit ────────────────────────────────────────────────────
+
+interface TechCheck { id: string; label: string; detail: string }
+
+function TechnicalTab({ businessId, websiteUrl }: { businessId: string; websiteUrl: string }) {
+  const [score, setScore] = useState<number | null>(null)
+  const [passed, setPassed] = useState<TechCheck[]>([])
+  const [failed, setFailed] = useState<TechCheck[]>([])
+  const [warnings, setWarnings] = useState<TechCheck[]>([])
+  const [running, setRunning] = useState(false)
+  const [checkedAt, setCheckedAt] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  async function runAudit() {
+    setRunning(true); setError(null)
+    try {
+      const res = await fetch('/api/seo/technical-audit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ business_id: businessId, website_url: websiteUrl }),
+      })
+      const d = await res.json().catch(() => ({}))
+      if (!res.ok) { setError(d.error ?? 'Audit failed'); setRunning(false); return }
+      setScore(d.score ?? null)
+      setPassed(d.passed ?? [])
+      setFailed(d.failed ?? [])
+      setWarnings(d.warnings ?? [])
+      setCheckedAt(d.checked_at ?? null)
+    } catch { setError('Network error') }
+    setRunning(false)
+  }
+
+  const col = score === null ? '#9ca3af' : score >= 80 ? '#7FB897' : score >= 60 ? '#f59e0b' : '#ef4444'
+
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+        <button onClick={runAudit} disabled={running}
+          style={{ padding: '8px 20px', borderRadius: 8, border: 'none', background: '#7FB897', color: '#0E1411', fontSize: 13, fontWeight: 700, cursor: running ? 'default' : 'pointer', fontFamily: 'inherit', opacity: running ? 0.6 : 1 }}>
+          {running ? 'Auditing…' : score !== null ? 'Re-run audit' : 'Run technical audit'}
+        </button>
+        {checkedAt && <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)' }}>Checked {new Date(checkedAt).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>}
+      </div>
+      {error && <p style={{ fontSize: 13, color: '#F87171', marginBottom: 16 }}>✗ {error}</p>}
+      {score === null && !error && !running && (
+        <div style={{ textAlign: 'center', padding: 60 }}>
+          <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 14 }}>Click &quot;Run technical audit&quot; to check HTTPS, mobile, sitemap, robots.txt, links and titles.</p>
+        </div>
+      )}
+      {score !== null && (
+        <>
+          <div style={{ display: 'flex', gap: 16, alignItems: 'center', marginBottom: 24, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+              <RingChart score={score} />
+              <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Tech score</span>
+            </div>
+            {([['Passed', passed.length, '#7FB897'], ['Failed', failed.length, '#ef4444'], ['Warnings', warnings.length, '#f59e0b']] as [string, number, string][]).map(([label, val, c]) => (
+              <div key={label} style={statCell}>
+                <div style={{ fontSize: 24, fontWeight: 800, color: c, lineHeight: 1 }}>{val}</div>
+                <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 4, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</div>
+              </div>
+            ))}
+          </div>
+          {failed.length > 0 && (
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#ef4444', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Failed checks</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {failed.map(c => (
+                  <div key={c.id} style={{ display: 'flex', gap: 12, padding: '12px 16px', background: 'rgba(239,68,68,0.06)', borderRadius: 12, border: '1px solid rgba(239,68,68,0.2)' }}>
+                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#ef4444', flexShrink: 0, marginTop: 5 }} />
+                    <div style={{ flex: 1 }}>
+                      <div style={{ color: '#fff', fontSize: 13, fontWeight: 600 }}>{c.label}</div>
+                      <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, marginTop: 2 }}>{c.detail}</div>
+                    </div>
+                    <span style={{ fontSize: 11, padding: '3px 8px', borderRadius: 12, background: 'rgba(239,68,68,0.12)', color: '#fca5a5', flexShrink: 0 }}>Fail</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {warnings.length > 0 && (
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#f59e0b', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Warnings</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {warnings.map(c => (
+                  <div key={c.id} style={{ display: 'flex', gap: 12, padding: '12px 16px', background: 'rgba(245,158,11,0.06)', borderRadius: 12, border: '1px solid rgba(245,158,11,0.2)' }}>
+                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#f59e0b', flexShrink: 0, marginTop: 5 }} />
+                    <div style={{ flex: 1 }}>
+                      <div style={{ color: '#fff', fontSize: 13, fontWeight: 600 }}>{c.label}</div>
+                      <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, marginTop: 2 }}>{c.detail}</div>
+                    </div>
+                    <span style={{ fontSize: 11, padding: '3px 8px', borderRadius: 12, background: 'rgba(245,158,11,0.1)', color: '#fcd34d', flexShrink: 0 }}>Warn</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {passed.length > 0 && (
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: 'rgba(255,255,255,0.4)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Passing</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {passed.map(c => (
+                  <div key={c.id} style={{ display: 'flex', gap: 12, padding: '10px 16px', background: 'rgba(127,184,151,0.04)', borderRadius: 10, border: '1px solid rgba(127,184,151,0.12)' }}>
+                    <span style={{ color: col, fontSize: 13, flexShrink: 0, marginTop: 1 }}>✓</span>
+                    <div style={{ flex: 1 }}>
+                      <span style={{ color: 'rgba(255,255,255,0.8)', fontSize: 13, fontWeight: 500 }}>{c.label}</span>
+                      <span style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12, marginLeft: 8 }}>{c.detail}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
+// ── Tab 7: Fix History ─────────────────────────────────────────────────────────
+
+interface SeoFix { id: string; issue_type: string; fix_applied: string | null; state: string; applied_at: string }
+
+function FixHistoryTab({ businessId }: { businessId: string }) {
+  const [fixes, setFixes] = useState<SeoFix[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    async function load() {
+      setLoading(true)
+      const { data } = await supabase
+        .from('seo_fixes')
+        .select('id, issue_type, fix_applied, state, applied_at')
+        .eq('business_id', businessId)
+        .order('applied_at', { ascending: false })
+        .limit(50)
+      setFixes((data ?? []) as SeoFix[])
+      setLoading(false)
+    }
+    load()
+  }, [businessId])
+
+  if (loading) return <p style={{ color: 'rgba(255,255,255,0.4)', textAlign: 'center', padding: 40 }}>Loading…</p>
+
+  if (fixes.length === 0) return (
+    <div style={{ textAlign: 'center', padding: 60 }}>
+      <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 14 }}>No fixes applied yet.</p>
+      <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: 12, marginTop: 8 }}>When you apply a fix from the Fix tab, it will appear here with the content used.</p>
+    </div>
+  )
+
+  const ISSUE_LABELS: Record<string, string> = {
+    missing_title: 'Missing title',
+    title_too_long: 'Title too long',
+    missing_meta_description: 'Missing meta description',
+    meta_too_long: 'Meta too long',
+    missing_h1: 'Missing H1',
+    thin_content: 'Thin content',
+    missing_schema: 'Missing schema markup',
+    missing_alt_text: 'Missing alt text',
+    slow_page: 'Slow page',
+    broken_link: 'Broken link',
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+        <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)' }}>{fixes.length} fix{fixes.length !== 1 ? 'es' : ''} applied</span>
+      </div>
+      {fixes.map(fix => (
+        <div key={fix.id} style={{ padding: '16px 20px', background: 'rgba(255,255,255,0.04)', borderRadius: 14, border: '1px solid rgba(255,255,255,0.08)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: fix.fix_applied ? 12 : 0 }}>
+            <div>
+              <div style={{ color: '#fff', fontSize: 13, fontWeight: 600 }}>{ISSUE_LABELS[fix.issue_type] ?? fix.issue_type.replace(/_/g, ' ')}</div>
+              <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 11, marginTop: 3 }}>
+                Applied {new Date(fix.applied_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+              </div>
+            </div>
+            <span style={{ fontSize: 11, padding: '3px 10px', borderRadius: 20, background: fix.state === 'verified' ? 'rgba(127,184,151,0.15)' : fix.state === 'applied' ? 'rgba(245,158,11,0.1)' : 'rgba(255,255,255,0.06)', color: fix.state === 'verified' ? '#7FB897' : fix.state === 'applied' ? '#f59e0b' : 'rgba(255,255,255,0.4)', flexShrink: 0 }}>
+              {fix.state}
+            </span>
+          </div>
+          {fix.fix_applied && (
+            <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', background: 'rgba(0,0,0,0.18)', borderRadius: 10, padding: '10px 14px' }}>
+              <pre style={{ flex: 1, margin: 0, fontSize: 12, color: '#7FB897', fontFamily: 'monospace', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{fix.fix_applied.slice(0, 600)}{fix.fix_applied.length > 600 ? '…' : ''}</pre>
+              <CopyBtn text={fix.fix_applied} />
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// ── Tab 8: Competitors ────────────────────────────────────────────────────────
 
 interface CompetitorAnalysis { id: string; competitor_url: string; analysis: Record<string, unknown>; created_at: string }
 
@@ -954,7 +1148,7 @@ function RecommendationsTab({ businessId }: { businessId: string }) {
 
 // ── Page ───────────────────────────────────────────────────────────────────
 
-type TabId = 'health' | 'issues' | 'optimizer' | 'keywords' | 'local' | 'competitors' | 'recommendations'
+type TabId = 'health' | 'issues' | 'optimizer' | 'keywords' | 'local' | 'competitors' | 'recommendations' | 'technical' | 'fix_history'
 const TABS: Array<{ id: TabId; label: string }> = [
   { id: 'health', label: 'Overview' },
   { id: 'issues', label: 'Issues' },
@@ -962,6 +1156,8 @@ const TABS: Array<{ id: TabId; label: string }> = [
   { id: 'keywords', label: 'Keywords' },
   { id: 'local', label: 'Local SEO' },
   { id: 'competitors', label: 'Competitors' },
+  { id: 'technical', label: 'Technical' },
+  { id: 'fix_history', label: 'Fix History' },
   { id: 'recommendations', label: 'Recommendations' },
 ]
 
@@ -1108,6 +1304,8 @@ export default function SeoPage() {
             {tab === 'keywords' && <KeywordsTab businessId={business.id} businessName={business.name ?? undefined} businessIndustry={(business as unknown as { industry?: string }).industry ?? undefined} />}
             {tab === 'local' && <LocalSeoTab businessId={business.id} />}
             {tab === 'competitors' && <CompetitorsTab businessId={business.id} />}
+            {tab === 'technical' && <TechnicalTab businessId={business.id} websiteUrl={websiteUrl} />}
+            {tab === 'fix_history' && <FixHistoryTab businessId={business.id} />}
             {tab === 'recommendations' && <RecommendationsTab businessId={business.id} />}
           </>
         )}
