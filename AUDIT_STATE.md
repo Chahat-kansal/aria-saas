@@ -1,10 +1,16 @@
 # Aria OS Audit State
 
 ## Last updated
-2026-05-31 — Session 6 COMPLETE. All 9 checks done. 28 security/silent-failure bugs fixed.
+2026-06-02 — Prompt 202 COMPLETE. Fire-and-forget sweep done. 29 routes fixed with waitUntil.
 
 ## Push Status
-ALL COMMITS PUSHED — origin/main is current as of c4b4089c
+ALL COMMITS PUSHED — origin/main is current as of 3fa11d63
+
+## Prompt 202 — Fire-and-Forget Fix (2026-06-02)
+Installed `@vercel/functions`. Replaced all `void (async () => { ... })()` patterns with
+`waitUntil((async () => { ... })())` across 29 API routes. Background DB writes (aria_ai_calls,
+aria_autopilot_actions, pos_gift_card_transactions, aria_action_log, outcome learning) now
+survive Vercel serverless function freeze. Zero IIFEs remain in src/app/api/.
 
 ## LIVE DB SCHEMA — pos_products (confirmed 2026-05-31)
 Both `track_stock` AND `track_inventory` exist (separate boolean columns).
