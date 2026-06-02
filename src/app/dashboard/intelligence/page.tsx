@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useBusinessContext } from '@/components/providers/BusinessProvider'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
+import { useRouter } from 'next/navigation'
 
 interface IntelligenceEvent {
   id: string; event_type: string; severity: 'critical'|'high'|'medium'|'info';
@@ -51,10 +52,22 @@ function timeAgo(dateStr: string) {
   return Math.floor(h / 24) + 'd ago'
 }
 
+function getActionLabel(eventType: string): string {
+  if (/low_stock|reorder/i.test(eventType)) return 'Reorder now →'
+  if (/pricing_gap|price_below_cost/i.test(eventType)) return 'Fix price →'
+  if (/dead_stock/i.test(eventType)) return 'Run promo →'
+  if (/slow_day|quiet_period/i.test(eventType)) return 'View promotions →'
+  if (/churn_risk|lapsed_customer/i.test(eventType)) return 'Send winback →'
+  if (/review_unreplied/i.test(eventType)) return 'Reply to reviews →'
+  if (/expiry_alert/i.test(eventType)) return 'View expiry →'
+  return 'Fix this →'
+}
+
 const C = { bg: '#0d0d14', surface: '#13131a', border: 'rgba(255,255,255,0.06)', text: '#E8EDE7', dim: 'rgba(255,255,255,0.4)', muted: 'rgba(255,255,255,0.2)', green: '#7FB897', violet: '#A78BFA' }
 
 export default function IntelligencePage() {
   const { business } = useBusinessContext()
+  const router = useRouter()
   const [events, setEvents] = useState<IntelligenceEvent[]>([])
   const [hypotheses, setHypotheses] = useState<Hypothesis[]>([])
   const [stats, setStats] = useState<Stats | null>(null)
@@ -63,14 +76,15 @@ export default function IntelligencePage() {
   const [selected, setSelected] = useState<IntelligenceEvent | null>(null)
   const [newCount, setNewCount] = useState(0)
   const [acking, setAcking] = useState<string | null>(null)
+  const [actionFiring, setActionFiring] = useState<Record<string, boolean>>({})
 
   const load = useCallback(async () => {
     if (!business?.id) return
     setLoading(true)
     const [evRes, hRes, sRes] = await Promise.all([
-      fetch(`/api/intelligence-events?business_id=${business.id}&limit=100`).then(r => r.json()).catch(() => ({ events: [] })),
-      fetch(`/api/aria/hypotheses?business_id=${business.id}`).then(r => r.json()).catch(() => ({ hypotheses: [] })),
-      fetch(`/api/intelligence-events/stats?business_id=${business.id}`).then(r => r.json()).catch(() => null),
+      fetch('/api/intelligence-events?business_id=' + business.id + '&limit=100').then(r => r.json()).catch(() => ({ events: [] })),
+      fetch('/api/aria/hypotheses?business_id=' + business.id).then(r => r.json()).catch(() => ({ hypotheses: [] })),
+      fetch('/api/intelligence-events/stats?business_id=' + business.id).then(r => r.json()).catch(() => null),
     ])
     setEvents(evRes.events ?? [])
     setHypotheses(hRes.hypotheses ?? [])
@@ -100,7 +114,7 @@ export default function IntelligencePage() {
     if (!business?.id) return
     const unread = events.filter(e => !e.acknowledged)
     if (unread.length === 0) return
-    if (!confirm(`Dismiss all ${unread.length} alert${unread.length === 1 ? '' : 's'}?`)) return
+    if (!confirm('Dismiss all ' + unread.length + ' alert' + (unread.length === 1 ? '' : 's') + '?')) return
     setClearingAll(true)
     try {
       await Promise.all(unread.map(e =>
@@ -111,7 +125,7 @@ export default function IntelligencePage() {
       ))
       setEvents(prev => prev.map(e => ({ ...e, acknowledged: true })))
       setSelected(null); setNewCount(0)
-      setToast(`All ${unread.length} alert${unread.length === 1 ? '' : 's'} cleared`)
+      setToast('All ' + unread.length + ' alert' + (unread.length === 1 ? '' : 's') + ' cleared')
       setTimeout(() => setToast(''), 2500)
     } finally { setClearingAll(false) }
   }
@@ -130,8 +144,73 @@ export default function IntelligencePage() {
   }
 
   async function updateHypothesis(id: string, status: string) {
-    await fetch(`/api/aria/hypotheses?id=${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) })
+    await fetch('/api/aria/hypotheses?id=' + id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) })
     setHypotheses(hs => hs.map(h => h.id === id ? { ...h, status } : h))
+  }
+
+  async function handleEventAction(e: IntelligenceEvent) {
+    if (!business?.id) return
+    setActionFiring(prev => ({ ...prev, [e.id]: true }))
+    try {
+      if (/low_stock|reorder/i.test(e.event_type)) {
+        await fetch('/api/pos/purchase-orders', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ business_id: business.id, product_id: (e.data as { product_id?: string } | null)?.product_id }),
+        }).catch(() => null)
+      } else if (/pricing_gap|price_below_cost/i.test(e.event_type)) {
+        const productId = (e.data as { product_id?: string } | null)?.product_id
+        const suggestedPrice = (e.data as { suggested_price?: number } | null)?.suggested_price
+        if (productId && suggestedPrice) {
+          await fetch('/api/pos/products/' + productId, {
+            method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ price: suggestedPrice }),
+          }).catch(() => null)
+        }
+      } else if (/dead_stock/i.test(e.event_type)) {
+        await fetch('/api/pos/promotions', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ business_id: business.id, discount_pct: 20, product_id: (e.data as { product_id?: string } | null)?.product_id }),
+        }).catch(() => null)
+      } else if (/slow_day|quiet_period/i.test(e.event_type)) {
+        router.push('/dashboard/promotions')
+        setActionFiring(prev => ({ ...prev, [e.id]: false }))
+        return
+      } else if (/churn_risk|lapsed_customer/i.test(e.event_type)) {
+        await fetch('/api/aria/winback', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ business_id: business.id, customer_ids: (e.data as { customer_ids?: string[] } | null)?.customer_ids ?? [] }),
+        }).catch(() => null)
+      } else if (/review_unreplied/i.test(e.event_type)) {
+        router.push('/dashboard/reviews')
+        setActionFiring(prev => ({ ...prev, [e.id]: false }))
+        return
+      } else if (/expiry_alert/i.test(e.event_type)) {
+        router.push('/dashboard/warehouse?tab=expiry')
+        setActionFiring(prev => ({ ...prev, [e.id]: false }))
+        return
+      } else {
+        if (e.action_href) {
+          router.push(e.action_href)
+        } else {
+          await acknowledge(e.id, true)
+        }
+        setActionFiring(prev => ({ ...prev, [e.id]: false }))
+        return
+      }
+
+      await acknowledge(e.id, true)
+      setToast('Done')
+      setTimeout(() => setToast(''), 2500)
+      fetch('/api/aria/autopilot-actions', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ business_id: business.id, action_type: 'intelligence_action_taken', payload: { event_type: e.event_type } }),
+      }).catch(() => null)
+    } catch {
+      setToast('Action failed — try again')
+      setTimeout(() => setToast(''), 2500)
+    } finally {
+      setActionFiring(prev => ({ ...prev, [e.id]: false }))
+    }
   }
 
   // Apply category filter + priority sort
@@ -154,7 +233,7 @@ export default function IntelligencePage() {
     const isSel = selected?.id === e.id
     return (
       <div key={e.id} onClick={() => setSelected(e)}
-        style={{ padding: '14px 16px', borderRadius: 10, cursor: 'pointer', background: isSel ? 'rgba(127,184,151,0.06)' : C.surface, border: '1px solid ' + (isSel ? 'rgba(127,184,151,0.3)' : C.border), borderLeft: `4px solid ${pm.color}`, transition: 'all 0.12s' }}>
+        style={{ padding: '14px 16px', borderRadius: 10, cursor: 'pointer', background: isSel ? 'rgba(127,184,151,0.06)' : C.surface, border: '1px solid ' + (isSel ? 'rgba(127,184,151,0.3)' : C.border), borderLeft: '4px solid ' + pm.color, transition: 'all 0.12s' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, marginBottom: 4 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: pm.color + '20', color: pm.color }}>{pm.label}</span>
@@ -281,7 +360,7 @@ export default function IntelligencePage() {
                   <p style={{ fontSize: 10, color: C.dim, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>Generated vs resolved per week</p>
                   <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, height: 50 }}>
                     {stats.weekly.slice(-8).map(w => (
-                      <div key={w.week} style={{ flex: 1, position: 'relative', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }} title={`${w.week}: ${w.generated} / ${w.resolved}`}>
+                      <div key={w.week} style={{ flex: 1, position: 'relative', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }} title={w.week + ': ' + w.generated + ' / ' + w.resolved}>
                         <div style={{ height: (w.generated / maxV * 100) + '%', background: 'rgba(127,184,151,0.3)', borderRadius: '2px 2px 0 0', position: 'relative' }}>
                           <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: (w.resolved / Math.max(1, w.generated) * 100) + '%', background: C.green }} />
                         </div>
@@ -326,12 +405,20 @@ export default function IntelligencePage() {
 
             <p style={{ fontSize: 10, color: C.dim, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>Take action</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {/* Primary one-click action button */}
+              <button
+                onClick={() => handleEventAction(selected)}
+                disabled={actionFiring[selected.id]}
+                style={{ padding: '11px 14px', borderRadius: 8, border: 'none', background: C.green, color: '#0d0d14', fontSize: 13, fontWeight: 700, cursor: actionFiring[selected.id] ? 'default' : 'pointer', fontFamily: 'inherit', opacity: actionFiring[selected.id] ? 0.6 : 1, width: '100%', textAlign: 'center' }}>
+                {actionFiring[selected.id] ? 'Working…' : getActionLabel(selected.event_type)}
+              </button>
+
               {selected.action_href && selected.action_label && (
-                <Link href={selected.action_href} style={{ padding: '10px 14px', borderRadius: 8, background: C.green, color: '#0d0d14', fontSize: 13, fontWeight: 700, textDecoration: 'none', textAlign: 'center' }}>
+                <Link href={selected.action_href} style={{ padding: '10px 14px', borderRadius: 8, background: 'rgba(127,184,151,0.12)', color: C.green, fontSize: 12, fontWeight: 600, textDecoration: 'none', textAlign: 'center', border: '1px solid rgba(127,184,151,0.2)' }}>
                   {selected.action_label} →
                 </Link>
               )}
-              <Link href={`/dashboard/ask-aria?context=${encodeURIComponent(selected.title)}`}
+              <Link href={'/dashboard/ask-aria?context=' + encodeURIComponent(selected.title)}
                 style={{ padding: '10px 14px', borderRadius: 8, border: '1px solid ' + C.border, color: C.violet, fontSize: 12, fontWeight: 600, textDecoration: 'none', textAlign: 'center' }}>
                 ✦ Ask Aria what to do
               </Link>
