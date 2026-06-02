@@ -31,7 +31,7 @@ async function _POST(req: Request) {
 
   const resendKey = process.env.RESEND_API_KEY
   if (resendKey) {
-    await fetch('https://api.resend.com/emails', {
+    const emailRes = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: { Authorization: 'Bearer ' + resendKey, 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -43,6 +43,11 @@ async function _POST(req: Request) {
         html: '<p style="font-family:Arial,sans-serif;">Hi ' + String(member.first_name) + ',</p><p style="font-size:24px;font-weight:700;letter-spacing:4px;">' + code + '</p><p style="color:#888;font-size:13px;">This code expires in 24 hours. Do not share it.</p>',
       }),
     }).catch(() => null)
+    if (!emailRes?.ok) {
+      const errText = await emailRes?.text().catch(() => 'unknown') ?? 'Email service unavailable'
+      console.error('[staff-portal/auth] Resend failed:', errText)
+      return NextResponse.json({ error: 'Could not send login code — please try again' }, { status: 502 })
+    }
   }
 
   return NextResponse.json({ ok: true })

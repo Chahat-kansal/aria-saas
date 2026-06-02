@@ -43,15 +43,18 @@ async function _POST(req: Request) {
   // Send mode: owner approved the draft, send it
   if (send && sendDraft && quote.customer_email) {
     const resendKey = process.env.RESEND_API_KEY
-    if (resendKey) {
-      const from = process.env.RESEND_FROM_DOMAIN
-        ? `${bizName} <quotes@${process.env.RESEND_FROM_DOMAIN}>`
-        : `${bizName} <onboarding@resend.dev>`
-      await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${resendKey}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ from, to: quote.customer_email as string, subject: sendSubject ?? `Following up on your quote from ${bizName}`, html: `<p>${(sendDraft as string).replace(/\n/g, '<br>')}</p>` }),
-      }).catch(() => {})
+    if (!resendKey) return NextResponse.json({ error: 'Email not configured' }, { status: 503 })
+    const from = process.env.RESEND_FROM_DOMAIN
+      ? `${bizName} <quotes@${process.env.RESEND_FROM_DOMAIN}>`
+      : `${bizName} <onboarding@resend.dev>`
+    const emailRes = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${resendKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from, to: quote.customer_email as string, subject: sendSubject ?? `Following up on your quote from ${bizName}`, html: `<p>${(sendDraft as string).replace(/\n/g, '<br>')}</p>` }),
+    }).catch(() => null)
+    if (!emailRes?.ok) {
+      const errText = await emailRes?.text().catch(() => 'unknown') ?? 'Email service unavailable'
+      return NextResponse.json({ error: `Email send failed: ${errText}` }, { status: 502 })
     }
     return NextResponse.json({ ok: true, sent: true })
   }
