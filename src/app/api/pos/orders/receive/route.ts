@@ -33,24 +33,21 @@ async function _POST(req: Request) {
     }>) {
       if (!item.product_id || !item.received_qty) continue;
 
-      // 1. Update pos_products.stock_quantity
+      // 1. Update pos_products.stock_quantity — atomic increment
       const { data: prod } = await supabase.from('pos_products')
-        .select('stock_quantity').eq('id', item.product_id).eq('business_id', bid).maybeSingle();
+        .select('id').eq('id', item.product_id).eq('business_id', bid).maybeSingle();
       if (prod) {
-        await supabase.from('pos_products')
-          .update({ stock_quantity: (prod.stock_quantity || 0) + item.received_qty })
-          .eq('id', item.product_id).eq('business_id', bid);
+        await supabase.rpc('increment_numeric', { p_table: 'pos_products', p_id: item.product_id, p_column: 'stock_quantity', p_amount: item.received_qty });
       }
 
-      // 2. Update pos_outlet_inventory.items_on_hand
+      // 2. Update pos_outlet_inventory.items_on_hand — atomic increment
       if (outlet) {
         const { data: inv } = await supabase.from('pos_outlet_inventory')
-          .select('id, items_on_hand')
+          .select('id')
           .eq('product_id', item.product_id).eq('outlet_id', outlet.id).maybeSingle();
         if (inv) {
-          await supabase.from('pos_outlet_inventory')
-            .update({ items_on_hand: (inv.items_on_hand || 0) + item.received_qty, updated_at: new Date().toISOString() })
-            .eq('id', inv.id);
+          await supabase.rpc('increment_numeric', { p_table: 'pos_outlet_inventory', p_id: inv.id, p_column: 'items_on_hand', p_amount: item.received_qty });
+          await supabase.from('pos_outlet_inventory').update({ updated_at: new Date().toISOString() }).eq('id', inv.id);
         } else {
           await supabase.from('pos_outlet_inventory').insert({
             business_id: bid, outlet_id: outlet.id, product_id: item.product_id,
