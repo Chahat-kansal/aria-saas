@@ -331,6 +331,48 @@ async function _POST(req: Request) {
     }))
   } catch { /* competitor_snapshots may not exist */ }
 
+  // SEO score drop + keyword drops for briefing alert
+  let seoScoreDrop: { current: number; prev: number; drop: number } | null = null
+  let seoKeywordDrops: Array<{ keyword: string; old_rank: number; new_rank: number }> = []
+  try {
+    const sevenDaysAgoIso = new Date(Date.now() - 7 * 86400000).toISOString()
+    const [{ data: recentAudits }, { data: kwDropRaw }] = await Promise.all([
+      supabaseAdmin
+        .from('seo_audits')
+        .select('health_score, finished_at')
+        .eq('business_id', business_id)
+        .eq('status', 'complete')
+        .not('finished_at', 'is', null)
+        .order('finished_at', { ascending: false })
+        .limit(2),
+      supabaseAdmin
+        .from('seo_keyword_rankings')
+        .select('keyword, current_position, position_history, last_checked_at')
+        .eq('business_id', business_id)
+        .not('current_position', 'is', null)
+        .limit(20),
+    ])
+    if (recentAudits && recentAudits.length === 2) {
+      const curr = recentAudits[0].health_score as number
+      const prev = recentAudits[1].health_score as number
+      if (prev - curr > 5) seoScoreDrop = { current: curr, prev, drop: prev - curr }
+    }
+    if (kwDropRaw) {
+      for (const r of kwDropRaw as Array<{ keyword: string; current_position: number; position_history: unknown; last_checked_at: string | null }>) {
+        const hist = Array.isArray(r.position_history) ? (r.position_history as Array<{ position: number | null }>) : []
+        if (hist.length < 2 || r.current_position == null) continue
+        const prevPos = hist[hist.length - 2].position
+        if (prevPos == null) continue
+        const wasInTop10 = prevPos <= 10
+        const nowOutside = r.current_position > 10
+        if (wasInTop10 && nowOutside) {
+          seoKeywordDrops.push({ keyword: r.keyword, old_rank: prevPos, new_rank: r.current_position })
+        }
+      }
+      seoKeywordDrops = seoKeywordDrops.slice(0, 3)
+    }
+  } catch { /* non-fatal */ }
+
   // School holidays signal (VIC 2026)
   const VIC_SCHOOL_BREAKS_2026 = [
     { label: 'Term 1 break', start: new Date('2026-03-28'), end: new Date('2026-04-13') },
@@ -483,6 +525,20 @@ async function _POST(req: Request) {
       drop_pct: d.drop_pct,
       message: d.comp + ' dropped ' + d.product + ' by ' + d.drop_pct + '% — consider a competitive response.',
     })) : null,
+    seo_alerts: (seoScoreDrop || seoKeywordDrops.length > 0) ? {
+      score_drop: seoScoreDrop ? {
+        current: seoScoreDrop.current,
+        previous: seoScoreDrop.prev,
+        drop_points: seoScoreDrop.drop,
+        message: 'SEO health score dropped ' + seoScoreDrop.drop + ' points (from ' + seoScoreDrop.prev + ' to ' + seoScoreDrop.current + ') — run an audit to identify new issues.',
+      } : null,
+      keyword_drops: seoKeywordDrops.map(k => ({
+        keyword: k.keyword,
+        old_rank: k.old_rank,
+        new_rank: k.new_rank,
+        message: '"' + k.keyword + '" dropped from #' + k.old_rank + ' to #' + k.new_rank + ' — outside top 10.',
+      })),
+    } : null,
   };
 
   const hasActionableData =
