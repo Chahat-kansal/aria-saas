@@ -5,6 +5,7 @@ export const maxDuration = 300
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { waitUntil } from '@vercel/functions'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { checkRateLimit } from '@/lib/rate-limit'
 import { callAnthropic, callAnthropicWithTools } from '@/lib/aria/providers/anthropic'
@@ -977,7 +978,7 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
 
       // Mark conversation as escalated
       if (conversationId) {
-        void (async () => { try { await supabaseAdmin.from('aria_conversations').update({ has_escalated: true }).eq('id', conversationId) } catch { /* non-fatal */ } })()
+        waitUntil((async () => { try { await supabaseAdmin.from('aria_conversations').update({ has_escalated: true }).eq('id', conversationId) } catch { /* non-fatal */ } })())
       }
     } catch (e) {
       actionResult = { type: 'escalate_error', message: (e as Error).message }

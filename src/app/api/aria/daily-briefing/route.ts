@@ -5,6 +5,7 @@ import { trackUsage } from '@/lib/track-usage';
 import { getBusinessSales, getBusinessCustomers, getBusinessItems } from '@/lib/business-data';
 import { NextResponse } from 'next/server';
 import { getWeatherForecast, getUpcomingHolidays, getABSRetailBenchmarks, getRBAData } from '@/lib/external-apis';
+import { waitUntil } from '@vercel/functions'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { trackAICall } from '@/lib/aria/ai-telemetry'
 import { geminiFlash } from '@/lib/gemini'
@@ -493,7 +494,7 @@ Generate 3-5 actionable briefing items from this real data. If invoice_status sh
 
   // Audit trail: record that Aria flagged overdue invoices in this briefing.
   if (invoiceStats.overdueCount > 0) {
-    void (async () => {
+    waitUntil((async () => {
       try {
         await supabase.from('aria_action_log').insert({
           business_id,
@@ -507,7 +508,7 @@ Generate 3-5 actionable briefing items from this real data. If invoice_status sh
           executed_at: new Date().toISOString(),
         });
       } catch { /* non-fatal */ }
-    })();
+    })());
   }
 
   return NextResponse.json({

@@ -3,6 +3,7 @@ export const runtime = 'nodejs'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { NextResponse } from 'next/server'
+import { waitUntil } from '@vercel/functions'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string) {
@@ -178,7 +179,7 @@ async function _POST(req: Request) {
   }
 
   if (imported > 0) {
-    void (async () => { try { await supabaseAdmin.from('aria_autopilot_actions').insert({ business_id: bid, action_type: 'delivery_csv_imported', summary: `Imported ${imported} ${platform} orders from CSV. Commission data now available in Aria briefings.`, confidence: 1.0, status: 'completed' }) } catch {} })()
+    waitUntil((async () => { try { await supabaseAdmin.from('aria_autopilot_actions').insert({ business_id: bid, action_type: 'delivery_csv_imported', summary: `Imported ${imported} ${platform} orders from CSV. Commission data now available in Aria briefings.`, confidence: 1.0, status: 'completed' }) } catch {} })())
   }
 
   return NextResponse.json({ imported, skipped, platform, errors: errors.slice(0, 10) })
