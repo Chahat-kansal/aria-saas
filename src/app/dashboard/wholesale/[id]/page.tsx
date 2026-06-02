@@ -320,76 +320,132 @@ export default function WholesaleOrderDetailPage() {
       <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start' }}>
         {/* Invoice preview */}
         <div style={{ flex: 1, minWidth: 0 }}>
-          {/* Inline invoice preview */}
-          <div style={{ background: '#fff', borderRadius: 12, padding: '28px 32px', marginBottom: 16, boxShadow: '0 2px 16px rgba(0,0,0,0.25)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24, borderBottom: '2px solid #2D5240', paddingBottom: 16 }}>
-              <div>
-                <div style={{ width: 40, height: 40, borderRadius: '50%', background: '#2D5240', color: '#7FB897', fontSize: 18, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 6 }}>W</div>
-                <p style={{ fontSize: 16, fontWeight: 700, color: '#2D5240', margin: 0 }}>TAX INVOICE</p>
+          {/* Inline invoice preview — matches mockup exactly */}
+          <div style={{ background: '#ffffff', borderRadius: 12, padding: '28px 32px', marginBottom: 16, boxShadow: '0 2px 24px rgba(0,0,0,0.18)', color: '#111', fontFamily: '-apple-system, Helvetica Neue, Arial, sans-serif' }}>
+
+            {/* Header: logo + biz + invoice number + badge */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
+              <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                <div style={{ width: 44, height: 44, borderRadius: 10, background: '#2D5240', color: '#7FB897', fontSize: 20, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  {(order.business_name || 'S').charAt(0).toUpperCase()}
+                </div>
+                <div>
+                  <p style={{ margin: '0 0 2px', fontSize: 16, fontWeight: 600, color: '#111' }}>{order.business_name || 'Your Business'}</p>
+                  <p style={{ margin: 0, fontSize: 11, color: '#888', lineHeight: 1.5 }}>Tax Invoice · GST registered</p>
+                </div>
               </div>
               <div style={{ textAlign: 'right' }}>
-                <p style={{ fontFamily: 'monospace', fontSize: 16, fontWeight: 700, color: '#2D5240', margin: 0 }}>{order.order_number}</p>
-                <p style={{ fontSize: 11, color: '#666', margin: '2px 0' }}>Issue: {today}</p>
-                <p style={{ fontSize: 11, color: '#ef4444', margin: 0 }}>Due: {dueDate}</p>
+                <p style={{ margin: '0 0 2px', fontSize: 10, fontWeight: 600, color: '#888', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Tax invoice</p>
+                <p style={{ margin: '0 0 8px', fontSize: 18, fontWeight: 600, color: '#111' }}>{order.invoice_number || order.order_number}</p>
+                <span style={{ fontSize: 11, padding: '3px 10px', borderRadius: 99, background: '#fef9c3', color: '#854d0e', fontWeight: 500 }}>Awaiting payment</span>
               </div>
             </div>
 
-            {/* 3-col */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 20 }}>
-              <div style={{ background: '#f5faf7', borderRadius: 6, padding: 12 }}>
-                <p style={{ fontSize: 9, fontWeight: 700, color: '#2D5240', textTransform: 'uppercase', margin: '0 0 6px' }}>Bill To</p>
-                {order.customer?.business_name && <p style={{ fontSize: 12, fontWeight: 600, margin: '0 0 2px', color: '#1a1a1a' }}>{order.customer.business_name}</p>}
-                {order.customer?.name && <p style={{ fontSize: 11, margin: '0', color: '#555' }}>{order.customer.name}</p>}
-                {order.customer?.email && <p style={{ fontSize: 11, margin: '1px 0 0', color: '#555' }}>{order.customer.email}</p>}
+            <div style={{ height: 1, background: '#e5e7eb', marginBottom: 20 }} />
+
+            {/* Bill to / Ship to / Details */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16, marginBottom: 20 }}>
+              <div>
+                <p style={{ margin: '0 0 7px', fontSize: 10, fontWeight: 600, color: '#888', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Bill to</p>
+                {order.customer?.business_name && <p style={{ margin: '0 0 2px', fontSize: 13, fontWeight: 500, color: '#111' }}>{order.customer.business_name}</p>}
+                {order.customer?.abn && <p style={{ margin: '0 0 2px', fontSize: 11, color: '#555' }}>ABN {order.customer.abn}</p>}
+                {order.customer?.name && <p style={{ margin: '0 0 2px', fontSize: 11, color: '#555' }}>Attn: {order.customer.name}</p>}
+                {order.customer?.billing_address && <p style={{ margin: '0 0 2px', fontSize: 11, color: '#555' }}>{order.customer.billing_address}</p>}
+                {order.customer?.email && <p style={{ margin: 0, fontSize: 11, color: '#555' }}>{order.customer.email}</p>}
               </div>
-              <div style={{ background: '#f5faf7', borderRadius: 6, padding: 12 }}>
-                <p style={{ fontSize: 9, fontWeight: 700, color: '#2D5240', textTransform: 'uppercase', margin: '0 0 6px' }}>Ship To</p>
-                <p style={{ fontSize: 11, color: '#555', margin: 0 }}>{order.delivery_address || order.customer?.shipping_address || '—'}</p>
+              <div>
+                <p style={{ margin: '0 0 7px', fontSize: 10, fontWeight: 600, color: '#888', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Ship to</p>
+                <p style={{ margin: 0, fontSize: 11, color: '#555', lineHeight: 1.6 }}>{order.delivery_address || order.customer?.shipping_address || '—'}</p>
+                {order.delivery_notes && <p style={{ margin: '4px 0 0', fontSize: 11, color: '#888', fontStyle: 'italic' }}>{order.delivery_notes}</p>}
               </div>
-              <div style={{ background: '#f5faf7', borderRadius: 6, padding: 12 }}>
-                <p style={{ fontSize: 9, fontWeight: 700, color: '#2D5240', textTransform: 'uppercase', margin: '0 0 6px' }}>Details</p>
-                <p style={{ fontSize: 11, color: '#555', margin: '0 0 2px' }}><strong>Terms:</strong> {order.payment_terms}</p>
-                {order.po_ref && <p style={{ fontSize: 11, color: '#555', margin: 0 }}><strong>PO:</strong> {order.po_ref}</p>}
+              <div>
+                <p style={{ margin: '0 0 7px', fontSize: 10, fontWeight: 600, color: '#888', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Details</p>
+                <table style={{ width: '100%', borderCollapse: 'collapse', margin: 0 }}>
+                  {[
+                    ['Issued', today],
+                    ['Due', dueDate],
+                    ['Terms', order.payment_terms || 'Net 14'],
+                    ...(order.po_ref ? [['PO ref', order.po_ref]] : []),
+                    ['Order ID', order.order_number],
+                  ].map(([label, val]) => (
+                    <tr key={label}>
+                      <td style={{ fontSize: 11, color: '#888', padding: '2px 0', border: 'none' }}>{label}</td>
+                      <td style={{ fontSize: 11, color: '#111', padding: '2px 0', textAlign: 'right', border: 'none', fontWeight: label === 'Due' ? 600 : 400 }}>{val}</td>
+                    </tr>
+                  ))}
+                </table>
               </div>
             </div>
 
-            {/* Items */}
-            <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 16 }}>
+            {/* Line items */}
+            <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 20 }}>
               <thead>
-                <tr style={{ background: '#2D5240', color: '#fff' }}>
-                  {['Product', 'Qty', 'Wholesale', 'Total'].map(h => (
-                    <th key={h} style={{ padding: '8px 10px', fontSize: 11, textAlign: h === 'Product' ? 'left' : 'right' }}>{h}</th>
+                <tr style={{ background: '#f8faf8', borderTop: '1px solid #e5e7eb', borderBottom: '1px solid #e5e7eb' }}>
+                  {[['SKU', 'left', 72], ['Description', 'left', null], ['Qty', 'right', 40], ['Unit price', 'right', 80], ['Disc.', 'right', 50], ['Line total', 'right', 80]].map(([h, align, w]) => (
+                    <th key={h as string} style={{ padding: '8px 10px', fontSize: 10, fontWeight: 600, color: '#666', textAlign: align as 'left'|'right', textTransform: 'uppercase', letterSpacing: '0.06em', width: w ? w + 'px' : undefined }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {order.items.map(item => (
-                  <tr key={item.id} style={{ borderBottom: '1px solid #e8f0eb' }}>
-                    <td style={{ padding: '7px 10px', fontSize: 12 }}>
-                      {item.sku && <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, color: '#888', marginRight: 5 }}>{item.sku}</span>}
-                      {item.name}
+                  <tr key={item.id} style={{ borderBottom: '1px solid #eef2ee' }}>
+                    <td style={{ padding: '10px 10px', fontSize: 11, color: '#888', fontFamily: 'monospace' }}>{item.sku || '—'}</td>
+                    <td style={{ padding: '10px 10px' }}>
+                      <span style={{ fontSize: 13, fontWeight: 500, color: '#111' }}>{item.name}</span>
+                      {item.description && <div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>{item.description}</div>}
                     </td>
-                    <td style={{ padding: '7px 10px', fontSize: 12, textAlign: 'right' }}>{item.quantity}</td>
-                    <td style={{ padding: '7px 10px', fontSize: 12, textAlign: 'right' }}>${(Number(item.unit_price) || 0).toFixed(2)}</td>
-                    <td style={{ padding: '7px 10px', fontSize: 12, fontWeight: 600, textAlign: 'right' }}>${(Number(item.line_total) || 0).toFixed(2)}</td>
+                    <td style={{ padding: '10px 10px', fontSize: 13, textAlign: 'right', color: '#111' }}>{item.quantity}</td>
+                    <td style={{ padding: '10px 10px', fontSize: 13, textAlign: 'right', color: '#111' }}>${(Number(item.unit_price) || 0).toFixed(2)}</td>
+                    <td style={{ padding: '10px 10px', fontSize: 13, textAlign: 'right', color: Number(item.discount_pct) > 0 ? '#166534' : '#aaa' }}>
+                      {Number(item.discount_pct) > 0 ? Number(item.discount_pct).toFixed(0) + '%' : '—'}
+                    </td>
+                    <td style={{ padding: '10px 10px', fontSize: 13, fontWeight: 500, textAlign: 'right', color: '#111' }}>${(Number(item.line_total) || 0).toFixed(2)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
 
-            {/* Totals */}
-            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-              <div style={{ width: 240, border: '1px solid #e8f0eb', borderRadius: 6, padding: 12 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#555', marginBottom: 3 }}><span>Subtotal</span><span>${(Number(order.subtotal) || 0).toFixed(2)}</span></div>
-                {Number(order.discount_total) > 0 && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#2D5240', marginBottom: 3 }}><span>Discount</span><span>−${(Number(order.discount_total) || 0).toFixed(2)}</span></div>
-                )}
-                {Number(order.freight) > 0 && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#555', marginBottom: 3 }}><span>Freight</span><span>${(Number(order.freight) || 0).toFixed(2)}</span></div>
-                )}
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#555', marginBottom: 6 }}><span>GST (10%)</span><span>${(Number(order.gst_total) || 0).toFixed(2)}</span></div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, fontWeight: 700, borderTop: '2px solid #2D5240', paddingTop: 8 }}><span>Total AUD</span><span>${(Number(order.total) || 0).toFixed(2)}</span></div>
+            {/* Notes + Totals side by side */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 32, paddingTop: 8 }}>
+              <div style={{ flex: 1 }}>
+                <p style={{ margin: '0 0 7px', fontSize: 10, fontWeight: 600, color: '#888', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Notes</p>
+                <p style={{ margin: 0, fontSize: 12, color: '#555', lineHeight: 1.6 }}>{order.notes || 'Thank you for your order.'}</p>
               </div>
+              <div style={{ width: 240 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#555', padding: '4px 0' }}><span>Subtotal (excl. GST)</span><span>${(Number(order.subtotal) || 0).toFixed(2)}</span></div>
+                {Number(order.discount_total) > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#166534', padding: '4px 0' }}><span>Discount</span><span>−${(Number(order.discount_total) || 0).toFixed(2)}</span></div>
+                )}
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#555', padding: '4px 0' }}><span>Freight</span><span>${(Number(order.freight) || 0).toFixed(2)}</span></div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#555', padding: '4px 0' }}><span>GST (10%)</span><span>${(Number(order.gst_total) || 0).toFixed(2)}</span></div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, fontWeight: 600, color: '#111', borderTop: '1px solid #e5e7eb', marginTop: 8, paddingTop: 9 }}><span>Total inc. GST</span><span>${(Number(order.total) || 0).toFixed(2)}</span></div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 10px', marginTop: 10, background: '#fef9c3', borderRadius: 6 }}>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: '#854d0e' }}>Amount due</span>
+                  <span style={{ fontSize: 14, fontWeight: 600, color: '#854d0e' }}>${(Number(order.total) || 0).toFixed(2)}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Payment block */}
+            <div style={{ marginTop: 24, padding: '16px 20px', background: '#f8faf8', borderRadius: 8, display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 20 }}>
+              <div>
+                <p style={{ margin: '0 0 6px', fontSize: 10, fontWeight: 600, color: '#888', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Bank transfer</p>
+                <p style={{ margin: 0, fontSize: 11, color: '#444', lineHeight: 1.7, fontFamily: 'monospace' }}>Reference: {order.invoice_number || order.order_number}<br />Due by: {dueDate}</p>
+              </div>
+              <div>
+                <p style={{ margin: '0 0 6px', fontSize: 10, fontWeight: 600, color: '#888', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Pay online</p>
+                <p style={{ margin: 0, fontSize: 11, color: '#555', lineHeight: 1.6 }}>Card or PayID — secure link sent via email with this invoice.</p>
+              </div>
+              <div>
+                <p style={{ margin: '0 0 6px', fontSize: 10, fontWeight: 600, color: '#888', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Terms</p>
+                <p style={{ margin: 0, fontSize: 11, color: '#555', lineHeight: 1.6 }}>{order.payment_terms || 'Net 14'}. 2% late fee per month after due date.</p>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div style={{ marginTop: 16, display: 'flex', justifyContent: 'space-between', fontSize: 10, color: '#aaa', borderTop: '1px solid #e5e7eb', paddingTop: 12 }}>
+              <span>Questions? Contact us about this invoice</span>
+              <span>Generated by Aria · ariaos.site</span>
             </div>
           </div>
 
