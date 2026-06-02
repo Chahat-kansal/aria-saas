@@ -45,10 +45,9 @@ async function _POST(req: Request, { params }: Params) {
         business_id: bid,
       }))
     )
-    // Restore stock for refunded items
+    // Restore stock for refunded items — atomic increment prevents concurrent-refund race
     for (const it of refundItems) {
-      const { data: prod } = await supabase.from('pos_products').select('stock_quantity').eq('id', it.product_id).maybeSingle()
-      if (prod) await supabase.from('pos_products').update({ stock_quantity: (prod.stock_quantity || 0) + Math.abs(it.quantity) }).eq('id', it.product_id)
+      await supabase.rpc('increment_numeric', { p_table: 'pos_products', p_id: it.product_id, p_column: 'stock_quantity', p_amount: Math.abs(it.quantity) })
     }
   }
 

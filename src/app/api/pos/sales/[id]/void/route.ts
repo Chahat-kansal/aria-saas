@@ -28,12 +28,11 @@ async function _POST(req: Request, { params }: Params) {
 
   await supabase.from('pos_sales').update({ status: 'voided', last_edited_at: new Date().toISOString() }).eq('id', id)
 
-  // Restore stock for all items
+  // Restore stock for all items — atomic increment prevents concurrent-void race
   const { data: items } = await supabase.from('pos_sale_items').select('product_id, quantity').eq('sale_id', id)
   for (const item of items ?? []) {
     if (!item.product_id) continue
-    const { data: prod } = await supabase.from('pos_products').select('stock_quantity').eq('id', item.product_id).maybeSingle()
-    if (prod) await supabase.from('pos_products').update({ stock_quantity: (prod.stock_quantity || 0) + item.quantity }).eq('id', item.product_id)
+    await supabase.rpc('increment_numeric', { p_table: 'pos_products', p_id: item.product_id, p_column: 'stock_quantity', p_amount: item.quantity })
   }
 
   await supabase.from('pos_audit_log').insert({
