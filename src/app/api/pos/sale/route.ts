@@ -267,26 +267,21 @@ async function _POST(req: Request) {
     }
   } catch (e) { console.error('[sale] payment recording failed:', e); }
 
-  // Decrement stock + log stock movements
+  // Decrement stock atomically + log stock movements
   const stockOps: PromiseLike<any>[] = [];
   for (const i of items) {
     const p = productMap[i.product_id];
-    if (!p?.track_stock || p.stock_quantity == null) continue;
-    const current = p.stock_quantity as number;
-    const newStock = Math.max(0, current - i.quantity);
-    stockOps.push(
-      supabase.from('pos_products').update({ stock_quantity: newStock }).eq('id', i.product_id).then(r => r)
-    );
-    // Log stock movement — non-fatal if table missing
+    if (!p?.track_stock) continue;
     stockOps.push(
       (async () => {
+        const { data: newStock } = await supabase.rpc('decrement_stock_quantity', { p_product_id: i.product_id, p_amount: i.quantity });
         try {
           await supabase.from('stock_movements').insert({
             business_id: business.id,
             item_id: i.product_id,
             movement_type: 'sale',
             quantity_added: -i.quantity,
-            new_stock: newStock,
+            new_stock: newStock ?? 0,
             notes: `Sale ${saleNumber}`,
             scanned_at: new Date().toISOString(),
           });
@@ -296,30 +291,30 @@ async function _POST(req: Request) {
   }
   await Promise.all(stockOps);
 
-  // Update session totals (fix: eftpos not 'card')
+  // Update session totals atomically — use RPC to avoid concurrent-sale race
   if (openSession) {
     const cashAmt = payment_method === 'cash' ? total_amount
       : payment_method === 'split' ? (split_cash ?? 0) : 0;
-    const cardAmt = payment_method === 'eftpos' ? total_amount  // fixed: was 'card'
+    const cardAmt = payment_method === 'eftpos' ? total_amount
       : payment_method === 'split' ? (split_card ?? 0) : 0;
-    await Promise.resolve(supabase.from('pos_cash_sessions').update({
-      total_cash_sales: (openSession.total_cash_sales ?? 0) + cashAmt,
-      total_card_sales: (openSession.total_card_sales ?? 0) + cardAmt,
-    }).eq('id', openSession.id));
+    await supabase.rpc('increment_session_totals', {
+      p_session_id: openSession.id,
+      p_cash_delta: cashAmt,
+      p_card_delta: cardAmt,
+      p_transaction_delta: 1,
+    }).maybeSingle();
   }
 
-  // Update customer loyalty + stats (waitUntil — keeps function alive, doesn't block response)
+  // Update customer loyalty + stats — atomic RPCs prevent concurrent-sale race
   if (customer_id) {
     waitUntil((async () => {
       try {
-        const { data: cust } = await supabase.from('pos_customers').select('loyalty_points, total_spent, visit_count').eq('id', customer_id).maybeSingle();
-        if (!cust) return;
-        await supabase.from('pos_customers').update({
-          loyalty_points: (cust.loyalty_points ?? 0) + Math.floor(total_amount),
-          total_spent: (cust.total_spent ?? 0) + total_amount,
-          visit_count: (cust.visit_count ?? 0) + 1,
-          last_visit: new Date().toISOString(),
-        }).eq('id', customer_id);
+        await Promise.all([
+          supabase.rpc('increment_loyalty_points', { customer_id, points: Math.floor(total_amount) }).maybeSingle(),
+          supabase.rpc('increment_numeric', { p_table: 'pos_customers', p_id: customer_id, p_column: 'total_spent', p_amount: total_amount }),
+          supabase.rpc('increment_numeric', { p_table: 'pos_customers', p_id: customer_id, p_column: 'visit_count', p_amount: 1 }),
+          supabase.from('pos_customers').update({ last_visit: new Date().toISOString() }).eq('id', customer_id),
+        ])
       } catch (e) { console.error('[sale] loyalty update failed:', e) }
     })())
   }
@@ -359,10 +354,8 @@ async function _POST(req: Request) {
         if (!recipe || !(recipe as any).recipe_ingredients?.length) continue
         for (const ing of (recipe as any).recipe_ingredients as Array<{ product_id: string | null; quantity: number }>) {
           if (!ing.product_id) continue
-          const { data: prod } = await supabase.from('pos_products').select('stock_quantity').eq('id', ing.product_id).maybeSingle()
-          if (prod?.stock_quantity == null) continue
           const deduct = (ing.quantity * item.quantity) / ((recipe as any).serves || 1)
-          await supabase.from('pos_products').update({ stock_quantity: Math.max(0, (prod.stock_quantity as number) - deduct) }).eq('id', ing.product_id)
+          await supabase.rpc('decrement_stock_quantity', { p_product_id: ing.product_id, p_amount: deduct })
         }
       }
     } catch { /* non-fatal */ }
