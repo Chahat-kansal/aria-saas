@@ -1,5 +1,17 @@
 # Prompt 203 — Consolidated Silent-Failure Sweep (final verification)
 
+
+## UI/UX & ANIMATION REQUIREMENTS
+Before writing any frontend code, read these skill files in full:
+- /mnt/skills/user/ui-ux-pro-max/SKILL.md — apply design tokens, color palettes, font pairings, and component patterns from this skill to every page and component you create or edit
+- /mnt/skills/public/frontend-design/SKILL.md — apply production-grade frontend patterns
+
+For any page that involves data visualization, reports, charts, or animated content, also read:
+- /mnt/skills/public/remotion/SKILL.md (if it exists) — use Remotion for any video/animation exports or animated report components
+
+Apply these skills silently — do not narrate reading them. Just produce better UI as a result.
+Every dashboard page must use the design system from ui-ux-pro-max: correct spacing, typography, color tokens, and component hierarchy. No plain HTML divs with inline styles that ignore the design system.
+
 The definitive single-pass sweep for ALL pattern-detectable silent failures. Re-runs every
 check class from Sessions 6/7 + prompt 202, PLUS new classes not yet covered. This is the
 most complete static sweep possible.
