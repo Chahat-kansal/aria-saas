@@ -1,4 +1,6 @@
+'use client'
 import Link from 'next/link'
+import { useState } from 'react'
 
 const PLANS = [
   {
@@ -33,16 +35,40 @@ const PLANS = [
 export default function BillingPage({
   searchParams,
 }: {
-  searchParams: { reason?: string }
+  searchParams: { reason?: string; error?: string }
 }) {
   const isExpired = searchParams?.reason === 'trial_expired'
+  const [loading, setLoading] = useState('')
+  const [error, setError] = useState(searchParams?.error || '')
+
+  async function checkout(plan: string) {
+    setLoading(plan)
+    setError('')
+    try {
+      const res = await fetch('/api/billing/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ plan }),
+      })
+      const data = await res.json()
+      if (data.url) {
+        window.location.href = data.url
+      } else if (data.error === 'billing_not_configured') {
+        setError('Stripe is not yet configured. Add price IDs to Vercel env vars.')
+      } else {
+        setError(data.message || data.error || 'Something went wrong')
+      }
+    } catch {
+      setError('Could not connect to payment system. Try again.')
+    }
+    setLoading('')
+  }
 
   return (
     <div
       style={{ background: '#0E1411', minHeight: '100vh' }}
       className="flex flex-col items-center px-6 py-16"
     >
-      {/* Header */}
       <div className="text-center mb-12 max-w-xl">
         {isExpired ? (
           <>
@@ -58,26 +84,24 @@ export default function BillingPage({
           </>
         ) : (
           <>
-            <h1 className="text-2xl font-semibold text-white mb-3">Upgrade your plan</h1>
+            <h1 className="text-2xl font-semibold text-white mb-3">Choose your plan</h1>
             <p style={{ color: 'rgba(255,255,255,0.5)' }} className="text-sm">
               All plans include a 14-day free trial. Cancel anytime.
             </p>
           </>
         )}
+        {error && (
+          <p className="mt-4 text-xs text-red-400 bg-red-400/10 rounded-lg px-4 py-2">{error}</p>
+        )}
       </div>
 
-      {/* Pricing cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-5xl mb-10">
         {PLANS.map((plan) => (
           <div
             key={plan.plan}
             style={{
-              background: plan.highlight
-                ? 'rgba(127,184,151,0.08)'
-                : 'rgba(255,255,255,0.03)',
-              border: plan.highlight
-                ? '1px solid rgba(127,184,151,0.4)'
-                : '1px solid rgba(255,255,255,0.08)',
+              background: plan.highlight ? 'rgba(127,184,151,0.08)' : 'rgba(255,255,255,0.03)',
+              border: plan.highlight ? '1px solid rgba(127,184,151,0.4)' : '1px solid rgba(255,255,255,0.08)',
               borderRadius: 16,
             }}
             className="flex flex-col p-6"
@@ -104,22 +128,22 @@ export default function BillingPage({
                 </li>
               ))}
             </ul>
-            <a
-              href={'/api/billing/checkout?plan=' + plan.plan}
-              className="block text-center py-2.5 rounded-lg text-sm font-semibold transition-opacity hover:opacity-90"
+            <button
+              onClick={() => checkout(plan.plan)}
+              disabled={loading !== ''}
+              className="block text-center py-2.5 rounded-lg text-sm font-semibold transition-opacity hover:opacity-90 disabled:opacity-50"
               style={
                 plan.highlight
                   ? { background: '#7FB897', color: '#0E1411' }
                   : { background: 'rgba(255,255,255,0.08)', color: 'white', border: '1px solid rgba(255,255,255,0.12)' }
               }
             >
-              Get started with {plan.name}
-            </a>
+              {loading === plan.plan ? 'Redirecting…' : `Get started with ${plan.name}`}
+            </button>
           </div>
         ))}
       </div>
 
-      {/* Data access — always visible when trial expired */}
       {isExpired && (
         <div className="w-full max-w-5xl mb-8 p-4 rounded-xl"
           style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
@@ -141,19 +165,12 @@ export default function BillingPage({
         </div>
       )}
 
-      {/* Footer links */}
       <div className="flex flex-wrap justify-center gap-4 text-xs" style={{ color: 'rgba(255,255,255,0.35)' }}>
-        <Link href="/dashboard" className="hover:text-white transition-colors">
-          Back to dashboard
-        </Link>
+        <Link href="/dashboard" className="hover:text-white transition-colors">Back to dashboard</Link>
         <span>·</span>
-        <Link href="/dashboard/settings" className="hover:text-white transition-colors">
-          Manage subscription
-        </Link>
+        <Link href="/dashboard/settings" className="hover:text-white transition-colors">Manage subscription</Link>
         <span>·</span>
-        <a href="mailto:support@ariaos.site" className="hover:text-white transition-colors">
-          Contact support
-        </a>
+        <a href="mailto:support@ariaos.site" className="hover:text-white transition-colors">Contact support</a>
       </div>
     </div>
   )
