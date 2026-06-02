@@ -8,11 +8,13 @@ function makeAgent(type: AgentType) {
     case 'reorder': return new ReorderAgent();
     case 'pricing': return new PricingAgent();
     case 'schedule': return new ScheduleAgent();
+    default: return null;
   }
 }
 
 export async function runAgent(type: AgentType, business_id: string): Promise<AgentRunResult> {
   const agent = makeAgent(type);
+  if (!agent) return { decisions: [], errors: [new Error('Agent not implemented: ' + type)], duration_ms: 0 };
   return agent.run(business_id);
 }
 
