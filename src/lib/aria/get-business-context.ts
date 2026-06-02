@@ -17,12 +17,15 @@ export async function getBusinessContext(businessId: string): Promise<string> {
   const ly30start = new Date(ly.getTime() - 30 * 86400000).toISOString()
   const ly30end   = ly.toISOString()
 
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
+
   const [
     business,
     sales7, sales30, sales90,
     ly7, ly30,
     saleItems7,
     customers, reviews, outcomes, lowStock,
+    hypothesisOutcomes,
   ] = await Promise.allSettled([
     db.from('businesses').select('*').eq('id', businessId).single(),
     db.from('pos_sales').select('total_amount, created_at')
@@ -53,6 +56,11 @@ export async function getBusinessContext(businessId: string): Promise<string> {
     db.from('pos_products').select('name, stock_quantity, reorder_point')
       .eq('business_id', businessId).eq('is_active', true)
       .filter('stock_quantity', 'lte', 10).limit(5),
+    db.from('aria_hypotheses')
+      .select('outcome_verdict')
+      .eq('business_id', businessId)
+      .eq('status', 'closed')
+      .gte('generated_at', monthStart),
   ])
 
   // SKU aggregation from sale_items
@@ -89,6 +97,13 @@ export async function getBusinessContext(businessId: string): Promise<string> {
   const revs  = reviews.status   === 'fulfilled' ? reviews.value.data    ?? [] : []
   const outs  = outcomes.status  === 'fulfilled' ? outcomes.value.data   ?? [] : []
   const alts  = lowStock.status  === 'fulfilled' ? lowStock.value.data   ?? [] : []
+
+  const outcomeData = hypothesisOutcomes.status === 'fulfilled' ? (hypothesisOutcomes.value.data ?? []) : []
+  const outcomes_arr = (outcomeData) as Array<{ outcome_verdict: string | null }>
+  const hyp_worked = outcomes_arr.filter(o => o.outcome_verdict === 'worked').length
+  const hyp_failed = outcomes_arr.filter(o => o.outcome_verdict === 'failed').length
+  const hyp_total = outcomes_arr.filter(o => o.outcome_verdict !== null).length
+  const hyp_successRate = hyp_total > 0 ? Math.round((hyp_worked / hyp_total) * 100) : null
 
   const lapsed = custs.filter((c: any) =>
     c.last_visit && new Date(c.last_visit) < new Date(now.getTime() - 42 * 86400000)
@@ -152,6 +167,13 @@ export async function getBusinessContext(businessId: string): Promise<string> {
     },
     low_stock_alerts: alts,
     recent_aria_outcomes: outs,
+    aria_intelligence: {
+      suggestions_this_month: { worked: hyp_worked, failed: hyp_failed, inconclusive: hyp_total - hyp_worked - hyp_failed },
+      success_rate_pct: hyp_successRate,
+      summary: hyp_successRate !== null
+        ? 'Aria suggestions this month: ' + hyp_worked + ' worked, ' + hyp_failed + " didn't (" + hyp_successRate + '% success rate)'
+        : 'No closed hypotheses this month yet',
+    },
     weather: weather ?? { _note: 'Weather data unavailable — proceeding without weather context.' },
     seo: await (async () => {
       try {
