@@ -1,70 +1,97 @@
-# Prompt 101 — SEO Sprint 3: Keyword Tracking + Local SEO
+# Prompt 101 — SEO Sprint 3: Keyword Tracking + Local SEO Scanner
 
-Run AFTER Prompt 100 (SEO Sprint 2) is complete.
+Run AFTER Prompt 100 (SEO Sprint 2) is complete. Read CLAUDE.md first.
 
-## Pre-flight
+## Pre-flight (MANDATORY — read CLAUDE.md first)
 ```
 git pull origin main
-npx tsc --noEmit
-npm run build
+npx tsc --noEmit   # must be zero errors
+npm run build      # must pass
 ```
+Read CLAUDE.md. Read every file you will edit before touching it.
+One commit per task. After every commit: git push origin main, then confirm git log origin/main..HEAD is empty.
+State "Build verified green, all commits pushed." before finishing.
+
+## UPGRADE-ONLY RULE
+Never remove, stub, or downgrade any existing feature. Fix forward only.
+
+## ARIA INTELLIGENCE RULE (applies to every task)
+Every new feature must:
+1. Write relevant data to aria_ai_calls (log AI usage)
+2. Feed insights back into the daily briefing context (update buildAskAriaContext or daily-briefing route to include new data)
+3. Log significant actions to aria_autopilot_actions
+4. Use claude-haiku-4-5-20251001 unless the task requires complex reasoning (then claude-sonnet-4-5-20250929)
+
 
 ## TASK 1 — Keyword tracking API
-### src/app/api/seo/keywords/route.ts
-GET: list business keywords ordered by search_volume desc, include current_rank + rank_change
-POST body { keyword: string }:
-- Insert into seo_keywords
-- Immediately attempt rank check: fetch https://www.google.com/search?q={keyword}+{business_city} with a realistic UA
-- Parse result position (1-10 or "not in top 10")
-- Insert seo_keyword_history row
-- Return { keyword, current_rank, checked_at }
+Create src/app/api/seo/keyword-tracking/route.ts
 
-DELETE /{id}: remove keyword + history
+GET: returns tracked keywords for business — { keyword, position, volume, difficulty, url, last_checked_at, position_history[] }
+POST { keyword, target_url }: add a keyword to track
 
-### src/app/api/seo/keywords/[id]/route.ts
-GET: keyword detail + full rank history for chart
+Create table if not exists:
+```sql
+CREATE TABLE IF NOT EXISTS seo_keyword_rankings (
+  id uuid primary key default gen_random_uuid(),
+  business_id uuid references businesses(id) on delete cascade,
+  keyword text not null,
+  target_url text,
+  current_position integer,
+  volume integer,
+  difficulty integer,
+  position_history jsonb default '[]',
+  last_checked_at timestamptz,
+  created_at timestamptz default now()
+);
+CREATE INDEX ON seo_keyword_rankings (business_id, keyword);
+```
 
-## TASK 2 — Keyword rank cron
-Create src/app/api/cron/seo-keyword-check/route.ts
-Schedule: "0 3 * * *"
-For each business with tracked keywords:
-- Re-check rank for each keyword
-- Insert seo_keyword_history
-- Update seo_keywords.current_rank, rank_change (vs yesterday), last_checked_at
-Add to vercel.json.
-Commit: "feat(seo/cron): daily keyword rank check"
+Position check: use web_search (Anthropic tool) to search the keyword and find where the business URL ranks in the first 30 results. Store position (null if not found).
+Commit: "feat(seo/keywords): keyword ranking tracker API + DB table"
 
-## TASK 3 — Local SEO scanner
-Create src/app/api/seo/local/route.ts
-POST: scan the business Google Business Profile health
-- Check businesses.google_place_id exists
-- Check businesses.google_rating, google_total_reviews populated
-- Check businesses.website matches what's on GBP
-- Score: 0-100 based on completeness
-- Store result in seo_local table (create if not exists: id, business_id, score, issues jsonb, scanned_at)
-Commit: "feat(seo): local SEO scanner"
+## TASK 2 — Local SEO scanner
+Create src/app/api/seo/local-scan/route.ts
 
-## TASK 4 — Keywords + Local SEO dashboard UI
-Add two new tabs to /dashboard/seo page:
-1. "Keywords" tab:
-   - Add keyword input + button
-   - Table: keyword | current rank | rank change (▲▼) | search volume | last checked
-   - Rank history line chart per keyword (recharts)
-   - "Not tracked yet" empty state with suggested keywords based on business industry + name
+POST { business_id }: scan local SEO signals
+Checks:
+1. Google Business Profile completeness (NAP — Name, Address, Phone) — check via web search
+2. Local keyword opportunities: "{industry} {suburb}" searches — does the business appear?
+3. Citation consistency: business name/address consistent across web mentions
+4. Local schema markup on the business website (fetch the website, check for LocalBusiness schema)
 
-2. "Local SEO" tab:
-   - Local SEO score gauge (0-100)
-   - Checklist: GBP claimed ✓/✗, website listed ✓/✗, reviews count, avg rating
-   - "Scan now" button → POST /api/seo/local
-Commit: "feat(seo/dashboard): keywords tab + local SEO tab"
+Return: { score: 0-100, issues: [], opportunities: [], nap_consistent: boolean }
+Model: claude-haiku-4-5-20251001 for analysis
+Commit: "feat(seo/local): local SEO scanner — NAP, citations, local keywords, schema"
 
-## DB tables
-seo_keywords: id, business_id, keyword, current_rank, rank_change, search_volume, last_checked_at, created_at
-seo_keyword_history: id, keyword_id, business_id, rank, checked_at
-seo_local: id, business_id, score, issues (jsonb), scanned_at
-Create these via migration if they don't exist.
+## TASK 3 — Keyword suggestions
+Create src/app/api/seo/keyword-suggestions/route.ts
+
+POST { business_id, seed_keyword? }: generate keyword suggestions
+- Pull business industry, suburb, products from business context
+- Use web search to find related keywords people search for
+- Score by estimated difficulty (low/medium/high) and relevance
+- Return top 20 keyword suggestions not already being tracked
+
+Model: claude-haiku-4-5-20251001
+Commit: "feat(seo/keywords): AI keyword suggestions based on business context"
+
+## TASK 4 — SEO dashboard: Keywords tab
+Add "Keywords" tab to existing SEO dashboard page (src/app/dashboard/seo/).
+- Keyword table: keyword | position | volume | difficulty | trend (up/down/new)
+- Position history sparkline per keyword
+- Add keyword input
+- "Scan positions now" button (calls keyword-tracking route)
+- Local SEO score card with issues list
+- Keyword suggestions panel
+
+Commit: "feat(seo/dashboard): keywords tab + local SEO scanner UI"
+
+## TASK 5 — Feed into Aria briefing
+In daily briefing context: add top keyword position changes (any keyword moving more than 3 positions).
+Add to buildAskAriaContext: SEO position summary (top 5 keywords + positions).
+Commit: "feat(seo/briefing): keyword ranking changes in daily briefing context"
 
 ## Rules
-- npx tsc --noEmit + npm run build before each commit
-- Model: claude-haiku-4-5-20251001
 - vercel.json: do not exceed 22 functions or daily cron max
+- Model: claude-haiku-4-5-20251001
+- All DB migrations via Supabase MCP (apply_migration tool)

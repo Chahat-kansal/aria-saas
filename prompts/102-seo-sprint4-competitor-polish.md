@@ -1,55 +1,87 @@
-# Prompt 102 — SEO Sprint 4: Competitor SEO Analysis + Dashboard Polish
+# Prompt 102 — SEO Sprint 4: Competitor SEO Analysis + Full Dashboard Polish
 
-Run AFTER Prompt 101 (SEO Sprint 3) is complete.
+Run AFTER Prompt 101 (SEO Sprint 3) is complete. Read CLAUDE.md first.
 
-## Pre-flight
+## Pre-flight (MANDATORY — read CLAUDE.md first)
 ```
 git pull origin main
-npx tsc --noEmit
-npm run build
+npx tsc --noEmit   # must be zero errors
+npm run build      # must pass
 ```
+Read CLAUDE.md. Read every file you will edit before touching it.
+One commit per task. After every commit: git push origin main, then confirm git log origin/main..HEAD is empty.
+State "Build verified green, all commits pushed." before finishing.
 
-## TASK 1 — Competitor SEO analysis
-Create src/app/api/seo/competitors/route.ts
-POST: given a competitor URL, crawl their homepage + up to 5 pages:
-- Extract their title tags, meta descriptions, H1s, keyword density
-- Compare to this business's own pages
-- Generate AI comparison: "They rank for X, you don't. Here's how to compete."
-- Store in seo_competitor_analysis table (id, business_id, competitor_url, analysis jsonb, created_at)
-GET: list past competitor analyses
+## UPGRADE-ONLY RULE
+Never remove, stub, or downgrade any existing feature. Fix forward only.
 
-Commit: "feat(seo): competitor SEO analysis — crawl + AI comparison"
+## ARIA INTELLIGENCE RULE (applies to every task)
+Every new feature must:
+1. Write relevant data to aria_ai_calls (log AI usage)
+2. Feed insights back into the daily briefing context (update buildAskAriaContext or daily-briefing route to include new data)
+3. Log significant actions to aria_autopilot_actions
+4. Use claude-haiku-4-5-20251001 unless the task requires complex reasoning (then claude-sonnet-4-5-20250929)
 
-## TASK 2 — Recommendations engine
-Create src/app/api/seo/recommendations/route.ts
-GET: AI-generated prioritised action list based on:
-- Current seo_issues (unresolved criticals first)
-- Keyword gaps vs competitors
-- Local SEO score
-- Industry benchmarks (hardcode reasonable benchmarks per industry)
-Returns: [ { priority: 1-5, action: string, impact: 'high'|'medium'|'low', effort: 'low'|'medium'|'high' } ]
-Commit: "feat(seo): AI recommendations engine with priority + effort scoring"
 
-## TASK 3 — Dashboard polish
-Full polish pass on /dashboard/seo:
-- Overview tab: health score gauge (SVG arc, colour-coded red/amber/green), issue count by severity, last crawl timestamp, "Run new audit" button
-- Issues tab: filterable by severity + state (open/applied/verified), sortable by page
-- Fix tab: bulk fix button, progress bar during bulk fix, "All fixed!" confetti state
-- Keywords tab: from Sprint 3
-- Local SEO tab: from Sprint 3
-- Competitors tab: add competitor URL input, show past analyses, AI comparison cards
-- Recommendations tab: prioritised action cards with effort/impact badges
-Commit: "feat(seo/dashboard): full polish — 6 tabs, gauges, bulk fix progress, recommendations"
+## TASK 1 — Competitor SEO comparison
+Create src/app/api/seo/competitor-analysis/route.ts
 
-## TASK 4 — SEO score in business brain
-After each completed audit, write a summary to the business brain:
-- Top 3 unresolved critical issues
-- Current health score
-- Top keyword rank
-This means Aria's daily briefing can reference SEO health.
-Commit: "feat(seo): write audit summary to business brain for Aria briefings"
+POST { business_id, competitor_url }: analyse competitor SEO
+- Fetch competitor website (web_fetch)
+- Extract: title tags, meta descriptions, H1s, page count estimate, schema markup present
+- Web search: what keywords does this competitor rank for in top 10?
+- Compare to our business: where are we stronger? where are they ahead?
+- Return structured comparison: { competitor_url, their_strengths[], our_opportunities[], keyword_gaps[] }
+
+Model: claude-sonnet-4-5-20250929 for analysis quality
+Commit: "feat(seo/competitor): competitor SEO gap analysis"
+
+## TASK 2 — Technical SEO audit
+Create src/app/api/seo/technical-audit/route.ts
+
+POST { business_id, website_url }: run technical SEO audit on the business's own website
+Checks:
+- Page speed signals (check if Lighthouse data available via web search)
+- Mobile-friendly check (fetch URL, check viewport meta tag)
+- HTTPS (does URL redirect to https?)
+- Sitemap exists (check /sitemap.xml)
+- robots.txt exists and allows indexing
+- Broken internal links (fetch homepage, check all href links, HEAD each one)
+- Duplicate title tags (fetch 3-5 key pages, compare titles)
+
+Return: { score, passed[], failed[], warnings[] }
+Commit: "feat(seo/technical): technical SEO audit — speed, mobile, schema, links"
+
+## TASK 3 — Fix application engine (Sprint 2 completion)
+Verify src/app/api/seo/apply-fix/route.ts is complete and working:
+- Reads the specific SEO issue (missing meta description, missing H1, etc.)
+- Generates the fix using AI (proper meta description, H1 text, schema JSON)
+- Returns fix as copyable text/code the owner can apply to their website
+- Logs the fix to seo_fixes table (id, business_id, issue_type, fix_applied, applied_at)
+
+If the route is incomplete, finish it. If the table doesn't exist, create it.
+Commit: "feat(seo/fixes): fix application engine complete with logging"
+
+## TASK 4 — Full SEO dashboard polish
+Audit and complete src/app/dashboard/seo/page.tsx:
+Tabs: Overview | Crawl Results | Keywords | Competitors | Technical | Fix History
+
+Overview tab: SEO score card, top 3 issues, quick wins, last crawl date
+Crawl Results tab: page-by-page issues (existing Sprint 1 output)
+Keywords tab: (Sprint 3 work)
+Competitors tab: competitor comparison cards, add competitor input
+Technical tab: technical audit score + checklist
+Fix History tab: applied fixes with before/after
+
+All tabs must be functional — no empty states that say "coming soon".
+Commit: "feat(seo/dashboard): full 6-tab SEO dashboard — all tabs functional"
+
+## TASK 5 — SEO score in morning briefing
+In daily briefing: if SEO score dropped >5 points since last week, add a briefing alert.
+If a keyword dropped out of top 10, mention it.
+Commit: "feat(seo/briefing): SEO score changes + keyword drops in daily briefing"
 
 ## Rules
-- npx tsc --noEmit + npm run build before each commit
-- Model: claude-haiku-4-5-20251001 for analysis, sonnet for recommendations
 - vercel.json: 22 function max, daily cron max
+- haiku for data processing, sonnet for competitor analysis only
+- All migrations via Supabase MCP

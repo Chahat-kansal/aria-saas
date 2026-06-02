@@ -1,76 +1,132 @@
-# Prompt 107 — Promotions + Price Lists (Full Feature)
+# Prompt 107 — Promotions + Price Lists: Full Feature to Category-Leading Standard
 
-Routes exist but UI is partial. Build to category-leading standard vs Square/Lightspeed.
+Competitor benchmark: Square marketing, Lightspeed promotions, Shopify discounts. Match 80%+.
+Routes exist but UI is partial. Read ALL existing files under promotions/price-lists/timed-prices/ before writing. Read CLAUDE.md first.
 
-## Pre-flight
+## Pre-flight (MANDATORY — read CLAUDE.md first)
 ```
 git pull origin main
-npx tsc --noEmit
-npm run build
+npx tsc --noEmit   # must be zero errors
+npm run build      # must pass
 ```
-Read ALL existing files under src/app/api/pos/promotions/, src/app/api/pos/price-lists/, src/app/api/pos/timed-prices/, src/app/api/pos/scheduled-price-changes/ before writing anything.
+Read CLAUDE.md. Read every file you will edit before touching it.
+One commit per task. After every commit: git push origin main, then confirm git log origin/main..HEAD is empty.
+State "Build verified green, all commits pushed." before finishing.
+
+## UPGRADE-ONLY RULE
+Never remove, stub, or downgrade any existing feature. Fix forward only.
+
+## ARIA INTELLIGENCE RULE (applies to every task)
+Every new feature must:
+1. Write relevant data to aria_ai_calls (log AI usage)
+2. Feed insights back into the daily briefing context (update buildAskAriaContext or daily-briefing route to include new data)
+3. Log significant actions to aria_autopilot_actions
+4. Use claude-haiku-4-5-20251001 unless the task requires complex reasoning (then claude-sonnet-4-5-20250929)
+
 
 ## TASK 1 — Promotions engine audit + completion
-Read the promotions route. Ensure it supports:
-- discount_type: 'percent' | 'fixed' | 'bogo' | 'multibuy'
-- applies_to: 'all' | 'category' | 'product' | 'customer_group'
-- conditions: min_spend, min_qty, customer_segment
-- Schedule: start_at, end_at (active only within window)
-- Stackable: boolean (can stack with other promos?)
-- Usage limit: max_uses, uses_count
-If any of those fields are missing from the route logic: add them.
-Commit: "feat(promotions): full promo engine — BOGO, multibuy, scheduled, usage limits"
+Read EVERY file under src/app/api/pos/promotions/ and src/app/api/pos/discounts/.
+Check the promotions table schema via Supabase list_tables.
 
-## TASK 2 — Price lists
-Price lists allow different prices for different customer groups (e.g. wholesale vs retail).
-Ensure src/app/api/pos/price-lists/ supports:
-- Create price list: { name, customer_group_ids[], description }
-- Add product to price list: { product_id, override_price }
-- POS checkout: if customer has a group, apply their price list automatically
-- Export price list as CSV
-Commit: "feat(price-lists): customer group price lists with POS auto-apply"
+Ensure the engine supports ALL of:
+- discount_type: 'percent' | 'fixed_amount' | 'bogo' | 'multibuy' | 'free_item'
+- applies_to: 'all_products' | 'category' | 'specific_products' | 'customer_segment'
+- conditions: min_spend, min_qty, customer_segment[], required_product_ids[]
+- schedule: start_at, end_at (only active within window — check current timestamp)
+- stackable: boolean (can combine with other active promos)
+- usage_limit: max_uses (nullable = unlimited), uses_count (increment on use)
+- promo_code: optional code (e.g. "WELCOME10") — POS can accept promo codes
+
+BOGO logic: buy 1 of product A, get 1 of product B free (or same product at 0)
+Multibuy logic: buy 3 for price of 2, buy 6 get 10% off
+
+If any field missing from DB: add via apply_migration.
+If any logic missing from route: add it.
+Apply promos at POS checkout: POST /api/pos/sale should check active promos and apply the best applicable one.
+Commit: "feat(promotions): complete promo engine — BOGO, multibuy, codes, stackable, usage limits"
+
+## TASK 2 — Price lists (wholesale/retail/VIP)
+Read src/app/api/pos/price-lists/ fully.
+Price lists let businesses have different prices for different customer groups.
+
+Ensure:
+POST /price-lists: { name, description, customer_group: 'wholesale'|'staff'|'vip'|'custom' }
+POST /price-lists/[id]/products: { product_id, override_price }
+GET /price-lists/[id]: list with all product overrides
+DELETE /price-lists/[id]/products/[product_id]: remove override
+
+POS checkout integration: when a customer is loaded and they have a customer_group, auto-apply their price list.
+Add customer_group to pos_customers (apply_migration if missing).
+Export price list as CSV (GET /price-lists/[id]/export).
+Commit: "feat(price-lists): customer group price lists + POS auto-apply + export"
 
 ## TASK 3 — Scheduled price changes
-Review src/app/api/pos/scheduled-price-changes/.
-A scheduled price change sets a product price at a future date (e.g. price increase on Jan 1).
+Read src/app/api/pos/scheduled-price-changes/ fully.
 Ensure:
-- POST: { product_id, new_price, effective_at, reason }
-- Cron applies pending changes: merge into existing daily cron
-- Owner gets a daily briefing mention when a scheduled change fires today
-Commit: "feat(scheduled-prices): auto-apply scheduled price changes via cron"
+POST: { product_id, new_price, effective_at (ISO datetime), reason }
+GET: list pending changes, sorted by effective_at
+DELETE: cancel a pending change
 
-## TASK 4 — Timed pricing
-Review src/app/api/pos/timed-prices/.
-Timed prices apply during specific hours (e.g. happy hour 4-6pm, 20% off cocktails).
+Daily cron (merge into existing cron — do NOT add a new cron):
+- Find scheduled_price_changes where effective_at <= now() AND applied=false
+- Update pos_products.price = new_price
+- Set applied=true, applied_at=now()
+- Add briefing mention: "Price change applied today: {product} {old}→{new}"
+
+Log applied changes to aria_autopilot_actions.
+Commit: "feat(scheduled-prices): auto-apply scheduled price changes via cron + briefing alert"
+
+## TASK 4 — Timed pricing (happy hour / time-of-day)
+Read src/app/api/pos/timed-prices/ fully.
 Ensure:
-- POST: { product_id or category_id, discount_pct, start_time (HH:MM), end_time, days_of_week[] }
-- POS checkout applies timed price if current time falls in window
-- Dashboard shows active timed prices now
-Commit: "feat(timed-prices): time-of-day pricing with day-of-week control"
+POST: { name, applies_to: product_id|category_id, discount_pct, start_time (HH:MM), end_time (HH:MM), days_of_week: number[] (0=Sun..6=Sat), active }
+GET: list with currently_active flag (check current time against window)
 
-## TASK 5 — Dashboard UI
-Create/complete src/app/dashboard/promotions/page.tsx:
-Tabs: Promotions | Price Lists | Scheduled Changes | Timed Pricing
+POS integration: at checkout, check if any timed prices are active RIGHT NOW — apply if so.
+Dashboard shows: "Happy Hour active now — 20% off cocktails" badge.
+Commit: "feat(timed-prices): time-of-day/day-of-week pricing + POS auto-apply + active badge"
+
+## TASK 5 — AI promo suggestions
+src/app/api/pos/promotions/suggestions/route.ts:
+POST { business_id }: generate AI promo suggestions
+- Pull: slow-moving products (low sales last 30d), upcoming public holidays, current promotions
+- AI suggests: "Run a 20% off Banana Bread Tuesday — it's your slowest product and Tuesday is your quietest day"
+- Return: [{ title, discount_type, discount_value, applies_to, reason, estimated_lift_pct }]
+- Model: claude-haiku-4-5-20251001
+- Log to aria_ai_calls
+Commit: "feat(promotions): AI promo suggestions based on sales patterns + slow movers"
+
+## TASK 6 — Full promotions dashboard
+src/app/dashboard/promotions/page.tsx — 5 tabs:
 
 Promotions tab:
-- Active promos table: name | type | discount | applies to | uses | end date | status badge
-- Create promo modal: full form matching all promo types
-- "Pause" / "End now" actions
+- Active promos: name | type | discount | applies_to | uses | end date | status badge
+- Create promo modal: all fields including promo code, BOGO target, schedule
+- Pause / End now / Duplicate actions
+- AI suggestions panel (collapsible)
 
 Price Lists tab:
-- List price lists with customer group assignments
-- Click → show product override table, edit prices inline
+- List price lists with group label
+- Click → product override table, edit prices inline
+- Export CSV button
 
 Scheduled Changes tab:
-- Timeline view: upcoming changes sorted by date
-- "Cancel" button per change
+- Timeline (sorted by effective_at): product | current price | new price | date | cancel button
+- "Add scheduled change" button
 
 Timed Pricing tab:
 - Weekly grid showing which hours have active pricing rules
 - Create/edit/delete timed price rules
-Commit: "feat(promotions/dashboard): full promotions UI — 4 tabs, all promo types"
+
+Promo Codes tab:
+- List codes with uses/limit, active status
+- Quick "Add code" button
+
+Feed into briefing: active promotions count, promo code usage stats.
+Commit: "feat(promotions/dashboard): full 5-tab promotions UI — all promo types covered"
 
 ## Rules
 - All prices in dollars (numeric)
 - npx tsc --noEmit + npm run build before each commit
-- Do not add new cron entries — merge into existing daily cron
+- Do NOT add new cron entries — merge into existing daily cron
+- Migrations via Supabase MCP

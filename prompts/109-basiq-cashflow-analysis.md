@@ -1,63 +1,111 @@
-# Prompt 109 — Basiq Bank Feed: Cash Flow Analysis
+# Prompt 109 — Basiq Bank Feed: Cash Flow Intelligence
 
-Basiq connection is now fixed. Build the downstream cash flow intelligence.
+Basiq connection is fixed and working. Build the downstream cash flow analysis.
+Read CLAUDE.md first.
 
-## Pre-flight
+## Pre-flight (MANDATORY — read CLAUDE.md first)
 ```
 git pull origin main
-npx tsc --noEmit
-npm run build
+npx tsc --noEmit   # must be zero errors
+npm run build      # must pass
 ```
-Read src/app/api/integrations/basiq/ (all routes) and src/app/dashboard/cash-flow/ before writing anything.
+Read CLAUDE.md. Read every file you will edit before touching it.
+One commit per task. After every commit: git push origin main, then confirm git log origin/main..HEAD is empty.
+State "Build verified green, all commits pushed." before finishing.
 
-## What Basiq gives us
-After bank connection: we can fetch transactions from the user's bank accounts via Basiq API.
-Endpoints available: GET /users/{id}/accounts, GET /users/{id}/transactions
+## UPGRADE-ONLY RULE
+Never remove, stub, or downgrade any existing feature. Fix forward only.
+
+## ARIA INTELLIGENCE RULE (applies to every task)
+Every new feature must:
+1. Write relevant data to aria_ai_calls (log AI usage)
+2. Feed insights back into the daily briefing context (update buildAskAriaContext or daily-briefing route to include new data)
+3. Log significant actions to aria_autopilot_actions
+4. Use claude-haiku-4-5-20251001 unless the task requires complex reasoning (then claude-sonnet-4-5-20250929)
+
 
 ## TASK 1 — Transaction sync
-Create src/app/api/integrations/basiq/sync-transactions/route.ts
-POST: { business_id }
-- Get basiq_user_id from businesses table
-- Fetch transactions: GET https://au-api.basiq.io/users/{basiq_user_id}/transactions?limit=500
-- For each transaction: insert into bank_transactions table (create if not exists):
-  id, business_id, basiq_transaction_id (unique), account_id, amount (dollars), direction (debit/credit), description, category (from Basiq), posted_date, created_at
-- Skip already-synced transactions (upsert on basiq_transaction_id)
-Commit: "feat(basiq): sync bank transactions to local DB"
+Read src/app/api/integrations/basiq/ — understand current state.
+
+Create src/app/api/basiq/transactions/sync/route.ts:
+POST { business_id }:
+1. Get Basiq user_id from businesses table
+2. Call Basiq GET /users/{userId}/transactions (last 90 days)
+3. Upsert into bank_transactions table:
+   ```sql
+   CREATE TABLE IF NOT EXISTS bank_transactions (
+     id uuid primary key default gen_random_uuid(),
+     business_id uuid references businesses(id) on delete cascade,
+     basiq_transaction_id text unique,
+     account_id text,
+     amount numeric not null,
+     direction text, -- 'debit' | 'credit'
+     description text,
+     category text,
+     merchant_name text,
+     transaction_date date,
+     status text,
+     balance numeric,
+     created_at timestamptz default now()
+   );
+   CREATE INDEX ON bank_transactions (business_id, transaction_date DESC);
+   ```
+4. Return { synced, accounts_found, balance }
+
+Daily cron: sync transactions for all connected businesses (merge into existing cron).
+Commit: "feat(basiq): transaction sync → bank_transactions table with daily cron"
 
 ## TASK 2 — Cash flow analysis API
-Create src/app/api/pos/cash-flow/analysis/route.ts
-GET params: period (7d|30d|90d)
-- Pull bank_transactions for the period
-- Pull pos_sales for same period (cash inflow)
-- Categorise outflows: rent, wages, stock, utilities, other (use Basiq categories + keyword matching)
-- Calculate: total_in, total_out, net_cash_flow, runway_days (current balance / avg daily outflow)
-- AI insight: "Your biggest expense category is X at $Y/month. At this rate you have Z days of runway."
-- Return structured analysis + AI commentary
-Commit: "feat(cash-flow): bank transaction analysis + runway calculation + AI insight"
+src/app/api/basiq/cashflow/route.ts:
+GET { business_id, period: '30d'|'90d'|'12m' }:
+- Total inflows vs outflows
+- Weekly/monthly cash flow chart data
+- Category breakdown (expenses by merchant category)
+- Cash burn rate (avg daily outflow)
+- Runway: current_balance / daily_burn_rate (in days)
+- Largest expense categories
+- Upcoming predicted expenses (based on recurring patterns)
 
-## TASK 3 — Cash flow sync cron
-Add to existing daily cron:
-- For every business with basiq_connected=true: call sync-transactions
-- After sync: regenerate cash flow analysis + write to business brain
-Commit: "feat(basiq/cron): daily bank transaction sync for connected businesses"
+Detect recurring expenses: transactions with same merchant and similar amount monthly → flag as recurring.
+Model: haiku for pattern detection
+Commit: "feat(basiq/cashflow): cash flow analysis — burn rate, runway, categories, recurring"
 
-## TASK 4 — Dashboard UI
-Update src/app/dashboard/cash-flow/page.tsx:
-- If not connected: show Basiq connect CTA (link to integrations page)
-- If connected:
-  - Cash flow chart (bar: in vs out by week, recharts)
-  - Expense breakdown donut chart by category
-  - Runway gauge: X days of runway (red < 30, amber < 90, green > 90)
-  - Recent transactions table: date | description | category | amount (colour-coded debit/credit)
-  - "Sync now" button
-  - AI Aria commentary card
-Commit: "feat(cash-flow/dashboard): full cash flow UI — charts, runway, transactions, AI"
+## TASK 3 — Cash flow vs revenue reconciliation
+src/app/api/basiq/reconcile/route.ts:
+GET { business_id, month }:
+- Compare Aria POS revenue for the month vs bank deposits
+- Flag discrepancies > 5% (possible missing Square settlement, cash not deposited, etc.)
+- Return: { pos_revenue, bank_deposits, difference, reconciliation_status, flags[] }
 
-## DB table needed
-bank_transactions: id, business_id, basiq_transaction_id (unique), account_id, amount (numeric dollars), direction (text), description, category, posted_date, created_at
-Create via Supabase migration.
+Add to daily briefing: if bank balance drops below a threshold (businesses.low_balance_alert_threshold — add if missing), alert in briefing.
+Commit: "feat(basiq/reconcile): revenue vs bank reconciliation + low balance alert"
+
+## TASK 4 — AI cash flow commentary
+src/app/api/basiq/ai-analysis/route.ts:
+POST { business_id }:
+- Pull: last 90 days transactions + pos revenue + current balance
+- AI generates plain-English cash flow commentary:
+  "Your cash burn is $340/day. At current balance ($18,420), you have 54 days runway. Your biggest expense is ALM invoices at $4,200/month — up 12% vs last quarter."
+- Include: risks, opportunities, specific recommendations
+- Log to aria_ai_calls
+Model: claude-sonnet-4-5-20250929 (complex analysis)
+Commit: "feat(basiq/ai): AI cash flow commentary with runway + risk analysis"
+
+## TASK 5 — Dashboard
+src/app/dashboard/cash-flow/page.tsx (or add to integrations/basiq):
+- Account balance cards (one per connected account)
+- Cash flow chart: inflows vs outflows by week (last 12 weeks)
+- Runway meter: "54 days runway" with colour coding (>90d green, 30-90d amber, <30d red)
+- Category breakdown donut chart
+- Recurring expenses list with amounts
+- Reconciliation status vs POS revenue
+- "AI Analysis" card with commentary + "Refresh" button
+- Transaction list with search + category filter
+
+In daily briefing: current balance + runway + any reconciliation flags.
+Commit: "feat(basiq/dashboard): cash flow dashboard — balance, runway, categories, reconciliation"
 
 ## Rules
-- Amounts as dollars (numeric) — Basiq returns decimal amounts, store as-is
-- Model: claude-haiku-4-5-20251001 for AI commentary
+- Model: claude-haiku-4-5-20251001 for data processing, sonnet for AI analysis only
 - npx tsc --noEmit + npm run build before each commit
+- Migrations via Supabase MCP
