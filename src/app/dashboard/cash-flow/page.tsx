@@ -46,6 +46,13 @@ export default function CashFlowPage() {
   const [newExpenseAmount, setNewExpenseAmount] = useState('')
   const [expensesSaving, setExpensesSaving] = useState(false)
   const [expensesSavedAt, setExpensesSavedAt] = useState<string>('')
+  const [cashCommentary, setCashCommentary] = useState<string | null>(null)
+  const [dailyBurn, setDailyBurn] = useState<number | null>(null)
+  const [runwayDays, setRunwayDays] = useState<number | null>(null)
+  const [lowestPoint, setLowestPoint] = useState<number | null>(null)
+  const [pendingPOs, setPendingPOs] = useState<Array<{id: string; supplier_name?: string; total_amount?: number; due_date?: string; status: string}>>([])
+  const [lastYearData, setLastYearData] = useState<Array<{date: string; lastYearRevenue: number}>>([])
+  const [seasonalInsight, setSeasonalInsight] = useState<string>('')
 
   // Load persisted expenses on mount
   useEffect(() => {
@@ -118,6 +125,60 @@ export default function CashFlowPage() {
         forecastDays.push({ date: dateStr, day: d.toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' }), revenue_actual: isPast ? (actual ?? 0) : null, revenue_forecast: Math.round(forecast), expenses_forecast: Math.round(estExpenses), expenses_actual: null, net: Math.round(net), cumulative: Math.round(cumulative), is_past: isPast })
       }
       setDays(forecastDays)
+
+      // Compute burn metrics
+      const pastDays = forecastDays.filter((d: DayForecast) => new Date(d.date) < new Date())
+      const recentPast = pastDays.slice(-7)
+      const burn = recentPast.length > 0
+        ? recentPast.reduce((s: number, d: DayForecast) => s + (d.net ?? 0), 0) / recentPast.length
+        : 0
+      const currentForecast = forecastDays.find((d: DayForecast) => new Date(d.date) >= new Date())
+      const balance = currentForecast?.cumulative ?? forecastDays[forecastDays.length - 1]?.cumulative ?? 0
+      const runway = burn < 0 ? Math.round(Math.abs(balance / burn)) : null
+      const lowest = Math.min(...forecastDays.map((d: DayForecast) => d.cumulative ?? 0))
+      setDailyBurn(burn)
+      setRunwayDays(runway)
+      setLowestPoint(lowest)
+      if (business?.id) {
+        fetch('/api/aria/cash-commentary', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ business_id: business.id, burn_rate: burn, runway_days: runway, lowest_point: lowest }),
+        }).then(r => r.json()).then(d => { if (d.commentary) setCashCommentary(d.commentary) }).catch(() => null)
+
+        // Load pending POs
+        fetch('/api/pos/purchase-orders?business_id=' + business.id + '&status=pending')
+          .then(r => r.json())
+          .then(d => {
+            const orders = d.orders ?? d.purchase_orders ?? []
+            if (Array.isArray(orders)) setPendingPOs(orders.slice(0, 10))
+          }).catch(() => null)
+      }
+
+      // Load last year data for seasonal overlay
+      const yearAgo = new Date(); yearAgo.setFullYear(yearAgo.getFullYear() - 1)
+      const lyStart = new Date(yearAgo); lyStart.setDate(lyStart.getDate() - 5)
+      const lyEnd = new Date(yearAgo); lyEnd.setDate(lyEnd.getDate() + 30)
+      try {
+        const lyRes = await fetch('/api/pos/sales?business_id=' + business!.id + '&limit=500&from=' + lyStart.toISOString() + '&to=' + lyEnd.toISOString())
+        const lyData = await lyRes.json() as { sales?: Array<{ created_at: string; total_amount: number; status: string }> }
+        const lySales = (lyData.sales ?? []).filter(s => s.status !== 'voided')
+        const lyByDay: Record<string, number> = {}
+        for (const s of lySales) {
+          const d = new Date(s.created_at)
+          d.setFullYear(d.getFullYear() + 1)
+          const key = d.toISOString().split('T')[0]
+          lyByDay[key] = (lyByDay[key] ?? 0) + (s.total_amount ?? 0)
+        }
+        setLastYearData(Object.entries(lyByDay).map(([date, rev]) => ({ date, lastYearRevenue: Math.round(rev) })))
+      } catch { /* ignore */ }
+
+      const month = new Date().getMonth()
+      setSeasonalInsight(
+        month === 11 ? 'December typically spikes revenue but expenses also rise — plan your cash buffer accordingly.'
+        : month === 0 || month === 1 ? 'January–February often runs below annual average — a quieter period to conserve cash.'
+        : month >= 5 && month <= 7 ? 'Mid-year (June–August) can be slower for retail — watch your burn rate carefully.'
+        : 'Compare your current trajectory to last year to spot seasonal patterns early.'
+      )
     } catch { /* ignore */ }
     setLoading(false)
   }, [business?.id, horizon, scenario, fixedDailyExpense])
@@ -340,6 +401,24 @@ export default function CashFlowPage() {
         </div>
       )}
 
+      {dailyBurn !== null && (
+        <div style={{ marginBottom: 20, padding: '16px 18px', borderRadius: 12, border: '1px solid ' + (runwayDays !== null && runwayDays < 30 ? 'rgba(239,68,68,0.3)' : runwayDays !== null && runwayDays < 90 ? 'rgba(245,158,11,0.3)' : 'rgba(127,184,151,0.3)'), background: runwayDays !== null && runwayDays < 30 ? 'rgba(239,68,68,0.06)' : runwayDays !== null && runwayDays < 90 ? 'rgba(245,158,11,0.06)' : 'rgba(127,184,151,0.06)' }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: '#7FB897', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>✦ Aria&apos;s read</div>
+          <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.85)', lineHeight: 1.6, margin: '0 0 10px' }}>
+            {runwayDays !== null && runwayDays < 30
+              ? '⚠ At current burn rate, you may need to top up in ' + runwayDays + ' days.'
+              : runwayDays !== null && runwayDays < 90
+              ? 'Cash position tightens in ' + runwayDays + ' days — plan ahead.'
+              : 'Cash position is healthy across the next 30 days.'}
+          </p>
+          {cashCommentary && <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', lineHeight: 1.55, margin: 0 }}>{cashCommentary}</p>}
+          <div style={{ display: 'flex', gap: 16, marginTop: 10, fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>
+            <span>Daily net: <strong style={{ color: dailyBurn < 0 ? '#ef4444' : '#7FB897' }}>${dailyBurn.toFixed(2)}/day</strong></span>
+            {lowestPoint !== null && <span>Lowest point: <strong style={{ color: lowestPoint < 0 ? '#ef4444' : 'rgba(255,255,255,0.7)' }}>${lowestPoint.toFixed(0)}</strong></span>}
+          </div>
+        </div>
+      )}
+
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12, marginBottom: 24 }}>
         {[
           { label: 'Last 7 days actual', value: fmt(totalActualRevenue), color: C.green },
@@ -406,6 +485,42 @@ export default function CashFlowPage() {
           </table>
         </div>
       )}
+
+      {seasonalInsight && (
+        <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 10, fontStyle: 'italic' }}>{seasonalInsight}</p>
+      )}
+
+      <div style={{ marginTop: 20 }}>
+        <div style={{ fontSize: 14, fontWeight: 700, color: 'rgba(255,255,255,0.8)', marginBottom: 12 }}>Supplier payment timing</div>
+        {pendingPOs.length === 0 ? (
+          <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', padding: '20px 0' }}>No pending supplier invoices to optimise.</p>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {pendingPOs.slice(0, 5).map(po => {
+              const optimalDay = days.filter(d => (d.cumulative ?? 0) > 0 && po.due_date && new Date(d.date) <= new Date(po.due_date)).slice(-1)[0]
+              const daysDeferred = optimalDay && po.due_date
+                ? Math.floor((new Date(optimalDay.date).getTime() - new Date().getTime()) / 86400000)
+                : 0
+              return (
+                <div key={po.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', background: 'rgba(255,255,255,0.04)', borderRadius: 10, border: '1px solid rgba(255,255,255,0.07)' }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: '#fff' }}>{po.supplier_name ?? 'Supplier'}</div>
+                    {po.total_amount && <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 2 }}>${po.total_amount.toFixed(2)} due</div>}
+                  </div>
+                  {optimalDay && daysDeferred > 0 ? (
+                    <div style={{ fontSize: 12, color: '#7FB897', textAlign: 'right' }}>
+                      <div style={{ fontWeight: 600 }}>Pay {new Date(optimalDay.date).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}</div>
+                      <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11 }}>Save {daysDeferred}d cash float</div>
+                    </div>
+                  ) : (
+                    <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>Pay now</span>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
 
       <div style={{ marginTop: 20, padding: '12px 16px', background: 'rgba(255,255,255,0.02)', borderRadius: 10, fontSize: 11, color: C.dim }}>
         Scenarios: <b style={{ color: C.green }}>Optimistic</b> +20%, <b style={{ color: C.amber }}>Base</b> historical average, <b style={{ color: C.red }}>Pessimistic</b> -25%.
