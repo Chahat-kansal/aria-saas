@@ -76,6 +76,7 @@ const ALL_ITEMS: Record<string, NavItemDef> = {
   'missed-demand':              { href: '/dashboard/missed-demand',            label: 'Missed demand',     icon: ShoppingBagIcon,    badge: 'New', section: 'Intelligence' },
   'intelligence':               { href: '/dashboard/intelligence',             label: 'Intelligence centre', icon: BrainIcon,          section: 'Intelligence' },
   'autopilot':                  { href: '/dashboard/autopilot',                label: 'Autopilot',           icon: BrainIcon,          badge: '⚡', section: 'Intelligence' },
+  'agents':                     { href: '/dashboard/agents',                   label: 'Revenue Council',     icon: BrainIcon,          badge: 'AI',  section: 'Intelligence' },
   'social-calendar':            { href: '/dashboard/social/calendar',          label: 'Post Calendar',       icon: CalendarIcon,       section: 'Marketing'    },
   'visa/clients':               { href: '/visa/clients',                       label: 'Clients',           icon: UsersIcon,          section: 'VisaAI'       },
   'visa/applications':          { href: '/visa/applications',                  label: 'Applications',      icon: FileTextIcon,       section: 'VisaAI'       },

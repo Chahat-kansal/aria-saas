@@ -52,6 +52,7 @@ export interface AskAriaContext {
   busiest_hour: { hour: string; avg_revenue: number }
   avg_daily_revenue: number
   subscription_tier: string | null
+  council_plan: { narrative: string | null; projected_revenue_impact: number } | null
 }
 
 export async function buildAskAriaContext(
@@ -236,6 +237,17 @@ export async function buildAskAriaContext(
   // Subscription tier
   const subscriptionTier = (subscriptionRes.data as { tier?: string } | null)?.tier ?? null
 
+  // ── Fetch today's council plan_narrative (non-blocking) ──────────────────
+  const todayStr = new Date().toISOString().split('T')[0]
+  const { data: councilRow } = await supabaseAdmin
+    .from('agent_council_sessions')
+    .select('plan_narrative, projected_revenue_impact')
+    .eq('business_id', businessId)
+    .eq('session_date', todayStr)
+    .eq('status', 'complete')
+    .maybeSingle()
+    .then(r => r, () => ({ data: null }))
+
   // ── Fetch fresh signals separately (non-blocking, best-effort) ─────────
   const { data: signalRows } = await supabaseAdmin
     .from('aria_signal_cache')
@@ -369,5 +381,9 @@ export async function buildAskAriaContext(
     busiest_hour: busiestHour,
     avg_daily_revenue: avgDailyRevenue,
     subscription_tier: subscriptionTier,
+    council_plan: councilRow ? {
+      narrative: councilRow.plan_narrative ?? null,
+      projected_revenue_impact: Number(councilRow.projected_revenue_impact ?? 0),
+    } : null,
   }
 }
