@@ -42,7 +42,7 @@ export async function POST(req: Request) {
   }
 
   await supabaseAdmin.from('stripe_events').upsert(
-    { id: event.id, type: event.type, processed: false, created_at: new Date().toISOString() },
+    { id: event.id, type: event.type, processed: false, received_at: new Date().toISOString() },
     { onConflict: 'id' }
   )
 
