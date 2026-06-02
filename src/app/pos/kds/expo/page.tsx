@@ -27,7 +27,8 @@ export default function ExpoPage() {
     if (r2.ok) {
       const j = await r2.json()
       // Show only 'ready' orders on expo (cooked, waiting to be served)
-      setReadyOrders(((j.orders ?? []) as KdsOrder[]).filter(o => o.status === 'ready'))
+      // Show new, bumped (in progress) and ready orders on expo
+      setReadyOrders(((j.orders ?? []) as KdsOrder[]).filter(o => ['new','bumped','ready','in_progress'].includes(o.status)))
     }
     setLoading(false)
   }, [])
@@ -63,7 +64,10 @@ export default function ExpoPage() {
           {readyOrders.map(order => (
             <div key={order.id} className="rounded-lg p-4" style={{ border: '1px solid rgba(34,197,94,0.3)', background: 'rgba(34,197,94,0.05)' }}>
               <h2 className="text-lg font-medium mb-1 flex items-center gap-2">
-                <span className="text-xs px-2 py-0.5 rounded" style={{ background: 'rgba(34,197,94,0.2)', color: '#22c55e' }}>READY</span>
+                <span className="text-xs px-2 py-0.5 rounded" style={{
+                  background: order.status === 'ready' ? 'rgba(34,197,94,0.2)' : order.status === 'bumped' ? 'rgba(245,158,11,0.2)' : 'rgba(59,130,246,0.2)',
+                  color: order.status === 'ready' ? '#22c55e' : order.status === 'bumped' ? '#f59e0b' : '#60a5fa'
+                }}>{order.status.toUpperCase()}</span>
                 {order.table_label ?? 'No table'}
                 {order.ticket_number && <span className="text-sm" style={{ color: 'var(--text-secondary, #A8B5A8)' }}>#{order.ticket_number}</span>}
               </h2>
