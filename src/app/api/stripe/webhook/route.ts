@@ -12,10 +12,15 @@ async function syncSubscription(
   status: string,
   extra: Record<string, unknown> = {}
 ) {
-  await supabaseAdmin
+  const { data, error } = await supabaseAdmin
     .from('business_subscriptions')
     .update({ status, updated_at: new Date().toISOString(), ...extra })
     .eq('stripe_subscription_id', stripeSubId)
+    .select('id')
+  if (error) console.error('[stripe/webhook] syncSubscription error:', error.message)
+  if (!error && (!data || data.length === 0)) {
+    console.error('[stripe/webhook] syncSubscription: no subscription found for stripe_sub_id', stripeSubId, '— status not updated to', status)
+  }
 }
 
 export async function POST(req: Request) {
