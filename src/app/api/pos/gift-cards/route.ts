@@ -3,6 +3,7 @@ export const runtime = 'nodejs'
 
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { NextResponse } from 'next/server'
+import { waitUntil } from '@vercel/functions'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 
 function generateCode(): string {
@@ -81,7 +82,7 @@ async function _POST(req: Request) {
   }).select().single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  void (async () => { try { await supabase.from('pos_gift_card_transactions').insert({ gift_card_id: data.id, business_id: biz.id, type: 'issue', amount, balance_after: amount, note: body.recipient_name ? `Issued to ${body.recipient_name}` : 'Issued' }) } catch {} })()
+  waitUntil((async () => { try { await supabase.from('pos_gift_card_transactions').insert({ gift_card_id: data.id, business_id: biz.id, type: 'issue', amount, balance_after: amount, note: body.recipient_name ? `Issued to ${body.recipient_name}` : 'Issued' }) } catch {} })())
   return NextResponse.json({ gift_card: data })
 }
 
@@ -109,7 +110,7 @@ async function _PATCH(req: Request) {
     const { data, error } = await supabase.from('pos_gift_cards')
       .update({ balance: newBalance, is_active: true }).eq('id', id).eq('business_id', biz.id).select().single()
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    void (async () => { try { await supabase.from('pos_gift_card_transactions').insert({ gift_card_id: id, business_id: biz.id, type: 'reload', amount: reload, balance_after: newBalance, note: body.note || null }) } catch {} })()
+    waitUntil((async () => { try { await supabase.from('pos_gift_card_transactions').insert({ gift_card_id: id, business_id: biz.id, type: 'reload', amount: reload, balance_after: newBalance, note: body.note || null }) } catch {} })())
     return NextResponse.json({ gift_card: data })
   }
 
