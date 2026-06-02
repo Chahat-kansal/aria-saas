@@ -49,7 +49,18 @@ async function _GET(req: Request, { params }: { params: { id: string } }) {
     customer = cust
   }
 
-  return NextResponse.json({ order: { ...order, items: items ?? [], customer } })
+  // Fetch business name + abn for invoice display
+  let bizInfo: { name: string; abn: string | null } | null = null
+  try {
+    const { data: biz } = await supabaseAdmin
+      .from('businesses')
+      .select('name, abn')
+      .eq('id', order.business_id)
+      .maybeSingle()
+    bizInfo = biz
+  } catch { /* non-fatal */ }
+
+  return NextResponse.json({ order: { ...order, items: items ?? [], customer, business_name: bizInfo?.name ?? null, business_abn: bizInfo?.abn ?? null } })
 }
 
 const UpdateOrderSchema = z.object({

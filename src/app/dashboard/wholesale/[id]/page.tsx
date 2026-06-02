@@ -22,6 +22,7 @@ interface Customer {
   name: string
   email: string | null
   business_name: string | null
+  business_abn: string | null
   abn: string | null
   billing_address: string | null
   shipping_address: string | null
@@ -327,11 +328,13 @@ export default function WholesaleOrderDetailPage() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
               <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
                 <div style={{ width: 44, height: 44, borderRadius: 10, background: '#2D5240', color: '#7FB897', fontSize: 20, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  {(order.business_name || 'S').charAt(0).toUpperCase()}
+                  {(order.business_name || 'A').charAt(0).toUpperCase()}
                 </div>
                 <div>
                   <p style={{ margin: '0 0 2px', fontSize: 16, fontWeight: 600, color: '#111' }}>{order.business_name || 'Your Business'}</p>
-                  <p style={{ margin: 0, fontSize: 11, color: '#888', lineHeight: 1.5 }}>Tax Invoice · GST registered</p>
+                  <p style={{ margin: 0, fontSize: 11, color: '#888', lineHeight: 1.5 }}>
+                    {order.business_abn ? `ABN ${order.business_abn} · ` : ''}Tax Invoice · GST registered
+                  </p>
                 </div>
               </div>
               <div style={{ textAlign: 'right' }}>
