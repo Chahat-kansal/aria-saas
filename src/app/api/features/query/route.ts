@@ -82,8 +82,9 @@ async function _POST(req: Request) {
     // Ordering
     const orderDir = query.order_dir === 'asc';
     if (query.order_by) q = q.order(query.order_by, { ascending: orderDir });
-    else if (query.type === 'group_sum' || query.type === 'count_per_customer') {
-      q = q.order(query.field ?? 'count', { ascending: false });
+    else if (query.type === 'group_sum' && query.field) {
+      // count_per_customer: skip server-side order — aggregation+sorting done in aggregate()
+      q = q.order(query.field, { ascending: false });
     }
 
     if (query.limit) q = q.limit(query.limit);
