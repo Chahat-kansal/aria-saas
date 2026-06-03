@@ -24,12 +24,14 @@ const STYLES = [
   { id: 'day_in_life',      emoji: '🌅', label: 'Day in Life',  desc: 'Story format' },
 ]
 const GENRES = ['auto','action','comedy','drama','epic','noir']
+// Each clip is max 15s — longer reels auto-stitch multiple clips client-side
 const DURATIONS = [
-  { secs: 5,  label: '5s',  costAud: 0.48 },
-  { secs: 10, label: '10s', costAud: 0.95 },
-  { secs: 15, label: '15s', costAud: 1.43 },
-  { secs: 30, label: '30s', costAud: 2.85 },
-  { secs: 60, label: '60s', costAud: 5.70 },
+  { secs: 10, label: '10s', clips: 1, costAud: 0.95 },
+  { secs: 15, label: '15s', clips: 1, costAud: 1.43 },
+  { secs: 20, label: '20s', clips: 2, costAud: 1.90 },
+  { secs: 30, label: '30s', clips: 3, costAud: 2.85 },
+  { secs: 45, label: '45s', clips: 3, costAud: 3.80 },
+  { secs: 60, label: '60s', clips: 4, costAud: 5.70 },
 ]
 const RESOLUTIONS = [{ id: '720p', label: '720p HD', note: 'Fast' }, { id: '1080p', label: '1080p FHD', note: 'Best' }]
 const FILTER_PRESETS = [
@@ -91,6 +93,10 @@ export default function ReelStudioPage() {
   const [genProgress, setGenProgress] = useState(0)
   const [latestVideo, setLatestVideo] = useState<string|null>(null)
   const [activeJob, setActiveJob] = useState<{jobId:string;sessionId:string}|null>(null)
+  const [clipUrls, setClipUrls] = useState<string[]>([])
+  const [clipProgress, setClipProgress] = useState(0)
+  const [totalClips, setTotalClips] = useState(1)
+  const [stitching, setStitching] = useState(false)
   const [publishing, setPublishing] = useState(false)
   const [publishMsg, setPublishMsg] = useState('')
   const [publishCaption, setPublishCaption] = useState('')
@@ -203,31 +209,148 @@ export default function ReelStudioPage() {
     setSceneUploading(false)
   }
 
-  async function generate() {
-    if (!bid || !userToken || generating) return
-    setGenerating(true); setLatestVideo(null); setGenProgress(5)
-    setGenMsg(selectedInf?.soul_status === 'ready' ? '🎭 Soul mode — consistent face guaranteed…'
-      : selectedInf ? '🎬 Using influencer as start frame…' : '✨ Generating scene…')
+  // Each Higgsfield clip = max 15s. Longer reels = multiple clips generated in parallel then stitched.
+  function clipsNeeded(secs: number) { return Math.ceil(secs / 15) }
+  function secsPerClip(secs: number) { return Math.min(secs, 15) }
+
+  async function generateSingleClip(clipNum: number, totalClipsCount: number): Promise<string | null> {
+    const clipPrompt = prompt
+      ? (clipNum === 1 ? prompt : prompt + `, continuation scene ${clipNum} of ${totalClipsCount}, same setting`)
+      : null
     try {
       const res = await fetch(EDGE, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${userToken}` },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${userToken!}` },
         body: JSON.stringify({
           business_id: bid,
           influencer_id: selectedInf?.id ?? null,
           soul_id: selectedInf?.soul_status === 'ready' ? selectedInf.soul_id : null,
           higgsfield_job_id: selectedInf?.higgsfield_job_id ?? null,
           scene_image_url: sceneUrl ?? null,
-          prompt: prompt || null, style,
-          duration_seconds: duration, resolution, genre,
+          prompt: clipPrompt, style,
+          duration_seconds: secsPerClip(duration), resolution, genre,
         }),
       })
       const d = await res.json()
-      if (!d.job_id) throw new Error(d.error ?? 'No job_id returned')
-      setGenMsg(`🎬 Generating ${duration}s reel… takes ~60–90s`)
-      setGenProgress(15)
-      setActiveJob({ jobId: d.job_id, sessionId: d.session_id })
-      pollStatus(d.job_id, d.session_id, userToken)
+      if (!d.job_id) throw new Error(d.error ?? 'No job_id')
+      // Poll until complete
+      return await pollClip(d.job_id, d.session_id)
+    } catch (e: any) {
+      console.error(`Clip ${clipNum} failed:`, e.message)
+      return null
+    }
+  }
+
+  async function pollClip(jobId: string, sessionId: string): Promise<string | null> {
+    for (let attempt = 0; attempt < 60; attempt++) {
+      await new Promise(r => setTimeout(r, 5000))
+      try {
+        const res = await fetch(`${EDGE}?job_id=${jobId}&session_id=${sessionId}`,
+          { headers: { Authorization: `Bearer ${userToken!}` } })
+        const d = await res.json()
+        if (d.status === 'COMPLETED' && d.video_url) return d.video_url
+        if (d.status === 'FAILED') return null
+      } catch {}
+    }
+    return null
+  }
+
+  async function stitchClips(urls: string[]): Promise<string> {
+    if (urls.length === 1) return urls[0]
+    setStitching(true)
+    setGenMsg('🎞 Stitching clips into one reel…')
+    try {
+      // Use ffmpeg.wasm to concatenate clips in the browser
+      const { FFmpeg } = await import('@ffmpeg/ffmpeg' as any)
+      const { fetchFile, toBlobURL } = await import('@ffmpeg/util' as any)
+      const ffmpeg = new FFmpeg()
+      const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd'
+      await ffmpeg.load({
+        coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
+        wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
+      })
+      // Write each clip
+      const listLines: string[] = []
+      for (let i = 0; i < urls.length; i++) {
+        const data = await fetchFile(urls[i])
+        await ffmpeg.writeFile(`clip${i}.mp4`, data)
+        listLines.push(`file 'clip${i}.mp4'`)
+      }
+      await ffmpeg.writeFile('list.txt', listLines.join('
+'))
+      // Concatenate
+      await ffmpeg.exec(['-f', 'concat', '-safe', '0', '-i', 'list.txt', '-c', 'copy', 'output.mp4'])
+      const data = await ffmpeg.readFile('output.mp4')
+      const blob = new Blob([data], { type: 'video/mp4' })
+      setStitching(false)
+      return URL.createObjectURL(blob)
+    } catch (e: any) {
+      setStitching(false)
+      // Fallback: just return first clip if stitching fails
+      console.error('Stitch failed, using first clip:', e.message)
+      return urls[0]
+    }
+  }
+
+  async function generate() {
+    if (!bid || !userToken || generating) return
+    setGenerating(true); setLatestVideo(null); setGenProgress(5)
+    setClipUrls([]); setClipProgress(0)
+
+    const clips = clipsNeeded(duration)
+    setTotalClips(clips)
+    setGenMsg(clips > 1
+      ? `🎬 Generating ${clips} clips for ${duration}s reel… (~${clips * 90}s)`
+      : `🎬 Generating ${duration}s reel… (~90s)`)
+
+    try {
+      if (clips === 1) {
+        // Single clip — existing flow
+        const res = await fetch(EDGE, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${userToken}` },
+          body: JSON.stringify({
+            business_id: bid,
+            influencer_id: selectedInf?.id ?? null,
+            soul_id: selectedInf?.soul_status === 'ready' ? selectedInf.soul_id : null,
+            higgsfield_job_id: selectedInf?.higgsfield_job_id ?? null,
+            scene_image_url: sceneUrl ?? null,
+            prompt: prompt || null, style,
+            duration_seconds: duration, resolution, genre,
+          }),
+        })
+        const d = await res.json()
+        if (!d.job_id) throw new Error(d.error ?? 'No job_id returned')
+        setGenMsg(`⏳ Generating ${duration}s reel…`)
+        setGenProgress(15)
+        setActiveJob({ jobId: d.job_id, sessionId: d.session_id })
+        pollStatus(d.job_id, d.session_id, userToken)
+      } else {
+        // Multi-clip: generate all in parallel
+        setGenMsg(`🎬 Generating ${clips} clips in parallel for ${duration}s reel…`)
+        const clipPromises = Array.from({ length: clips }, (_, i) =>
+          generateSingleClip(i + 1, clips).then(url => {
+            if (url) {
+              setClipProgress(p => p + 1)
+              setGenProgress(p => Math.min(p + Math.floor(80 / clips), 88))
+            }
+            return url
+          })
+        )
+        const results = await Promise.all(clipPromises)
+        const validClips = results.filter(Boolean) as string[]
+        if (validClips.length === 0) throw new Error('All clips failed to generate')
+
+        setGenMsg(`✅ ${validClips.length}/${clips} clips ready — stitching…`)
+        setGenProgress(90)
+        const finalUrl = await stitchClips(validClips)
+        setLatestVideo(finalUrl)
+        setGenerating(false)
+        setGenProgress(100)
+        setGenMsg(`✅ ${duration}s reel ready! (${validClips.length} clips stitched)`)
+        setTab('edit')
+        if (bid) loadBiz(bid, userToken)
+      }
     } catch (e: any) {
       setGenMsg('❌ ' + e.message); setGenerating(false); setGenProgress(0)
     }
@@ -530,6 +653,7 @@ export default function ReelStudioPage() {
                     color: duration === d.secs ? '#7FB897' : 'rgba(255,255,255,0.4)', transition: 'all 120ms' }}>
                     {d.label}
                     <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.3)', fontWeight: 400, marginTop: 1 }}>${d.costAud}</div>
+                    {d.clips > 1 && <div style={{ fontSize: 8, color: 'rgba(127,184,151,0.6)', marginTop: 1 }}>{d.clips} clips</div>}
                   </button>
                 ))}
               </div>
@@ -573,8 +697,11 @@ export default function ReelStudioPage() {
               <div style={{ fontSize: 20, fontWeight: 800, color: '#F59E0B' }}>${estimatedCost.toFixed(2)} AUD</div>
             </div>
 
-            <button onClick={generate} disabled={generating} style={{ ...S.btn(true, generating), width: '100%' }}>
-              {generating ? '⏳ Generating…' : `Generate Reel — $${estimatedCost.toFixed(2)} AUD`}
+            <button onClick={generate} disabled={generating || stitching} style={{ ...S.btn(true, generating || stitching), width: '100%' }}>
+              {stitching ? '🎞 Stitching clips…'
+                : generating && totalClips > 1 ? `⏳ ${clipProgress}/${totalClips} clips…`
+                : generating ? '⏳ Generating…'
+                : `Generate ${duration}s Reel — $${estimatedCost.toFixed(2)} AUD${clipsNeeded(duration) > 1 ? ` (${clipsNeeded(duration)} clips)` : ''}`}
             </button>
 
             {genMsg && (
@@ -583,10 +710,15 @@ export default function ReelStudioPage() {
                 color: genMsg.startsWith('✅') ? '#7FB897' : genMsg.startsWith('❌') ? '#EF4444' : 'rgba(255,255,255,0.6)',
                 lineHeight: 1.5 }}>
                 {genMsg}
-                {generating && (
+                {(generating || stitching) && (
                   <div style={{ marginTop: 8, height: 3, borderRadius: 99, background: 'rgba(255,255,255,0.1)', overflow: 'hidden' }}>
                     <div style={{ height: '100%', width: genProgress + '%', background: '#7FB897',
                       borderRadius: 99, transition: 'width 0.8s ease' }} />
+                  </div>
+                )}
+                {generating && totalClips > 1 && (
+                  <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', marginTop: 6 }}>
+                    Clips ready: {clipProgress}/{totalClips} · Auto-stitching when all done
                   </div>
                 )}
               </div>
