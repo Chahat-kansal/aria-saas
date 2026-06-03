@@ -17,9 +17,11 @@ async function _GET(req: NextRequest) {
   const { data: biz } = await supabase.from('businesses').select('id').eq('id', business_id).eq('user_id', user.id).maybeSingle();
   if (!biz) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
+  // Use explicit FK hint syntax to disambiguate the two FKs to staff_members:
+  // staff_member:staff_member_id(name) — joins via staff_member_id FK
   let query = supabase
     .from('staff_recipe_training')
-    .select('*, recipes(name, category), staff_members(name)')
+    .select('*, recipes(name, category), staff_member:staff_member_id(name)')
     .eq('business_id', business_id);
 
   if (staff_id) query = query.eq('staff_member_id', staff_id);
@@ -53,8 +55,6 @@ async function _POST(req: NextRequest) {
   };
   if (status === 'completed') payload.completed_at = now;
 
-  // Use upsert only when staff_member_id is present (unique constraint is on staff_member_id,recipe_id)
-  // When null, do a plain insert (no conflict possible since NULL != NULL in unique indexes)
   let result;
   if (staff_member_id) {
     result = await supabase
@@ -63,7 +63,6 @@ async function _POST(req: NextRequest) {
       .select()
       .single();
   } else {
-    // No staff_member_id — check if a matching record exists first
     const { data: existing } = await supabase
       .from('staff_recipe_training')
       .select('id')
