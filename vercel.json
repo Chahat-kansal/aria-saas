@@ -192,6 +192,18 @@
       "schedule": "0 6 * * *"
     },
     {
+      "path": "/api/cron/waste-prep-guide",
+      "schedule": "0 11 * * *"
+    },
+    {
+      "path": "/api/cron/waste-noon-check",
+      "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/cron/waste-reconcile",
+      "schedule": "0 12 * * *"
+    },
+    {
       "path": "/api/cron/labour-optimisation",
       "schedule": "0 19 * * *"
     }

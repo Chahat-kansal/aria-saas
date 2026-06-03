@@ -280,6 +280,15 @@ export default function AgentsPage() {
   const [labourLoading, setLabourLoading] = useState(false)
   const [labourPotentialSaving, setLabourPotentialSaving] = useState<number | null>(null)
 
+  // Waste Elimination widget state
+  const [wasteData, setWasteData] = useState<{
+    today_predictions: Array<{ product_id: string; recommended_prep_qty: number; recommended_prep_time: string; prep_guide_narrative: string; prediction_confidence: number; actual_units_sold: number | null; actual_waste_units: number | null; promotion_triggered: boolean; pos_products: { name: string; shelf_life_hours: number | null } | null }>
+    tomorrow_predictions: Array<{ product_id: string; recommended_prep_qty: number; recommended_prep_time: string; prep_guide_narrative: string; prediction_confidence: number; pos_products: { name: string; shelf_life_hours: number | null } | null }>
+    waste_saved_this_month: number
+    accuracy_this_month: number | null
+  } | null>(null)
+  const [wasteLoading, setWasteLoading] = useState(false)
+
   const bid = business?.id
 
   // Intelligence tab state
@@ -447,14 +456,28 @@ export default function AgentsPage() {
     setLabourLoading(false)
   }, [bid])
 
+  const loadWasteData = useCallback(async () => {
+    if (!bid) return
+    setWasteLoading(true)
+    try {
+      const res = await fetch('/api/agents/waste/predictions')
+      if (res.ok) {
+        const d = await res.json() as typeof wasteData
+        setWasteData(d)
+      }
+    } catch { /* non-fatal */ }
+    setWasteLoading(false)
+  }, [bid])
+
   useEffect(() => {
     if (tab === 'agents') {
       void loadMenuData()
       void loadFlashData()
       void loadClvData()
       void loadLabourData()
+      void loadWasteData()
     }
-  }, [tab, loadMenuData, loadFlashData, loadClvData, loadLabourData])
+  }, [tab, loadMenuData, loadFlashData, loadClvData, loadLabourData, loadWasteData])
 
   useEffect(() => {
     if (tab === 'intelligence') void loadIntelligenceData()
@@ -1061,6 +1084,77 @@ export default function AgentsPage() {
                     )}
                   </div>
                 </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* ── Waste Elimination Widget ─────────────────────────────────────── */}
+        <div style={{ marginTop: 24, background: surface, border, borderRadius: 16, overflow: 'hidden' }}>
+          <div style={{ padding: '18px 24px', borderBottom: border, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <h3 style={{ color: '#fff', fontSize: 16, fontWeight: 600, margin: 0 }}>♻️ Waste Elimination</h3>
+              <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12, margin: '4px 0 0' }}>Prep guide · prediction accuracy · waste saved via flash promos</p>
+            </div>
+            <button onClick={() => void loadWasteData()} style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid rgba(127,184,151,0.3)', background: 'transparent', color: '#7FB897', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+              Refresh
+            </button>
+          </div>
+          <div style={{ padding: 24 }}>
+            {wasteLoading ? (
+              <div style={{ color: 'rgba(255,255,255,0.3)', textAlign: 'center', padding: 32 }}>Loading waste data...</div>
+            ) : !wasteData || (wasteData.today_predictions.length === 0 && wasteData.tomorrow_predictions.length === 0) ? (
+              <div style={{ textAlign: 'center', padding: '32px 0', color: 'rgba(255,255,255,0.25)', fontSize: 13 }}>
+                No prep predictions yet — set shelf_life_hours or prep_time_minutes on products to enable waste tracking
+              </div>
+            ) : (
+              <div>
+                {/* Summary stats */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 24 }}>
+                  <div style={{ background: 'rgba(127,184,151,0.08)', border: '1px solid rgba(127,184,151,0.2)', borderRadius: 12, padding: '14px 16px' }}>
+                    <div style={{ fontSize: 11, color: '#7FB897', fontWeight: 700, marginBottom: 4 }}>WASTE SAVED (30 DAYS)</div>
+                    <div style={{ fontFamily: 'Fraunces, Georgia, serif', fontStyle: 'italic', fontSize: 26, color: '#7FB897' }}>${(wasteData.waste_saved_this_month ?? 0).toFixed(0)}</div>
+                    <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>via flash promotions</div>
+                  </div>
+                  <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: '14px 16px' }}>
+                    <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', fontWeight: 700, marginBottom: 4 }}>PREDICTION ACCURACY</div>
+                    <div style={{ fontFamily: 'Fraunces, Georgia, serif', fontStyle: 'italic', fontSize: 26, color: '#fff' }}>
+                      {wasteData.accuracy_this_month !== null ? wasteData.accuracy_this_month + '%' : '—'}
+                    </div>
+                    <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>last 30 days</div>
+                  </div>
+                  <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: '14px 16px' }}>
+                    <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', fontWeight: 700, marginBottom: 4 }}>ITEMS TRACKED</div>
+                    <div style={{ fontFamily: 'Fraunces, Georgia, serif', fontStyle: 'italic', fontSize: 26, color: '#fff' }}>{wasteData.tomorrow_predictions.length}</div>
+                    <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>products tomorrow</div>
+                  </div>
+                </div>
+
+                {/* Tomorrow's prep guide */}
+                {wasteData.tomorrow_predictions.length > 0 && (
+                  <div style={{ marginBottom: 20 }}>
+                    <h4 style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12, fontWeight: 700, margin: '0 0 10px', textTransform: 'uppercase', letterSpacing: 1 }}>Tomorrow&apos;s Prep Guide</h4>
+                    {wasteData.tomorrow_predictions[0].prep_guide_narrative && (
+                      <div style={{ background: 'rgba(45,82,64,0.15)', border: '1px solid rgba(45,82,64,0.3)', borderRadius: 10, padding: '12px 16px', marginBottom: 12, fontSize: 13, color: 'rgba(255,255,255,0.75)', lineHeight: 1.6, fontStyle: 'italic' }}>
+                        {wasteData.tomorrow_predictions[0].prep_guide_narrative}
+                      </div>
+                    )}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      {wasteData.tomorrow_predictions.slice(0, 8).map(p => (
+                        <div key={p.product_id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: 'rgba(255,255,255,0.03)', borderRadius: 8, border: '1px solid rgba(255,255,255,0.06)' }}>
+                          <div>
+                            <span style={{ fontSize: 13, color: '#fff', fontWeight: 500 }}>{p.pos_products?.name ?? p.product_id}</span>
+                            <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginLeft: 8 }}>{p.recommended_prep_time}</span>
+                          </div>
+                          <div style={{ textAlign: 'right' }}>
+                            <span style={{ fontSize: 13, fontWeight: 700, color: '#7FB897' }}>{p.recommended_prep_qty} units</span>
+                            <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', marginLeft: 8 }}>{Math.round(p.prediction_confidence * 100)}% conf</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
