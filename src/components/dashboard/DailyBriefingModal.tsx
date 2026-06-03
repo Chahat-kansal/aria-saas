@@ -139,38 +139,30 @@ export function DailyBriefingModal() {
           // Council returned a text briefing — parse into multiple insight cards
           if (councilData?.briefing) {
             const text: string = councilData.briefing;
-            // Split on sentence-ending punctuation followed by capital letter (new insight)
-            // Also split on em-dash sections, numbered points, or double newlines
-            const rawSentences = text.split(/\.\s+(?=[A-Z])|\n\n+/).map((s: string) => s.trim()).filter((s: string) => s.length > 20);
+            const sentences = text.split('. ').map((s: string) => s.trim()).filter((s: string) => s.length > 20);
+            const mid = Math.ceil(sentences.length / 2);
+            const cardTexts: string[] = sentences.length <= 2
+              ? [sentences.join('. ')]
+              : [sentences.slice(0, mid).join('. '), sentences.slice(mid).join('. ')];
 
-            // Group into meaningful cards (2-3 sentences each, max 4 cards)
-            const chunkSize = Math.ceil(rawSentences.length / Math.min(4, Math.max(1, Math.ceil(rawSentences.length / 2))));
-            const chunks: string[][] = [];
-            for (let i = 0; i < rawSentences.length; i += chunkSize) {
-              chunks.push(rawSentences.slice(i, i + chunkSize));
-            }
-
-            // Map chunks to recommendation cards with varied categories/priorities
-            const categoryMap: Array<{ category: Recommendation['category']; priority: Recommendation['priority']; icon: string }> = [
-              { category: 'revenue', priority: 'high', icon: '💰' },
-              { category: 'customers', priority: 'high', icon: '👥' },
-              { category: 'stock', priority: 'medium', icon: '📦' },
-              { category: 'marketing', priority: 'medium', icon: '📣' },
-              { category: 'reviews', priority: 'low', icon: '⭐' },
+            const cats: Array<{ category: Recommendation['category']; priority: Recommendation['priority'] }> = [
+              { category: 'revenue', priority: 'high' },
+              { category: 'customers', priority: 'high' },
+              { category: 'stock', priority: 'medium' },
+              { category: 'marketing', priority: 'medium' },
             ];
 
-            const parsed: Recommendation[] = chunks.slice(0, 4).map((chunk, idx) => {
-              const meta = categoryMap[idx % categoryMap.length];
-              const sentences = chunk.join(' ');
-              // Extract a short title from first ~6 words
-              const words = sentences.split(' ');
-              const title = words.slice(0, 6).join(' ').replace(/[,.:;]$/, '') + (words.length > 6 ? '…' : '');
+            const parsed: Recommendation[] = cardTexts.slice(0, 4).map((cardText, idx) => {
+              const meta = cats[idx % cats.length];
+              const words = cardText.split(' ');
+              const cardTitle = words.slice(0, 6).join(' ').replace(/[,.:;]$/, '') + (words.length > 6 ? '...' : '');
+              const cardId = 'council-' + String(idx);
               return {
-                id: \`council-\${idx}\`,
+                id: cardId,
                 priority: meta.priority,
                 category: meta.category,
-                title,
-                description: sentences,
+                title: cardTitle,
+                description: cardText,
                 action_label: idx === 0 ? 'View full briefing' : 'Take action',
                 action_type: 'navigate' as const,
                 metric: '',
@@ -180,15 +172,14 @@ export function DailyBriefingModal() {
               };
             });
 
-            // Always add a "view full briefing" card at the end if more than 1 card
             if (parsed.length > 1) {
               parsed.push({
                 id: 'council-view-full',
                 priority: 'low',
                 category: 'compliance',
                 title: 'Read full intelligence brief',
-                description: 'Open Ask Aria to see the complete analysis with all insights, trends, and recommendations for today.',
-                action_label: 'Open full briefing →',
+                description: 'Open Ask Aria to see the complete analysis with all insights and recommendations for today.',
+                action_label: 'Open full briefing',
                 action_type: 'navigate',
                 metric: '',
                 metric_label: '',
@@ -197,7 +188,7 @@ export function DailyBriefingModal() {
               });
             }
 
-            setRecs(parsed.filter(r => r.title.trim() && r.description.trim()));
+            setRecs(parsed.filter((r: Recommendation) => r.title.trim() && r.description.trim()));
             setHasLiveData(true);
             setTimeout(() => setIsBriefingOpen(true), 800);
             setIsBriefingLoading(false);
