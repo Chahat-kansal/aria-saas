@@ -287,6 +287,9 @@ AVAILABLE BLOCK TYPES — choose only what fits the question and data:
 
 - "html": custom grid layout, heatmap, or anything structural. Use inline styles, dark theme (#0E1411 bg, #7FB897 accent).
 
+- "pushback": ONLY when the advice directly contradicts a past decision flagged in PAST DECISION CONFLICTS below. Amber/red warning block.
+  {"type":"pushback","decision":"The past decision that this conflicts with","tension":"What specifically contradicts — one clear sentence","question":"Do you want to revisit this decision?","severity":"low|medium|high"}
+
 BLOCK SELECTION RULES:
 - A simple factual question ("what was my revenue today?") → just lead + metric_row, maybe chart. No brain_readouts needed.
 - A strategic/advisory question → brain_readouts shows the council's thinking. council_split only if they genuinely disagree.
@@ -392,6 +395,72 @@ async function writeCouncilCache(businessId: string, hash: string, result: Counc
   } catch { /* non-fatal */ }
 }
 
+// ── Contradiction / Pushback Detector ─────────────────────────────
+interface ContradictionWarning {
+  past_decision: string
+  current_direction: string
+  severity: 'low' | 'medium' | 'high'
+}
+
+function detectContradictions(question: string, memories: import('./memory/recall').RecalledMemory[]): ContradictionWarning[] {
+  const decisionMemories = memories.filter(m => m.kind === 'decision' || m.kind === 'tried')
+  if (decisionMemories.length === 0) return []
+
+  // Reversal triggers: owner is asking about something they already decided on
+  const reversalSignals = /should i|thinking of|considering|what if i|what about|should we|could we|would it make sense/i.test(question)
+  if (!reversalSignals) return []
+
+  const qWords = new Set(question.toLowerCase().split(/\W+/).filter(w => w.length > 3))
+
+  const warnings: ContradictionWarning[] = []
+  for (const mem of decisionMemories) {
+    const mWords = mem.content.toLowerCase().split(/\W+/).filter(w => w.length > 3)
+    const overlap = mWords.filter(w => qWords.has(w)).length
+    const overlapRatio = mWords.length > 0 ? overlap / mWords.length : 0
+
+    if (overlapRatio >= 0.25) {
+      warnings.push({
+        past_decision: mem.content,
+        current_direction: question.slice(0, 120),
+        severity: mem.importance >= 8 ? 'high' : mem.importance >= 6 ? 'medium' : 'low',
+      })
+    }
+  }
+
+  return warnings.slice(0, 3) // max 3 pushbacks per response
+}
+
+// ── Reasoning Depth Classifier ─────────────────────────────────────
+// Decides which model to use for synthesis based on question complexity.
+// Brains always use Haiku (speed/cost). Only synthesis escalates.
+function classifyQuestionComplexity(question: string, mode: string): {
+  synthesisModel: string
+  escalationReason: string | null
+} {
+  const HAIKU = 'claude-haiku-4-5-20251001'
+  const SONNET = 'claude-sonnet-4-5-20250929'
+
+  // Briefing and weekly report — always Sonnet for richer synthesis
+  if (mode === 'briefing' || mode === 'weekly_report') {
+    return { synthesisModel: SONNET, escalationReason: 'briefing_mode_always_sonnet' }
+  }
+
+  // Critical/high-stakes → Sonnet
+  const critical = /close.*locat|shut.*down|sell.*business|cash.*crisis|running.*out.*cash|legal.*issue|compliance.*fine|about.*to.*fail|bankrupt/i
+  if (critical.test(question)) {
+    return { synthesisModel: SONNET, escalationReason: 'critical_business_situation' }
+  }
+
+  // Complex strategic analysis → Sonnet
+  const complex = /should.*hire|raise.*price|open.*second|expand|growth.*strat|if.*raise.*by|what.*happen.*if|should.*close|forecast|full.*analy|deep.*dive|6.month|12.month|next.*year|compare.*scenario|cash.*flow.*forecast|profit.*if|labour.*cost.*ratio|should.*i.*invest|restructur/i
+  if (complex.test(question)) {
+    return { synthesisModel: SONNET, escalationReason: 'complex_strategic_question' }
+  }
+
+  // Default to Haiku — fast and sufficient for factual/moderate questions
+  return { synthesisModel: HAIKU, escalationReason: null }
+}
+
 // ── Main Export ────────────────────────────────────────────────────
 export async function runAriaCouncil(
   businessContext: string,
@@ -403,9 +472,11 @@ export async function runAriaCouncil(
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 
   const HAIKU = 'claude-haiku-4-5-20251001'
-  const SONNET = 'claude-sonnet-4-5-20250929'
 
   const activeQuestion = question ?? 'Analyse this business and give me your most important insights.'
+
+  // Classify synthesis model based on question complexity
+  const { synthesisModel, escalationReason } = classifyQuestionComplexity(activeQuestion, mode)
 
   // Cache check — skip for briefing/weekly_report modes (always fresh data)
   const hash = intentHash(activeQuestion)
@@ -423,6 +494,7 @@ export async function runAriaCouncil(
 
   const memoryBlock = formatMemoriesForPrompt(memories)
   const summaryBlock = formatSummariesForPrompt(recentSummaries)
+  const contradictions = detectContradictions(activeQuestion, memories)
 
   const qualityCtx = quality.hedge_level !== 'none'
     ? 'DATA QUALITY: ' + quality.overall_score + '/100 (' + quality.hedge_level + ' hedging required)\n' +
@@ -490,9 +562,13 @@ HONESTY: Never state percentage changes with thin data. Use "looks like"/"sugges
 
   const memorySynthesisBlock = memoryBlock ? memoryBlock + '\n' : ''
   const summarySynthesisBlock = summaryBlock ? summaryBlock + '\n' : ''
+  const contradictionBlock = contradictions.length > 0
+    ? 'PAST DECISION CONFLICTS (generate pushback blocks if relevant):\n' +
+      contradictions.map(c => '- Past decision: "' + c.past_decision + '" | Severity: ' + c.severity).join('\n') + '\n'
+    : ''
 
   const synthesisInput = `
-${summarySynthesisBlock}${memorySynthesisBlock}BUSINESS DATA:
+${summarySynthesisBlock}${memorySynthesisBlock}${contradictionBlock}BUSINESS DATA:
 ${businessContext}
 ${qualitySynthesisBlock}
 GROWTH BRAIN (confidence: ${growth.confidence}):
@@ -530,7 +606,7 @@ MODE: ${mode}
   try {
     const res = await callWithTimeout(
       () => withBackoff(() => client.messages.create({
-        model: HAIKU,
+        model: synthesisModel,
         max_tokens: 6000,
         temperature: 0.2,
         system: synthesisSystemPrompt,
@@ -543,7 +619,7 @@ MODE: ${mode}
     const parsed = safeParseJSON(text)
 
     await logAICall({
-      agent_key: 'council_synthesis', model_id: SONNET, provider: 'anthropic',
+      agent_key: 'council_synthesis', model_id: synthesisModel, provider: 'anthropic',
       input_tokens: res.usage.input_tokens, output_tokens: res.usage.output_tokens,
       success: !!parsed, business_id: businessId,
     })
@@ -561,7 +637,8 @@ MODE: ${mode}
       final_briefing: typeof parsed.final_briefing === 'string' ? parsed.final_briefing : text.slice(0, 200),
       honesty_flags: quality.missing_critical.map(m => 'LOW_DATA: ' + m),
       data_quality_score: quality.overall_score,
-      synthesis_model: HAIKU,
+      synthesis_model: synthesisModel,
+      escalation_reason: escalationReason ?? undefined,
       ask_blocks: (mode === 'ask_aria' || mode === 'briefing') && Array.isArray(parsed.ask_blocks) ? (parsed.ask_blocks as AskBlock[]).filter(b => {
         if (!b || !b.type) return false
         if (b.type === 'chart') return Array.isArray((b as {values?:unknown[]}).values) && (b as {values?:unknown[]}).values!.length > 0

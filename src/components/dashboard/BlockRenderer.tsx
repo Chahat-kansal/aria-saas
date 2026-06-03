@@ -240,6 +240,36 @@ export function BlockRenderer({ block, onChoice }: Props) {
     )
   }
 
+  if (block.type === 'pushback') {
+    const sev = block.severity ?? 'medium'
+    const borderC = sev === 'high' ? 'rgba(248,113,113,0.3)' : 'rgba(245,158,11,0.3)'
+    const bgC     = sev === 'high' ? 'rgba(248,113,113,0.06)' : 'rgba(245,158,11,0.06)'
+    const textC   = sev === 'high' ? R : A
+    return (
+      <div style={{ borderRadius: 12, border: '0.5px solid ' + borderC, background: bgC, marginBottom: 12, overflow: 'hidden' }}>
+        <div style={{ padding: '7px 12px', background: sev === 'high' ? 'rgba(248,113,113,0.1)' : 'rgba(245,158,11,0.1)', borderBottom: '0.5px solid ' + borderC, display: 'flex', alignItems: 'center', gap: 7 }}>
+          <span style={{ fontSize: 12 }}>{sev === 'high' ? '🚨' : '⚠️'}</span>
+          <span style={{ fontSize: 9, fontWeight: 700, color: textC, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+            Aria is pushing back
+          </span>
+        </div>
+        <div style={{ padding: 12 }}>
+          <div style={{ fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,0.7)', marginBottom: 5 }}>
+            <span style={{ color: textC }}>Past decision:</span> {block.decision}
+          </div>
+          <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.85)', lineHeight: 1.6, marginBottom: 8 }}>
+            {block.tension}
+          </div>
+          {block.question && (
+            <div style={{ padding: '7px 10px', borderRadius: 8, background: 'rgba(255,255,255,0.04)', border: '0.5px solid rgba(255,255,255,0.1)', fontSize: 11, color: 'rgba(255,255,255,0.55)', fontStyle: 'italic' }}>
+              {block.question}
+            </div>
+          )}
+        </div>
+      </div>
+    )
+  }
+
     return null
   } catch (e) {
     console.error('[BlockRenderer] render error:', block?.type, e)

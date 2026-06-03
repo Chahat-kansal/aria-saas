@@ -94,6 +94,13 @@ export type AskBlock =
       rows: Array<{ metric: string; left: number; right: number; format?: string }>
       show_delta?: boolean
     }
+  | {
+      type: 'pushback'
+      decision: string
+      tension: string
+      question: string
+      severity?: 'low' | 'medium' | 'high'
+    }
 
 export interface AskResponse {
   blocks: AskBlock[]
