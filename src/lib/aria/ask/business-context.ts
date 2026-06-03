@@ -53,6 +53,7 @@ export interface AskAriaContext {
   avg_daily_revenue: number
   subscription_tier: string | null
   council_plan: { narrative: string | null; projected_revenue_impact: number } | null
+  bas_current_quarter: { period_start: string; period_end: string; due_date: string; status: string; net_gst: number | null; w2_payg: number | null } | null
 }
 
 export async function buildAskAriaContext(
@@ -237,6 +238,25 @@ export async function buildAskAriaContext(
   // Subscription tier
   const subscriptionTier = (subscriptionRes.data as { tier?: string } | null)?.tier ?? null
 
+  // ── Fetch current BAS quarter draft (non-blocking, best-effort) ──────────
+  const { data: basRow } = await supabaseAdmin
+    .from('bas_drafts')
+    .select('period_start,period_end,due_date,status,net_gst,w2_payg_withholding')
+    .eq('business_id', businessId)
+    .order('period_start', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+    .then(r => r, () => ({ data: null }))
+
+  const basCurrentQuarter = basRow ? {
+    period_start: String(basRow.period_start),
+    period_end: String(basRow.period_end),
+    due_date: String(basRow.due_date),
+    status: String(basRow.status),
+    net_gst: basRow.net_gst != null ? Number(basRow.net_gst) : null,
+    w2_payg: basRow.w2_payg_withholding != null ? Number(basRow.w2_payg_withholding) : null,
+  } : null
+
   // ── Fetch today's council plan_narrative (non-blocking) ──────────────────
   const todayStr = new Date().toISOString().split('T')[0]
   const { data: councilRow } = await supabaseAdmin
@@ -385,5 +405,6 @@ export async function buildAskAriaContext(
       narrative: councilRow.plan_narrative ?? null,
       projected_revenue_impact: Number(councilRow.projected_revenue_impact ?? 0),
     } : null,
+    bas_current_quarter: basCurrentQuarter,
   }
 }

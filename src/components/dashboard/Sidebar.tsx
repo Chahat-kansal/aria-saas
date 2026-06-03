@@ -115,6 +115,7 @@ const ALL_ITEMS: Record<string, NavItemDef> = {
   'weekly-reports':  { href: '/dashboard/weekly-reports', label: 'Weekly Reports',   icon: TrendingUpIcon, badge: 'AI',  section: 'Operations' },
   'price-tickets':   { href: '/dashboard/price-tickets',  label: 'Price Tickets',    icon: TagIcon,        badge: 'AI',  section: 'Operations' },
 'timed-prices':   { href: '/dashboard/timed-prices',  label: 'Timed Prices',     icon: TagIcon,        section: 'Operations' },
+  'bas':           { href: '/dashboard/bas',           label: 'Tax & BAS',        icon: ReceiptIcon,    badge: 'AI',  section: 'Operations' },
 };
 
 // Always-on sections — surfaced for EVERY business regardless of industry config,
