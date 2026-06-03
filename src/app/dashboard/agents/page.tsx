@@ -298,6 +298,16 @@ export default function AgentsPage() {
   const [expandedBriefId, setExpandedBriefId] = useState<string | null>(null)
   const [updatingBriefId, setUpdatingBriefId] = useState<string | null>(null)
 
+  // Reputation state
+  const [repReviews, setRepReviews] = useState<Array<{ id: string; platform: string; reviewer_name: string | null; rating: number; review_text: string | null; review_date: string | null; response_text: string | null; response_status: string; sentiment: string | null; is_crisis: boolean | null; key_themes: string[] | null }>>([])
+  const [repStats, setRepStats] = useState<{ avg_rating: number | null; total_reviews: number; pending_responses: number; this_week_count: number } | null>(null)
+  const [repAeoScore, setRepAeoScore] = useState<number | null>(null)
+  const [repAeoSnapshots, setRepAeoSnapshots] = useState<Array<{ query: string; appeared: boolean; recommendations: string[] }>>([])
+  const [repRequestStats, setRepRequestStats] = useState<{ sent: number; opened: number; clicked: number; reviews_received: number } | null>(null)
+  const [repLoading, setRepLoading] = useState(false)
+  const [repRespondingId, setRepRespondingId] = useState<string | null>(null)
+  const [repExpandedId, setRepExpandedId] = useState<string | null>(null)
+
   const bid = business?.id
 
   // Intelligence tab state
@@ -500,6 +510,23 @@ export default function AgentsPage() {
     setNegLoading(false)
   }, [bid])
 
+  const loadReputationData = useCallback(async () => {
+    if (!bid) return
+    setRepLoading(true)
+    try {
+      const res = await fetch('/api/agents/reputation')
+      if (res.ok) {
+        const d = await res.json() as { reviews: typeof repReviews; stats: typeof repStats; aeo_score: number; aeo_snapshots: typeof repAeoSnapshots; request_stats: typeof repRequestStats }
+        setRepReviews(d.reviews ?? [])
+        setRepStats(d.stats ?? null)
+        setRepAeoScore(d.aeo_score ?? null)
+        setRepAeoSnapshots(d.aeo_snapshots ?? [])
+        setRepRequestStats(d.request_stats ?? null)
+      }
+    } catch { /* non-fatal */ }
+    setRepLoading(false)
+  }, [bid])
+
   useEffect(() => {
     if (tab === 'agents') {
       void loadMenuData()
@@ -508,8 +535,9 @@ export default function AgentsPage() {
       void loadLabourData()
       void loadWasteData()
       void loadNegotiationData()
+      void loadReputationData()
     }
-  }, [tab, loadMenuData, loadFlashData, loadClvData, loadLabourData, loadWasteData, loadNegotiationData])
+  }, [tab, loadMenuData, loadFlashData, loadClvData, loadLabourData, loadWasteData, loadNegotiationData, loadReputationData])
 
   useEffect(() => {
     if (tab === 'intelligence') void loadIntelligenceData()
@@ -1601,6 +1629,141 @@ export default function AgentsPage() {
               </div>
             )}
           </div>
+        </div>
+
+        {/* ── REPUTATION DEFENCE WIDGET ─────────────────────────────── */}
+        <div style={{ background: surface, border, borderRadius: 14, padding: 20, marginTop: 16 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <div>
+              <h3 style={{ color: '#fff', fontSize: 15, fontWeight: 600, margin: 0 }}>Reputation Defence</h3>
+              <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, margin: '2px 0 0' }}>Review monitoring · AI responses · AEO visibility</p>
+            </div>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              {repAeoScore !== null && (
+                <span style={{ padding: '4px 10px', borderRadius: 8, fontSize: 12, fontWeight: 600, background: repAeoScore >= 60 ? 'rgba(127,184,151,0.15)' : 'rgba(245,158,11,0.15)', color: repAeoScore >= 60 ? '#7FB897' : '#F59E0B', border: '1px solid ' + (repAeoScore >= 60 ? 'rgba(127,184,151,0.3)' : 'rgba(245,158,11,0.3)') }}>
+                  AI Visibility {repAeoScore}/100
+                </span>
+              )}
+              <button onClick={() => void loadReputationData()} style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid rgba(127,184,151,0.3)', background: 'transparent', color: '#7FB897', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                Refresh
+              </button>
+            </div>
+          </div>
+
+          {repLoading ? (
+            <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 13 }}>Loading reputation data...</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {/* Stats row */}
+              {repStats && (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
+                  {[
+                    { label: 'Avg Rating', value: repStats.avg_rating ? repStats.avg_rating.toFixed(1) + ' ★' : '—', color: '#F59E0B' },
+                    { label: 'Total Reviews', value: String(repStats.total_reviews), color: '#7FB897' },
+                    { label: 'Pending Responses', value: String(repStats.pending_responses), color: repStats.pending_responses > 0 ? '#F97316' : '#7FB897' },
+                    { label: 'This Week', value: '+' + String(repStats.this_week_count), color: '#7FB897' },
+                  ].map(s => (
+                    <div key={s.label} style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 10, padding: '10px 14px', textAlign: 'center' }}>
+                      <div style={{ color: s.color, fontSize: 20, fontWeight: 700, fontFamily: 'Fraunces, serif', fontStyle: 'italic' }}>{s.value}</div>
+                      <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11, marginTop: 2 }}>{s.label}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Review response queue */}
+              {repReviews.filter(r => r.response_status === 'pending' && r.response_text).length > 0 && (
+                <div>
+                  <h4 style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 8px' }}>Response Queue</h4>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {repReviews.filter(r => r.response_status === 'pending' && r.response_text).slice(0, 5).map(review => (
+                      <div key={review.id} style={{ background: review.is_crisis ? 'rgba(239,68,68,0.08)' : 'rgba(255,255,255,0.04)', border: '1px solid ' + (review.is_crisis ? 'rgba(239,68,68,0.4)' : 'rgba(255,255,255,0.06)'), borderRadius: 10, padding: '12px 14px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
+                          <div>
+                            <span style={{ color: '#F59E0B', fontSize: 13 }}>{'★'.repeat(Math.round(review.rating))}</span>
+                            <span style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12, marginLeft: 8 }}>{review.reviewer_name ?? 'Anonymous'}</span>
+                            {review.is_crisis && <span style={{ marginLeft: 8, fontSize: 11, color: '#EF4444', fontWeight: 600 }}>⚠ Crisis — manual review required</span>}
+                            {review.sentiment && !review.is_crisis && (
+                              <span style={{ marginLeft: 8, fontSize: 10, padding: '2px 6px', borderRadius: 4, background: review.sentiment === 'positive' ? 'rgba(127,184,151,0.15)' : review.sentiment === 'negative' ? 'rgba(239,68,68,0.15)' : 'rgba(255,255,255,0.08)', color: review.sentiment === 'positive' ? '#7FB897' : review.sentiment === 'negative' ? '#EF4444' : 'rgba(255,255,255,0.5)' }}>{review.sentiment}</span>
+                            )}
+                          </div>
+                          {!review.is_crisis && (
+                            <div style={{ display: 'flex', gap: 6 }}>
+                              <button
+                                disabled={repRespondingId === review.id}
+                                onClick={async () => {
+                                  setRepRespondingId(review.id)
+                                  await fetch('/api/agents/reputation/respond/' + review.id, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'approve' }) })
+                                  setRepRespondingId(null)
+                                  void loadReputationData()
+                                }}
+                                style={{ padding: '4px 10px', borderRadius: 6, border: 'none', background: '#2D5240', color: '#fff', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
+                              >Post</button>
+                              <button
+                                disabled={repRespondingId === review.id}
+                                onClick={async () => {
+                                  setRepRespondingId(review.id)
+                                  await fetch('/api/agents/reputation/respond/' + review.id, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'skip' }) })
+                                  setRepRespondingId(null)
+                                  void loadReputationData()
+                                }}
+                                style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.15)', background: 'transparent', color: 'rgba(255,255,255,0.5)', fontSize: 11, cursor: 'pointer' }}
+                              >Skip</button>
+                            </div>
+                          )}
+                        </div>
+                        <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12, margin: '0 0 8px', lineHeight: 1.5 }}>"{(review.review_text ?? '').slice(0, 120)}{(review.review_text?.length ?? 0) > 120 ? '...' : ''}"</p>
+                        {review.response_text && (
+                          <div>
+                            <button onClick={() => setRepExpandedId(repExpandedId === review.id ? null : review.id)} style={{ background: 'none', border: 'none', color: '#7FB897', fontSize: 11, cursor: 'pointer', padding: 0 }}>
+                              {repExpandedId === review.id ? 'Hide AI draft ↑' : 'View AI draft ↓'}
+                            </button>
+                            {repExpandedId === review.id && (
+                              <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12, margin: '6px 0 0', padding: '8px 12px', background: 'rgba(127,184,151,0.06)', borderRadius: 6, lineHeight: 1.5, fontStyle: 'italic' }}>{review.response_text}</p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* AEO Score */}
+              {repAeoSnapshots.length > 0 && (
+                <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 10, padding: '14px 16px' }}>
+                  <h4 style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 10px' }}>AI Search Visibility (AEO)</h4>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {repAeoSnapshots.map((snap, i) => (
+                      <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                        <span style={{ fontSize: 13, flexShrink: 0, marginTop: 1 }}>{snap.appeared ? '✅' : '❌'}</span>
+                        <div>
+                          <span style={{ color: snap.appeared ? '#7FB897' : 'rgba(255,255,255,0.5)', fontSize: 12 }}>{snap.query}</span>
+                          {!snap.appeared && snap.recommendations.length > 0 && (
+                            <p style={{ color: 'rgba(255,165,0,0.8)', fontSize: 11, margin: '2px 0 0' }}>{snap.recommendations[0]}</p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Review request funnel */}
+              {repRequestStats && repRequestStats.sent > 0 && (
+                <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 10, padding: '14px 16px' }}>
+                  <h4 style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 8px' }}>Review Request Funnel</h4>
+                  <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 13, margin: 0 }}>
+                    {repRequestStats.sent} sent · {repRequestStats.opened} opened · {repRequestStats.clicked} clicked · {repRequestStats.reviews_received} reviews received
+                  </p>
+                </div>
+              )}
+
+              {repReviews.length === 0 && !repLoading && (
+                <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 13, textAlign: 'center', padding: '20px 0' }}>No reviews synced yet. Make sure your Google Place ID is set in Settings.</p>
+              )}
+            </div>
+          )}
         </div>
 
         </div>

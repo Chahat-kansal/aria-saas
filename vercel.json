@@ -214,6 +214,14 @@
     {
       "path": "/api/cron/bas-monitor",
       "schedule": "0 22 * * *"
+    },
+    {
+      "path": "/api/cron/reputation-requests",
+      "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/cron/aeo-weekly",
+      "schedule": "0 21 * * 0"
     }
   ]
 }
