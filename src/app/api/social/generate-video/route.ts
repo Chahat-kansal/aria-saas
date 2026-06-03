@@ -124,13 +124,15 @@ async function _POST(req: NextRequest) {
     }, { status: 503 })
   }
 
+  // Use kling v1.6 standard — v2.1 requires special account approval on fal
   const modelId = sourceImageUrl
-    ? 'fal-ai/kling-video/v2.1/standard/image-to-video'
-    : 'fal-ai/kling-video/v2.1/standard/text-to-video'
+    ? 'fal-ai/kling-video/v1.6/standard/image-to-video'
+    : 'fal-ai/kling-video/v1.6/standard/text-to-video'
 
   const falInput: Record<string, any> = {
-    prompt: videoPrompt.slice(0, 512),
-    duration: duration_seconds <= 10 ? '5' : '10',
+    prompt: videoPrompt.slice(0, 500),
+    duration: '5',  // '5' or '10' as string — kling API requirement
+    aspect_ratio: '9:16',
   }
   if (sourceImageUrl) falInput.image_url = sourceImageUrl
 
@@ -197,7 +199,7 @@ async function _GET(req: NextRequest) {
   if (!effectiveRequestId) return NextResponse.json({ error: 'fal_request_id required' }, { status: 400 })
   if (!process.env.FAL_KEY) return NextResponse.json({ status: 'no_provider' }, { status: 503 })
 
-  const effectiveModelId = model_id || 'fal-ai/kling-video/v2.1/standard/image-to-video'
+  const effectiveModelId = model_id || 'fal-ai/kling-video/v1.6/standard/image-to-video'
 
   try {
     const status = await fal.queue.status(effectiveModelId as any, { requestId: effectiveRequestId, logs: false })
