@@ -39,6 +39,8 @@ function DeliveryIcon({ className }: { className?: string }) {
 }
 
 const ALL_ITEMS: Record<string, NavItemDef> = {
+  'reels':                       { href: '/dashboard/reels',                    label: 'Reel Studio',
+  icon: SocialIcon, section: 'marketing', badge: 'NEW' },
   'social':                     { href: '/dashboard/social',                   label: 'Social Media',      icon: SocialIcon,         badge: 'AI',  section: 'Marketing'    },
   'orders':                     { href: '/dashboard/orders',                   label: 'Weekly Orders',     icon: OrdersIcon,         badge: 'AI',  section: 'Operations'   },
   'delivery':                   { href: '/dashboard/delivery',                 label: 'Delivery platforms', icon: DeliveryIcon,       section: 'Operations'   },
