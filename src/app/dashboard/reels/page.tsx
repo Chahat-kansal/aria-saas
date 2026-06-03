@@ -108,6 +108,10 @@ export default function ReelStudioPage() {
   const [genProgress, setGenProgress] = useState(0)
   const [latestVideo, setLatestVideo] = useState<string|null>(null)
   const [activeJob, setActiveJob] = useState<{jobId:string;sessionId:string}|null>(null)
+  const [publishing, setPublishing] = useState(false)
+  const [publishMsg, setPublishMsg] = useState('')
+  const [publishCaption, setPublishCaption] = useState('')
+  const [publishPlatform, setPublishPlatform] = useState<'instagram'|'facebook'>('instagram')
   const pollRef = useRef<ReturnType<typeof setTimeout>|null>(null)
 
   // History + tabs
@@ -238,6 +242,40 @@ export default function ReelStudioPage() {
       pollRef.current = setTimeout(() => pollStatus(jobId, sessionId, token), 8000)
     }
   }, [bid])
+
+  async function publishReel() {
+    if (!latestVideo || !bid || !userToken || publishing) return
+    setPublishing(true); setPublishMsg('')
+    try {
+      // Create a social_post record with the video_url then publish it
+      const createRes = await fetch('/api/social/posts/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          business_id: bid,
+          platform: publishPlatform,
+          caption: publishCaption || (selectedInf ? selectedInf.name + ' visits our store — authentic & warm ☕' : 'Check out our latest reel!'),
+          hashtags: ['smallbusiness', 'australia', 'reels', 'local'],
+          post_type: 'reel',
+          video_url: latestVideo,
+        }),
+      })
+      const cd = await createRes.json()
+      if (!cd.post?.id) throw new Error(cd.error ?? 'Could not create post')
+
+      const pubRes = await fetch('/api/social/publish', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ post_id: cd.post.id, business_id: bid, post_type_override: 'reel' }),
+      })
+      const pd = await pubRes.json()
+      if (!pubRes.ok) throw new Error(pd.error ?? 'Publish failed')
+      setPublishMsg('✅ Published to ' + publishPlatform + '!')
+    } catch (e: any) {
+      setPublishMsg('❌ ' + e.message)
+    }
+    setPublishing(false)
+  }
 
   const selectedDuration = DURATIONS.find(d => d.secs === duration) ?? DURATIONS[2]
   const selectedFilter = FILTER_PRESETS.find(f => f.id === filter) ?? FILTER_PRESETS[0]
@@ -526,6 +564,44 @@ export default function ReelStudioPage() {
               <a href={latestVideo} download="aria-reel.mp4" style={{ display: 'block', textAlign: 'center', padding: '13px 0', borderRadius: 12, background: 'linear-gradient(135deg,#7FB897,#2D5240)', color: '#fff', fontSize: 14, fontWeight: 800, textDecoration: 'none', letterSpacing: -0.3 }}>
                 ⬇ Download Reel
               </a>
+            )}
+
+            {/* Publish to social */}
+            {latestVideo && (
+              <div style={C.section}>
+                <span style={C.slabel}>Publish directly to social</span>
+
+                {/* Platform selector */}
+                <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+                  {(['instagram', 'facebook'] as const).map(p => (
+                    <button key={p} onClick={() => setPublishPlatform(p)} style={{ flex: 1, padding: '8px 0', borderRadius: 9, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 700, background: publishPlatform === p ? 'rgba(127,184,151,0.15)' : 'rgba(255,255,255,0.04)', boxShadow: publishPlatform === p ? 'inset 0 0 0 1.5px rgba(127,184,151,0.5)' : 'inset 0 0 0 1px rgba(255,255,255,0.06)', color: publishPlatform === p ? '#7FB897' : 'rgba(255,255,255,0.4)' }}>
+                      {p === 'instagram' ? '📸 Instagram' : '👍 Facebook'}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Caption */}
+                <textarea
+                  value={publishCaption}
+                  onChange={e => setPublishCaption(e.target.value)}
+                  rows={3}
+                  placeholder="Caption for this reel (leave blank for auto-generated)"
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 10, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: '#fff', fontSize: 12, fontFamily: 'inherit', resize: 'none', outline: 'none', boxSizing: 'border-box', marginBottom: 10, lineHeight: 1.6 }}
+                />
+
+                <button
+                  onClick={publishReel}
+                  disabled={publishing}
+                  style={{ width: '100%', padding: '12px 0', borderRadius: 12, border: 'none', cursor: publishing ? 'wait' : 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 800, background: publishing ? 'rgba(99,102,241,0.3)' : 'linear-gradient(135deg,#6366f1,#4f46e5)', color: publishing ? 'rgba(255,255,255,0.4)' : '#fff', letterSpacing: -0.2 }}>
+                  {publishing ? '⏳ Publishing…' : `🚀 Publish to ${publishPlatform === 'instagram' ? 'Instagram' : 'Facebook'} Reels`}
+                </button>
+
+                {publishMsg && (
+                  <div style={{ fontSize: 12, marginTop: 8, padding: '8px 12px', borderRadius: 8, background: 'rgba(255,255,255,0.04)', color: publishMsg.startsWith('✅') ? '#7FB897' : '#EF4444' }}>
+                    {publishMsg}
+                  </div>
+                )}
+              </div>
             )}
           </div>
 
