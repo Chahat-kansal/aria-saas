@@ -84,7 +84,7 @@ async function _POST(req: NextRequest) {
   if (!business_id) return NextResponse.json({ error: 'business_id required' }, { status: 400 })
 
   if (!is_admin) {
-    const { data: prefs } = await supabase.from('aria_influencer_config')
+    const { data: prefs } = await supabase.from('social_preferences')
       .select('reels_enabled').eq('business_id', business_id).maybeSingle()
     if (!prefs?.reels_enabled) {
       return NextResponse.json({
