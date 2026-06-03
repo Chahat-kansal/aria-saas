@@ -65,6 +65,45 @@ interface FlashData {
   mode: string
 }
 
+interface ClvPortfolio {
+  total_customer_count: number
+  champion_count: number
+  loyal_count: number
+  potential_count: number
+  at_risk_count: number
+  dormant_count: number
+  lost_count: number
+  total_predicted_annual_revenue: number
+  at_risk_annual_revenue: number
+  top_20_pct_revenue_share: number
+  if_rising_stars_add_1_visit: number
+  interventions_sent: number
+  interventions_responded: number
+  response_rate_pct: number
+  revenue_attributed_to_interventions: number
+  avg_clv_champion?: number
+  avg_clv_loyal?: number
+  avg_clv_potential?: number
+}
+
+interface ClvOpportunity {
+  id: string
+  customer_id: string
+  clv_tier: string
+  intervention_priority: string
+  predicted_annual_revenue: number
+  predicted_3yr_clv: number
+  avg_basket_size: number
+  days_since_last_visit: number
+  recommended_offer_type: string
+  recommended_offer_value: number | null
+  recommended_message: string | null
+  intervention_rationale: string | null
+  intervention_sent_at: string | null
+  scored_at: string
+  pos_customers: { name: string; email: string | null; phone: string | null } | null
+}
+
 type TabId = 'today' | 'agents' | 'history' | 'performance'
 type Priority = 'growth' | 'margin' | 'retention' | 'balanced'
 
@@ -173,6 +212,16 @@ export default function AgentsPage() {
   const [flashLoading, setFlashLoading] = useState(false)
   const [cancellingFlash, setCancellingFlash] = useState<string | null>(null)
 
+  // Customer Intelligence (CLV) widget state
+  const [clvPortfolio, setClvPortfolio] = useState<ClvPortfolio | null>(null)
+  const [clvOpportunities, setClvOpportunities] = useState<ClvOpportunity[]>([])
+  const [clvLoading, setClvLoading] = useState(false)
+  const [clvTierFilter, setClvTierFilter] = useState<string>('')
+  const [sendingClvId, setSendingClvId] = useState<string | null>(null)
+  const [sentClvIds, setSentClvIds] = useState<Set<string>>(new Set())
+  const [skippedClvIds, setSkippedClvIds] = useState<Set<string>>(new Set())
+  const [expandedClvId, setExpandedClvId] = useState<string | null>(null)
+
   const bid = business?.id
 
   const loadCouncil = useCallback(async () => {
@@ -254,6 +303,30 @@ export default function AgentsPage() {
     setFlashLoading(false)
   }, [bid])
 
+  const loadClvData = useCallback(async () => {
+    if (!bid) return
+    setClvLoading(true)
+    try {
+      const url = clvTierFilter
+        ? '/api/agents/clv/customers?tier=' + clvTierFilter + '&limit=20'
+        : '/api/agents/clv/customers?limit=20'
+      const [portfolioRes, customersRes] = await Promise.all([
+        fetch('/api/agents/clv'),
+        fetch(url),
+      ])
+      if (portfolioRes.ok) {
+        const d = await portfolioRes.json() as { portfolio: ClvPortfolio | null; top_opportunities: ClvOpportunity[] }
+        setClvPortfolio(d.portfolio)
+        if (!clvTierFilter) setClvOpportunities(d.top_opportunities ?? [])
+      }
+      if (customersRes.ok && clvTierFilter) {
+        const d = await customersRes.json() as { customers: ClvOpportunity[] }
+        setClvOpportunities(d.customers ?? [])
+      }
+    } catch { /* non-fatal */ }
+    setClvLoading(false)
+  }, [bid, clvTierFilter])
+
   useEffect(() => {
     void loadCouncil()
     void loadHistory()
@@ -264,8 +337,9 @@ export default function AgentsPage() {
     if (tab === 'agents') {
       void loadMenuData()
       void loadFlashData()
+      void loadClvData()
     }
-  }, [tab, loadMenuData, loadFlashData])
+  }, [tab, loadMenuData, loadFlashData, loadClvData])
 
   const savePriority = async (p: Priority) => {
     setPriority(p)
@@ -350,6 +424,17 @@ export default function AgentsPage() {
     setMenuScores([])
     setMenuActions([])
     setTimeout(() => setResetDone(false), 4000)
+  }
+
+  const sendClvIntervention = async (scoreId: string) => {
+    setSendingClvId(scoreId)
+    try {
+      const r = await fetch('/api/agents/clv/send/' + scoreId, { method: 'POST' })
+      if (r.ok) {
+        setSentClvIds(prev => new Set([...prev, scoreId]))
+      }
+    } catch { /* show error */ }
+    setSendingClvId(null)
   }
 
   const cancelFlashIntervention = async (id: string) => {
@@ -857,6 +942,195 @@ export default function AgentsPage() {
                     )}
                   </div>
                 </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* ── Customer Intelligence (CLV) Widget ──────────────────────────── */}
+        <div style={{ marginTop: 24, background: surface, border, borderRadius: 16, overflow: 'hidden' }}>
+          <div style={{ padding: '18px 24px', borderBottom: border, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <h3 style={{ color: '#fff', fontSize: 16, fontWeight: 600, margin: 0 }}>💎 Customer Intelligence</h3>
+              <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12, margin: '4px 0 0' }}>CLV tiers · minimum effective offers · intervention queue</p>
+            </div>
+            <button onClick={() => bid && fetch('/api/agents/clv/trigger', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ business_id: bid }) }).then(() => void loadClvData())} style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid rgba(139,92,246,0.3)', background: 'transparent', color: '#8B5CF6', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+              Run CLV analysis
+            </button>
+          </div>
+
+          <div style={{ padding: 24 }}>
+            {clvLoading ? (
+              <div style={{ color: 'rgba(255,255,255,0.3)', textAlign: 'center', padding: 32 }}>Analysing customer lifetime values...</div>
+            ) : !clvPortfolio ? (
+              <div style={{ textAlign: 'center', padding: 40 }}>
+                <div style={{ fontSize: 36, marginBottom: 12 }}>💎</div>
+                <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: 14, marginBottom: 16 }}>No CLV data yet — run the analysis to score your customers</p>
+                <button onClick={() => bid && fetch('/api/agents/clv/trigger', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ business_id: bid }) }).then(() => void loadClvData())} style={{ padding: '8px 20px', borderRadius: 8, border: 'none', background: '#8B5CF6', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                  Analyse now
+                </button>
+              </div>
+            ) : (
+              <div>
+                {/* Portfolio summary cards */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 24 }}>
+                  <div style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)', borderRadius: 12, padding: '14px 16px', cursor: 'pointer' }} onClick={() => { setClvTierFilter(clvTierFilter === 'champion' ? '' : 'champion'); void loadClvData() }}>
+                    <div style={{ fontSize: 11, color: '#F59E0B', fontWeight: 700, marginBottom: 4 }}>CHAMPIONS ⭐</div>
+                    <div style={{ fontFamily: 'Fraunces, Georgia, serif', fontStyle: 'italic', fontSize: 20, color: '#F59E0B' }}>{clvPortfolio.champion_count}</div>
+                    <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>${Math.round(clvPortfolio.avg_clv_champion ?? 0)}/yr avg</div>
+                  </div>
+                  <div style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 12, padding: '14px 16px', cursor: 'pointer' }} onClick={() => { setClvTierFilter(clvTierFilter === 'at_risk' ? '' : 'at_risk'); void loadClvData() }}>
+                    <div style={{ fontSize: 11, color: '#EF4444', fontWeight: 700, marginBottom: 4 }}>⚠ AT RISK</div>
+                    <div style={{ fontFamily: 'Fraunces, Georgia, serif', fontStyle: 'italic', fontSize: 20, color: '#EF4444' }}>{clvPortfolio.at_risk_count}</div>
+                    <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>${Math.round(clvPortfolio.at_risk_annual_revenue)} at risk</div>
+                  </div>
+                  <div style={{ background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.2)', borderRadius: 12, padding: '14px 16px', cursor: 'pointer' }} onClick={() => { setClvTierFilter(clvTierFilter === 'potential' ? '' : 'potential'); void loadClvData() }}>
+                    <div style={{ fontSize: 11, color: '#8B5CF6', fontWeight: 700, marginBottom: 4 }}>↑ POTENTIAL</div>
+                    <div style={{ fontFamily: 'Fraunces, Georgia, serif', fontStyle: 'italic', fontSize: 20, color: '#8B5CF6' }}>{clvPortfolio.potential_count}</div>
+                    <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>+${Math.round(clvPortfolio.if_rising_stars_add_1_visit)}/mo if +1 visit</div>
+                  </div>
+                  <div style={{ background: 'rgba(107,114,128,0.08)', border: '1px solid rgba(107,114,128,0.2)', borderRadius: 12, padding: '14px 16px', cursor: 'pointer' }} onClick={() => { setClvTierFilter(clvTierFilter === 'dormant' ? '' : 'dormant'); void loadClvData() }}>
+                    <div style={{ fontSize: 11, color: '#9CA3AF', fontWeight: 700, marginBottom: 4 }}>DORMANT 💤</div>
+                    <div style={{ fontFamily: 'Fraunces, Georgia, serif', fontStyle: 'italic', fontSize: 20, color: '#9CA3AF' }}>{clvPortfolio.dormant_count}</div>
+                    <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>last active 60–180 days</div>
+                  </div>
+                </div>
+
+                {/* Rising stars callout */}
+                {clvPortfolio.potential_count > 0 && clvPortfolio.if_rising_stars_add_1_visit > 0 && (
+                  <div style={{ background: 'rgba(139,92,246,0.1)', border: '1px solid rgba(139,92,246,0.25)', borderRadius: 12, padding: '14px 20px', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 14 }}>
+                    <span style={{ fontSize: 24 }}>🚀</span>
+                    <div>
+                      <p style={{ color: '#fff', fontSize: 14, fontWeight: 600, margin: 0 }}>
+                        If your {clvPortfolio.potential_count} potential customers visited once more per month: <span style={{ color: '#8B5CF6' }}>+${Math.round(clvPortfolio.if_rising_stars_add_1_visit)}/month</span>
+                      </p>
+                      <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12, margin: '4px 0 0' }}>
+                        Top 20% of customers generate {clvPortfolio.top_20_pct_revenue_share}% of predicted revenue · {clvPortfolio.total_customer_count} customers scored
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Tier distribution bar */}
+                <div style={{ marginBottom: 20 }}>
+                  <div style={{ display: 'flex', gap: 2, height: 8, borderRadius: 4, overflow: 'hidden' }}>
+                    {[
+                      { tier: 'champion', count: clvPortfolio.champion_count, color: '#F59E0B' },
+                      { tier: 'loyal', count: clvPortfolio.loyal_count, color: '#7FB897' },
+                      { tier: 'potential', count: clvPortfolio.potential_count, color: '#8B5CF6' },
+                      { tier: 'at_risk', count: clvPortfolio.at_risk_count, color: '#EF4444' },
+                      { tier: 'dormant', count: clvPortfolio.dormant_count, color: '#6B7280' },
+                      { tier: 'lost', count: clvPortfolio.lost_count, color: '#374151' },
+                    ].filter(s => s.count > 0).map(seg => (
+                      <div
+                        key={seg.tier}
+                        title={seg.tier + ': ' + seg.count + ' customers'}
+                        onClick={() => { setClvTierFilter(clvTierFilter === seg.tier ? '' : seg.tier); void loadClvData() }}
+                        style={{ flex: seg.count, background: seg.color, cursor: 'pointer', transition: 'opacity 0.15s', opacity: clvTierFilter && clvTierFilter !== seg.tier ? 0.3 : 1 }}
+                      />
+                    ))}
+                  </div>
+                  <div style={{ display: 'flex', gap: 16, marginTop: 6, flexWrap: 'wrap' }}>
+                    {[
+                      { tier: 'champion', label: 'Champions', color: '#F59E0B', count: clvPortfolio.champion_count },
+                      { tier: 'loyal', label: 'Loyal', color: '#7FB897', count: clvPortfolio.loyal_count },
+                      { tier: 'potential', label: 'Potential', color: '#8B5CF6', count: clvPortfolio.potential_count },
+                      { tier: 'at_risk', label: 'At risk', color: '#EF4444', count: clvPortfolio.at_risk_count },
+                      { tier: 'dormant', label: 'Dormant', color: '#6B7280', count: clvPortfolio.dormant_count },
+                    ].map(seg => (
+                      <button key={seg.tier} onClick={() => { setClvTierFilter(clvTierFilter === seg.tier ? '' : seg.tier); void loadClvData() }} style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: seg.color, display: 'inline-block' }} />
+                        <span style={{ fontSize: 11, color: clvTierFilter === seg.tier ? '#fff' : 'rgba(255,255,255,0.4)' }}>{seg.label} ({seg.count})</span>
+                      </button>
+                    ))}
+                    {clvTierFilter && <button onClick={() => { setClvTierFilter(''); void loadClvData() }} style={{ fontSize: 11, color: '#8B5CF6', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>Clear filter</button>}
+                  </div>
+                </div>
+
+                {/* Intervention queue */}
+                <div style={{ marginBottom: 20 }}>
+                  <h4 style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 10px' }}>
+                    Intervention Queue {clvTierFilter ? '— ' + clvTierFilter.replace('_', ' ') : '— urgent & high priority'}
+                  </h4>
+                  {clvOpportunities.filter(op => !skippedClvIds.has(op.id)).length === 0 ? (
+                    <p style={{ color: 'rgba(255,255,255,0.25)', fontSize: 13 }}>No pending interventions{clvTierFilter ? ' in this tier' : ''}</p>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {clvOpportunities.filter(op => !skippedClvIds.has(op.id)).slice(0, 8).map(op => {
+                        const isSent = sentClvIds.has(op.id) || !!op.intervention_sent_at
+                        const isExpanded = expandedClvId === op.id
+                        const TIER_COLORS: Record<string, string> = { champion: '#F59E0B', loyal: '#7FB897', potential: '#8B5CF6', at_risk: '#EF4444', dormant: '#6B7280', lost: '#374151' }
+                        const tierColor = TIER_COLORS[op.clv_tier] ?? '#6B7280'
+
+                        return (
+                          <div key={op.id} style={{ background: isSent ? 'rgba(45,82,64,0.2)' : 'rgba(255,255,255,0.04)', border: '1px solid ' + (isSent ? 'rgba(127,184,151,0.3)' : 'rgba(255,255,255,0.08)'), borderRadius: 12, padding: '14px 16px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                              <div style={{ flex: 1 }}>
+                                <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
+                                  <span style={{ fontSize: 11, fontWeight: 700, color: tierColor, background: tierColor + '18', padding: '2px 8px', borderRadius: 99, textTransform: 'capitalize' }}>
+                                    {op.clv_tier.replace('_', ' ')}
+                                  </span>
+                                  <span style={{ fontSize: 12, fontWeight: 600, color: op.intervention_priority === 'urgent' ? '#EF4444' : '#F97316' }}>
+                                    {op.intervention_priority === 'urgent' ? '🔴' : '🟠'} {op.intervention_priority}
+                                  </span>
+                                  {isSent && <span style={{ fontSize: 11, color: '#7FB897' }}>✓ Sent</span>}
+                                </div>
+                                <p style={{ color: '#fff', fontSize: 13, fontWeight: 600, margin: '0 0 3px' }}>
+                                  {op.pos_customers?.name ?? 'Customer'}
+                                </p>
+                                <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11, margin: 0 }}>
+                                  Last visited {op.days_since_last_visit} days ago · avg basket ${op.avg_basket_size?.toFixed(2) ?? '—'} · ${Math.round(op.predicted_annual_revenue)}/yr predicted
+                                </p>
+                                {op.recommended_message && (
+                                  <div style={{ marginTop: 8 }}>
+                                    <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12, margin: 0, fontStyle: 'italic' }}>
+                                      "{isExpanded ? op.recommended_message : (op.recommended_message.slice(0, 80) + (op.recommended_message.length > 80 ? '...' : ''))}"
+                                    </p>
+                                    {op.recommended_message.length > 80 && (
+                                      <button onClick={() => setExpandedClvId(isExpanded ? null : op.id)} style={{ fontSize: 11, color: '#8B5CF6', background: 'none', border: 'none', cursor: 'pointer', padding: '4px 0 0', display: 'block' }}>
+                                        {isExpanded ? 'Show less' : 'See full message'}
+                                      </button>
+                                    )}
+                                  </div>
+                                )}
+                                <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', margin: '6px 0 0', textTransform: 'capitalize' }}>
+                                  Offer: {op.recommended_offer_type.replace(/_/g, ' ')}{op.recommended_offer_value ? ' · ' + (op.recommended_offer_type === 'points_bonus' ? op.recommended_offer_value + 'x points' : op.recommended_offer_value + '% off') : ''}
+                                </p>
+                              </div>
+                              {!isSent && (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginLeft: 12, flexShrink: 0 }}>
+                                  <button
+                                    onClick={() => void sendClvIntervention(op.id)}
+                                    disabled={sendingClvId === op.id}
+                                    style={{ padding: '6px 14px', borderRadius: 8, border: 'none', background: '#8B5CF6', color: '#fff', fontSize: 12, fontWeight: 600, cursor: sendingClvId === op.id ? 'default' : 'pointer', opacity: sendingClvId === op.id ? 0.6 : 1 }}
+                                  >
+                                    {sendingClvId === op.id ? 'Sending...' : 'Send now'}
+                                  </button>
+                                  <button
+                                    onClick={() => setSkippedClvIds(prev => new Set([...prev, op.id]))}
+                                    style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.12)', background: 'transparent', color: 'rgba(255,255,255,0.4)', fontSize: 12, cursor: 'pointer' }}
+                                  >
+                                    Skip
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Intervention performance */}
+                {clvPortfolio.interventions_sent > 0 && (
+                  <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 12, padding: '14px 18px' }}>
+                    <h4 style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 8px' }}>Intervention Performance</h4>
+                    <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 13, margin: 0 }}>
+                      {clvPortfolio.interventions_sent} messages sent · {clvPortfolio.interventions_responded} responded ({clvPortfolio.response_rate_pct}%) · ${Math.round(clvPortfolio.revenue_attributed_to_interventions)} attributed
+                    </p>
+                  </div>
+                )}
               </div>
             )}
           </div>
