@@ -230,6 +230,10 @@
     {
       "path": "/api/cron/customer-acquisition",
       "schedule": "0 21 * * 1"
+    },
+    {
+      "path": "/api/cron/inventory-financing",
+      "schedule": "0 19 * * 0"
     }
   ]
 }

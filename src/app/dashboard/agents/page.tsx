@@ -325,6 +325,16 @@ export default function AgentsPage() {
   const [repRespondingId, setRepRespondingId] = useState<string | null>(null)
   const [repExpandedId, setRepExpandedId] = useState<string | null>(null)
 
+  // Inventory financing / cash flow state
+  const [finWeeks, setFinWeeks] = useState<Array<{ week_number: number; forecast_week: string; predicted_pos_revenue: number; predicted_supplier_payments: number; predicted_payroll: number; predicted_rent_utilities: number; predicted_other_fixed: number; opening_cash_position: number; closing_cash_position: number; reorder_events: Array<{ product_name: string; supplier_name: string; estimated_cost: number }>; reorder_total_cost: number; risk_level: string; risk_reason: string }>>([])
+  const [finOpportunities, setFinOpportunities] = useState<Array<{ id: string; opportunity_type: string; description: string; potential_benefit: number | null; effort_level: string | null; urgency: string | null; trigger_week: string | null; status: string }>>([])
+  const [finCurrentCash, setFinCurrentCash] = useState<number | null>(null)
+  const [finBankConnected, setFinBankConnected] = useState(false)
+  const [finLoading, setFinLoading] = useState(false)
+  const [finExpandedWeek, setFinExpandedWeek] = useState<number | null>(null)
+  const [finRunning, setFinRunning] = useState(false)
+  const [finActioning, setFinActioning] = useState<string | null>(null)
+
   const bid = business?.id
 
   // Intelligence tab state
@@ -586,6 +596,22 @@ export default function AgentsPage() {
     setRepLoading(false)
   }, [bid])
 
+  const loadFinancingData = useCallback(async () => {
+    if (!bid) return
+    setFinLoading(true)
+    try {
+      const res = await fetch('/api/agents/financing/forecast')
+      if (res.ok) {
+        const d = await res.json() as { weeks: typeof finWeeks; current_cash: number | null; bank_connected: boolean; opportunities: typeof finOpportunities }
+        setFinWeeks(d.weeks ?? [])
+        setFinCurrentCash(d.current_cash)
+        setFinBankConnected(d.bank_connected ?? false)
+        setFinOpportunities(d.opportunities ?? [])
+      }
+    } catch { /* non-fatal */ }
+    setFinLoading(false)
+  }, [bid]) // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     if (tab === 'agents') {
       void loadMenuData()
@@ -597,8 +623,9 @@ export default function AgentsPage() {
       void loadReputationData()
       void loadReconciliationData()
       void loadAcquisitionData()
+      void loadFinancingData()
     }
-  }, [tab, loadMenuData, loadFlashData, loadClvData, loadLabourData, loadWasteData, loadNegotiationData, loadReputationData, loadReconciliationData, loadAcquisitionData])
+  }, [tab, loadMenuData, loadFlashData, loadClvData, loadLabourData, loadWasteData, loadNegotiationData, loadReputationData, loadReconciliationData, loadAcquisitionData, loadFinancingData])
 
   useEffect(() => {
     if (tab === 'intelligence') void loadIntelligenceData()
@@ -2084,6 +2111,203 @@ export default function AgentsPage() {
               {repReviews.length === 0 && !repLoading && (
                 <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 13, textAlign: 'center', padding: '20px 0' }}>No reviews synced yet. Make sure your Google Place ID is set in Settings.</p>
               )}
+            </div>
+          )}
+        </div>
+
+        {/* ── CASH FLOW INTELLIGENCE WIDGET ─────────────────────────── */}
+        <div style={{ background: surface, border, borderRadius: 14, padding: 20, marginTop: 16 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <div>
+              <h3 style={{ color: '#fff', fontSize: 15, fontWeight: 600, margin: 0 }}>Cash Flow Intelligence</h3>
+              <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, margin: '2px 0 0' }}>14-week forecast · reorder cash impact · financing options</p>
+            </div>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              {finCurrentCash !== null && (
+                <span style={{ fontSize: 12, padding: '4px 10px', borderRadius: 8, fontWeight: 600, background: finBankConnected ? 'rgba(127,184,151,0.12)' : 'rgba(245,158,11,0.12)', color: finBankConnected ? '#7FB897' : '#F59E0B', border: '1px solid ' + (finBankConnected ? 'rgba(127,184,151,0.3)' : 'rgba(245,158,11,0.3)') }}>
+                  {finBankConnected ? 'Bank' : 'Est.'} ${Math.round(finCurrentCash).toLocaleString()}
+                </span>
+              )}
+              <button
+                disabled={finRunning}
+                onClick={async () => {
+                  setFinRunning(true)
+                  await fetch('/api/agents/financing/run', { method: 'POST' }).catch(() => {})
+                  setFinRunning(false)
+                  void loadFinancingData()
+                }}
+                style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid rgba(127,184,151,0.3)', background: 'transparent', color: '#7FB897', fontSize: 12, fontWeight: 600, cursor: finRunning ? 'default' : 'pointer', opacity: finRunning ? 0.6 : 1 }}
+              >
+                {finRunning ? 'Running...' : 'Rebuild'}
+              </button>
+            </div>
+          </div>
+
+          {finLoading ? (
+            <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 13 }}>Building cash flow forecast...</p>
+          ) : finWeeks.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '30px 0' }}>
+              <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 13, marginBottom: 12 }}>No forecast yet. Click Rebuild to generate your 14-week cash flow forecast.</p>
+              {!finBankConnected && (
+                <p style={{ color: 'rgba(245,158,11,0.7)', fontSize: 12 }}>Connect your bank account for accurate balance data (Settings → Bank Connection).</p>
+              )}
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+              {/* Bank connection status */}
+              <div style={{ padding: '8px 14px', borderRadius: 8, background: finBankConnected ? 'rgba(127,184,151,0.08)' : 'rgba(245,158,11,0.08)', border: '1px solid ' + (finBankConnected ? 'rgba(127,184,151,0.2)' : 'rgba(245,158,11,0.2)') }}>
+                <p style={{ color: finBankConnected ? '#7FB897' : '#F59E0B', fontSize: 12, margin: 0 }}>
+                  {finBankConnected
+                    ? 'Cash position $' + Math.round(finCurrentCash ?? 0).toLocaleString() + ' (from bank feed)'
+                    : 'Cash position estimated from POS revenue ($' + Math.round(finCurrentCash ?? 0).toLocaleString() + '). Connect your bank for accuracy.'}
+                </p>
+              </div>
+
+              {/* 14-week visual chart */}
+              <div>
+                <h4 style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 10px' }}>14-Week Cash Position</h4>
+                <div style={{ display: 'flex', gap: 3, alignItems: 'flex-end', height: 80 }}>
+                  {finWeeks.map(w => {
+                    const maxCash = Math.max(...finWeeks.map(x => x.closing_cash_position), 1)
+                    const minCash = Math.min(...finWeeks.map(x => x.closing_cash_position), 0)
+                    const range = Math.max(1, maxCash - minCash)
+                    const heightPct = Math.max(4, Math.round(((w.closing_cash_position - minCash) / range) * 100))
+                    const barColor = w.risk_level === 'critical' ? '#EF4444' : w.risk_level === 'high' ? '#F97316' : w.risk_level === 'medium' ? '#F59E0B' : '#7FB897'
+                    const isExpanded = finExpandedWeek === w.week_number
+                    return (
+                      <div key={w.week_number} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, cursor: 'pointer' }} onClick={() => setFinExpandedWeek(isExpanded ? null : w.week_number)}>
+                        <div style={{ width: '100%', height: heightPct + '%', background: barColor, borderRadius: '3px 3px 0 0', border: isExpanded ? '1px solid rgba(255,255,255,0.4)' : 'none', minHeight: 4, transition: 'all 0.2s' }} />
+                        <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.35)' }}>W{w.week_number}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+                <div style={{ display: 'flex', gap: 12, marginTop: 6 }}>
+                  {[['#7FB897', 'Safe'], ['#F59E0B', 'Watch'], ['#F97316', 'High risk'], ['#EF4444', 'Critical']].map(([c, l]) => (
+                    <div key={l} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <div style={{ width: 8, height: 8, borderRadius: 2, background: c }} />
+                      <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)' }}>{l}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Expanded week detail */}
+              {finExpandedWeek !== null && (() => {
+                const w = finWeeks.find(x => x.week_number === finExpandedWeek)
+                if (!w) return null
+                return (
+                  <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 10, padding: '14px 16px', border: '1px solid rgba(255,255,255,0.08)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                      <h4 style={{ color: '#fff', fontSize: 13, fontWeight: 600, margin: 0 }}>Week {w.week_number} — {w.forecast_week}</h4>
+                      <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 99, background: w.risk_level === 'critical' ? 'rgba(239,68,68,0.15)' : w.risk_level === 'high' ? 'rgba(249,115,22,0.15)' : w.risk_level === 'medium' ? 'rgba(245,158,11,0.15)' : 'rgba(127,184,151,0.12)', color: w.risk_level === 'critical' ? '#EF4444' : w.risk_level === 'high' ? '#F97316' : w.risk_level === 'medium' ? '#F59E0B' : '#7FB897' }}>
+                        {w.risk_level}
+                      </span>
+                    </div>
+                    {w.risk_reason && <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12, margin: '0 0 10px', lineHeight: 1.5 }}>{w.risk_reason}</p>}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                      {[
+                        { label: 'Revenue (predicted)', value: '$' + Math.round(w.predicted_pos_revenue).toLocaleString(), color: '#7FB897' },
+                        { label: 'Supplier payments', value: '$' + Math.round(w.predicted_supplier_payments).toLocaleString(), color: '#EF4444' },
+                        { label: 'Payroll', value: '$' + Math.round(w.predicted_payroll).toLocaleString(), color: '#F97316' },
+                        { label: 'Rent + Utilities', value: '$' + Math.round(w.predicted_rent_utilities).toLocaleString(), color: '#F97316' },
+                        { label: 'Opening cash', value: '$' + Math.round(w.opening_cash_position).toLocaleString(), color: '#fff' },
+                        { label: 'Closing cash', value: '$' + Math.round(w.closing_cash_position).toLocaleString(), color: w.closing_cash_position < 0 ? '#EF4444' : '#7FB897' },
+                      ].map(item => (
+                        <div key={item.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 8px', background: 'rgba(255,255,255,0.03)', borderRadius: 6 }}>
+                          <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11 }}>{item.label}</span>
+                          <span style={{ color: item.color, fontSize: 11, fontWeight: 600 }}>{item.value}</span>
+                        </div>
+                      ))}
+                    </div>
+                    {w.reorder_events.length > 0 && (
+                      <div style={{ marginTop: 10 }}>
+                        <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11, margin: '0 0 6px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Reorder events this week</p>
+                        {w.reorder_events.map((r, i) => (
+                          <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 8px', background: 'rgba(239,68,68,0.06)', borderRadius: 5, marginBottom: 3 }}>
+                            <span style={{ color: 'rgba(255,255,255,0.7)', fontSize: 11 }}>{r.product_name} ({r.supplier_name})</span>
+                            <span style={{ color: '#EF4444', fontSize: 11, fontWeight: 600 }}>-${Math.round(r.estimated_cost).toLocaleString()}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )
+              })()}
+
+              {/* Critical week alerts */}
+              {finWeeks.some(w => w.risk_level === 'critical' || w.risk_level === 'high') && (
+                <div>
+                  <h4 style={{ color: '#EF4444', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 8px' }}>Cash Risk Alerts</h4>
+                  {finWeeks.filter(w => w.risk_level === 'critical' || w.risk_level === 'high').map(w => (
+                    <div key={w.week_number} style={{ background: w.risk_level === 'critical' ? 'rgba(239,68,68,0.08)' : 'rgba(249,115,22,0.08)', border: '1px solid ' + (w.risk_level === 'critical' ? 'rgba(239,68,68,0.3)' : 'rgba(249,115,22,0.3)'), borderRadius: 8, padding: '10px 14px', marginBottom: 8 }}>
+                      <p style={{ color: w.risk_level === 'critical' ? '#EF4444' : '#F97316', fontSize: 12, fontWeight: 600, margin: '0 0 4px' }}>
+                        Week {w.week_number} ({w.forecast_week}) — ${Math.round(w.closing_cash_position).toLocaleString()} closing
+                      </p>
+                      {w.risk_reason && <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 11, margin: 0, lineHeight: 1.5 }}>{w.risk_reason}</p>}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Financing opportunities */}
+              {finOpportunities.length > 0 && (
+                <div>
+                  <h4 style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 8px' }}>Financing Options</h4>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {finOpportunities.filter(o => o.status === 'open').slice(0, 6).map(opp => {
+                      const effortColor = opp.effort_level === 'automatic' ? '#7FB897' : opp.effort_level === 'one_tap' ? '#7FB897' : opp.effort_level === 'phone_call' ? '#F59E0B' : '#F97316'
+                      const urgencyColor = opp.urgency === 'urgent' ? '#EF4444' : opp.urgency === 'this_week' ? '#F97316' : '#F59E0B'
+                      return (
+                        <div key={opp.id} style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 10, padding: '12px 14px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
+                            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                              {opp.urgency && (
+                                <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 99, background: urgencyColor + '18', color: urgencyColor, border: '1px solid ' + urgencyColor + '44' }}>
+                                  {opp.urgency.replace('_', ' ')}
+                                </span>
+                              )}
+                              {opp.effort_level && (
+                                <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 99, background: effortColor + '15', color: effortColor }}>
+                                  {opp.effort_level.replace('_', ' ')}
+                                </span>
+                              )}
+                            </div>
+                            {opp.potential_benefit && opp.potential_benefit > 0 && (
+                              <span style={{ fontSize: 12, fontWeight: 700, color: '#7FB897' }}>${Math.round(opp.potential_benefit).toLocaleString()}</span>
+                            )}
+                          </div>
+                          <p style={{ color: 'rgba(255,255,255,0.75)', fontSize: 12, margin: '0 0 10px', lineHeight: 1.5 }}>{opp.description}</p>
+                          <div style={{ display: 'flex', gap: 6 }}>
+                            <button
+                              disabled={finActioning === opp.id}
+                              onClick={async () => {
+                                setFinActioning(opp.id)
+                                await fetch('/api/agents/financing/opportunities?id=' + opp.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'actioned' }) }).catch(() => {})
+                                setFinActioning(null)
+                                void loadFinancingData()
+                              }}
+                              style={{ padding: '4px 12px', borderRadius: 6, border: 'none', background: '#2D5240', color: '#fff', fontSize: 11, fontWeight: 600, cursor: 'pointer', opacity: finActioning === opp.id ? 0.6 : 1 }}
+                            >Done</button>
+                            <button
+                              disabled={finActioning === opp.id}
+                              onClick={async () => {
+                                setFinActioning(opp.id)
+                                await fetch('/api/agents/financing/opportunities?id=' + opp.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'dismissed' }) }).catch(() => {})
+                                setFinActioning(null)
+                                void loadFinancingData()
+                              }}
+                              style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.15)', background: 'transparent', color: 'rgba(255,255,255,0.4)', fontSize: 11, cursor: 'pointer' }}
+                            >Dismiss</button>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
             </div>
           )}
         </div>
