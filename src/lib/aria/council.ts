@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { createClient } from '@supabase/supabase-js'
 import type { AskBlock } from './ask-types'
 import { runContextBrain, type ContextBrainOutput } from './context-brain'
+import { assessDataQuality, type DataQualityReport, FALLBACK_QUALITY } from './data-quality'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -26,6 +27,10 @@ export interface CouncilResult {
   ask_followups?: string[]
   raw_brain_outputs: BrainOutput[]
   context_brain_output?: ContextBrainOutput | null
+  honesty_flags?: string[]
+  data_quality_score?: number
+  synthesis_model?: string
+  escalation_reason?: string
   meta: {
     brains_succeeded: number
     brains_failed: number
@@ -220,9 +225,24 @@ async function callBrain(
 // Her response style is Claude — structured, visual, specific, never padded.
 
 // buildSynthesisPrompt injects the owner's actual question so every block is question-specific
-function buildSynthesisPrompt(question: string, businessName: string, industry: string): string {
+function buildSynthesisPrompt(question: string, businessName: string, industry: string, quality?: DataQualityReport): string {
+  const honestyRules = quality && quality.hedge_level !== 'none'
+    ? '\nDATA QUALITY: ' + quality.overall_score + '/100 — hedge level: ' + quality.hedge_level + '\n' +
+      (quality.reliability_statement ? quality.reliability_statement + '\n' : '') +
+      'HONESTY RULES FOR SYNTHESIS:\n' +
+      (quality.hedge_level === 'heavy' ? '- Open with the data warning. Do not bury it.\n- Lead with what you do not know before what you do.\n' : '') +
+      (quality.hedge_level === 'moderate' ? '- Be honest about what the data shows vs what you are inferring.\n' : '') +
+      '- NEVER state a percentage change when data is thin — say "too few sales to calculate trends reliably"\n' +
+      '- NEVER recommend a price change without stating what margin data it is based on\n' +
+      '- NEVER claim a product is "your top seller" without citing the actual sales count\n' +
+      '- If advisors disagree AND data is thin: present the disagreement honestly as "advisors are split and data is too thin to resolve this"\n' +
+      '- Use "looks like", "suggests", "early signal" for low-confidence findings\n' +
+      '- Use "clearly", "the data shows" ONLY for findings with 20+ supporting data points\n'
+    : ''
+
   return 'You are Aria — the final voice synthesising 3 expert advisors for: "' + question + '"\n' +
-    'Business: ' + businessName + ' (' + industry + ')\n\n' +
+    'Business: ' + businessName + ' (' + industry + ')\n' +
+    honestyRules + '\n' +
     'Write a direct, specific answer to "' + question + '" that weaves all three perspectives.\n' +
     'Start with the most important insight. Use their actual business numbers.\n' +
     'Every sentence must be specific to this business — no generic advice.\n\n' +
@@ -385,7 +405,6 @@ export async function runAriaCouncil(
   const SONNET = 'claude-sonnet-4-5-20250929'
 
   const activeQuestion = question ?? 'Analyse this business and give me your most important insights.'
-  const userPrompt = `Business data:\n${businessContext}`
 
   // Cache check — skip for briefing/weekly_report modes (always fresh data)
   const hash = intentHash(activeQuestion)
@@ -393,6 +412,21 @@ export async function runAriaCouncil(
     const cached = await readCouncilCache(businessId, hash)
     if (cached) return cached
   }
+
+  // Assess data quality before brains — fast DB count queries (~100ms)
+  // This ensures all brains receive quality context and can hedge appropriately
+  const quality = await assessDataQuality(businessId).catch(() => ({ ...FALLBACK_QUALITY }))
+
+  const qualityCtx = quality.hedge_level !== 'none'
+    ? 'DATA QUALITY: ' + quality.overall_score + '/100 (' + quality.hedge_level + ' hedging required)\n' +
+      (quality.missing_critical.length > 0 ? 'CRITICAL GAPS: ' + quality.missing_critical.join('; ') + '\n' : '') +
+      'DATA RELIABILITY: ' + quality.hedge_level + ' hedging required.\n' +
+      (quality.hedge_level === 'heavy' ? "WARNING: Data is very thin. Lead with what you don't know before what you do. Never sound confident with thin data.\n" : '') +
+      (quality.hedge_level === 'moderate' ? 'Be honest about what the data shows vs what you are inferring.\n' : '') +
+      'If data is insufficient for a recommendation, say: "Not enough data to advise on this."\n\n'
+    : ''
+
+  const userPrompt = qualityCtx + 'Business data:\n' + businessContext
 
   const now = new Date()
   const weekStart = new Date(now)
@@ -438,11 +472,17 @@ export async function runAriaCouncil(
 
   if (succeeded.length === 0) return null
 
-  // Build synthesis input — use Haiku for synthesis too (cost reduction)
+  // Build synthesis input
+  const qualitySynthesisBlock = quality.hedge_level !== 'none'
+    ? `\nDATA QUALITY: ${quality.overall_score}/100 — hedge level: ${quality.hedge_level}
+${quality.reliability_statement}
+HONESTY: Never state percentage changes with thin data. Use "looks like"/"suggests" for low-confidence findings.\n`
+    : ''
+
   const synthesisInput = `
 BUSINESS DATA:
 ${businessContext}
-
+${qualitySynthesisBlock}
 GROWTH BRAIN (confidence: ${growth.confidence}):
 Observations: ${growth.observations.join(' | ')}
 Recommendations: ${growth.recommendations.join(' | ')}
@@ -472,6 +512,7 @@ MODE: ${mode}
     activeQuestion,
     bizInfo?.trading_name ?? 'Your business',
     bizInfo?.industry ?? 'retail',
+    quality,
   )
 
   try {
@@ -506,6 +547,9 @@ MODE: ${mode}
 
     const councilResult: CouncilOutput = {
       final_briefing: typeof parsed.final_briefing === 'string' ? parsed.final_briefing : text.slice(0, 200),
+      honesty_flags: quality.missing_critical.map(m => 'LOW_DATA: ' + m),
+      data_quality_score: quality.overall_score,
+      synthesis_model: HAIKU,
       ask_blocks: (mode === 'ask_aria' || mode === 'briefing') && Array.isArray(parsed.ask_blocks) ? (parsed.ask_blocks as AskBlock[]).filter(b => {
         if (!b || !b.type) return false
         if (b.type === 'chart') return Array.isArray((b as {values?:unknown[]}).values) && (b as {values?:unknown[]}).values!.length > 0
@@ -548,6 +592,12 @@ export async function insertCouncilRun(
   mode: string,
   council: CouncilOutput | null,
   fellBack: boolean,
+  opts?: {
+    data_quality_score?: number
+    honesty_flags?: string[]
+    synthesis_model?: string
+    escalation_reason?: string
+  }
 ): Promise<void> {
   try {
     await supabaseAdmin.from('council_runs').insert({
@@ -564,6 +614,10 @@ export async function insertCouncilRun(
       synthesis_succeeded: council?.meta?.synthesis_succeeded ?? false,
       fell_back_to_single_model: fellBack,
       duration_ms: council?.meta?.duration_ms ?? 0,
+      data_quality_score: opts?.data_quality_score ?? council?.data_quality_score ?? null,
+      honesty_flags: opts?.honesty_flags ?? council?.honesty_flags ?? null,
+      synthesis_model: opts?.synthesis_model ?? council?.synthesis_model ?? null,
+      escalation_reason: opts?.escalation_reason ?? council?.escalation_reason ?? null,
     })
   } catch { /* non-fatal — logging should never break the briefing */ }
 }

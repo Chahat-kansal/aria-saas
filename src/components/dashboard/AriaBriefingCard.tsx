@@ -216,6 +216,14 @@ function LoadingSkeleton() {
   )
 }
 
+interface DataQuality {
+  overall_score: number
+  hedge_level: 'none' | 'light' | 'moderate' | 'heavy'
+  missing_critical: string[]
+  missing_helpful: string[]
+  reliability_statement: string
+}
+
 /* ─── Main component ─────────────────────────────────────────── */
 export function AriaBriefingCard({ businessId }: { businessId: string }) {
   const [data, setData]           = useState<BriefingResponse | null>(null)
@@ -223,6 +231,7 @@ export function AriaBriefingCard({ businessId }: { businessId: string }) {
   const [loading, setLoading]     = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [expanded, setExpanded]   = useState(false)
+  const [dataQuality, setDataQuality] = useState<DataQuality | null>(null)
 
   const loadBriefing = useCallback(async (force = false) => {
     if (!businessId) return
@@ -236,8 +245,14 @@ export function AriaBriefingCard({ businessId }: { businessId: string }) {
 
   useEffect(() => {
     setLoading(true)
-    loadBriefing().finally(() => setLoading(false))
-  }, [loadBriefing])
+    Promise.all([
+      loadBriefing(),
+      fetch('/api/aria/data-quality?businessId=' + businessId)
+        .then(r => r.ok ? r.json() : null)
+        .then((d: DataQuality | null) => { if (d) setDataQuality(d) })
+        .catch(() => {}),
+    ]).finally(() => setLoading(false))
+  }, [loadBriefing, businessId])
 
   const refresh = async () => {
     setRefreshing(true)
@@ -288,6 +303,33 @@ export function AriaBriefingCard({ businessId }: { businessId: string }) {
           ))}
         </div>
       </div>
+
+      {/* Data quality banner — shown above briefing when data is thin */}
+      {dataQuality && (dataQuality.hedge_level === 'heavy' || dataQuality.hedge_level === 'moderate') && (
+        <div style={{
+          margin: '0 16px 0',
+          padding: '10px 14px',
+          borderRadius: 8,
+          background: dataQuality.hedge_level === 'heavy' ? 'rgba(239,68,68,0.08)' : 'rgba(245,158,11,0.08)',
+          border: '1px solid ' + (dataQuality.hedge_level === 'heavy' ? 'rgba(239,68,68,0.25)' : 'rgba(245,158,11,0.25)'),
+          display: 'flex',
+          alignItems: 'flex-start',
+          gap: 10,
+        }}>
+          <span style={{ fontSize: 13, flexShrink: 0, marginTop: 1 }}>
+            {dataQuality.hedge_level === 'heavy' ? '⚠️' : '⚠️'}
+          </span>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: dataQuality.hedge_level === 'heavy' ? '#F87171' : '#F59E0B', marginBottom: 2 }}>
+              Analysis based on limited data
+            </div>
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.55)', lineHeight: 1.5 }}>
+              {dataQuality.missing_critical[0] ?? dataQuality.reliability_statement}
+              {dataQuality.overall_score > 0 ? ' (data quality: ' + dataQuality.overall_score + '/100)' : ''}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Body — sections rendered in council's chosen order */}
       <div style={{ padding: '16px 20px 4px' }}>
