@@ -54,7 +54,8 @@ export default function AdminInfluencerPage() {
   const [postType, setPostType] = useState<'reel' | 'story'>('reel')
   const [publishing, setPublishing] = useState<string | null>(null)
   const [approving, setApproving] = useState<string | null>(null)
-  const [tab, setTab] = useState<'queue' | 'history' | 'config'>( 'queue')
+  const [tab, setTab] = useState<'queue' | 'history' | 'library' | 'config'>('queue')
+  const [adminInfluencerLibrary, setAdminInfluencerLibrary] = useState<any[]>([])
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null)
 
   // Config edit state
@@ -64,10 +65,11 @@ export default function AdminInfluencerPage() {
   const [savingConfig, setSavingConfig] = useState(false)
 
   const load = useCallback(async () => {
-    const [bizRes, postsRes, configRes] = await Promise.all([
+    const [bizRes, postsRes, configRes, libRes] = await Promise.all([
       fetch('/api/admin/influencer/businesses'),
       fetch('/api/admin/influencer/posts'),
       fetch('/api/admin/influencer/config'),
+      fetch('/api/admin/influencer/library'),
     ])
     if (bizRes.ok) setBusinesses(await bizRes.json().then(d => d.businesses ?? []))
     if (postsRes.ok) setPosts(await postsRes.json().then(d => d.posts ?? []))
@@ -80,6 +82,7 @@ export default function AdminInfluencerPage() {
         setEditIgToken(cfg.ariaos_page_access_token ?? '')
       }
     }
+    if (libRes.ok) setAdminInfluencerLibrary(await libRes.json().then(d => d.influencers ?? []))
   }, [])
 
   useEffect(() => { load() }, [load])
@@ -255,8 +258,8 @@ export default function AdminInfluencerPage() {
       </div>
 
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: 4, marginBottom: 20 }}>
-        {(['queue', 'history', 'config'] as const).map(t => (
+      <div style={{ display: 'flex', gap: 4, marginBottom: 20, flexWrap: 'wrap' }}>
+        {(['queue', 'history', 'library', 'config'] as const).map(t => (
           <button key={t} onClick={() => setTab(t)} style={{
             padding: '7px 16px', borderRadius: 8, fontFamily: 'inherit', fontWeight: 700,
             fontSize: 12, cursor: 'pointer', border: '1px solid',
@@ -265,7 +268,10 @@ export default function AdminInfluencerPage() {
             borderColor: tab === t ? 'rgba(0,229,255,0.4)' : 'rgba(255,255,255,0.08)',
             color: tab === t ? C.cyan : C.muted,
           }}>
-            {t === 'queue' ? `Queue (${queuePosts.length})` : t === 'history' ? `Published (${historyPosts.length})` : 'Config'}
+            {t === 'queue' ? 'Queue (' + queuePosts.length + ')' :
+             t === 'history' ? 'Published (' + historyPosts.length + ')' :
+             t === 'library' ? 'Library (' + adminInfluencerLibrary.length + ')' :
+             'Config'}
           </button>
         ))}
       </div>
@@ -299,6 +305,69 @@ export default function AdminInfluencerPage() {
               onApprove={() => {}} onPublish={() => {}}
               approving={false} publishing={false} />
           ))}
+        </div>
+      )}
+
+      {/* Library tab */}
+      {tab === 'library' && (
+        <div>
+          <div style={{ background: C.card, border: '1px solid ' + C.border, borderRadius: 14, padding: 20, marginBottom: 20 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: C.text, marginBottom: 14 }}>Add character from Higgsfield</div>
+            <AddInfluencerForm onAdd={async (data) => {
+              const res = await fetch('/api/admin/influencer/library', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data),
+              })
+              const d = await res.json()
+              if (d.ok) await load()
+              else setMsg({ text: '❌ ' + (d.error ?? 'Failed'), ok: false })
+            }} />
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+            {adminInfluencerLibrary.map(inf => (
+              <div key={inf.id} style={{ background: C.card, border: '1px solid ' + C.border, borderRadius: 12, overflow: 'hidden' }}>
+                <img src={inf.image_url} alt={inf.name}
+                  style={{ width: '100%', aspectRatio: '3/4', objectFit: 'cover', display: 'block' }} />
+                <div style={{ padding: '10px 12px' }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{inf.name}</div>
+                  <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>{inf.description}</div>
+                  <div style={{ fontSize: 11, color: C.dim, marginTop: 4 }}>Used in {inf.usage_count ?? 0} Reels</div>
+                  <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                    <button onClick={async () => {
+                      await fetch('/api/admin/influencer/library', {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ id: inf.id, is_featured: !inf.is_featured }),
+                      })
+                      await load()
+                    }} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 6, cursor: 'pointer',
+                      fontFamily: 'inherit', fontWeight: 600,
+                      background: inf.is_featured ? 'rgba(127,184,151,0.15)' : 'transparent',
+                      border: '1px solid ' + (inf.is_featured ? 'rgba(127,184,151,0.4)' : C.border),
+                      color: inf.is_featured ? C.green : C.muted }}>
+                      {inf.is_featured ? '★ Featured' : '☆ Feature'}
+                    </button>
+                    <button onClick={async () => {
+                      await fetch('/api/admin/influencer/library', {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ id: inf.id, is_active: !inf.is_active }),
+                      })
+                      await load()
+                    }} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 6, cursor: 'pointer',
+                      fontFamily: 'inherit', fontWeight: 600,
+                      background: inf.is_active ? 'transparent' : 'rgba(239,68,68,0.1)',
+                      border: '1px solid ' + (inf.is_active ? C.border : 'rgba(239,68,68,0.3)'),
+                      color: inf.is_active ? C.muted : C.red }}>
+                      {inf.is_active ? 'Active' : 'Hidden'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
@@ -347,6 +416,56 @@ export default function AdminInfluencerPage() {
           </button>
         </div>
       )}
+    </div>
+  )
+}
+
+function AddInfluencerForm({ onAdd }: { onAdd: (data: any) => Promise<void> }) {
+  const [name, setName] = useState('')
+  const [imageUrl, setImageUrl] = useState('')
+  const [description, setDescription] = useState('')
+  const [industries, setIndustries] = useState('')
+  const [saving, setSaving] = useState(false)
+  const FC = {
+    border: 'rgba(255,255,255,0.1)', text: 'var(--text-primary)',
+    dim: 'var(--text-tertiary)', cyan: '#00E5FF',
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      {[
+        { label: 'Name', val: name, set: setName, placeholder: 'e.g. Aria, Nova, Zara' },
+        { label: 'Higgsfield CDN image URL', val: imageUrl, set: setImageUrl, placeholder: 'https://d8j0ntlcm91z4.cloudfront.net/...' },
+        { label: 'Description', val: description, set: setDescription, placeholder: 'Warm and approachable — suits cafes...' },
+        { label: 'Industries (comma-separated)', val: industries, set: setIndustries, placeholder: 'cafe, restaurant, retail' },
+      ].map(({ label, val, set, placeholder }) => (
+        <div key={label}>
+          <div style={{ fontSize: 11, color: FC.dim, marginBottom: 4 }}>{label}</div>
+          <input value={val} onChange={e => set(e.target.value)} placeholder={placeholder}
+            style={{ width: '100%', padding: '8px 12px', borderRadius: 8, background: 'rgba(255,255,255,0.04)',
+              border: '1px solid ' + FC.border, color: FC.text, fontSize: 12, fontFamily: 'inherit', boxSizing: 'border-box' }} />
+        </div>
+      ))}
+      {imageUrl && (
+        <img src={imageUrl} alt="preview"
+          style={{ width: 80, height: 120, objectFit: 'cover', borderRadius: 8, border: '1px solid rgba(255,255,255,0.1)' }} />
+      )}
+      <button onClick={async () => {
+        if (!name || !imageUrl) return
+        setSaving(true)
+        await onAdd({
+          name, image_url: imageUrl, description,
+          industry_tags: industries.split(',').map(s => s.trim()).filter(Boolean),
+        })
+        setName(''); setImageUrl(''); setDescription(''); setIndustries('')
+        setSaving(false)
+      }} disabled={saving || !name || !imageUrl}
+        style={{ padding: '9px 20px', borderRadius: 9, fontFamily: 'inherit', fontWeight: 700, fontSize: 13,
+          cursor: saving ? 'wait' : 'pointer',
+          background: 'rgba(0,229,255,0.12)', border: '1px solid rgba(0,229,255,0.3)', color: FC.cyan,
+          opacity: !name || !imageUrl ? 0.5 : 1 }}>
+        {saving ? 'Adding...' : '+ Add to Library'}
+      </button>
     </div>
   )
 }

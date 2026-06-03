@@ -78,6 +78,7 @@ async function _POST(req: NextRequest) {
     is_admin = false,
     background_music = 'none',
     voiceover_url,
+    influencer_id,
   } = await req.json()
 
   if (!business_id) return NextResponse.json({ error: 'business_id required' }, { status: 400 })
@@ -147,7 +148,14 @@ async function _POST(req: NextRequest) {
         reel_duration_seconds: duration_seconds,
         reel_cost_aud: estimatedCost,
         post_type: 'reel',
+        ...(influencer_id ? { influencer_id, influencer_image_url: reel_source_image_url || null } : {}),
       }).eq('id', post_id)
+    } catch {}
+  }
+
+  if (influencer_id) {
+    try {
+      await supabaseAdmin.rpc('increment_influencer_usage', { p_id: influencer_id })
     } catch {}
   }
 

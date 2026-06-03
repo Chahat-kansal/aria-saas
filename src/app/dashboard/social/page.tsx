@@ -74,6 +74,15 @@ export default function SocialPage() {
   const [showAssetLibrary, setShowAssetLibrary] = useState(false)
   const [reelBillingThisMonth, setReelBillingThisMonth] = useState<{total_cost_aud: number; reel_count: number} | null>(null)
 
+  // ── AI Influencer Library state (Prompt 235) ─────────────────────────
+  const [influencerLibrary, setInfluencerLibrary] = useState<Array<{
+    id: string; name: string; description: string; image_url: string;
+    industry_tags: string[]; style_tags: string[]; is_featured: boolean
+  }>>([])
+  const [selectedInfluencerId, setSelectedInfluencerId] = useState<string | null>(null)
+  const [selectedInfluencerUrl, setSelectedInfluencerUrl] = useState<string | null>(null)
+  const [showInfluencerPicker, setShowInfluencerPicker] = useState(false)
+
   useEffect(() => {
     if (!bid) return
     fetch('/api/social/reels-addon?business_id=' + bid)
@@ -91,6 +100,10 @@ export default function SocialPage() {
     fetch('/api/social/reel-billing?business_id=' + bid)
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (d) setReelBillingThisMonth(d) })
+      .catch(() => {})
+    fetch('/api/social/influencer-library')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.influencers) setInfluencerLibrary(d.influencers) })
       .catch(() => {})
   }, [bid])
 
@@ -535,7 +548,10 @@ export default function SocialPage() {
           reel_mode: reelMode,
           reel_style: reelStyle,
           reel_custom_prompt: reelCustomPrompt || null,
-          reel_source_image_url: reelMode === 'image' ? (reelSourceImage || post?.image_url) : null,
+          reel_source_image_url: selectedInfluencerId
+            ? selectedInfluencerUrl
+            : reelMode === 'image' ? (reelSourceImage || post?.image_url) : null,
+          influencer_id: selectedInfluencerId ?? null,
           duration_seconds: reelDuration,
           background_music: reelBgMusic,
           voiceover_url: voiceUrls[reelCreatorPostId] || null,
@@ -560,7 +576,22 @@ export default function SocialPage() {
       alert('Network error: ' + e.message)
     }
     setReelGenerating(false)
+    setSelectedInfluencerId(null)
+    setSelectedInfluencerUrl(null)
   }
+
+  // Auto-suggest prompt when influencer selected and prompt is empty
+  useEffect(() => {
+    if (selectedInfluencerId && !reelCustomPrompt) {
+      const inf = influencerLibrary.find(i => i.id === selectedInfluencerId)
+      if (inf) {
+        setReelCustomPrompt(
+          inf.name + ' visits this local Australian business, looks around genuinely impressed, smiles warmly at the camera, authentic UGC style'
+        )
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedInfluencerId])
 
   async function pollFalStatus(postId: string, requestId: string) {
     try {
@@ -1554,7 +1585,7 @@ export default function SocialPage() {
       {reelCreatorPostId && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 9998, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}
           onClick={() => !reelGenerating && setReelCreatorPostId(null)}>
-          <div onClick={e => e.stopPropagation()} style={{ background: '#0f1117', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '20px 20px 0 0', padding: '24px 24px 32px', width: '100%', maxWidth: 560, maxHeight: '90vh', overflowY: 'auto' }}>
+          <div onClick={e => e.stopPropagation()} style={{ position: 'relative', background: '#0f1117', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '20px 20px 0 0', padding: '24px 24px 32px', width: '100%', maxWidth: 560, maxHeight: '90vh', overflowY: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
               <p style={{ fontSize: 16, fontWeight: 800, color: '#fff' }}>Create Reel</p>
               <button onClick={() => !reelGenerating && setReelCreatorPostId(null)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', fontSize: 20, cursor: 'pointer', lineHeight: 1 }}>&times;</button>
@@ -1609,11 +1640,143 @@ export default function SocialPage() {
               </div>
             )}
 
+            {/* AI Influencer picker */}
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                  AI Influencer <span style={{ color: '#7FB897', fontSize: 10 }}>INCLUDED WITH REELS</span>
+                </div>
+                {selectedInfluencerId && (
+                  <button onClick={() => { setSelectedInfluencerId(null); setSelectedInfluencerUrl(null) }}
+                    style={{ fontSize: 11, color: '#EF4444', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
+                    × Remove
+                  </button>
+                )}
+              </div>
+
+              {selectedInfluencerId ? (
+                <div style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '10px 12px',
+                  background: 'rgba(127,184,151,0.08)', border: '1px solid rgba(127,184,151,0.3)', borderRadius: 10 }}>
+                  <img src={selectedInfluencerUrl!} alt="influencer"
+                    style={{ width: 48, height: 72, objectFit: 'cover', borderRadius: 8, flexShrink: 0 }} />
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: '#fff' }}>
+                      {influencerLibrary.find(i => i.id === selectedInfluencerId)?.name}
+                    </div>
+                    <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginTop: 2 }}>
+                      {influencerLibrary.find(i => i.id === selectedInfluencerId)?.description}
+                    </div>
+                    <button onClick={() => setShowInfluencerPicker(true)}
+                      style={{ fontSize: 11, color: '#7FB897', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', marginTop: 4, padding: 0 }}>
+                      Change →
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button onClick={() => setShowInfluencerPicker(true)}
+                  style={{ width: '100%', padding: '12px', borderRadius: 10, cursor: 'pointer', fontFamily: 'inherit',
+                    border: '1px dashed rgba(127,184,151,0.3)', background: 'rgba(127,184,151,0.04)',
+                    color: 'rgba(255,255,255,0.6)', fontSize: 13, textAlign: 'left',
+                    display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span style={{ fontSize: 20 }}>✨</span>
+                  <div>
+                    <div style={{ fontWeight: 600, color: '#fff' }}>Add AI Influencer (optional)</div>
+                    <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>
+                      Pick a character to appear in your Reel — included with your Reels add-on
+                    </div>
+                  </div>
+                </button>
+              )}
+            </div>
+
+            {/* Influencer picker modal — inside the Reel Creator panel */}
+            {showInfluencerPicker && (
+              <div style={{
+                position: 'absolute', inset: 0, zIndex: 10,
+                background: '#0f1117',
+                borderRadius: '20px 20px 0 0',
+                padding: '20px 20px 32px',
+                overflowY: 'auto',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+                  <div style={{ fontSize: 15, fontWeight: 800, color: '#fff' }}>Choose AI Influencer</div>
+                  <button onClick={() => setShowInfluencerPicker(false)}
+                    style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', fontSize: 20, cursor: 'pointer' }}>&times;</button>
+                </div>
+                <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', marginBottom: 16, lineHeight: 1.6 }}>
+                  Aria animates your chosen influencer visiting your business. Their image becomes the start frame of your Reel.
+                </p>
+
+                <div onClick={() => { setSelectedInfluencerId(null); setSelectedInfluencerUrl(null); setShowInfluencerPicker(false) }}
+                  style={{ padding: '10px 14px', borderRadius: 10, marginBottom: 12, cursor: 'pointer',
+                    border: '1px solid ' + (!selectedInfluencerId ? 'rgba(127,184,151,0.5)' : 'rgba(255,255,255,0.08)'),
+                    background: !selectedInfluencerId ? 'rgba(127,184,151,0.08)' : 'transparent',
+                    fontSize: 13, color: 'rgba(255,255,255,0.7)', display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span style={{ fontSize: 20 }}>🚫</span>
+                  <div>
+                    <div style={{ fontWeight: 600 }}>No influencer — use my own image</div>
+                    <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>Animate your product or shop photo</div>
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  {influencerLibrary.map(inf => (
+                    <div key={inf.id}
+                      onClick={() => { setSelectedInfluencerId(inf.id); setSelectedInfluencerUrl(inf.image_url); setShowInfluencerPicker(false) }}
+                      style={{ borderRadius: 12, overflow: 'hidden', cursor: 'pointer',
+                        border: '2px solid ' + (selectedInfluencerId === inf.id ? '#7FB897' : 'rgba(255,255,255,0.08)'),
+                        background: selectedInfluencerId === inf.id ? 'rgba(127,184,151,0.08)' : 'transparent' }}>
+                      <div style={{ position: 'relative' }}>
+                        <img src={inf.image_url} alt={inf.name}
+                          style={{ width: '100%', aspectRatio: '3/4', objectFit: 'cover', display: 'block' }} />
+                        {inf.is_featured && (
+                          <div style={{ position: 'absolute', top: 8, left: 8, background: '#7FB897',
+                            color: '#fff', fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 99 }}>
+                            FEATURED
+                          </div>
+                        )}
+                        {selectedInfluencerId === inf.id && (
+                          <div style={{ position: 'absolute', top: 8, right: 8, background: '#7FB897',
+                            color: '#fff', fontSize: 16, width: 24, height: 24, borderRadius: '50%',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            ✓
+                          </div>
+                        )}
+                      </div>
+                      <div style={{ padding: '10px 12px' }}>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: '#fff' }}>{inf.name}</div>
+                        <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 3, lineHeight: 1.5 }}>
+                          {inf.description?.slice(0, 60)}
+                        </div>
+                        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 6 }}>
+                          {inf.industry_tags?.slice(0, 2).map(t => (
+                            <span key={t} style={{ fontSize: 9, padding: '1px 6px', borderRadius: 99,
+                              background: 'rgba(127,184,151,0.12)', color: '#7FB897', fontWeight: 600,
+                              textTransform: 'capitalize' }}>
+                              {t}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Custom scene prompt */}
             <div style={{ marginBottom: 16 }}>
               <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Scene / concept (optional)</p>
               <textarea value={reelCustomPrompt} onChange={e => setReelCustomPrompt(e.target.value)} rows={3}
-                placeholder="Describe the scene, product, or mood you want…"
+                placeholder={
+                  selectedInfluencerId
+                    ? (influencerLibrary.find(i => i.id === selectedInfluencerId)?.name ?? 'Influencer') + ' walks into your business, looks around, smiles warmly at the camera'
+                    : reelMode === 'image'
+                    ? 'e.g. "Camera slowly zooms into the coffee cup as steam rises, warm morning light"'
+                    : reelMode === 'text'
+                    ? 'e.g. "Busy Melbourne café at morning rush, barista making flat white, cosy warm atmosphere"'
+                    : 'Leave blank and Aria will decide based on your post content'
+                }
                 style={{ width: '100%', padding: '10px 12px', borderRadius: 10, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', fontSize: 13, fontFamily: 'inherit', resize: 'vertical', outline: 'none' }} />
             </div>
 
