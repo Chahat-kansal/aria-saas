@@ -28,9 +28,10 @@ const GENRES = ['auto','action','comedy','drama','epic','noir']
 
 const DURATIONS = [
   { secs: 5,  label: '5s',  credits: 10, costAud: 0.48 },
-  { secs: 8,  label: '8s',  credits: 16, costAud: 0.76 },
   { secs: 10, label: '10s', credits: 20, costAud: 0.95 },
   { secs: 15, label: '15s', credits: 30, costAud: 1.43 },
+  { secs: 30, label: '30s', credits: 60, costAud: 2.85 },
+  { secs: 60, label: '60s', credits: 120, costAud: 5.70 },
 ]
 
 const RESOLUTIONS = [
@@ -138,7 +139,7 @@ export default function ReelStudioPage() {
     if (!data) return
     setBid(data.id)
     const [infRes, sesRes] = await Promise.all([
-      fetch('/api/social/influencer-library'),
+      fetch('/api/social/influencer-library', { credentials: 'include' }),
       supabase.from('reel_studio_sessions').select('*')
         .eq('business_id', data.id).order('created_at', { ascending: false }).limit(30)
     ])
@@ -396,6 +397,16 @@ export default function ReelStudioPage() {
                     <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.3)', fontWeight: 400, marginTop: 1 }}>${d.costAud}</div>
                   </button>
                 ))}
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
+                <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)' }}>Custom:</span>
+                <input type="number" min={3} max={60} placeholder="e.g. 45"
+                  onChange={e => { const v = parseInt(e.target.value); if (!isNaN(v) && v >= 3 && v <= 60) setDuration(v) }}
+                  style={{ width: 68, padding: '6px 8px', borderRadius: 8, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', fontSize: 12, fontFamily: 'inherit', outline: 'none' }} />
+                <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.25)' }}>sec (3-60)</span>
+              </div>
+              <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.2)', marginTop: 4 }}>
+                Up to 60s supported via clip stitching
               </div>
               <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
                 {RESOLUTIONS.map(r => (
