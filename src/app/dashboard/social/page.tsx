@@ -620,10 +620,10 @@ export default function SocialPage() {
     try {
       const res = await fetch('/api/social/generate-video?fal_request_id=' + encodeURIComponent(requestId));
       const d = await res.json();
-      if (d.status === 'COMPLETED') {
+      if (d.status === 'COMPLETED' || d.status === 'completed') {
         setFalPolling(p => { const n = { ...p }; delete n[postId]; return n; });
         if (d.video_url) setPosts(prev => prev.map(p => p.id === postId ? { ...p, video_url: d.video_url } : p));
-      } else if (d.status === 'FAILED' || d.status === 'error') {
+      } else if (d.status === 'FAILED' || d.status === 'failed' || d.status === 'error' || d.status === 'ERROR') {
         setFalPolling(p => { const n = { ...p }; delete n[postId]; return n; });
       } else {
         setTimeout(() => pollFalStatus(postId, requestId), 5000);
@@ -690,7 +690,7 @@ export default function SocialPage() {
           if (voiceoverUrl) params.set('voiceover_url', voiceoverUrl)
           const res = await fetch('/api/social/generate-video?' + params)
           const d = await res.json()
-          if (d.status === 'COMPLETED') {
+          if (d.status === 'COMPLETED' || d.status === 'completed') {
             setPosts(prev => prev.map(p => p.id === postId
               ? { ...p, video_url: d.video_url, post_type: 'reel' } : p))
             setReelPolling(prev => { const n = {...prev}; delete n[postId]; return n })
@@ -1975,7 +1975,7 @@ export default function SocialPage() {
                   <div>
                     <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.35)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 10 }}>Duration</div>
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                      {([5, 10, 15, 20, 30] as const).map(d => (
+                      {([5, 10, 15] as const).map(d => (
                         <button key={d} onClick={() => { setReelDuration(d); setReelDurationCustom('') }}
                           style={{ flex: '1 1 28%', minWidth: 44, padding: '9px 4px', borderRadius: 10, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 700, fontSize: 12, background: reelDuration === d && !reelDurationCustom ? 'rgba(245,158,11,0.15)' : 'rgba(255,255,255,0.04)', boxShadow: reelDuration === d && !reelDurationCustom ? 'inset 0 0 0 1.5px rgba(245,158,11,0.5)' : 'inset 0 0 0 1px rgba(255,255,255,0.07)', color: reelDuration === d && !reelDurationCustom ? '#F59E0B' : 'rgba(255,255,255,0.4)', transition: 'all 150ms' }}>
                           {d}s
@@ -1991,7 +1991,7 @@ export default function SocialPage() {
                       />
                       <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.2)', whiteSpace: 'nowrap' }}>sec</span>
                     </div>
-                    <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.2)', marginTop: 5 }}>≤10s: Kling · 11–15s: Wan 2.7 · 16–30s: Wan 2.6</div>
+                    <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.2)', marginTop: 5 }}>Up to 15s · Higgsfield Seedance / Wan 2.7 · 9:16</div>
                   </div>
                   <div>
                     <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.35)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 10 }}>Music</div>

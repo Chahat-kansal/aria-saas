@@ -7,13 +7,23 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { put } from '@vercel/blob'
-import { fal } from '@fal-ai/client'
-import { getBackgroundMusicUrl } from '@/lib/social/audio'
 
-fal.config({ credentials: process.env.FAL_KEY ?? '' })
+const HIGGSFIELD_API = 'https://api.higgsfield.ai'
+
+// Higgsfield model routing by duration + whether we have a start image
+// All models support 9:16 aspect ratio, up to 15s
+function pickModel(durationSec: number, hasImage: boolean): { model: string; maxDuration: number } {
+  if (hasImage) {
+    // Image-to-video: Seedance 2.0 is best for identity/influencer consistency
+    return { model: 'seedance_2_0', maxDuration: 15 }
+  }
+  // Text-to-video: Wan 2.7 supports up to 15s with audio sync
+  return { model: 'wan2_7', maxDuration: 15 }
+}
 
 function calcCostAUD(durationSec: number): number {
-  return Math.round(Math.ceil(durationSec / 10) * 0.56 * 100) / 100
+  // Approximate: Higgsfield charges per credit, ~$0.05–0.08 AUD per second
+  return Math.round(durationSec * 0.07 * 100) / 100
 }
 
 const STYLE_PROMPTS: Record<string, string> = {
@@ -23,44 +33,6 @@ const STYLE_PROMPTS: Record<string, string> = {
   flash_sale:       'Energetic fast-cut, bold colours, urgency,',
   testimonial:      'Warm authentic customer moment, genuine smile,',
   day_in_life:      'Documentary-style day-in-the-life, real moments,',
-}
-
-async function mergeAudioIntoVideo(
-  videoUrl: string,
-  audioUrl: string,
-  outputKey: string
-): Promise<string> {
-  const ffmpeg = require('fluent-ffmpeg')
-  const ffmpegPath = require('@ffmpeg-installer/ffmpeg').path
-  ffmpeg.setFfmpegPath(ffmpegPath)
-
-  const [vRes, aRes] = await Promise.all([fetch(videoUrl), fetch(audioUrl)])
-  const [vBuf, aBuf] = await Promise.all([vRes.arrayBuffer(), aRes.arrayBuffer()])
-
-  const tmp = require('os').tmpdir()
-  const fs = require('fs')
-  const videoPath = tmp + '/v_' + Date.now() + '.mp4'
-  const audioPath = tmp + '/a_' + Date.now() + '.mp3'
-  const outPath   = tmp + '/out_' + Date.now() + '.mp4'
-
-  fs.writeFileSync(videoPath, Buffer.from(vBuf))
-  fs.writeFileSync(audioPath, Buffer.from(aBuf))
-
-  await new Promise<void>((resolve, reject) => {
-    ffmpeg(videoPath)
-      .addInput(audioPath)
-      .outputOptions(['-c:v copy', '-c:a aac', '-shortest', '-map 0:v:0', '-map 1:a:0'])
-      .save(outPath)
-      .on('end', resolve)
-      .on('error', reject)
-  })
-
-  const outBuf = fs.readFileSync(outPath)
-  const blob = await put(outputKey, outBuf, { access: 'public', contentType: 'video/mp4' })
-
-  try { fs.unlinkSync(videoPath); fs.unlinkSync(audioPath); fs.unlinkSync(outPath) } catch {}
-
-  return blob.url
 }
 
 async function _POST(req: NextRequest) {
@@ -74,15 +46,15 @@ async function _POST(req: NextRequest) {
     reel_style = 'lifestyle',
     reel_custom_prompt,
     reel_source_image_url,
-    duration_seconds = 15,
+    duration_seconds = 10,
     is_admin = false,
     background_music = 'none',
-    voiceover_url,
     influencer_id,
   } = await req.json()
 
   if (!business_id) return NextResponse.json({ error: 'business_id required' }, { status: 400 })
 
+  // Auth gate: check reels enabled
   if (!is_admin) {
     const { data: prefs } = await supabase.from('social_preferences')
       .select('reels_enabled').eq('business_id', business_id).maybeSingle()
@@ -94,127 +66,113 @@ async function _POST(req: NextRequest) {
     }
   }
 
-  let post: any = null
+  const higgsfieldKey = process.env.HIGGSFIELD_API_KEY
+  if (!higgsfieldKey) {
+    return NextResponse.json({
+      error: 'HIGGSFIELD_API_KEY not configured',
+      message: 'Add HIGGSFIELD_API_KEY to Vercel environment variables.',
+    }, { status: 503 })
+  }
+
+  let post: Record<string, unknown> | null = null
   if (post_id) {
     const { data } = await supabase.from('social_posts').select('*').eq('id', post_id).maybeSingle()
     post = data
   }
 
   const stylePrefix = STYLE_PROMPTS[reel_style] ?? STYLE_PROMPTS.lifestyle
-  let videoPrompt = ''
-  let sourceImageUrl: string | null = null
+  const customPrompt = reel_custom_prompt || (post?.reel_concept as string) || (post?.caption as string) || 'Australian small business showcase'
+  const videoPrompt = (stylePrefix + ' ' + customPrompt + ' 9:16 vertical, photorealistic, vibrant, no text overlays').slice(0, 500)
 
-  if (reel_mode === 'image') {
-    sourceImageUrl = reel_source_image_url || post?.image_url || null
-    videoPrompt = stylePrefix + ' ' + (reel_custom_prompt || post?.reel_concept || post?.caption || 'showcase this business') + ' 9:16 vertical, photorealistic, no text overlays'
-  } else if (reel_mode === 'text') {
-    videoPrompt = stylePrefix + ' ' + (reel_custom_prompt || post?.reel_concept || post?.caption) + ' 9:16 vertical, photorealistic, no text overlays'
-    sourceImageUrl = null
-  } else {
-    sourceImageUrl = post?.image_url || null
-    videoPrompt = stylePrefix + ' ' + (post?.reel_concept || post?.caption || 'Australian small business showcase') + ' 9:16 vertical, photorealistic, no text overlays'
+  // Source image: influencer photo takes priority, then uploaded image, then post image
+  const sourceImageUrl: string | null = reel_source_image_url || (post?.image_url as string) || null
+  const clampedDuration = Math.max(3, Math.min(15, duration_seconds))
+  const { model } = pickModel(clampedDuration, !!sourceImageUrl)
+  const estimatedCost = calcCostAUD(clampedDuration)
+
+  console.log('[generate-video] submitting to Higgsfield:', { model, duration: clampedDuration, hasImage: !!sourceImageUrl, influencer_id })
+
+  // Build Higgsfield generation payload
+  const payload: Record<string, unknown> = {
+    model,
+    prompt: videoPrompt,
+    aspect_ratio: '9:16',
+    duration: clampedDuration,
+    resolution: '720p',
   }
 
-  const estimatedCost = calcCostAUD(duration_seconds)
-
-  if (!process.env.FAL_KEY) {
-    return NextResponse.json({
-      error: 'FAL_KEY not configured',
-      message: 'Add FAL_KEY to Vercel environment variables.',
-    }, { status: 503 })
+  // Attach start image if available (for image-to-video)
+  if (sourceImageUrl) {
+    payload.medias = [{ value: sourceImageUrl, role: 'start_image' }]
   }
 
-  // Model routing by duration:
-  // ≤10s  → kling v1.6 (best quality, supports image-to-video with influencer)
-  // 11-15s → wan/v2.7  (up to 15s, supports 9:16 image-to-video, $0.10/s)
-  // 16-30s → wan/v2.6  (up to 30s, text-to-video only, $0.10/s)
-  let modelId: string
-  const falInput: Record<string, any> = { prompt: videoPrompt.slice(0, 500) }
-
-  if (duration_seconds <= 10) {
-    // Kling: only supports '5' or '10' as string
-    const klingDuration: '5' | '10' = duration_seconds >= 10 ? '10' : '5'
-    modelId = sourceImageUrl
-      ? 'fal-ai/kling-video/v1.6/standard/image-to-video'
-      : 'fal-ai/kling-video/v1.6/standard/text-to-video'
-    falInput.duration = klingDuration
-    falInput.aspect_ratio = '9:16'
-    if (sourceImageUrl) falInput.image_url = sourceImageUrl
-
-  } else if (duration_seconds <= 15) {
-    // Wan 2.7: supports 2-15s, 9:16, image-to-video
-    modelId = sourceImageUrl
-      ? 'fal-ai/wan/v2.7/image-to-video'
-      : 'fal-ai/wan/v2.7/text-to-video'
-    falInput.duration = duration_seconds
-    falInput.resolution = '720p'
-    falInput.aspect_ratio = '9:16'
-    if (sourceImageUrl) falInput.image_url = sourceImageUrl
-
-  } else {
-    // Wan 2.6: supports 3-30s, text-to-video (no i2v for >15s)
-    modelId = 'fal-ai/wan/v2.6/text-to-video'
-    falInput.duration = String(Math.min(duration_seconds, 30))
-    falInput.resolution = '720p'
-    falInput.aspect_ratio = '9:16'
-  }
-
-  console.log('[generate-video] submitting:', { modelId, duration: falInput.duration, hasImage: !!sourceImageUrl, influencer_id })
-
-  let submitResult: any
+  // Submit to Higgsfield
+  let jobId: string
   try {
-    submitResult = await fal.queue.submit(modelId as any, { input: falInput })
-  } catch (falErr: any) {
-    console.error('[generate-video] fal.queue.submit failed:', falErr?.message ?? falErr, 'model:', modelId, 'FAL_KEY set:', !!process.env.FAL_KEY)
-    return NextResponse.json({
-      error: 'video_generation_failed',
-      message: falErr?.message ?? 'Video generation service error — check FAL_KEY',
-    }, { status: 502 })
-  }
-  const request_id = (submitResult as any).request_id as string
+    const res = await fetch(`${HIGGSFIELD_API}/v1/video/generate`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${higgsfieldKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    })
 
+    if (!res.ok) {
+      const errText = await res.text().catch(() => res.statusText)
+      console.error('[generate-video] Higgsfield error:', res.status, errText)
+      return NextResponse.json({
+        error: 'generation_failed',
+        message: `Higgsfield error ${res.status}: ${errText}`,
+      }, { status: 502 })
+    }
+
+    const data = await res.json()
+    jobId = data.id || data.job_id || data.request_id
+    if (!jobId) throw new Error('No job ID in Higgsfield response: ' + JSON.stringify(data))
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e)
+    console.error('[generate-video] Higgsfield submit failed:', msg)
+    return NextResponse.json({ error: 'generation_failed', message: msg }, { status: 502 })
+  }
+
+  // Save to DB
   if (post_id) {
     try {
       await supabaseAdmin.from('social_posts').update({
-        fal_request_id: request_id,
-        reel_mode,
-        reel_style,
+        fal_request_id: jobId, // reuse column for job tracking
+        reel_mode, reel_style,
         reel_custom_prompt: reel_custom_prompt || null,
-        reel_source_image_url: sourceImageUrl,
-        reel_duration_seconds: duration_seconds,
+        reel_duration_seconds: clampedDuration,
         reel_cost_aud: estimatedCost,
         post_type: 'reel',
-        ...(influencer_id ? { influencer_id, influencer_image_url: reel_source_image_url || null } : {}),
+        ...(influencer_id ? { influencer_id, influencer_image_url: sourceImageUrl || null } : {}),
       }).eq('id', post_id)
     } catch {}
   }
 
   if (influencer_id) {
-    try {
-      await supabaseAdmin.rpc('increment_influencer_usage', { p_id: influencer_id })
-    } catch {}
+    try { await supabaseAdmin.rpc('increment_influencer_usage', { p_id: influencer_id }) } catch {}
   }
 
-  // Log to reel_usage_log for cost tracking
+  // Log cost
   try {
     await supabaseAdmin.from('reel_usage_log').insert({
-      business_id,
-      social_post_id: post_id || null,
-      fal_request_id: request_id,
-      model: modelId,
-      duration_seconds: duration_seconds >= 10 ? 10 : 5,
+      business_id, social_post_id: post_id || null,
+      fal_request_id: jobId, model,
+      duration_seconds: clampedDuration,
       cost_aud: estimatedCost,
       status: 'processing',
     })
   } catch {}
 
   return NextResponse.json({
-    fal_request_id: request_id,
-    model_id: modelId,
+    fal_request_id: jobId,
+    model_id: model,
     estimated_cost_aud: estimatedCost,
     status: 'queued',
     background_music,
-    voiceover_url: voiceover_url || null,
+    duration_seconds: clampedDuration,
   })
 }
 
@@ -223,94 +181,81 @@ async function _GET(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const fal_request_id = req.nextUrl.searchParams.get('fal_request_id')
-  const model_id = req.nextUrl.searchParams.get('model_id')
+  const jobId = req.nextUrl.searchParams.get('fal_request_id') || req.nextUrl.searchParams.get('request_id')
+  const model_id = req.nextUrl.searchParams.get('model_id') || 'seedance_2_0'
   const post_id = req.nextUrl.searchParams.get('post_id')
   const business_id = req.nextUrl.searchParams.get('business_id')
-  const background_music = req.nextUrl.searchParams.get('background_music') || 'none'
-  const voiceover_url = req.nextUrl.searchParams.get('voiceover_url')
 
-  // Legacy: support old ?request_id= param
-  const legacy_request_id = req.nextUrl.searchParams.get('request_id')
-  const effectiveRequestId = fal_request_id || legacy_request_id
+  if (!jobId) return NextResponse.json({ error: 'fal_request_id required' }, { status: 400 })
 
-  if (!effectiveRequestId) return NextResponse.json({ error: 'fal_request_id required' }, { status: 400 })
-  if (!process.env.FAL_KEY) return NextResponse.json({ status: 'no_provider' }, { status: 503 })
-
-  const effectiveModelId = model_id || 'fal-ai/kling-video/v1.6/standard/image-to-video'
+  const higgsfieldKey = process.env.HIGGSFIELD_API_KEY
+  if (!higgsfieldKey) return NextResponse.json({ status: 'no_provider' }, { status: 503 })
 
   try {
-    const status = await fal.queue.status(effectiveModelId as any, { requestId: effectiveRequestId, logs: false })
-    const statusStr = (status as any).status as string
+    const res = await fetch(`${HIGGSFIELD_API}/v1/video/job/${jobId}`, {
+      headers: { 'Authorization': `Bearer ${higgsfieldKey}` },
+    })
 
-    if (statusStr === 'COMPLETED') {
-      const result = await fal.queue.result(effectiveModelId as any, { requestId: effectiveRequestId })
-      const rawVideoUrl: string = (result as any).data?.video?.url
+    if (!res.ok) {
+      const errText = await res.text().catch(() => res.statusText)
+      console.error('[generate-video GET] Higgsfield status error:', res.status, errText)
+      return NextResponse.json({ status: 'error', error: errText }, { status: 500 })
+    }
 
-      if (!rawVideoUrl) return NextResponse.json({ status: 'FAILED', error: 'No video URL in result' })
+    const data = await res.json()
+    const status = (data.status || '').toUpperCase()
 
+    // Higgsfield statuses: pending, processing, completed, failed
+    if (status === 'COMPLETED' || data.result_url || data.video_url) {
+      const rawVideoUrl: string = data.result_url || data.video_url || data.output?.video_url
+
+      if (!rawVideoUrl) return NextResponse.json({ status: 'FAILED', error: 'No video URL in response' })
+
+      // Upload to Vercel Blob for CDN
       let finalVideoUrl = rawVideoUrl
-      const audioToMerge = voiceover_url || await getBackgroundMusicUrl(background_music)
-
-      const blobKey = 'aria-social/reels/' + (post_id || effectiveRequestId) + '-' + Date.now() + '.mp4'
-
-      if (audioToMerge) {
+      if (process.env.BLOB_READ_WRITE_TOKEN) {
         try {
-          finalVideoUrl = await mergeAudioIntoVideo(rawVideoUrl, audioToMerge, blobKey)
-        } catch (e: any) {
-          console.error('[generate-video] audio merge failed:', e.message)
+          const blobKey = 'aria-social/reels/' + (post_id || jobId) + '-' + Date.now() + '.mp4'
           const vRes = await fetch(rawVideoUrl)
           const vBuf = await vRes.arrayBuffer()
           const blob = await put(blobKey, vBuf, { access: 'public', contentType: 'video/mp4' })
           finalVideoUrl = blob.url
+        } catch (e: unknown) {
+          console.error('[generate-video] blob upload failed:', e instanceof Error ? e.message : String(e))
+          // Fall back to direct URL
         }
-      } else {
-        const vRes = await fetch(rawVideoUrl)
-        const vBuf = await vRes.arrayBuffer()
-        const blob = await put(blobKey, vBuf, { access: 'public', contentType: 'video/mp4' })
-        finalVideoUrl = blob.url
       }
 
       if (post_id) {
         try {
-          await supabaseAdmin.from('social_posts').update({ video_url: finalVideoUrl, post_type: 'reel' }).eq('id', post_id)
+          await supabaseAdmin.from('social_posts').update({ post_type: 'reel' }).eq('id', post_id)
         } catch {}
       }
 
-      if (business_id) {
+      // Update reel_usage_log status
+      if (jobId) {
         try {
-          const { data: postRow } = post_id ? (await supabaseAdmin.from('social_posts')
-            .select('reel_cost_aud, reel_duration_seconds, reel_mode, reel_style')
-            .eq('id', post_id).maybeSingle()) : { data: null }
-          // Fire-and-forget billing — never awaited so it never blocks Reel delivery
-          fetch((process.env.NEXT_PUBLIC_APP_URL ?? '') + '/api/billing/reels-usage', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              business_id,
-              post_id: post_id || null,
-              cost_aud: postRow?.reel_cost_aud || 0.56,
-              duration_seconds: postRow?.reel_duration_seconds || 15,
-              provider: effectiveModelId,
-              reel_mode: postRow?.reel_mode || null,
-              reel_style: postRow?.reel_style || null,
-              fal_request_id: effectiveRequestId,
-            }),
-          }).catch(() => {})
+          await supabaseAdmin.from('reel_usage_log').update({ status: 'completed' }).eq('fal_request_id', jobId)
         } catch {}
       }
 
       return NextResponse.json({ status: 'COMPLETED', video_url: finalVideoUrl })
     }
 
-    if (statusStr === 'FAILED') {
-      return NextResponse.json({ status: 'FAILED', error: 'fal.ai generation failed' })
+    if (status === 'FAILED' || status === 'ERROR') {
+      if (jobId) {
+        try { await supabaseAdmin.from('reel_usage_log').update({ status: 'failed' }).eq('fal_request_id', jobId) } catch {}
+      }
+      return NextResponse.json({ status: 'FAILED', error: data.error || 'Generation failed' })
     }
 
-    return NextResponse.json({ status: statusStr })
-  } catch (e: any) {
-    console.error('[generate-video GET] fal status error:', e?.message ?? e)
-    return NextResponse.json({ status: 'error', error: e?.message ?? 'unknown' }, { status: 500 })
+    // Still processing
+    return NextResponse.json({ status: status || 'IN_PROGRESS' })
+
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e)
+    console.error('[generate-video GET] error:', msg)
+    return NextResponse.json({ status: 'error', error: msg }, { status: 500 })
   }
 }
 
