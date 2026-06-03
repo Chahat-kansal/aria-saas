@@ -31,7 +31,7 @@ async function _GET(req: Request) {
     .from('menu_engineering_actions')
     .select('*,pos_products(name)')
     .eq('business_id', biz.id)
-    .order('actioned_at', { ascending: false })
+    .order('executed_at', { ascending: false })
     .limit(limit);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

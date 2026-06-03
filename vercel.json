@@ -186,6 +186,10 @@
     {
       "path": "/api/cron/council-session",
       "schedule": "0 20 * * *"
+    },
+    {
+      "path": "/api/cron/menu-engineering",
+      "schedule": "0 6 * * *"
     }
   ]
 }

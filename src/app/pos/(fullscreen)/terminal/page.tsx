@@ -375,6 +375,9 @@ export default function TerminalPage() {
   const [showCustomItem,   setShowCustomItem]   = useState(false);
   const [customItemForm,   setCustomItemForm]   = useState({ desc: '', price: '', qty: '1', taxable: true, isNote: false });
 
+  /* ── Bundle choice modal (agent bundle deal) ────────────────── */
+  const [bundleModal, setBundleModal] = useState<{ product: Product; bundleProduct: Product; bundlePrice: number } | null>(null);
+
   /* ── Price check mode ─────────────────────────────────────────── */
   const [priceCheckMode,   setPriceCheckMode]   = useState(false);
   const [priceCheckProd,   setPriceCheckProd]   = useState<Product | null>(null);
@@ -1118,6 +1121,11 @@ export default function TerminalPage() {
     if ((p as any).serial_tracked) { setSerialInput(''); setSerialPrompt({ product: p }); return; }
     if (p.is_weight_based && p.price_per_kg) { setWeightInput(''); setWeightModal({ product: p }); return; }
     if ((p as any).builder_type === 'sandwich') { setSandwichBuilderProduct(p); return; }
+    // Bundle choice — show modal if agent has set a bundle deal for this product
+    if (p.agent_bundle_product_id && p.agent_bundle_price) {
+      const bundleProduct = products.find(pr => pr.id === p.agent_bundle_product_id);
+      if (bundleProduct) { setBundleModal({ product: p, bundleProduct, bundlePrice: p.agent_bundle_price }); return; }
+    }
 
     // Check pre-loaded cache — no network needed for most products
     const cached = modifierCache.current[p.id];
@@ -4241,6 +4249,39 @@ export default function TerminalPage() {
           } catch { /* non-fatal */ }
         }}
       />
+
+      {/* Bundle choice modal — agent-suggested bundle deal */}
+      {bundleModal && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)' }}
+          onClick={() => setBundleModal(null)}>
+          <div style={{ background: '#1D2E25', border: '1px solid rgba(127,184,151,0.25)', borderRadius: 18, padding: '28px 24px', maxWidth: 360, width: '90%', boxShadow: '0 24px 64px rgba(0,0,0,0.5)' }}
+            onClick={e => e.stopPropagation()}>
+            <div style={{ fontSize: 10, color: '#7FB897', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 10 }}>Aria Bundle Deal</div>
+            <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>{bundleModal.product.name}</div>
+            <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginBottom: 20 }}>
+              Often bought with <strong style={{ color: 'var(--text-primary)' }}>{bundleModal.bundleProduct.name}</strong>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <button
+                onClick={() => {
+                  addToCartDirect(bundleModal.product, 1);
+                  addToCartDirect({ ...bundleModal.bundleProduct, price: bundleModal.bundlePrice - bundleModal.product.price }, 1);
+                  setBundleModal(null);
+                }}
+                style={{ padding: '14px 16px', borderRadius: 12, border: '2px solid #7FB897', background: 'rgba(127,184,151,0.1)', color: '#7FB897', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span>Bundle with {bundleModal.bundleProduct.name}</span>
+                <span style={{ fontFamily: "'JetBrains Mono',monospace" }}>${bundleModal.bundlePrice.toFixed(2)}</span>
+              </button>
+              <button
+                onClick={() => { addToCartDirect(bundleModal.product, 1); setBundleModal(null); }}
+                style={{ padding: '12px 16px', borderRadius: 12, border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', color: 'var(--text-secondary)', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span>Add single only</span>
+                <span style={{ fontFamily: "'JetBrains Mono',monospace" }}>${bundleModal.product.price.toFixed(2)}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

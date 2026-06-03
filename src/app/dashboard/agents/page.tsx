@@ -251,8 +251,8 @@ export default function AgentsPage() {
   const [savingPriority, setSavingPriority] = useState(false)
 
   // Menu engineering widget state
-  const [menuScores, setMenuScores] = useState<Array<{ product_id: string; bcg_quadrant: string; composite_score: number; scored_at: string; pos_products: { name: string; price: number } | null }>>([])
-  const [menuActions, setMenuActions] = useState<Array<{ id: string; action_type: string; reasoning: string | null; actioned_at: string }>>([])
+  const [menuScores, setMenuScores] = useState<Array<{ product_id: string; performance_tier: string; composite_score: number; scored_at: string; pos_products: { name: string; price: number } | null }>>([])
+  const [menuActions, setMenuActions] = useState<Array<{ id: string; action_type: string; reasoning: string | null; executed_at: string; revenue_impact_actual: number | null }>>([])
   const [menuLoading, setMenuLoading] = useState(false)
   const [showResetModal, setShowResetModal] = useState(false)
   const [resetting, setResetting] = useState(false)
@@ -337,15 +337,13 @@ export default function AgentsPage() {
         fetch('/api/agents/menu-engineering/actions?limit=20'),
       ])
       if (scoresRes.ok) {
-        const d = await scoresRes.json() as { scores: typeof menuScores }
+        const d = await scoresRes.json() as { scores: typeof menuScores; current_mode?: string }
         setMenuScores(d.scores ?? [])
+        if (d.current_mode) setCurrentMenuMode(d.current_mode)
       }
       if (actionsRes.ok) {
         const d = await actionsRes.json() as { actions: typeof menuActions }
         setMenuActions(d.actions ?? [])
-        // Infer current mode from latest mode action
-        const modeAction = (d.actions ?? []).find((a: typeof menuActions[0]) => a.action_type.startsWith('activate_'))
-        if (modeAction) setCurrentMenuMode(modeAction.action_type.replace('activate_', '').replace('_mode', ''))
       }
     } catch { /* non-fatal */ }
     setMenuLoading(false)
@@ -823,7 +821,7 @@ export default function AgentsPage() {
                       { q: 'plowhouse', label: '🟢 Plowhouses', desc: 'High velocity · Low margin', color: '#7FB897', bg: 'rgba(127,184,151,0.08)' },
                       { q: 'dog', label: '⚫ Dogs', desc: 'Low velocity · Low margin', color: '#6B7280', bg: 'rgba(107,114,128,0.08)' },
                     ].map(cell => {
-                      const items = menuScores.filter(s => s.bcg_quadrant === cell.q)
+                      const items = menuScores.filter(s => s.performance_tier === cell.q)
                       return (
                         <div key={cell.q} style={{ background: cell.bg, border: '1px solid ' + cell.color + '22', borderRadius: 10, padding: 10, overflow: 'hidden' }}>
                           <div style={{ fontSize: 11, fontWeight: 700, color: cell.color, marginBottom: 4 }}>{cell.label}</div>
@@ -861,7 +859,7 @@ export default function AgentsPage() {
                         {menuActions.slice(0, 8).map(a => (
                           <div key={a.id} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
                             <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', whiteSpace: 'nowrap', marginTop: 1 }}>
-                              {new Date(a.actioned_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              {new Date(a.executed_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                             </span>
                             <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.6)' }}>
                               {a.action_type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
@@ -899,9 +897,9 @@ export default function AgentsPage() {
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
                     {[
                       { label: 'Scored', value: String(menuScores.length) },
-                      { label: 'Stars', value: String(menuScores.filter(s => s.bcg_quadrant === 'star').length) },
-                      { label: 'Puzzles', value: String(menuScores.filter(s => s.bcg_quadrant === 'puzzle').length) },
-                      { label: 'Dogs', value: String(menuScores.filter(s => s.bcg_quadrant === 'dog').length) },
+                      { label: 'Stars', value: String(menuScores.filter(s => s.performance_tier === 'star').length) },
+                      { label: 'Puzzles', value: String(menuScores.filter(s => s.performance_tier === 'puzzle').length) },
+                      { label: 'Dogs', value: String(menuScores.filter(s => s.performance_tier === 'dog').length) },
                     ].map(m => (
                       <div key={m.label} style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 8, padding: '8px 10px', textAlign: 'center' }}>
                         <div style={{ fontSize: 16, fontWeight: 700, color: '#fff', fontFamily: 'Fraunces, Georgia, serif', fontStyle: 'italic' }}>{m.value}</div>
