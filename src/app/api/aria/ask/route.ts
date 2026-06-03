@@ -27,6 +27,7 @@ import type { CouncilOutput } from '@/lib/aria/council'
 import { getBusinessContext } from '@/lib/aria/get-business-context'
 import { maybeWriteMemory } from '@/lib/aria/ask/memory-writer'
 import { extractAndStoreMemories } from '@/lib/aria/memory/extract'
+import { summariseConversation } from '@/lib/aria/memory/summarize'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
   const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
@@ -305,8 +306,18 @@ async function _POST(req: Request) {
         } catch (e) {
           console.error('[aria/ask] upsertConversation failed (council):', (e as Error).message)
         }
-        // Fire-and-forget memory extraction for council responses
+        // Fire-and-forget memory extraction + conversation summarisation for council responses
         extractAndStoreMemories(bid, message, council.final_briefing, savedConvId).catch(() => {})
+        if (savedConvId) {
+          const _cid = savedConvId
+          Promise.resolve(supabaseAdmin.from('aria_conversations').select('messages').eq('id', _cid).maybeSingle())
+            .then(({ data: conv }) => {
+              const msgs = Array.isArray((conv as { messages?: Array<{ role: string; content: string }> } | null)?.messages)
+                ? (conv as { messages: Array<{ role: string; content: string }> }).messages
+                : []
+              summariseConversation(bid, msgs, _cid).catch(() => {})
+            }).catch(() => {})
+        }
         return NextResponse.json({
           blocks: council.ask_blocks ?? [{ type: 'lead', content: council.final_briefing }],
           followups: council.ask_followups ?? [],
@@ -381,6 +392,14 @@ IMAGE ANALYSIS — full depth vision:
 • Handwritten notes → transcribe accurately
 • Multiple images → analyse all and compare
 Always extract EVERY number, date, and name visible. Never say "I can see an image" — describe exactly what's in it.
+
+IMAGE HONESTY RULES (non-negotiable):
+• If an image is blurry, dark, cropped, or partially visible — say so explicitly before attempting to read it. Do not guess at obscured content.
+• NEVER estimate or infer dollar amounts from invoices or receipts — read the exact printed number. If a total is unclear, say "I cannot read this total clearly" rather than estimating.
+• For charts or graphs: extract the actual data points — do not guess trend direction without reading the axis values.
+• When an image shows a mix of readable and unreadable areas: clearly separate what you CAN read from what you CANNOT. Say "I can clearly see X, but Y is unclear."
+• For handwritten documents: flag any word or number you are uncertain about with [unclear] rather than substituting a guess.
+• NEVER claim to see something that isn't in the image to seem helpful. If an invoice total doesn't appear, say "total not visible in this image."
 
 FILE UNDERSTANDING:
 • PDFs, Excel/CSV files, text files: analyse and answer questions about the content
@@ -999,6 +1018,17 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
   // Write any new memories from this conversation — non-blocking (both regex and AI extraction)
   maybeWriteMemory(bid, message, historyContent).catch(() => {})
   extractAndStoreMemories(bid, message, historyContent, savedConvId).catch(() => {})
+  // Summarise conversation for multi-session context — fire-and-forget
+  if (savedConvId) {
+    const _scid = savedConvId
+    Promise.resolve(supabaseAdmin.from('aria_conversations').select('messages').eq('id', _scid).maybeSingle())
+      .then(({ data: conv }) => {
+        const msgs = Array.isArray((conv as { messages?: Array<{ role: string; content: string }> } | null)?.messages)
+          ? (conv as { messages: Array<{ role: string; content: string }> }).messages
+          : []
+        summariseConversation(bid, msgs, _scid).catch(() => {})
+      }).catch(() => {})
+  }
 
   // Track actual spend in DB for cost guard
   try {

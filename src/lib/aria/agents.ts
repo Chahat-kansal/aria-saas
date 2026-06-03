@@ -66,6 +66,7 @@ Return ONLY valid JSON. No prose. No code fences.`
     review_reputation:     `Schema: { "type": "insight", "title": "reputation score", "description": "reputation analysis", "rationale": "1 sentence", "confidence": "high", "estimated_impact_dollars": 0, "payload": {} }`,
     long_doc_map:    `Schema: { "type": "insight", "title": "document section", "description": "extracted content", "rationale": "n/a", "confidence": "high", "estimated_impact_dollars": 0, "payload": {} }`,
     long_doc_reduce: `Schema: { "type": "insight", "title": "document synthesis", "description": "synthesised answer", "rationale": "n/a", "confidence": "high", "estimated_impact_dollars": 0, "payload": {} }`,
+    conversation_summarizer: `Schema: { "summary": "string", "key_decisions": [], "key_concerns": [], "followup_promised": [] }`,
   }
 
   return `${baseRules}\n\n${schemas[agentKey] ?? schemas.generic}`
@@ -109,6 +110,7 @@ export async function runAgent(
     customer_insight: 'haiku', document_vision: 'haiku',
     marketing_ai_generate: 'sonnet', review_reputation: 'haiku',
     long_doc_map: 'haiku', long_doc_reduce: 'sonnet',
+    conversation_summarizer: 'haiku',
   }
 
   const result = await callAnthropic<Recommendation>({

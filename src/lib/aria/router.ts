@@ -17,6 +17,7 @@ function agentToCategory(key: AgentKey): string {
     customer_insight: 'customers', document_vision: 'inventory',
     marketing_ai_generate: 'promotions', review_reputation: 'sales',
     long_doc_map: 'sales', long_doc_reduce: 'sales',
+    conversation_summarizer: 'sales',
   }
   return map[key] ?? 'sales'
 }

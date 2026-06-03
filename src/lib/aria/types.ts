@@ -14,6 +14,7 @@ export type AgentKey =
   | 'signal_engine_synth' | 'memory_extractor' | 'customer_insight' | 'document_vision'
   | 'marketing_ai_generate' | 'review_reputation'
   | 'long_doc_map' | 'long_doc_reduce'
+  | 'conversation_summarizer'
 
 export type AgentRole = 'agent' | 'judge' | 'data' | 'narrative' | 'classify' | 'chat' | 'export' | 'analysis' | 'other' | 'document'
 
