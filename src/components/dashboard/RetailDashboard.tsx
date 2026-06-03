@@ -249,6 +249,10 @@ export function RetailDashboard({ business }: { business: Business }) {
   return (
     <div className="p-4 md:p-6 max-w-6xl mx-auto space-y-6">
 
+      {/* ─── Aria Value Surface ──────────────────────────────── */}
+      <FirstInsightBanner />
+      <AriaWinsBar />
+
       {/* ─── Section 1: Morning Brief ─────────────────────────── */}
       <div className="rounded-2xl overflow-hidden" style={{ background: 'linear-gradient(135deg,rgba(29,158,117,0.12) 0%,#13131a 45%)', border: '1px solid rgba(29,158,117,0.2)' }}>
         <div className="flex flex-col md:flex-row md:items-center gap-4 px-5 pt-5 pb-4 border-b border-[rgba(255,255,255,0.06)]">
