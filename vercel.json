@@ -190,6 +190,10 @@
     {
       "path": "/api/cron/menu-engineering",
       "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/cron/labour-optimisation",
+      "schedule": "0 19 * * *"
     }
   ]
 }

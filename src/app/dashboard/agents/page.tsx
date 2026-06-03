@@ -274,6 +274,12 @@ export default function AgentsPage() {
   const [skippedClvIds, setSkippedClvIds] = useState<Set<string>>(new Set())
   const [expandedClvId, setExpandedClvId] = useState<string | null>(null)
 
+  // Labour Optimisation widget state
+  const [labourRealtime, setLabourRealtime] = useState<{ labour_pct: number; active_staff_count: number; cost_so_far: number; revenue_today: number; threshold_pct: number; target_pct: number; over_threshold: boolean } | null>(null)
+  const [labourActions, setLabourActions] = useState<Array<{ id: string; action_type: string; target_date: string; target_hour_start: number | null; target_hour_end: number | null; staff_response: string | null; labour_cost_saving: number | null; message_sent: string | null; executed_at: string; staff_members?: { first_name: string; last_name: string } | null }>>([])
+  const [labourLoading, setLabourLoading] = useState(false)
+  const [labourPotentialSaving, setLabourPotentialSaving] = useState<number | null>(null)
+
   const bid = business?.id
 
   // Intelligence tab state
@@ -419,13 +425,36 @@ export default function AgentsPage() {
     setForgettingId(null)
   }
 
+  const loadLabourData = useCallback(async () => {
+    if (!bid) return
+    setLabourLoading(true)
+    try {
+      const [realtimeRes, actionsRes] = await Promise.all([
+        fetch('/api/agents/labour/realtime'),
+        fetch('/api/agents/labour/actions'),
+      ])
+      if (realtimeRes.ok) {
+        const d = await realtimeRes.json() as typeof labourRealtime
+        setLabourRealtime(d)
+      }
+      if (actionsRes.ok) {
+        const d = await actionsRes.json() as { actions: typeof labourActions; pending_responses: number; accepted_count: number; declined_count: number; total_savings_realised: number }
+        setLabourActions(d.actions ?? [])
+        const pendingSavings = (d.actions ?? []).filter((a: { staff_response: string | null; labour_cost_saving: number | null }) => a.staff_response === 'pending').reduce((s: number, a: { labour_cost_saving: number | null }) => s + Number(a.labour_cost_saving ?? 0), 0)
+        setLabourPotentialSaving(pendingSavings)
+      }
+    } catch { /* non-fatal */ }
+    setLabourLoading(false)
+  }, [bid])
+
   useEffect(() => {
     if (tab === 'agents') {
       void loadMenuData()
       void loadFlashData()
       void loadClvData()
+      void loadLabourData()
     }
-  }, [tab, loadMenuData, loadFlashData, loadClvData])
+  }, [tab, loadMenuData, loadFlashData, loadClvData, loadLabourData])
 
   useEffect(() => {
     if (tab === 'intelligence') void loadIntelligenceData()
@@ -1032,6 +1061,92 @@ export default function AgentsPage() {
                     )}
                   </div>
                 </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* ── Labour Optimisation Widget ───────────────────────────────────── */}
+        <div style={{ marginTop: 24, background: surface, border, borderRadius: 16, overflow: 'hidden' }}>
+          <div style={{ padding: '18px 24px', borderBottom: border, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <h3 style={{ color: '#fff', fontSize: 16, fontWeight: 600, margin: 0 }}>👷 Labour Optimisation</h3>
+              <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12, margin: '4px 0 0' }}>Live labour % · roster gap forecast · shift offer queue</p>
+            </div>
+            <button onClick={() => void loadLabourData()} style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid rgba(245,158,11,0.3)', background: 'transparent', color: '#F59E0B', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+              Refresh
+            </button>
+          </div>
+          <div style={{ padding: 24 }}>
+            {labourLoading ? (
+              <div style={{ color: 'rgba(255,255,255,0.3)', textAlign: 'center', padding: 32 }}>Loading labour data...</div>
+            ) : (
+              <div>
+                {/* Live Labour % */}
+                {labourRealtime && (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 24 }}>
+                    <div style={{ background: labourRealtime.over_threshold ? 'rgba(239,68,68,0.1)' : 'rgba(127,184,151,0.1)', border: '1px solid ' + (labourRealtime.over_threshold ? 'rgba(239,68,68,0.3)' : 'rgba(127,184,151,0.3)'), borderRadius: 12, padding: '14px 16px' }}>
+                      <div style={{ fontSize: 11, color: labourRealtime.over_threshold ? '#EF4444' : '#7FB897', fontWeight: 700, marginBottom: 4 }}>LIVE LABOUR %{labourRealtime.over_threshold ? ' ⚠' : ''}</div>
+                      <div style={{ fontFamily: 'Fraunces, Georgia, serif', fontStyle: 'italic', fontSize: 28, color: labourRealtime.over_threshold ? '#EF4444' : '#7FB897' }}>{labourRealtime.labour_pct}%</div>
+                      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>Target {labourRealtime.target_pct}% · Alert {labourRealtime.threshold_pct}%</div>
+                    </div>
+                    <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: '14px 16px' }}>
+                      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', fontWeight: 700, marginBottom: 4 }}>ACTIVE STAFF</div>
+                      <div style={{ fontFamily: 'Fraunces, Georgia, serif', fontStyle: 'italic', fontSize: 28, color: '#fff' }}>{labourRealtime.active_staff_count}</div>
+                      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>clocked in now</div>
+                    </div>
+                    <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: '14px 16px' }}>
+                      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', fontWeight: 700, marginBottom: 4 }}>LABOUR COST TODAY</div>
+                      <div style={{ fontFamily: 'Fraunces, Georgia, serif', fontStyle: 'italic', fontSize: 28, color: '#fff' }}>${labourRealtime.cost_so_far.toFixed(0)}</div>
+                      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>Revenue: ${labourRealtime.revenue_today.toFixed(0)}</div>
+                    </div>
+                    <div style={{ background: labourPotentialSaving && labourPotentialSaving > 0 ? 'rgba(127,184,151,0.08)' : 'rgba(255,255,255,0.04)', border: '1px solid ' + (labourPotentialSaving && labourPotentialSaving > 0 ? 'rgba(127,184,151,0.2)' : 'rgba(255,255,255,0.08)'), borderRadius: 12, padding: '14px 16px' }}>
+                      <div style={{ fontSize: 11, color: '#7FB897', fontWeight: 700, marginBottom: 4 }}>PENDING SAVINGS</div>
+                      <div style={{ fontFamily: 'Fraunces, Georgia, serif', fontStyle: 'italic', fontSize: 28, color: '#7FB897' }}>${(labourPotentialSaving ?? 0).toFixed(0)}</div>
+                      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>awaiting staff response</div>
+                    </div>
+                  </div>
+                )}
+                {/* Action Queue */}
+                {labourActions.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '32px 0', color: 'rgba(255,255,255,0.25)', fontSize: 13 }}>
+                    No labour actions yet — agent runs nightly to generate roster recommendations
+                  </div>
+                ) : (
+                  <div>
+                    <h4 style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12, fontWeight: 700, margin: '0 0 10px', textTransform: 'uppercase', letterSpacing: 1 }}>Shift Offer Queue (last 30 days)</h4>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {labourActions.slice(0, 10).map(a => {
+                        const statusColor = a.staff_response === 'accepted' ? '#7FB897' : a.staff_response === 'declined' ? '#EF4444' : '#F59E0B'
+                        const statusLabel = a.staff_response === 'accepted' ? 'Accepted' : a.staff_response === 'declined' ? 'Declined' : 'Pending'
+                        const staffName = a.staff_members ? a.staff_members.first_name + ' ' + a.staff_members.last_name : 'All staff'
+                        const hours = a.target_hour_start !== null && a.target_hour_end !== null ? a.target_hour_start + ':00–' + a.target_hour_end + ':00' : ''
+                        return (
+                          <div key={a.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', background: 'rgba(255,255,255,0.04)', borderRadius: 10, border: '1px solid rgba(255,255,255,0.07)' }}>
+                            <div style={{ flex: 1 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
+                                <span style={{ fontSize: 12, fontWeight: 600, color: '#fff' }}>{a.action_type.replace(/_/g, ' ')}</span>
+                                <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 20, background: statusColor + '22', color: statusColor, fontWeight: 700 }}>{statusLabel}</span>
+                              </div>
+                              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>
+                                {staffName}{hours ? ' · ' + hours : ''}{a.target_date ? ' · ' + a.target_date : ''}
+                              </div>
+                              {a.message_sent && (
+                                <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', marginTop: 3, fontStyle: 'italic' }}>"{a.message_sent.slice(0, 80)}{a.message_sent.length > 80 ? '…' : ''}"</div>
+                              )}
+                            </div>
+                            <div style={{ textAlign: 'right', marginLeft: 12 }}>
+                              {a.labour_cost_saving ? (
+                                <div style={{ fontSize: 13, fontWeight: 700, color: '#7FB897' }}>${Number(a.labour_cost_saving).toFixed(0)} saved</div>
+                              ) : null}
+                              <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.25)', marginTop: 2 }}>{new Date(a.executed_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}</div>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>

@@ -132,7 +132,7 @@ export function DailyBriefingModal() {
           const rec: Recommendation = {
             id: 'council-briefing',
             priority: 'high',
-            category: 'AI Briefing',
+            category: 'compliance',
             title: "Today's Intelligence Brief",
             description: councilData.briefing,
             action_label: 'View full briefing',
