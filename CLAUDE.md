@@ -19,11 +19,13 @@ commits THREE times — every single time because code was committed/pushed WITH
 5. git log origin/main..HEAD   # MUST be empty. If not empty → push again.
 ```
 
-**NEVER:**
-- ❌ Commit without running `npm run build` first
-- ❌ Push a commit that hasn't passed `npm run build`
-- ❌ Build on top of a commit you haven't verified builds
-- ❌ Batch multiple commits and build only at the end — build before EACH commit
+**COMMIT RULE — ONE COMMIT PER PROMPT (not per task):**
+- ✅ Complete ALL tasks in a prompt, then build ONCE, then make ONE commit
+- ✅ This means one Vercel deploy per prompt, not per task
+- ❌ Never make multiple commits for a single prompt — wastes Vercel build quota
+- ❌ Never commit without running `npm run build` first
+- ❌ Never push a commit that hasn't passed `npm run build`
+- ❌ Never build on top of a commit you haven't verified builds
 
 **At the END of every task/session:**
 - Run `npm run build` one final time to confirm the whole thing is green
