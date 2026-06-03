@@ -116,6 +116,41 @@ export function DailyBriefingModal() {
     setBriefingError(false);
 
     try {
+      // Primary: council briefing — the 4-brain AI system
+      const councilRes = await fetch('/api/aria/briefing?businessId=' + business.id);
+
+      if (councilRes.status === 401 || councilRes.status === 429) {
+        setAuthFailed(true);
+        setIsBriefingLoading(false);
+        return;
+      }
+
+      if (councilRes.ok) {
+        const councilData = await councilRes.json();
+        if (councilData?.briefing) {
+          // Council returned a real briefing — show it as a single rich rec
+          const rec: Recommendation = {
+            id: 'council-briefing',
+            priority: 'high',
+            category: 'AI Briefing',
+            title: 'Today's Intelligence Brief',
+            description: councilData.briefing,
+            action_label: 'View full briefing',
+            action_type: 'navigate',
+            metric: '',
+            metric_label: '',
+            trend: null,
+            action_payload: { href: '/dashboard/ask-aria' },
+          };
+          setRecs([rec]);
+          setHasLiveData(true);
+          setTimeout(() => setIsBriefingOpen(true), 800);
+          setIsBriefingLoading(false);
+          return;
+        }
+      }
+
+      // Fallback: legacy daily-briefing route
       const res = await fetch('/api/aria/daily-briefing', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -123,15 +158,15 @@ export function DailyBriefingModal() {
       });
 
       if (res.status === 401 || res.status === 429) {
-        // Session expired or rate-limited — stop permanently, don't open modal
         setAuthFailed(true);
         setIsBriefingLoading(false);
         return;
       }
 
       if (!res.ok) {
-        // Other API error — show error state in modal but don't retry
-        setBriefingError(true);
+        // Legacy route failed — show empty state instead of error
+        setRecs([]);
+        setHasLiveData(false);
         setTimeout(() => setIsBriefingOpen(true), 800);
         setIsBriefingLoading(false);
         return;
@@ -139,7 +174,6 @@ export function DailyBriefingModal() {
 
       const data = await res.json();
 
-      // Only respect DB dismiss if it was specifically set today
       if (data.dismissed_at) {
         const dd = new Date(data.dismissed_at);
         const yyyy = dd.getFullYear();
@@ -153,7 +187,6 @@ export function DailyBriefingModal() {
         }
       }
 
-      // Respect remind_at if set in the future
       if (data.remind_at && new Date(data.remind_at) > new Date()) {
         setIsBriefingLoading(false);
         return;
@@ -165,10 +198,11 @@ export function DailyBriefingModal() {
 
       setRecs(validRecs);
       setHasLiveData(validRecs.length > 0);
-      // Always open — even with 0 recs. Show onboarding state if no data.
       setTimeout(() => setIsBriefingOpen(true), 800);
     } catch {
-      setBriefingError(true);
+      // Never show error — open with empty state instead
+      setRecs([]);
+      setHasLiveData(false);
       setTimeout(() => setIsBriefingOpen(true), 800);
     }
 
