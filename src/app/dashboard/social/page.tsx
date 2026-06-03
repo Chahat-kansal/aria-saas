@@ -528,7 +528,7 @@ export default function SocialPage() {
     const prompt = concept || post?.reel_concept || post?.caption || '';
     const res = await fetch('/api/social/generate-video', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt, image_url: post?.image_url }),
+      body: JSON.stringify({ prompt, image_url: post?.image_url, business_id: bid, post_id: postId }),
     });
     const d = await res.json();
     if (d.job_id) setVideoJobs(p => ({ ...p, [postId]: d.job_id }));
