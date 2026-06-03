@@ -127,26 +127,87 @@ export function DailyBriefingModal() {
 
       if (councilRes.ok) {
         const councilData = await councilRes.json();
-        if (councilData?.briefing) {
-          // Council returned a real briefing — show it as a single rich rec
-          const rec: Recommendation = {
-            id: 'council-briefing',
-            priority: 'high',
-            category: 'compliance',
-            title: "Today's Intelligence Brief",
-            description: councilData.briefing,
-            action_label: 'View full briefing',
-            action_type: 'navigate',
-            metric: '',
-            metric_label: '',
-            trend: null,
-            action_payload: { href: '/dashboard/ask-aria' },
-          };
-          setRecs([rec]);
-          setHasLiveData(true);
-          setTimeout(() => setIsBriefingOpen(true), 800);
-          setIsBriefingLoading(false);
-          return;
+        if (councilData?.briefing || councilData?.recommendations?.length) {
+          // If council returned structured recommendations, use them directly
+          if (Array.isArray(councilData.recommendations) && councilData.recommendations.length > 0) {
+            setRecs(councilData.recommendations.filter((r: Recommendation) => r.title?.trim() && r.description?.trim()));
+            setHasLiveData(true);
+            setTimeout(() => setIsBriefingOpen(true), 800);
+            setIsBriefingLoading(false);
+            return;
+          }
+          // Council returned a text briefing — parse into multiple insight cards
+          if (councilData?.briefing) {
+            const text: string = councilData.briefing;
+            // Split on sentence-ending punctuation followed by capital letter (new insight)
+            // Also split on em-dash sections, numbered points, or double newlines
+            const rawSentences = text
+              .split(/(?<=[.!?])\s+(?=[A-Z])|—\s*(?=[A-Z])|
+
++/)
+              .map((s: string) => s.trim())
+              .filter((s: string) => s.length > 20);
+
+            // Group into meaningful cards (2-3 sentences each, max 4 cards)
+            const chunkSize = Math.ceil(rawSentences.length / Math.min(4, Math.max(1, Math.ceil(rawSentences.length / 2))));
+            const chunks: string[][] = [];
+            for (let i = 0; i < rawSentences.length; i += chunkSize) {
+              chunks.push(rawSentences.slice(i, i + chunkSize));
+            }
+
+            // Map chunks to recommendation cards with varied categories/priorities
+            const categoryMap: Array<{ category: Recommendation['category']; priority: Recommendation['priority']; icon: string }> = [
+              { category: 'revenue', priority: 'high', icon: '💰' },
+              { category: 'customers', priority: 'high', icon: '👥' },
+              { category: 'stock', priority: 'medium', icon: '📦' },
+              { category: 'marketing', priority: 'medium', icon: '📣' },
+              { category: 'reviews', priority: 'low', icon: '⭐' },
+            ];
+
+            const parsed: Recommendation[] = chunks.slice(0, 4).map((chunk, idx) => {
+              const meta = categoryMap[idx % categoryMap.length];
+              const sentences = chunk.join(' ');
+              // Extract a short title from first ~6 words
+              const words = sentences.split(' ');
+              const title = words.slice(0, 6).join(' ').replace(/[,.:;]$/, '') + (words.length > 6 ? '…' : '');
+              return {
+                id: \`council-\${idx}\`,
+                priority: meta.priority,
+                category: meta.category,
+                title,
+                description: sentences,
+                action_label: idx === 0 ? 'View full briefing' : 'Take action',
+                action_type: 'navigate' as const,
+                metric: '',
+                metric_label: '',
+                trend: null,
+                action_payload: { href: '/dashboard/ask-aria' },
+              };
+            });
+
+            // Always add a "view full briefing" card at the end if more than 1 card
+            if (parsed.length > 1) {
+              parsed.push({
+                id: 'council-view-full',
+                priority: 'low',
+                category: 'compliance',
+                title: 'Read full intelligence brief',
+                description: 'Open Ask Aria to see the complete analysis with all insights, trends, and recommendations for today.',
+                action_label: 'Open full briefing →',
+                action_type: 'navigate',
+                metric: '',
+                metric_label: '',
+                trend: null,
+                action_payload: { href: '/dashboard/ask-aria' },
+              });
+            }
+
+            setRecs(parsed.filter(r => r.title.trim() && r.description.trim()));
+            setHasLiveData(true);
+            setTimeout(() => setIsBriefingOpen(true), 800);
+            setIsBriefingLoading(false);
+            return;
+          }
         }
       }
 
