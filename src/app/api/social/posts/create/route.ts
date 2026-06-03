@@ -11,30 +11,32 @@ async function _POST(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { business_id } = await req.json()
+  const {
+    business_id,
+    platform = 'instagram',
+    caption = '',
+    hashtags = [],
+    post_type = 'reel',
+    video_url = null,
+    image_url = null,
+  } = await req.json()
+
   if (!business_id) return NextResponse.json({ error: 'business_id required' }, { status: 400 })
 
-  // Verify ownership
   const { data: biz } = await supabaseAdmin
-    .from('businesses')
-    .select('id')
-    .eq('id', business_id)
-    .eq('user_id', user.id)
-    .maybeSingle()
+    .from('businesses').select('id')
+    .eq('id', business_id).eq('user_id', user.id).maybeSingle()
   if (!biz) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   const { data: post, error } = await supabaseAdmin
     .from('social_posts')
     .insert({
-      business_id,
-      platform: 'instagram',
-      caption: '',
-      hashtags: [],
-      status: 'draft',
-      post_type: 'reel',
+      business_id, platform, caption, hashtags,
+      status: 'draft', post_type,
+      ...(video_url ? { video_url } : {}),
+      ...(image_url ? { image_url } : {}),
     })
-    .select()
-    .single()
+    .select().single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ post })
