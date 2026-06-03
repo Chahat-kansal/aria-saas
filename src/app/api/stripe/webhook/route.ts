@@ -132,6 +132,20 @@ export async function POST(req: Request) {
           status: 'active',
           updated_at: new Date().toISOString(),
         }).eq('stripe_customer_id', customerId)
+
+        // Mark current month's Reel invoices as paid
+        const { data: bSub } = await supabaseAdmin
+          .from('business_subscriptions')
+          .select('business_id')
+          .eq('stripe_customer_id', customerId)
+          .maybeSingle()
+        if (bSub?.business_id) {
+          const billingMonth = new Date().toISOString().slice(0, 7)
+          await supabaseAdmin.from('reel_monthly_invoices').update({ status: 'paid' })
+            .eq('business_id', bSub.business_id)
+            .eq('billing_month', billingMonth)
+            .eq('status', 'billed')
+        }
       }
     }
 

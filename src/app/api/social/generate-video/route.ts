@@ -228,23 +228,26 @@ async function _GET(req: NextRequest) {
         } catch {}
       }
 
-      if (business_id && post_id) {
+      if (business_id) {
         try {
-          const { data: postRow } = await supabaseAdmin.from('social_posts')
+          const { data: postRow } = post_id ? (await supabaseAdmin.from('social_posts')
             .select('reel_cost_aud, reel_duration_seconds, reel_mode, reel_style')
-            .eq('id', post_id).maybeSingle()
-          if (postRow) {
-            await supabaseAdmin.from('reel_usage_log').insert({
+            .eq('id', post_id).maybeSingle()) : { data: null }
+          // Fire-and-forget billing — never awaited so it never blocks Reel delivery
+          fetch((process.env.NEXT_PUBLIC_APP_URL ?? '') + '/api/billing/reels-usage', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
               business_id,
-              post_id,
-              cost_aud: postRow.reel_cost_aud || 0.56,
-              duration_seconds: postRow.reel_duration_seconds || 15,
+              post_id: post_id || null,
+              cost_aud: postRow?.reel_cost_aud || 0.56,
+              duration_seconds: postRow?.reel_duration_seconds || 15,
               provider: effectiveModelId,
-              reel_mode: postRow.reel_mode,
-              reel_style: postRow.reel_style,
+              reel_mode: postRow?.reel_mode || null,
+              reel_style: postRow?.reel_style || null,
               fal_request_id: effectiveRequestId,
-            })
-          }
+            }),
+          }).catch(() => {})
         } catch {}
       }
 
