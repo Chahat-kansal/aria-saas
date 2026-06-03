@@ -899,6 +899,13 @@ export default function TerminalPage() {
     return () => clearTimeout(timer);
   }, [cart.map(i => i.product.id).join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  /* ─── Layout preferences — load on mount ─────────────────────── */
+  useEffect(() => {
+    fetch('/api/pos/layout-preferences').then(r => r.ok ? r.json() : null).then(d => {
+      if (d?.product_grid_order) setProductGridOrder(d.product_grid_order)
+    }).catch(() => {})
+  }, []);
+
   /* ─── Product grid order prefs (loaded by POSSidebar, broadcast via event) ── */
   useEffect(() => {
     const cached = (window as Window & { __posProductGridOrder?: Record<string, string[]> | null }).__posProductGridOrder
@@ -2571,6 +2578,13 @@ export default function TerminalPage() {
             </div>
             {/* Spacer */}
             <span style={{ flex: 1 }} />
+            {/* Customise layout button */}
+            <button
+              onClick={() => setGridCustomising(v => !v)}
+              title="Customise product layout"
+              style={{ padding: '4px 8px', borderRadius: 7, fontSize: 11, fontWeight: 600, background: gridCustomising ? 'rgba(127,184,151,0.2)' : 'transparent', border: gridCustomising ? '1px solid rgba(127,184,151,0.3)' : '1px solid rgba(255,255,255,0.08)', color: gridCustomising ? '#7FB897' : 'var(--text-tertiary)', cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}>
+              ⊞ {gridCustomising ? 'Done' : 'Customise'}
+            </button>
             {/* Layout switcher */}
             <LayoutSwitcher current={currentLayout} onChange={setLayout} />
             {/* Outlet switcher — only shown if >1 outlet */}

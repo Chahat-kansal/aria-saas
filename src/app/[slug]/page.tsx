@@ -47,5 +47,14 @@ export default async function CustomerHubPage({ params }: { params: { slug: stri
     reviewUrl,
   }
 
+  // Fire-and-forget hub visit tracking (non-blocking)
+  void supabaseAdmin.from('customer_hub_clicks').insert({
+    business_id: biz.id,
+    target: 'hub_view',
+    visitor_id: null,
+    referrer: null,
+    user_agent: null,
+  })
+
   return <HubClient business={business} />
 }

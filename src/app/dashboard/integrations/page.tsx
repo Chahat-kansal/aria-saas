@@ -104,6 +104,9 @@ export default function IntegrationsPage() {
   const [csvFile, setCsvFile] = useState<File | null>(null)
   const [importing, setImporting] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
+  const [slack, setSlack] = useState<{ connected: boolean; team_name: string | null; channel_name: string | null; channel_id: string | null; briefing_enabled: boolean } | null>(null)
+  const [slackChannels, setSlackChannels] = useState<Array<{ id: string; name: string }>>([])
+  const [slackBusy, setSlackBusy] = useState<'connect' | 'disconnect' | 'channels' | 'test' | 'briefing' | null>(null)
 
   const showToast = (m: string) => { setToast(m); setTimeout(() => setToast(''), 4000) }
 
@@ -135,6 +138,49 @@ export default function IntegrationsPage() {
     if (r) setBank(r)
   }, [business?.id])
   useEffect(() => { loadBank() }, [loadBank])
+
+  const loadSlack = useCallback(async () => {
+    if (!business?.id) return
+    const r = await fetch('/api/integrations/slack/status?business_id=' + business.id).then(r => r.json()).catch(() => null)
+    if (r) setSlack(r)
+  }, [business?.id])
+  useEffect(() => { loadSlack() }, [loadSlack])
+
+  const loadSlackChannels = async () => {
+    if (!business?.id) return
+    setSlackBusy('channels')
+    const r = await fetch('/api/integrations/slack/channel?business_id=' + business.id).then(r => r.json()).catch(() => null)
+    setSlackBusy(null)
+    if (r?.channels) setSlackChannels(r.channels)
+  }
+
+  const disconnectSlack = async () => {
+    if (!business?.id || !confirm('Disconnect Slack?')) return
+    setSlackBusy('disconnect')
+    await fetch('/api/integrations/slack/disconnect', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ business_id: business.id }) })
+    setSlackBusy(null); showToast('Slack disconnected.'); loadSlack()
+  }
+
+  const saveSlackChannel = async (channelId: string, channelName: string) => {
+    if (!business?.id) return
+    await fetch('/api/integrations/slack/channel', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ business_id: business.id, channel_id: channelId, channel_name: channelName }) })
+    showToast('Channel saved.'); loadSlack()
+  }
+
+  const toggleSlackBriefing = async () => {
+    if (!business?.id) return
+    setSlackBusy('briefing')
+    await fetch('/api/integrations/slack/status', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ business_id: business.id, slack_briefing_enabled: !slack?.briefing_enabled }) })
+    setSlackBusy(null); loadSlack()
+  }
+
+  const sendSlackTest = async () => {
+    if (!business?.id) return
+    setSlackBusy('test')
+    const r = await fetch('/api/integrations/slack/send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ business_id: business.id, message: 'Test message from Aria — your Slack integration is working!' }) })
+    setSlackBusy(null)
+    showToast(r.ok ? 'Test message sent!' : 'Send failed — check your channel selection.')
+  }
 
   const connectBank = async () => {
     if (!business?.id) return
@@ -588,6 +634,70 @@ export default function IntegrationsPage() {
           </>
         ) : (
           <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', margin: 0 }}>🔒 Read-only access · Aria can see balances but can never move money. Disconnect anytime.</p>
+        )}
+      </div>
+
+      {/* Slack */}
+      <div className="rounded-xl p-5 space-y-4" style={{ background: 'var(--bg-elevated, #1A2620)', border: '1px solid var(--divider, rgba(232,237,231,0.06))' }}>
+        <div className="flex items-start justify-between">
+          <div>
+            <p style={{ fontSize: 14, fontWeight: 700, color: '#E8EDE7', margin: 0 }}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={{ color: '#E01E5A' }}><path d="M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52zM6.313 15.165a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.313A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.522v-6.313zM8.834 5.042a2.528 2.528 0 0 1-2.521-2.52A2.528 2.528 0 0 1 8.834 0a2.528 2.528 0 0 1 2.521 2.522v2.52H8.834zM8.834 6.313a2.528 2.528 0 0 1 2.521 2.521 2.528 2.528 0 0 1-2.521 2.521H2.522A2.528 2.528 0 0 1 0 8.834a2.528 2.528 0 0 1 2.522-2.521h6.312zM18.956 8.834a2.528 2.528 0 0 1 2.522-2.521A2.528 2.528 0 0 1 24 8.834a2.528 2.528 0 0 1-2.522 2.521h-2.522V8.834zM17.688 8.834a2.528 2.528 0 0 1-2.523 2.521 2.527 2.527 0 0 1-2.52-2.521V2.522A2.527 2.527 0 0 1 15.165 0a2.528 2.528 0 0 1 2.523 2.522v6.312zM15.165 18.956a2.528 2.528 0 0 1 2.523 2.522A2.528 2.528 0 0 1 15.165 24a2.527 2.527 0 0 1-2.52-2.522v-2.522h2.52zM15.165 17.688a2.527 2.527 0 0 1-2.52-2.523 2.526 2.526 0 0 1 2.52-2.52h6.313A2.527 2.527 0 0 1 24 15.165a2.528 2.528 0 0 1-2.522 2.523h-6.313z"/></svg>
+                Slack
+              </span>
+            </p>
+            <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', margin: '4px 0 0' }}>
+              {slack?.connected ? 'Connected to ' + (slack.team_name ?? 'your workspace') : 'Receive daily briefings and alerts in Slack'}
+            </p>
+          </div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            {slack?.connected ? (
+              <button onClick={disconnectSlack} disabled={slackBusy !== null}
+                style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.08)', color: '#ef4444', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+                {slackBusy === 'disconnect' ? '…' : 'Disconnect'}
+              </button>
+            ) : (
+              <a href={'/api/integrations/slack/connect?business_id=' + (business?.id ?? '')}
+                style={{ padding: '10px 18px', borderRadius: 9, background: '#4A154B', color: '#fff', fontSize: 13, fontWeight: 700, textDecoration: 'none', display: 'inline-block' }}>
+                Connect Slack
+              </a>
+            )}
+          </div>
+        </div>
+
+        {slack?.connected && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <select
+                defaultValue={slack.channel_id ?? ''}
+                onChange={e => {
+                  const ch = slackChannels.find(c => c.id === e.target.value)
+                  if (ch) saveSlackChannel(ch.id, ch.name)
+                }}
+                onClick={() => { if (slackChannels.length === 0) loadSlackChannels() }}
+                style={{ flex: 1, padding: '8px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.06)', color: '#fff', fontSize: 13, cursor: 'pointer' }}>
+                <option value="">{slackChannels.length === 0 ? (slackBusy === 'channels' ? 'Loading channels…' : (slack.channel_name ? '#' + slack.channel_name : 'Click to load channels…')) : 'Select a channel'}</option>
+                {slackChannels.map(c => <option key={c.id} value={c.id}>{'#' + c.name}</option>)}
+              </select>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderRadius: 8, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 600 }}>Send daily briefing to Slack</div>
+                <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>Aria will post your morning briefing each day</div>
+              </div>
+              <button onClick={toggleSlackBriefing} disabled={slackBusy === 'briefing'}
+                style={{ padding: '6px 14px', borderRadius: 20, border: 'none', background: slack.briefing_enabled ? 'rgba(34,197,94,0.2)' : 'rgba(255,255,255,0.08)', color: slack.briefing_enabled ? '#22c55e' : 'rgba(255,255,255,0.4)', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+                {slack.briefing_enabled ? 'On' : 'Off'}
+              </button>
+            </div>
+            {slack.channel_id && (
+              <button onClick={sendSlackTest} disabled={slackBusy === 'test'}
+                style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid rgba(127,184,151,0.25)', background: 'rgba(127,184,151,0.08)', color: '#7FB897', fontSize: 12, fontWeight: 600, cursor: 'pointer', width: 'fit-content' }}>
+                {slackBusy === 'test' ? 'Sending…' : 'Send test message'}
+              </button>
+            )}
+          </div>
         )}
       </div>
 

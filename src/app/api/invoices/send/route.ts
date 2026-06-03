@@ -7,6 +7,7 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { checkRateLimit } from '@/lib/rate-limit'
+import { markBriefingStale } from '@/lib/aria/briefing-invalidate'
 import { z } from 'zod'
 import { validateBody } from '@/lib/api/validate'
 
@@ -225,6 +226,7 @@ async function _POST(req: Request) {
   }).eq('id', invoiceId).select('*').single()
 
   if (updateErr) return NextResponse.json({ error: updateErr.message }, { status: 500 })
+  markBriefingStale(inv.business_id).catch(() => {})
   return NextResponse.json({ invoice: updated, pdfUrl })
 }
 

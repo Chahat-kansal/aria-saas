@@ -1,0 +1,50 @@
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+
+import { NextResponse } from 'next/server'
+import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { supabaseAdmin } from '@/lib/supabase-admin'
+import { withErrorCapture } from '@/lib/api/with-error-capture'
+
+async function _GET(req: Request) {
+  const supabase = createServerSupabaseClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const { searchParams } = new URL(req.url)
+  const businessId = searchParams.get('business_id')
+  if (!businessId) return NextResponse.json({ error: 'business_id required' }, { status: 400 })
+
+  const { data: biz } = await supabase.from('businesses').select('id').eq('id', businessId).eq('user_id', user.id).maybeSingle()
+  if (!biz) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+  const { data } = await supabaseAdmin.from('businesses')
+    .select('slack_connected, slack_team_name, slack_channel_id, slack_channel_name, slack_briefing_enabled')
+    .eq('id', businessId).single()
+
+  return NextResponse.json({
+    connected: data?.slack_connected ?? false,
+    team_name: data?.slack_team_name ?? null,
+    channel_id: data?.slack_channel_id ?? null,
+    channel_name: data?.slack_channel_name ?? null,
+    briefing_enabled: data?.slack_briefing_enabled ?? false,
+  })
+}
+
+async function _PATCH(req: Request) {
+  const supabase = createServerSupabaseClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const body = await req.json() as { business_id: string; slack_briefing_enabled: boolean }
+  const { business_id, slack_briefing_enabled } = body
+
+  const { data: biz } = await supabase.from('businesses').select('id').eq('id', business_id).eq('user_id', user.id).maybeSingle()
+  if (!biz) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+  await supabaseAdmin.from('businesses').update({ slack_briefing_enabled }).eq('id', business_id)
+  return NextResponse.json({ ok: true })
+}
+
+export const GET = withErrorCapture('integrations/slack/status', _GET)
+export const PATCH = withErrorCapture('integrations/slack/status', _PATCH)

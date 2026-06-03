@@ -232,6 +232,7 @@ export function AriaBriefingCard({ businessId }: { businessId: string }) {
   const [refreshing, setRefreshing] = useState(false)
   const [expanded, setExpanded]   = useState(false)
   const [dataQuality, setDataQuality] = useState<DataQuality | null>(null)
+  const autoTriggered = useRef(false)
 
   const loadBriefing = useCallback(async (force = false) => {
     if (!businessId) return
@@ -261,7 +262,40 @@ export function AriaBriefingCard({ businessId }: { businessId: string }) {
   }
 
   if (loading) return <LoadingSkeleton />
-  if (!data?.briefing) return null
+
+  if (!data?.briefing) {
+    // Auto-trigger once on first mount if briefing is missing
+    if (!autoTriggered.current && businessId) {
+      autoTriggered.current = true
+      setRefreshing(true)
+      loadBriefing(true).finally(() => setRefreshing(false))
+    }
+    return (
+      <div style={{ borderRadius: 16, background: 'rgba(13,20,15,0.97)', border: '1px solid rgba(127,184,151,0.25)', marginBottom: 20, overflow: 'hidden' }}>
+        <div style={{ height: 3, background: 'linear-gradient(90deg, rgba(127,184,151,0), rgba(127,184,151,1), rgba(127,184,151,0))' }} />
+        <div style={{ padding: '20px 24px', display: 'flex', alignItems: 'center', gap: 16 }}>
+          <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'rgba(127,184,151,0.1)', border: '1px solid rgba(127,184,151,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>
+            {refreshing ? '⏳' : '🧠'}
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#7FB897', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 4 }}>Aria Briefing</div>
+            <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.55)', lineHeight: 1.5 }}>
+              {refreshing
+                ? 'Generating your briefing — this takes a few seconds…'
+                : 'No briefing generated yet. Connect your POS, add sales data, or add inventory to get your first Aria briefing.'}
+            </div>
+          </div>
+          {!refreshing && (
+            <button
+              onClick={() => { setRefreshing(true); loadBriefing(true).finally(() => setRefreshing(false)) }}
+              style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: 'rgba(127,184,151,0.15)', color: '#7FB897', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}>
+              Generate
+            </button>
+          )}
+        </div>
+      </div>
+    )
+  }
 
   // Use council's layout decision — fall back gracefully
   const layout = data.layout ?? FALLBACK_LAYOUT

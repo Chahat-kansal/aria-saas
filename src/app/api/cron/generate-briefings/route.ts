@@ -6,6 +6,7 @@ import { supabaseAdmin } from '@/lib/supabase-admin'
 import { generateInsight } from '@/lib/aria-insights'
 import { checkBriefingTrigger, localDateString, BriefingBusiness } from '@/lib/aria/timezone'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { sendSlackMessage } from '@/lib/integrations/slack'
 
 function authOk(req: NextRequest): boolean {
   const cronSecret = process.env.CRON_SECRET
@@ -14,8 +15,16 @@ function authOk(req: NextRequest): boolean {
   return auth === `Bearer ${cronSecret}` || auth === cronSecret
 }
 
+interface BriefingBusinessWithSlack extends BriefingBusiness {
+  slack_connected?: boolean
+  slack_briefing_enabled?: boolean
+  slack_access_token?: string | null
+  slack_channel_id?: string | null
+  name?: string
+}
+
 async function generateMorning(
-  biz: BriefingBusiness,
+  biz: BriefingBusinessWithSlack,
   today: string
 ) {
   const yesterday = new Date(today)
@@ -102,6 +111,18 @@ async function generateMorning(
     }, { onConflict: 'business_id,briefing_date' }),
   ])
   if (cacheErr) console.warn('[generate-briefings] aria_briefings_cache upsert:', cacheErr.message)
+
+  // Send to Slack if enabled
+  if (biz.slack_connected && biz.slack_briefing_enabled && biz.slack_access_token && biz.slack_channel_id) {
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://ariaos.site'
+    const bizName = biz.name ?? 'Your Business'
+    const blocks = [
+      { type: 'header', text: { type: 'plain_text', text: 'Aria Morning Briefing — ' + bizName } },
+      { type: 'section', text: { type: 'mrkdwn', text: bullets.map((b: string) => '• ' + b).join('\n') } },
+      { type: 'actions', elements: [{ type: 'button', text: { type: 'plain_text', text: 'Open Aria' }, url: appUrl + '/dashboard' }] },
+    ]
+    sendSlackMessage(biz.slack_access_token, biz.slack_channel_id, 'Morning briefing for ' + bizName, blocks).catch(() => {})
+  }
 }
 
 async function generateEvening(
@@ -143,7 +164,7 @@ async function _GET(req: NextRequest) {
 
   const { data: bizList, error } = await supabaseAdmin
     .from('businesses')
-    .select('id, timezone, closing_hour_local, evening_briefing_lead_hours, evening_briefing_enabled, morning_briefing_enabled')
+    .select('id, name, timezone, closing_hour_local, evening_briefing_lead_hours, evening_briefing_enabled, morning_briefing_enabled, slack_connected, slack_briefing_enabled, slack_access_token, slack_channel_id')
     .eq('is_active', true)
     .limit(500)
 
@@ -152,11 +173,11 @@ async function _GET(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  const businesses = (bizList ?? []) as BriefingBusiness[]
+  const businesses = (bizList ?? []) as BriefingBusinessWithSlack[]
   let morning = 0, evening = 0, errors = 0
 
   // Build work items (skip businesses with no trigger)
-  const work: Array<{ biz: BriefingBusiness; trigger: 'morning' | 'evening'; today: string }> = []
+  const work: Array<{ biz: BriefingBusinessWithSlack; trigger: 'morning' | 'evening'; today: string }> = []
   for (const biz of businesses) {
     const trigger = checkBriefingTrigger(biz)
     if (!trigger) continue

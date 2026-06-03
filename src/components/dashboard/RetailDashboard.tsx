@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { MorningCommandCentre } from '@/components/dashboard/MorningCommandCentre';
 import { AriaBriefingCard } from '@/components/dashboard/AriaBriefingCard';
 import { PendingActionsCard } from '@/components/dashboard/PendingActionsCard'
+import { SetupGuideCard } from '@/components/dashboard/SetupGuideCard'
 import { LiveRevenueTicker, ThreeWayRevenue, HourlyHeatmap, StaffOnShift, AIActionStrip, WeatherWidget } from './ProWidgets';
 import { CustomerSurfaces } from '@/components/dashboard/CustomerSurfaces';
 import { AriaWinsBar } from './AriaWinsBar';
@@ -398,6 +399,7 @@ export function RetailDashboard({ business }: { business: Business }) {
 <HourlyHeatmap businessId={business.id} />
 
 {/* ─── Section 3: MorningCommandCentre (AI decisions) ── */}
+      <SetupGuideCard businessId={business.id} />
       {councilBriefing
         ? <AriaBriefingCard businessId={business.id} />
         : <MorningCommandCentre />}

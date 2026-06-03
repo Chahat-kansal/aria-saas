@@ -64,6 +64,8 @@ const ALL_ITEMS: Record<string, NavItemDef> = {
   'suppliers':                  { href: '/dashboard/suppliers',                label: 'Supplier prices',   icon: SearchIcon,         section: 'Inventory'    },
   'churn':                      { href: '/dashboard/churn',                    label: 'Churn prevention',  icon: TrendingDownIcon,   section: 'Intelligence' },
   'invoices':                   { href: '/dashboard/invoices',                 label: 'Invoices',          icon: FileTextIcon,       badge: 'AI', section: 'Revenue' },
+  'gift-cards':                 { href: '/dashboard/gift-cards',               label: 'Gift cards',        icon: CreditCardIcon,     section: 'Revenue' },
+  'xero':                       { href: '/dashboard/xero',                     label: 'Xero sync',         icon: FileTextIcon,       section: 'Revenue' },
   'wholesale':                  { href: '/dashboard/wholesale',                label: 'Wholesale orders',  icon: ClipboardIcon,      badge: 'AI', section: 'Revenue' },
   'bookings':                   { href: '/dashboard/bookings',                 label: 'Bookings + sales',  icon: CalendarIcon,       section: 'Revenue'      },
   'quote-builder':              { href: '/dashboard/quote-builder',            label: 'Quote builder',     icon: FileTextIcon,       section: 'Pro tools'    },
@@ -149,6 +151,7 @@ const ALWAYS_SECTIONS: { section: string; items: (NavItemDef & { fresh?: boolean
     items: [
       { href: '/dashboard/settings/sharing', label: 'Sharing',           icon: ShareIcon,   section: 'Settings', fresh: true },
       { href: '/dashboard/settings/reports', label: 'Scheduled Reports', icon: CalendarIcon, section: 'Settings', fresh: true },
+      { href: '/dashboard/xero',             label: 'Xero sync',         icon: FileTextIcon, section: 'Settings' },
     ],
   },
 ]
@@ -488,6 +491,9 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
 }
 
 /* ─── Icons ─────────────────────────────────────────────────────── */
+function CreditCardIcon({ className }: { className?: string }) {
+  return <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>;
+}
 function GridIcon({ className }: { className?: string }) {
   return <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>;
 }

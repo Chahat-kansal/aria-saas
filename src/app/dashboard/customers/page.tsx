@@ -208,8 +208,15 @@ export default function CustomersPage() {
   const bulkWinback = async () => {
     if (!checkedIds.size) return
     setBulkWinbackLoading(true)
-    await Promise.all([...checkedIds].map(id => fetch('/api/customers/' + id + '/winback', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) })))
-    setBulkWinbackLoading(false); setCheckedIds(new Set())
+    const r = await fetch('/api/customers/bulk-winback', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ customer_ids: [...checkedIds] }),
+    })
+    const d = await r.json() as { sent?: number; failed?: number }
+    setBulkWinbackLoading(false)
+    setCheckedIds(new Set())
+    if (r.ok) alert(`Winback sent to ${d.sent ?? 0} customers${d.failed ? '. ' + d.failed + ' failed.' : '.'}`)
   }
   const recalcSegments = async () => {
     if (!bid) return
