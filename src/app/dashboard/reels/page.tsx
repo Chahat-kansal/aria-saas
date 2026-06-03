@@ -125,9 +125,21 @@ export default function ReelStudioPage() {
 
   async function loadBiz(uid: string, token: string) {
     try {
-      const { data: biz } = await supabase.from('businesses').select('id')
-        .eq('user_id', uid).eq('is_active', true).maybeSingle()
-      if (!biz) { setError('No active business found'); return }
+      // Use localStorage active business ID (same as BusinessProvider/switcher)
+      const storedId = typeof window !== 'undefined'
+        ? localStorage.getItem('aria_active_business_id') : null
+
+      const query = supabase.from('businesses').select('id')
+        .eq('user_id', uid).eq('is_active', true)
+
+      const { data: bizList } = await query.order('created_at', { ascending: false }).limit(10)
+      if (!bizList?.length) { setError('No active business found'); return }
+
+      // Prefer stored active business, fallback to first
+      const biz = storedId
+        ? (bizList.find(b => b.id === storedId) ?? bizList[0])
+        : bizList[0]
+
       setBid(biz.id)
       // Auto-load reel ideas
       setTimeout(() => loadIdeas(), 100)
