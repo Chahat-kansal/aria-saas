@@ -14,7 +14,8 @@
       "maxDuration": 120
     },
     "src/app/api/cron/**/*.ts": {
-      "maxDuration": 300
+      "maxDuration": 300,
+      "memory": 1024
     },
     "src/app/api/crons/**/*.ts": {
       "maxDuration": 300
@@ -24,10 +25,6 @@
     },
     "src/app/api/**/*.ts": {
       "maxDuration": 60
-    },
-    "src/app/api/cron/weekly-report/route.ts": {
-      "memory": 1024,
-      "maxDuration": 300
     }
   },
   "crons": [
