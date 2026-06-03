@@ -226,6 +226,10 @@
     {
       "path": "/api/cron/reconciliation",
       "schedule": "0 20 * * *"
+    },
+    {
+      "path": "/api/cron/customer-acquisition",
+      "schedule": "0 21 * * 1"
     }
   ]
 }

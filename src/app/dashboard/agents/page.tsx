@@ -298,6 +298,13 @@ export default function AgentsPage() {
   const [expandedBriefId, setExpandedBriefId] = useState<string | null>(null)
   const [updatingBriefId, setUpdatingBriefId] = useState<string | null>(null)
 
+  // Customer acquisition / AEO state
+  const [acqProfile, setAcqProfile] = useState<{ overall_aeo_score: number; google_business_score: number; review_velocity_score: number; content_freshness_score: number; missing_fields: string[] | null; improvement_recommendations: Array<{ field: string; action: string; impact: string; effort: string; priority: number }> | null } | null>(null)
+  const [acqContent, setAcqContent] = useState<Array<{ id: string; content_type: string; title: string; content: string; target_queries: string[] | null; published_at: string | null; published_to: string[] | null }>>([])
+  const [acqAeoSnaps, setAcqAeoSnaps] = useState<Array<{ query: string; appeared: boolean }>>([])
+  const [acqLoading, setAcqLoading] = useState(false)
+  const [runningAcq, setRunningAcq] = useState(false)
+
   // Reconciliation state
   const [reconDays, setReconDays] = useState<Array<{ id: string; recon_date: string; pos_sales_total: number; bank_deposits_total: number; variance_amount: number; status: string; bank_data_source: string; explanation: string | null }>>([])
   const [reconAnomalies, setReconAnomalies] = useState<Array<{ id: string; expense_category: string | null; expense_description: string | null; amount: number; deviation_pct: number | null; possible_causes: string[] | null; status: string }>>([])
@@ -520,6 +527,21 @@ export default function AgentsPage() {
     setNegLoading(false)
   }, [bid])
 
+  const loadAcquisitionData = useCallback(async () => {
+    if (!bid) return
+    setAcqLoading(true)
+    try {
+      const res = await fetch('/api/agents/acquisition/profile')
+      if (res.ok) {
+        const d = await res.json() as { profile: typeof acqProfile; content: typeof acqContent; aeo_snapshots: typeof acqAeoSnaps }
+        setAcqProfile(d.profile ?? null)
+        setAcqContent(d.content ?? [])
+        setAcqAeoSnaps(d.aeo_snapshots ?? [])
+      }
+    } catch { /* non-fatal */ }
+    setAcqLoading(false)
+  }, [bid])
+
   const loadReconciliationData = useCallback(async () => {
     if (!bid) return
     setReconLoading(true)
@@ -574,8 +596,9 @@ export default function AgentsPage() {
       void loadNegotiationData()
       void loadReputationData()
       void loadReconciliationData()
+      void loadAcquisitionData()
     }
-  }, [tab, loadMenuData, loadFlashData, loadClvData, loadLabourData, loadWasteData, loadNegotiationData, loadReputationData, loadReconciliationData])
+  }, [tab, loadMenuData, loadFlashData, loadClvData, loadLabourData, loadWasteData, loadNegotiationData, loadReputationData, loadReconciliationData, loadAcquisitionData])
 
   useEffect(() => {
     if (tab === 'intelligence') void loadIntelligenceData()
@@ -1667,6 +1690,125 @@ export default function AgentsPage() {
               </div>
             )}
           </div>
+        </div>
+
+        {/* ── CUSTOMER ACQUISITION / AEO WIDGET ────────────────────── */}
+        <div style={{ background: surface, border, borderRadius: 14, padding: 20, marginTop: 16 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <div>
+              <h3 style={{ color: '#fff', fontSize: 15, fontWeight: 600, margin: 0 }}>Customer Acquisition (AEO)</h3>
+              <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, margin: '2px 0 0' }}>Answer Engine Optimisation · AI search visibility · Content generation</p>
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                disabled={runningAcq}
+                onClick={async () => {
+                  setRunningAcq(true)
+                  await fetch('/api/agents/acquisition/run', { method: 'POST' })
+                  setRunningAcq(false)
+                  void loadAcquisitionData()
+                }}
+                style={{ padding: '6px 14px', borderRadius: 8, border: 'none', background: '#2D5240', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: runningAcq ? 0.6 : 1 }}
+              >{runningAcq ? 'Analysing...' : 'Run AEO Analysis'}</button>
+              <button onClick={() => void loadAcquisitionData()} style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid rgba(127,184,151,0.3)', background: 'transparent', color: '#7FB897', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Refresh</button>
+            </div>
+          </div>
+
+          {acqLoading ? (
+            <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 13 }}>Loading AEO data...</p>
+          ) : acqProfile ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {/* AEO Score gauge */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: 48, fontWeight: 700, fontFamily: 'Fraunces, serif', fontStyle: 'italic', color: acqProfile.overall_aeo_score >= 70 ? '#7FB897' : acqProfile.overall_aeo_score >= 40 ? '#F59E0B' : '#EF4444', lineHeight: 1 }}>{acqProfile.overall_aeo_score}</div>
+                  <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, marginTop: 4 }}>/100 AEO Score</div>
+                  <div style={{ fontSize: 11, marginTop: 4, color: acqProfile.overall_aeo_score >= 70 ? '#7FB897' : acqProfile.overall_aeo_score >= 40 ? '#F59E0B' : '#EF4444', fontWeight: 600 }}>
+                    {acqProfile.overall_aeo_score >= 70 ? 'High visibility' : acqProfile.overall_aeo_score >= 40 ? 'Moderate' : 'Low visibility'}
+                  </div>
+                </div>
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {[
+                    { label: 'Google Profile', score: acqProfile.google_business_score, max: 40 },
+                    { label: 'Reviews', score: acqProfile.review_velocity_score, max: 35 },
+                    { label: 'Content freshness', score: acqProfile.content_freshness_score, max: 25 },
+                  ].map(dim => (
+                    <div key={dim.label} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: 11, width: 110, flexShrink: 0 }}>{dim.label}</span>
+                      <div style={{ flex: 1, height: 6, background: 'rgba(255,255,255,0.06)', borderRadius: 3 }}>
+                        <div style={{ height: '100%', width: Math.min(100, dim.score) + '%', background: dim.score >= 70 ? '#7FB897' : dim.score >= 40 ? '#F59E0B' : '#EF4444', borderRadius: 3 }} />
+                      </div>
+                      <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11, width: 45, textAlign: 'right', flexShrink: 0 }}>{dim.score}/{dim.max}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Top recommendations */}
+              {acqProfile.improvement_recommendations && acqProfile.improvement_recommendations.length > 0 && (
+                <div>
+                  <h4 style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 8px' }}>Top Improvements</h4>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {acqProfile.improvement_recommendations.slice(0, 4).map((rec, i) => (
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: 'rgba(255,255,255,0.04)', borderRadius: 8 }}>
+                        <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, fontWeight: 600, flexShrink: 0, background: rec.impact === 'high' ? 'rgba(239,68,68,0.15)' : rec.impact === 'medium' ? 'rgba(245,158,11,0.15)' : 'rgba(127,184,151,0.15)', color: rec.impact === 'high' ? '#EF4444' : rec.impact === 'medium' ? '#F59E0B' : '#7FB897' }}>{rec.impact}</span>
+                        <span style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12, flex: 1 }}>{rec.action}</span>
+                        <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11, flexShrink: 0 }}>{rec.effort}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* AI search test results */}
+              {acqAeoSnaps.length > 0 && (
+                <div>
+                  <h4 style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 8px' }}>AI Search Visibility</h4>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 6 }}>
+                    {acqAeoSnaps.slice(0, 6).map((snap, i) => (
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px', background: 'rgba(255,255,255,0.04)', borderRadius: 6 }}>
+                        <span style={{ fontSize: 12 }}>{snap.appeared ? '✅' : '❌'}</span>
+                        <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{snap.query}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Content queue */}
+              {acqContent.filter(c => !c.published_at).length > 0 && (
+                <div>
+                  <h4 style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 8px' }}>Content Queue</h4>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {acqContent.filter(c => !c.published_at).slice(0, 3).map(piece => (
+                      <div key={piece.id} style={{ padding: '10px 12px', background: 'rgba(255,255,255,0.04)', borderRadius: 8, border: '1px solid rgba(255,255,255,0.06)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                          <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: 'rgba(127,184,151,0.15)', color: '#7FB897' }}>{piece.content_type.replace('_', ' ')}</span>
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(piece.content).catch(() => {})
+                              fetch('/api/agents/acquisition/content?id=' + piece.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ published_to: ['copied'], published_at: new Date().toISOString() }) }).then(() => void loadAcquisitionData()).catch(() => {})
+                            }}
+                            style={{ padding: '3px 8px', borderRadius: 5, border: '1px solid rgba(127,184,151,0.3)', background: 'transparent', color: '#7FB897', fontSize: 10, cursor: 'pointer' }}
+                          >Copy</button>
+                        </div>
+                        <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12, margin: 0, lineHeight: 1.5 }}>{piece.content.slice(0, 120)}{piece.content.length > 120 ? '...' : ''}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div style={{ textAlign: 'center', padding: '20px 0' }}>
+              <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 13, margin: '0 0 12px' }}>No AEO profile yet. Run analysis to start.</p>
+              <button
+                disabled={runningAcq}
+                onClick={async () => { setRunningAcq(true); await fetch('/api/agents/acquisition/run', { method: 'POST' }); setRunningAcq(false); void loadAcquisitionData() }}
+                style={{ padding: '8px 20px', borderRadius: 8, border: 'none', background: '#2D5240', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+              >{runningAcq ? 'Analysing...' : 'Run First AEO Analysis'}</button>
+            </div>
+          )}
         </div>
 
         {/* ── FINANCIAL RECONCILIATION WIDGET ───────────────────────── */}
