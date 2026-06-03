@@ -7,6 +7,8 @@ import { AriaBriefingCard } from '@/components/dashboard/AriaBriefingCard';
 import { PendingActionsCard } from '@/components/dashboard/PendingActionsCard'
 import { LiveRevenueTicker, ThreeWayRevenue, HourlyHeatmap, StaffOnShift, AIActionStrip, WeatherWidget } from './ProWidgets';
 import { CustomerSurfaces } from '@/components/dashboard/CustomerSurfaces';
+import { AriaWinsBar } from './AriaWinsBar';
+import { FirstInsightBanner } from './FirstInsightBanner';
 
 interface Business { id: string; name: string; owner_name?: string; industry?: string; pos_enabled?: boolean | null; }
 interface DailySale { total_amount: number; }
