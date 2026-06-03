@@ -15,7 +15,7 @@ export default function RecipeProductionTab({ businessId, recipes }: { businessI
       setLoading(true);
       try {
         const since = new Date(Date.now() - 28 * 86400000).toISOString();
-        const res = await fetch(`/api/pos/sales/list?business_id=${businessId}&since=${since}`).then(r => r.json()).catch(() => ({ sales: [] }));
+        const res = await fetch(`/api/pos/sales?business_id=${businessId}&since=${since}&limit=500`).then(r => r.json()).catch(() => ({ sales: [] }));
         const buckets: Record<string, number[]> = {};
         const sales = res.sales ?? res.data ?? [];
         for (const r of recipes) {
