@@ -68,7 +68,7 @@ export default function SocialPage() {
   const [reelStyle, setReelStyle] = useState('lifestyle')
   const [reelCustomPrompt, setReelCustomPrompt] = useState('')
   const [reelSourceImage, setReelSourceImage] = useState<string | null>(null)
-  const [reelDuration, setReelDuration] = useState<10|15|30>(15)
+  const [reelDuration, setReelDuration] = useState<5|10>(5)
   const [reelBgMusic, setReelBgMusic] = useState('none')
   const [reelGenerating, setReelGenerating] = useState(false)
   const [reelPolling, setReelPolling] = useState<Record<string, {requestId: string; modelId: string; bgMusic: string; voiceoverUrl?: string}>>({})
