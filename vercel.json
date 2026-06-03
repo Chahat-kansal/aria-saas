@@ -222,6 +222,10 @@
     {
       "path": "/api/cron/aeo-weekly",
       "schedule": "0 21 * * 0"
+    },
+    {
+      "path": "/api/cron/reconciliation",
+      "schedule": "0 20 * * *"
     }
   ]
 }

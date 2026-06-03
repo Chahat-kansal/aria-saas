@@ -298,6 +298,16 @@ export default function AgentsPage() {
   const [expandedBriefId, setExpandedBriefId] = useState<string | null>(null)
   const [updatingBriefId, setUpdatingBriefId] = useState<string | null>(null)
 
+  // Reconciliation state
+  const [reconDays, setReconDays] = useState<Array<{ id: string; recon_date: string; pos_sales_total: number; bank_deposits_total: number; variance_amount: number; status: string; bank_data_source: string; explanation: string | null }>>([])
+  const [reconAnomalies, setReconAnomalies] = useState<Array<{ id: string; expense_category: string | null; expense_description: string | null; amount: number; deviation_pct: number | null; possible_causes: string[] | null; status: string }>>([])
+  const [reconPL, setReconPL] = useState<Array<{ id: string; period_month: number; period_year: number; net_revenue: number; gross_margin_pct: number; ebitda: number; summary_narrative: string | null; revenue_vs_last_month_pct: number }>>([])
+  const [reconTotalVariance7d, setReconTotalVariance7d] = useState(0)
+  const [reconUnresolved, setReconUnresolved] = useState(0)
+  const [reconLoading, setReconLoading] = useState(false)
+  const [reconExpandedDay, setReconExpandedDay] = useState<string | null>(null)
+  const [resolvingAnomalyId, setResolvingAnomalyId] = useState<string | null>(null)
+
   // Reputation state
   const [repReviews, setRepReviews] = useState<Array<{ id: string; platform: string; reviewer_name: string | null; rating: number; review_text: string | null; review_date: string | null; response_text: string | null; response_status: string; sentiment: string | null; is_crisis: boolean | null; key_themes: string[] | null }>>([])
   const [repStats, setRepStats] = useState<{ avg_rating: number | null; total_reviews: number; pending_responses: number; this_week_count: number } | null>(null)
@@ -510,6 +520,33 @@ export default function AgentsPage() {
     setNegLoading(false)
   }, [bid])
 
+  const loadReconciliationData = useCallback(async () => {
+    if (!bid) return
+    setReconLoading(true)
+    try {
+      const [dailyRes, anomaliesRes, plRes] = await Promise.all([
+        fetch('/api/agents/reconciliation/daily'),
+        fetch('/api/agents/reconciliation/anomalies'),
+        fetch('/api/agents/reconciliation/pl'),
+      ])
+      if (dailyRes.ok) {
+        const d = await dailyRes.json() as { reconciliations: typeof reconDays; total_variance_7d: number; unresolved_count: number }
+        setReconDays(d.reconciliations ?? [])
+        setReconTotalVariance7d(d.total_variance_7d ?? 0)
+        setReconUnresolved(d.unresolved_count ?? 0)
+      }
+      if (anomaliesRes.ok) {
+        const d = await anomaliesRes.json() as { anomalies: typeof reconAnomalies }
+        setReconAnomalies(d.anomalies ?? [])
+      }
+      if (plRes.ok) {
+        const d = await plRes.json() as { reports: typeof reconPL }
+        setReconPL(d.reports ?? [])
+      }
+    } catch { /* non-fatal */ }
+    setReconLoading(false)
+  }, [bid])
+
   const loadReputationData = useCallback(async () => {
     if (!bid) return
     setRepLoading(true)
@@ -536,8 +573,9 @@ export default function AgentsPage() {
       void loadWasteData()
       void loadNegotiationData()
       void loadReputationData()
+      void loadReconciliationData()
     }
-  }, [tab, loadMenuData, loadFlashData, loadClvData, loadLabourData, loadWasteData, loadNegotiationData, loadReputationData])
+  }, [tab, loadMenuData, loadFlashData, loadClvData, loadLabourData, loadWasteData, loadNegotiationData, loadReputationData, loadReconciliationData])
 
   useEffect(() => {
     if (tab === 'intelligence') void loadIntelligenceData()
@@ -1629,6 +1667,148 @@ export default function AgentsPage() {
               </div>
             )}
           </div>
+        </div>
+
+        {/* ── FINANCIAL RECONCILIATION WIDGET ───────────────────────── */}
+        <div style={{ background: surface, border, borderRadius: 14, padding: 20, marginTop: 16 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <div>
+              <h3 style={{ color: '#fff', fontSize: 15, fontWeight: 600, margin: 0 }}>Financial Reconciliation</h3>
+              <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, margin: '2px 0 0' }}>Daily POS vs bank · Anomaly detection · Monthly P&amp;L</p>
+            </div>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              {reconUnresolved > 0 && (
+                <span style={{ padding: '4px 10px', borderRadius: 8, fontSize: 12, fontWeight: 600, background: 'rgba(239,68,68,0.15)', color: '#EF4444', border: '1px solid rgba(239,68,68,0.3)' }}>
+                  {reconUnresolved} unresolved
+                </span>
+              )}
+              <button onClick={() => void loadReconciliationData()} style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid rgba(127,184,151,0.3)', background: 'transparent', color: '#7FB897', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Refresh</button>
+            </div>
+          </div>
+
+          {reconLoading ? (
+            <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 13 }}>Loading reconciliation data...</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {/* Summary stats */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+                {[
+                  { label: '7-Day Variance', value: '$' + reconTotalVariance7d.toFixed(0), color: reconTotalVariance7d > 100 ? '#EF4444' : '#7FB897' },
+                  { label: 'Open Anomalies', value: String(reconAnomalies.length), color: reconAnomalies.length > 0 ? '#F59E0B' : '#7FB897' },
+                  { label: 'Days Reconciled', value: String(reconDays.filter(d => d.status === 'balanced').length), color: '#7FB897' },
+                ].map(s => (
+                  <div key={s.label} style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 10, padding: '10px 14px', textAlign: 'center' }}>
+                    <div style={{ color: s.color, fontSize: 22, fontWeight: 700, fontFamily: 'Fraunces, serif', fontStyle: 'italic' }}>{s.value}</div>
+                    <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11, marginTop: 2 }}>{s.label}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Last 7 days daily dots */}
+              {reconDays.slice(0, 7).length > 0 && (
+                <div>
+                  <h4 style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 8px' }}>Last 7 Days</h4>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    {reconDays.slice(0, 7).map(day => (
+                      <div key={day.id}>
+                        <div
+                          onClick={() => setReconExpandedDay(reconExpandedDay === day.id ? null : day.id)}
+                          style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: 'rgba(255,255,255,0.04)', borderRadius: 8, cursor: 'pointer' }}
+                        >
+                          <span style={{ fontSize: 10, color: day.status === 'balanced' ? '#7FB897' : day.status === 'variance' ? '#EF4444' : '#F59E0B' }}>●</span>
+                          <span style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12, flex: 1 }}>{day.recon_date}</span>
+                          <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>POS ${Number(day.pos_sales_total).toFixed(0)}</span>
+                          {Math.abs(Number(day.variance_amount)) > 0.01 && (
+                            <span style={{ color: '#EF4444', fontSize: 11, fontWeight: 600 }}>Δ${Math.abs(Number(day.variance_amount)).toFixed(0)}</span>
+                          )}
+                          <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: day.status === 'balanced' ? 'rgba(127,184,151,0.15)' : day.status === 'variance' ? 'rgba(239,68,68,0.15)' : 'rgba(245,158,11,0.15)', color: day.status === 'balanced' ? '#7FB897' : day.status === 'variance' ? '#EF4444' : '#F59E0B' }}>{day.status}</span>
+                        </div>
+                        {reconExpandedDay === day.id && (
+                          <div style={{ padding: '10px 14px', background: 'rgba(255,255,255,0.02)', borderRadius: '0 0 8px 8px', marginTop: 2 }}>
+                            <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12, margin: '0 0 4px' }}>Bank source: {day.bank_data_source} · Bank total: ${Number(day.bank_deposits_total).toFixed(2)}</p>
+                            {day.explanation && <p style={{ color: '#7FB897', fontSize: 12, margin: 0 }}>Note: {day.explanation}</p>}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Anomalies */}
+              {reconAnomalies.length > 0 && (
+                <div>
+                  <h4 style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 8px' }}>Expense Anomalies</h4>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {reconAnomalies.slice(0, 5).map(anomaly => (
+                      <div key={anomaly.id} style={{ background: (anomaly.deviation_pct ?? 0) >= 200 ? 'rgba(239,68,68,0.08)' : 'rgba(245,158,11,0.08)', border: '1px solid ' + ((anomaly.deviation_pct ?? 0) >= 200 ? 'rgba(239,68,68,0.2)' : 'rgba(245,158,11,0.2)'), borderRadius: 8, padding: '10px 12px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                          <div>
+                            <p style={{ color: '#fff', fontSize: 13, fontWeight: 600, margin: '0 0 2px' }}>{anomaly.expense_description ?? anomaly.expense_category}</p>
+                            <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11, margin: 0 }}>{anomaly.deviation_pct}% above normal · ${Number(anomaly.amount).toFixed(0)}</p>
+                            {anomaly.possible_causes && anomaly.possible_causes.length > 0 && (
+                              <p style={{ color: 'rgba(255,165,0,0.8)', fontSize: 11, margin: '4px 0 0' }}>Possible: {anomaly.possible_causes[0]}</p>
+                            )}
+                          </div>
+                          <div style={{ display: 'flex', gap: 4 }}>
+                            <button
+                              disabled={resolvingAnomalyId === anomaly.id}
+                              onClick={async () => {
+                                setResolvingAnomalyId(anomaly.id)
+                                await fetch('/api/agents/reconciliation/anomalies?id=' + anomaly.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'accepted' }) })
+                                setResolvingAnomalyId(null)
+                                void loadReconciliationData()
+                              }}
+                              style={{ padding: '4px 8px', borderRadius: 6, border: '1px solid rgba(127,184,151,0.3)', background: 'transparent', color: '#7FB897', fontSize: 11, cursor: 'pointer' }}
+                            >Accept</button>
+                            <button
+                              disabled={resolvingAnomalyId === anomaly.id}
+                              onClick={async () => {
+                                setResolvingAnomalyId(anomaly.id)
+                                await fetch('/api/agents/reconciliation/anomalies?id=' + anomaly.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'error' }) })
+                                setResolvingAnomalyId(null)
+                                void loadReconciliationData()
+                              }}
+                              style={{ padding: '4px 8px', borderRadius: 6, border: '1px solid rgba(239,68,68,0.3)', background: 'transparent', color: '#EF4444', fontSize: 11, cursor: 'pointer' }}
+                            >Flag</button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Monthly P&L */}
+              {reconPL.length > 0 && (
+                <div>
+                  <h4 style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 8px' }}>Monthly P&amp;L</h4>
+                  {reconPL[0]?.summary_narrative && (
+                    <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12, margin: '0 0 10px', fontStyle: 'italic', lineHeight: 1.5 }}>{reconPL[0].summary_narrative}</p>
+                  )}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    {reconPL.slice(0, 6).map(report => (
+                      <div key={report.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: 'rgba(255,255,255,0.04)', borderRadius: 8 }}>
+                        <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12, width: 60, flexShrink: 0 }}>{report.period_month}/{report.period_year}</span>
+                        <div style={{ flex: 1, height: 6, background: 'rgba(255,255,255,0.06)', borderRadius: 3, overflow: 'hidden' }}>
+                          <div style={{ height: '100%', width: Math.min(100, Math.round((report.net_revenue / (reconPL[0]?.net_revenue || 1)) * 100)) + '%', background: '#7FB897', borderRadius: 3 }} />
+                        </div>
+                        <span style={{ color: '#fff', fontSize: 12, fontWeight: 600, width: 70, textAlign: 'right', flexShrink: 0 }}>${Math.round(report.net_revenue / 1000)}k</span>
+                        <span style={{ color: Number(report.gross_margin_pct) > 50 ? '#7FB897' : '#F59E0B', fontSize: 11, width: 50, textAlign: 'right', flexShrink: 0 }}>{Number(report.gross_margin_pct).toFixed(1)}%</span>
+                        <span style={{ color: report.revenue_vs_last_month_pct >= 0 ? '#7FB897' : '#EF4444', fontSize: 11, width: 45, textAlign: 'right', flexShrink: 0 }}>
+                          {report.revenue_vs_last_month_pct >= 0 ? '+' : ''}{Number(report.revenue_vs_last_month_pct).toFixed(1)}%
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {reconDays.length === 0 && !reconLoading && (
+                <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 13, textAlign: 'center', padding: '20px 0' }}>Reconciliation starts automatically daily. First data appears tomorrow morning.</p>
+              )}
+            </div>
+          )}
         </div>
 
         {/* ── REPUTATION DEFENCE WIDGET ─────────────────────────────── */}
