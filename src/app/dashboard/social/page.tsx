@@ -51,6 +51,46 @@ export default function SocialPage() {
   const [posts, setPosts]           = useState<SocialPost[]>([]);
   const [prefs, setPrefs]           = useState<Prefs>({ brand_voice: 'friendly', post_frequency: 'weekly', auto_hashtags: [], topics_to_avoid: null, target_audience: null, business_tagline: null });
   const [generating, setGenerating] = useState(false);
+
+  // ── Growth Engine state ──────────────────────────────────────────
+  const [growthLoading, setGrowthLoading] = useState(false)
+  const [growthMsg, setGrowthMsg] = useState<string | null>(null)
+  const [reviewStats, setReviewStats] = useState<{sent: number, reviews: number} | null>(null)
+
+  useEffect(() => {
+    if (!bid) return
+    // Load review request stats
+    fetch(`/api/aria/review-stats?businessId=${bid}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) setReviewStats(d) })
+      .catch(() => {})
+  }, [bid])
+
+  async function generateGrowthPost() {
+    if (!bid || connectedPlatforms.length === 0) return
+    setGrowthLoading(true); setGrowthMsg(null)
+    const platform = connectedPlatforms.includes('instagram') ? 'instagram'
+      : connectedPlatforms.includes('facebook') ? 'facebook' : connectedPlatforms[0]
+    try {
+      const res = await fetch('/api/social/growth-post', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ business_id: bid, platform }),
+      })
+      const d = await res.json()
+      if (d.ok) {
+        setGrowthMsg(d.message)
+        // Reload posts so the new draft appears
+        const postsRes = await fetch(`/api/social/posts?business_id=${bid}`)
+        const postsData = await postsRes.json()
+        if (postsData.posts) setPosts(postsData.posts)
+      } else {
+        setGrowthMsg('Could not generate post: ' + (d.error || 'Unknown error'))
+      }
+    } catch { setGrowthMsg('Network error — try again') }
+    setGrowthLoading(false)
+  }
+
   const [loadingPosts, setLoadingPosts] = useState(true);
   const [editingId, setEditingId]   = useState<string | null>(null);
   const [editCaption, setEditCaption] = useState('');
@@ -862,6 +902,55 @@ export default function SocialPage() {
           <BestTimesHeatmap businessId={bid} />
         </div>
       )}
+
+
+      {/* ── Growth Engine Panel ─────────────────────────────────────── */}
+      <div style={{
+        background: 'linear-gradient(135deg, rgba(127,184,151,0.08) 0%, rgba(10,20,14,0.95) 100%)',
+        border: '1px solid rgba(127,184,151,0.22)',
+        borderRadius: 14, padding: '18px 20px', marginBottom: 20,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#7FB897', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 4 }}>
+              ✦ Aria Growth Engine
+            </div>
+            <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.65)', lineHeight: 1.5 }}>
+              Aria reads your POS data and writes a post about your best-selling item this week.
+              <br />You approve it with one tap — it goes live at the optimal time.
+            </div>
+            {reviewStats && (
+              <div style={{ display: 'flex', gap: 16, marginTop: 10 }}>
+                <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>
+                  📩 {reviewStats.sent} review requests sent
+                </span>
+                <span style={{ fontSize: 11, color: '#7FB897' }}>
+                  ⭐ {reviewStats.reviews} new reviews this week
+                </span>
+              </div>
+            )}
+            {growthMsg && (
+              <div style={{ marginTop: 8, fontSize: 12, color: growthMsg.startsWith('Could') ? '#f87171' : '#7FB897' }}>
+                {growthMsg}
+              </div>
+            )}
+          </div>
+          <button
+            onClick={generateGrowthPost}
+            disabled={growthLoading || !bid || connectedPlatforms.length === 0}
+            style={{
+              padding: '10px 20px', borderRadius: 9, fontFamily: 'inherit', fontWeight: 700,
+              fontSize: 13, cursor: growthLoading ? 'wait' : 'pointer',
+              background: connectedPlatforms.length === 0 ? 'rgba(127,184,151,0.08)' : 'rgba(127,184,151,0.15)',
+              border: '1px solid rgba(127,184,151,0.35)', color: '#7FB897',
+              opacity: (!bid || connectedPlatforms.length === 0) ? 0.5 : 1,
+              flexShrink: 0, whiteSpace: 'nowrap',
+            }}
+          >
+            {growthLoading ? '✨ Generating…' : connectedPlatforms.length === 0 ? 'Connect Instagram first' : '✦ Generate this week's post'}
+          </button>
+        </div>
+      </div>
 
       {/* Generate button */}
       <section style={{ marginBottom: 28 }}>

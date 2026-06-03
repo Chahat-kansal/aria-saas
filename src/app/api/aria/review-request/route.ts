@@ -1,151 +1,81 @@
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
+import { NextRequest, NextResponse } from 'next/server'
+import { createServerSupabaseClient } from '@/lib/supabase-server'
+import twilio from 'twilio'
 
-import { z } from 'zod';
-import { validateBody } from '@/lib/api/validate';
-import { createServerSupabaseClient } from '@/lib/supabase-server';
-import { checkRateLimit } from '@/lib/rate-limit';
-import { sendSMS } from '@/lib/clicksend'
-import Anthropic from '@anthropic-ai/sdk';
-import { ARIA_VOICE } from '@/lib/aria-voice-guide';
-import { NextResponse } from 'next/server';
-import { withErrorCapture } from '@/lib/api/with-error-capture'
-import { trackAICall } from '@/lib/aria/ai-telemetry'
-import { getBusinessContext, hasEnoughData } from '@/lib/aria/get-business-context'
-import { getSystemPrompt } from '@/lib/aria/get-system-prompt'
-import { writeAriaOutcome } from '@/lib/aria/write-outcome'
+export const dynamic = 'force-dynamic'
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+/**
+ * POST /api/aria/review-request
+ * Sends an SMS review request to a customer after a completed POS sale.
+ * Called by the POS terminal 30min after sale completion (client-side setTimeout)
+ * OR manually triggered from the dashboard.
+ *
+ * Rate-limited: one review request per customer per 30 days.
+ * UPGRADE_ONLY: add more channels (email, WhatsApp), never remove SMS.
+ */
+export async function POST(req: NextRequest) {
+  const supabase = createServerSupabaseClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
 
-const ReviewRequestSchema = z.object({
-  customerId: z.string().uuid().optional(),
-  businessId: z.string().uuid().optional(),
-  review_id: z.string().uuid().optional(),
-})
-
-async function _POST(req: Request) {
-  const supabase = createServerSupabaseClient();
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
-  if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-  const rl = await checkRateLimit('messaging', user.id);
-  if (!rl.ok) return NextResponse.json({ error: 'Rate limit exceeded. Try again later.' }, { status: 429 });
-
-  const parsed = await validateBody(req, ReviewRequestSchema)
-  if ('error' in parsed) return parsed.error
-  const body = parsed.data
-
-  let customerId = body.customerId
-  let businessId = body.businessId
-
-  // Support review_id lookup — fetch customer from review record
-  if (!customerId && body.review_id) {
-    const { data: reviewRow } = await supabase
-      .from('reviews')
-      .select('customer_id, business_id')
-      .eq('id', body.review_id)
-      .maybeSingle();
-    if (reviewRow) {
-      customerId = reviewRow.customer_id;
-      businessId = reviewRow.business_id;
-    }
+  const { business_id, sale_id, customer_phone, customer_name } = await req.json()
+  if (!business_id || !customer_phone) {
+    return NextResponse.json({ error: 'business_id and customer_phone required' }, { status: 400 })
   }
 
-  if (!customerId || !businessId) return NextResponse.json({ error: 'customerId and businessId required (or review_id)' }, { status: 400 });
+  const { data: biz } = await supabase.from('businesses')
+    .select('id,name,google_review_url,suburb')
+    .eq('id', business_id).eq('user_id', user.id).maybeSingle()
+  if (!biz) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  const [{ data: business }, { data: customer }] = await Promise.all([
-    supabase.from('businesses').select('*').eq('id', businessId).eq('user_id', user.id).single(),
-    supabase.from('pos_customers').select('*').eq('id', customerId).eq('business_id', businessId).single(),
-  ]);
+  // Rate limit: skip if we already sent this customer a review request in the last 30 days
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
+  const { data: recent } = await supabase.from('aria_autopilot_actions')
+    .select('id').eq('business_id', business_id)
+    .eq('action_type', 'review_request')
+    .eq('metadata->phone', customer_phone)
+    .gte('created_at', thirtyDaysAgo)
+    .limit(1).maybeSingle()
 
-  if (!business || !customer) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-
-
-
-  if (!customer.phone) {
-    return NextResponse.json({
-      error: 'No phone number',
-      message: `${customer.name} has no phone number on file. Add a phone number before sending SMS.`,
-      sms_sent: false,
-      code: 'NO_PHONE',
-    }, { status: 400 });
+  if (recent) {
+    return NextResponse.json({ ok: true, skipped: true, reason: 'Rate limited — review request already sent in last 30 days' })
   }
 
-  const prompt = `Write a short, friendly review request SMS (max 160 chars) for:
-Customer: ${customer.name}
-Business: ${business.name} (${business.industry})
-${business.google_business_url ? `Google Business URL: ${business.google_business_url}` : ''}
-Keep it warm and personal. Ask them to share their experience. Return ONLY the SMS text.`;
+  // Build the message
+  const firstName = customer_name?.split(' ')[0] ?? 'there'
+  const reviewUrl = (biz as any).google_review_url ?? `https://www.google.com/search?q=${encodeURIComponent((biz.name ?? '') + ' ' + ((biz as any).suburb ?? ''))}`
+  const bizName = biz.name ?? 'us'
 
-  const response = await trackAICall({ route: 'aria/review-request', model: 'claude-haiku-4-5-20251001', businessId: businessId, purpose: 'review-request-sms' }, () => anthropic.messages.create({
-    model: 'claude-haiku-4-5-20251001',
-    max_tokens: 200,
-      temperature: 0.75,
-    system: `${ARIA_VOICE}\n\nWrite concise, warm review request SMS messages. Return ONLY the SMS text, no explanation.`,
-    messages: [{ role: 'user', content: prompt }],
-  }));
+  const message = `Hi ${firstName}! Thanks for visiting ${bizName} today 😊 We'd love your feedback — it helps other locals find us. Takes 30 seconds: ${reviewUrl}`
 
-  const messageText = response.content.filter(b => b.type === 'text').map(b => b.text).join('').trim();
+  // Send via Twilio
+  const accountSid = process.env.TWILIO_ACCOUNT_SID
+  const authToken = process.env.TWILIO_AUTH_TOKEN
+  const fromNumber = process.env.TWILIO_PHONE_NUMBER
+
+  if (!accountSid || !authToken || !fromNumber) {
+    return NextResponse.json({ error: 'Twilio not configured' }, { status: 500 })
+  }
 
   try {
-    const smsResult = await sendSMS(customer.phone, messageText);
+    const client = twilio(accountSid, authToken)
+    const msg = await client.messages.create({
+      body: message,
+      from: fromNumber,
+      to: customer_phone,
+    })
 
-    if (!smsResult.ok) {
-      await supabase.from('campaigns').insert({
-        business_id: businessId,
-        customer_id: customerId,
-        type: 'review_request',
-        message: messageText,
-        sms_sent: false,
-        error: smsResult.error ?? 'SMS failed',
-        failed_at: new Date().toISOString(),
-      });
-      await supabase.from('activity_log').insert({
-        business_id: businessId,
-        action_type: 'review',
-        description: `Review request SMS to ${customer.name} FAILED: ${smsResult.error ?? 'Unknown error'}`,
-        metadata: { customerId, smsSent: false },
-      });
-      return NextResponse.json({ error: 'SMS delivery failed', message: smsResult.error ?? 'SMS failed', sms_sent: false }, { status: 500 });
-    }
+    // Log to autopilot_actions for tracking + rate limiting
+    await supabase.from('aria_autopilot_actions').insert({
+      business_id,
+      action_type: 'review_request',
+      action_label: `Review request SMS → ${firstName}`,
+      status: 'sent',
+      metadata: { phone: customer_phone, sale_id, message_sid: msg.sid },
+    })
 
-    await supabase.from('reviews').insert({
-      business_id: businessId,
-      customer_id: customerId,
-      platform: 'google',
-      request_sent_at: new Date().toISOString(),
-    });
-
-    await supabase.from('campaigns').insert({
-      business_id: businessId,
-      customer_id: customerId,
-      type: 'review_request',
-      message: messageText,
-      sms_sent: true,
-      sent_at: new Date().toISOString(),
-    });
-
-    await supabase.from('activity_log').insert({
-      business_id: businessId,
-      action_type: 'review',
-      description: `Review request SMS sent to ${customer.name} (${customer.phone})`,
-      metadata: { customerId, smsSent: true },
-    });
-
-    return NextResponse.json({ success: true, message: messageText, sms_sent: true });
-  } catch (err) {
-    const errMsg = err instanceof Error ? err.message : 'Unknown error';
-    await supabase.from('campaigns').insert({
-      business_id: businessId,
-      customer_id: customerId,
-      type: 'review_request',
-      message: messageText,
-      sms_sent: false,
-      error: errMsg,
-      failed_at: new Date().toISOString(),
-    });
-    return NextResponse.json({ error: 'SMS delivery failed', message: errMsg, sms_sent: false }, { status: 500 });
+    return NextResponse.json({ ok: true, message_sid: msg.sid })
+  } catch (e: any) {
+    return NextResponse.json({ error: e.message }, { status: 500 })
   }
 }
-
-export const POST = withErrorCapture('aria/review-request', _POST)
