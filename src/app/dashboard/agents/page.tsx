@@ -104,7 +104,59 @@ interface ClvOpportunity {
   pos_customers: { name: string; email: string | null; phone: string | null } | null
 }
 
-type TabId = 'today' | 'agents' | 'history' | 'performance'
+type TabId = 'today' | 'agents' | 'history' | 'performance' | 'intelligence'
+
+// ── Intelligence tab types ─────────────────────────────────────────────────────
+
+interface IntelMemory {
+  id: string
+  kind: string
+  content: string
+  topic: string | null
+  importance: number
+  confidence: number
+  source_type: string
+  created_at: string
+  reference_count: number | null
+}
+
+interface IntelCouncilRun {
+  id: string
+  mode: string
+  created_at: string
+  brains_succeeded: number
+  brains_failed: number
+  synthesis_succeeded: boolean
+  fell_back_to_single_model: boolean
+  duration_ms: number
+  data_quality_score: number | null
+  synthesis_model: string | null
+  escalation_reason: string | null
+  honesty_flags: string[] | null
+}
+
+interface IntelSummary {
+  id: string
+  conversation_date: string
+  mode: string
+  summary: string
+  key_decisions: string[]
+  key_concerns: string[]
+  followup_promised: string[]
+}
+
+interface IntelQuality {
+  overall_score: number
+  pos_score: number
+  customer_score: number
+  inventory_score: number
+  staff_score: number
+  supplier_score: number
+  missing_critical: string[]
+  missing_helpful: string[]
+  reliability_statement: string
+  hedge_level: string
+}
 type Priority = 'growth' | 'margin' | 'retention' | 'balanced'
 
 // ── Agent config ──────────────────────────────────────────────────────────────
@@ -224,6 +276,15 @@ export default function AgentsPage() {
 
   const bid = business?.id
 
+  // Intelligence tab state
+  const [intelQuality, setIntelQuality] = useState<IntelQuality | null>(null)
+  const [intelMemories, setIntelMemories] = useState<IntelMemory[]>([])
+  const [intelRuns, setIntelRuns] = useState<IntelCouncilRun[]>([])
+  const [intelSummaries, setIntelSummaries] = useState<IntelSummary[]>([])
+  const [intelLoading, setIntelLoading] = useState(false)
+  const [memKindFilter, setMemKindFilter] = useState('all')
+  const [forgettingId, setForgettingId] = useState<string | null>(null)
+
   const loadCouncil = useCallback(async () => {
     if (!bid) return
     setLoading(true)
@@ -333,6 +394,33 @@ export default function AgentsPage() {
     void loadSettings()
   }, [loadCouncil, loadHistory, loadSettings])
 
+  const loadIntelligenceData = useCallback(async () => {
+    if (!bid) return
+    setIntelLoading(true)
+    try {
+      const [q, m, r, s] = await Promise.all([
+        fetch('/api/aria/data-quality?businessId=' + bid).then(res => res.ok ? res.json() : null),
+        fetch('/api/aria/memory').then(res => res.ok ? res.json() : { memories: [] }),
+        fetch('/api/aria/council-runs?limit=7').then(res => res.ok ? res.json() : { runs: [] }),
+        fetch('/api/aria/conversation-summaries?days=7').then(res => res.ok ? res.json() : { summaries: [] }),
+      ])
+      setIntelQuality(q ?? null)
+      setIntelMemories((m as { memories: IntelMemory[] }).memories ?? [])
+      setIntelRuns((r as { runs: IntelCouncilRun[] }).runs ?? [])
+      setIntelSummaries((s as { summaries: IntelSummary[] }).summaries ?? [])
+    } catch { /* non-fatal */ }
+    setIntelLoading(false)
+  }, [bid])
+
+  const forgetMemory = async (id: string) => {
+    setForgettingId(id)
+    try {
+      await fetch('/api/aria/memory?id=' + id + '&reason=owner_forgotten', { method: 'DELETE' })
+      setIntelMemories(ms => ms.filter(m => m.id !== id))
+    } catch { /* non-fatal */ }
+    setForgettingId(null)
+  }
+
   useEffect(() => {
     if (tab === 'agents') {
       void loadMenuData()
@@ -340,6 +428,10 @@ export default function AgentsPage() {
       void loadClvData()
     }
   }, [tab, loadMenuData, loadFlashData, loadClvData])
+
+  useEffect(() => {
+    if (tab === 'intelligence') void loadIntelligenceData()
+  }, [tab, loadIntelligenceData])
 
   const savePriority = async (p: Priority) => {
     setPriority(p)
@@ -468,14 +560,14 @@ export default function AgentsPage() {
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 4, marginBottom: 24, background: surface, borderRadius: 10, padding: 4, width: 'fit-content' }}>
-        {(['today', 'agents', 'history', 'performance'] as TabId[]).map(t => (
+        {(['today', 'agents', 'history', 'performance', 'intelligence'] as TabId[]).map(t => (
           <button key={t} onClick={() => setTab(t)} style={{
             padding: '8px 18px', borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: 'pointer', border: 'none',
             background: tab === t ? '#2D5240' : 'transparent',
             color: tab === t ? '#fff' : 'rgba(255,255,255,0.45)',
             transition: 'all 0.15s',
           }}>
-            {t === 'today' ? "Today's Plan" : t === 'agents' ? 'All Agents' : t === 'history' ? 'History' : 'Performance'}
+            {t === 'today' ? "Today's Plan" : t === 'agents' ? 'All Agents' : t === 'history' ? 'History' : t === 'performance' ? 'Performance' : 'Intelligence'}
           </button>
         ))}
       </div>
@@ -1272,6 +1364,203 @@ export default function AgentsPage() {
               </tbody>
             </table>
           </div>
+        </div>
+      )}
+
+      {/* ── INTELLIGENCE TAB ─────────────────────────────────────────────────── */}
+      {tab === 'intelligence' && (
+        <div>
+          {intelLoading ? (
+            <div style={{ color: 'rgba(255,255,255,0.4)', padding: 40, textAlign: 'center', fontSize: 13 }}>Loading intelligence data...</div>
+          ) : (
+            <>
+              {/* Data Quality Card */}
+              <div style={{ background: surface, border, borderRadius: 14, padding: 24, marginBottom: 24 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
+                  <h3 style={{ color: '#fff', fontSize: 15, fontWeight: 600, margin: 0 }}>Data Quality</h3>
+                  {intelQuality && (
+                    <span style={{
+                      padding: '3px 10px', borderRadius: 99, fontSize: 11, fontWeight: 700,
+                      background: intelQuality.overall_score >= 75 ? 'rgba(127,184,151,0.15)' : intelQuality.overall_score >= 50 ? 'rgba(245,158,11,0.15)' : 'rgba(239,68,68,0.15)',
+                      color: intelQuality.overall_score >= 75 ? '#7FB897' : intelQuality.overall_score >= 50 ? '#F59E0B' : '#F87171',
+                    }}>
+                      {intelQuality.overall_score}/100 · {intelQuality.hedge_level === 'none' ? 'Good' : intelQuality.hedge_level === 'light' ? 'Fair' : intelQuality.hedge_level === 'moderate' ? 'Limited' : 'Very Limited'}
+                    </span>
+                  )}
+                </div>
+                {intelQuality ? (
+                  <>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 10, marginBottom: 16 }}>
+                      {[
+                        { label: 'POS Sales', score: intelQuality.pos_score },
+                        { label: 'Customers', score: intelQuality.customer_score },
+                        { label: 'Inventory', score: intelQuality.inventory_score },
+                        { label: 'Staff', score: intelQuality.staff_score },
+                        { label: 'Suppliers', score: intelQuality.supplier_score },
+                      ].map(({ label, score }) => (
+                        <div key={label} style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 10, padding: '12px 0', textAlign: 'center' }}>
+                          <div style={{ fontSize: 20, fontWeight: 700, color: score >= 75 ? '#7FB897' : score >= 50 ? '#F59E0B' : '#F87171', lineHeight: 1 }}>{score}</div>
+                          <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', marginTop: 5, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</div>
+                          <div style={{ margin: '8px 8px 0', height: 3, borderRadius: 2, background: 'rgba(255,255,255,0.08)' }}>
+                            <div style={{ height: '100%', borderRadius: 2, width: score + '%', background: score >= 75 ? '#7FB897' : score >= 50 ? '#F59E0B' : '#F87171', transition: 'width 0.8s' }} />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    {intelQuality.missing_critical.length > 0 && (
+                      <div style={{ padding: '10px 14px', borderRadius: 8, background: 'rgba(239,68,68,0.07)', border: '1px solid rgba(239,68,68,0.2)', fontSize: 12, color: 'rgba(255,255,255,0.6)' }}>
+                        <span style={{ color: '#F87171', fontWeight: 600 }}>Missing: </span>{intelQuality.missing_critical.join(' · ')}
+                      </div>
+                    )}
+                    {intelQuality.reliability_statement && (
+                      <div style={{ marginTop: 10, fontSize: 11, color: 'rgba(255,255,255,0.35)', lineHeight: 1.5 }}>{intelQuality.reliability_statement}</div>
+                    )}
+                  </>
+                ) : (
+                  <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 13 }}>No quality data yet.</div>
+                )}
+              </div>
+
+              {/* Memory Browser */}
+              <div style={{ background: surface, border, borderRadius: 14, overflow: 'hidden', marginBottom: 24 }}>
+                <div style={{ padding: '16px 20px', borderBottom: border, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <h3 style={{ color: '#fff', fontSize: 14, fontWeight: 600, margin: 0 }}>Business Memory ({intelMemories.length})</h3>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    {['all', 'fact', 'preference', 'decision', 'goal', 'concern', 'tried'].map(k => (
+                      <button key={k} onClick={() => setMemKindFilter(k)} style={{
+                        padding: '3px 10px', borderRadius: 99, fontSize: 10, fontWeight: 600, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+                        background: memKindFilter === k ? '#2D5240' : 'rgba(255,255,255,0.06)',
+                        color: memKindFilter === k ? '#fff' : 'rgba(255,255,255,0.4)',
+                      }}>
+                        {k === 'all' ? 'All' : k}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div style={{ maxHeight: 380, overflowY: 'auto' }}>
+                  {intelMemories.filter(m => memKindFilter === 'all' || m.kind === memKindFilter).length === 0 ? (
+                    <div style={{ padding: 24, color: 'rgba(255,255,255,0.3)', fontSize: 13, textAlign: 'center' }}>
+                      {intelMemories.length === 0 ? 'No memories yet — they build up as you use Ask Aria.' : 'No memories of this type.'}
+                    </div>
+                  ) : (
+                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                      <thead>
+                        <tr style={{ borderBottom: border }}>
+                          {['Kind', 'Memory', 'Topic', 'Importance', ''].map(col => (
+                            <th key={col} style={{ padding: '8px 16px', textAlign: 'left', color: 'rgba(255,255,255,0.35)', fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{col}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {intelMemories.filter(m => memKindFilter === 'all' || m.kind === memKindFilter).map(mem => (
+                          <tr key={mem.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                            <td style={{ padding: '10px 16px', whiteSpace: 'nowrap' }}>
+                              <span style={{
+                                fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 99,
+                                background: mem.kind === 'fact' ? 'rgba(96,165,250,0.15)' : mem.kind === 'decision' ? 'rgba(167,139,250,0.15)' : mem.kind === 'goal' ? 'rgba(127,184,151,0.15)' : mem.kind === 'concern' ? 'rgba(239,68,68,0.15)' : 'rgba(245,158,11,0.15)',
+                                color: mem.kind === 'fact' ? '#60A5FA' : mem.kind === 'decision' ? '#A78BFA' : mem.kind === 'goal' ? '#7FB897' : mem.kind === 'concern' ? '#F87171' : '#F59E0B',
+                              }}>{mem.kind}</span>
+                            </td>
+                            <td style={{ padding: '10px 16px', color: 'rgba(255,255,255,0.8)', fontSize: 12, lineHeight: 1.5, maxWidth: 380 }}>{mem.content}</td>
+                            <td style={{ padding: '10px 16px', color: 'rgba(255,255,255,0.35)', fontSize: 11 }}>{mem.topic ?? '—'}</td>
+                            <td style={{ padding: '10px 16px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <div style={{ width: 32, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.08)' }}>
+                                  <div style={{ height: '100%', borderRadius: 2, width: (mem.importance * 10) + '%', background: mem.importance >= 8 ? '#7FB897' : mem.importance >= 5 ? '#F59E0B' : '#6B7280' }} />
+                                </div>
+                                <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)' }}>{mem.importance}</span>
+                              </div>
+                            </td>
+                            <td style={{ padding: '10px 16px' }}>
+                              <button onClick={() => forgetMemory(mem.id)} disabled={forgettingId === mem.id}
+                                style={{ padding: '4px 10px', borderRadius: 7, border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.06)', color: '#F87171', fontSize: 10, cursor: forgettingId === mem.id ? 'default' : 'pointer', fontFamily: 'inherit', opacity: forgettingId === mem.id ? 0.5 : 1 }}>
+                                {forgettingId === mem.id ? '...' : 'Forget'}
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </div>
+
+              {/* Council Quality */}
+              <div style={{ background: surface, border, borderRadius: 14, overflow: 'hidden', marginBottom: 24 }}>
+                <div style={{ padding: '16px 20px', borderBottom: border }}>
+                  <h3 style={{ color: '#fff', fontSize: 14, fontWeight: 600, margin: 0 }}>Recent Council Runs</h3>
+                </div>
+                {intelRuns.length === 0 ? (
+                  <div style={{ padding: 24, color: 'rgba(255,255,255,0.3)', fontSize: 13, textAlign: 'center' }}>No council runs yet.</div>
+                ) : (
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr style={{ borderBottom: border }}>
+                        {['Date', 'Mode', 'Model', 'Brains', 'Quality', 'Duration', 'Escalation'].map(col => (
+                          <th key={col} style={{ padding: '8px 14px', textAlign: 'left', color: 'rgba(255,255,255,0.35)', fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{col}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {intelRuns.map(run => (
+                        <tr key={run.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                          <td style={{ padding: '10px 14px', color: 'rgba(255,255,255,0.5)', fontSize: 11 }}>{new Date(run.created_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</td>
+                          <td style={{ padding: '10px 14px', color: 'rgba(255,255,255,0.6)', fontSize: 11, textTransform: 'capitalize' }}>{run.mode.replace(/_/g, ' ')}</td>
+                          <td style={{ padding: '10px 14px', color: run.synthesis_model?.includes('sonnet') ? '#A78BFA' : 'rgba(255,255,255,0.4)', fontSize: 10 }}>
+                            {run.synthesis_model ? run.synthesis_model.replace('claude-', '').replace(/-20\d{6}$/, '') : 'haiku'}
+                          </td>
+                          <td style={{ padding: '10px 14px', color: run.brains_succeeded === 4 ? '#7FB897' : '#F59E0B', fontSize: 12 }}>{run.brains_succeeded}/4</td>
+                          <td style={{ padding: '10px 14px' }}>
+                            {run.data_quality_score != null ? (
+                              <span style={{ fontSize: 11, color: run.data_quality_score >= 75 ? '#7FB897' : run.data_quality_score >= 50 ? '#F59E0B' : '#F87171', fontWeight: 600 }}>{run.data_quality_score}</span>
+                            ) : <span style={{ color: 'rgba(255,255,255,0.2)', fontSize: 11 }}>—</span>}
+                          </td>
+                          <td style={{ padding: '10px 14px', color: 'rgba(255,255,255,0.4)', fontSize: 11 }}>{run.duration_ms ? Math.round(run.duration_ms / 1000) + 's' : '—'}</td>
+                          <td style={{ padding: '10px 14px' }}>
+                            {run.escalation_reason ? (
+                              <span style={{ fontSize: 10, color: '#A78BFA', background: 'rgba(167,139,250,0.1)', padding: '2px 6px', borderRadius: 4 }}>
+                                {run.escalation_reason.replace(/_/g, ' ').replace('question', '').trim()}
+                              </span>
+                            ) : <span style={{ color: 'rgba(255,255,255,0.2)', fontSize: 11 }}>—</span>}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+
+              {/* Conversation History */}
+              <div style={{ background: surface, border, borderRadius: 14, padding: 20 }}>
+                <h3 style={{ color: '#fff', fontSize: 14, fontWeight: 600, margin: '0 0 16px' }}>Recent Conversation Summaries</h3>
+                {intelSummaries.length === 0 ? (
+                  <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 13, textAlign: 'center', padding: '16px 0' }}>No summaries yet — they are generated after Ask Aria conversations.</div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {intelSummaries.map(s => (
+                      <div key={s.id} style={{ padding: 14, borderRadius: 10, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                          <span style={{ fontSize: 11, fontWeight: 600, color: '#7FB897' }}>{new Date(s.conversation_date + 'T00:00:00').toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })}</span>
+                          <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.25)', textTransform: 'capitalize' }}>{s.mode.replace(/_/g, ' ')}</span>
+                        </div>
+                        <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)', lineHeight: 1.6, marginBottom: 8 }}>{s.summary}</div>
+                        {s.key_decisions?.length > 0 && (
+                          <div style={{ fontSize: 11, color: '#A78BFA', marginBottom: 4 }}>
+                            Decided: {s.key_decisions.join(' · ')}
+                          </div>
+                        )}
+                        {s.followup_promised?.length > 0 && (
+                          <div style={{ fontSize: 11, color: '#F59E0B' }}>
+                            Follow up: {s.followup_promised.join(' · ')}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
         </div>
       )}
 
