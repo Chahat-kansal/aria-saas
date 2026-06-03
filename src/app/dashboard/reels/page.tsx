@@ -288,8 +288,8 @@ export default function ReelStudioPage() {
         await ffmpeg.writeFile(`clip${i}.mp4`, data)
         listLines.push(`file 'clip${i}.mp4'`)
       }
-      await ffmpeg.writeFile('list.txt', listLines.join('
-'))
+      await ffmpeg.writeFile('list.txt', listLines.join('\n'))
+      // list written
       // Concatenate
       await ffmpeg.exec(['-f', 'concat', '-safe', '0', '-i', 'list.txt', '-c', 'copy', 'output.mp4'])
       const data = await ffmpeg.readFile('output.mp4')
