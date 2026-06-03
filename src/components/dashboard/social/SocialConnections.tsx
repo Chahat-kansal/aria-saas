@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 
 interface Connection {
   id: string
-  platform: 'instagram' | 'facebook' | 'google_business'
+  platform: 'instagram' | 'facebook' | 'tiktok' | 'google_business'
   platform_account_name: string | null
   account_handle?: string | null
   profile_picture?: string | null
@@ -25,6 +25,12 @@ const PLATFORM_META = {
     icon: '👍',
     color: '#1877F2',
     description: 'Post to your Facebook Page',
+  },
+  tiktok: {
+    name: 'TikTok',
+    icon: '🎵',
+    color: '#010101',
+    description: 'Post Reels and short videos',
   },
   google_business: {
     name: 'Google Business',
@@ -57,6 +63,8 @@ export default function SocialConnections({ businessId, onChange }: { businessId
   const handleConnect = (platform: string) => {
     if (platform === 'google_business') {
       window.location.href = `/api/social/google/connect?business_id=${businessId}`
+    } else if (platform === 'tiktok') {
+      window.location.href = `/api/social/connect/tiktok?business_id=${businessId}`
     } else {
       window.location.href = `/api/integrations/connect/${platform}?business_id=${businessId}`
     }
@@ -74,7 +82,7 @@ export default function SocialConnections({ businessId, onChange }: { businessId
     }
   }
 
-  const platforms = ['instagram', 'facebook', 'google_business'] as const
+  const platforms = ['instagram', 'facebook', 'tiktok', 'google_business'] as const
 
   return (
     <div style={{
@@ -97,7 +105,7 @@ export default function SocialConnections({ businessId, onChange }: { businessId
           color: connections.length > 0 ? '#7FB897' : 'rgba(255,255,255,0.4)',
           fontWeight: 600,
         }}>
-          {connections.length}/3 connected
+          {connections.length}/4 connected
         </span>
       </div>
 
