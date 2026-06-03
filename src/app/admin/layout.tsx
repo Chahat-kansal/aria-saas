@@ -15,6 +15,7 @@ const NAV = [
   { href: '/admin/announcements',label: 'Announcements',  icon: '📢' },
   { href: '/admin/audit',        label: 'Audit Log',      icon: '🔍' },
   { href: '/admin/system',       label: 'System',         icon: '⚙️' },
+  { href: '/admin/influencer',   label: 'AI Influencer',  icon: '🎬' },
 ];
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
