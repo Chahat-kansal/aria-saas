@@ -14,7 +14,6 @@ async function _GET(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
 
-  // Ownership check
   const { data: biz } = await supabase.from('businesses').select('id').eq('id', business_id).eq('user_id', user.id).maybeSingle();
   if (!biz) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
@@ -39,29 +38,58 @@ async function _POST(req: NextRequest) {
   const { business_id, staff_member_id, recipe_id, status, notes, signed_off_by } = await req.json();
   if (!business_id || !recipe_id) return NextResponse.json({ error: 'business_id and recipe_id required' }, { status: 400 });
 
-  // Ownership check
   const { data: biz } = await supabase.from('businesses').select('id').eq('id', business_id).eq('user_id', user.id).maybeSingle();
   if (!biz) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-  const payload: Record<string, any> = {
+  const now = new Date().toISOString();
+  const payload: Record<string, unknown> = {
     business_id,
     staff_member_id: staff_member_id ?? null,
     recipe_id,
     status: status ?? 'not_started',
     notes: notes ?? null,
     signed_off_by: signed_off_by ?? null,
-    updated_at: new Date().toISOString(),
+    updated_at: now,
   };
-  if (status === 'completed') payload.completed_at = new Date().toISOString();
+  if (status === 'completed') payload.completed_at = now;
 
-  const { data, error } = await supabase
-    .from('staff_recipe_training')
-    .upsert(payload, { onConflict: 'staff_member_id,recipe_id' })
-    .select()
-    .single();
+  // Use upsert only when staff_member_id is present (unique constraint is on staff_member_id,recipe_id)
+  // When null, do a plain insert (no conflict possible since NULL != NULL in unique indexes)
+  let result;
+  if (staff_member_id) {
+    result = await supabase
+      .from('staff_recipe_training')
+      .upsert(payload, { onConflict: 'staff_member_id,recipe_id' })
+      .select()
+      .single();
+  } else {
+    // No staff_member_id — check if a matching record exists first
+    const { data: existing } = await supabase
+      .from('staff_recipe_training')
+      .select('id')
+      .eq('business_id', business_id)
+      .eq('recipe_id', recipe_id)
+      .is('staff_member_id', null)
+      .maybeSingle();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ training: data });
+    if (existing) {
+      result = await supabase
+        .from('staff_recipe_training')
+        .update(payload)
+        .eq('id', existing.id)
+        .select()
+        .single();
+    } else {
+      result = await supabase
+        .from('staff_recipe_training')
+        .insert(payload)
+        .select()
+        .single();
+    }
+  }
+
+  if (result.error) return NextResponse.json({ error: result.error.message }, { status: 500 });
+  return NextResponse.json({ training: result.data });
 }
 
 export const GET = withErrorCapture('recipes/training', _GET)
