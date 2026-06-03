@@ -15,7 +15,7 @@ async function _GET(req: NextRequest) {
 
   const { data, error } = await supabaseAdmin
     .from('aria_influencer_library')
-    .select('id, name, description, image_url, industry_tags, style_tags, is_featured, usage_count')
+    .select('id, name, description, image_url, higgsfield_job_id, industry_tags, style_tags, is_featured, usage_count')
     .eq('is_active', true)
     .order('is_featured', { ascending: false })
     .order('usage_count', { ascending: false })
