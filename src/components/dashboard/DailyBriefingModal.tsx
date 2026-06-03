@@ -133,7 +133,7 @@ export function DailyBriefingModal() {
             id: 'council-briefing',
             priority: 'high',
             category: 'AI Briefing',
-            title: 'Today's Intelligence Brief',
+            title: "Today's Intelligence Brief",
             description: councilData.briefing,
             action_label: 'View full briefing',
             action_type: 'navigate',
