@@ -1,34 +1,92 @@
-# Prompt 237 — Run All Pending Prompts (95, 96, 97, 99, 209B) in Sequence
+# Prompt 237 — Run All Pending Prompts (95, 96, 97, 99, 209B) — Upgrade-Only, Audit-Verified
 
-## HOW TO RUN THIS
-Run each numbered section below IN ORDER. After each section:
-1. `npx tsc --noEmit` — must pass
-2. `npm run build` — must pass
-3. `git push origin main`
-4. Move to the next section
-
-Do NOT jump ahead. Each section builds on the last.
+## PRE-FLIGHT (mandatory before anything)
+```
+git pull origin main
+npx tsc --noEmit   # must be zero errors
+npm run build      # must pass
+```
+Read CLAUDE.md. Read every file you will edit IN FULL before writing a single line.
+UPGRADE-ONLY: never remove, stub, or downgrade anything. Fix forward only.
+One commit per task. `git push origin main` after every commit.
 
 ---
 
-## SECTION A — Prompt 95: Stabilization Sweep
+## WHAT IS ALREADY DONE — DO NOT REIMPLEMENT
 
-**Priority tasks from this prompt (in order):**
+Full code audit confirmed these are already built:
 
-### A1 — Briefing cache invalidation
-In the briefing API at `/api/aria/dashboard-briefing/[page]`, accept a `?fresh=true` query param that forces regeneration. After every invoice status change (mark-as-paid, send, void), the frontend calls the briefing API with `?fresh=true`. Apply same pattern to all feature briefings (parcels, customers, social, loyalty).
+- **A4 Theme persistence** — `POSSidebar.tsx` already uses `localStorage.getItem('pos_theme')` and `localStorage.setItem('pos_theme', theme)`. ✅ SKIP.
+- **A5 API client** — `src/lib/api/client.ts` exists (57 lines) with `apiFetch` + `ApiError`. ✅ SKIP.
+- **A6 Roster guard rails** — `src/app/api/aria/roster/route.ts` (278 lines) already has guard logic. ✅ SKIP.
+- **B1 Welcome chooser** — `src/app/in-store/[business_id]/welcome/page.tsx` exists. Main page already redirects to welcome. ✅ SKIP.
+- **B2 Markdown stripping** — `stripBasicMarkdown` already in `src/app/in-store/[business_id]/KioskClient.tsx`. ✅ SKIP.
+- **C2 Market fetcher lib** — `src/lib/aria/market-prices.ts` exists. ✅ SKIP.
+- **C3 Scan routes** — `/api/market-prices/scan` (203 lines) + `/api/market-prices/results` (112 lines) with daily limit + background fire. ✅ SKIP.
+- **C4 Market Prices tab** — competitors dashboard already has market prices. ✅ SKIP.
+- **C6 Market price cron** — `/api/cron/market-price-refresh` exists. ✅ SKIP.
+- **D1 Share links API** — `/api/share-links` (96 lines), `/shared/[token]` (117 lines), `/dashboard/settings/sharing` (189 lines) all exist. ✅ Mostly done — see gap below.
+- **D2 Schedule cron** — `/api/cron/send-scheduled-reports` (271 lines, generates PDF), `/dashboard/settings/reports` (234 lines) both exist. ✅ Mostly done — see gap below.
+- **E1 CSS overflow fix** — `aria-landing.css` already has `overflow-y: auto` and `scrollbar-width: none`. ✅ SKIP.
+- **E3 h2 font clamp** — already applied. ✅ SKIP.
+- **E4 Remotion compositions** — all 6 exist: AskAriaComp, BrainOrbComp, DailyBriefingComp, POSCheckoutComp, RevenueChartComp, WinbackComp. ✅ SKIP.
 
-Commit: `"fix(aria-briefing): cache invalidation on invoice/parcel/customer mutations"`
+---
 
-### A2 — Competitor scan/read table mismatch (confirmed bug)
-Read `src/app/dashboard/competitor-watch/page.tsx` — identify every table it queries.
-Read the scan route at `/api/aria/competitor-scan` — identify every table it writes to.
-The scan writes to `aria_competitor_watches` but the page reads from `competitor_businesses` and `competitor_snapshots`. Fix: make the scan also write to the tables the page reads from. Add error handling when 0 competitors found.
+## GENUINELY PENDING — GAPS CONFIRMED BY CODE AUDIT
 
-Commit: `"fix(competitor-watch): scan writes to same tables page reads from"`
+---
 
-### A3 — Puppeteer fix for PDF generation
-In `/api/reports/weekly-generate/route.ts`, replace puppeteer with:
+## TASK 1 — A1: Briefing Cache Invalidation
+
+**What exists:** `/api/aria/briefing/route.ts` and `/api/aria/daily-briefing/route.ts` exist. No `dashboard-briefing` route.
+**What's missing:** No `?fresh=true` param handling. No post-mutation briefing refresh in invoice/parcel/customer pages.
+
+### Fix
+Read `/api/aria/briefing/route.ts` (147 lines) fully first.
+
+Add `?fresh=true` / `force_refresh=true` support: when this param is present, skip cache and regenerate the briefing immediately. Pattern — at the top of the GET handler:
+```typescript
+const forceRefresh = req.nextUrl.searchParams.get('fresh') === 'true'
+// If forceRefresh, bypass any cached row and regenerate
+```
+
+Then in the invoice page (`src/app/dashboard/invoices/page.tsx`), after marking an invoice paid/sent/voided, call:
+```typescript
+fetch(`/api/aria/briefing?businessId=${bid}&fresh=true`, { method: 'GET' }).catch(() => {})
+```
+Apply same pattern to: parcel status changes, customer winback sends, social post publish.
+
+Commit: `"fix(aria-briefing): fresh=true param forces regeneration + post-mutation refresh on invoice/parcel/customer"`
+
+---
+
+## TASK 2 — A2: Competitor Scan/Read Table Mismatch
+
+**What exists:** `/api/aria/competitors/route.ts` (159 lines) — writes to `aria_competitor_watches` AND `competitor_businesses`. Competitors dashboard (726 lines) — reads from neither (uses its own fetch pattern).
+**What's missing:** Dashboard page doesn't read from the tables the scan writes to. Also needs 0-result error surfacing.
+
+### Fix
+Read `src/app/dashboard/competitors/page.tsx` fully. Find where it fetches competitor data.
+Read `src/app/api/aria/competitors/route.ts` fully. Note what it writes.
+
+Reconcile: ensure the dashboard's fetch calls hit the same tables the scan writes to. Specifically:
+- If dashboard reads from a different endpoint, either update it to read from `competitor_businesses` + `competitor_snapshots`, or update the scan route to also populate whatever the dashboard reads.
+- Add error handling: when scan returns 0 results, surface a clear message to the owner ("No competitors found within 5km — try expanding the radius or running a new scan").
+
+Do NOT remove any existing competitor data tables or columns. Add to what exists.
+
+Commit: `"fix(competitor-watch): scan + read tables reconciled, 0-result error surfaced"`
+
+---
+
+## TASK 3 — A3: Puppeteer Fix for PDF Generation
+
+**What exists:** `src/app/api/reports/weekly-generate/route.ts` (109 lines) — imports from `src/lib/reports/weekly-pdf.ts`. No puppeteer import in the route itself.
+**What's missing:** Need to check `src/lib/reports/weekly-pdf.ts` — that's where the actual browser launch happens.
+
+### Fix
+Read `src/lib/reports/weekly-pdf.ts` fully first. If it uses plain `puppeteer`, replace with:
 ```typescript
 import chromium from '@sparticuz/chromium'
 import puppeteer from 'puppeteer-core'
@@ -41,111 +99,98 @@ const browser = await puppeteer.launch({
 })
 ```
 Run: `npm i @sparticuz/chromium puppeteer-core`
-Remove plain `puppeteer` if present.
-In vercel.json, increase memory to 1024MB and timeout to 60s for the weekly-generate function.
+Remove plain `puppeteer` from package.json if present (check it's not used elsewhere first).
 
-Commit: `"fix(reports): use @sparticuz/chromium for serverless PDF generation"`
+In `vercel.json`, find the weekly-generate function config and ensure memory is at least 1024MB and maxDuration 60s. Do NOT exceed 22 total functions and do NOT change cron schedules.
 
-### A4 — Theme persistence
-Wherever POS theme is stored in useState, persist to localStorage on change and read on mount.
+If `weekly-pdf.ts` already uses `@sparticuz/chromium` → skip this task.
 
-Commit: `"fix(theme): persist light/dark choice across refreshes"`
-
-### A5 — Surface API errors
-Add `src/lib/api/client.ts`:
-```typescript
-export class ApiError extends Error {
-  constructor(public status: number, public body: string, public url: string) {
-    super(`API ${status}: ${url}`)
-  }
-}
-export async function apiFetch(url: string, opts?: RequestInit) {
-  const r = await fetch(url, opts)
-  if (!r.ok) {
-    const body = await r.text()
-    throw new ApiError(r.status, body, url)
-  }
-  return r.json()
-}
-```
-Wrap key dashboard fetches in this helper. Show a toast or inline error state when ApiError is thrown.
-
-Commit: `"feat(api-client): unified fetch helper + error surfacing across dashboard"`
-
-### A6 — Roster guard rails
-In the roster generation prompt/route, add hard rules: never recommend closing more than 2 days/week. If fewer than 4 weeks of historical revenue data, do not make closure recommendations — default to scheduling everyone evenly.
-
-Commit: `"fix(roster): guard rails against recommending mass closures"`
-
-### A7 — Aria Says honest empty states
-For every dashboard page with an Aria Says banner, verify the briefing generator triggers on page load with an empty-state fallback if data is missing. Replace generic "not enough data" text with specific reasons. Auto-regenerate if briefing is missing.
-
-Commit: `"fix(aria-says): honest empty states + auto-regenerate on page load if briefing missing"`
+Commit: `"fix(reports): @sparticuz/chromium for serverless PDF + memory/timeout in vercel.json"`
 
 ---
 
-## SECTION B — Prompt 96: Kiosk Welcome Chooser + Structured Response Formatting
+## TASK 4 — A7: Aria Says Honest Empty States
 
-### B1 — Welcome chooser page
-Create `src/app/in-store/[business_id]/welcome/page.tsx`:
-1. On mount, read `?t=` from URL. POST to `/api/in-store/redeem-token`.
-2. Fetch `/api/public/instore/config?slug={business_id}` to read `scan_and_go_enabled`.
-3. Render two cards:
-   - PRIMARY: "Skip the queue — scan as you shop" → `/in-store/{slug}/cart` (hidden if scan_and_go_enabled = false)
-   - SECONDARY: "Ask Aria a question" → `/in-store/{slug}/chat`
-4. If scan_and_go is OFF, skip chooser entirely — redirect directly to chat.
-5. Pipel design system (light, hard ink borders, Inter, lime accent).
+**What exists:** Page-insight briefing exists. No evidence of honest empty state copy.
+**What's missing:** Generic "not enough data" text needs replacing with specific reasons. Auto-regenerate if stale.
 
-Also ensure `instore_kiosk_configs` has `scan_and_go_enabled boolean DEFAULT false` column (already added today — skip if exists).
+### Fix
+Search for "not enough data" and "keep using Aria" across dashboard pages. For each occurrence:
+- Replace with specific reason why data is missing (e.g. "Connect your POS to see sales insights" or "Run your first SEO audit to see results")
+- Add a retry/regenerate button that re-calls the briefing endpoint with `?fresh=true`
 
-Modify `/in-store/[business_id]/page.tsx` to redirect to `/welcome?t={token}` when token is in URL.
+Do NOT remove any existing Aria Says banners. Only improve their empty-state copy.
 
-Commit: `"feat(kiosk): welcome chooser page — fork to scan-and-go or chat after token redeem"`
-
-### B2 — Markdown stripping (fast win)
-In the kiosk chat page, add a markdown-to-plain-text pass before rendering:
-```typescript
-function stripBasicMarkdown(s: string): string {
-  return s
-    .replace(/\*\*(.+?)\*\*/g, '$1')
-    .replace(/\*(.+?)\*/g, '$1')
-    .replace(/^#+\s+/gm, '')
-    .replace(/`([^`]+)`/g, '$1')
-}
-```
-Apply to every Aria reply text before rendering.
-
-Commit: `"fix(kiosk-chat): strip markdown from Aria replies — no more literal asterisks"`
-
-### B3 — Structured blocks in kiosk chat
-In the kiosk chat API route (likely `/api/public/instore/chat/route.ts`):
-- Update system prompt to prefer structured blocks over markdown for list-shaped answers
-- Return `{ response: <plain text>, blocks: [...] }` same format as `/api/aria/ask`
-
-In the kiosk chat page:
-- Import `BlockRenderer` from `src/components/aria/BlockRenderer.tsx`
-- Add `theme="light"` prop support to BlockRenderer if not already present
-- Render blocks below text when present
-
-Add `menu_list` block type to BlockRenderer if missing:
-- Section title, 1-column list with name + price right-aligned
-- Optional description in muted text, border between items
-
-Add `recommendation_card` block type if missing:
-- Name (Fraunces italic), price, reason in muted text, optional image
-
-Commit: `"fix(kiosk-chat): structured blocks + BlockRenderer — replies look like a menu not raw markdown"`
-
-### B4 — Action card for in-stock items
-When Aria confirms an item is in stock, return an `action_card` block with "Add to basket" button → `/in-store/{slug}/cart` with product pre-added.
-
-Commit: `"feat(kiosk-chat): action_card 'Add to basket' when Aria confirms in-stock items"`
+Commit: `"fix(aria-says): specific empty states + regenerate button on stale briefings"`
 
 ---
 
-## SECTION C — Prompt 97: Market Price Comparison
+## TASK 5 — B3: BlockRenderer Missing Block Types
 
-### C1 — DB migrations (run via Supabase MCP)
+**What exists:** `src/components/aria/BlockRenderer.tsx` (436 lines) — has: number, lead, text, chart, metric_row, brain_readouts, council_split, action_list, action_single, html, live_render, styled_chart, line, area, pie.
+**What's missing:** `menu_list`, `recommendation_card`, `action_card`, `theme` prop for light mode.
+
+### Fix
+Read `src/components/aria/BlockRenderer.tsx` fully first. It's 436 lines — understand the existing pattern for adding block types before writing anything.
+
+Add to BlockRenderer (ADDITIVE — do not change existing block types):
+
+**`theme` prop** — add `theme?: 'light' | 'dark'` to the component props. Default `'dark'`. When `theme='light'`, use white/ink colours instead of dark. Pass through to child renderers.
+
+**`menu_list` block type:**
+```tsx
+// { type: 'menu_list', title: string, items: { name: string, price: string, description?: string }[] }
+// Layout: section title, 1-column list, name + price right-aligned, description in muted text below, border between items
+```
+
+**`recommendation_card` block type:**
+```tsx
+// { type: 'recommendation_card', name: string, price: string, reason: string, image_url?: string }
+// Layout: name in Fraunces italic, price, reason in muted text, optional image left
+```
+
+**`action_card` block type:**
+```tsx
+// { type: 'action_card', title: string, body: string, buttons: { label: string, href: string }[] }
+// Layout: title, body text, buttons row
+```
+
+In the kiosk chat page (`src/app/in-store/[business_id]/KioskClient.tsx` or similar), pass `theme="light"` to BlockRenderer since kiosk uses Pipel light theme.
+
+Commit: `"feat(BlockRenderer): add menu_list, recommendation_card, action_card block types + theme prop for light mode"`
+
+---
+
+## TASK 6 — B4: Action Card for In-Stock Items in Kiosk
+
+**What exists:** Instore chat API (`src/app/api/public/instore/chat/route.ts`, 446 lines) returns blocks. No action_card for in-stock confirmations.
+**What's missing:** When Aria confirms an item is in stock, it should return an `action_card` block with "Add to basket" button.
+
+### Fix
+Read `src/app/api/public/instore/chat/route.ts` fully. Find where in-stock responses are constructed.
+
+Update the system prompt to include: when confirming an item is in stock, include an `action_card` block:
+```json
+{
+  "type": "action_card",
+  "title": "Yes, we have it",
+  "body": "{product_name} — {price}",
+  "buttons": [{"label": "Add to basket", "href": "/in-store/{slug}/cart?add={product_id}"}]
+}
+```
+
+The cart page already exists at `/in-store/{slug}/cart`. Ensure it accepts a `?add={product_id}` query param to pre-add an item (read the cart page first to check if this already works).
+
+Commit: `"feat(kiosk-chat): action_card with Add to basket when Aria confirms in-stock items"`
+
+---
+
+## TASK 7 — C1: Market Price DB Migrations
+
+**What exists:** `pos_market_price_cache` table exists but missing the new columns. `market_price_scans` table does not exist.
+**What's missing:** New columns on `pos_market_price_cache` + `market_price_scans` table.
+
+### DB (run via Supabase MCP)
 ```sql
 ALTER TABLE pos_market_price_cache
   ADD COLUMN IF NOT EXISTS retailer_type text DEFAULT 'competitor',
@@ -176,282 +221,118 @@ CREATE POLICY "market_scans_owner" ON market_price_scans
   WITH CHECK (business_id IN (SELECT id FROM businesses WHERE user_id = auth.uid()));
 ```
 
-Commit: `"feat(db): market_price_scans table + pos_market_price_cache enhancements"`
-
-### C2 — Market price fetcher lib
-Create `src/lib/aria/market-prices.ts`:
-
-```typescript
-interface MarketPriceResult {
-  source_name: string
-  source_url: string
-  shelf_price: number
-  confidence: 'high' | 'medium' | 'low'
-  search_query: string
-}
-```
-
-Strategy A (always runs): fetch retailer search HTML → pass to Haiku to extract price.
-Retailer URLs per industry:
-- liquor: danmurphys.com.au, bws.com.au, liquorland.com.au
-- cafe/retail/bakery: coles.com.au, woolworths.com.au
-- restaurant: ubereats.com/au, menulog.com.au
-
-SSRF guard: allowlist only the above domains. Never follow redirects to private IPs.
-Rate limits: 2s between different domains, 5s between same domain, max 5 retailers/product.
-Cache: 24h (check expires_at before re-fetching).
-
-Strategy B (fallback if GOOGLE_CUSTOM_SEARCH_CX env exists): Google Custom Search API.
-
-Haiku prompt for price extraction:
-```
-Extract the price of "{productName}" from this search result HTML.
-Return JSON: { "found": true/false, "price": number_or_null, "product_name": string_or_null }
-If multiple results, return the lowest price for the most closely matching product.
-Only return JSON, nothing else.
-```
-
-Commit: `"feat(market-prices): market price fetcher lib — HTML fetch + Haiku extraction"`
-
-### C3 — Scan API routes
-`POST /api/market-prices/scan` — creates scan row, fires background scan, returns `{ scan_id }` immediately.
-- 1-scan-per-day limit (failed scans don't count)
-- Scans top 20 active products by revenue DESC
-- Writes to `pos_market_price_cache` with price_gap_cents, is_overpriced, is_underpriced
-- Logs Haiku calls to `aria_ai_calls`
-
-`GET /api/market-prices/scan/[scan_id]` — returns scan status + summary.
-
-`GET /api/market-prices/results` — returns products with cached market prices.
-
-Commit: `"feat(market-prices): scan API routes (trigger + poll + results)"`
-
-### C4 — Market Prices tab in competitor-watch dashboard
-In `/dashboard/competitor-watch/page.tsx`, add a "Market Prices" tab:
-- Scan trigger button + "Last scanned: X ago"
-- AriaSays banner with summary
-- 3 stat cards: Overpriced / Underpriced / In range
-- Product table: Product | Your price | Market low | Market avg | Gap | Status | Action
-- Status: 🔴 Overpriced / 🟢 Underpriced / ⚪ In range
-- "Match price" button → updates pos_products.price with confirmation dialog
-- "View source" link → opens found_url in new tab
-- Retailer breakdown per product
-- Mobile responsive: cards stack to 1-column
-
-Commit: `"feat(competitor-watch): Market Prices tab with product comparison table"`
-
-### C5 — Daily briefing integration
-In the daily briefing generator, add a market prices block if `market_price_scans` has a completed scan < 7 days old. Industry-specific framing:
-- liquor: Dan Murphy's pricing context
-- cafe: local average comparison
-- retail: Coles/Woolworths comparison
-
-Commit: `"feat(market-prices): daily briefing integration + industry-specific insights"`
-
-### C6 — Daily cron
-New route: `/api/cron/market-price-refresh`
-Add to vercel.json: `"schedule": "0 15 * * *"` (3pm UTC = 1am AEST)
-Auto-scan top 10 products for businesses that used the feature in last 30 days but haven't scanned in 20h.
-
-Commit: `"feat(market-prices): daily cron auto-refresh for active businesses"`
+Commit: `"feat(db): market_price_scans table + pos_market_price_cache new columns"`
 
 ---
 
-## SECTION D — Prompt 99: Share Dashboard + Schedule PDF
+## TASK 8 — C5: Market Prices in Daily Briefing
 
-### D1 — Shared read-only dashboard links
+**What exists:** `/api/aria/briefing/route.ts` (147 lines). No market price data included.
+**What's missing:** Market price summary block in the briefing when scan data exists.
 
-#### API routes
-`POST /api/share-links` — create (auth required, validates business ownership)
-`GET /api/share-links` — list for business (auth required)
-`DELETE /api/share-links/[id]` — deactivate (auth required)
-`GET /api/shared/[token]` — validate token + return business_id and allowed pages (PUBLIC, no auth)
+### Fix
+Read `/api/aria/briefing/route.ts` fully. Find where business context data is assembled.
 
-Tables `dashboard_share_links` and `scheduled_pdf_reports` may already exist — check first, skip migration if they do.
+Add a market prices block — query `market_price_scans` for the most recent completed scan < 7 days old. If found, query `pos_market_price_cache` for overpriced/underpriced items. Add to briefing context:
+```
+Market prices (last scanned {date}): {overpriced_count} products above market. Biggest gap: {product} at ${owner_price} vs market ${market_avg}. Potential recovery: ${weekly_estimate}/week.
+```
+Industry-specific framing: liquor mentions Dan Murphy's, cafe mentions local average, retail mentions Coles/Woolworths.
 
-If not, create:
-```sql
-CREATE TABLE IF NOT EXISTS dashboard_share_links (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  business_id uuid NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
-  token text UNIQUE NOT NULL DEFAULT encode(gen_random_bytes(32), 'hex'),
-  label text NOT NULL,
-  recipient_name text,
-  recipient_email text,
-  pages_allowed text[] NOT NULL DEFAULT '{}',
-  expires_at timestamptz,
-  is_active boolean DEFAULT true,
-  access_count int DEFAULT 0,
-  last_accessed_at timestamptz,
-  created_at timestamptz DEFAULT now()
-);
-ALTER TABLE dashboard_share_links ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "owner_share_links" ON dashboard_share_links
-  FOR ALL USING (business_id IN (SELECT id FROM businesses WHERE user_id = auth.uid()));
+If no scan data exists (most businesses initially) → skip silently, do not add empty market section.
 
-CREATE TABLE IF NOT EXISTS scheduled_pdf_reports (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  business_id uuid NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
-  share_link_id uuid REFERENCES dashboard_share_links(id) ON DELETE SET NULL,
-  label text NOT NULL,
-  page text NOT NULL,
-  frequency text NOT NULL CHECK (frequency IN ('daily','weekly','monthly')),
-  day_of_week int,
-  day_of_month int,
-  hour_aest int DEFAULT 8,
-  recipients jsonb NOT NULL DEFAULT '[]',
-  include_share_link boolean DEFAULT true,
-  is_active boolean DEFAULT true,
-  last_sent_at timestamptz,
-  next_send_at timestamptz,
-  created_at timestamptz DEFAULT now()
-);
-ALTER TABLE scheduled_pdf_reports ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "owner_scheduled_pdf" ON scheduled_pdf_reports
-  FOR ALL USING (business_id IN (SELECT id FROM businesses WHERE user_id = auth.uid()));
+Commit: `"feat(market-prices): market price summary in daily briefing when scan data exists"`
+
+---
+
+## TASK 9 — D1: Share Links — ReadOnly Context Missing
+
+**What exists:** `/shared/[token]/page.tsx` (117 lines) — validates token, renders shared view. No ReadOnly context — action buttons are NOT hidden.
+**What's missing:** ReadOnly context provider that hides mutation buttons in the shared view.
+
+### Fix
+Read `src/app/shared/[token]/page.tsx` fully.
+
+Create `src/contexts/ReadOnlyContext.tsx`:
+```typescript
+import { createContext, useContext } from 'react'
+export const ReadOnlyContext = createContext(false)
+export const useReadOnly = () => useContext(ReadOnlyContext)
 ```
 
-#### Shared view route
-Create `src/app/shared/[token]/page.tsx`:
-1. Validate token via `GET /api/shared/[token]` — if invalid/expired: friendly error page
-2. If valid: increment access_count, render shared view
-3. Top bar: business name, "Shared by Aria OS", date
-4. Sidebar: only pages from pages_allowed
-5. ReadOnly context provider: hides action buttons, prevents mutation
-6. Footer: "Read-only view shared by {business_name}. Data refreshes daily."
+In the shared route, wrap rendered content with `<ReadOnlyContext.Provider value={true}>`.
 
-Shareable pages: overview, cash-flow, invoices, sales, staff, weekly-reports, profit-leaks, competitors
-NOT shareable: customers, loyalty, winback, ask-aria, settings, admin
+In each dashboard page component that can be shared (invoices, cash-flow, sales, staff, reports, profit-leaks, competitors), add:
+```typescript
+const isReadOnly = useReadOnly()
+// Then: hide action buttons when isReadOnly is true
+// e.g. {!isReadOnly && <button>Mark as paid</button>}
+```
 
-#### Settings page
-Add `/dashboard/settings/sharing` page:
-- List existing share links (label, recipient, pages, expires, access count, active toggle, delete)
-- "Create new share link" form: label, recipient name+email, pages checkboxes, expiry, "Generate link" button
-- Shows copy-able URL + "Email this link" button after creation
+Do NOT remove buttons from the normal dashboard — only hide them in the read-only shared context. This is purely additive.
 
-Commit: `"feat(sharing): read-only dashboard share links for accountants/partners"`
+Commit: `"feat(sharing): ReadOnly context provider — hides action buttons in shared dashboard view"`
 
-### D2 — Schedule dashboard page as PDF email
+---
 
-#### Schedule PDF modal
-Add a "Schedule PDF" button (calendar icon) to every major dashboard page top bar. Opens a modal:
-- Label (prefilled with page name)
+## TASK 10 — D2: Schedule PDF Button on Dashboard Pages
+
+**What exists:** `/api/cron/send-scheduled-reports` (271 lines, generates PDF) ✅, `/dashboard/settings/reports` (234 lines) ✅. No "Schedule PDF" button visible on dashboard pages.
+**What's missing:** The "Schedule PDF" trigger button on each major dashboard page so owners can discover and use the feature.
+
+### Fix
+Read `src/app/dashboard/layout.tsx` or the main dashboard shell to understand where the top bar renders.
+
+Add a small "Schedule PDF" button (calendar icon) to the top-right area of the dashboard layout — visible on every dashboard page. On click, open a modal:
+- Label (prefilled with current page name from `usePathname()`)
 - Frequency: Daily / Weekly / Monthly
-- Weekly: pick day of week; Monthly: pick day of month
-- Time: hour in AEST (default 8am)
-- Recipients: up to 5 email addresses
-- Include share link toggle
-- "Schedule" button → creates row in `scheduled_pdf_reports`
+- Day/time selector (depending on frequency)
+- Recipients: up to 5 emails
+- "Schedule" → POST to existing `/api/scheduled-reports` route (find the actual route that writes to `scheduled_pdf_reports`)
 
-#### PDF generation
-Reuse `@sparticuz/chromium` + `puppeteer-core` (already installed in Section A3).
-Navigate to the shared link for the relevant page, wait for render, generate PDF, send via SendGrid.
+On mobile, collapse the button into an overflow/actions menu.
+Do NOT modify the cron or settings pages — they already work. Only add the discovery surface.
 
-#### Cron
-New route: `/api/cron/send-scheduled-reports`
-Add to vercel.json: `"schedule": "0 20 * * *"` (8pm UTC = 6am AEST)
-Query `scheduled_pdf_reports` where is_active=true and next_send_at < now().
-For each: generate PDF, email to recipients, update last_sent_at, compute next_send_at.
-
-`computeNextSend` function:
-```typescript
-function computeNextSend(freq: string, dayOfWeek: number|null, dayOfMonth: number|null, hourAest: number): Date {
-  const now = new Date()
-  const hourUtc = (hourAest - 10 + 24) % 24
-  if (freq === 'daily') {
-    const next = new Date(now)
-    next.setUTCHours(hourUtc, 0, 0, 0)
-    if (next <= now) next.setUTCDate(next.getUTCDate() + 1)
-    return next
-  }
-  if (freq === 'weekly' && dayOfWeek !== null) {
-    const next = new Date(now)
-    next.setUTCHours(hourUtc, 0, 0, 0)
-    const daysUntil = (dayOfWeek - now.getUTCDay() + 7) % 7 || 7
-    next.setUTCDate(next.getUTCDate() + daysUntil)
-    return next
-  }
-  if (freq === 'monthly' && dayOfMonth !== null) {
-    const next = new Date(now)
-    next.setUTCDate(Math.min(dayOfMonth, 28))
-    next.setUTCHours(hourUtc, 0, 0, 0)
-    if (next <= now) next.setUTCMonth(next.getUTCMonth() + 1)
-    return next
-  }
-  return now
-}
-```
-
-Email template (SendGrid):
-- Subject: "{label} — {month} {year}"
-- Body: business name, "Here is your scheduled {frequency} report for {label}", date range, PDF attached
-- If include_share_link: "View the live dashboard here: {url}"
-- Footer: "You're receiving this because {owner_name} set up this scheduled report."
-
-#### Settings page
-Add `/dashboard/settings/reports` page: list all scheduled reports with status, last sent, next send, edit/delete/pause buttons.
-
-#### Sidebar entries
-Under SETTINGS in sidebar: "Sharing" and "Scheduled Reports"
-
-Commit: `"feat(scheduled-reports): schedule any dashboard page as PDF email with recurring delivery"`
+Commit: `"feat(scheduled-reports): Schedule PDF button in dashboard top bar — modal to create scheduled report"`
 
 ---
 
-## SECTION E — Prompt 209B: Landing Page Layout Fix
+## TASK 11 — E2: Fix Remotion Player Scene Sizes
 
-### E1 — Fix scene overflow in aria-landing.css
-In `src/styles/aria-landing.css`, find `.landing-v3 .scene` and change:
-- `overflow: hidden` → `overflow-y: auto; overflow-x: hidden`
-- `padding: 80px 32px` → `padding: 60px 32px`
-- Add: `scrollbar-width: none; -ms-overflow-style: none;`
-- Add: `.landing-v3 .scene::-webkit-scrollbar { display: none; }`
+**What exists:** All 6 compositions exist. `aria-landing.css` has `overflow-y: auto`. But `.scene` still has `align-items: flex-start` and `padding: 0 32px` — Players may still overflow.
+**What's missing:** Player `compositionHeight` values may still be too large for the viewport.
 
-Update `.landing-v3 .scene-inner`:
-- Add: `display: flex; flex-direction: column; align-items: center; padding-bottom: 40px;`
+### Fix
+Read each scene component in `src/components/marketing/landing/`:
+- `MeetAriaScene.tsx`, `SmartPOSScene.tsx`, `BrainScene.tsx`, `ReorderScene.tsx`, `AskScene.tsx`, `ProblemSceneNew.tsx`
 
-Commit: `"fix(landing/css): scene overflow-y:auto — fixes Remotion Player clipping"`
+For each that has a Remotion Player, check the `compositionHeight`. If it exceeds 380px, reduce it. Also remove any feature grids stacked below the Player that cause overflow.
 
-### E2 — Fix Remotion Player sizes
-For each scene component that has a Remotion Player, reduce compositionHeight to fit within viewport. Max compositionHeight = 380px. Remove any feature grids below the Player if they push content below viewport.
+**DO NOT touch:** ProblemScene, ScheduleScene, AustraliaScene, TestimonialScene, PricingTiersScene, OutroScene, TenMinutesScene, AustraliaWideScene, PricingAgentScene, LandingShell.tsx, StickyOverlay.tsx, ProgressBar.tsx, scene-data.ts.
 
-Affected scenes: MeetAriaScene, SmartPOSScene, BrainScene, ReorderScene, AskScene, ProblemSceneNew.
-DO NOT touch: ProblemScene, ScheduleScene, AustraliaScene, TestimonialScene, PricingTiersScene, OutroScene, TenMinutesScene, AustraliaWideScene, PricingAgentScene.
+If all Player heights are already ≤ 380px → skip this task.
 
-Commit: `"fix(landing/scenes): resize Remotion Players to fit viewport, remove overflowing grids"`
-
-### E3 — Fix h2 font size
-Find `.landing-v3 .scene h2` in aria-landing.css, set:
-```css
-.landing-v3 .scene h2 {
-  font-size: clamp(2rem, 4.5vw, 3.5rem);
-  line-height: 1.08;
-}
-```
-
-Commit: `"fix(landing/css): reduce h2 size in scenes — Cormorant was too large"`
-
-### E4 — Check missing Remotion compositions
-Verify all composition files exist in `src/components/marketing/landing/remotion/`:
-- DailyBriefingComp.tsx, POSCheckoutComp.tsx, WinbackComp.tsx, BrainOrbComp.tsx, AskAriaComp.tsx, RevenueChartComp.tsx
-
-For any missing file, create a minimal working composition using AbsoluteFill from remotion with animated content matching the scene's purpose.
-
-DO NOT touch: LandingShell.tsx, StickyOverlay.tsx, ProgressBar.tsx, scene-data.ts
-
-Commit: `"fix(landing/remotion): ensure all 6 compositions exist and export correctly"`
+Commit: `"fix(landing/scenes): reduce Remotion Player compositionHeight to fit viewport"`
 
 ---
 
-## FINAL RULES (apply throughout)
-- `npx tsc --noEmit` + `npm run build` before EVERY commit
-- `git push origin main` after EVERY commit
-- Vercel functions limit stays at exactly 22
-- Cron schedules: daily only (never sub-daily)
-- UPGRADE_ONLY / RULE 0: no feature, field, or capability removed
-- If a section fails to build, fix it before moving to the next section
-- Do not combine sections into one commit — each task gets its own commit
+## FINAL RULES
+- `npx tsc --noEmit` + `npm run build` before every commit
+- `git push origin main` after every commit
+- Vercel: max 22 functions, cron schedules daily only
+- UPGRADE-ONLY: never remove existing code — only add
+- Amounts in dollars (numeric), never cents
+- Models: `claude-haiku-4-5-20251001` for AI calls
 
-## PRIORITY if limit runs low
-Run in this order: A2 → A3 → B1 → B2 → C1 → C2 → C3 → C4 → D1 → E1 → E2
-Stop after each section push and report status.
+## PRIORITY ORDER if limit runs low
+1. Task 7 (C1 DB) — market_price_scans table needed for scan routes to work
+2. Task 3 (A3 Puppeteer) — PDF generation broken without this
+3. Task 5 (B3 BlockRenderer) — kiosk needs menu_list + theme prop
+4. Task 1 (A1 Briefing cache) — invoice stale state bug
+5. Task 2 (A2 Competitor tables) — scan/read mismatch bug
+6. Task 9 (D1 ReadOnly) — share links need this to be secure
+7. Task 10 (D2 Schedule button) — discoverability
+8. Task 8 (C5 Briefing market) — nice to have
+9. Task 6 (B4 action_card) — kiosk add-to-basket
+10. Task 4 (A7 empty states) — copy polish
+11. Task 11 (E2 Remotion sizes) — landing polish
