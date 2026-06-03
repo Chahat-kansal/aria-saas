@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useBusinessContext } from '@/components/providers/BusinessProvider'
 import { AriaSays, invalidateAriaInsight } from '@/components/dashboard/AriaSays'
+import { useReadOnly } from '@/contexts/ReadOnlyContext'
 
 interface Service { id: string; name: string; description: string | null; unit_price: number; gst_applicable: boolean; recurring: boolean; active: boolean }
 interface BLine { description: string; quantity: number; unit_price: number; gst_applicable: boolean }
@@ -45,6 +46,7 @@ const EMPTY_LINE: BLine = { description: '', quantity: 1, unit_price: 0, gst_app
 export default function InvoicesPage() {
   const { business } = useBusinessContext()
   const bid = business?.id
+  const isReadOnly = useReadOnly()
   const [tab, setTab] = useState<'invoices' | 'services'>('invoices')
   const [invoices, setInvoices] = useState<Invoice[]>([])
   const [filter, setFilter] = useState('all')
@@ -109,7 +111,7 @@ export default function InvoicesPage() {
   async function markPaid() {
     if (!selected) return
     const r = await fetch('/api/invoices/' + selected.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'paid', paid_at: new Date().toISOString() }) }).then(x => x.json())
-    if (r.invoice) { setSelected(r.invoice); fetchInvoices(); invalidateAriaInsight(bid, 'invoices') }
+    if (r.invoice) { setSelected(r.invoice); fetchInvoices(); invalidateAriaInsight(bid, 'invoices'); fetch('/api/aria/briefing?businessId=' + bid + '&fresh=true').catch(() => {}) }
   }
 
   async function sendInvoice() {
@@ -117,7 +119,7 @@ export default function InvoicesPage() {
     setSending(true)
     const r = await fetch('/api/invoices/send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ invoiceId: selected.id, sendMethod }) }).then(x => x.json())
     setSending(false)
-    if (r.invoice) { setSelected(r.invoice); fetchInvoices(); invalidateAriaInsight(bid, 'invoices') }
+    if (r.invoice) { setSelected(r.invoice); fetchInvoices(); invalidateAriaInsight(bid, 'invoices'); fetch('/api/aria/briefing?businessId=' + bid + '&fresh=true').catch(() => {}) }
     else alert(r.error ?? 'Send failed')
   }
 
@@ -201,7 +203,7 @@ export default function InvoicesPage() {
   async function voidInvoice() {
     if (!selected) return; setActionLoading('void')
     const r = await fetch('/api/invoices/' + selected.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'void' }) }).then(x => x.json())
-    setActionLoading(null); if (r.invoice) { setSelected(r.invoice); fetchInvoices() }
+    setActionLoading(null); if (r.invoice) { setSelected(r.invoice); fetchInvoices(); fetch('/api/aria/briefing?businessId=' + bid + '&fresh=true').catch(() => {}) }
   }
   async function duplicateInvoice() {
     if (!selected || !bid) return; setActionLoading('dup')
@@ -399,7 +401,7 @@ export default function InvoicesPage() {
                     <button style={BTN('p')} onClick={sendInvoice} disabled={sending}>{sending ? 'Sending…' : 'Send'}</button>
                   </div>
                 )}
-                {(selected.status === 'sent' || selected.status === 'overdue') && (
+                {!isReadOnly && (selected.status === 'sent' || selected.status === 'overdue') && (
                   <>
                     <button style={BTN('p')} onClick={markPaid}>Mark Paid</button>
                     <button style={BTN('g')} onClick={draftReminder}>Draft Reminder</button>
@@ -409,15 +411,19 @@ export default function InvoicesPage() {
                   <p style={{ fontSize: 12, color: C.muted, textAlign: 'center', margin: 0 }}>Paid {new Date(selected.paid_at).toLocaleDateString('en-AU')}</p>
                 )}
                 {selected.viewed_at && <p style={{ fontSize: 11, color: '#a855f7', margin: 0 }}>Opened {Math.floor((Date.now() - new Date(selected.viewed_at).getTime()) / 60000)}m ago</p>}
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  <button onClick={toggleAutoReminders} style={{ ...BTN(selected.auto_reminders ? 'p' : 'g'), fontSize: 11 }}>Auto reminders: {selected.auto_reminders ? 'ON' : 'OFF'}</button>
-                  <button style={{ ...BTN('g'), fontSize: 11 }} onClick={() => setRecurringModal(true)}>↻ Recurring</button>
-                </div>
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  <button style={{ ...BTN('g'), fontSize: 11 }} onClick={duplicateInvoice} disabled={actionLoading === 'dup'}>{actionLoading === 'dup' ? '…' : 'Duplicate'}</button>
-                  {(selected.status === 'sent' || selected.status === 'overdue') && <button style={{ ...BTN('d'), fontSize: 11 }} onClick={voidInvoice} disabled={actionLoading === 'void'}>{actionLoading === 'void' ? '…' : 'Void'}</button>}
-                  {!!(business as unknown as Record<string, unknown>)?.xero_connected_at && <button style={{ ...BTN('g'), fontSize: 11 }} onClick={() => xeroSync(selected.id)} disabled={actionLoading === 'xero-' + selected.id}>{actionLoading === 'xero-' + selected.id ? '…' : 'Xero sync'}</button>}
-                </div>
+                {!isReadOnly && (
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <button onClick={toggleAutoReminders} style={{ ...BTN(selected.auto_reminders ? 'p' : 'g'), fontSize: 11 }}>Auto reminders: {selected.auto_reminders ? 'ON' : 'OFF'}</button>
+                    <button style={{ ...BTN('g'), fontSize: 11 }} onClick={() => setRecurringModal(true)}>↻ Recurring</button>
+                  </div>
+                )}
+                {!isReadOnly && (
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <button style={{ ...BTN('g'), fontSize: 11 }} onClick={duplicateInvoice} disabled={actionLoading === 'dup'}>{actionLoading === 'dup' ? '…' : 'Duplicate'}</button>
+                    {(selected.status === 'sent' || selected.status === 'overdue') && <button style={{ ...BTN('d'), fontSize: 11 }} onClick={voidInvoice} disabled={actionLoading === 'void'}>{actionLoading === 'void' ? '…' : 'Void'}</button>}
+                    {!!(business as unknown as Record<string, unknown>)?.xero_connected_at && <button style={{ ...BTN('g'), fontSize: 11 }} onClick={() => xeroSync(selected.id)} disabled={actionLoading === 'xero-' + selected.id}>{actionLoading === 'xero-' + selected.id ? '…' : 'Xero sync'}</button>}
+                  </div>
+                )}
               </div>
             </div>
           )}

@@ -101,6 +101,24 @@ export type AskBlock =
       question: string
       severity?: 'low' | 'medium' | 'high'
     }
+  | {
+      type: 'menu_list'
+      title?: string
+      items: Array<{ name: string; price: string; description?: string }>
+    }
+  | {
+      type: 'recommendation_card'
+      name: string
+      price: string
+      reason: string
+      image_url?: string
+    }
+  | {
+      type: 'action_card'
+      title: string
+      body: string
+      buttons: Array<{ label: string; href: string }>
+    }
 
 export interface AskResponse {
   blocks: AskBlock[]

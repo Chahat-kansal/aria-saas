@@ -7,8 +7,6 @@ import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { sendSlackMessage } from '@/lib/integrations/slack'
 
-export { sendSlackMessage }
-
 async function _POST(req: Request) {
   const supabase = createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()

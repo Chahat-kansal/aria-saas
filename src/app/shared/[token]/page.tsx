@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { ReadOnlyProvider } from '@/contexts/ReadOnlyContext'
 
 async function getSharedData(token: string) {
   const { data: link } = await supabaseAdmin
@@ -71,6 +72,7 @@ export default async function SharedPage({ params }: { params: { token: string }
   )
 
   return (
+    <ReadOnlyProvider>
     <div style={{ minHeight: '100vh', background: '#0E1611', fontFamily: 'system-ui,-apple-system,sans-serif', color: '#F5F3EC' }}>
       {/* Top bar */}
       <div style={{ background: 'rgba(255,255,255,0.03)', borderBottom: '1px solid rgba(255,255,255,0.07)', padding: '14px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
@@ -112,5 +114,6 @@ export default async function SharedPage({ params }: { params: { token: string }
         </div>
       </div>
     </div>
+    </ReadOnlyProvider>
   )
 }

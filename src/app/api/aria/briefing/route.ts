@@ -23,6 +23,8 @@ async function _GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const businessId = searchParams.get('businessId');
   if (!businessId) return NextResponse.json({ error: 'businessId required' }, { status: 400 });
+  // fresh=true: caller signals a mutation just happened — briefing regenerates from live data (always true here, no cache)
+  const _forceRefresh = searchParams.get('fresh') === 'true' || searchParams.get('force_refresh') === 'true'
 
   const { data: business } = await supabase
     .from('businesses')
@@ -38,6 +40,8 @@ async function _GET(req: Request) {
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
   const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
 
+  const sevenDaysAgoForScans = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+
   const [
     { data: recentActivity, count: activityCount },
     { data: activeLeaks },
@@ -48,6 +52,7 @@ async function _GET(req: Request) {
     { data: recentStocktakes },
     { data: lowStockProducts },
     { data: recentAudits },
+    { data: latestScan },
   ] = await Promise.all([
     supabase.from('activity_log').select('description', { count: 'exact' }).eq('business_id', businessId).gte('created_at', sevenDaysAgo),
     supabase.from('profit_leaks').select('description,monthly_loss').eq('business_id', businessId).eq('status', 'detected'),
@@ -58,6 +63,7 @@ async function _GET(req: Request) {
     supabase.from('pos_stock_takes').select('status,items_counted,items_with_variance,completed_at').eq('business_id', businessId).order('completed_at', { ascending: false }).limit(1),
     supabase.from('pos_products').select('name,stock_quantity,low_stock_threshold').eq('business_id', businessId).eq('track_stock', true).lt('stock_quantity', 5).limit(5),
     supabase.from('pos_shift_audits').select('flagged_items,failed_checks,shift_date').eq('business_id', businessId).gte('shift_date', new Date(Date.now() - 2 * 86400_000).toISOString().slice(0, 10)).order('shift_date', { ascending: false }).limit(5),
+    supabase.from('market_price_scans').select('id,finished_at,overpriced_count,underpriced_count,potential_revenue_gain_cents').eq('business_id', businessId).eq('status', 'complete').gte('finished_at', sevenDaysAgoForScans).order('finished_at', { ascending: false }).limit(1),
   ]);
 
   const totalLeakLoss = (activeLeaks || []).reduce((s: number, l: { monthly_loss?: number }) => s + (l.monthly_loss || 0), 0);
@@ -69,6 +75,25 @@ async function _GET(req: Request) {
   const overdueTotal = (overdueCustomers || []).reduce((s: number, c: { current_balance_cents?: number }) => s + (c.current_balance_cents ?? 0), 0);
 
   const lastStocktake = recentStocktakes?.[0];
+
+  // Market price data — only included if a recent scan exists
+  const scanRow = latestScan?.[0]
+  let marketPriceContext = ''
+  if (scanRow) {
+    const { data: topOverpriced } = await supabase
+      .from('pos_market_price_cache')
+      .select('product_name,our_price,market_avg_price,price_gap_pct')
+      .eq('business_id', businessId)
+      .eq('is_overpriced', true)
+      .order('price_gap_pct', { ascending: false })
+      .limit(1)
+    const scanDate = new Date(scanRow.finished_at as string).toLocaleDateString('en-AU')
+    const overpriced = (scanRow.overpriced_count as number) ?? 0
+    const gain = ((scanRow.potential_revenue_gain_cents as number) ?? 0) / 100
+    const topItem = topOverpriced?.[0]
+    const industryRef = business.industry === 'liquor' ? "Dan Murphy's" : business.industry === 'cafe' ? 'local café average' : 'Coles/Woolworths'
+    marketPriceContext = `\nMarket prices (last scanned ${scanDate}): ${overpriced} product${overpriced !== 1 ? 's' : ''} above market vs ${industryRef}.${topItem ? ` Biggest gap: ${topItem.product_name} at $${Number(topItem.our_price ?? 0).toFixed(2)} vs market $${Number(topItem.market_avg_price ?? 0).toFixed(2)}.` : ''} Potential weekly revenue recovery: $${gain.toFixed(2)}.`
+  }
 
   const context = `Business: ${business.name} (${business.industry})
 Owner: ${business.owner_name}
@@ -85,7 +110,7 @@ Cash-up (last 7 days): ${cashSessions?.length || 0} sessions. Avg variance: ${av
 Overdue customer tabs (90+ days): ${overdueCustomers?.length || 0} customers owing A$${(overdueTotal / 100).toFixed(2)} total.
 Last stocktake: ${lastStocktake ? lastStocktake.items_counted + ' items counted, ' + lastStocktake.items_with_variance + ' variances found.' : 'No stocktake on record.'}
 Low stock products: ${lowStockProducts?.map((p: { name?: string; stock_quantity?: number }) => p.name + ' (' + p.stock_quantity + ' left)').join(', ') || 'none critical'}
-Audit checks (last 48h): ${(() => { const aa = (recentAudits || []) as Array<{failed_checks?: number; flagged_items?: Array<{name: string}>}>; const tot = aa.reduce((s, a) => s + (a.failed_checks ?? 0), 0); const flags = aa.flatMap(a => a.flagged_items ?? []).slice(0,3).map(f => f.name).join(', '); return tot > 0 ? tot + ' required checks failed' + (flags ? ': ' + flags : '') : 'all checks passed'; })()}`.trim();
+Audit checks (last 48h): ${(() => { const aa = (recentAudits || []) as Array<{failed_checks?: number; flagged_items?: Array<{name: string}>}>; const tot = aa.reduce((s, a) => s + (a.failed_checks ?? 0), 0); const flags = aa.flatMap(a => a.flagged_items ?? []).slice(0,3).map(f => f.name).join(', '); return tot > 0 ? tot + ' required checks failed' + (flags ? ': ' + flags : '') : 'all checks passed'; })()}${marketPriceContext}`.trim();
 
   // Try council path first — falls back to single-model if it fails
   let council = null

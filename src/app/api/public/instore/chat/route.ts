@@ -320,7 +320,9 @@ export async function POST(req: Request) {
           // build it deterministically from the real catalogue (grouped by category)
           // so it renders as a clean menu card instead of relying on the LLM to format.
           type MenuItem = { name: string; price: string; description?: string }
-          type Block = { type: 'menu_list'; title: string; items: MenuItem[] }
+          type MenuBlock = { type: 'menu_list'; title: string; items: MenuItem[] }
+          type ActionCardBlock = { type: 'action_card'; title: string; body: string; buttons: Array<{ label: string; href: string }> }
+          type Block = MenuBlock | ActionCardBlock
           let blocks: Block[] = []
           const isMenuQuery = /\b(menu|what (do|do you|'?s)( you)? (have|sell|offer|stock|got|serve)|what'?s on|full (list|menu)|see (the )?menu|browse|everything you)\b/i.test(message)
           if (isMenuQuery) {
@@ -354,6 +356,23 @@ export async function POST(req: Request) {
           // Demand signal extraction
           const lowerMsg = message.toLowerCase()
           const asked = products.find(p => p.name && lowerMsg.includes(p.name.toLowerCase()))
+
+          // Action card — when a specific product is asked about and is in stock,
+          // append an "Add to basket" action card (only if no menu query — avoid duplication).
+          if (!isMenuQuery && asked) {
+            const qty = Number(asked.stock_quantity ?? 0)
+            const tracked = asked.track_stock !== false
+            const stockOk = !tracked || qty > 0
+            if (stockOk) {
+              const priceStr = asked.price != null ? ' — $' + Number(asked.price).toFixed(2) : ''
+              blocks.push({
+                type: 'action_card',
+                title: 'Yes, we have it',
+                body: asked.name + priceStr,
+                buttons: [{ label: 'Add to basket', href: '/in-store/' + business_id + '/cart?add=' + asked.id }],
+              })
+            }
+          }
           let signal_type: 'answered' | 'missed_demand' | 'recommendation' | 'recipe' = 'answered'
           let product_asked: string | null = null
           let matched_product_id: string | null = null

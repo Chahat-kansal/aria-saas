@@ -129,8 +129,21 @@ export function AriaSays({ businessId, page, pageData, dismissable = true }: Pro
     )
   }
 
+  const NO_DATA_MSGS: Record<string, string> = {
+    sales: 'Connect your POS and complete a sale to see sales insights.',
+    invoices: 'Create and send an invoice to see invoice insights.',
+    customers: 'Add your first customer or import from POS to see customer insights.',
+    'weekly-reports': 'Generate your first weekly report to see trends here.',
+    'shift-reports': 'Complete a shift close to see cash reconciliation insights.',
+    seo: 'Run your first SEO audit under Settings → SEO to see results.',
+    competitors: 'Run a competitor scan to see how you compare locally.',
+    'profit-leaks': 'Process some sales so Aria can identify profit improvement opportunities.',
+    staff: 'Add a staff member and log some shifts to see staff insights.',
+    'cash-flow': 'Record some expenses or complete a cash session to see cash-flow insights.',
+    reorder: 'Track inventory and complete some sales to see reorder forecasts.',
+  }
   const emptyMsg = result?.no_data
-    ? 'Not enough data yet — Aria will generate an insight once there\'s more to work with.'
+    ? (NO_DATA_MSGS[page] ?? 'No data yet for this section — complete some actions to see insights.')
     : 'Give me a moment, I\'m thinking about this…'
 
   return (
@@ -146,7 +159,17 @@ export function AriaSays({ businessId, page, pageData, dismissable = true }: Pro
         ) : result?.insight ? (
           <p style={{ fontSize: 13, lineHeight: 1.55, color: 'rgba(255,255,255,0.92)', margin: '4px 0 0' }}>{result.insight}</p>
         ) : (
-          <p style={{ fontSize: 12, color: c.dim, margin: '4px 0 0', fontStyle: 'italic' }}>{emptyMsg}</p>
+          <div>
+            <p style={{ fontSize: 12, color: c.dim, margin: '4px 0 0', fontStyle: 'italic' }}>{emptyMsg}</p>
+            {result?.no_data && (
+              <button
+                onClick={() => { retriedRef.current = false; load(true) }}
+                style={{ marginTop: 6, fontSize: 11, color: c.text, background: 'none', border: '1px solid ' + c.border, borderRadius: 6, padding: '3px 8px', cursor: 'pointer', fontFamily: 'inherit' }}
+              >
+                Regenerate
+              </button>
+            )}
+          </div>
         )}
         {result?.link && !loading && (
           <Link href={result.link} style={{ display: 'inline-block', marginTop: 6, fontSize: 11, color: c.text, fontWeight: 600, textDecoration: 'none' }}>

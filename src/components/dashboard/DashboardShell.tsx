@@ -8,6 +8,7 @@ import { showAriaBriefing } from '@/components/dashboard/DailyBriefingModal';
 import { usePathname } from 'next/navigation';
 import { SetupGuide } from '@/components/dashboard/SetupGuide';
 import { TourSpotlight } from '@/components/dashboard/TourSpotlight';
+import { SchedulePDFButton } from '@/components/dashboard/SchedulePDFButton';
 
 export function DashboardShell({ children }: { children: React.ReactNode }) {
   const { business, loading } = useBusinessContext();
@@ -121,11 +122,13 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
             </span>
             Briefing
           </button>
+          <SchedulePDFButton compact />
         </div>
 
         {/* Desktop top bar */}
-        <div className="hidden md:flex items-center justify-end px-4 py-2 flex-shrink-0"
+        <div className="hidden md:flex items-center justify-end gap-2 px-4 py-2 flex-shrink-0"
           style={{ background: '#13131a', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+          <SchedulePDFButton />
           <button
             onClick={() => showAriaBriefing()}
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-[rgba(255,255,255,0.6)] hover:text-white bg-[rgba(255,255,255,0.04)] hover:bg-[rgba(255,255,255,0.08)] border border-[rgba(255,255,255,0.08)] rounded-lg transition-colors"

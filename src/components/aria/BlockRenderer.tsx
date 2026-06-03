@@ -138,7 +138,7 @@ function SpreadsheetBlock({ block }: { block: SpreadsheetBlock }) {
   )
 }
 
-function OneBlock({ block, onAction }: { block: AskBlock; onAction?: (prompt: string) => void }) {
+function OneBlock({ block, onAction, theme = 'dark' }: { block: AskBlock; onAction?: (prompt: string) => void; theme?: 'light' | 'dark' }) {
   switch (block.type) {
     case 'lead':
       return <p style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.6, margin: 0 }}>{block.content}</p>
@@ -416,6 +416,71 @@ function OneBlock({ block, onAction }: { block: AskBlock; onAction?: (prompt: st
       )
     }
 
+    case 'menu_list': {
+      const dividerColor = theme === 'light' ? 'rgba(0,0,0,0.08)' : 'var(--divider)'
+      const nameColor = theme === 'light' ? '#111' : 'var(--text-primary)'
+      const priceColor = theme === 'light' ? '#2D5240' : '#7FB897'
+      const descColor = theme === 'light' ? '#555' : 'var(--text-tertiary)'
+      return (
+        <div style={{ background: theme === 'light' ? '#fff' : 'var(--bg-elevated)', borderRadius: 12, border: '1px solid ' + dividerColor, overflow: 'hidden' }}>
+          {block.title && (
+            <div style={{ padding: '10px 14px', borderBottom: '1px solid ' + dividerColor, fontSize: 12, fontWeight: 700, color: priceColor, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              {block.title}
+            </div>
+          )}
+          {block.items.map((item, i) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, padding: '10px 14px', borderBottom: i < block.items.length - 1 ? '1px solid ' + dividerColor : 'none' }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: nameColor }}>{item.name}</div>
+                {item.description && <div style={{ fontSize: 12, color: descColor, marginTop: 2, lineHeight: 1.4 }}>{item.description}</div>}
+              </div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: priceColor, flexShrink: 0 }}>{item.price}</div>
+            </div>
+          ))}
+        </div>
+      )
+    }
+
+    case 'recommendation_card': {
+      const cardBg = theme === 'light' ? '#f9fafb' : 'var(--bg-elevated)'
+      const cardBorder = theme === 'light' ? 'rgba(45,82,64,0.2)' : 'rgba(127,184,151,0.3)'
+      const nameColor = theme === 'light' ? '#111' : 'var(--text-primary)'
+      const priceColor = theme === 'light' ? '#2D5240' : '#7FB897'
+      const reasonColor = theme === 'light' ? '#555' : 'var(--text-secondary)'
+      return (
+        <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', background: cardBg, borderRadius: 12, border: '1px solid ' + cardBorder, padding: '14px 16px' }}>
+          {block.image_url && (
+            <img src={block.image_url} alt={block.name} width={56} height={56} style={{ borderRadius: 8, objectFit: 'cover', flexShrink: 0 }} />
+          )}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontFamily: 'Georgia, serif', fontStyle: 'italic', fontSize: 15, fontWeight: 700, color: nameColor, lineHeight: 1.3, marginBottom: 2 }}>{block.name}</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: priceColor, marginBottom: 6 }}>{block.price}</div>
+            <div style={{ fontSize: 12, color: reasonColor, lineHeight: 1.5 }}>{block.reason}</div>
+          </div>
+        </div>
+      )
+    }
+
+    case 'action_card': {
+      const cardBg = theme === 'light' ? '#fff' : 'var(--bg-elevated)'
+      const cardBorder = theme === 'light' ? 'rgba(0,0,0,0.1)' : 'var(--divider)'
+      const titleColor = theme === 'light' ? '#111' : 'var(--text-primary)'
+      const bodyColor = theme === 'light' ? '#444' : 'var(--text-secondary)'
+      return (
+        <div style={{ background: cardBg, borderRadius: 12, border: '1px solid ' + cardBorder, padding: '16px' }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: titleColor, marginBottom: 6 }}>{block.title}</div>
+          <div style={{ fontSize: 13, color: bodyColor, lineHeight: 1.6, marginBottom: 12 }}>{block.body}</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {block.buttons.map((btn, i) => (
+              <a key={i} href={btn.href} style={{ display: 'inline-block', padding: '7px 16px', borderRadius: 8, background: '#2D5240', color: '#fff', fontSize: 12, fontWeight: 600, textDecoration: 'none', fontFamily: 'inherit' }}>
+                {btn.label}
+              </a>
+            ))}
+          </div>
+        </div>
+      )
+    }
+
     default:
       return (
         <span style={{ display: 'inline-block', fontSize: 11, padding: '3px 10px', borderRadius: 99, background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.25)', color: '#F87171', fontFamily: 'monospace' }}>
@@ -425,11 +490,11 @@ function OneBlock({ block, onAction }: { block: AskBlock; onAction?: (prompt: st
   }
 }
 
-export function BlockRenderer({ blocks, onAction }: { blocks: AskBlock[]; onAction?: (prompt: string) => void }) {
+export function BlockRenderer({ blocks, onAction, theme = 'dark' }: { blocks: AskBlock[]; onAction?: (prompt: string) => void; theme?: 'light' | 'dark' }) {
   if (!blocks || blocks.length === 0) return null
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      {blocks.map((block, i) => <OneBlock key={i} block={block} onAction={onAction} />)}
+      {blocks.map((block, i) => <OneBlock key={i} block={block} onAction={onAction} theme={theme} />)}
     </div>
   )
 }

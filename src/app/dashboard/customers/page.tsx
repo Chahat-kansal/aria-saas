@@ -204,6 +204,7 @@ export default function CustomersPage() {
     setWinbackLoading(id)
     await fetch('/api/customers/' + id + '/winback', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) })
     setWinbackLoading(null)
+    fetch('/api/aria/briefing?businessId=' + bid + '&fresh=true').catch(() => {})
   }
   const bulkWinback = async () => {
     if (!checkedIds.size) return
@@ -216,7 +217,10 @@ export default function CustomersPage() {
     const d = await r.json() as { sent?: number; failed?: number }
     setBulkWinbackLoading(false)
     setCheckedIds(new Set())
-    if (r.ok) alert(`Winback sent to ${d.sent ?? 0} customers${d.failed ? '. ' + d.failed + ' failed.' : '.'}`)
+    if (r.ok) {
+      alert(`Winback sent to ${d.sent ?? 0} customers${d.failed ? '. ' + d.failed + ' failed.' : '.'}`)
+      fetch('/api/aria/briefing?businessId=' + bid + '&fresh=true').catch(() => {})
+    }
   }
   const recalcSegments = async () => {
     if (!bid) return
