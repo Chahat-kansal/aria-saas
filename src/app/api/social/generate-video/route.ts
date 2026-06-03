@@ -8,53 +8,41 @@ import { supabaseAdmin } from '@/lib/supabase-admin'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
 import { put } from '@vercel/blob'
 
-// Higgsfield API base
-const HF_BASE = 'https://api.higgsfield.ai'
+// Pricing: 4000 credits = $190 AUD → $0.0475/credit
+// kling3_0: 20 credits/10s = $0.95, 30 credits/15s = $1.43
+// To stay under $2 AUD: max 20s (2x10s clips = $1.90) or 15s single ($1.43)
+const CREDITS_PER_AUD = 4000 / 190  // ~21.05 credits per $1 AUD
+const CREDITS_10S = 20
+const CREDITS_15S = 30
 
 function calcCostAUD(durationSec: number): number {
-  // Higgsfield pricing: ~0.5 credits per second at $0.05/credit ≈ $0.025 AUD/s
-  // Charge owners at $0.056/s to cover costs + margin
-  return Math.round(durationSec * 0.056 * 100) / 100
+  const clips = Math.ceil(durationSec / 10)
+  const credits = clips * CREDITS_10S
+  return Math.round((credits / CREDITS_PER_AUD) * 100) / 100
 }
 
-// Pick best Higgsfield model based on whether we have a start image + duration
-// All models support 9:16 and up to 15s
-// For >15s we chain 2 clips (e.g. 2×10s = 20s, 2×15s = 30s)
-function pickModel(hasImage: boolean, durationSec: number): string {
-  if (hasImage) {
-    // seedance_2_0: best for identity/person consistency with start frame
-    return 'seedance_2_0'
-  }
-  // kling3_0: multi-shot, great for text-to-video reels up to 15s
-  return 'kling3_0'
-}
-
-async function hfPost(path: string, body: object): Promise<any> {
-  const apiKey = process.env.HIGGSFIELD_API_KEY
-  if (!apiKey) throw new Error('HIGGSFIELD_API_KEY not set')
-  const res = await fetch(HF_BASE + path, {
+async function hgPost(path: string, body: object) {
+  const key = process.env.HIGGSFIELD_API_KEY
+  if (!key) throw new Error('HIGGSFIELD_API_KEY not set')
+  const res = await fetch('https://api.higgsfield.ai' + path, {
     method: 'POST',
-    headers: { 'Authorization': 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
+    headers: { Authorization: 'Bearer ' + key, 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
-  if (!res.ok) {
-    const err = await res.text().catch(() => res.statusText)
-    throw new Error('Higgsfield API ' + res.status + ': ' + err)
-  }
-  return res.json()
+  const text = await res.text()
+  if (!res.ok) throw new Error('Higgsfield ' + res.status + ': ' + text)
+  return JSON.parse(text)
 }
 
-async function hfGet(path: string): Promise<any> {
-  const apiKey = process.env.HIGGSFIELD_API_KEY
-  if (!apiKey) throw new Error('HIGGSFIELD_API_KEY not set')
-  const res = await fetch(HF_BASE + path, {
-    headers: { 'Authorization': 'Bearer ' + apiKey },
+async function hgGet(path: string) {
+  const key = process.env.HIGGSFIELD_API_KEY
+  if (!key) throw new Error('HIGGSFIELD_API_KEY not set')
+  const res = await fetch('https://api.higgsfield.ai' + path, {
+    headers: { Authorization: 'Bearer ' + key },
   })
-  if (!res.ok) {
-    const err = await res.text().catch(() => res.statusText)
-    throw new Error('Higgsfield API ' + res.status + ': ' + err)
-  }
-  return res.json()
+  const text = await res.text()
+  if (!res.ok) throw new Error('Higgsfield ' + res.status + ': ' + text)
+  return JSON.parse(text)
 }
 
 async function _POST(req: NextRequest) {
@@ -63,21 +51,20 @@ async function _POST(req: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const {
-    post_id,
-    business_id,
+    post_id, business_id,
     reel_mode = 'auto',
     reel_style = 'lifestyle',
     reel_custom_prompt,
     reel_source_image_url,
     duration_seconds = 10,
     is_admin = false,
-    background_music = 'none',
     influencer_id,
+    influencer_job_id,     // higgsfield_job_id from aria_influencer_library — native HF asset
+    owner_image_job_id,    // job_id from an owner-uploaded/generated image
   } = await req.json()
 
   if (!business_id) return NextResponse.json({ error: 'business_id required' }, { status: 400 })
 
-  // Auth check — reels enabled
   if (!is_admin) {
     const { data: prefs } = await supabase.from('social_preferences')
       .select('reels_enabled').eq('business_id', business_id).maybeSingle()
@@ -86,11 +73,13 @@ async function _POST(req: NextRequest) {
     }
   }
 
-  // Clamp duration — Higgsfield models max 15s per clip
-  // For >15s we return clip_count > 1 and the UI chains them
-  const PER_CLIP_MAX = 15
-  const clipDuration = Math.min(duration_seconds, PER_CLIP_MAX)
-  const clipCount = Math.ceil(duration_seconds / PER_CLIP_MAX)
+  if (!process.env.HIGGSFIELD_API_KEY) {
+    return NextResponse.json({ error: 'HIGGSFIELD_API_KEY not configured. Add it in Vercel environment variables.' }, { status: 503 })
+  }
+
+  // Clamp duration to 10s per clip (Kling 3.0 max that stays under $2 for 2 clips)
+  const clampedDuration = Math.min(Math.max(duration_seconds, 5), 10)
+  const estimatedCost = calcCostAUD(clampedDuration)
 
   let post: any = null
   if (post_id) {
@@ -99,66 +88,63 @@ async function _POST(req: NextRequest) {
   }
 
   // Build prompt
-  const STYLE_PREFIXES: Record<string, string> = {
-    lifestyle: 'Warm cinematic lifestyle,',
+  const STYLES: Record<string, string> = {
+    lifestyle: 'Warm cinematic lifestyle shot,',
     product_showcase: 'Professional product showcase, slow zoom,',
-    behind_scenes: 'Authentic behind-the-scenes, candid light,',
-    flash_sale: 'Energetic fast-cut, bold colours, urgency,',
+    behind_scenes: 'Authentic behind-the-scenes, candid,',
+    flash_sale: 'Energetic fast-cut, bold colours,',
     testimonial: 'Warm authentic customer moment,',
-    day_in_life: 'Documentary day-in-the-life, real moments,',
+    day_in_life: 'Documentary day-in-the-life,',
   }
-  const stylePrefix = STYLE_PREFIXES[reel_style] ?? STYLE_PREFIXES.lifestyle
+  const prefix = STYLES[reel_style] ?? STYLES.lifestyle
   const basePrompt = reel_custom_prompt || post?.reel_concept || post?.caption || 'Australian small business showcase'
-  const videoPrompt = (stylePrefix + ' ' + basePrompt + ' 9:16 vertical, photorealistic, no text overlays').slice(0, 500)
+  const prompt = (prefix + ' ' + basePrompt + ', authentic UGC style, 9:16 vertical, cinematic, no text overlays').slice(0, 500)
 
-  // Source image: influencer photo > uploaded image > post image
-  const sourceImageUrl: string | null = reel_source_image_url || post?.image_url || null
-  const modelId = pickModel(!!sourceImageUrl, clipDuration)
-  const estimatedCost = calcCostAUD(duration_seconds)
+  // Start frame: influencer job ID > owner uploaded image job ID > null (text-to-video)
+  // CRITICAL: must be a Higgsfield-native job ID (UUID), NOT a cloudfront URL
+  const startFrameJobId: string | null = influencer_job_id || owner_image_job_id || null
 
-  if (!process.env.HIGGSFIELD_API_KEY) {
-    return NextResponse.json({ error: 'HIGGSFIELD_API_KEY not configured' }, { status: 503 })
-  }
-
-  // Build Higgsfield job payload
-  const jobBody: any = {
-    model: modelId,
-    prompt: videoPrompt,
+  const jobBody: Record<string, any> = {
+    model: 'kling3_0',
+    prompt,
     aspect_ratio: '9:16',
-    duration: clipDuration,
-    resolution: '720p',
+    duration: clampedDuration,
+    mode: 'std',
+    sound: 'on',
   }
 
-  // Add start frame if we have a source image
-  if (sourceImageUrl) {
-    jobBody.medias = [{ value: sourceImageUrl, role: 'start_image' }]
+  if (startFrameJobId) {
+    jobBody.medias = [{ value: startFrameJobId, role: 'start_image' }]
   }
 
-  console.log('[generate-video] Higgsfield submit:', { modelId, duration: clipDuration, clipCount, hasImage: !!sourceImageUrl, influencer_id })
+  console.log('[generate-video] submitting to Higgsfield:', {
+    model: 'kling3_0',
+    duration: clampedDuration,
+    hasStartFrame: !!startFrameJobId,
+    influencer_id,
+    estimatedCost,
+  })
 
   let jobId: string
   try {
-    const result = await hfPost('/v1/video/generate', jobBody)
-    jobId = result.id ?? result.job_id
-    if (!jobId) throw new Error('No job ID in response: ' + JSON.stringify(result))
+    const result = await hgPost('/v1/video/generate', jobBody)
+    jobId = result.id ?? result.job_id ?? result.request_id
+    if (!jobId) throw new Error('No job ID returned: ' + JSON.stringify(result))
   } catch (err: any) {
-    console.error('[generate-video] Higgsfield submit failed:', err.message)
-    return NextResponse.json({ error: 'video_generation_failed', message: err.message }, { status: 502 })
+    console.error('[generate-video] Higgsfield failed:', err.message)
+    return NextResponse.json({ error: 'generation_failed', message: err.message }, { status: 502 })
   }
 
-  // Update post record
   if (post_id) {
     try {
       await supabaseAdmin.from('social_posts').update({
-        fal_request_id: jobId,  // reuse column for higgsfield job id
-        reel_mode,
-        reel_style,
+        fal_request_id: jobId,
+        reel_mode, reel_style,
         reel_custom_prompt: reel_custom_prompt || null,
-        reel_source_image_url: sourceImageUrl,
-        reel_duration_seconds: duration_seconds,
+        reel_duration_seconds: clampedDuration,
         reel_cost_aud: estimatedCost,
         post_type: 'reel',
-        ...(influencer_id ? { influencer_id, influencer_image_url: sourceImageUrl } : {}),
+        ...(influencer_id ? { influencer_id } : {}),
       }).eq('id', post_id)
     } catch {}
   }
@@ -167,26 +153,23 @@ async function _POST(req: NextRequest) {
     try { await supabaseAdmin.rpc('increment_influencer_usage', { p_id: influencer_id }) } catch {}
   }
 
-  // Cost tracking
   try {
     await supabaseAdmin.from('reel_usage_log').insert({
       business_id,
       social_post_id: post_id || null,
       fal_request_id: jobId,
-      model: modelId,
-      duration_seconds: duration_seconds,
+      model: 'kling3_0_higgsfield',
+      duration_seconds: clampedDuration,
       cost_aud: estimatedCost,
       status: 'processing',
     })
   } catch {}
 
   return NextResponse.json({
-    fal_request_id: jobId,   // keep same field name so polling works
+    fal_request_id: jobId,
     job_id: jobId,
-    model_id: modelId,
-    clip_count: clipCount,
-    clip_duration: clipDuration,
-    total_duration: duration_seconds,
+    model_id: 'kling3_0',
+    duration: clampedDuration,
     estimated_cost_aud: estimatedCost,
     status: 'queued',
     provider: 'higgsfield',
@@ -199,53 +182,51 @@ async function _GET(req: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const jobId = req.nextUrl.searchParams.get('fal_request_id') || req.nextUrl.searchParams.get('job_id')
-  const modelId = req.nextUrl.searchParams.get('model_id') || 'seedance_2_0'
   const postId = req.nextUrl.searchParams.get('post_id')
+  const businessId = req.nextUrl.searchParams.get('business_id')
 
   if (!jobId) return NextResponse.json({ error: 'job_id required' }, { status: 400 })
   if (!process.env.HIGGSFIELD_API_KEY) return NextResponse.json({ status: 'no_provider' }, { status: 503 })
 
   try {
-    const result = await hfGet('/v1/video/generate/' + jobId)
-    const status: string = result.status ?? 'UNKNOWN'
+    const result = await hgGet('/v1/video/' + jobId)
+    const status: string = (result.status ?? '').toLowerCase()
 
-    // Higgsfield statuses: pending, processing, completed, failed
-    if (status === 'completed' || status === 'COMPLETED') {
-      const videoUrl: string = result.video_url ?? result.url ?? result.output?.url
-
+    if (status === 'completed') {
+      const videoUrl: string = result.video_url ?? result.url ?? result.output?.url ?? result.output?.video_url
       if (!videoUrl) return NextResponse.json({ status: 'FAILED', error: 'No video URL in result' })
 
-      // Save to Vercel Blob for permanent hosting
-      let finalVideoUrl = videoUrl
+      let finalUrl = videoUrl
       if (process.env.BLOB_READ_WRITE_TOKEN) {
         try {
           const blobKey = 'aria-social/reels/' + (postId || jobId) + '-' + Date.now() + '.mp4'
           const vRes = await fetch(videoUrl)
           const vBuf = await vRes.arrayBuffer()
           const blob = await put(blobKey, vBuf, { access: 'public', contentType: 'video/mp4' })
-          finalVideoUrl = blob.url
-        } catch {}
+          finalUrl = blob.url
+        } catch (e: any) {
+          console.warn('[generate-video] blob upload failed, using direct URL:', e.message)
+        }
       }
 
       if (postId) {
-        try {
-          await supabaseAdmin.from('social_posts').update({ video_url: finalVideoUrl, post_type: 'reel' }).eq('id', postId)
-          await supabaseAdmin.from('reel_usage_log').update({ status: 'completed' }).eq('fal_request_id', jobId)
-        } catch {}
+        try { await supabaseAdmin.from('social_posts').update({ video_url: finalUrl, post_type: 'reel' }).eq('id', postId) } catch {}
+        try { await supabaseAdmin.from('reel_usage_log').update({ status: 'completed' }).eq('fal_request_id', jobId) } catch {}
       }
 
-      return NextResponse.json({ status: 'COMPLETED', video_url: finalVideoUrl })
+      return NextResponse.json({ status: 'COMPLETED', video_url: finalUrl })
     }
 
-    if (status === 'failed' || status === 'FAILED') {
+    if (status === 'failed' || status === 'error') {
       try { await supabaseAdmin.from('reel_usage_log').update({ status: 'failed' }).eq('fal_request_id', jobId) } catch {}
       return NextResponse.json({ status: 'FAILED', error: result.error || 'Generation failed' })
     }
 
-    // Still processing
+    // pending / processing / in_queue
     return NextResponse.json({ status: 'IN_QUEUE' })
+
   } catch (err: any) {
-    console.error('[generate-video GET] status check error:', err.message)
+    console.error('[generate-video GET]', err.message)
     return NextResponse.json({ status: 'error', error: err.message }, { status: 500 })
   }
 }

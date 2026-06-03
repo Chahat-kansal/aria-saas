@@ -70,6 +70,7 @@ export default function SocialPage() {
   const [reelSourceImage, setReelSourceImage] = useState<string | null>(null)
   const [reelDuration, setReelDuration] = useState<number>(10)
   const [reelDurationCustom, setReelDurationCustom] = useState<string>('')
+  const [ownerImageJobId, setOwnerImageJobId] = useState<string | null>(null)
   const [reelBgMusic, setReelBgMusic] = useState('none')
   const [reelGenerating, setReelGenerating] = useState(false)
   const [reelPolling, setReelPolling] = useState<Record<string, {requestId: string; modelId: string; bgMusic: string; voiceoverUrl?: string}>>({})
@@ -1984,12 +1985,12 @@ export default function SocialPage() {
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
                       <input
-                        type="number" min={3} max={30} placeholder="Custom (3–30s)"
+                        type="number" min={3} max={10} placeholder="Custom (3–30s)"
                         value={reelDurationCustom}
                         onChange={e => { setReelDurationCustom(e.target.value); if (e.target.value) setReelDuration(Number(e.target.value)) }}
                         style={{ flex: 1, padding: '8px 10px', borderRadius: 9, background: 'rgba(255,255,255,0.04)', border: reelDurationCustom ? '1.5px solid rgba(245,158,11,0.5)' : '1px solid rgba(255,255,255,0.09)', color: reelDurationCustom ? '#F59E0B' : '#fff', fontSize: 12, fontFamily: 'inherit', outline: 'none' }}
                       />
-                      <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.2)', whiteSpace: 'nowrap' }}>sec</span>
+                      <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.2)', whiteSpace: 'nowrap' }}>s (max 10)</span>
                     </div>
                     <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.2)', marginTop: 5 }}>Up to 15s · Higgsfield Seedance / Wan 2.7 · 9:16</div>
                   </div>
