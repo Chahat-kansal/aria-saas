@@ -1740,261 +1740,288 @@ export default function SocialPage() {
     </div>
       )}
 
-      {/* ── Reel Creator Panel (Gap 3) ────────────────────────────────── */}
+      {/* ── Reel Creator Panel ─────────────────────────────────────────── */}
       {reelCreatorPostId && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 9998, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}
-          onClick={() => !reelGenerating && setReelCreatorPostId(null)}>
-          <div onClick={e => e.stopPropagation()} style={{ position: 'relative', background: '#0f1117', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '20px 20px 0 0', padding: '24px 24px 32px', width: '100%', maxWidth: 560, maxHeight: '90vh', overflowY: 'auto' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
-              <p style={{ fontSize: 16, fontWeight: 800, color: '#fff' }}>Create Reel</p>
-              <button onClick={() => !reelGenerating && setReelCreatorPostId(null)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', fontSize: 20, cursor: 'pointer', lineHeight: 1 }}>&times;</button>
+        <div
+          style={{ position: 'fixed', inset: 0, zIndex: 9998, background: 'rgba(0,0,0,0.92)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}
+          onClick={() => !reelGenerating && setReelCreatorPostId(null)}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              position: 'relative', width: '100%', maxWidth: 600,
+              maxHeight: '94vh', overflowY: 'auto',
+              background: 'linear-gradient(160deg, #0f1117 0%, #111820 100%)',
+              border: '1px solid rgba(127,184,151,0.18)',
+              borderRadius: '24px 24px 0 0',
+              boxShadow: '0 -24px 80px rgba(0,0,0,0.6)',
+            }}
+          >
+            {/* Handle bar */}
+            <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 12, paddingBottom: 4 }}>
+              <div style={{ width: 40, height: 4, borderRadius: 99, background: 'rgba(255,255,255,0.15)' }} />
+            </div>
+
+            {/* Header */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 24px 0' }}>
+              <div>
+                <div style={{ fontSize: 18, fontWeight: 800, color: '#fff', letterSpacing: -0.3 }}>Create Reel</div>
+                <div style={{ fontSize: 12, color: 'rgba(127,184,151,0.8)', marginTop: 2 }}>AI-generated · 9:16 vertical · fal.ai</div>
+              </div>
+              <button
+                onClick={() => !reelGenerating && setReelCreatorPostId(null)}
+                style={{ width: 32, height: 32, borderRadius: '50%', border: 'none', background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.6)', fontSize: 18, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'inherit' }}
+                aria-label="Close"
+              >×</button>
             </div>
 
             {!reelsEnabled ? (
-              <div style={{ padding: '32px 0', textAlign: 'center' }}>
-                <p style={{ fontSize: 15, color: 'rgba(255,255,255,0.55)', marginBottom: 8, lineHeight: 1.6 }}>
-                  Enable AI Reels to create video content for your business.
-                </p>
-                <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)', marginBottom: 24 }}>
-                  Metered billing: $0.56–$1.68 AUD per Reel, charged monthly. Cancel any time.
-                </p>
+              <div style={{ padding: '40px 24px 48px', textAlign: 'center' }}>
+                <div style={{ width: 56, height: 56, borderRadius: '50%', background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, margin: '0 auto 16px' }}>🎬</div>
+                <div style={{ fontSize: 16, fontWeight: 700, color: '#fff', marginBottom: 8 }}>Enable AI Reels</div>
+                <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', marginBottom: 8, lineHeight: 1.6 }}>Create short video content for your business using AI.</p>
+                <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)', marginBottom: 24 }}>$0.56–$1.12 AUD per Reel · Billed monthly · Cancel any time</p>
                 <button onClick={enableReels} disabled={reelsLoading}
-                  style={{ padding: '12px 32px', borderRadius: 12, border: 'none', background: '#F59E0B', color: '#0f1117', fontSize: 14, fontWeight: 800, cursor: reelsLoading ? 'wait' : 'pointer', fontFamily: 'inherit' }}>
+                  style={{ padding: '13px 32px', borderRadius: 12, border: 'none', background: '#F59E0B', color: '#0f1117', fontSize: 14, fontWeight: 800, cursor: reelsLoading ? 'wait' : 'pointer', fontFamily: 'inherit' }}>
                   {reelsLoading ? 'Enabling…' : 'Enable AI Reels'}
                 </button>
               </div>
             ) : (
-            <>
-            {/* Mode tabs */}
-            <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
-              {([['auto', 'Auto'], ['image', 'From image'], ['text', 'Text prompt']] as const).map(([v, l]) => (
-                <button key={v} onClick={() => setReelMode(v)}
-                  style={{ flex: 1, padding: '8px 0', borderRadius: 9, border: 'none', background: reelMode === v ? 'rgba(245,158,11,0.2)' : 'rgba(255,255,255,0.05)', color: reelMode === v ? '#F59E0B' : 'rgba(255,255,255,0.5)', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
-                  {l}
-                </button>
-              ))}
-            </div>
+              <div style={{ padding: '20px 24px 40px', display: 'flex', flexDirection: 'column', gap: 20 }}>
 
-            {/* Style presets */}
-            <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Style</p>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6, marginBottom: 16 }}>
-              {([
-                ['lifestyle', 'Lifestyle'],
-                ['product_showcase', 'Product'],
-                ['behind_scenes', 'Behind scenes'],
-                ['flash_sale', 'Flash sale'],
-                ['testimonial', 'Testimonial'],
-                ['day_in_life', 'Day in life'],
-              ] as const).map(([v, l]) => (
-                <button key={v} onClick={() => setReelStyle(v)}
-                  style={{ padding: '7px 0', borderRadius: 8, border: reelStyle === v ? '1px solid rgba(245,158,11,0.5)' : '1px solid rgba(255,255,255,0.08)', background: reelStyle === v ? 'rgba(245,158,11,0.12)' : 'rgba(255,255,255,0.03)', color: reelStyle === v ? '#F59E0B' : 'rgba(255,255,255,0.55)', fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
-                  {l}
-                </button>
-              ))}
-            </div>
+                {/* Mode selector */}
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.35)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 10 }}>Generation mode</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8 }}>
+                    {([['auto', '✦', 'Auto'], ['image', '⬡', 'From image'], ['text', '◈', 'Text only']] as const).map(([v, icon, label]) => (
+                      <button key={v} onClick={() => setReelMode(v)}
+                        style={{
+                          padding: '11px 6px', borderRadius: 12, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+                          background: reelMode === v ? 'rgba(245,158,11,0.15)' : 'rgba(255,255,255,0.04)',
+                          boxShadow: reelMode === v ? 'inset 0 0 0 1.5px rgba(245,158,11,0.5)' : 'inset 0 0 0 1px rgba(255,255,255,0.07)',
+                          color: reelMode === v ? '#F59E0B' : 'rgba(255,255,255,0.45)',
+                          transition: 'all 150ms ease',
+                        }}>
+                        <div style={{ fontSize: 16, marginBottom: 3 }}>{icon}</div>
+                        <div style={{ fontSize: 11, fontWeight: 700 }}>{label}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
 
-            {/* Image source (for 'image' mode) */}
-            {reelMode === 'image' && (
-              <div style={{ marginBottom: 16 }}>
-                <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Source image</p>
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  {posts.find(p => p.id === reelCreatorPostId)?.image_url && (
-                    <button onClick={() => setReelSourceImage(posts.find(p => p.id === reelCreatorPostId)?.image_url || null)}
-                      style={{ padding: '6px 12px', borderRadius: 8, border: reelSourceImage === posts.find(p => p.id === reelCreatorPostId)?.image_url ? '1px solid rgba(127,184,151,0.6)' : '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: 'rgba(255,255,255,0.7)', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>
-                      Post image
+                {/* Image upload — shown when mode=image OR always as optional */}
+                {(reelMode === 'image' || reelMode === 'auto') && (
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.35)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 10 }}>
+                      {reelMode === 'image' ? 'Source image (required)' : 'Start frame (optional)'}
+                    </div>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                      {/* Upload button */}
+                      <label style={{
+                        display: 'flex', alignItems: 'center', gap: 8, padding: '9px 16px', borderRadius: 10, cursor: 'pointer',
+                        border: '1.5px dashed rgba(127,184,151,0.4)', background: 'rgba(127,184,151,0.04)',
+                        color: '#7FB897', fontSize: 12, fontWeight: 600, fontFamily: 'inherit',
+                      }}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                        Upload photo
+                        <input type="file" accept="image/*" style={{ display: 'none' }}
+                          onChange={async e => {
+                            const file = e.target.files?.[0]
+                            if (!file) return
+                            const reader = new FileReader()
+                            reader.onload = ev => setReelSourceImage(ev.target?.result as string)
+                            reader.readAsDataURL(file)
+                          }} />
+                      </label>
+                      {/* Post image shortcut */}
+                      {posts.find(p => p.id === reelCreatorPostId)?.image_url && (
+                        <button onClick={() => setReelSourceImage(posts.find(p => p.id === reelCreatorPostId)?.image_url || null)}
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: 6, padding: '9px 14px', borderRadius: 10, cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 600, border: 'none',
+                            background: reelSourceImage === posts.find(p => p.id === reelCreatorPostId)?.image_url ? 'rgba(127,184,151,0.15)' : 'rgba(255,255,255,0.06)',
+                            boxShadow: reelSourceImage === posts.find(p => p.id === reelCreatorPostId)?.image_url ? 'inset 0 0 0 1.5px rgba(127,184,151,0.5)' : 'none',
+                            color: 'rgba(255,255,255,0.7)',
+                          }}>
+                          <img src={posts.find(p => p.id === reelCreatorPostId)?.image_url!} alt="" style={{ width: 18, height: 18, borderRadius: 4, objectFit: 'cover' }} />
+                          Post image
+                        </button>
+                      )}
+                      {/* Asset library */}
+                      {assetLibrary.slice(0, 3).map(a => (
+                        <button key={a.id} onClick={() => setReelSourceImage(a.url)}
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: 6, padding: '9px 14px', borderRadius: 10, cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 600, border: 'none',
+                            background: reelSourceImage === a.url ? 'rgba(127,184,151,0.15)' : 'rgba(255,255,255,0.06)',
+                            boxShadow: reelSourceImage === a.url ? 'inset 0 0 0 1.5px rgba(127,184,151,0.5)' : 'none',
+                            color: 'rgba(255,255,255,0.7)',
+                          }}>
+                          <img src={a.url} alt="" style={{ width: 18, height: 18, borderRadius: 4, objectFit: 'cover' }} />
+                          {a.name.slice(0, 10)}
+                        </button>
+                      ))}
+                    </div>
+                    {/* Preview selected image */}
+                    {reelSourceImage && (
+                      <div style={{ marginTop: 10, position: 'relative', display: 'inline-block' }}>
+                        <img src={reelSourceImage} alt="Selected frame" style={{ height: 80, width: 'auto', borderRadius: 8, objectFit: 'cover', border: '1.5px solid rgba(127,184,151,0.4)' }} />
+                        <button onClick={() => setReelSourceImage(null)}
+                          style={{ position: 'absolute', top: -6, right: -6, width: 20, height: 20, borderRadius: '50%', border: 'none', background: '#EF4444', color: '#fff', fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'inherit' }}>×</button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* AI Influencer */}
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.35)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+                      AI Influencer <span style={{ color: '#7FB897', fontSize: 9, fontWeight: 800, padding: '1px 5px', borderRadius: 99, background: 'rgba(127,184,151,0.12)', marginLeft: 4 }}>INCLUDED</span>
+                    </div>
+                    {selectedInfluencerId && (
+                      <button onClick={() => { setSelectedInfluencerId(null); setSelectedInfluencerUrl(null) }}
+                        style={{ fontSize: 11, color: '#EF4444', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>Remove</button>
+                    )}
+                  </div>
+
+                  {selectedInfluencerId ? (
+                    <div style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '12px 14px', background: 'rgba(127,184,151,0.06)', border: '1.5px solid rgba(127,184,151,0.25)', borderRadius: 14 }}>
+                      <img src={selectedInfluencerUrl!} alt="influencer" style={{ width: 52, height: 68, objectFit: 'cover', borderRadius: 10, flexShrink: 0 }} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 14, fontWeight: 700, color: '#fff' }}>{influencerLibrary.find(i => i.id === selectedInfluencerId)?.name}</div>
+                        <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', marginTop: 2, lineHeight: 1.5 }}>{influencerLibrary.find(i => i.id === selectedInfluencerId)?.description}</div>
+                        <button onClick={() => setShowInfluencerPicker(true)} style={{ fontSize: 11, color: '#7FB897', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', marginTop: 6, padding: 0, fontWeight: 600 }}>Change influencer →</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button onClick={() => setShowInfluencerPicker(true)}
+                      style={{ width: '100%', padding: '14px 16px', borderRadius: 14, cursor: 'pointer', fontFamily: 'inherit', border: '1.5px dashed rgba(127,184,151,0.25)', background: 'rgba(127,184,151,0.03)', display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <div style={{ width: 40, height: 40, borderRadius: 10, background: 'rgba(127,184,151,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7FB897" strokeWidth="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+                      </div>
+                      <div style={{ textAlign: 'left' }}>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: '#fff' }}>Add AI Influencer</div>
+                        <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginTop: 2 }}>Optional · Animates a person into your Reel</div>
+                      </div>
                     </button>
                   )}
-                  {assetLibrary.slice(0, 5).map(a => (
-                    <button key={a.id} onClick={() => setReelSourceImage(a.url)}
-                      style={{ padding: '6px 12px', borderRadius: 8, border: reelSourceImage === a.url ? '1px solid rgba(127,184,151,0.6)' : '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: 'rgba(255,255,255,0.7)', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>
-                      {a.name.slice(0, 14)}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
 
-            {/* AI Influencer picker */}
-            <div style={{ marginBottom: 20 }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                  AI Influencer <span style={{ color: '#7FB897', fontSize: 10 }}>INCLUDED WITH REELS</span>
-                </div>
-                {selectedInfluencerId && (
-                  <button onClick={() => { setSelectedInfluencerId(null); setSelectedInfluencerUrl(null) }}
-                    style={{ fontSize: 11, color: '#EF4444', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
-                    × Remove
-                  </button>
-                )}
-              </div>
+                  {/* Influencer picker overlay */}
+                  {showInfluencerPicker && (
+                    <div style={{ position: 'absolute', inset: 0, zIndex: 10, background: 'linear-gradient(160deg, #0f1117 0%, #111820 100%)', borderRadius: '24px 24px 0 0', padding: '20px 20px 40px', overflowY: 'auto' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                        <div style={{ fontSize: 16, fontWeight: 800, color: '#fff' }}>Choose Influencer</div>
+                        <button onClick={() => setShowInfluencerPicker(false)}
+                          style={{ width: 32, height: 32, borderRadius: '50%', border: 'none', background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.6)', fontSize: 18, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'inherit' }}>×</button>
+                      </div>
+                      <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)', marginBottom: 16, lineHeight: 1.6 }}>Their photo becomes the start frame. Aria animates them visiting your business.</p>
 
-              {selectedInfluencerId ? (
-                <div style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '10px 12px',
-                  background: 'rgba(127,184,151,0.08)', border: '1px solid rgba(127,184,151,0.3)', borderRadius: 10 }}>
-                  <img src={selectedInfluencerUrl!} alt="influencer"
-                    style={{ width: 48, height: 72, objectFit: 'cover', borderRadius: 8, flexShrink: 0 }} />
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: '#fff' }}>
-                      {influencerLibrary.find(i => i.id === selectedInfluencerId)?.name}
+                      <div onClick={() => { setSelectedInfluencerId(null); setSelectedInfluencerUrl(null); setShowInfluencerPicker(false) }}
+                        style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 12, marginBottom: 14, cursor: 'pointer', border: '1.5px solid ' + (!selectedInfluencerId ? 'rgba(127,184,151,0.5)' : 'rgba(255,255,255,0.07)'), background: !selectedInfluencerId ? 'rgba(127,184,151,0.06)' : 'transparent' }}>
+                        <div style={{ width: 40, height: 40, borderRadius: 10, background: 'rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>🚫</div>
+                        <div>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: '#fff' }}>No influencer</div>
+                          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)' }}>Animate your product or scene only</div>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                        {influencerLibrary.map(inf => (
+                          <div key={inf.id} onClick={() => { setSelectedInfluencerId(inf.id); setSelectedInfluencerUrl(inf.image_url); setShowInfluencerPicker(false) }}
+                            style={{ borderRadius: 14, overflow: 'hidden', cursor: 'pointer', border: '2px solid ' + (selectedInfluencerId === inf.id ? '#7FB897' : 'rgba(255,255,255,0.07)'), background: selectedInfluencerId === inf.id ? 'rgba(127,184,151,0.06)' : 'rgba(255,255,255,0.02)', transition: 'border-color 150ms' }}>
+                            <div style={{ position: 'relative', aspectRatio: '3/4', overflow: 'hidden' }}>
+                              <img src={inf.image_url} alt={inf.name} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                              {inf.is_featured && (<div style={{ position: 'absolute', top: 8, left: 8, background: '#7FB897', color: '#0f1117', fontSize: 9, fontWeight: 800, padding: '2px 7px', borderRadius: 99, letterSpacing: '0.05em' }}>FEATURED</div>)}
+                              {selectedInfluencerId === inf.id && (<div style={{ position: 'absolute', inset: 0, background: 'rgba(127,184,151,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ width: 28, height: 28, borderRadius: '50%', background: '#7FB897', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, color: '#fff' }}>✓</div></div>)}
+                            </div>
+                            <div style={{ padding: '10px 12px' }}>
+                              <div style={{ fontSize: 13, fontWeight: 700, color: '#fff' }}>{inf.name}</div>
+                              <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', marginTop: 2, lineHeight: 1.5 }}>{inf.description?.slice(0, 55)}</div>
+                              <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', marginTop: 6 }}>
+                                {inf.industry_tags?.slice(0, 2).map(t => (<span key={t} style={{ fontSize: 9, padding: '1px 6px', borderRadius: 99, background: 'rgba(127,184,151,0.1)', color: '#7FB897', fontWeight: 700, textTransform: 'capitalize' }}>{t}</span>))}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                    <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginTop: 2 }}>
-                      {influencerLibrary.find(i => i.id === selectedInfluencerId)?.description}
-                    </div>
-                    <button onClick={() => setShowInfluencerPicker(true)}
-                      style={{ fontSize: 11, color: '#7FB897', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', marginTop: 4, padding: 0 }}>
-                      Change →
-                    </button>
+                  )}
+                </div>
+
+                {/* Style presets */}
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.35)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 10 }}>Vibe</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8 }}>
+                    {([['lifestyle','☀️','Lifestyle'],['product_showcase','📦','Product'],['behind_scenes','🎥','BTS'],['flash_sale','⚡','Flash sale'],['testimonial','💬','Testimonial'],['day_in_life','🌅','Day in life']] as const).map(([v, icon, l]) => (
+                      <button key={v} onClick={() => setReelStyle(v)}
+                        style={{ padding: '9px 4px', borderRadius: 10, border: 'none', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'center', background: reelStyle === v ? 'rgba(245,158,11,0.12)' : 'rgba(255,255,255,0.04)', boxShadow: reelStyle === v ? 'inset 0 0 0 1.5px rgba(245,158,11,0.45)' : 'inset 0 0 0 1px rgba(255,255,255,0.06)', transition: 'all 150ms' }}>
+                        <div style={{ fontSize: 16, marginBottom: 3 }}>{icon}</div>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: reelStyle === v ? '#F59E0B' : 'rgba(255,255,255,0.5)' }}>{l}</div>
+                      </button>
+                    ))}
                   </div>
                 </div>
-              ) : (
-                <button onClick={() => setShowInfluencerPicker(true)}
-                  style={{ width: '100%', padding: '12px', borderRadius: 10, cursor: 'pointer', fontFamily: 'inherit',
-                    border: '1px dashed rgba(127,184,151,0.3)', background: 'rgba(127,184,151,0.04)',
-                    color: 'rgba(255,255,255,0.6)', fontSize: 13, textAlign: 'left',
-                    display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span style={{ fontSize: 20 }}>✨</span>
+
+                {/* Scene prompt */}
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.35)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 10 }}>Scene / concept <span style={{ color: 'rgba(255,255,255,0.2)', textTransform: 'none', fontWeight: 400 }}>optional</span></div>
+                  <textarea value={reelCustomPrompt} onChange={e => setReelCustomPrompt(e.target.value)} rows={3}
+                    placeholder={selectedInfluencerId ? (influencerLibrary.find(i => i.id === selectedInfluencerId)?.name ?? 'Influencer') + ' walks into your café, looks around, smiles warmly at the camera — cozy morning light' : reelMode === 'image' ? 'e.g. Camera slowly zooms into the coffee cup as steam rises, warm morning light' : 'e.g. Busy Melbourne café at morning rush, barista making flat white, cosy warm atmosphere'}
+                    style={{ width: '100%', padding: '12px 14px', borderRadius: 12, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.09)', color: '#fff', fontSize: 13, fontFamily: 'inherit', resize: 'none', outline: 'none', lineHeight: 1.6, boxSizing: 'border-box' }} />
+                </div>
+
+                {/* Duration + music row */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                   <div>
-                    <div style={{ fontWeight: 600, color: '#fff' }}>Add AI Influencer (optional)</div>
-                    <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>
-                      Pick a character to appear in your Reel — included with your Reels add-on
+                    <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.35)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 10 }}>Duration</div>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      {([5, 10] as const).map(d => (
+                        <button key={d} onClick={() => setReelDuration(d)}
+                          style={{ flex: 1, padding: '10px 0', borderRadius: 10, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, background: reelDuration === d ? 'rgba(245,158,11,0.15)' : 'rgba(255,255,255,0.04)', boxShadow: reelDuration === d ? 'inset 0 0 0 1.5px rgba(245,158,11,0.5)' : 'inset 0 0 0 1px rgba(255,255,255,0.07)', color: reelDuration === d ? '#F59E0B' : 'rgba(255,255,255,0.4)', transition: 'all 150ms' }}>
+                          {d}s
+                        </button>
+                      ))}
                     </div>
+                    <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.2)', marginTop: 6 }}>5s or 10s · kling API limit</div>
                   </div>
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.35)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 10 }}>Music</div>
+                    <select value={reelBgMusic} onChange={e => setReelBgMusic(e.target.value)}
+                      style={{ width: '100%', padding: '10px 12px', borderRadius: 10, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.09)', color: '#fff', fontSize: 13, fontFamily: 'inherit', outline: 'none' }}>
+                      <option value="none">None</option>
+                      <option value="upbeat">Upbeat</option>
+                      <option value="warm">Warm & cosy</option>
+                      <option value="minimal">Minimal</option>
+                      <option value="energetic">Energetic</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Cost + CTA */}
+                <div style={{ background: 'rgba(245,158,11,0.05)', border: '1px solid rgba(245,158,11,0.15)', borderRadius: 14, padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div>
+                    <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)' }}>Estimated cost</div>
+                    <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.25)', marginTop: 2 }}>Charged to your monthly Aria invoice</div>
+                  </div>
+                  <div style={{ fontSize: 20, fontWeight: 800, color: '#F59E0B' }}>${calcReelCostDisplay(reelDuration)} AUD</div>
+                </div>
+
+                <button onClick={submitReelGeneration} disabled={reelGenerating}
+                  style={{ width: '100%', padding: '15px', borderRadius: 14, border: 'none', cursor: reelGenerating ? 'wait' : 'pointer', fontFamily: 'inherit', fontSize: 15, fontWeight: 800, letterSpacing: -0.2, background: reelGenerating ? 'rgba(245,158,11,0.35)' : 'linear-gradient(135deg, #F59E0B 0%, #D97706 100%)', color: reelGenerating ? 'rgba(255,255,255,0.5)' : '#0f1117', boxShadow: reelGenerating ? 'none' : '0 4px 20px rgba(245,158,11,0.3)', transition: 'all 200ms ease' }}>
+                  {reelGenerating ? (
+                    <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+                      <span style={{ display: 'inline-block', width: 14, height: 14, border: '2px solid rgba(255,255,255,0.4)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
+                      Generating your Reel…
+                    </span>
+                  ) : `Generate Reel — $${calcReelCostDisplay(reelDuration)} AUD`}
                 </button>
-              )}
-            </div>
 
-            {/* Influencer picker modal — inside the Reel Creator panel */}
-            {showInfluencerPicker && (
-              <div style={{
-                position: 'absolute', inset: 0, zIndex: 10,
-                background: '#0f1117',
-                borderRadius: '20px 20px 0 0',
-                padding: '20px 20px 32px',
-                overflowY: 'auto',
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-                  <div style={{ fontSize: 15, fontWeight: 800, color: '#fff' }}>Choose AI Influencer</div>
-                  <button onClick={() => setShowInfluencerPicker(false)}
-                    style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', fontSize: 20, cursor: 'pointer' }}>&times;</button>
-                </div>
-                <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', marginBottom: 16, lineHeight: 1.6 }}>
-                  Aria animates your chosen influencer visiting your business. Their image becomes the start frame of your Reel.
-                </p>
-
-                <div onClick={() => { setSelectedInfluencerId(null); setSelectedInfluencerUrl(null); setShowInfluencerPicker(false) }}
-                  style={{ padding: '10px 14px', borderRadius: 10, marginBottom: 12, cursor: 'pointer',
-                    border: '1px solid ' + (!selectedInfluencerId ? 'rgba(127,184,151,0.5)' : 'rgba(255,255,255,0.08)'),
-                    background: !selectedInfluencerId ? 'rgba(127,184,151,0.08)' : 'transparent',
-                    fontSize: 13, color: 'rgba(255,255,255,0.7)', display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span style={{ fontSize: 20 }}>🚫</span>
-                  <div>
-                    <div style={{ fontWeight: 600 }}>No influencer — use my own image</div>
-                    <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>Animate your product or shop photo</div>
-                  </div>
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                  {influencerLibrary.map(inf => (
-                    <div key={inf.id}
-                      onClick={() => { setSelectedInfluencerId(inf.id); setSelectedInfluencerUrl(inf.image_url); setShowInfluencerPicker(false) }}
-                      style={{ borderRadius: 12, overflow: 'hidden', cursor: 'pointer',
-                        border: '2px solid ' + (selectedInfluencerId === inf.id ? '#7FB897' : 'rgba(255,255,255,0.08)'),
-                        background: selectedInfluencerId === inf.id ? 'rgba(127,184,151,0.08)' : 'transparent' }}>
-                      <div style={{ position: 'relative' }}>
-                        <img src={inf.image_url} alt={inf.name}
-                          style={{ width: '100%', aspectRatio: '3/4', objectFit: 'cover', display: 'block' }} />
-                        {inf.is_featured && (
-                          <div style={{ position: 'absolute', top: 8, left: 8, background: '#7FB897',
-                            color: '#fff', fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 99 }}>
-                            FEATURED
-                          </div>
-                        )}
-                        {selectedInfluencerId === inf.id && (
-                          <div style={{ position: 'absolute', top: 8, right: 8, background: '#7FB897',
-                            color: '#fff', fontSize: 16, width: 24, height: 24, borderRadius: '50%',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            ✓
-                          </div>
-                        )}
-                      </div>
-                      <div style={{ padding: '10px 12px' }}>
-                        <div style={{ fontSize: 13, fontWeight: 700, color: '#fff' }}>{inf.name}</div>
-                        <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 3, lineHeight: 1.5 }}>
-                          {inf.description?.slice(0, 60)}
-                        </div>
-                        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 6 }}>
-                          {inf.industry_tags?.slice(0, 2).map(t => (
-                            <span key={t} style={{ fontSize: 9, padding: '1px 6px', borderRadius: 99,
-                              background: 'rgba(127,184,151,0.12)', color: '#7FB897', fontWeight: 600,
-                              textTransform: 'capitalize' }}>
-                              {t}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
               </div>
-            )}
-
-            {/* Custom scene prompt */}
-            <div style={{ marginBottom: 16 }}>
-              <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Scene / concept (optional)</p>
-              <textarea value={reelCustomPrompt} onChange={e => setReelCustomPrompt(e.target.value)} rows={3}
-                placeholder={
-                  selectedInfluencerId
-                    ? (influencerLibrary.find(i => i.id === selectedInfluencerId)?.name ?? 'Influencer') + ' walks into your business, looks around, smiles warmly at the camera'
-                    : reelMode === 'image'
-                    ? 'e.g. "Camera slowly zooms into the coffee cup as steam rises, warm morning light"'
-                    : reelMode === 'text'
-                    ? 'e.g. "Busy Melbourne café at morning rush, barista making flat white, cosy warm atmosphere"'
-                    : 'Leave blank and Aria will decide based on your post content'
-                }
-                style={{ width: '100%', padding: '10px 12px', borderRadius: 10, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', fontSize: 13, fontFamily: 'inherit', resize: 'vertical', outline: 'none' }} />
-            </div>
-
-            {/* Duration + music */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
-              <div>
-                <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Duration</p>
-                <div style={{ display: 'flex', gap: 6 }}>
-                  {([10, 15, 30] as const).map(d => (
-                    <button key={d} onClick={() => setReelDuration(d)}
-                      style={{ flex: 1, padding: '7px 0', borderRadius: 8, border: reelDuration === d ? '1px solid rgba(245,158,11,0.5)' : '1px solid rgba(255,255,255,0.08)', background: reelDuration === d ? 'rgba(245,158,11,0.12)' : 'rgba(255,255,255,0.03)', color: reelDuration === d ? '#F59E0B' : 'rgba(255,255,255,0.5)', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
-                      {d}s
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Background music</p>
-                <select value={reelBgMusic} onChange={e => setReelBgMusic(e.target.value)}
-                  style={{ width: '100%', padding: '8px 10px', borderRadius: 8, background: '#1a1a2e', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', fontSize: 12, fontFamily: 'inherit' }}>
-                  <option value="none">None</option>
-                  <option value="upbeat">Upbeat</option>
-                  <option value="warm">Warm</option>
-                  <option value="minimal">Minimal</option>
-                  <option value="energetic">Energetic</option>
-                </select>
-              </div>
-            </div>
-
-            {/* Cost estimate + generate */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.2)', borderRadius: 10, marginBottom: 16 }}>
-              <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>Estimated cost</span>
-              <span style={{ fontSize: 14, fontWeight: 700, color: '#F59E0B' }}>${calcReelCostDisplay(reelDuration)} AUD</span>
-            </div>
-
-            <button onClick={submitReelGeneration} disabled={reelGenerating}
-              style={{ width: '100%', padding: '13px', borderRadius: 12, border: 'none', background: reelGenerating ? 'rgba(245,158,11,0.4)' : '#F59E0B', color: '#0f1117', fontSize: 15, fontWeight: 800, cursor: reelGenerating ? 'wait' : 'pointer', fontFamily: 'inherit' }}>
-              {reelGenerating ? '⏳ Generating…' : ('Generate Reel — $' + calcReelCostDisplay(reelDuration) + ' AUD')}
-            </button>
-            </>
             )}
           </div>
         </div>
       )}
+
 
       {/* ── Reels Addon Modal ──────────────────────────────────────────── */}
       {showReelsModal && (

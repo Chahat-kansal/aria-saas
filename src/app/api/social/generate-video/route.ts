@@ -131,10 +131,11 @@ async function _POST(req: NextRequest) {
 
   const falInput: Record<string, any> = {
     prompt: videoPrompt.slice(0, 500),
-    duration: '5',  // '5' or '10' as string — kling API requirement
+    duration: duration_seconds >= 10 ? '10' : '5',  // kling only supports '5' or '10'
     aspect_ratio: '9:16',
   }
   if (sourceImageUrl) falInput.image_url = sourceImageUrl
+  console.log('[generate-video] submitting:', { modelId, duration: falInput.duration, hasImage: !!sourceImageUrl, influencer_id })
 
   let submitResult: any
   try {
@@ -169,6 +170,19 @@ async function _POST(req: NextRequest) {
       await supabaseAdmin.rpc('increment_influencer_usage', { p_id: influencer_id })
     } catch {}
   }
+
+  // Log to reel_usage_log for cost tracking
+  try {
+    await supabaseAdmin.from('reel_usage_log').insert({
+      business_id,
+      social_post_id: post_id || null,
+      fal_request_id: request_id,
+      model: modelId,
+      duration_seconds: duration_seconds >= 10 ? 10 : 5,
+      cost_aud: estimatedCost,
+      status: 'processing',
+    })
+  } catch {}
 
   return NextResponse.json({
     fal_request_id: request_id,
