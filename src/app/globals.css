@@ -423,3 +423,12 @@ body          { font-family: var(--font-body, 'Outfit', system-ui, sans-serif); 
   transition: all 120ms;
 }
 .quick-action:hover { background: rgba(127,184,151,0.08); color: #fff; border-color: rgba(127,184,151,0.3); }
+
+/* ── Video intro flash prevention ───────────────────────────────
+   Inline script in layout.tsx adds this class before React mounts.
+   VideoIntro component removes it on mount — by then the video overlay
+   is covering the page so the real page can be visible underneath. */
+html.intro-pending body {
+  opacity: 0 !important;
+  pointer-events: none;
+}

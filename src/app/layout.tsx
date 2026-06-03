@@ -59,6 +59,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" data-theme="dark" suppressHydrationWarning>
       <head>
+      <script dangerouslySetInnerHTML={{__html: `
+(function(){
+  try {
+    if(!sessionStorage.getItem('aria_intro_seen')){
+      document.documentElement.classList.add('intro-pending');
+    }
+  } catch(e){}
+})();
+`}} />
         {/* Importmap — must come before any ES module scripts.
             Tells the browser where to find 'three' when TalkingHead imports it. */}
         <script type="importmap" dangerouslySetInnerHTML={{ __html: JSON.stringify({
