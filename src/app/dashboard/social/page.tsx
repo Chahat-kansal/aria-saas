@@ -19,6 +19,59 @@ function PlatformBadge({ platform }: { platform: string }) {
     <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 99, background: ((PLATFORM_COLORS[platform] || '#666') + '20'), color: PLATFORM_COLORS[platform] || '#aaa', fontWeight: 700, border: ('1px solid ' + (PLATFORM_COLORS[platform] || '#666') + '40') }}>
       {PLATFORM_ICONS[platform]} {platform.replace('_', ' ')}
     </span>
+
+      {/* ── Reels Addon Modal ──────────────────────────────────────────── */}
+      {showReelsModal && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 9999,
+          background: 'rgba(0,0,0,0.75)', display: 'flex',
+          alignItems: 'center', justifyContent: 'center', padding: 24,
+        }} onClick={() => setShowReelsModal(false)}>
+          <div onClick={e => e.stopPropagation()} style={{
+            background: 'var(--bg-surface)', border: '1px solid rgba(251,191,36,0.25)',
+            borderRadius: 18, padding: '32px 28px', maxWidth: 460, width: '100%',
+          }}>
+            <div style={{ fontSize: 28, marginBottom: 12 }}>🎬</div>
+            <h2 style={{ fontSize: 20, fontWeight: 800, margin: '0 0 10px', color: 'var(--text-primary)' }}>
+              AI Reels — Add-on Feature
+            </h2>
+            <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.7, marginBottom: 20 }}>
+              Aria can automatically generate short video Reels for your Instagram and Facebook using Google Veo AI — featuring your top products and real sales data.
+            </p>
+            <div style={{ background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.2)',
+              borderRadius: 12, padding: '14px 16px', marginBottom: 24 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#F59E0B', marginBottom: 8 }}>
+                ⚡ What this costs
+              </div>
+              <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.8 }}>
+                • Each AI Reel costs approximately <strong style={{ color: 'var(--text-primary)' }}>$0.50–$1.00 AUD</strong> in video generation fees<br/>
+                • Charged per Reel generated — you only pay when you use it<br/>
+                • Added to your monthly Aria invoice<br/>
+                • You can disable this at any time in Social Settings
+              </div>
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginBottom: 24, lineHeight: 1.6 }}>
+              By clicking Enable, you confirm you understand that AI Reel generation incurs additional charges per video generated, billed monthly. You can turn this off at any time.
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => setShowReelsModal(false)}
+                style={{ flex: 1, padding: '11px 0', borderRadius: 10, fontFamily: 'inherit',
+                  fontWeight: 700, fontSize: 14, cursor: 'pointer',
+                  background: 'transparent', border: '1px solid rgba(255,255,255,0.1)',
+                  color: 'var(--text-secondary)' }}>
+                Cancel
+              </button>
+              <button onClick={enableReels} disabled={reelsLoading}
+                style={{ flex: 2, padding: '11px 0', borderRadius: 10, fontFamily: 'inherit',
+                  fontWeight: 700, fontSize: 14, cursor: reelsLoading ? 'wait' : 'pointer',
+                  background: 'rgba(251,191,36,0.15)', border: '1px solid rgba(251,191,36,0.4)',
+                  color: '#F59E0B' }}>
+                {reelsLoading ? 'Enabling…' : '✓ Enable AI Reels — I understand the cost'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
   );
 }
 
@@ -51,6 +104,31 @@ export default function SocialPage() {
   const [posts, setPosts]           = useState<SocialPost[]>([]);
   const [prefs, setPrefs]           = useState<Prefs>({ brand_voice: 'friendly', post_frequency: 'weekly', auto_hashtags: [], topics_to_avoid: null, target_audience: null, business_tagline: null });
   const [generating, setGenerating] = useState(false);
+
+  // ── Reels addon state ─────────────────────────────────────────────────
+  const [reelsEnabled, setReelsEnabled] = useState(false)
+  const [reelsLoading, setReelsLoading] = useState(false)
+  const [showReelsModal, setShowReelsModal] = useState(false)
+
+  useEffect(() => {
+    if (!bid) return
+    fetch(`/api/social/reels-addon?business_id=${bid}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) setReelsEnabled(d.enabled) })
+      .catch(() => {})
+  }, [bid])
+
+  async function enableReels() {
+    if (!bid) return
+    setReelsLoading(true)
+    const res = await fetch('/api/social/reels-addon', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ business_id: bid, enable: true }),
+    })
+    const d = await res.json()
+    if (d.ok) { setReelsEnabled(true); setShowReelsModal(false) }
+    setReelsLoading(false)
+  }
 
   // ── Growth Engine state ──────────────────────────────────────────
   const [growthLoading, setGrowthLoading] = useState(false)
@@ -1113,10 +1191,19 @@ export default function SocialPage() {
                           {videoStatus[post.id]?.url && <a href={videoStatus[post.id]!.url} target="_blank" rel="noreferrer" style={{ marginLeft: 6, color: C.green }}>▶ Watch</a>}
                         </span>
                       ) : (
+                        {!reelsEnabled ? (
+                          <button onClick={() => setShowReelsModal(true)}
+                            style={{ padding: '7px 14px', borderRadius: 8, fontFamily: 'inherit', fontWeight: 700,
+                              fontSize: 12, cursor: 'pointer', background: 'rgba(251,191,36,0.08)',
+                              border: '1px solid rgba(251,191,36,0.25)', color: '#F59E0B' }}>
+                            🎬 Enable Reels (Add-on)
+                          </button>
+                        ) : (
                         <button onClick={() => generateVideo(post.id, post.reel_concept)}
                           style={{ padding: '5px 12px', borderRadius: 7, border: ('1px solid ' + C.blue + '40'), background: (C.blue + '10'), color: C.blue, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
                           🎬 Generate Video
                         </button>
+                        )}
                       )
                     ) : null}
                     {providers?.voiceover.elevenlabs ? (
