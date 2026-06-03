@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import type { AskBlock } from './ask-types'
 import { runContextBrain, type ContextBrainOutput } from './context-brain'
 import { assessDataQuality, type DataQualityReport, FALLBACK_QUALITY } from './data-quality'
+import { recallMemories, formatMemoriesForPrompt, fetchRecentSummaries, formatSummariesForPrompt } from './memory/recall'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -413,9 +414,15 @@ export async function runAriaCouncil(
     if (cached) return cached
   }
 
-  // Assess data quality before brains — fast DB count queries (~100ms)
-  // This ensures all brains receive quality context and can hedge appropriately
-  const quality = await assessDataQuality(businessId).catch(() => ({ ...FALLBACK_QUALITY }))
+  // Assess quality + recall memories + fetch summaries in parallel before brains
+  const [quality, memories, recentSummaries] = await Promise.all([
+    assessDataQuality(businessId).catch(() => ({ ...FALLBACK_QUALITY })),
+    recallMemories(businessId, activeQuestion).catch(() => []),
+    fetchRecentSummaries(businessId).catch(() => []),
+  ])
+
+  const memoryBlock = formatMemoriesForPrompt(memories)
+  const summaryBlock = formatSummariesForPrompt(recentSummaries)
 
   const qualityCtx = quality.hedge_level !== 'none'
     ? 'DATA QUALITY: ' + quality.overall_score + '/100 (' + quality.hedge_level + ' hedging required)\n' +
@@ -426,7 +433,9 @@ export async function runAriaCouncil(
       'If data is insufficient for a recommendation, say: "Not enough data to advise on this."\n\n'
     : ''
 
-  const userPrompt = qualityCtx + 'Business data:\n' + businessContext
+  const userPrompt = [summaryBlock, memoryBlock, qualityCtx, 'Business data:\n' + businessContext]
+    .filter(Boolean)
+    .join('\n\n')
 
   const now = new Date()
   const weekStart = new Date(now)
@@ -479,8 +488,11 @@ ${quality.reliability_statement}
 HONESTY: Never state percentage changes with thin data. Use "looks like"/"suggests" for low-confidence findings.\n`
     : ''
 
+  const memorySynthesisBlock = memoryBlock ? memoryBlock + '\n' : ''
+  const summarySynthesisBlock = summaryBlock ? summaryBlock + '\n' : ''
+
   const synthesisInput = `
-BUSINESS DATA:
+${summarySynthesisBlock}${memorySynthesisBlock}BUSINESS DATA:
 ${businessContext}
 ${qualitySynthesisBlock}
 GROWTH BRAIN (confidence: ${growth.confidence}):

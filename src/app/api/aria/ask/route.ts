@@ -26,6 +26,7 @@ import { runAriaCouncil } from '@/lib/aria/council'
 import type { CouncilOutput } from '@/lib/aria/council'
 import { getBusinessContext } from '@/lib/aria/get-business-context'
 import { maybeWriteMemory } from '@/lib/aria/ask/memory-writer'
+import { extractAndStoreMemories } from '@/lib/aria/memory/extract'
 
 async function getBid(supabase: ReturnType<typeof createServerSupabaseClient>, userId: string): Promise<string | null> {
   const { data: active } = await supabase.from('user_active_business').select('business_id').eq('user_id', userId).maybeSingle()
@@ -304,6 +305,8 @@ async function _POST(req: Request) {
         } catch (e) {
           console.error('[aria/ask] upsertConversation failed (council):', (e as Error).message)
         }
+        // Fire-and-forget memory extraction for council responses
+        extractAndStoreMemories(bid, message, council.final_briefing, savedConvId).catch(() => {})
         return NextResponse.json({
           blocks: council.ask_blocks ?? [{ type: 'lead', content: council.final_briefing }],
           followups: council.ask_followups ?? [],
@@ -993,8 +996,9 @@ NEVER give a one-line answer to a business question. Match ChatGPT/Gemini depth 
     console.error('[aria/ask] upsertConversation failed:', (e as Error).message, 'conv_id:', conversationId)
   }
 
-  // Write any new memories from this conversation — non-blocking
+  // Write any new memories from this conversation — non-blocking (both regex and AI extraction)
   maybeWriteMemory(bid, message, historyContent).catch(() => {})
+  extractAndStoreMemories(bid, message, historyContent, savedConvId).catch(() => {})
 
   // Track actual spend in DB for cost guard
   try {

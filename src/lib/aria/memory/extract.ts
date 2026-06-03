@@ -82,6 +82,32 @@ Extract durable memories. Return JSON array only.`
   }
 }
 
+export async function extractAndStoreMemories(
+  businessId: string,
+  userMessage: string,
+  ariaResponse: string,
+  conversationId?: string | null,
+): Promise<void> {
+  if ((userMessage + ariaResponse).split(' ').length < 50) return
+
+  try {
+    const { data: biz } = await supabaseAdmin
+      .from('businesses')
+      .select('name, trading_name, industry')
+      .eq('id', businessId)
+      .maybeSingle()
+
+    const bizName = (biz as Record<string, string | null> | null)?.trading_name ?? (biz as Record<string, string | null> | null)?.name ?? 'this business'
+    const industry = (biz as Record<string, string | null> | null)?.industry ?? 'retail'
+
+    const transcript = 'Owner: ' + userMessage + '\nAria: ' + ariaResponse
+    const memories = await extractMemoriesFromTranscript(businessId, transcript, bizName, industry)
+    if (memories.length > 0) {
+      await persistMemories(businessId, memories, conversationId ?? null)
+    }
+  } catch { /* non-fatal fire-and-forget */ }
+}
+
 export async function persistMemories(
   businessId: string,
   memories: ExtractedMemory[],
