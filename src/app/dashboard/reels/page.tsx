@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
-import { createBrowserSupabaseClient } from '@/lib/supabase-browser'
+import { createBrowserClient } from '@supabase/ssr'
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const EDGE_FN = SUPABASE_URL + '/functions/v1/reel-engine'
@@ -30,7 +30,7 @@ type CostStats = {
 }
 
 export default function ReelStudioPage() {
-  const supabase = createBrowserSupabaseClient()
+  const supabase = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
   const [bid, setBid] = useState<string | null>(null)
   const [session, setSession] = useState<any>(null)
 
