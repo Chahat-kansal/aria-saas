@@ -62,7 +62,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <script dangerouslySetInnerHTML={{__html: `
 (function(){
   try {
-    if(!sessionStorage.getItem('aria_intro_seen')){
+    // Only hide body on the landing page (/) — never on /pos, /dashboard, etc.
+    var isLanding = location.pathname === '/' || location.pathname === '';
+    if(isLanding && !sessionStorage.getItem('aria_intro_seen')){
       document.documentElement.classList.add('intro-pending');
     }
   } catch(e){}
