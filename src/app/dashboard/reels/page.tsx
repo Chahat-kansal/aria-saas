@@ -10,6 +10,7 @@ type Inf = { id: string; name: string; description: string; image_url: string
              higgsfield_job_id: string; soul_id: string | null; soul_status: string | null }
 type Session = { id: string; status: string; video_url: string | null
                  cost_aud: number; created_at: string; style: string; duration_seconds: number }
+type ReelIdea = { title: string; why: string; style: string; prompt: string; hook: string; hashtags: string[]; urgency: 'high'|'medium'|'low' }
 type PixabayTrack = { id: number; title: string; duration: number; url: string; preview: string|null; bpm: number|null; artist: string }
 
 const STYLES = [
@@ -100,6 +101,10 @@ export default function ReelStudioPage() {
   const [tab, setTab] = useState<'create'|'edit'|'history'>('create')
   const [totalSpent, setTotalSpent] = useState(0)
   const [monthlyReels, setMonthlyReels] = useState(0)
+  const [reelIdeas, setReelIdeas] = useState<ReelIdea[]>([])
+  const [ideasLoading, setIdeasLoading] = useState(false)
+  const [ideasLoaded, setIdeasLoaded] = useState(false)
+  const [expandedIdea, setExpandedIdea] = useState<number|null>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
 
   useEffect(() => {
@@ -118,6 +123,8 @@ export default function ReelStudioPage() {
         .eq('user_id', uid).eq('is_active', true).maybeSingle()
       if (!biz) { setError('No active business found'); return }
       setBid(biz.id)
+      // Auto-load reel ideas
+      setTimeout(() => loadIdeas(), 100)
 
       const [infRes, sesRes] = await Promise.all([
         fetch('/api/social/influencer-library'),
@@ -149,6 +156,26 @@ export default function ReelStudioPage() {
       setMusicTracks(d.tracks ?? [])
     } catch {}
     setMusicLoading(false)
+  }
+
+  async function loadIdeas() {
+    if (!bid || ideasLoading) return
+    setIdeasLoading(true)
+    try {
+      const res = await fetch(`/api/reels/ideas?business_id=${bid}`)
+      const d = await res.json()
+      if (d.ideas?.length) { setReelIdeas(d.ideas); setIdeasLoaded(true) }
+    } catch {}
+    setIdeasLoading(false)
+  }
+
+  function applyIdea(idea: ReelIdea) {
+    setStyle(idea.style)
+    setPrompt(idea.prompt)
+    setPublishCaption(idea.hook + '\n\n' + (idea.hashtags ?? []).map((h: string) => '#' + h).join(' '))
+    setExpandedIdea(null)
+    // Scroll to generate button
+    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   function previewTrack(track: PixabayTrack) {
@@ -338,6 +365,74 @@ export default function ReelStudioPage() {
       {tab === 'create' && (
         <div style={S.body}>
           <div style={S.left}>
+
+            {/* Aria Ideas Panel */}
+            <div style={{ background: 'linear-gradient(135deg, rgba(127,184,151,0.08), rgba(45,82,64,0.12))',
+              border: '1px solid rgba(127,184,151,0.2)', borderRadius: 14, padding: '14px 16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: ideasLoaded ? 12 : 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 15 }}>✦</span>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: '#7FB897' }}>Aria Reel Ideas</span>
+                  <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>from your POS data</span>
+                </div>
+                <button onClick={loadIdeas} disabled={ideasLoading} style={{ fontSize: 10, padding: '4px 10px',
+                  borderRadius: 99, border: 'none', cursor: ideasLoading ? 'wait' : 'pointer',
+                  background: 'rgba(127,184,151,0.15)', color: '#7FB897', fontFamily: 'inherit', fontWeight: 700 }}>
+                  {ideasLoading ? '⏳' : ideasLoaded ? '↻ Refresh' : '✦ Generate ideas'}
+                </button>
+              </div>
+
+              {ideasLoading && (
+                <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', paddingTop: 8 }}>
+                  Reading your sales data, products & reviews…
+                </div>
+              )}
+
+              {ideasLoaded && reelIdeas.map((idea, i) => (
+                <div key={i} style={{ marginBottom: 8 }}>
+                  <div onClick={() => setExpandedIdea(expandedIdea === i ? null : i)}
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      padding: '9px 12px', borderRadius: 10, cursor: 'pointer',
+                      background: expandedIdea === i ? 'rgba(127,184,151,0.12)' : 'rgba(255,255,255,0.04)',
+                      boxShadow: expandedIdea === i ? 'inset 0 0 0 1.5px rgba(127,184,151,0.4)' : 'inset 0 0 0 1px rgba(255,255,255,0.07)',
+                      transition: 'all 120ms' }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 99, fontWeight: 700,
+                          background: idea.urgency === 'high' ? 'rgba(239,68,68,0.2)' : idea.urgency === 'medium' ? 'rgba(245,158,11,0.2)' : 'rgba(127,184,151,0.2)',
+                          color: idea.urgency === 'high' ? '#EF4444' : idea.urgency === 'medium' ? '#F59E0B' : '#7FB897' }}>
+                          {idea.urgency === 'high' ? '🔥 Hot' : idea.urgency === 'medium' ? '⚡ Good' : '✓ Evergreen'}
+                        </span>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{idea.title}</span>
+                      </div>
+                    </div>
+                    <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', marginLeft: 8, flexShrink: 0 }}>{expandedIdea === i ? '▲' : '▼'}</span>
+                  </div>
+
+                  {expandedIdea === i && (
+                    <div style={{ padding: '10px 12px', background: 'rgba(255,255,255,0.03)',
+                      borderRadius: '0 0 10px 10px', border: '1px solid rgba(127,184,151,0.15)',
+                      borderTop: 'none', marginTop: -2 }}>
+                      <div style={{ fontSize: 11, color: '#7FB897', marginBottom: 6, lineHeight: 1.5 }}>
+                        📊 {idea.why}
+                      </div>
+                      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginBottom: 8, lineHeight: 1.5 }}>
+                        🎬 {idea.prompt}
+                      </div>
+                      <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', marginBottom: 10 }}>
+                        Hook: "{idea.hook}"
+                      </div>
+                      <button onClick={() => applyIdea(idea)} style={{ width: '100%', padding: '9px 0',
+                        borderRadius: 9, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+                        fontSize: 12, fontWeight: 800, background: 'linear-gradient(135deg,#7FB897,#2D5240)',
+                        color: '#fff', letterSpacing: -0.2 }}>
+                        ✦ Use this idea →
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
 
             {/* Influencer */}
             <div style={S.card}>
