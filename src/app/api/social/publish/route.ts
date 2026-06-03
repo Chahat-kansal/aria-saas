@@ -75,28 +75,79 @@ async function _POST(req: Request) {
       platformPostId = fbData.post_id || fbData.id || null;
 
     } else if (post.platform === 'instagram') {
-      if (!post.image_url) throw new Error('Instagram requires an image URL');
-      const safeImageUrl = await ensurePublicImageUrl(post.image_url, post.id);
-      console.log('[social/publish] instagram image_url:', safeImageUrl);
-      const containerRes = await fetch(
-        `https://graph.facebook.com/v19.0/${conn.instagram_account_id}/media`,
-        {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ image_url: safeImageUrl, caption: fullCaption, access_token: conn.access_token }),
+      const videoUrl = (post as any).video_url as string | null;
+      const isReel = !!videoUrl;
+
+      if (isReel) {
+        // ── Instagram Reels via video_url ──────────────────────────────
+        // Step 1: Create media container (REELS type)
+        const containerRes = await fetch(
+          `https://graph.facebook.com/v19.0/${conn.instagram_account_id}/media`,
+          {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              media_type: 'REELS',
+              video_url: videoUrl,
+              caption: fullCaption,
+              share_to_feed: true, // appears in feed + Reels tab
+              access_token: conn.access_token,
+            }),
+          }
+        );
+        const { id: creationId, error: cErr } = await containerRes.json();
+        if (cErr) throw new Error(cErr.message);
+        if (!creationId) throw new Error('No creation_id from Instagram Reels container');
+
+        // Step 2: Poll until container is READY (video processing takes ~15-30s)
+        let ready = false;
+        for (let attempt = 0; attempt < 12; attempt++) {
+          await new Promise(r => setTimeout(r, 5000));
+          const statusRes = await fetch(
+            `https://graph.facebook.com/v19.0/${creationId}?fields=status_code&access_token=${conn.access_token}`
+          );
+          const statusData = await statusRes.json();
+          if (statusData.status_code === 'FINISHED') { ready = true; break; }
+          if (statusData.status_code === 'ERROR') throw new Error('Instagram video processing failed');
         }
-      );
-      const { id: creationId, error: cErr } = await containerRes.json();
-      if (cErr) throw new Error(cErr.message);
-      const publishRes = await fetch(
-        `https://graph.facebook.com/v19.0/${conn.instagram_account_id}/media_publish`,
-        {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ creation_id: creationId, access_token: conn.access_token }),
-        }
-      );
-      const pubData = await publishRes.json();
-      if (pubData.error) throw new Error(pubData.error.message);
-      platformPostId = pubData.id || null;
+        if (!ready) throw new Error('Instagram video container timed out');
+
+        // Step 3: Publish
+        const publishRes = await fetch(
+          `https://graph.facebook.com/v19.0/${conn.instagram_account_id}/media_publish`,
+          {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ creation_id: creationId, access_token: conn.access_token }),
+          }
+        );
+        const pubData = await publishRes.json();
+        if (pubData.error) throw new Error(pubData.error.message);
+        platformPostId = pubData.id || null;
+
+      } else {
+        // ── Standard Instagram image post ──────────────────────────────
+        if (!post.image_url) throw new Error('Instagram requires an image_url or video_url');
+        const safeImageUrl = await ensurePublicImageUrl(post.image_url, post.id);
+        console.log('[social/publish] instagram image_url:', safeImageUrl);
+        const containerRes = await fetch(
+          `https://graph.facebook.com/v19.0/${conn.instagram_account_id}/media`,
+          {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ image_url: safeImageUrl, caption: fullCaption, access_token: conn.access_token }),
+          }
+        );
+        const { id: creationId, error: cErr } = await containerRes.json();
+        if (cErr) throw new Error(cErr.message);
+        const publishRes = await fetch(
+          `https://graph.facebook.com/v19.0/${conn.instagram_account_id}/media_publish`,
+          {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ creation_id: creationId, access_token: conn.access_token }),
+          }
+        );
+        const pubData = await publishRes.json();
+        if (pubData.error) throw new Error(pubData.error.message);
+        platformPostId = pubData.id || null;
+      }
 
     } else if (post.platform === 'google_business') {
       const gbRes = await fetch(
