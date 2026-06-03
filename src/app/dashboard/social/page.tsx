@@ -68,7 +68,8 @@ export default function SocialPage() {
   const [reelStyle, setReelStyle] = useState('lifestyle')
   const [reelCustomPrompt, setReelCustomPrompt] = useState('')
   const [reelSourceImage, setReelSourceImage] = useState<string | null>(null)
-  const [reelDuration, setReelDuration] = useState<5|10>(5)
+  const [reelDuration, setReelDuration] = useState<number>(10)
+  const [reelDurationCustom, setReelDurationCustom] = useState<string>('')
   const [reelBgMusic, setReelBgMusic] = useState('none')
   const [reelGenerating, setReelGenerating] = useState(false)
   const [reelPolling, setReelPolling] = useState<Record<string, {requestId: string; modelId: string; bgMusic: string; voiceoverUrl?: string}>>({})
@@ -1973,15 +1974,24 @@ export default function SocialPage() {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                   <div>
                     <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.35)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 10 }}>Duration</div>
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      {([5, 10] as const).map(d => (
-                        <button key={d} onClick={() => setReelDuration(d)}
-                          style={{ flex: 1, padding: '10px 0', borderRadius: 10, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 700, fontSize: 13, background: reelDuration === d ? 'rgba(245,158,11,0.15)' : 'rgba(255,255,255,0.04)', boxShadow: reelDuration === d ? 'inset 0 0 0 1.5px rgba(245,158,11,0.5)' : 'inset 0 0 0 1px rgba(255,255,255,0.07)', color: reelDuration === d ? '#F59E0B' : 'rgba(255,255,255,0.4)', transition: 'all 150ms' }}>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      {([5, 10, 15, 20, 30] as const).map(d => (
+                        <button key={d} onClick={() => { setReelDuration(d); setReelDurationCustom('') }}
+                          style={{ flex: '1 1 28%', minWidth: 44, padding: '9px 4px', borderRadius: 10, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 700, fontSize: 12, background: reelDuration === d && !reelDurationCustom ? 'rgba(245,158,11,0.15)' : 'rgba(255,255,255,0.04)', boxShadow: reelDuration === d && !reelDurationCustom ? 'inset 0 0 0 1.5px rgba(245,158,11,0.5)' : 'inset 0 0 0 1px rgba(255,255,255,0.07)', color: reelDuration === d && !reelDurationCustom ? '#F59E0B' : 'rgba(255,255,255,0.4)', transition: 'all 150ms' }}>
                           {d}s
                         </button>
                       ))}
                     </div>
-                    <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.2)', marginTop: 6 }}>5s or 10s · kling API limit</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
+                      <input
+                        type="number" min={3} max={30} placeholder="Custom (3–30s)"
+                        value={reelDurationCustom}
+                        onChange={e => { setReelDurationCustom(e.target.value); if (e.target.value) setReelDuration(Number(e.target.value)) }}
+                        style={{ flex: 1, padding: '8px 10px', borderRadius: 9, background: 'rgba(255,255,255,0.04)', border: reelDurationCustom ? '1.5px solid rgba(245,158,11,0.5)' : '1px solid rgba(255,255,255,0.09)', color: reelDurationCustom ? '#F59E0B' : '#fff', fontSize: 12, fontFamily: 'inherit', outline: 'none' }}
+                      />
+                      <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.2)', whiteSpace: 'nowrap' }}>sec</span>
+                    </div>
+                    <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.2)', marginTop: 5 }}>≤10s: Kling · 11–15s: Wan 2.7 · 16–30s: Wan 2.6</div>
                   </div>
                   <div>
                     <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.35)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 10 }}>Music</div>

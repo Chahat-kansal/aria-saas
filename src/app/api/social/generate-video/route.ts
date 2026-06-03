@@ -124,17 +124,41 @@ async function _POST(req: NextRequest) {
     }, { status: 503 })
   }
 
-  // Use kling v1.6 standard — v2.1 requires special account approval on fal
-  const modelId = sourceImageUrl
-    ? 'fal-ai/kling-video/v1.6/standard/image-to-video'
-    : 'fal-ai/kling-video/v1.6/standard/text-to-video'
+  // Model routing by duration:
+  // ≤10s  → kling v1.6 (best quality, supports image-to-video with influencer)
+  // 11-15s → wan/v2.7  (up to 15s, supports 9:16 image-to-video, $0.10/s)
+  // 16-30s → wan/v2.6  (up to 30s, text-to-video only, $0.10/s)
+  let modelId: string
+  const falInput: Record<string, any> = { prompt: videoPrompt.slice(0, 500) }
 
-  const falInput: Record<string, any> = {
-    prompt: videoPrompt.slice(0, 500),
-    duration: duration_seconds >= 10 ? '10' : '5',  // kling only supports '5' or '10'
-    aspect_ratio: '9:16',
+  if (duration_seconds <= 10) {
+    // Kling: only supports '5' or '10' as string
+    const klingDuration: '5' | '10' = duration_seconds >= 10 ? '10' : '5'
+    modelId = sourceImageUrl
+      ? 'fal-ai/kling-video/v1.6/standard/image-to-video'
+      : 'fal-ai/kling-video/v1.6/standard/text-to-video'
+    falInput.duration = klingDuration
+    falInput.aspect_ratio = '9:16'
+    if (sourceImageUrl) falInput.image_url = sourceImageUrl
+
+  } else if (duration_seconds <= 15) {
+    // Wan 2.7: supports 2-15s, 9:16, image-to-video
+    modelId = sourceImageUrl
+      ? 'fal-ai/wan/v2.7/image-to-video'
+      : 'fal-ai/wan/v2.7/text-to-video'
+    falInput.duration = duration_seconds
+    falInput.resolution = '720p'
+    falInput.aspect_ratio = '9:16'
+    if (sourceImageUrl) falInput.image_url = sourceImageUrl
+
+  } else {
+    // Wan 2.6: supports 3-30s, text-to-video (no i2v for >15s)
+    modelId = 'fal-ai/wan/v2.6/text-to-video'
+    falInput.duration = String(Math.min(duration_seconds, 30))
+    falInput.resolution = '720p'
+    falInput.aspect_ratio = '9:16'
   }
-  if (sourceImageUrl) falInput.image_url = sourceImageUrl
+
   console.log('[generate-video] submitting:', { modelId, duration: falInput.duration, hasImage: !!sourceImageUrl, influencer_id })
 
   let submitResult: any
