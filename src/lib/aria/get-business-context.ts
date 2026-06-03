@@ -73,7 +73,7 @@ export async function getBusinessContext(businessId: string): Promise<string> {
     db.from('business_expenses')
       .select('amount')
       .eq('business_id', businessId)
-      .gte('date', d7),
+      .gte('expense_date', d7),
   ])
 
   // SKU aggregation from sale_items
