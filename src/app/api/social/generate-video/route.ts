@@ -2,167 +2,251 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 120
 
+import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { NextResponse } from 'next/server'
 import { withErrorCapture } from '@/lib/api/with-error-capture'
+import { put } from '@vercel/blob'
+import { fal } from '@fal-ai/client'
+import { getBackgroundMusicUrl } from '@/lib/social/audio'
 
-const VEO_MODEL = 'veo-2.0-generate-001'
-const FAL_MODEL = 'fal-ai/kling-video/v2.1/standard/image-to-video'
+fal.config({ credentials: process.env.FAL_KEY ?? '' })
 
-/**
- * POST /api/social/generate-video
- * Provider priority: fal.ai Kling 2.1 → Google Veo 2.0 → Runway → Replicate
- * UPGRADE_ONLY: add providers, never remove existing ones.
- *
- * GET /api/social/generate-video?request_id=xxx
- * Poll fal.ai job status.
- */
-
-function calcReelCost(durationSeconds: number): number {
-  const clips = Math.ceil(durationSeconds / 10)
-  const costPerClip = 0.28 + 5 * 0.056 // Kling 2.1 Standard 10s clip
-  return Math.round(clips * costPerClip * 100) / 100
+function calcCostAUD(durationSec: number): number {
+  return Math.round(Math.ceil(durationSec / 10) * 0.56 * 100) / 100
 }
 
-// ── fal.ai Kling 2.1 — primary ─────────────────────────────────────────────
-async function startFal(
-  prompt: string, imageUrl: string | undefined, durationSeconds: number
-): Promise<{ jobId: string; provider: string; requestId: string } | null> {
-  const key = process.env.FAL_KEY
-  if (!key || !imageUrl) return null  // image-to-video requires a start frame
-  try {
-    // Dynamic import to avoid top-level side effects from fal.config
-    const { fal } = await import('@fal-ai/client')
-    fal.config({ credentials: key })
-    const clampedDur = durationSeconds <= 5 ? '5' : '10'
-    const result = await fal.queue.submit(FAL_MODEL, {
-      input: {
-        prompt: prompt.slice(0, 512),
-        image_url: imageUrl,
-        duration: clampedDur,
-      },
-    })
-    const reqId = (result as any).request_id as string | undefined
-    if (!reqId) return null
-    return { jobId: 'fal:' + reqId, provider: 'fal.ai Kling 2.1', requestId: reqId }
-  } catch (e: any) {
-    console.error('[fal] submit error:', e?.message ?? e)
-    return null
-  }
+const STYLE_PROMPTS: Record<string, string> = {
+  lifestyle:        'Warm cinematic lifestyle shot,',
+  product_showcase: 'Professional product showcase, clean background, slow zoom,',
+  behind_scenes:    'Authentic behind-the-scenes, candid, natural lighting,',
+  flash_sale:       'Energetic fast-cut, bold colours, urgency,',
+  testimonial:      'Warm authentic customer moment, genuine smile,',
+  day_in_life:      'Documentary-style day-in-the-life, real moments,',
 }
 
-// ── Google Veo 2.0 — fallback 1 ────────────────────────────────────────────
-async function startVeo(prompt: string, imageUrl?: string): Promise<{ jobId: string; provider: string } | null> {
-  const key = process.env.GEMINI_API_KEY
-  if (!key) return null
+async function mergeAudioIntoVideo(
+  videoUrl: string,
+  audioUrl: string,
+  outputKey: string
+): Promise<string> {
+  const ffmpeg = require('fluent-ffmpeg')
+  const ffmpegPath = require('@ffmpeg-installer/ffmpeg').path
+  ffmpeg.setFfmpegPath(ffmpegPath)
 
-  const requestBody: Record<string, unknown> = {
-    model: VEO_MODEL,
-    prompt: { text: prompt.slice(0, 1000) },
-    generationConfig: { durationSeconds: 5, aspectRatio: '9:16' },
-  }
+  const [vRes, aRes] = await Promise.all([fetch(videoUrl), fetch(audioUrl)])
+  const [vBuf, aBuf] = await Promise.all([vRes.arrayBuffer(), aRes.arrayBuffer()])
 
-  if (imageUrl) {
-    try {
-      const imgRes = await fetch(imageUrl)
-      if (imgRes.ok) {
-        const buf = await imgRes.arrayBuffer()
-        requestBody.image = {
-          imageBytes: Buffer.from(buf).toString('base64'),
-          mimeType: imgRes.headers.get('content-type') ?? 'image/jpeg',
-        }
-      }
-    } catch { /* proceed without start frame */ }
-  }
+  const tmp = require('os').tmpdir()
+  const fs = require('fs')
+  const videoPath = tmp + '/v_' + Date.now() + '.mp4'
+  const audioPath = tmp + '/a_' + Date.now() + '.mp3'
+  const outPath   = tmp + '/out_' + Date.now() + '.mp4'
 
-  try {
-    const res = await fetch(
-      'https://generativelanguage.googleapis.com/v1beta/models/' + VEO_MODEL + ':generateVideo?key=' + key,
-      { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(requestBody) }
-    )
-    if (!res.ok) {
-      const err = await res.text().catch(() => '')
-      console.error('[veo] API error:', res.status, err.slice(0, 200))
-      return null
-    }
-    const d = await res.json() as { name?: string; error?: { message: string } }
-    if (d.error) { console.error('[veo] error:', d.error.message); return null }
-    if (!d.name) return null
-    return { jobId: 'veo:' + d.name, provider: 'Google Veo 2.0' }
-  } catch (e: any) {
-    console.error('[veo] exception:', e?.message ?? e)
-    return null
-  }
+  fs.writeFileSync(videoPath, Buffer.from(vBuf))
+  fs.writeFileSync(audioPath, Buffer.from(aBuf))
+
+  await new Promise<void>((resolve, reject) => {
+    ffmpeg(videoPath)
+      .addInput(audioPath)
+      .outputOptions(['-c:v copy', '-c:a aac', '-shortest', '-map 0:v:0', '-map 1:a:0'])
+      .save(outPath)
+      .on('end', resolve)
+      .on('error', reject)
+  })
+
+  const outBuf = fs.readFileSync(outPath)
+  const blob = await put(outputKey, outBuf, { access: 'public', contentType: 'video/mp4' })
+
+  try { fs.unlinkSync(videoPath); fs.unlinkSync(audioPath); fs.unlinkSync(outPath) } catch {}
+
+  return blob.url
 }
 
-// ── Runway Gen4 Turbo — fallback 2 ─────────────────────────────────────────
-async function startRunway(prompt: string, imageUrl?: string): Promise<{ jobId: string; provider: string } | null> {
-  const key = process.env.RUNWAY_API_KEY
-  if (!key) return null
-  try {
-    const endpoint = imageUrl ? 'image_to_video' : 'text_to_video'
-    const body: Record<string, unknown> = imageUrl
-      ? { model: 'gen4_turbo', promptImage: imageUrl, promptText: prompt.slice(0, 512), duration: 5, ratio: '720:1280' }
-      : { model: 'gen4_turbo', promptText: prompt.slice(0, 512), duration: 5, ratio: '720:1280' }
-    const res = await fetch('https://api.dev.runwayml.com/v1/' + endpoint, {
-      method: 'POST',
-      headers: { Authorization: 'Bearer ' + key, 'Content-Type': 'application/json', 'X-Runway-Version': '2024-11-06' },
-      body: JSON.stringify(body),
-    })
-    if (!res.ok) return null
-    const d = await res.json()
-    return d.id ? { jobId: 'runway:' + d.id, provider: 'Runway Gen4' } : null
-  } catch { return null }
-}
-
-// ── Replicate SVD — fallback 3 (last resort) ───────────────────────────────
-async function startReplicate(prompt: string): Promise<{ jobId: string; provider: string } | null> {
-  const key = process.env.REPLICATE_API_KEY
-  if (!key) return null
-  try {
-    const res = await fetch('https://api.replicate.com/v1/predictions', {
-      method: 'POST',
-      headers: { Authorization: 'Token ' + key, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        version: 'dce698e891f2ec379db3b3a2fbc0ce7a',
-        input: { prompt: prompt.slice(0, 512), num_frames: 25, width: 576, height: 1024 },
-      }),
-    })
-    if (!res.ok) return null
-    const d = await res.json()
-    return d.id ? { jobId: 'replicate:' + d.id, provider: 'Replicate SVD' } : null
-  } catch { return null }
-}
-
-// ── GET — poll fal.ai job status ────────────────────────────────────────────
-async function _GET(req: Request) {
-  const url = new URL(req.url)
-  const requestId = url.searchParams.get('request_id')
-  if (!requestId) return NextResponse.json({ error: 'request_id required' }, { status: 400 })
-
+async function _POST(req: NextRequest) {
   const supabase = createServerSupabaseClient()
-  const { data: { user }, error: authError } = await supabase.auth.getUser()
-  if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const key = process.env.FAL_KEY
-  if (!key) return NextResponse.json({ status: 'no_provider' }, { status: 503 })
+  const {
+    post_id, business_id,
+    reel_mode = 'auto',
+    reel_style = 'lifestyle',
+    reel_custom_prompt,
+    reel_source_image_url,
+    duration_seconds = 15,
+    is_admin = false,
+    background_music = 'none',
+    voiceover_url,
+  } = await req.json()
+
+  if (!business_id) return NextResponse.json({ error: 'business_id required' }, { status: 400 })
+
+  if (!is_admin) {
+    const { data: prefs } = await supabase.from('social_preferences')
+      .select('reels_enabled').eq('business_id', business_id).maybeSingle()
+    if (!prefs?.reels_enabled) {
+      return NextResponse.json({
+        error: 'reels_not_enabled',
+        message: 'Enable AI Reels in Social Settings first.',
+      }, { status: 403 })
+    }
+  }
+
+  let post: any = null
+  if (post_id) {
+    const { data } = await supabase.from('social_posts').select('*').eq('id', post_id).maybeSingle()
+    post = data
+  }
+
+  const stylePrefix = STYLE_PROMPTS[reel_style] ?? STYLE_PROMPTS.lifestyle
+  let videoPrompt = ''
+  let sourceImageUrl: string | null = null
+
+  if (reel_mode === 'image') {
+    sourceImageUrl = reel_source_image_url || post?.image_url || null
+    videoPrompt = stylePrefix + ' ' + (reel_custom_prompt || post?.reel_concept || post?.caption || 'showcase this business') + ' 9:16 vertical, photorealistic, no text overlays'
+  } else if (reel_mode === 'text') {
+    videoPrompt = stylePrefix + ' ' + (reel_custom_prompt || post?.reel_concept || post?.caption) + ' 9:16 vertical, photorealistic, no text overlays'
+    sourceImageUrl = null
+  } else {
+    sourceImageUrl = post?.image_url || null
+    videoPrompt = stylePrefix + ' ' + (post?.reel_concept || post?.caption || 'Australian small business showcase') + ' 9:16 vertical, photorealistic, no text overlays'
+  }
+
+  const estimatedCost = calcCostAUD(duration_seconds)
+
+  if (!process.env.FAL_KEY) {
+    return NextResponse.json({
+      error: 'FAL_KEY not configured',
+      message: 'Add FAL_KEY to Vercel environment variables.',
+    }, { status: 503 })
+  }
+
+  const modelId = sourceImageUrl
+    ? 'fal-ai/kling-video/v2.1/standard/image-to-video'
+    : 'fal-ai/kling-video/v2.1/standard/text-to-video'
+
+  const falInput: Record<string, any> = {
+    prompt: videoPrompt.slice(0, 512),
+    duration: duration_seconds <= 10 ? '5' : '10',
+  }
+  if (sourceImageUrl) falInput.image_url = sourceImageUrl
+
+  const submitResult = await fal.queue.submit(modelId as any, { input: falInput })
+  const request_id = (submitResult as any).request_id as string
+
+  if (post_id) {
+    try {
+      await supabaseAdmin.from('social_posts').update({
+        fal_request_id: request_id,
+        reel_mode,
+        reel_style,
+        reel_custom_prompt: reel_custom_prompt || null,
+        reel_source_image_url: sourceImageUrl,
+        reel_duration_seconds: duration_seconds,
+        reel_cost_aud: estimatedCost,
+        post_type: 'reel',
+      }).eq('id', post_id)
+    } catch {}
+  }
+
+  return NextResponse.json({
+    fal_request_id: request_id,
+    model_id: modelId,
+    estimated_cost_aud: estimatedCost,
+    status: 'queued',
+    background_music,
+    voiceover_url: voiceover_url || null,
+  })
+}
+
+async function _GET(req: NextRequest) {
+  const supabase = createServerSupabaseClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const fal_request_id = req.nextUrl.searchParams.get('fal_request_id')
+  const model_id = req.nextUrl.searchParams.get('model_id')
+  const post_id = req.nextUrl.searchParams.get('post_id')
+  const business_id = req.nextUrl.searchParams.get('business_id')
+  const background_music = req.nextUrl.searchParams.get('background_music') || 'none'
+  const voiceover_url = req.nextUrl.searchParams.get('voiceover_url')
+
+  // Legacy: support old ?request_id= param
+  const legacy_request_id = req.nextUrl.searchParams.get('request_id')
+  const effectiveRequestId = fal_request_id || legacy_request_id
+
+  if (!effectiveRequestId) return NextResponse.json({ error: 'fal_request_id required' }, { status: 400 })
+  if (!process.env.FAL_KEY) return NextResponse.json({ status: 'no_provider' }, { status: 503 })
+
+  const effectiveModelId = model_id || 'fal-ai/kling-video/v2.1/standard/image-to-video'
 
   try {
-    const { fal } = await import('@fal-ai/client')
-    fal.config({ credentials: key })
-
-    const status = await fal.queue.status(FAL_MODEL, { requestId, logs: false })
+    const status = await fal.queue.status(effectiveModelId as any, { requestId: effectiveRequestId, logs: false })
     const statusStr = (status as any).status as string
 
     if (statusStr === 'COMPLETED') {
-      const output = await fal.queue.result(FAL_MODEL, { requestId })
-      const videoUrl = ((output as any).data as any)?.video?.url as string | undefined
-      return NextResponse.json({ status: 'COMPLETED', video_url: videoUrl ?? null })
+      const result = await fal.queue.result(effectiveModelId as any, { requestId: effectiveRequestId })
+      const rawVideoUrl: string = (result as any).data?.video?.url
+
+      if (!rawVideoUrl) return NextResponse.json({ status: 'FAILED', error: 'No video URL in result' })
+
+      let finalVideoUrl = rawVideoUrl
+      const audioToMerge = voiceover_url || await getBackgroundMusicUrl(background_music)
+
+      const blobKey = 'aria-social/reels/' + (post_id || effectiveRequestId) + '-' + Date.now() + '.mp4'
+
+      if (audioToMerge) {
+        try {
+          finalVideoUrl = await mergeAudioIntoVideo(rawVideoUrl, audioToMerge, blobKey)
+        } catch (e: any) {
+          console.error('[generate-video] audio merge failed:', e.message)
+          const vRes = await fetch(rawVideoUrl)
+          const vBuf = await vRes.arrayBuffer()
+          const blob = await put(blobKey, vBuf, { access: 'public', contentType: 'video/mp4' })
+          finalVideoUrl = blob.url
+        }
+      } else {
+        const vRes = await fetch(rawVideoUrl)
+        const vBuf = await vRes.arrayBuffer()
+        const blob = await put(blobKey, vBuf, { access: 'public', contentType: 'video/mp4' })
+        finalVideoUrl = blob.url
+      }
+
+      if (post_id) {
+        try {
+          await supabaseAdmin.from('social_posts').update({ video_url: finalVideoUrl, post_type: 'reel' }).eq('id', post_id)
+        } catch {}
+      }
+
+      if (business_id && post_id) {
+        try {
+          const { data: postRow } = await supabaseAdmin.from('social_posts')
+            .select('reel_cost_aud, reel_duration_seconds, reel_mode, reel_style')
+            .eq('id', post_id).maybeSingle()
+          if (postRow) {
+            await supabaseAdmin.from('reel_usage_log').insert({
+              business_id,
+              post_id,
+              cost_aud: postRow.reel_cost_aud || 0.56,
+              duration_seconds: postRow.reel_duration_seconds || 15,
+              provider: effectiveModelId,
+              reel_mode: postRow.reel_mode,
+              reel_style: postRow.reel_style,
+              fal_request_id: effectiveRequestId,
+            })
+          }
+        } catch {}
+      }
+
+      return NextResponse.json({ status: 'COMPLETED', video_url: finalVideoUrl })
     }
+
     if (statusStr === 'FAILED') {
-      return NextResponse.json({ status: 'FAILED' })
+      return NextResponse.json({ status: 'FAILED', error: 'fal.ai generation failed' })
     }
+
     return NextResponse.json({ status: statusStr })
   } catch (e: any) {
     console.error('[generate-video GET] fal status error:', e?.message ?? e)
@@ -170,117 +254,5 @@ async function _GET(req: Request) {
   }
 }
 
-// ── POST — submit video generation ─────────────────────────────────────────
-async function _POST(req: Request) {
-  const supabase = createServerSupabaseClient()
-  const { data: { user }, error: authError } = await supabase.auth.getUser()
-  if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-  const { prompt, image_url, business_id, post_id, duration_seconds, post_type } = await req.json() as {
-    prompt?: string; image_url?: string; business_id?: string; post_id?: string;
-    duration_seconds?: number; post_type?: string
-  }
-
-  if (!prompt) return NextResponse.json({ error: 'prompt required' }, { status: 400 })
-
-  const dur = typeof duration_seconds === 'number' && duration_seconds > 0 ? duration_seconds : 10
-
-  // Reels gate — check opt-in
-  if (business_id) {
-    const { data: prefs } = await supabase.from('social_preferences')
-      .select('reels_enabled').eq('business_id', business_id).maybeSingle()
-    if (!prefs?.reels_enabled) {
-      return NextResponse.json({
-        error: 'reels_not_enabled',
-        message: 'AI Reels is not enabled for this business. Enable it in Social Settings to generate video content.',
-      }, { status: 403 })
-    }
-  }
-
-  const estimatedCost = calcReelCost(dur)
-  const effectivePostType = post_type === 'story' ? 'story' : 'reel'
-
-  // ── Try fal.ai Kling 2.1 first ─────────────────────────────────────────
-  const falResult = await startFal(prompt, image_url, dur)
-
-  if (falResult) {
-    if (business_id) {
-      try { await supabaseAdmin.from('reel_usage_log').insert({
-        business_id,
-        post_id: post_id ?? null,
-        cost_aud: estimatedCost,
-        duration_seconds: dur,
-        provider: falResult.provider,
-        fal_request_id: falResult.requestId,
-      }) } catch {}
-    }
-    if (post_id) {
-      try { await supabaseAdmin.from('social_posts').update({
-        fal_request_id: falResult.requestId,
-        reel_cost_aud: estimatedCost,
-        reel_duration_seconds: dur,
-        post_type: effectivePostType,
-      }).eq('id', post_id) } catch {}
-    }
-    return NextResponse.json({
-      fal_request_id: falResult.requestId,
-      job_id: falResult.jobId,
-      provider: falResult.provider,
-      estimated_cost_aud: estimatedCost,
-      status: 'queued',
-    })
-  }
-
-  // ── Fallbacks: Veo → Runway → Replicate ──────────────────────────────
-  const result = await startVeo(prompt, image_url)
-    ?? await startRunway(prompt, image_url)
-    ?? await startReplicate(prompt)
-
-  if (!result) {
-    return NextResponse.json({
-      error: 'no_provider',
-      message: 'No video provider available. FAL_KEY, GEMINI_API_KEY, or RUNWAY_API_KEY should be set.',
-    }, { status: 503 })
-  }
-
-  if (business_id) {
-    try { await supabaseAdmin.from('reel_usage_log').insert({
-      business_id,
-      post_id: post_id ?? null,
-      cost_aud: estimatedCost,
-      duration_seconds: dur,
-      provider: result.provider,
-      fal_request_id: null,
-    }) } catch {}
-    // Also log to aria_studio_assets for billing tracking (Veo charges per second)
-    try { await supabaseAdmin.from('aria_studio_assets').insert({
-      business_id,
-      prompt,
-      enhanced_prompt: prompt,
-      style: 'reel',
-      format: '9:16',
-      provider: result.provider,
-      image_url: null,
-      folder: 'reels',
-      tags: ['reel', 'video', 'auto-generated'],
-      status: 'processing',
-    }).select().single() } catch {}
-  }
-  if (post_id) {
-    try { await supabaseAdmin.from('social_posts').update({
-      reel_cost_aud: estimatedCost,
-      reel_duration_seconds: dur,
-      post_type: effectivePostType,
-    }).eq('id', post_id) } catch {}
-  }
-
-  return NextResponse.json({
-    job_id: result.jobId,
-    provider: result.provider,
-    estimated_cost_aud: estimatedCost,
-    status: 'queued',
-  })
-}
-
-export const GET = withErrorCapture('social/generate-video/poll', _GET)
 export const POST = withErrorCapture('social/generate-video', _POST)
+export const GET = withErrorCapture('social/generate-video', _GET)

@@ -6,7 +6,7 @@ import { BestTimesHeatmap } from '@/components/dashboard/social/BestTimesHeatmap
 
 const C = { bg: 'var(--bg-base)', card: 'var(--bg-surface)', border: 'transparent', text: '#F0F4FF', muted: 'var(--text-secondary)', dim: 'var(--text-tertiary)', violet: '#8B5CF6', green: '#22C55E', red: '#EF4444', amber: '#F59E0B', blue: '#3B82F6' };
 
-interface SocialPost { id: string; platform: string; status: string; caption: string; hashtags: string[]; image_url: string | null; image_prompt: string | null; image_credit: string | null; scheduled_for: string | null; published_at: string | null; aria_reasoning: string | null; industry_context: string | null; reel_concept: string | null; reel_script: string | null; content_calendar_month: string | null; created_at: string; video_url: string | null; post_type: string | null; fal_request_id: string | null; reel_cost_aud: number | null; reel_duration_seconds: number | null; }
+interface SocialPost { id: string; platform: string; status: string; caption: string; hashtags: string[]; image_url: string | null; image_prompt: string | null; image_credit: string | null; scheduled_for: string | null; published_at: string | null; aria_reasoning: string | null; industry_context: string | null; reel_concept: string | null; reel_script: string | null; content_calendar_month: string | null; created_at: string; video_url: string | null; post_type: string | null; fal_request_id: string | null; reel_cost_aud: number | null; reel_duration_seconds: number | null; reel_mode: string | null; reel_style: string | null; }
 interface Providers { image: { stability_ai: boolean; dalle3: boolean; unsplash: boolean }; video: { runway: boolean; replicate: boolean }; voiceover: { elevenlabs: boolean } }
 interface SocialConn { id: string; platform: string; platform_account_name: string | null; is_active: boolean; }
 interface Prefs { brand_voice: string; post_frequency: string; auto_hashtags: string[]; topics_to_avoid: string | null; target_audience: string | null; business_tagline: string | null; }
@@ -57,11 +57,40 @@ export default function SocialPage() {
   const [reelsLoading, setReelsLoading] = useState(false)
   const [showReelsModal, setShowReelsModal] = useState(false)
 
+  // ── Token expiry warnings (Gap 5) ────────────────────────────────────
+  const [tokenWarnings, setTokenWarnings] = useState<Array<{platform: string; expires_in_days: number | null; warning: boolean; expired: boolean}>>([])
+
+  // ── Reel Creator Panel state (Gap 3/4) ───────────────────────────────
+  const [reelCreatorPostId, setReelCreatorPostId] = useState<string | null>(null)
+  const [reelMode, setReelMode] = useState<'auto'|'image'|'text'>('auto')
+  const [reelStyle, setReelStyle] = useState('lifestyle')
+  const [reelCustomPrompt, setReelCustomPrompt] = useState('')
+  const [reelSourceImage, setReelSourceImage] = useState<string | null>(null)
+  const [reelDuration, setReelDuration] = useState<10|15|30>(15)
+  const [reelBgMusic, setReelBgMusic] = useState('none')
+  const [reelGenerating, setReelGenerating] = useState(false)
+  const [reelPolling, setReelPolling] = useState<Record<string, {requestId: string; modelId: string; bgMusic: string; voiceoverUrl?: string}>>({})
+  const [assetLibrary, setAssetLibrary] = useState<Array<{id: string; url: string; name: string}>>([])
+  const [showAssetLibrary, setShowAssetLibrary] = useState(false)
+  const [reelBillingThisMonth, setReelBillingThisMonth] = useState<{total_cost_aud: number; reel_count: number} | null>(null)
+
   useEffect(() => {
     if (!bid) return
-    fetch(`/api/social/reels-addon?business_id=${bid}`)
+    fetch('/api/social/reels-addon?business_id=' + bid)
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (d) setReelsEnabled(d.enabled) })
+      .catch(() => {})
+    fetch('/api/social/token-status?business_id=' + bid)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.connections) setTokenWarnings(d.connections.filter((c: any) => c.warning || c.expired)) })
+      .catch(() => {})
+    fetch('/api/social/asset-library?business_id=' + bid)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.assets) setAssetLibrary(d.assets) })
+      .catch(() => {})
+    fetch('/api/social/reel-billing?business_id=' + bid)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) setReelBillingThisMonth(d) })
       .catch(() => {})
   }, [bid])
 
@@ -474,38 +503,68 @@ export default function SocialPage() {
   }
 
   function calcReelCostDisplay(durationSeconds: number): string {
-    const clips = Math.ceil(durationSeconds / 10);
-    const costPerClip = 0.28 + 5 * 0.056;
-    return (Math.round(clips * costPerClip * 100) / 100).toFixed(2);
+    return calcReelCost(durationSeconds).toFixed(2);
   }
 
-  async function generateVideo(postId: string, concept: string | null, durationSeconds = 10) {
-    const post = posts.find(p => p.id === postId);
-    const prompt = concept || post?.reel_concept || post?.caption || '';
-    const res = await fetch('/api/social/generate-video', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        prompt, image_url: post?.image_url, business_id: bid, post_id: postId,
-        duration_seconds: durationSeconds,
-      }),
-    });
-    const d = await res.json();
-    if (d.fal_request_id) {
-      setFalPolling(p => ({ ...p, [postId]: true }));
-      setPosts(prev => prev.map(p => p.id === postId
-        ? { ...p, fal_request_id: d.fal_request_id, reel_cost_aud: d.estimated_cost_aud }
-        : p));
-      pollFalStatus(postId, d.fal_request_id);
-    } else if (d.job_id) {
-      setVideoJobs(p => ({ ...p, [postId]: d.job_id }));
-    } else if (d.error) {
-      alert(d.message || 'Video generation failed. Check provider API keys.');
+  function calcReelCost(dur: number): number {
+    return Math.round(Math.ceil(dur / 10) * 0.56 * 100) / 100
+  }
+
+  async function generateVideo(postId: string, concept: string | null) {
+    const post = posts.find(p => p.id === postId)
+    setReelCreatorPostId(postId)
+    setReelMode('auto')
+    setReelStyle('lifestyle')
+    setReelCustomPrompt(concept || post?.reel_concept || post?.caption || '')
+    setReelSourceImage(post?.image_url || null)
+    setReelDuration(15)
+    setReelBgMusic('none')
+  }
+
+  async function submitReelGeneration() {
+    if (!reelCreatorPostId || !bid) return
+    setReelGenerating(true)
+    const post = posts.find(p => p.id === reelCreatorPostId)
+    try {
+      const res = await fetch('/api/social/generate-video', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          post_id: reelCreatorPostId,
+          business_id: bid,
+          reel_mode: reelMode,
+          reel_style: reelStyle,
+          reel_custom_prompt: reelCustomPrompt || null,
+          reel_source_image_url: reelMode === 'image' ? (reelSourceImage || post?.image_url) : null,
+          duration_seconds: reelDuration,
+          background_music: reelBgMusic,
+          voiceover_url: voiceUrls[reelCreatorPostId] || null,
+        }),
+      })
+      const d = await res.json()
+      if (d.fal_request_id) {
+        setReelPolling(prev => ({
+          ...prev,
+          [reelCreatorPostId]: {
+            requestId: d.fal_request_id,
+            modelId: d.model_id,
+            bgMusic: reelBgMusic,
+            voiceoverUrl: voiceUrls[reelCreatorPostId],
+          },
+        }))
+        setReelCreatorPostId(null)
+      } else {
+        alert(d.message || d.error || 'Generation failed')
+      }
+    } catch (e: any) {
+      alert('Network error: ' + e.message)
     }
+    setReelGenerating(false)
   }
 
   async function pollFalStatus(postId: string, requestId: string) {
     try {
-      const res = await fetch('/api/social/generate-video?request_id=' + encodeURIComponent(requestId));
+      const res = await fetch('/api/social/generate-video?fal_request_id=' + encodeURIComponent(requestId));
       const d = await res.json();
       if (d.status === 'COMPLETED') {
         setFalPolling(p => { const n = { ...p }; delete n[postId]; return n; });
@@ -561,6 +620,37 @@ export default function SocialPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [videoJobs]);
 
+  // Gap 3: Reel Creator polling effect
+  useEffect(() => {
+    if (Object.keys(reelPolling).length === 0) return
+    const interval = setInterval(async () => {
+      for (const [postId, { requestId, modelId, bgMusic, voiceoverUrl }] of Object.entries(reelPolling)) {
+        try {
+          const params = new URLSearchParams({
+            fal_request_id: requestId,
+            model_id: modelId,
+            post_id: postId,
+            business_id: bid ?? '',
+            background_music: bgMusic,
+          })
+          if (voiceoverUrl) params.set('voiceover_url', voiceoverUrl)
+          const res = await fetch('/api/social/generate-video?' + params)
+          const d = await res.json()
+          if (d.status === 'COMPLETED') {
+            setPosts(prev => prev.map(p => p.id === postId
+              ? { ...p, video_url: d.video_url, post_type: 'reel' } : p))
+            setReelPolling(prev => { const n = {...prev}; delete n[postId]; return n })
+          } else if (d.status === 'FAILED') {
+            setReelPolling(prev => { const n = {...prev}; delete n[postId]; return n })
+            alert('Reel generation failed. Please try again.')
+          }
+        } catch {}
+      }
+    }, 5000)
+    return () => clearInterval(interval)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reelPolling, bid])
+
   async function generateVoiceover(postId: string) {
     if (!voiceText.trim()) return;
     setVoiceGenerating(true);
@@ -591,6 +681,25 @@ export default function SocialPage() {
         <h1 style={{ fontSize: 24, fontWeight: 800, color: C.text, marginBottom: 6 }}>Social Media Manager</h1>
         <p style={{ fontSize: 14, color: C.muted }}>{INDUSTRY_SUBTITLE[industry] || INDUSTRY_SUBTITLE.retail}</p>
       </div>
+
+      {/* Gap 5 — Token expiry banners */}
+      {tokenWarnings.map(w => (
+        <div key={w.platform} style={{
+          background: w.expired ? 'rgba(239,68,68,0.1)' : 'rgba(251,191,36,0.1)',
+          border: '1px solid ' + (w.expired ? 'rgba(239,68,68,0.3)' : 'rgba(251,191,36,0.3)'),
+          borderRadius: 10, padding: '10px 16px', marginBottom: 12,
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        }}>
+          <span style={{ fontSize: 13, color: w.expired ? '#EF4444' : '#F59E0B', fontWeight: 600 }}>
+            {w.expired
+              ? ('⚠ Your ' + w.platform + ' connection has expired — posts will fail until you reconnect')
+              : ('⚠ Your ' + w.platform + ' connection expires in ' + w.expires_in_days + ' days — reconnect soon')}
+          </span>
+          <a href="/dashboard/social" style={{ fontSize: 12, color: '#7FB897', fontWeight: 700, textDecoration: 'none' }}>
+            Reconnect →
+          </a>
+        </div>
+      ))}
 
       {/* Phase 6 — Aria Community channel banner */}
       <div style={{ background: 'rgba(127,184,151,0.06)', border: '1px solid rgba(127,184,151,0.25)', borderRadius: 12, padding: '12px 16px', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
@@ -849,6 +958,30 @@ export default function SocialPage() {
                   </div>
                 </div>
               </div>
+
+              {/* Gap 7: Reel performance + billing */}
+              <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 12, padding: '14px 18px', marginBottom: 20 }}>
+                <p style={{ fontSize: 12, fontWeight: 700, marginBottom: 10 }}>Reel vs Image performance</p>
+                <div style={{ display: 'flex', gap: 12, marginBottom: 12 }}>
+                  {[
+                    { label: 'Reels (30d)', value: posts.filter(p => (p as any).post_type === 'reel' && p.status === 'published').length, color: '#F59E0B' },
+                    { label: 'Image posts', value: posts.filter(p => (p as any).post_type !== 'reel' && p.status === 'published').length, color: '#60A5FA' },
+                    { label: 'Stories posted', value: posts.filter(p => (p as any).post_type === 'story').length, color: '#A78BFA' },
+                  ].map(s => (
+                    <div key={s.label} style={{ flex: 1, background: 'rgba(255,255,255,0.03)', borderRadius: 10, padding: '10px 12px' }}>
+                      <p style={{ fontSize: 10, color: C.muted, marginBottom: 4 }}>{s.label}</p>
+                      <p style={{ fontSize: 20, fontWeight: 700, color: s.color }}>{s.value}</p>
+                    </div>
+                  ))}
+                </div>
+                {reelBillingThisMonth && (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.2)', borderRadius: 8 }}>
+                    <span style={{ fontSize: 12, color: '#F59E0B' }}>Reel generation cost this month</span>
+                    <span style={{ fontSize: 14, fontWeight: 700, color: '#F59E0B' }}>${reelBillingThisMonth.total_cost_aud.toFixed(2)} AUD ({reelBillingThisMonth.reel_count} reels)</span>
+                  </div>
+                )}
+              </div>
+
               {bid && socialTab !== 'best-times' && (
                 <div style={{ marginTop: 20 }}>
                   <p style={{ fontSize: 11, color: C.muted, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Best times to post</p>
@@ -1212,16 +1345,22 @@ export default function SocialPage() {
                       style={{ padding: '5px 12px', borderRadius: 7, border: ('1px solid ' + C.violet + '40'), background: (C.violet + '10'), color: C.violet, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', opacity: imgGenerating[post.id] ? 0.6 : 1 }}>
                       {imgGenerating[post.id] ? '⏳ Generating…' : '🖼 Generate Image'}
                     </button>
-                    {/* Video / Reel generation — fal.ai Kling 2.1 primary */}
-                    {falPolling[post.id] ? (
-                      <span style={{ fontSize: 11, padding: '5px 12px', borderRadius: 7, border: ('1px solid ' + C.blue + '40'), background: (C.blue + '10'), color: C.blue }}>
-                        ⏳ Generating Reel (~60s)…
+                    {/* Video / Reel generation — fal.ai Kling 2.1 via Reel Creator */}
+                    {reelPolling[post.id] ? (
+                      <span style={{ fontSize: 11, padding: '5px 12px', borderRadius: 7,
+                        background: 'rgba(59,130,246,0.1)', color: '#3B82F6', border: '1px solid rgba(59,130,246,0.3)' }}>
+                        ⏳ Generating Reel... (~60s)
                       </span>
                     ) : post.video_url ? (
-                      <a href={post.video_url} target="_blank" rel="noreferrer"
-                        style={{ fontSize: 11, padding: '5px 12px', borderRadius: 7, border: ('1px solid ' + C.green + '40'), background: (C.green + '10'), color: C.green, textDecoration: 'none', fontWeight: 600 }}>
-                        ▶ Watch Reel
-                      </a>
+                      <div style={{ marginTop: 4 }}>
+                        <video src={post.video_url} controls muted
+                          style={{ width: '100%', maxHeight: 200, borderRadius: 10, background: '#000', display: 'block' }} />
+                        {post.reel_cost_aud && (
+                          <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginTop: 4 }}>
+                            {'🎬 A$' + Number(post.reel_cost_aud).toFixed(2) + ' · added to ' + new Date().toLocaleString('en-AU', {month:'long'}) + ' bill'}
+                          </p>
+                        )}
+                      </div>
                     ) : videoJobs[post.id] ? (
                       <span style={{ fontSize: 11, padding: '5px 12px', borderRadius: 7, border: ('1px solid ' + C.blue + '40'), background: (C.blue + '10'), color: videoStatus[post.id]?.status === 'completed' ? C.green : C.blue }}>
                         {videoStatus[post.id]?.status === 'completed' ? '✓ Video ready' : videoStatus[post.id]?.status === 'failed' ? '✗ Failed' : '⏳ Processing…'}
@@ -1229,28 +1368,18 @@ export default function SocialPage() {
                       </span>
                     ) : !reelsEnabled ? (
                       <button onClick={() => setShowReelsModal(true)}
-                        style={{ padding: '5px 12px', borderRadius: 7, fontFamily: 'inherit', fontWeight: 600,
-                          fontSize: 11, cursor: 'pointer', background: 'rgba(251,191,36,0.08)',
-                          border: '1px solid rgba(251,191,36,0.25)', color: '#F59E0B' }}>
-                        🎬 Enable Reels
+                        style={{ padding: '5px 12px', borderRadius: 7, border: '1px solid rgba(251,191,36,0.3)',
+                          background: 'rgba(251,191,36,0.08)', color: '#F59E0B', fontSize: 11, fontWeight: 600,
+                          cursor: 'pointer', fontFamily: 'inherit' }}>
+                        🎬 Enable Reels (Add-on)
                       </button>
                     ) : (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <select
-                          value={reelDurations[post.id] || 10}
-                          onChange={e => setReelDurations(p => ({ ...p, [post.id]: Number(e.target.value) }))}
-                          style={{ fontSize: 11, padding: '4px 8px', borderRadius: 6,
-                            background: 'rgba(59,130,246,0.08)', border: ('1px solid ' + C.blue + '40'),
-                            color: C.blue, fontFamily: 'inherit', cursor: 'pointer' }}>
-                          <option value={10}>10s — ${calcReelCostDisplay(10)}</option>
-                          <option value={15}>15s — ${calcReelCostDisplay(15)}</option>
-                          <option value={30}>30s — ${calcReelCostDisplay(30)}</option>
-                        </select>
-                        <button onClick={() => generateVideo(post.id, post.reel_concept, reelDurations[post.id] || 10)}
-                          style={{ padding: '5px 12px', borderRadius: 7, border: ('1px solid ' + C.blue + '40'), background: (C.blue + '10'), color: C.blue, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
-                          🎬 Generate Reel
-                        </button>
-                      </div>
+                      <button onClick={() => generateVideo(post.id, (post as any).reel_concept)}
+                        style={{ padding: '5px 12px', borderRadius: 7, border: '1px solid rgba(59,130,246,0.4)',
+                          background: 'rgba(59,130,246,0.1)', color: '#3B82F6', fontSize: 11, fontWeight: 600,
+                          cursor: 'pointer', fontFamily: 'inherit' }}>
+                        🎬 Create Reel
+                      </button>
                     )}
                     {/* Story button — Instagram and Facebook only */}
                     {post.image_url && post.post_type !== 'story'
@@ -1419,6 +1548,113 @@ export default function SocialPage() {
         )}
       </section>
     </div>
+      )}
+
+      {/* ── Reel Creator Panel (Gap 3) ────────────────────────────────── */}
+      {reelCreatorPostId && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 9998, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}
+          onClick={() => !reelGenerating && setReelCreatorPostId(null)}>
+          <div onClick={e => e.stopPropagation()} style={{ background: '#0f1117', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '20px 20px 0 0', padding: '24px 24px 32px', width: '100%', maxWidth: 560, maxHeight: '90vh', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
+              <p style={{ fontSize: 16, fontWeight: 800, color: '#fff' }}>Create Reel</p>
+              <button onClick={() => !reelGenerating && setReelCreatorPostId(null)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', fontSize: 20, cursor: 'pointer', lineHeight: 1 }}>&times;</button>
+            </div>
+
+            {/* Mode tabs */}
+            <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
+              {([['auto', 'Auto'], ['image', 'From image'], ['text', 'Text prompt']] as const).map(([v, l]) => (
+                <button key={v} onClick={() => setReelMode(v)}
+                  style={{ flex: 1, padding: '8px 0', borderRadius: 9, border: 'none', background: reelMode === v ? 'rgba(245,158,11,0.2)' : 'rgba(255,255,255,0.05)', color: reelMode === v ? '#F59E0B' : 'rgba(255,255,255,0.5)', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                  {l}
+                </button>
+              ))}
+            </div>
+
+            {/* Style presets */}
+            <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Style</p>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6, marginBottom: 16 }}>
+              {([
+                ['lifestyle', 'Lifestyle'],
+                ['product_showcase', 'Product'],
+                ['behind_scenes', 'Behind scenes'],
+                ['flash_sale', 'Flash sale'],
+                ['testimonial', 'Testimonial'],
+                ['day_in_life', 'Day in life'],
+              ] as const).map(([v, l]) => (
+                <button key={v} onClick={() => setReelStyle(v)}
+                  style={{ padding: '7px 0', borderRadius: 8, border: reelStyle === v ? '1px solid rgba(245,158,11,0.5)' : '1px solid rgba(255,255,255,0.08)', background: reelStyle === v ? 'rgba(245,158,11,0.12)' : 'rgba(255,255,255,0.03)', color: reelStyle === v ? '#F59E0B' : 'rgba(255,255,255,0.55)', fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+                  {l}
+                </button>
+              ))}
+            </div>
+
+            {/* Image source (for 'image' mode) */}
+            {reelMode === 'image' && (
+              <div style={{ marginBottom: 16 }}>
+                <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Source image</p>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {posts.find(p => p.id === reelCreatorPostId)?.image_url && (
+                    <button onClick={() => setReelSourceImage(posts.find(p => p.id === reelCreatorPostId)?.image_url || null)}
+                      style={{ padding: '6px 12px', borderRadius: 8, border: reelSourceImage === posts.find(p => p.id === reelCreatorPostId)?.image_url ? '1px solid rgba(127,184,151,0.6)' : '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: 'rgba(255,255,255,0.7)', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>
+                      Post image
+                    </button>
+                  )}
+                  {assetLibrary.slice(0, 5).map(a => (
+                    <button key={a.id} onClick={() => setReelSourceImage(a.url)}
+                      style={{ padding: '6px 12px', borderRadius: 8, border: reelSourceImage === a.url ? '1px solid rgba(127,184,151,0.6)' : '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: 'rgba(255,255,255,0.7)', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>
+                      {a.name.slice(0, 14)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Custom scene prompt */}
+            <div style={{ marginBottom: 16 }}>
+              <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Scene / concept (optional)</p>
+              <textarea value={reelCustomPrompt} onChange={e => setReelCustomPrompt(e.target.value)} rows={3}
+                placeholder="Describe the scene, product, or mood you want…"
+                style={{ width: '100%', padding: '10px 12px', borderRadius: 10, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', fontSize: 13, fontFamily: 'inherit', resize: 'vertical', outline: 'none' }} />
+            </div>
+
+            {/* Duration + music */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
+              <div>
+                <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Duration</p>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  {([10, 15, 30] as const).map(d => (
+                    <button key={d} onClick={() => setReelDuration(d)}
+                      style={{ flex: 1, padding: '7px 0', borderRadius: 8, border: reelDuration === d ? '1px solid rgba(245,158,11,0.5)' : '1px solid rgba(255,255,255,0.08)', background: reelDuration === d ? 'rgba(245,158,11,0.12)' : 'rgba(255,255,255,0.03)', color: reelDuration === d ? '#F59E0B' : 'rgba(255,255,255,0.5)', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                      {d}s
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Background music</p>
+                <select value={reelBgMusic} onChange={e => setReelBgMusic(e.target.value)}
+                  style={{ width: '100%', padding: '8px 10px', borderRadius: 8, background: '#1a1a2e', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', fontSize: 12, fontFamily: 'inherit' }}>
+                  <option value="none">None</option>
+                  <option value="upbeat">Upbeat</option>
+                  <option value="warm">Warm</option>
+                  <option value="minimal">Minimal</option>
+                  <option value="energetic">Energetic</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Cost estimate + generate */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.2)', borderRadius: 10, marginBottom: 16 }}>
+              <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>Estimated cost</span>
+              <span style={{ fontSize: 14, fontWeight: 700, color: '#F59E0B' }}>${calcReelCostDisplay(reelDuration)} AUD</span>
+            </div>
+
+            <button onClick={submitReelGeneration} disabled={reelGenerating}
+              style={{ width: '100%', padding: '13px', borderRadius: 12, border: 'none', background: reelGenerating ? 'rgba(245,158,11,0.4)' : '#F59E0B', color: '#0f1117', fontSize: 15, fontWeight: 800, cursor: reelGenerating ? 'wait' : 'pointer', fontFamily: 'inherit' }}>
+              {reelGenerating ? '⏳ Generating…' : ('Generate Reel — $' + calcReelCostDisplay(reelDuration) + ' AUD')}
+            </button>
+          </div>
+        </div>
       )}
 
       {/* ── Reels Addon Modal ──────────────────────────────────────────── */}

@@ -280,6 +280,34 @@ async function _POST(req: Request) {
       const gbData = await gbRes.json();
       if (gbData.error) throw new Error(JSON.stringify(gbData.error));
       platformPostId = gbData.name || null;
+
+    } else if (post.platform === 'tiktok') {
+      const videoUrl = (post as any).video_url as string | null;
+      if (!videoUrl) throw new Error('TikTok requires a video_url (Reel)');
+      const initRes = await fetch('https://open.tiktokapis.com/v2/post/publish/video/init/', {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer ' + conn.access_token,
+          'Content-Type': 'application/json; charset=UTF-8',
+        },
+        body: JSON.stringify({
+          post_info: {
+            title: fullCaption.slice(0, 150),
+            privacy_level: 'PUBLIC_TO_EVERYONE',
+            disable_duet: false,
+            disable_comment: false,
+            disable_stitch: false,
+            video_cover_timestamp_ms: 1000,
+          },
+          source_info: {
+            source: 'PULL_FROM_URL',
+            video_url: videoUrl,
+          },
+        }),
+      });
+      const initData = await initRes.json();
+      if (initData.error?.code !== 'ok') throw new Error(initData.error?.message ?? 'TikTok init failed');
+      platformPostId = initData.data?.publish_id ?? null;
     }
   } catch (err: any) {
     publishError = err.message;

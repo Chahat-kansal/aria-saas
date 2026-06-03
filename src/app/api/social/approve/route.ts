@@ -19,6 +19,7 @@ async function _POST(req: Request) {
 
   const updates: Record<string, any> = {
     status: 'approved',
+    approval_status: 'approved',
     approved_at: new Date().toISOString(),
   };
   if (edited_caption !== undefined) updates.caption = edited_caption;

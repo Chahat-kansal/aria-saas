@@ -97,5 +97,50 @@ export async function GET(req: Request) {
     }
   }
 
+  // Gap 8: Update hashtag performance stats
+  const publishedWithHashtags = await supabase
+    .from('social_posts')
+    .select('id, business_id, hashtags, engagement_data')
+    .eq('status', 'published')
+    .not('hashtags', 'eq', '{}')
+    .gte('published_at', cutoff.toISOString())
+    .limit(100)
+
+  for (const post of publishedWithHashtags.data ?? []) {
+    if (!post.hashtags?.length || !post.engagement_data) continue
+    const reach = (post.engagement_data as any).reach ?? (post.engagement_data as any).post_impressions ?? 0
+    const likes = (post.engagement_data as any).likes ?? (post.engagement_data as any).post_engaged_users ?? 0
+    if (!reach) continue
+
+    for (const tag of post.hashtags as string[]) {
+      const cleanTag = tag.replace(/^#+/, '')
+      await supabase.from('social_hashtag_stats').upsert({
+        business_id: post.business_id,
+        hashtag: cleanTag,
+        avg_reach: reach,
+        avg_likes: likes,
+        usage_count: 1,
+        last_used_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'business_id,hashtag' })
+      try {
+        await supabase.rpc('increment_hashtag_usage', {
+          p_business_id: post.business_id,
+          p_hashtag: cleanTag,
+          p_reach: reach,
+          p_likes: likes,
+        })
+      } catch { /* ignore */ }
+    }
+  }
+
+  // Gap 12: Mark expired stories
+  await supabase.from('social_posts')
+    .update({ status: 'expired' as any })
+    .eq('post_type', 'story')
+    .lt('story_expires_at', new Date().toISOString())
+    .not('status', 'eq', 'expired')
+    .then(() => {})
+
   return NextResponse.json({ ok: true, synced, failed, total: posts.length })
 }
