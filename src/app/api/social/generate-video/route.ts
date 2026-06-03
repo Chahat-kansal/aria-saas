@@ -134,7 +134,16 @@ async function _POST(req: NextRequest) {
   }
   if (sourceImageUrl) falInput.image_url = sourceImageUrl
 
-  const submitResult = await fal.queue.submit(modelId as any, { input: falInput })
+  let submitResult: any
+  try {
+    submitResult = await fal.queue.submit(modelId as any, { input: falInput })
+  } catch (falErr: any) {
+    console.error('[generate-video] fal.queue.submit failed:', falErr?.message ?? falErr, 'model:', modelId, 'FAL_KEY set:', !!process.env.FAL_KEY)
+    return NextResponse.json({
+      error: 'video_generation_failed',
+      message: falErr?.message ?? 'Video generation service error — check FAL_KEY',
+    }, { status: 502 })
+  }
   const request_id = (submitResult as any).request_id as string
 
   if (post_id) {
