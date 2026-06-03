@@ -34,7 +34,7 @@ async function _POST(req: Request) {
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const { post_id, business_id } = await req.json();
+  const { post_id, business_id, post_type_override } = await req.json();
   if (!post_id || !business_id) return NextResponse.json({ error: 'post_id and business_id required' }, { status: 400 });
 
   const { data: biz } = await supabase.from('businesses').select('id')
@@ -46,6 +46,8 @@ async function _POST(req: Request) {
   if (!post) return NextResponse.json({ error: 'Post not found' }, { status: 404 });
   // Allow publishing draft or approved posts — both are valid
   if (post.status === 'published') return NextResponse.json({ error: 'Already published' }, { status: 400 });
+
+  const effectivePostType = (post_type_override || (post as any).post_type || 'image') as string;
 
   const { data: conn } = await supabase.from('social_connections').select('*')
     .eq('business_id', business_id).eq('platform', post.platform).maybeSingle();
@@ -60,9 +62,59 @@ async function _POST(req: Request) {
 
   try {
     if (post.platform === 'facebook') {
+      const videoUrl = (post as any).video_url as string | null;
+      if (effectivePostType === 'reel' && videoUrl) {
+        // ── Facebook Reels ──────────────────────────────────────────────────
+        const initRes = await fetch(
+          'https://graph.facebook.com/v19.0/' + conn.platform_page_id + '/video_reels',
+          {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ upload_phase: 'start', access_token: conn.access_token }),
+          }
+        );
+        const initData = await initRes.json();
+        if (initData.error) throw new Error(initData.error.message);
+        const { video_id, upload_url } = initData;
+        if (!video_id || !upload_url) throw new Error('Facebook Reels: no video_id or upload_url from start');
+        const videoRes = await fetch(videoUrl);
+        if (!videoRes.ok) throw new Error('Could not fetch reel video: ' + videoRes.status);
+        const videoBuffer = await videoRes.arrayBuffer();
+        await fetch(upload_url, {
+          method: 'POST',
+          headers: { Authorization: 'OAuth ' + conn.access_token, 'Content-Type': 'video/mp4' },
+          body: videoBuffer,
+        });
+        const finishRes = await fetch(
+          'https://graph.facebook.com/v19.0/' + conn.platform_page_id + '/video_reels',
+          {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              video_id, upload_phase: 'finish', video_state: 'PUBLISHED',
+              description: fullCaption, access_token: conn.access_token,
+            }),
+          }
+        );
+        const finishData = await finishRes.json();
+        if (finishData.error) throw new Error(finishData.error.message);
+        platformPostId = video_id || null;
+      } else if (effectivePostType === 'story') {
+        // ── Facebook Stories ────────────────────────────────────────────────
+        if (!post.image_url) throw new Error('Facebook Story requires an image_url');
+        const storyRes = await fetch(
+          'https://graph.facebook.com/v19.0/' + conn.platform_page_id + '/photo_stories',
+          {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url: post.image_url, access_token: conn.access_token }),
+          }
+        );
+        const storyData = await storyRes.json();
+        if (storyData.error) throw new Error(storyData.error.message);
+        platformPostId = storyData.post_id || null;
+      } else {
+        // ── Standard Facebook image / text ──────────────────────────────────
       const fbUrl = post.image_url
-        ? `https://graph.facebook.com/v19.0/${conn.platform_page_id}/photos`
-        : `https://graph.facebook.com/v19.0/${conn.platform_page_id}/feed`;
+        ? 'https://graph.facebook.com/v19.0/' + conn.platform_page_id + '/photos'
+        : 'https://graph.facebook.com/v19.0/' + conn.platform_page_id + '/feed';
       const fbBody = post.image_url
         ? { caption: fullCaption, url: post.image_url, access_token: conn.access_token }
         : { message: fullCaption, access_token: conn.access_token };
@@ -73,10 +125,77 @@ async function _POST(req: Request) {
       const fbData = await fbRes.json();
       if (fbData.error) throw new Error(fbData.error.message);
       platformPostId = fbData.post_id || fbData.id || null;
+      }
 
     } else if (post.platform === 'instagram') {
       const videoUrl = (post as any).video_url as string | null;
-      const isReel = !!videoUrl;
+      const isReel = !!videoUrl && effectivePostType !== 'story';
+
+      if (effectivePostType === 'story') {
+        // ── Instagram Story (image or video) ─────────────────────────────
+        if (videoUrl) {
+          // Video story — use STORIES media_type
+          const containerRes = await fetch(
+            'https://graph.facebook.com/v19.0/' + conn.instagram_account_id + '/media',
+            {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                media_type: 'STORIES',
+                video_url: videoUrl,
+                access_token: conn.access_token,
+              }),
+            }
+          );
+          const { id: creationId, error: cErr } = await containerRes.json();
+          if (cErr) throw new Error(cErr.message);
+          if (!creationId) throw new Error('No creation_id from Instagram Stories container');
+          // Poll until FINISHED
+          let ready = false;
+          for (let attempt = 0; attempt < 12; attempt++) {
+            await new Promise(r => setTimeout(r, 5000));
+            const statusRes = await fetch(
+              'https://graph.facebook.com/v19.0/' + creationId + '?fields=status_code&access_token=' + conn.access_token
+            );
+            const statusData = await statusRes.json();
+            if (statusData.status_code === 'FINISHED') { ready = true; break; }
+            if (statusData.status_code === 'ERROR') throw new Error('Instagram Story video processing failed');
+          }
+          if (!ready) throw new Error('Instagram Story container timed out');
+          const publishRes = await fetch(
+            'https://graph.facebook.com/v19.0/' + conn.instagram_account_id + '/media_publish',
+            {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ creation_id: creationId, access_token: conn.access_token }),
+            }
+          );
+          const pubData = await publishRes.json();
+          if (pubData.error) throw new Error(pubData.error.message);
+          platformPostId = pubData.id || null;
+        } else {
+          // Image story — no media_type needed, just image_url
+          if (!post.image_url) throw new Error('Instagram Story requires an image_url or video_url');
+          const safeUrl = await ensurePublicImageUrl(post.image_url, post.id);
+          const containerRes = await fetch(
+            'https://graph.facebook.com/v19.0/' + conn.instagram_account_id + '/media',
+            {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ image_url: safeUrl, access_token: conn.access_token }),
+            }
+          );
+          const { id: creationId, error: cErr } = await containerRes.json();
+          if (cErr) throw new Error(cErr.message);
+          const publishRes = await fetch(
+            'https://graph.facebook.com/v19.0/' + conn.instagram_account_id + '/media_publish',
+            {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ creation_id: creationId, access_token: conn.access_token }),
+            }
+          );
+          const pubData = await publishRes.json();
+          if (pubData.error) throw new Error(pubData.error.message);
+          platformPostId = pubData.id || null;
+        }
+      } else
 
       if (isReel) {
         // ── Instagram Reels via video_url ──────────────────────────────
@@ -167,10 +286,15 @@ async function _POST(req: Request) {
     console.error('[social/publish] platform error:', post.platform, err.message);
   }
 
+  const storyExpiry = (!publishError && effectivePostType === 'story')
+    ? new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+    : null;
+
   await supabase.from('social_posts').update({
     status: publishError ? 'failed' : 'published',
     published_at: publishError ? null : new Date().toISOString(),
     platform_post_id: platformPostId,
+    ...(storyExpiry ? { story_expires_at: storyExpiry } : {}),
   }).eq('id', post_id);
 
   if (publishError) {

@@ -6,7 +6,7 @@ import { BestTimesHeatmap } from '@/components/dashboard/social/BestTimesHeatmap
 
 const C = { bg: 'var(--bg-base)', card: 'var(--bg-surface)', border: 'transparent', text: '#F0F4FF', muted: 'var(--text-secondary)', dim: 'var(--text-tertiary)', violet: '#8B5CF6', green: '#22C55E', red: '#EF4444', amber: '#F59E0B', blue: '#3B82F6' };
 
-interface SocialPost { id: string; platform: string; status: string; caption: string; hashtags: string[]; image_url: string | null; image_prompt: string | null; image_credit: string | null; scheduled_for: string | null; published_at: string | null; aria_reasoning: string | null; industry_context: string | null; reel_concept: string | null; reel_script: string | null; content_calendar_month: string | null; created_at: string; }
+interface SocialPost { id: string; platform: string; status: string; caption: string; hashtags: string[]; image_url: string | null; image_prompt: string | null; image_credit: string | null; scheduled_for: string | null; published_at: string | null; aria_reasoning: string | null; industry_context: string | null; reel_concept: string | null; reel_script: string | null; content_calendar_month: string | null; created_at: string; video_url: string | null; post_type: string | null; fal_request_id: string | null; reel_cost_aud: number | null; reel_duration_seconds: number | null; }
 interface Providers { image: { stability_ai: boolean; dalle3: boolean; unsplash: boolean }; video: { runway: boolean; replicate: boolean }; voiceover: { elevenlabs: boolean } }
 interface SocialConn { id: string; platform: string; platform_account_name: string | null; is_active: boolean; }
 interface Prefs { brand_voice: string; post_frequency: string; auto_hashtags: string[]; topics_to_avoid: string | null; target_audience: string | null; business_tagline: string | null; }
@@ -19,59 +19,6 @@ function PlatformBadge({ platform }: { platform: string }) {
     <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 99, background: ((PLATFORM_COLORS[platform] || '#666') + '20'), color: PLATFORM_COLORS[platform] || '#aaa', fontWeight: 700, border: ('1px solid ' + (PLATFORM_COLORS[platform] || '#666') + '40') }}>
       {PLATFORM_ICONS[platform]} {platform.replace('_', ' ')}
     </span>
-
-      {/* ── Reels Addon Modal ──────────────────────────────────────────── */}
-      {showReelsModal && (
-        <div style={{
-          position: 'fixed', inset: 0, zIndex: 9999,
-          background: 'rgba(0,0,0,0.75)', display: 'flex',
-          alignItems: 'center', justifyContent: 'center', padding: 24,
-        }} onClick={() => setShowReelsModal(false)}>
-          <div onClick={e => e.stopPropagation()} style={{
-            background: 'var(--bg-surface)', border: '1px solid rgba(251,191,36,0.25)',
-            borderRadius: 18, padding: '32px 28px', maxWidth: 460, width: '100%',
-          }}>
-            <div style={{ fontSize: 28, marginBottom: 12 }}>🎬</div>
-            <h2 style={{ fontSize: 20, fontWeight: 800, margin: '0 0 10px', color: 'var(--text-primary)' }}>
-              AI Reels — Add-on Feature
-            </h2>
-            <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.7, marginBottom: 20 }}>
-              Aria can automatically generate short video Reels for your Instagram and Facebook using Google Veo AI — featuring your top products and real sales data.
-            </p>
-            <div style={{ background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.2)',
-              borderRadius: 12, padding: '14px 16px', marginBottom: 24 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: '#F59E0B', marginBottom: 8 }}>
-                ⚡ What this costs
-              </div>
-              <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.8 }}>
-                • Each AI Reel costs approximately <strong style={{ color: 'var(--text-primary)' }}>$0.50–$1.00 AUD</strong> in video generation fees<br/>
-                • Charged per Reel generated — you only pay when you use it<br/>
-                • Added to your monthly Aria invoice<br/>
-                • You can disable this at any time in Social Settings
-              </div>
-            </div>
-            <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginBottom: 24, lineHeight: 1.6 }}>
-              By clicking Enable, you confirm you understand that AI Reel generation incurs additional charges per video generated, billed monthly. You can turn this off at any time.
-            </div>
-            <div style={{ display: 'flex', gap: 10 }}>
-              <button onClick={() => setShowReelsModal(false)}
-                style={{ flex: 1, padding: '11px 0', borderRadius: 10, fontFamily: 'inherit',
-                  fontWeight: 700, fontSize: 14, cursor: 'pointer',
-                  background: 'transparent', border: '1px solid rgba(255,255,255,0.1)',
-                  color: 'var(--text-secondary)' }}>
-                Cancel
-              </button>
-              <button onClick={enableReels} disabled={reelsLoading}
-                style={{ flex: 2, padding: '11px 0', borderRadius: 10, fontFamily: 'inherit',
-                  fontWeight: 700, fontSize: 14, cursor: reelsLoading ? 'wait' : 'pointer',
-                  background: 'rgba(251,191,36,0.15)', border: '1px solid rgba(251,191,36,0.4)',
-                  color: '#F59E0B' }}>
-                {reelsLoading ? 'Enabling…' : '✓ Enable AI Reels — I understand the cost'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
   );
 }
 
@@ -184,6 +131,9 @@ export default function SocialPage() {
   const [imgGenerating, setImgGenerating] = useState<Record<string, boolean>>({});
   const [videoJobs, setVideoJobs] = useState<Record<string, string>>({});
   const [videoStatus, setVideoStatus] = useState<Record<string, { status: string; url?: string }>>({});
+  const [reelDurations, setReelDurations] = useState<Record<string, number>>({});
+  const [falPolling, setFalPolling] = useState<Record<string, boolean>>({});
+  const [storyPosting, setStoryPosting] = useState<Record<string, boolean>>({});
   const [publishing, setPublishing] = useState<Record<string, boolean>>({});
   const [publishToast, setPublishToast] = useState<{ id: string; ok: boolean; msg: string } | null>(null);
   // Phase 6 cross-posting: per-post checkbox to also mirror to Aria Community
@@ -523,23 +473,84 @@ export default function SocialPage() {
     setImgGenerating(p => { const n = { ...p }; delete n[postId]; return n; });
   }
 
-  async function generateVideo(postId: string, concept: string | null) {
+  function calcReelCostDisplay(durationSeconds: number): string {
+    const clips = Math.ceil(durationSeconds / 10);
+    const costPerClip = 0.28 + 5 * 0.056;
+    return (Math.round(clips * costPerClip * 100) / 100).toFixed(2);
+  }
+
+  async function generateVideo(postId: string, concept: string | null, durationSeconds = 10) {
     const post = posts.find(p => p.id === postId);
     const prompt = concept || post?.reel_concept || post?.caption || '';
     const res = await fetch('/api/social/generate-video', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt, image_url: post?.image_url, business_id: bid, post_id: postId }),
+      body: JSON.stringify({
+        prompt, image_url: post?.image_url, business_id: bid, post_id: postId,
+        duration_seconds: durationSeconds,
+      }),
     });
     const d = await res.json();
-    if (d.job_id) setVideoJobs(p => ({ ...p, [postId]: d.job_id }));
-    else if (d.error) alert(d.message || 'Video generation failed. Check your Runway API key.');
+    if (d.fal_request_id) {
+      setFalPolling(p => ({ ...p, [postId]: true }));
+      setPosts(prev => prev.map(p => p.id === postId
+        ? { ...p, fal_request_id: d.fal_request_id, reel_cost_aud: d.estimated_cost_aud }
+        : p));
+      pollFalStatus(postId, d.fal_request_id);
+    } else if (d.job_id) {
+      setVideoJobs(p => ({ ...p, [postId]: d.job_id }));
+    } else if (d.error) {
+      alert(d.message || 'Video generation failed. Check provider API keys.');
+    }
+  }
+
+  async function pollFalStatus(postId: string, requestId: string) {
+    try {
+      const res = await fetch('/api/social/generate-video?request_id=' + encodeURIComponent(requestId));
+      const d = await res.json();
+      if (d.status === 'COMPLETED') {
+        setFalPolling(p => { const n = { ...p }; delete n[postId]; return n; });
+        if (d.video_url) setPosts(prev => prev.map(p => p.id === postId ? { ...p, video_url: d.video_url } : p));
+      } else if (d.status === 'FAILED' || d.status === 'error') {
+        setFalPolling(p => { const n = { ...p }; delete n[postId]; return n; });
+      } else {
+        setTimeout(() => pollFalStatus(postId, requestId), 5000);
+      }
+    } catch {
+      setTimeout(() => pollFalStatus(postId, requestId), 5000);
+    }
   }
 
   async function pollVideoStatus(postId: string, jobId: string) {
-    const res = await fetch(`/api/social/video-status?job_id=${encodeURIComponent(jobId)}`);
+    const res = await fetch('/api/social/video-status?job_id=' + encodeURIComponent(jobId));
     const d = await res.json();
     setVideoStatus(p => ({ ...p, [postId]: d }));
     if (d.status === 'processing') setTimeout(() => pollVideoStatus(postId, jobId), 5000);
+  }
+
+  async function publishAsStory(postId: string) {
+    if (!bid) return;
+    setStoryPosting(p => ({ ...p, [postId]: true }));
+    try {
+      const res = await fetch('/api/social/publish', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ post_id: postId, business_id: bid, post_type_override: 'story' }),
+      });
+      const d = await res.json();
+      if (d.ok) {
+        setPosts(prev => prev.map(p =>
+          p.id === postId ? { ...p, status: 'published', post_type: 'story', published_at: new Date().toISOString() } : p
+        ));
+        setPublishToast({ id: postId, ok: true, msg: 'Story posted! Expires in 24h.' });
+      } else {
+        setPublishToast({ id: postId, ok: false, msg: d.error || 'Failed to post story' });
+      }
+    } catch {
+      setPublishToast({ id: postId, ok: false, msg: 'Network error posting story' });
+    } finally {
+      setStoryPosting(p => { const n = { ...p }; delete n[postId]; return n; });
+      setTimeout(() => setPublishToast(null), 5000);
+    }
   }
 
   // Start polling when a video job is created
@@ -1025,7 +1036,7 @@ export default function SocialPage() {
               flexShrink: 0, whiteSpace: 'nowrap',
             }}
           >
-            {growthLoading ? '✨ Generating…' : connectedPlatforms.length === 0 ? 'Connect Instagram first' : '✦ Generate this week's post'}
+            {growthLoading ? '✨ Generating…' : connectedPlatforms.length === 0 ? 'Connect Instagram first' : "❖ Generate this week’s post"}
           </button>
         </div>
       </div>
@@ -1063,8 +1074,17 @@ export default function SocialPage() {
             {draftPosts.map(post => (
               <div key={post.id} style={{ background: C.card, border: ('1px solid ' + C.border), borderRadius: 16, overflow: 'hidden' }}>
                 <div style={{ padding: '16px 20px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-                    <PlatformBadge platform={post.platform} />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'space-between', marginBottom: 12 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <PlatformBadge platform={post.platform} />
+                      {post.post_type && post.post_type !== 'image' && (
+                        <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 99,
+                          background: post.post_type === 'reel' ? 'rgba(59,130,246,0.15)' : 'rgba(139,92,246,0.15)',
+                          color: post.post_type === 'reel' ? C.blue : C.violet, fontWeight: 700 }}>
+                          {post.post_type === 'reel' ? '🎬 Reel' : '⏱ Story (24h)'}
+                        </span>
+                      )}
+                    </div>
                     {post.scheduled_for && (
                       <span style={{ fontSize: 11, color: C.dim }}>
                         Scheduled: {new Date(post.scheduled_for).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
@@ -1145,6 +1165,14 @@ export default function SocialPage() {
                     </div>
                   )}
 
+                  {/* Reel cost badge */}
+                  {post.reel_cost_aud && (
+                    <div style={{ fontSize: 12, color: C.blue, marginBottom: 8, padding: '4px 10px',
+                      background: 'rgba(59,130,246,0.08)', borderRadius: 8, display: 'inline-block' }}>
+                      🎬 Reel · ${post.reel_cost_aud.toFixed(2)} AUD · added to monthly bill
+                    </div>
+                  )}
+
                   {/* Actions */}
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                     {editingId === post.id ? (
@@ -1184,28 +1212,60 @@ export default function SocialPage() {
                       style={{ padding: '5px 12px', borderRadius: 7, border: ('1px solid ' + C.violet + '40'), background: (C.violet + '10'), color: C.violet, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', opacity: imgGenerating[post.id] ? 0.6 : 1 }}>
                       {imgGenerating[post.id] ? '⏳ Generating…' : '🖼 Generate Image'}
                     </button>
-                    {providers?.video.runway || providers?.video.replicate ? (
-                      videoJobs[post.id] ? (
-                        <span style={{ fontSize: 11, padding: '5px 12px', borderRadius: 7, border: ('1px solid ' + C.blue + '40'), background: (C.blue + '10'), color: videoStatus[post.id]?.status === 'completed' ? C.green : C.blue }}>
-                          {videoStatus[post.id]?.status === 'completed' ? '✓ Video ready' : videoStatus[post.id]?.status === 'failed' ? '✗ Failed' : '⏳ Processing…'}
-                          {videoStatus[post.id]?.url && <a href={videoStatus[post.id]!.url} target="_blank" rel="noreferrer" style={{ marginLeft: 6, color: C.green }}>▶ Watch</a>}
-                        </span>
-                      ) : (
-                        {!reelsEnabled ? (
-                          <button onClick={() => setShowReelsModal(true)}
-                            style={{ padding: '7px 14px', borderRadius: 8, fontFamily: 'inherit', fontWeight: 700,
-                              fontSize: 12, cursor: 'pointer', background: 'rgba(251,191,36,0.08)',
-                              border: '1px solid rgba(251,191,36,0.25)', color: '#F59E0B' }}>
-                            🎬 Enable Reels (Add-on)
-                          </button>
-                        ) : (
-                        <button onClick={() => generateVideo(post.id, post.reel_concept)}
+                    {/* Video / Reel generation — fal.ai Kling 2.1 primary */}
+                    {falPolling[post.id] ? (
+                      <span style={{ fontSize: 11, padding: '5px 12px', borderRadius: 7, border: ('1px solid ' + C.blue + '40'), background: (C.blue + '10'), color: C.blue }}>
+                        ⏳ Generating Reel (~60s)…
+                      </span>
+                    ) : post.video_url ? (
+                      <a href={post.video_url} target="_blank" rel="noreferrer"
+                        style={{ fontSize: 11, padding: '5px 12px', borderRadius: 7, border: ('1px solid ' + C.green + '40'), background: (C.green + '10'), color: C.green, textDecoration: 'none', fontWeight: 600 }}>
+                        ▶ Watch Reel
+                      </a>
+                    ) : videoJobs[post.id] ? (
+                      <span style={{ fontSize: 11, padding: '5px 12px', borderRadius: 7, border: ('1px solid ' + C.blue + '40'), background: (C.blue + '10'), color: videoStatus[post.id]?.status === 'completed' ? C.green : C.blue }}>
+                        {videoStatus[post.id]?.status === 'completed' ? '✓ Video ready' : videoStatus[post.id]?.status === 'failed' ? '✗ Failed' : '⏳ Processing…'}
+                        {videoStatus[post.id]?.url && <a href={videoStatus[post.id]!.url} target="_blank" rel="noreferrer" style={{ marginLeft: 6, color: C.green }}>▶ Watch</a>}
+                      </span>
+                    ) : !reelsEnabled ? (
+                      <button onClick={() => setShowReelsModal(true)}
+                        style={{ padding: '5px 12px', borderRadius: 7, fontFamily: 'inherit', fontWeight: 600,
+                          fontSize: 11, cursor: 'pointer', background: 'rgba(251,191,36,0.08)',
+                          border: '1px solid rgba(251,191,36,0.25)', color: '#F59E0B' }}>
+                        🎬 Enable Reels
+                      </button>
+                    ) : (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <select
+                          value={reelDurations[post.id] || 10}
+                          onChange={e => setReelDurations(p => ({ ...p, [post.id]: Number(e.target.value) }))}
+                          style={{ fontSize: 11, padding: '4px 8px', borderRadius: 6,
+                            background: 'rgba(59,130,246,0.08)', border: ('1px solid ' + C.blue + '40'),
+                            color: C.blue, fontFamily: 'inherit', cursor: 'pointer' }}>
+                          <option value={10}>10s — ${calcReelCostDisplay(10)}</option>
+                          <option value={15}>15s — ${calcReelCostDisplay(15)}</option>
+                          <option value={30}>30s — ${calcReelCostDisplay(30)}</option>
+                        </select>
+                        <button onClick={() => generateVideo(post.id, post.reel_concept, reelDurations[post.id] || 10)}
                           style={{ padding: '5px 12px', borderRadius: 7, border: ('1px solid ' + C.blue + '40'), background: (C.blue + '10'), color: C.blue, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
-                          🎬 Generate Video
+                          🎬 Generate Reel
                         </button>
-                        )}
-                      )
-                    ) : null}
+                      </div>
+                    )}
+                    {/* Story button — Instagram and Facebook only */}
+                    {post.image_url && post.post_type !== 'story'
+                      && (post.platform === 'instagram' || post.platform === 'facebook')
+                      && !storyPosting[post.id] && (
+                      <button onClick={() => publishAsStory(post.id)}
+                        style={{ padding: '5px 12px', borderRadius: 7, border: ('1px solid ' + C.violet + '40'),
+                          background: (C.violet + '10'), color: C.violet, fontSize: 11, fontWeight: 600,
+                          cursor: 'pointer', fontFamily: 'inherit' }}>
+                        📤 Story (24h)
+                      </button>
+                    )}
+                    {storyPosting[post.id] && (
+                      <span style={{ fontSize: 11, color: C.violet, padding: '5px 0' }}>⏳ Posting story…</span>
+                    )}
                     {providers?.voiceover.elevenlabs ? (
                       voiceUrls[post.id] ? (
                         <audio controls src={voiceUrls[post.id]} style={{ height: 28, borderRadius: 7, outline: 'none' }} />
@@ -1359,6 +1419,59 @@ export default function SocialPage() {
         )}
       </section>
     </div>
+      )}
+
+      {/* ── Reels Addon Modal ──────────────────────────────────────────── */}
+      {showReelsModal && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 9999,
+          background: 'rgba(0,0,0,0.75)', display: 'flex',
+          alignItems: 'center', justifyContent: 'center', padding: 24,
+        }} onClick={() => setShowReelsModal(false)}>
+          <div onClick={e => e.stopPropagation()} style={{
+            background: 'var(--bg-surface)', border: '1px solid rgba(251,191,36,0.25)',
+            borderRadius: 18, padding: '32px 28px', maxWidth: 460, width: '100%',
+          }}>
+            <div style={{ fontSize: 28, marginBottom: 12 }}>🎬</div>
+            <h2 style={{ fontSize: 20, fontWeight: 800, margin: '0 0 10px', color: 'var(--text-primary)' }}>
+              AI Reels — Add-on Feature
+            </h2>
+            <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.7, marginBottom: 20 }}>
+              Aria can automatically generate short video Reels for your Instagram and Facebook using fal.ai Kling 2.1 — featuring your top products and real sales data.
+            </p>
+            <div style={{ background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.2)',
+              borderRadius: 12, padding: '14px 16px', marginBottom: 24 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#F59E0B', marginBottom: 8 }}>
+                ⚡ What this costs
+              </div>
+              <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.8 }}>
+                Each AI Reel costs approximately <strong style={{ color: 'var(--text-primary)' }}>$0.56–$1.68 AUD</strong> in video generation fees.<br/>
+                Charged per Reel generated — you only pay when you use it.<br/>
+                Added to your monthly Aria invoice.<br/>
+                You can disable this at any time in Social Settings.
+              </div>
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginBottom: 24, lineHeight: 1.6 }}>
+              By clicking Enable, you confirm you understand that AI Reel generation incurs additional charges per video generated, billed monthly.
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => setShowReelsModal(false)}
+                style={{ flex: 1, padding: '11px 0', borderRadius: 10, fontFamily: 'inherit',
+                  fontWeight: 700, fontSize: 14, cursor: 'pointer',
+                  background: 'transparent', border: '1px solid rgba(255,255,255,0.1)',
+                  color: 'var(--text-secondary)' }}>
+                Cancel
+              </button>
+              <button onClick={enableReels} disabled={reelsLoading}
+                style={{ flex: 2, padding: '11px 0', borderRadius: 10, fontFamily: 'inherit',
+                  fontWeight: 700, fontSize: 14, cursor: reelsLoading ? 'wait' : 'pointer',
+                  background: 'rgba(251,191,36,0.15)', border: '1px solid rgba(251,191,36,0.4)',
+                  color: '#F59E0B' }}>
+                {reelsLoading ? 'Enabling…' : '✓ Enable AI Reels — I understand the cost'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {metricsModal && (

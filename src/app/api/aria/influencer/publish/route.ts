@@ -30,7 +30,8 @@ async function _POST(req: NextRequest) {
   if (!post) return NextResponse.json({ error: 'Post not found' }, { status: 404 })
   if (post.status === 'published') return NextResponse.json({ error: 'Already published' }, { status: 400 })
   if (post.status !== 'approved') return NextResponse.json({ error: 'Post must be approved first' }, { status: 400 })
-  if (!post.video_url) return NextResponse.json({ error: 'No video_url on post' }, { status: 400 })
+  const isStory = (post as any).post_type === 'story'
+  if (!post.video_url && !isStory) return NextResponse.json({ error: 'No video_url on post' }, { status: 400 })
 
   const { data: config } = await supabaseAdmin.from('aria_influencer_config')
     .select('*').eq('is_active', true).limit(1).maybeSingle()
@@ -44,9 +45,56 @@ async function _POST(req: NextRequest) {
     ? '\n\n' + (post.hashtags as string[]).map((h: string) => `#${h}`).join(' ')
     : '')
 
+  if (isStory) {
+    // ── Instagram Story path ──────────────────────────────────────────────
+    const storyBody: Record<string, unknown> = post.video_url
+      ? { media_type: 'STORIES', video_url: post.video_url, access_token: config.ariaos_page_access_token }
+      : { image_url: (post as any).image_url, access_token: config.ariaos_page_access_token }
+
+    const containerRes = await fetch(
+      'https://graph.facebook.com/v19.0/' + config.ariaos_instagram_account_id + '/media',
+      { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(storyBody) }
+    )
+    const { id: creationId, error: cErr } = await containerRes.json()
+    if (cErr) return NextResponse.json({ error: cErr.message }, { status: 500 })
+    if (!creationId) return NextResponse.json({ error: 'No creation_id from Instagram Stories container' }, { status: 500 })
+
+    if (post.video_url) {
+      let ready = false
+      for (let i = 0; i < 12; i++) {
+        await new Promise(r => setTimeout(r, 5000))
+        const statusRes = await fetch(
+          'https://graph.facebook.com/v19.0/' + creationId + '?fields=status_code&access_token=' + config.ariaos_page_access_token
+        )
+        const { status_code } = await statusRes.json()
+        if (status_code === 'FINISHED') { ready = true; break }
+        if (status_code === 'ERROR') return NextResponse.json({ error: 'Story video processing failed on Instagram' }, { status: 500 })
+      }
+      if (!ready) return NextResponse.json({ error: 'Instagram Story container timed out after 60s' }, { status: 504 })
+    }
+
+    const publishRes = await fetch(
+      'https://graph.facebook.com/v19.0/' + config.ariaos_instagram_account_id + '/media_publish',
+      { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ creation_id: creationId, access_token: config.ariaos_page_access_token }) }
+    )
+    const pubData = await publishRes.json()
+    if (pubData.error) return NextResponse.json({ error: pubData.error.message }, { status: 500 })
+
+    await supabaseAdmin.from('aria_influencer_posts')
+      .update({
+        status: 'published', instagram_post_id: pubData.id, published_at: new Date().toISOString(),
+        story_expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+      })
+      .eq('id', post_id)
+
+    return NextResponse.json({ ok: true, instagram_post_id: pubData.id, post_type: 'story' })
+  }
+
+  // ── Reels path (original) ─────────────────────────────────────────────────
   // Step 1 — Create Reels container
   const containerRes = await fetch(
-    `https://graph.facebook.com/v19.0/${config.ariaos_instagram_account_id}/media`,
+    'https://graph.facebook.com/v19.0/' + config.ariaos_instagram_account_id + '/media',
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -67,7 +115,7 @@ async function _POST(req: NextRequest) {
   for (let i = 0; i < 12; i++) {
     await new Promise(r => setTimeout(r, 5000))
     const statusRes = await fetch(
-      `https://graph.facebook.com/v19.0/${creationId}?fields=status_code&access_token=${config.ariaos_page_access_token}`
+      'https://graph.facebook.com/v19.0/' + creationId + '?fields=status_code&access_token=' + config.ariaos_page_access_token
     )
     const { status_code } = await statusRes.json()
     if (status_code === 'FINISHED') { ready = true; break }
@@ -77,7 +125,7 @@ async function _POST(req: NextRequest) {
 
   // Step 3 — Publish
   const publishRes = await fetch(
-    `https://graph.facebook.com/v19.0/${config.ariaos_instagram_account_id}/media_publish`,
+    'https://graph.facebook.com/v19.0/' + config.ariaos_instagram_account_id + '/media_publish',
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

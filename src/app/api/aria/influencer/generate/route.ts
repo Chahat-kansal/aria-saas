@@ -87,7 +87,7 @@ async function _POST(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const body = await req.json().catch(() => ({})) as { business_id?: string; skip_video?: boolean }
+  const body = await req.json().catch(() => ({})) as { business_id?: string; skip_video?: boolean; post_type?: string }
 
   const apiKey = process.env.GEMINI_API_KEY
   if (!apiKey) return NextResponse.json({ error: 'GEMINI_API_KEY not set' }, { status: 500 })
@@ -175,6 +175,8 @@ Respond with JSON only:
     videoUrl = await generateVeoVideo(scenePrompt, config.master_image_url, apiKey)
   }
 
+  const effectivePostType = body.post_type === 'story' ? 'story' : 'reel'
+
   // Save to aria_influencer_posts as draft — owner approves before it goes live
   const { data: post, error } = await supabaseAdmin.from('aria_influencer_posts').insert({
     featured_business_id: bizId,
@@ -184,6 +186,7 @@ Respond with JSON only:
     scene_prompt: scenePrompt,
     industry,
     status: 'draft',
+    post_type: effectivePostType,
   }).select().single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })

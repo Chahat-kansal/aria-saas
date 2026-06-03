@@ -51,6 +51,7 @@ export default function AdminInfluencerPage() {
   const [config, setConfig] = useState<Config | null>(null)
   const [selectedBizId, setSelectedBizId] = useState<string>('')
   const [generating, setGenerating] = useState(false)
+  const [postType, setPostType] = useState<'reel' | 'story'>('reel')
   const [publishing, setPublishing] = useState<string | null>(null)
   const [approving, setApproving] = useState<string | null>(null)
   const [tab, setTab] = useState<'queue' | 'history' | 'config'>( 'queue')
@@ -88,11 +89,11 @@ export default function AdminInfluencerPage() {
     const res = await fetch('/api/aria/influencer/generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ business_id: selectedBizId || undefined }),
+      body: JSON.stringify({ business_id: selectedBizId || undefined, post_type: postType }),
     })
     const d = await res.json()
     if (d.ok) {
-      setMsg({ text: `✅ Reel generated for ${d.featured_business}. Review in queue.`, ok: true })
+      setMsg({ text: (postType === 'story' ? '✅ Story' : '✅ Reel') + ' generated for ' + d.featured_business + '. Review in queue.', ok: true })
       await load()
       setTab('queue')
     } else {
@@ -204,6 +205,22 @@ export default function AdminInfluencerPage() {
           ✦ Generate New Reel
         </div>
         <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+          <div>
+            <label style={{ fontSize: 11, color: C.dim, display: 'block', marginBottom: 6 }}>Post Type</label>
+            <div style={{ display: 'flex', gap: 6 }}>
+              {(['reel', 'story'] as const).map(t => (
+                <button key={t} onClick={() => setPostType(t)} style={{
+                  padding: '7px 14px', borderRadius: 8, fontFamily: 'inherit', fontWeight: 700, fontSize: 12,
+                  cursor: 'pointer', border: '1px solid',
+                  background: postType === t ? 'rgba(0,229,255,0.12)' : 'transparent',
+                  borderColor: postType === t ? 'rgba(0,229,255,0.4)' : 'rgba(255,255,255,0.12)',
+                  color: postType === t ? C.cyan : C.muted,
+                }}>
+                  {t === 'reel' ? '🎬 Reel' : '⏱ Story (24h)'}
+                </button>
+              ))}
+            </div>
+          </div>
           <div style={{ flex: 1, minWidth: 220 }}>
             <label style={{ fontSize: 11, color: C.dim, display: 'block', marginBottom: 6 }}>Feature a specific business (or leave blank to auto-pick most active)</label>
             <select
@@ -227,7 +244,7 @@ export default function AdminInfluencerPage() {
               background: 'rgba(0,229,255,0.12)', border: '1px solid rgba(0,229,255,0.3)',
               color: C.cyan, opacity: generating || !config?.master_image_url ? 0.5 : 1,
               whiteSpace: 'nowrap' }}>
-            {generating ? '⏳ Generating Reel (~60s)…' : '✦ Generate Reel'}
+            {generating ? ('⏳ Generating ' + (postType === 'story' ? 'Story' : 'Reel') + ' (~60s)…') : ('✦ Generate ' + (postType === 'story' ? 'Story' : 'Reel'))}
           </button>
         </div>
         {!config?.master_image_url && (
