@@ -849,148 +849,67 @@ Read the full file, then add `approval_status: 'approved'` to the updates object
 
 ---
 
-## SECTION 5 — BACKGROUND MUSIC VIA API (Gap 2)
+## SECTION 5 — BACKGROUND MUSIC VIA PIXABAY API (Gap 2)
 
-No manual file uploads needed. Audio is pulled at runtime from two sources:
+No static files. Audio fetched at runtime from Pixabay using existing `PIXABAY_KEY` already in env.
+Pixabay License: ✅ royalty-free, commercial use allowed, no attribution required.
 
-### Primary: Mubert API (AI-generated, exact duration, mood-matched)
-If `MUBERT_API_KEY` is set in env — generate a track exactly matching the Reel duration.
-
-```typescript
-// lib/social/audio.ts
-export async function fetchMubertTrack(mood: string, durationSeconds: number): Promise<string | null> {
-  const key = process.env.MUBERT_API_KEY
-  if (!key) return null
-  try {
-    // Step 1: get token
-    const authRes = await fetch('https://api-b2b.mubert.com/v2/GetServiceAccess', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        method: 'GetServiceAccess',
-        params: { email: process.env.MUBERT_EMAIL ?? 'aria@ariaos.site', license: 'ttmmubertlicense', token: key }
-      })
-    })
-    const authData = await authRes.json()
-    const pat = authData?.data?.pat
-    if (!pat) return null
-
-    // Step 2: render track
-    const moodMap: Record<string, string> = {
-      upbeat: 'uplifting background music, energetic, positive',
-      warm: 'warm acoustic background, friendly, inviting cafe atmosphere',
-      minimal: 'minimal ambient, clean, professional',
-      energetic: 'energetic upbeat commercial, exciting, bold',
-    }
-    const renderRes = await fetch('https://api-b2b.mubert.com/v2/RecordTrackTTM', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        method: 'RecordTrackTTM',
-        params: {
-          pat,
-          text: moodMap[mood] ?? moodMap.upbeat,
-          duration: durationSeconds,
-          mode: 'track',
-          format: 'mp3',
-          intensity: 'medium',
-        }
-      })
-    })
-    const renderData = await renderRes.json()
-    // Poll until ready
-    const taskId = renderData?.data?.tasks_id
-    if (!taskId) return null
-
-    for (let i = 0; i < 12; i++) {
-      await new Promise(r => setTimeout(r, 3000))
-      const statusRes = await fetch('https://api-b2b.mubert.com/v2/GetTasksStatuses', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ method: 'GetTasksStatuses', params: { pat, tasks: [taskId] } })
-      })
-      const statusData = await statusRes.json()
-      const task = statusData?.data?.tasks?.[0]
-      if (task?.status === 'done' && task?.download_link) return task.download_link
-      if (task?.status === 'error') return null
-    }
-    return null
-  } catch { return null }
-}
-```
-
-### Fallback: Pixabay Audio API (free, uses existing PIXABAY_KEY)
-If Mubert unavailable or not configured — search Pixabay for a matching track.
+### Create `src/lib/social/audio.ts`
 
 ```typescript
-export async function fetchPixabayTrack(mood: string): Promise<string | null> {
-  const key = process.env.PIXABAY_KEY  // already in env for image search
-  if (!key) return null
-  const moodQuery: Record<string, string> = {
-    upbeat: 'upbeat happy background',
-    warm: 'warm acoustic cafe',
-    minimal: 'minimal ambient background',
-    energetic: 'energetic upbeat commercial',
-  }
-  try {
-    const q = encodeURIComponent(moodQuery[mood] ?? 'upbeat background music')
-    const res = await fetch(
-      `https://pixabay.com/api/videos/?key=${key}&q=${q}&video_type=music&per_page=5&safesearch=true`
-    )
-    // Note: Pixabay audio API endpoint
-    const audioRes = await fetch(
-      `https://pixabay.com/api/?key=${key}&q=${q}&media_type=music&per_page=5`
-    )
-    // Pixabay returns audio tracks in their API
-    // Use the first result's audio URL
-    if (!audioRes.ok) return null
-    const d = await audioRes.json()
-    const track = d.hits?.[0]
-    return track?.audio?.url ?? track?.previewURL ?? null
-  } catch { return null }
+/**
+ * Fetches royalty-free background music from Pixabay API.
+ * Uses existing PIXABAY_KEY — no new credentials needed.
+ * Pixabay License: free for commercial use, no attribution required.
+ * Tracks are 2-4 min; ffmpeg -shortest flag trims to Reel duration automatically.
+ */
+
+const MOOD_QUERIES: Record<string, string> = {
+  upbeat:    'upbeat happy background commercial',
+  warm:      'warm acoustic cafe cosy',
+  minimal:   'minimal ambient calm background',
+  energetic: 'energetic exciting bold upbeat',
 }
 
-// Combined: try Mubert first, fall back to Pixabay
-export async function getBackgroundMusic(mood: string, durationSeconds: number): Promise<string | null> {
+export async function getBackgroundMusicUrl(mood: string): Promise<string | null> {
   if (mood === 'none') return null
-  const mubert = await fetchMubertTrack(mood, durationSeconds)
-  if (mubert) return mubert
-  return fetchPixabayTrack(mood)
+  const key = process.env.PIXABAY_KEY
+  if (!key) return null
+
+  const q = encodeURIComponent(MOOD_QUERIES[mood] ?? MOOD_QUERIES.upbeat)
+  try {
+    const res = await fetch(
+      `https://pixabay.com/api/?key=${key}&q=${q}&media_type=music&per_page=10&safesearch=true`
+    )
+    if (!res.ok) return null
+    const data = await res.json() as {
+      hits?: Array<{ audio?: { mp3?: string }; previewURL?: string }>
+    }
+    const hits = data.hits ?? []
+    if (!hits.length) return null
+    // Pick randomly from top 5 results for variety
+    const pick = hits[Math.floor(Math.random() * Math.min(hits.length, 5))]
+    return pick?.audio?.mp3 ?? pick?.previewURL ?? null
+  } catch {
+    return null
+  }
 }
 ```
 
-Create this file at `src/lib/social/audio.ts`.
+### Use in generate-video GET handler
+Replace any static `MUSIC_URLS` map with:
+```typescript
+import { getBackgroundMusicUrl } from '@/lib/social/audio'
 
-Then in `generate-video/route.ts` GET handler, replace:
-```typescript
-const audioToMerge = voiceover_url || MUSIC_URLS[background_music]
-```
-with:
-```typescript
-import { getBackgroundMusic } from '@/lib/social/audio'
-const audioToMerge = voiceover_url || await getBackgroundMusic(background_music, duration_seconds ?? 15)
+// When COMPLETED and audio needed:
+const audioToMerge = voiceover_url || await getBackgroundMusicUrl(background_music)
 ```
 
-Remove the `MUSIC_URLS` constant entirely — no static file paths needed.
-
-### No static audio files needed
-Do NOT create any files in `public/audio/`. Audio is fetched at runtime from Mubert or Pixabay APIs.
-
-### UI update
-In the Reel Creator panel background music selector, the options render as before (None/Upbeat/Warm/Minimal/Energetic).
-Remove the "coming soon" note — music now works when MUBERT_API_KEY or PIXABAY_KEY is set.
-Add a small note: "Powered by Mubert AI" if MUBERT_API_KEY is set, otherwise "Powered by Pixabay".
-Since Claude Code can't know which key is set, just show: "AI-generated background music • royalty-free"
-
-### Env vars for audio (what you need from Chahat — see bottom of prompt)
-- `MUBERT_API_KEY` — get from mubert.com/api (paid plan ~$39/mo for full API)
-- `MUBERT_EMAIL` — email used to register Mubert account
-- `PIXABAY_KEY` — already in env ✅ (used for image search, same key works for audio)
-
-If only PIXABAY_KEY is set: free audio from Pixabay library (good quality, fixed tracks)
-If MUBERT_API_KEY is set: AI-generated audio, exact duration, mood-matched (better quality)
-
----
+### Key points
+- `PIXABAY_KEY` already in Vercel env ✅ — zero new setup
+- ffmpeg `-shortest` trims the 3-min Pixabay track to match Reel length
+- No files in `public/audio/` — completely runtime
+- UI shows: "Royalty-free background music · Pixabay"
 
 ## SECTION 6 — SOCIAL PAGE UI UPGRADES
 File: `src/app/dashboard/social/page.tsx`
@@ -1482,12 +1401,12 @@ Before committing, verify ALL of the following:
 - [ ] `npx tsc --noEmit` — ZERO errors
 - [ ] `npm run build` passes (or at minimum tsc passes)
 - [ ] Gap 1: audio merge function exists in generate-video route, falls back gracefully if merge fails
-- [ ] Gap 2: `src/lib/social/audio.ts` created with `getBackgroundMusic()` function
-- [ ] Gap 2: `fetchMubertTrack()` uses MUBERT_API_KEY if set (AI-generated, exact duration)
-- [ ] Gap 2: `fetchPixabayTrack()` uses PIXABAY_KEY as free fallback (already in env)
-- [ ] Gap 2: generate-video GET handler calls `getBackgroundMusic()` not static MUSIC_URLS
-- [ ] Gap 2: no static files in public/audio/ — all audio fetched at runtime
-- [ ] Gap 2: background music selector in UI shows all 5 options (none/upbeat/warm/minimal/energetic)
+- [ ] Gap 2: `src/lib/social/audio.ts` created with `getBackgroundMusicUrl(mood)` function
+- [ ] Gap 2: uses PIXABAY_KEY already in env — no new credentials
+- [ ] Gap 2: generate-video GET handler imports and calls `getBackgroundMusicUrl()`
+- [ ] Gap 2: no static files in public/audio/ — all audio fetched from Pixabay at runtime
+- [ ] Gap 2: ffmpeg `-shortest` trims Pixabay track to Reel duration automatically
+- [ ] Gap 2: UI shows 5 options (none/upbeat/warm/minimal/energetic) + "Royalty-free · Pixabay" note
 - [ ] Gap 3: Reel Creator panel has all 3 modes (auto/image/text)
 - [ ] Gap 4: 6 style options render correctly, style prefix applied to video prompt
 - [ ] Gap 5: token-status route exists, warning banner renders on social page
