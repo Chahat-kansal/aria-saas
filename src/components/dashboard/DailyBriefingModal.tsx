@@ -141,12 +141,7 @@ export function DailyBriefingModal() {
             const text: string = councilData.briefing;
             // Split on sentence-ending punctuation followed by capital letter (new insight)
             // Also split on em-dash sections, numbered points, or double newlines
-            const rawSentences = text
-              .split(/(?<=[.!?])\s+(?=[A-Z])|—\s*(?=[A-Z])|
-
-+/)
-              .map((s: string) => s.trim())
-              .filter((s: string) => s.length > 20);
+            const rawSentences = text.split(/\.\s+(?=[A-Z])|\n\n+/).map((s: string) => s.trim()).filter((s: string) => s.length > 20);
 
             // Group into meaningful cards (2-3 sentences each, max 4 cards)
             const chunkSize = Math.ceil(rawSentences.length / Math.min(4, Math.max(1, Math.ceil(rawSentences.length / 2))));
