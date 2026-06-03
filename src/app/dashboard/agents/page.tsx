@@ -289,6 +289,15 @@ export default function AgentsPage() {
   } | null>(null)
   const [wasteLoading, setWasteLoading] = useState(false)
 
+  // Supplier Negotiation widget state
+  const [negProfiles, setNegProfiles] = useState<Array<{ id: string; supplier_name: string; total_spend_12m: number; leverage_score: number; price_creep_pct: number; overcharge_count_12m: number; total_overcharge_12m: number; negotiation_priority: string; key_products: string[] | null; leverage_factors: string[] | null }>>([])
+  const [negBriefs, setNegBriefs] = useState<Array<{ id: string; supplier_name: string; negotiation_goal: string; expected_outcome: string; success_probability: number; draft_email_subject: string | null; draft_email_body: string | null; draft_talking_points: string[] | null; annual_saving_if_successful: number; monthly_saving_if_successful: number; status: string; leverage_arguments: Array<{ argument: string; data_point: string; strength: string }> | null }>>([])
+  const [negSummary, setNegSummary] = useState<{ total_suppliers: number; total_opportunity_annual: number; strongest_position: { supplier_name: string; leverage_score: number } | null; urgent_count: number; high_count: number } | null>(null)
+  const [negWonSavings, setNegWonSavings] = useState(0)
+  const [negLoading, setNegLoading] = useState(false)
+  const [expandedBriefId, setExpandedBriefId] = useState<string | null>(null)
+  const [updatingBriefId, setUpdatingBriefId] = useState<string | null>(null)
+
   const bid = business?.id
 
   // Intelligence tab state
@@ -469,6 +478,28 @@ export default function AgentsPage() {
     setWasteLoading(false)
   }, [bid])
 
+  const loadNegotiationData = useCallback(async () => {
+    if (!bid) return
+    setNegLoading(true)
+    try {
+      const [profilesRes, briefsRes] = await Promise.all([
+        fetch('/api/agents/negotiation/profiles'),
+        fetch('/api/agents/negotiation/briefs'),
+      ])
+      if (profilesRes.ok) {
+        const d = await profilesRes.json() as { profiles: typeof negProfiles; summary: typeof negSummary }
+        setNegProfiles(d.profiles ?? [])
+        setNegSummary(d.summary ?? null)
+      }
+      if (briefsRes.ok) {
+        const d = await briefsRes.json() as { briefs: typeof negBriefs; won_savings_this_year: number }
+        setNegBriefs(d.briefs ?? [])
+        setNegWonSavings(d.won_savings_this_year ?? 0)
+      }
+    } catch { /* non-fatal */ }
+    setNegLoading(false)
+  }, [bid])
+
   useEffect(() => {
     if (tab === 'agents') {
       void loadMenuData()
@@ -476,8 +507,9 @@ export default function AgentsPage() {
       void loadClvData()
       void loadLabourData()
       void loadWasteData()
+      void loadNegotiationData()
     }
-  }, [tab, loadMenuData, loadFlashData, loadClvData, loadLabourData, loadWasteData])
+  }, [tab, loadMenuData, loadFlashData, loadClvData, loadLabourData, loadWasteData, loadNegotiationData])
 
   useEffect(() => {
     if (tab === 'intelligence') void loadIntelligenceData()
@@ -1082,6 +1114,142 @@ export default function AgentsPage() {
                         ))}
                       </div>
                     )}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* ── Supplier Negotiation Widget ──────────────────────────────────── */}
+        <div style={{ marginTop: 24, background: surface, border, borderRadius: 16, overflow: 'hidden' }}>
+          <div style={{ padding: '18px 24px', borderBottom: border, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <h3 style={{ color: '#fff', fontSize: 16, fontWeight: 600, margin: 0 }}>🤝 Supplier Intelligence</h3>
+              <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12, margin: '4px 0 0' }}>Leverage scores · price creep detection · AI negotiation briefs</p>
+            </div>
+            <button onClick={() => void loadNegotiationData()} style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid rgba(255,165,0,0.3)', background: 'transparent', color: '#FFA500', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+              Refresh
+            </button>
+          </div>
+          <div style={{ padding: 24 }}>
+            {negLoading ? (
+              <div style={{ color: 'rgba(255,255,255,0.3)', textAlign: 'center', padding: 32 }}>Loading supplier intelligence...</div>
+            ) : negProfiles.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '32px 0', color: 'rgba(255,255,255,0.25)', fontSize: 13 }}>
+                No supplier data yet — agent runs on the 1st of each month using invoice history
+              </div>
+            ) : (
+              <div>
+                {/* Portfolio summary */}
+                {negSummary && (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 24 }}>
+                    <div style={{ background: 'rgba(255,165,0,0.08)', border: '1px solid rgba(255,165,0,0.2)', borderRadius: 12, padding: '14px 16px' }}>
+                      <div style={{ fontSize: 11, color: '#FFA500', fontWeight: 700, marginBottom: 4 }}>TOTAL OPPORTUNITY</div>
+                      <div style={{ fontFamily: 'Fraunces, Georgia, serif', fontStyle: 'italic', fontSize: 24, color: '#FFA500' }}>${(negSummary.total_opportunity_annual ?? 0).toFixed(0)}</div>
+                      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>annual savings potential</div>
+                    </div>
+                    <div style={{ background: 'rgba(127,184,151,0.08)', border: '1px solid rgba(127,184,151,0.2)', borderRadius: 12, padding: '14px 16px' }}>
+                      <div style={{ fontSize: 11, color: '#7FB897', fontWeight: 700, marginBottom: 4 }}>WON THIS YEAR</div>
+                      <div style={{ fontFamily: 'Fraunces, Georgia, serif', fontStyle: 'italic', fontSize: 24, color: '#7FB897' }}>${negWonSavings.toFixed(0)}</div>
+                      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>in negotiated savings</div>
+                    </div>
+                    <div style={{ background: negSummary.urgent_count > 0 ? 'rgba(239,68,68,0.08)' : 'rgba(255,255,255,0.04)', border: '1px solid ' + (negSummary.urgent_count > 0 ? 'rgba(239,68,68,0.2)' : 'rgba(255,255,255,0.08)'), borderRadius: 12, padding: '14px 16px' }}>
+                      <div style={{ fontSize: 11, color: negSummary.urgent_count > 0 ? '#EF4444' : 'rgba(255,255,255,0.5)', fontWeight: 700, marginBottom: 4 }}>ACTION NEEDED</div>
+                      <div style={{ fontFamily: 'Fraunces, Georgia, serif', fontStyle: 'italic', fontSize: 24, color: negSummary.urgent_count > 0 ? '#EF4444' : '#fff' }}>{negSummary.urgent_count + negSummary.high_count}</div>
+                      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>{negSummary.urgent_count} urgent · {negSummary.high_count} high</div>
+                    </div>
+                    <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: '14px 16px' }}>
+                      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', fontWeight: 700, marginBottom: 4 }}>SUPPLIERS TRACKED</div>
+                      <div style={{ fontFamily: 'Fraunces, Georgia, serif', fontStyle: 'italic', fontSize: 24, color: '#fff' }}>{negSummary.total_suppliers}</div>
+                      {negSummary.strongest_position && (
+                        <div style={{ fontSize: 11, color: '#7FB897', marginTop: 2 }}>Best: {negSummary.strongest_position.supplier_name} ({negSummary.strongest_position.leverage_score})</div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Supplier profiles table */}
+                <div style={{ marginBottom: 20 }}>
+                  <h4 style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12, fontWeight: 700, margin: '0 0 10px', textTransform: 'uppercase', letterSpacing: 1 }}>Supplier Profiles</h4>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {negProfiles.slice(0, 8).map(p => {
+                      const priorityColor = p.negotiation_priority === 'urgent' ? '#EF4444' : p.negotiation_priority === 'high' ? '#F59E0B' : p.negotiation_priority === 'medium' ? '#7FB897' : 'rgba(255,255,255,0.3)'
+                      const brief = negBriefs.find(b => b.supplier_name === p.supplier_name && (b.status === 'pending' || b.status === 'in_progress'))
+                      return (
+                        <div key={p.id}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', background: 'rgba(255,255,255,0.04)', borderRadius: 10, border: '1px solid rgba(255,255,255,0.07)', cursor: brief ? 'pointer' : 'default' }} onClick={() => brief && setExpandedBriefId(expandedBriefId === brief.id ? null : brief.id)}>
+                            <div style={{ flex: 1 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
+                                <span style={{ fontSize: 13, fontWeight: 600, color: '#fff' }}>{p.supplier_name}</span>
+                                <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 20, background: priorityColor + '22', color: priorityColor, fontWeight: 700, textTransform: 'uppercase' }}>{p.negotiation_priority}</span>
+                                {brief && <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 20, background: 'rgba(255,165,0,0.15)', color: '#FFA500', fontWeight: 700 }}>Brief ready</span>}
+                              </div>
+                              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>
+                                ${Number(p.total_spend_12m).toFixed(0)}/yr · Leverage {p.leverage_score}/100
+                                {Number(p.price_creep_pct) > 0 ? ' · ' + Number(p.price_creep_pct).toFixed(1) + '% price creep' : ''}
+                                {p.overcharge_count_12m > 0 ? ' · ' + p.overcharge_count_12m + ' overcharges' : ''}
+                              </div>
+                            </div>
+                            <div style={{ marginLeft: 12 }}>
+                              <div style={{ height: 6, width: 80, background: 'rgba(255,255,255,0.08)', borderRadius: 3, overflow: 'hidden' }}>
+                                <div style={{ width: p.leverage_score + '%', height: '100%', background: p.leverage_score >= 70 ? '#7FB897' : p.leverage_score >= 50 ? '#F59E0B' : '#EF4444', borderRadius: 3 }} />
+                              </div>
+                            </div>
+                          </div>
+                          {/* Brief detail expanded */}
+                          {brief && expandedBriefId === brief.id && (
+                            <div style={{ margin: '4px 0 8px', padding: '16px', background: 'rgba(255,165,0,0.05)', border: '1px solid rgba(255,165,0,0.15)', borderRadius: 10 }}>
+                              <div style={{ marginBottom: 12 }}>
+                                <div style={{ fontSize: 12, fontWeight: 700, color: '#FFA500', marginBottom: 4 }}>NEGOTIATION GOAL</div>
+                                <div style={{ fontSize: 13, color: '#fff' }}>{brief.negotiation_goal}</div>
+                              </div>
+                              <div style={{ marginBottom: 12 }}>
+                                <div style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.5)', marginBottom: 4 }}>EXPECTED OUTCOME</div>
+                                <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)' }}>{brief.expected_outcome}</div>
+                                <div style={{ fontSize: 12, color: '#7FB897', marginTop: 4 }}>
+                                  ${brief.monthly_saving_if_successful.toFixed(0)}/month · ${brief.annual_saving_if_successful.toFixed(0)}/year if successful · {Math.round(brief.success_probability * 100)}% success probability
+                                </div>
+                              </div>
+                              {brief.leverage_arguments && brief.leverage_arguments.length > 0 && (
+                                <div style={{ marginBottom: 12 }}>
+                                  <div style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.5)', marginBottom: 6 }}>LEVERAGE ARGUMENTS</div>
+                                  {brief.leverage_arguments.slice(0, 4).map((arg, i) => (
+                                    <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
+                                      <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: arg.strength === 'strong' ? 'rgba(127,184,151,0.2)' : arg.strength === 'medium' ? 'rgba(245,158,11,0.2)' : 'rgba(255,255,255,0.1)', color: arg.strength === 'strong' ? '#7FB897' : arg.strength === 'medium' ? '#F59E0B' : 'rgba(255,255,255,0.5)', fontWeight: 700, textTransform: 'uppercase', flexShrink: 0 }}>{arg.strength}</span>
+                                      <div>
+                                        <div style={{ fontSize: 12, color: '#fff' }}>{arg.argument}</div>
+                                        <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>{arg.data_point}</div>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              {brief.draft_email_subject && (
+                                <div style={{ marginBottom: 12 }}>
+                                  <div style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.5)', marginBottom: 4 }}>DRAFT EMAIL</div>
+                                  <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 8, padding: 12 }}>
+                                    <div style={{ fontSize: 12, color: '#FFA500', marginBottom: 6 }}>Subject: {brief.draft_email_subject}</div>
+                                    <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', whiteSpace: 'pre-wrap', maxHeight: 120, overflow: 'hidden' }}>{brief.draft_email_body}</div>
+                                  </div>
+                                </div>
+                              )}
+                              <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                                <button disabled={updatingBriefId === brief.id} onClick={async () => { setUpdatingBriefId(brief.id); await fetch('/api/agents/negotiation/briefs/' + brief.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'in_progress' }) }); setUpdatingBriefId(null); void loadNegotiationData() }} style={{ padding: '6px 14px', borderRadius: 8, border: 'none', background: '#F59E0B', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                                  {updatingBriefId === brief.id ? '...' : "I've started negotiating"}
+                                </button>
+                                <button disabled={updatingBriefId === brief.id} onClick={async () => { setUpdatingBriefId(brief.id); await fetch('/api/agents/negotiation/briefs/' + brief.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'won', outcome_notes: 'Won' }) }); setUpdatingBriefId(null); void loadNegotiationData() }} style={{ padding: '6px 14px', borderRadius: 8, border: 'none', background: '#7FB897', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                                  Won ✓
+                                </button>
+                                <button disabled={updatingBriefId === brief.id} onClick={async () => { setUpdatingBriefId(brief.id); await fetch('/api/agents/negotiation/briefs/' + brief.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'lost' }) }); setUpdatingBriefId(null); void loadNegotiationData() }} style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid rgba(239,68,68,0.3)', background: 'transparent', color: '#EF4444', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                                  Lost
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
                   </div>
                 </div>
               </div>
