@@ -1471,12 +1471,12 @@ export default function SocialPage() {
                         {videoStatus[post.id]?.url && <a href={videoStatus[post.id]!.url} target="_blank" rel="noreferrer" style={{ marginLeft: 6, color: C.green }}>▶ Watch</a>}
                       </span>
                     ) : (
-                      <button onClick={() => generateVideo(post.id, (post as any).reel_concept)}
-                        style={{ padding: '5px 12px', borderRadius: 7, border: '1px solid rgba(59,130,246,0.4)',
-                          background: 'rgba(59,130,246,0.1)', color: '#3B82F6', fontSize: 11, fontWeight: 600,
-                          cursor: 'pointer', fontFamily: 'inherit' }}>
-                        🎬 Create Reel
-                      </button>
+                      <a href="/dashboard/reels"
+                        style={{ padding: '5px 12px', borderRadius: 7, border: '1px solid rgba(127,184,151,0.4)',
+                          background: 'rgba(127,184,151,0.1)', color: '#7FB897', fontSize: 11, fontWeight: 600,
+                          cursor: 'pointer', fontFamily: 'inherit', textDecoration: 'none', display: 'inline-block' }}>
+                        🎬 Reel Studio →
+                      </a>
                     )}
                     {/* Story button — Instagram and Facebook only */}
                     {post.image_url && post.post_type !== 'story'
