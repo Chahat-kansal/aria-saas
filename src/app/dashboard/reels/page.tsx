@@ -55,14 +55,15 @@ const FILTER_PRESETS = [
   { id: 'golden',  label: 'Golden',   css: 'sepia(0.5) saturate(1.4) hue-rotate(-10deg)' },
 ]
 
-const MUSIC_TRACKS = [
-  { id: 'none',        label: 'No music',      bpm: 0 },
-  { id: 'upbeat',      label: '🎵 Upbeat pop',  bpm: 128 },
-  { id: 'chill',       label: '🎶 Chill lofi',  bpm: 90 },
-  { id: 'energetic',   label: '⚡ Energetic',   bpm: 140 },
-  { id: 'warm',        label: '🌅 Warm acoustic',bpm: 100 },
-  { id: 'cinematic',   label: '🎼 Cinematic',   bpm: 80 },
+const MUSIC_MOODS = [
+  { id: 'upbeat',    label: '⚡ Upbeat',     query: 'upbeat happy pop' },
+  { id: 'chill',     label: '🎶 Chill',      query: 'chill lofi calm' },
+  { id: 'energetic', label: '🔥 Energetic',  query: 'energetic bold powerful' },
+  { id: 'warm',      label: '🌅 Warm',       query: 'warm acoustic cosy' },
+  { id: 'cinematic', label: '🎬 Cinematic',  query: 'cinematic orchestral epic' },
+  { id: 'corporate', label: '💼 Corporate',  query: 'corporate professional uplifting' },
 ]
+type PixabayTrack = { id: number; title: string; duration: number; url: string; preview: string|null; bpm: number|null; artist: string }
 
 // ── Component ─────────────────────────────────────────────────────────────────
 export default function ReelStudioPage() {
@@ -91,6 +92,12 @@ export default function ReelStudioPage() {
   const [captionText, setCaptionText] = useState('')
   const [filter, setFilter] = useState('none')
   const [music, setMusic] = useState('none')
+  const [musicMood, setMusicMood] = useState('upbeat')
+  const [musicTracks, setMusicTracks] = useState<PixabayTrack[]>([])
+  const [musicLoading, setMusicLoading] = useState(false)
+  const [selectedTrack, setSelectedTrack] = useState<PixabayTrack|null>(null)
+  const [previewAudio, setPreviewAudio] = useState<HTMLAudioElement|null>(null)
+  const [playingId, setPlayingId] = useState<number|null>(null)
   const [speed, setSpeed] = useState(1)
   const [watermark, setWatermark] = useState(false)
   const [endCard, setEndCard] = useState('')
@@ -140,6 +147,29 @@ export default function ReelStudioPage() {
       const thisMonth = sesRes.data.filter((s: Session) => new Date(s.created_at).getMonth() === new Date().getMonth())
       setMonthlyReels(thisMonth.length)
     }
+  }
+
+  async function loadMusicTracks(mood: string) {
+    setMusicLoading(true); setMusicTracks([])
+    try {
+      const res = await fetch(`/api/social/music-search?mood=${mood}`)
+      const d = await res.json()
+      setMusicTracks(d.tracks ?? [])
+    } catch {}
+    setMusicLoading(false)
+  }
+
+  function previewTrack(track: PixabayTrack) {
+    if (previewAudio) { previewAudio.pause(); previewAudio.currentTime = 0 }
+    if (playingId === track.id) { setPlayingId(null); return }
+    const url = track.preview ?? track.url
+    if (!url) return
+    const audio = new Audio(url)
+    audio.volume = 0.4
+    audio.play().catch(() => {})
+    audio.onended = () => setPlayingId(null)
+    setPreviewAudio(audio)
+    setPlayingId(track.id)
   }
 
   async function handleSceneUpload(file: File) {
@@ -448,16 +478,37 @@ export default function ReelStudioPage() {
               )}
             </div>
 
-            {/* Music */}
+            {/* Music — Pixabay live search */}
             <div style={C.section}>
-              <span style={C.slabel}>Background music</span>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {MUSIC_TRACKS.map(t => (
-                  <button key={t.id} onClick={() => setMusic(t.id)} style={{ padding: '8px 12px', borderRadius: 8, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 600, textAlign: 'left', background: music === t.id ? 'rgba(127,184,151,0.12)' : 'rgba(255,255,255,0.04)', boxShadow: music === t.id ? 'inset 0 0 0 1.5px rgba(127,184,151,0.4)' : 'inset 0 0 0 1px rgba(255,255,255,0.06)', color: music === t.id ? '#7FB897' : 'rgba(255,255,255,0.6)', display: 'flex', justifyContent: 'space-between', transition: 'all 120ms' }}>
-                    <span>{t.label}</span>
-                    {t.bpm > 0 && <span style={{ opacity: 0.5, fontSize: 10 }}>{t.bpm} BPM</span>}
-                  </button>
+              <span style={C.slabel}>Background music <span style={{ color: 'rgba(255,255,255,0.2)', fontWeight: 400, textTransform: 'none' }}>powered by Pixabay · 230k free tracks</span></span>
+              <button onClick={() => { setMusic('none'); setSelectedTrack(null) }} style={{ ...C.chip(music === 'none'), marginBottom: 10 }}>🚫 No music</button>
+              {/* Mood selector */}
+              <div style={C.chipRow}>
+                {MUSIC_MOODS.map(m => (
+                  <button key={m.id} onClick={() => { setMusicMood(m.id); loadMusicTracks(m.id) }} style={C.chip(musicMood === m.id)}>{m.label}</button>
                 ))}
+              </div>
+              {/* Track list */}
+              <div style={{ marginTop: 10 }}>
+                {musicLoading && <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', padding: '8px 0' }}>🔍 Searching Pixabay…</div>}
+                {!musicLoading && musicTracks.length === 0 && (
+                  <button onClick={() => loadMusicTracks(musicMood)} style={{ fontSize: 11, color: '#7FB897', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: '4px 0' }}>Load tracks →</button>
+                )}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 200, overflowY: 'auto' }}>
+                  {musicTracks.map(t => (
+                    <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderRadius: 8, background: selectedTrack?.id === t.id ? 'rgba(127,184,151,0.12)' : 'rgba(255,255,255,0.04)', boxShadow: selectedTrack?.id === t.id ? 'inset 0 0 0 1.5px rgba(127,184,151,0.4)' : 'inset 0 0 0 1px rgba(255,255,255,0.06)', cursor: 'pointer', transition: 'all 120ms' }}
+                      onClick={() => { setSelectedTrack(t); setMusic(t.url) }}>
+                      <button onClick={e => { e.stopPropagation(); previewTrack(t) }} style={{ width: 24, height: 24, borderRadius: '50%', border: 'none', background: playingId === t.id ? '#7FB897' : 'rgba(255,255,255,0.1)', color: '#fff', fontSize: 10, cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        {playingId === t.id ? '■' : '▶'}
+                      </button>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 11, fontWeight: 600, color: selectedTrack?.id === t.id ? '#7FB897' : 'rgba(255,255,255,0.8)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.title}</div>
+                        <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.3)', marginTop: 1 }}>{t.artist} · {t.duration ? Math.floor(t.duration/60)+'m '+String(t.duration%60).padStart(2,'0')+'s' : ''}{t.bpm ? ' · '+t.bpm+' BPM' : ''}</div>
+                      </div>
+                      {selectedTrack?.id === t.id && <span style={{ fontSize: 9, color: '#7FB897', fontWeight: 700 }}>✓</span>}
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
 
