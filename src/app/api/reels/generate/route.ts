@@ -7,7 +7,7 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 
 const FAL_KEY = process.env.FAL_API_KEY ?? ''
-const FAL_T2V = 'fal-ai/kling-video/v2.1/pro/text-to-video'
+const FAL_T2V = 'fal-ai/kling-video/v2.1/master/text-to-video'
 const FAL_I2V = 'fal-ai/kling-video/v2.1/pro/image-to-video'
 
 const STYLE_PROMPTS: Record<string, string> = {
