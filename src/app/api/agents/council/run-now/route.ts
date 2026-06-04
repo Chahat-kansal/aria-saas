@@ -15,8 +15,20 @@ export async function POST() {
   const { data: { user }, error: authErr } = await supabase.auth.getUser()
   if (authErr || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { data: biz } = await supabase.from('businesses')
-    .select('id, name').eq('user_id', user.id).eq('is_active', true).maybeSingle()
+  // Resolve active business via user_active_business (the proven path; is_active may be NULL)
+  let biz: { id: string; name: string } | null = null
+  const { data: uab } = await supabaseAdmin.from('user_active_business')
+    .select('business_id').eq('user_id', user.id).maybeSingle()
+  if (uab?.business_id) {
+    const { data: b } = await supabaseAdmin.from('businesses')
+      .select('id, name').eq('id', uab.business_id).maybeSingle()
+    biz = b ?? null
+  }
+  if (!biz) {
+    const { data: b } = await supabaseAdmin.from('businesses')
+      .select('id, name').eq('user_id', user.id).order('created_at', { ascending: true }).limit(1).maybeSingle()
+    biz = b ?? null
+  }
   if (!biz) return NextResponse.json({ error: 'No active business' }, { status: 404 })
 
   // Clear today's session so the run is not skipped by the "already ran" guard.
