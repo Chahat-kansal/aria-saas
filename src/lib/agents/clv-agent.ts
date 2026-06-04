@@ -316,6 +316,24 @@ export class CLVAgent extends BaseAgent {
     }
 
     if (rawFeatures.length === 0) {
+      // Customers exist but no qualifying sales — data quality gap
+      if ((customers ?? []).length > 0) {
+        const dq = await this.saveDecisions([{
+          business_id,
+          agent_type: 'clv' as AgentType,
+          decision_data: {
+            action_type: 'data_quality',
+            customer_count: (customers ?? []).length,
+            issue: 'No sales are linked to customer profiles. Enable "Ask for customer at POS" to start building CLV data.',
+          },
+          reasoning: (customers ?? []).length + ' customer profiles exist but no qualifying sales are linked. CLV scoring requires pos_sales rows with customer_id set.',
+          confidence_score: 0.99,
+          projected_impact_cents: 0,
+          expires_at: new Date(Date.now() + 7 * 86400000).toISOString(),
+        }]);
+        await this.logRun(business_id, { decisions: dq, errors, duration_ms: Date.now() - t0 }, 'weekly_cron');
+        return { decisions: dq, errors, duration_ms: Date.now() - t0 };
+      }
       return { decisions: [], errors, duration_ms: Date.now() - t0 };
     }
 
@@ -696,6 +714,49 @@ Return JSON only: {"messages":[{"customer_id":"...","message":"..."}]}`;
       expires_at: new Date(Date.now() + 7 * 86400000).toISOString(),
       status: 'pending',
     }));
+
+    // Portfolio summary when no urgent/high-priority customers exist
+    if (decisionInputs.length === 0 && scored.length > 0) {
+      const aiSummary = await this.claudeStructured<{ reasoning: string }>({
+        system: 'You are a CLV analyst for Australian small businesses. Summarise portfolio health in 1-2 sentences focusing on the key opportunity or risk.',
+        user: JSON.stringify({
+          total_customers: scored.length,
+          champion: scored.filter(f => f.clv_tier === 'champion').length,
+          loyal: scored.filter(f => f.clv_tier === 'loyal').length,
+          at_risk: scored.filter(f => f.clv_tier === 'at_risk').length,
+          dormant: scored.filter(f => f.clv_tier === 'dormant').length,
+          total_annual_revenue: Math.round(totalAnnualRevenue),
+          at_risk_revenue: Math.round(atRiskRevenue),
+          top_20_pct_share: top20PctShare,
+        }),
+        maxTokens: 150,
+        agent_key: 'clv',
+        role: 'customer',
+        business_id,
+      });
+      decisionInputs.push({
+        business_id,
+        agent_type: 'clv' as AgentType,
+        decision_data: {
+          action_type: 'portfolio_health',
+          total_customers: scored.length,
+          tier_breakdown: {
+            champion: scored.filter(f => f.clv_tier === 'champion').length,
+            loyal: scored.filter(f => f.clv_tier === 'loyal').length,
+            potential: scored.filter(f => f.clv_tier === 'potential').length,
+            at_risk: scored.filter(f => f.clv_tier === 'at_risk').length,
+            dormant: scored.filter(f => f.clv_tier === 'dormant').length,
+          },
+          total_predicted_annual_revenue: Math.round(totalAnnualRevenue * 100) / 100,
+          at_risk_annual_revenue: Math.round(atRiskRevenue * 100) / 100,
+          top_20_pct_revenue_share: top20PctShare,
+        },
+        reasoning: aiSummary?.reasoning ?? ('Portfolio scored: ' + scored.length + ' customers, $' + Math.round(totalAnnualRevenue) + '/yr predicted revenue. No urgent interventions needed.'),
+        confidence_score: 0.85,
+        projected_impact_cents: Math.round(atRiskRevenue * 100 * 0.15),
+        expires_at: new Date(Date.now() + 7 * 86400000).toISOString(),
+      });
+    }
 
     const decisions = await this.saveDecisions(decisionInputs);
     const result: AgentRunResult = { decisions, errors, duration_ms: Date.now() - t0 };

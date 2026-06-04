@@ -473,6 +473,20 @@ export class LabourOptimisationAgent extends BaseAgent {
       if (labourPct > labourPctThreshold) {
         const activeCount = (activeStaffRes.data ?? []).length
         const alertMsg = 'Labour cost is ' + labourPct.toFixed(1) + '% of today\'s revenue. Target: ' + labourPctThreshold + '%. ' + activeCount + ' staff clocked in. Options: (1) Send 1 staff home early, (2) Run a flash promotion to increase revenue.'
+        const aiLabourReasoning = await this.claudeStructured<{ reasoning: string; priority_action: string }>({
+          system: 'You are a labour cost advisor for an Australian small business. Give a 1-sentence recommendation prioritising the most impactful action to take right now.',
+          user: JSON.stringify({
+            labour_pct: labourPct.toFixed(1),
+            threshold_pct: labourPctThreshold,
+            revenue_today: Math.round(revenueToday),
+            active_staff: activeCount,
+            avg_hourly_rate: Math.round(avgHourlyRate),
+          }),
+          maxTokens: 100,
+          agent_key: 'labour_optimisation',
+          role: 'forecast',
+          business_id,
+        });
         await supabaseAdmin.from('labour_optimisation_actions').insert({
           business_id,
           action_type: 'labour_pct_alert',
@@ -484,8 +498,8 @@ export class LabourOptimisationAgent extends BaseAgent {
         decisions.push({
           agent_type: 'labour_optimisation',
           business_id,
-          decision_data: { action_type: 'labour_pct_alert', labour_pct: labourPct, threshold: labourPctThreshold, revenue_today: revenueToday, active_staff: activeCount },
-          reasoning: alertMsg,
+          decision_data: { action_type: 'labour_pct_alert', labour_pct: labourPct, threshold: labourPctThreshold, revenue_today: revenueToday, active_staff: activeCount, priority_action: aiLabourReasoning?.priority_action },
+          reasoning: aiLabourReasoning?.reasoning ?? alertMsg,
           confidence_score: 0.95,
           projected_impact_cents: 0,
           expires_at: new Date(now.getTime() + 4 * 3600000).toISOString(),

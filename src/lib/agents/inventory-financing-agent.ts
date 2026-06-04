@@ -102,6 +102,23 @@ export class InventoryFinancingAgent extends BaseAgent {
       const criticalWeeks = weeks.filter(w => w.risk_level === 'critical' || w.risk_level === 'high')
       if (criticalWeeks.length > 0) {
         const worstWeek = criticalWeeks[0]
+        const aiReasoning = await this.claudeStructured<{ reasoning: string; owner_message: string }>({
+          system: 'You are a cash flow advisor for Australian small businesses. In 1-2 sentences identify the key risk and the most actionable response the owner should take.',
+          user: JSON.stringify({
+            current_cash: Math.round(currentCash),
+            is_estimated: isEstimated,
+            worst_week: worstWeek.week_number,
+            worst_week_date: worstWeek.forecast_week,
+            closing_cash: Math.round(worstWeek.closing_cash_position),
+            risk_reason: worstWeek.risk_reason,
+            critical_weeks: criticalWeeks.length,
+            opportunities: opportunities.length,
+          }),
+          maxTokens: 150,
+          agent_key: 'inventory_financing',
+          role: 'forecast',
+          business_id,
+        });
         decisions.push({
           business_id,
           agent_type: this.type,
@@ -113,8 +130,9 @@ export class InventoryFinancingAgent extends BaseAgent {
             worst_closing_cash: worstWeek.closing_cash_position,
             critical_weeks_count: criticalWeeks.length,
             opportunities_generated: opportunities.length,
+            owner_message: aiReasoning?.owner_message,
           },
-          reasoning: worstWeek.risk_reason || ('Cash drops to $' + Math.round(worstWeek.closing_cash_position) + ' in week ' + worstWeek.week_number),
+          reasoning: aiReasoning?.reasoning || worstWeek.risk_reason || ('Cash drops to $' + Math.round(worstWeek.closing_cash_position) + ' in week ' + worstWeek.week_number),
           confidence_score: 0.72,
           projected_impact_cents: Math.round(Math.abs(Math.min(0, worstWeek.closing_cash_position)) * 100),
           expires_at: addWeeks(new Date(), 2).toISOString(),

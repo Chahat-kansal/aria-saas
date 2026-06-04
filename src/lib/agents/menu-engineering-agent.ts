@@ -62,37 +62,52 @@ export class MenuEngineeringAgent extends BaseAgent {
       const fourteenDaysAgo = new Date(nowUtc.getTime() - 14 * 86400000)
       const thirtyDaysAgo = new Date(nowUtc.getTime() - 30 * 86400000)
 
-      // STEP 1: FETCH PRODUCTS AND SALES DATA
-      const [prodRes, saleItemsNowRes, saleItemsBaselineRes, saleItemsHaloRes] = await Promise.all([
-        supabaseAdmin.from('pos_products')
-          .select('id,name,price,cost_price,margin_pct,category_id,grid_position,agent_hidden,agent_upsell_product_id,agent_bundle_product_id,agent_bundle_price,stock_quantity,prep_time_minutes')
-          .eq('business_id', business_id)
-          .eq('is_active', true),
-        supabaseAdmin.from('pos_sale_items')
-          .select('product_id,quantity,line_total,sale_id,created_at')
-          .eq('pos_sales.business_id', business_id)
-          .gte('created_at', fourHoursAgo.toISOString()),
-        supabaseAdmin.from('pos_sale_items')
-          .select('product_id,quantity,line_total,sale_id,created_at')
-          .eq('pos_sales.business_id', business_id)
-          .gte('created_at', thirtyDaysAgo.toISOString())
-          .lt('created_at', fourHoursAgo.toISOString()),
-        supabaseAdmin.from('pos_sale_items')
-          .select('product_id,quantity,line_total,sale_id,created_at')
-          .eq('pos_sales.business_id', business_id)
-          .gte('created_at', fourteenDaysAgo.toISOString()),
-      ])
+      // STEP 1: FETCH PRODUCTS
+      const { data: prodData } = await supabaseAdmin.from('pos_products')
+        .select('id,name,price,cost_price,margin_pct,category_id,grid_position,agent_hidden,agent_upsell_product_id,agent_bundle_product_id,agent_bundle_price,stock_quantity,prep_time_minutes')
+        .eq('business_id', business_id)
+        .eq('is_active', true)
 
-      const products = (prodRes.data ?? []) as ProductRow[]
+      const products = (prodData ?? []) as ProductRow[]
       if (products.length === 0) {
         return { decisions: [], errors: [], duration_ms: Date.now() - t0 }
       }
 
-      const saleItemsNow = (saleItemsNowRes.data ?? []) as SaleItemRow[]
-      const saleItemsBaseline = (saleItemsBaselineRes.data ?? []) as SaleItemRow[]
-      const saleItemsHalo = (saleItemsHaloRes.data ?? []) as SaleItemRow[]
+      // STEP 2: Fetch business sale IDs to prevent cross-business item contamination
+      // (.eq('pos_sales.business_id', ...) on pos_sale_items is not a valid PostgREST filter without !inner join)
+      const { data: bizSalesRaw } = await supabaseAdmin
+        .from('pos_sales')
+        .select('id,created_at')
+        .eq('business_id', business_id)
+        .neq('status', 'voided')
+        .gte('created_at', thirtyDaysAgo.toISOString())
+        .limit(5000)
+      const bizSales = bizSalesRaw ?? []
+      const allBizSaleIds = bizSales.map(s => s.id)
+      const nowSaleIds = bizSales.filter(s => new Date(s.created_at) >= fourHoursAgo).map(s => s.id)
+      const baselineSaleIds = bizSales.filter(s => new Date(s.created_at) < fourHoursAgo).map(s => s.id)
+      const fourteenDaySaleIds = bizSales.filter(s => new Date(s.created_at) >= fourteenDaysAgo).map(s => s.id)
 
-      // STEP 2: VELOCITY SCORING
+      // Helper to fetch items in chunks
+      const fetchItems = async (ids: string[]): Promise<SaleItemRow[]> => {
+        if (ids.length === 0) return []
+        const result: SaleItemRow[] = []
+        for (let i = 0; i < ids.length; i += 500) {
+          const { data } = await supabaseAdmin.from('pos_sale_items')
+            .select('product_id,quantity,line_total,sale_id,created_at')
+            .in('sale_id', ids.slice(i, i + 500))
+          result.push(...(data ?? []) as SaleItemRow[])
+        }
+        return result
+      }
+
+      const [saleItemsNow, saleItemsBaseline, saleItemsHalo] = await Promise.all([
+        fetchItems(nowSaleIds),
+        fetchItems(baselineSaleIds),
+        fetchItems(fourteenDaySaleIds),
+      ])
+
+      // STEP 3: VELOCITY SCORING
       const unitsSoldNow: Record<string, number> = {}
       for (const si of saleItemsNow) {
         unitsSoldNow[si.product_id] = (unitsSoldNow[si.product_id] ?? 0) + Number(si.quantity)
@@ -110,7 +125,7 @@ export class MenuEngineeringAgent extends BaseAgent {
         }
       }
 
-      // STEP 3: MARGIN SCORING
+      // STEP 4: MARGIN SCORING
       const maxMargin = Math.max(
         ...products.map(p => {
           const mp = Number(p.margin_pct ?? 0)
@@ -126,14 +141,14 @@ export class MenuEngineeringAgent extends BaseAgent {
         return s + mp
       }, 0) / Math.max(products.length, 1)
 
-      // STEP 4: HALO SCORING — build co-purchase map
+      // STEP 5: HALO SCORING — build co-purchase map
       const haloBySaleId: Record<string, Array<{ product_id: string; line_total: number }>> = {}
       for (const si of saleItemsHalo) {
         if (!haloBySaleId[si.sale_id]) haloBySaleId[si.sale_id] = []
         haloBySaleId[si.sale_id].push({ product_id: si.product_id, line_total: Number(si.line_total) })
       }
 
-      // STEP 5: COMPOSITE SCORE + BCG CLASSIFICATION
+      // STEP 6: COMPOSITE SCORE + BCG CLASSIFICATION
       const scores: ScoreData[] = products.map(p => {
         // Velocity
         const unitsSold = unitsSoldNow[p.id] ?? 0
@@ -204,10 +219,7 @@ export class MenuEngineeringAgent extends BaseAgent {
         }
       })
 
-      // STEP 10: TIME-OF-DAY MODE SWITCHING (determine before grid sort)
-      // Using UTC hours; AEST = UTC+10, AEDT = UTC+11
-      // Fri/Sat (UTC dow 4,5) dinner rush 18-20 UTC ≈ 4-6am AEST (not dinner)
-      // Better to use raw UTC logic as a proxy
+      // STEP 7: TIME-OF-DAY MODE SWITCHING
       const isPeak = (dow >= 4 && dow <= 5 && hour >= 8 && hour <= 10) ||
                      (hour >= 1 && hour <= 3 && dow >= 1 && dow <= 5)
       const isQuiet = (dow >= 1 && dow <= 4 && hour >= 4 && hour <= 6)
@@ -215,10 +227,9 @@ export class MenuEngineeringAgent extends BaseAgent {
       if (isPeak) currentMode = 'peak'
       else if (isQuiet) currentMode = 'quiet'
 
-      // STEP 6: GRID POSITIONING
+      // STEP 8: GRID POSITIONING (compute before domain ops)
       let gridSorted: ScoreData[]
       if (currentMode === 'peak') {
-        // Speed proxy: prefer products with no prep_time (null or 0) and low price
         gridSorted = [...scores].sort((a, b) => {
           const aSpeed = (a.product.prep_time_minutes ?? 0) === 0 ? 0 : 1
           const bSpeed = (b.product.prep_time_minutes ?? 0) === 0 ? 0 : 1
@@ -240,240 +251,266 @@ export class MenuEngineeringAgent extends BaseAgent {
         }
       }
 
-      if (gridActions.length > 0) {
-        for (const ga of gridActions) {
-          await supabaseAdmin.from('pos_products').update({ grid_position: ga.next, last_scored_at: nowUtc.toISOString() }).eq('id', ga.product_id)
-        }
-        await supabaseAdmin.from('menu_engineering_actions').insert({
-          business_id,
-          action_type: 'reorder_grid',
-          previous_state: { positions: gridActions.map(g => ({ product_id: g.product_id, position: g.prev })) },
-          new_state: { positions: gridActions.map(g => ({ product_id: g.product_id, position: g.next })) },
-          reasoning: currentMode + ' mode — sorted ' + gridActions.length + ' products by ' + (currentMode === 'peak' ? 'speed' : currentMode === 'quiet' ? 'margin' : 'composite score'),
-        })
-
-        if (currentMode === 'peak') {
-          await supabaseAdmin.from('menu_engineering_actions').insert({ business_id, action_type: 'activate_peak_mode', reasoning: 'Peak hour detected — grid sorted by speed proxy' })
-        } else if (currentMode === 'quiet') {
-          await supabaseAdmin.from('menu_engineering_actions').insert({ business_id, action_type: 'activate_quiet_mode', reasoning: 'Quiet period — grid sorted by margin_score DESC' })
-        }
-      }
-
-      // STEP 7: UPSELL WIRING
-      const starProducts = scores.filter(s => s.performance_tier === 'star')
-      const puzzleProducts = scores.filter(s => s.performance_tier === 'puzzle')
-
-      for (const star of starProducts) {
-        const xCatPuzzle = puzzleProducts.filter(p => p.product.category_id !== star.product.category_id)
-        if (xCatPuzzle.length === 0) continue
-        const bestPuzzle = xCatPuzzle.sort((a, b) => b.margin_score - a.margin_score)[0]
-        if (star.product.agent_upsell_product_id !== bestPuzzle.product.id) {
-          await supabaseAdmin.from('pos_products').update({ agent_upsell_product_id: bestPuzzle.product.id }).eq('id', star.product.id)
-          await supabaseAdmin.from('menu_engineering_actions').insert({
-            business_id,
-            action_type: 'set_upsell',
-            product_id: star.product.id,
-            new_state: { upsell_product_id: bestPuzzle.product.id, upsell_name: bestPuzzle.product.name },
-            reasoning: 'Star product ' + star.product.name + ' upsells Puzzle product ' + bestPuzzle.product.name + ' (highest margin, different category)',
-          })
-        }
-      }
-
-      // STEP 8: BUNDLE DETECTION
-      for (const s of scores) {
-        if (s.halo_products.length === 0) continue
-        const topCoPurchased = s.halo_products[0]
-        const coProd = scores.find(sc => sc.product.id === topCoPurchased)
-        if (!coProd || coProd.performance_tier !== 'puzzle') continue
-
-        const bundlePrice = (s.product.price + coProd.product.price) * 0.90
-        const minProfitable = ((s.product.cost_price ?? s.product.price * 0.5) + (coProd.product.cost_price ?? coProd.product.price * 0.5)) * 1.20
-        if (bundlePrice < minProfitable) continue
-
-        if (s.product.agent_bundle_product_id !== coProd.product.id || s.product.agent_bundle_price !== bundlePrice) {
-          await supabaseAdmin.from('pos_products').update({
-            agent_bundle_product_id: coProd.product.id,
-            agent_bundle_price: Math.round(bundlePrice * 100) / 100,
-          }).eq('id', s.product.id)
-          await supabaseAdmin.from('menu_engineering_actions').insert({
-            business_id,
-            action_type: 'activate_bundle',
-            product_id: s.product.id,
-            new_state: { bundle_with: coProd.product.id, bundle_price: bundlePrice },
-            reasoning: s.product.name + ' and ' + coProd.product.name + ' co-purchased in ' + Math.round((s.halo_products.length > 0 ? 1 : 0) * 100) + '% of sales — bundle at $' + bundlePrice.toFixed(2),
-          })
-        }
-      }
-
-      // STEP 9: HIDE DOG PRODUCTS
+      // Compute dog products before domain ops (filter only — no DB read)
       const dogProducts = scores.filter(s =>
         s.performance_tier === 'dog' &&
         s.velocity_vs_avg < 0.3 &&
         Number(s.product.stock_quantity ?? 0) > 0 &&
         !s.product.agent_hidden
       )
+      const starProducts = scores.filter(s => s.performance_tier === 'star')
+      const puzzleProducts = scores.filter(s => s.performance_tier === 'puzzle')
 
-      for (const dog of dogProducts) {
-        await supabaseAdmin.from('pos_products').update({ agent_hidden: true, grid_position: 9999 }).eq('id', dog.product.id)
-        await supabaseAdmin.from('menu_engineering_actions').insert({
-          business_id,
-          action_type: 'hide_product',
-          product_id: dog.product.id,
-          previous_state: { agent_hidden: false, grid_position: dog.product.grid_position },
-          new_state: { agent_hidden: true, grid_position: 9999 },
-          reasoning: 'velocity ' + dog.velocity_vs_avg.toFixed(2) + 'x avg, BCG=dog, hiding to reduce menu confusion',
-        })
-        // Clearance promotion
-        await supabaseAdmin.from('pos_promotions').insert({
-          business_id,
-          name: 'Clearance — ' + dog.product.name,
-          discount_percent: 20,
-          product_ids: [dog.product.id],
-          valid_from: nowUtc.toISOString(),
-          valid_until: new Date(nowUtc.getTime() + 48 * 3600000).toISOString(),
-          is_active: true,
-          created_at: nowUtc.toISOString(),
-        }).then(() => {}, () => {})
-      }
-
-      // STEP 11: LEARNING LOOP
-      const fourHourCheck = new Date(nowUtc.getTime() - 4 * 3600000)
-      const eightHoursAgo = new Date(nowUtc.getTime() - 8 * 3600000)
-      const { data: oldActions } = await supabaseAdmin
-        .from('menu_engineering_actions')
-        .select('id, product_id, action_type, executed_at')
-        .eq('business_id', business_id)
-        .is('revenue_impact_actual', null)
-        .gte('executed_at', eightHoursAgo.toISOString())
-        .lt('executed_at', fourHourCheck.toISOString())
-
-      let weightAdjusted = false
-      const positiveMoves: number[] = []
-      const negativeMoves: number[] = []
-
-      for (const action of oldActions ?? []) {
-        if (!action.product_id) continue
-        const execAt = new Date(action.executed_at)
-        const endAt = new Date(execAt.getTime() + 4 * 3600000)
-
-        const { data: afterItems } = await supabaseAdmin
-          .from('pos_sale_items')
-          .select('line_total')
-          .eq('product_id', action.product_id)
-          .gte('created_at', execAt.toISOString())
-          .lt('created_at', endAt.toISOString())
-
-        const afterRevenue = (afterItems ?? []).reduce((s: number, i: { line_total: number }) => s + Number(i.line_total), 0)
-
-        // Find before revenue from product_performance_scores
-        const { data: scoreRow } = await supabaseAdmin
-          .from('product_performance_scores')
-          .select('revenue_4h_before_change')
-          .eq('business_id', business_id)
-          .eq('product_id', action.product_id)
-          .order('scored_at', { ascending: false })
-          .limit(1)
-          .maybeSingle()
-
-        const beforeRevenue = Number(scoreRow?.revenue_4h_before_change ?? 0)
-        const impact = afterRevenue - beforeRevenue
-
-        await supabaseAdmin.from('menu_engineering_actions')
-          .update({ revenue_impact_actual: impact })
-          .eq('id', action.id)
-
-        if (action.action_type === 'reorder_grid') {
-          if (impact > 0) positiveMoves.push(impact)
-          else negativeMoves.push(impact)
-        }
-      }
-
-      // Weight adaptation — 0.02 per cycle
-      if ((positiveMoves.length > 0 || negativeMoves.length > 0) && !weightAdjusted) {
-        const currentVW = velocityWeight
-        const currentMW = marginWeight
-        const currentHW = haloWeight
-        let newVW = currentVW, newMW = currentMW, newHW = currentHW
-
-        if (positiveMoves.length > negativeMoves.length) {
-          // Grid reorder working well — velocity weight is good
-          newVW = Math.min(0.60, currentVW + 0.02)
-        } else {
-          // Puzzle promotions underperforming — shift from halo to margin
-          newHW = Math.max(0.10, currentHW - 0.02)
-          newMW = Math.min(0.50, currentMW + 0.02)
-        }
-
-        // Normalise to sum to 1
-        const total = newVW + newMW + newHW
-        await supabaseAdmin.from('agent_settings').upsert({
-          business_id,
-          agent_type: 'menu_engineering',
-          config: {
-            ...cfg,
-            learned_weights: {
-              velocity: Math.round(newVW / total * 100) / 100,
-              margin: Math.round(newMW / total * 100) / 100,
-              halo: Math.round(newHW / total * 100) / 100,
-            },
-          },
-          updated_at: nowUtc.toISOString(),
-        }, { onConflict: 'business_id,agent_type' }).then(() => {}, () => {})
-        weightAdjusted = true
-      }
-
-      // FINAL: Upsert product_performance_scores
-      const upsertRows = scores.map(s => ({
+      // AI reasoning for the decision
+      const aiReasoning = await this.claudeStructured<{ reasoning: string; top_recommendation: string }>({
+        system: 'You are a menu engineering expert for Australian cafes and restaurants. In 1-2 sentences, summarise the key finding and most important action for the owner.',
+        user: JSON.stringify({
+          total_products: scores.length,
+          stars: starProducts.length,
+          dogs: dogProducts.length,
+          puzzles: puzzleProducts.length,
+          grid_changes: gridActions.length,
+          mode: currentMode,
+          top_star: starProducts[0]?.product.name,
+          top_dog: dogProducts[0]?.product.name,
+          data_available: allBizSaleIds.length > 0,
+        }),
+        maxTokens: 150,
+        agent_key: 'menu_engineering',
+        role: 'analysis',
         business_id,
-        product_id: s.product.id,
-        scored_at: nowUtc.toISOString(),
-        period_hours: 4,
-        units_sold_this_period: s.units_sold_this_period,
-        units_sold_baseline_same_period: s.units_sold_baseline,
-        velocity_vs_avg: Math.round(s.velocity_vs_avg * 1000) / 1000,
-        margin_pct: Math.round(s.margin_pct * 100) / 100,
-        margin_dollars_per_unit: Math.round(s.margin_dollars_per_unit * 100) / 100,
-        margin_score: Math.round(s.margin_score * 1000) / 1000,
-        halo_score: Math.round(s.halo_score * 1000) / 1000,
-        halo_products: s.halo_products,
-        halo_avg_copur_margin: Math.round(s.halo_avg_copur_margin * 100) / 100,
-        composite_score: Math.round(s.composite_score * 1000) / 1000,
-        performance_tier: s.performance_tier,
-        recommended_grid_position: gridSorted.findIndex(gs => gs.product.id === s.product.id) + 1,
-      }))
+      });
 
-      // Batch insert (ignore conflict = same scored_at)
-      for (const row of upsertRows) {
-        await supabaseAdmin.from('product_performance_scores').insert(row).then(() => {}, () => {})
-      }
-
-      // Update performance_tier on products
-      for (const s of scores) {
-        await supabaseAdmin.from('pos_products')
-          .update({ performance_tier: s.performance_tier, last_scored_at: nowUtc.toISOString() })
-          .eq('id', s.product.id)
-      }
-
-      // Save an AgentDecision summarising the run
+      // Push decision BEFORE domain ops — ensures it always emits even if DB writes fail
       decisions.push({
         agent_type: 'menu_engineering',
         business_id,
         decision_data: {
           action_type: 'menu_reorder',
           title: 'Menu engineering cycle complete',
-          description: 'Scored ' + scores.length + ' products. Stars: ' + scores.filter(s => s.performance_tier === 'star').length + ', Dogs: ' + dogProducts.length + ' hidden, Mode: ' + currentMode,
-          stars: scores.filter(s => s.performance_tier === 'star').length,
+          description: 'Scored ' + scores.length + ' products. Stars: ' + starProducts.length + ', Dogs: ' + dogProducts.length + ' hidden, Mode: ' + currentMode,
+          stars: starProducts.length,
           dogs: scores.filter(s => s.performance_tier === 'dog').length,
-          puzzles: scores.filter(s => s.performance_tier === 'puzzle').length,
+          puzzles: puzzleProducts.length,
           plowhouses: scores.filter(s => s.performance_tier === 'plowhouse').length,
           grid_changes: gridActions.length,
           mode: currentMode,
+          top_recommendation: aiReasoning?.top_recommendation,
         },
-        reasoning: 'Full BCG scoring cycle: ' + gridActions.length + ' grid changes, ' + dogProducts.length + ' products hidden',
+        reasoning: aiReasoning?.reasoning ?? ('Full BCG scoring cycle: ' + gridActions.length + ' grid changes, ' + dogProducts.length + ' products hidden'),
         confidence_score: 0.8,
-        projected_impact_cents: Math.round(scores.filter(s => s.performance_tier === 'star').reduce((s, sc) => s + sc.margin_dollars_per_unit * sc.units_sold_this_period, 0) * 100),
+        projected_impact_cents: Math.round(starProducts.reduce((s, sc) => s + sc.margin_dollars_per_unit * sc.units_sold_this_period, 0) * 100),
         expires_at: new Date(nowUtc.getTime() + 4 * 3600000).toISOString(),
       })
+
+      // DOMAIN OPS — each section wrapped so exceptions never kill the decision
+      try {
+        if (gridActions.length > 0) {
+          for (const ga of gridActions) {
+            await supabaseAdmin.from('pos_products').update({ grid_position: ga.next, last_scored_at: nowUtc.toISOString() }).eq('id', ga.product_id)
+          }
+          await supabaseAdmin.from('menu_engineering_actions').insert({
+            business_id,
+            action_type: 'reorder_grid',
+            previous_state: { positions: gridActions.map(g => ({ product_id: g.product_id, position: g.prev })) },
+            new_state: { positions: gridActions.map(g => ({ product_id: g.product_id, position: g.next })) },
+            reasoning: currentMode + ' mode — sorted ' + gridActions.length + ' products by ' + (currentMode === 'peak' ? 'speed' : currentMode === 'quiet' ? 'margin' : 'composite score'),
+          })
+          if (currentMode === 'peak') {
+            await supabaseAdmin.from('menu_engineering_actions').insert({ business_id, action_type: 'activate_peak_mode', reasoning: 'Peak hour detected — grid sorted by speed proxy' })
+          } else if (currentMode === 'quiet') {
+            await supabaseAdmin.from('menu_engineering_actions').insert({ business_id, action_type: 'activate_quiet_mode', reasoning: 'Quiet period — grid sorted by margin_score DESC' })
+          }
+        }
+      } catch (e) { errors.push(e instanceof Error ? e : new Error(String(e))) }
+
+      // UPSELL WIRING
+      try {
+        for (const star of starProducts) {
+          const xCatPuzzle = puzzleProducts.filter(p => p.product.category_id !== star.product.category_id)
+          if (xCatPuzzle.length === 0) continue
+          const bestPuzzle = xCatPuzzle.sort((a, b) => b.margin_score - a.margin_score)[0]
+          if (star.product.agent_upsell_product_id !== bestPuzzle.product.id) {
+            await supabaseAdmin.from('pos_products').update({ agent_upsell_product_id: bestPuzzle.product.id }).eq('id', star.product.id)
+            await supabaseAdmin.from('menu_engineering_actions').insert({
+              business_id,
+              action_type: 'set_upsell',
+              product_id: star.product.id,
+              new_state: { upsell_product_id: bestPuzzle.product.id, upsell_name: bestPuzzle.product.name },
+              reasoning: 'Star product ' + star.product.name + ' upsells Puzzle product ' + bestPuzzle.product.name + ' (highest margin, different category)',
+            })
+          }
+        }
+      } catch (e) { errors.push(e instanceof Error ? e : new Error(String(e))) }
+
+      // BUNDLE DETECTION
+      try {
+        for (const s of scores) {
+          if (s.halo_products.length === 0) continue
+          const topCoPurchased = s.halo_products[0]
+          const coProd = scores.find(sc => sc.product.id === topCoPurchased)
+          if (!coProd || coProd.performance_tier !== 'puzzle') continue
+
+          const bundlePrice = (s.product.price + coProd.product.price) * 0.90
+          const minProfitable = ((s.product.cost_price ?? s.product.price * 0.5) + (coProd.product.cost_price ?? coProd.product.price * 0.5)) * 1.20
+          if (bundlePrice < minProfitable) continue
+
+          if (s.product.agent_bundle_product_id !== coProd.product.id || s.product.agent_bundle_price !== bundlePrice) {
+            await supabaseAdmin.from('pos_products').update({
+              agent_bundle_product_id: coProd.product.id,
+              agent_bundle_price: Math.round(bundlePrice * 100) / 100,
+            }).eq('id', s.product.id)
+            await supabaseAdmin.from('menu_engineering_actions').insert({
+              business_id,
+              action_type: 'activate_bundle',
+              product_id: s.product.id,
+              new_state: { bundle_with: coProd.product.id, bundle_price: bundlePrice },
+              reasoning: s.product.name + ' and ' + coProd.product.name + ' co-purchased — bundle at $' + bundlePrice.toFixed(2),
+            })
+          }
+        }
+      } catch (e) { errors.push(e instanceof Error ? e : new Error(String(e))) }
+
+      // HIDE DOG PRODUCTS
+      try {
+        for (const dog of dogProducts) {
+          await supabaseAdmin.from('pos_products').update({ agent_hidden: true, grid_position: 9999 }).eq('id', dog.product.id)
+          await supabaseAdmin.from('menu_engineering_actions').insert({
+            business_id,
+            action_type: 'hide_product',
+            product_id: dog.product.id,
+            previous_state: { agent_hidden: false, grid_position: dog.product.grid_position },
+            new_state: { agent_hidden: true, grid_position: 9999 },
+            reasoning: 'velocity ' + dog.velocity_vs_avg.toFixed(2) + 'x avg, BCG=dog, hiding to reduce menu confusion',
+          })
+          // Clearance promotion
+          await supabaseAdmin.from('pos_promotions').insert({
+            business_id,
+            name: 'Clearance — ' + dog.product.name,
+            discount_percent: 20,
+            product_ids: [dog.product.id],
+            valid_from: nowUtc.toISOString(),
+            valid_until: new Date(nowUtc.getTime() + 48 * 3600000).toISOString(),
+            is_active: true,
+            created_at: nowUtc.toISOString(),
+          }).then(() => {}, () => {})
+        }
+      } catch (e) { errors.push(e instanceof Error ? e : new Error(String(e))) }
+
+      // LEARNING LOOP
+      try {
+        const fourHourCheck = new Date(nowUtc.getTime() - 4 * 3600000)
+        const eightHoursAgo = new Date(nowUtc.getTime() - 8 * 3600000)
+        const { data: oldActions } = await supabaseAdmin
+          .from('menu_engineering_actions')
+          .select('id, product_id, action_type, executed_at')
+          .eq('business_id', business_id)
+          .is('revenue_impact_actual', null)
+          .gte('executed_at', eightHoursAgo.toISOString())
+          .lt('executed_at', fourHourCheck.toISOString())
+
+        let weightAdjusted = false
+        const positiveMoves: number[] = []
+        const negativeMoves: number[] = []
+
+        for (const action of oldActions ?? []) {
+          if (!action.product_id) continue
+          const execAt = new Date(action.executed_at)
+          const endAt = new Date(execAt.getTime() + 4 * 3600000)
+
+          const { data: afterItems } = await supabaseAdmin
+            .from('pos_sale_items')
+            .select('line_total')
+            .eq('product_id', action.product_id)
+            .gte('created_at', execAt.toISOString())
+            .lt('created_at', endAt.toISOString())
+
+          const afterRevenue = (afterItems ?? []).reduce((s: number, i: { line_total: number }) => s + Number(i.line_total), 0)
+
+          const { data: scoreRow } = await supabaseAdmin
+            .from('product_performance_scores')
+            .select('revenue_4h_before_change')
+            .eq('business_id', business_id)
+            .eq('product_id', action.product_id)
+            .order('scored_at', { ascending: false })
+            .limit(1)
+            .maybeSingle()
+
+          const beforeRevenue = Number(scoreRow?.revenue_4h_before_change ?? 0)
+          const impact = afterRevenue - beforeRevenue
+
+          await supabaseAdmin.from('menu_engineering_actions')
+            .update({ revenue_impact_actual: impact })
+            .eq('id', action.id)
+
+          if (action.action_type === 'reorder_grid') {
+            if (impact > 0) positiveMoves.push(impact)
+            else negativeMoves.push(impact)
+          }
+        }
+
+        if ((positiveMoves.length > 0 || negativeMoves.length > 0) && !weightAdjusted) {
+          const currentVW = velocityWeight
+          const currentMW = marginWeight
+          const currentHW = haloWeight
+          let newVW = currentVW, newMW = currentMW, newHW = currentHW
+
+          if (positiveMoves.length > negativeMoves.length) {
+            newVW = Math.min(0.60, currentVW + 0.02)
+          } else {
+            newHW = Math.max(0.10, currentHW - 0.02)
+            newMW = Math.min(0.50, currentMW + 0.02)
+          }
+
+          const total = newVW + newMW + newHW
+          await supabaseAdmin.from('agent_settings').upsert({
+            business_id,
+            agent_type: 'menu_engineering',
+            config: {
+              ...cfg,
+              learned_weights: {
+                velocity: Math.round(newVW / total * 100) / 100,
+                margin: Math.round(newMW / total * 100) / 100,
+                halo: Math.round(newHW / total * 100) / 100,
+              },
+            },
+            updated_at: nowUtc.toISOString(),
+          }, { onConflict: 'business_id,agent_type' }).then(() => {}, () => {})
+          weightAdjusted = true
+        }
+      } catch (e) { errors.push(e instanceof Error ? e : new Error(String(e))) }
+
+      // UPSERT PRODUCT PERFORMANCE SCORES
+      try {
+        const upsertRows = scores.map(s => ({
+          business_id,
+          product_id: s.product.id,
+          scored_at: nowUtc.toISOString(),
+          period_hours: 4,
+          units_sold_this_period: s.units_sold_this_period,
+          units_sold_baseline_same_period: s.units_sold_baseline,
+          velocity_vs_avg: Math.round(s.velocity_vs_avg * 1000) / 1000,
+          margin_pct: Math.round(s.margin_pct * 100) / 100,
+          margin_dollars_per_unit: Math.round(s.margin_dollars_per_unit * 100) / 100,
+          margin_score: Math.round(s.margin_score * 1000) / 1000,
+          halo_score: Math.round(s.halo_score * 1000) / 1000,
+          halo_products: s.halo_products,
+          halo_avg_copur_margin: Math.round(s.halo_avg_copur_margin * 100) / 100,
+          composite_score: Math.round(s.composite_score * 1000) / 1000,
+          performance_tier: s.performance_tier,
+          recommended_grid_position: gridSorted.findIndex(gs => gs.product.id === s.product.id) + 1,
+        }))
+
+        for (const row of upsertRows) {
+          await supabaseAdmin.from('product_performance_scores').insert(row).then(() => {}, () => {})
+        }
+
+        for (const s of scores) {
+          await supabaseAdmin.from('pos_products')
+            .update({ performance_tier: s.performance_tier, last_scored_at: nowUtc.toISOString() })
+            .eq('id', s.product.id)
+        }
+      } catch (e) { errors.push(e instanceof Error ? e : new Error(String(e))) }
 
       const savedDecisions = await this.saveDecisions(decisions)
       await this.logRun(business_id, { decisions: savedDecisions, errors, duration_ms: Date.now() - t0 })
