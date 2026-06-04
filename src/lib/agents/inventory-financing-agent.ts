@@ -103,10 +103,17 @@ export class InventoryFinancingAgent extends BaseAgent {
         await this.saveOpportunities(business_id, opportunities)
       }
 
-      // Save decisions for critical/high weeks
+      // Runway metric: first week where closing_cash < 2× weekly opex (safety threshold)
+      const weeklyOpex = outflows.weeklyPayroll + outflows.weeklyRentUtil + outflows.weeklyOther
+      const safetyThreshold = Math.max(500, weeklyOpex * 2)
+      const runwayWeeks = weeks.findIndex(w => w.closing_cash_position < safetyThreshold)
+      // -1 = never hits threshold in 14w; else = week number where it first dips below
+
+      // Save decisions for critical/high weeks OR when runway is short
       const criticalWeeks = weeks.filter(w => w.risk_level === 'critical' || w.risk_level === 'high')
-      if (criticalWeeks.length > 0) {
-        const worstWeek = criticalWeeks[0]
+      const runwayShort = runwayWeeks >= 0 && runwayWeeks < 8 // tight in next 8 weeks
+      if (criticalWeeks.length > 0 || runwayShort) {
+        const worstWeek = criticalWeeks.length > 0 ? criticalWeeks[0] : weeks[runwayWeeks]
         const aiReasoning = await this.claudeStructured<{ reasoning: string; owner_message: string }>({
           system: 'You are a cash flow advisor for Australian small businesses. In 1-2 sentences identify the key risk and the most actionable response the owner should take.',
           user: JSON.stringify({
@@ -115,6 +122,8 @@ export class InventoryFinancingAgent extends BaseAgent {
             worst_week: worstWeek.week_number,
             worst_week_date: worstWeek.forecast_week,
             closing_cash: Math.round(worstWeek.closing_cash_position),
+            safety_threshold: Math.round(safetyThreshold),
+            runway_weeks: runwayWeeks,
             risk_reason: worstWeek.risk_reason,
             critical_weeks: criticalWeeks.length,
             opportunities: opportunities.length,
@@ -124,12 +133,17 @@ export class InventoryFinancingAgent extends BaseAgent {
           role: 'forecast',
           business_id,
         });
+        // Impact = shortfall below safety threshold (not just negative cash)
+        // This correctly fires even when cash is positive-but-dangerously-low
+        const impactCents = Math.round(Math.max(0, safetyThreshold - worstWeek.closing_cash_position) * 100)
         decisions.push({
           business_id,
           agent_type: this.type,
           decision_data: {
             cash_source: isEstimated ? 'pos_estimate' : 'bank_feed',
             current_cash: currentCash,
+            safety_threshold: safetyThreshold,
+            runway_weeks: runwayWeeks,
             worst_week_number: worstWeek.week_number,
             worst_week_date: worstWeek.forecast_week,
             worst_closing_cash: worstWeek.closing_cash_position,
@@ -137,9 +151,9 @@ export class InventoryFinancingAgent extends BaseAgent {
             opportunities_generated: opportunities.length,
             owner_message: aiReasoning?.owner_message,
           },
-          reasoning: aiReasoning?.reasoning || worstWeek.risk_reason || ('Cash drops to $' + Math.round(worstWeek.closing_cash_position) + ' in week ' + worstWeek.week_number),
+          reasoning: aiReasoning?.reasoning || worstWeek.risk_reason || ('Cash drops to $' + Math.round(worstWeek.closing_cash_position) + ' in week ' + worstWeek.week_number + ' (safety threshold $' + Math.round(safetyThreshold) + ')'),
           confidence_score: 0.72,
-          projected_impact_cents: Math.round(Math.abs(Math.min(0, worstWeek.closing_cash_position)) * 100),
+          projected_impact_cents: impactCents,
           expires_at: addWeeks(new Date(), 2).toISOString(),
         })
       }

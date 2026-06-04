@@ -279,18 +279,34 @@ Return ONLY valid JSON with no markdown.`;
       });
     } catch { /* non-fatal */ }
 
-    // Elasticity-adjusted projected impact — deterministic, no AI computing money
-    // For revenue_shortfall: sigma_below × 0.20 → recovery fraction (capped at 0.65)
-    // For other triggers: AI lift pct applied to 2h baseline revenue
+    // Projected impact — deterministic from historical baseline, never from AI
+    // For revenue_shortfall: use historical baseline_1h_revenue × remaining hours × recovery rate
+    // For other triggers: use max(recent 2h, 2× hourly baseline) × lift pct
     let projectedImpactCents: number;
+    const triggerData = primaryTrigger.data as Record<string, unknown>;
+    const baselineHourlyRev = Number(triggerData.baseline_1h_revenue ?? 0);
     if (primaryTrigger.type === 'revenue_shortfall') {
-      const sigmaBelow = Number((primaryTrigger.data as Record<string, unknown>).sigma_below ?? 1.5);
-      const shortfallAmt = Number((primaryTrigger.data as Record<string, unknown>).shortfall_pct ?? 30) / 100 * revenueIn2hBefore;
-      const recoveryRate = Math.min(0.65, sigmaBelow * 0.20); // stronger signal → higher expected recovery
-      projectedImpactCents = Math.round(Math.max(0, shortfallAmt * recoveryRate) * 100);
+      const sigmaBelow = Number(triggerData.sigma_below ?? 1.5);
+      const recoveryRate = Math.min(0.65, sigmaBelow * 0.20);
+      // Remaining operating hours today (assume 9am–10pm = 13h window)
+      const nowHour = new Date().getHours();
+      const remainingHours = Math.max(1, 22 - nowHour);
+      const expectedRemaining = baselineHourlyRev > 0
+        ? baselineHourlyRev * remainingHours
+        : Number(triggerData.shortfall_pct ?? 30) / 100 * Math.max(revenueIn2hBefore, 50);
+      projectedImpactCents = Math.round(Math.max(0, expectedRemaining * recoveryRate) * 100);
     } else {
-      projectedImpactCents = Math.round(revenueIn2hBefore * (intervention.expected_lift_pct ?? 15) / 100 * 100);
+      // Use max of recent revenue or 2× hourly historical baseline — prevents $0 on quiet hours
+      const baseRev = Math.max(revenueIn2hBefore, baselineHourlyRev * 2);
+      projectedImpactCents = Math.round(baseRev * (intervention.expected_lift_pct ?? 15) / 100 * 100);
     }
+
+    // Confidence = data strength, not lift magnitude
+    // Higher sigma deviation = clearer signal = higher confidence (capped 0.55–0.92)
+    const sigmaForConf = primaryTrigger.type === 'revenue_shortfall'
+      ? Number(triggerData.sigma_below ?? 1.5)
+      : 1.5;
+    const confidence_score = Math.min(0.92, Math.max(0.55, 0.50 + sigmaForConf * 0.10));
 
     // STEP 9 — Save agent decision
     const decisions = await this.saveDecisions([{
@@ -302,7 +318,7 @@ Return ONLY valid JSON with no markdown.`;
         flash_intervention_id: flashRow?.id,
       },
       reasoning: intervention.reasoning,
-      confidence_score: Math.min(1, (intervention.expected_lift_pct ?? 15) / 100),
+      confidence_score,
       projected_impact_cents: projectedImpactCents,
       expires_at: expiresAt.toISOString(),
       status: mode === 'auto' ? 'auto_executed' : 'pending',

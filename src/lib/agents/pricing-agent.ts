@@ -63,7 +63,7 @@ export class PricingAgent extends BaseAgent {
 
       // Fetch competitor cache — one row per competitor per product
       const { data: compRows } = await this.supabase.from('competitor_price_cache')
-        .select('product_name,competitor_name,competitor_price_cents,own_price_cents,own_margin_pct')
+        .select('product_name,competitor_name,competitor_price_cents')
         .eq('business_id', business_id)
         .gt('expires_at', new Date().toISOString())
         .limit(2000);
@@ -182,11 +182,11 @@ export class PricingAgent extends BaseAgent {
       }
 
       // Competitor-based pricing path
-      interface CompEntry { competitor_prices: number[]; own_price_cents: number; own_margin_pct: number; comp_rows: Array<{ name: string; price: number }>; }
+      interface CompEntry { competitor_prices: number[]; comp_rows: Array<{ name: string; price: number }>; }
       const productCompMap = new Map<string, CompEntry>();
-      for (const row of (compRows as Array<{ product_name: string; competitor_name: string; competitor_price_cents: number; own_price_cents: number; own_margin_pct: number }>)) {
+      for (const row of (compRows as Array<{ product_name: string; competitor_name: string; competitor_price_cents: number }>)) {
         if (!productCompMap.has(row.product_name)) {
-          productCompMap.set(row.product_name, { competitor_prices: [], own_price_cents: row.own_price_cents ?? 0, own_margin_pct: row.own_margin_pct ?? 0, comp_rows: [] });
+          productCompMap.set(row.product_name, { competitor_prices: [], comp_rows: [] });
         }
         if (row.competitor_price_cents) {
           const entry = productCompMap.get(row.product_name)!;
@@ -232,7 +232,7 @@ export class PricingAgent extends BaseAgent {
       for (const [productName, aggData] of productCompMap) {
         const compPrices = aggData.competitor_prices;
         if (compPrices.length < MIN_COMPETITOR_POINTS) continue;
-        const cc = { product_name: productName, own_price_cents: aggData.own_price_cents, own_margin_pct: aggData.own_margin_pct };
+        const cc = { product_name: productName };
         const cheapest = aggData.comp_rows.reduce((a, b) => a.price < b.price ? a : b, aggData.comp_rows[0]);
         const mostExpensive = aggData.comp_rows.reduce((a, b) => a.price > b.price ? a : b, aggData.comp_rows[0]);
 
@@ -241,7 +241,7 @@ export class PricingAgent extends BaseAgent {
 
         if (recentlyPricedProductIds.has(product.id)) continue;
 
-        const ourPrice = (product.price as number | null) ?? (cc.own_price_cents / 100);
+        const ourPrice = Number(product.price) || 0;
         const median = quantile(compPrices, 0.5);
         const p25 = quantile(compPrices, 0.25);
         const p75 = quantile(compPrices, 0.75);
@@ -262,10 +262,15 @@ export class PricingAgent extends BaseAgent {
           // Price drop always allowed — demand curve supports it
           suggested = this.roundToNearest99(median);
           focus = 'price-drop-to-recover-volume';
-        } else if (positionPct <= 0.25 && cc.own_margin_pct > 30 && isInelastic) {
+        } else if (positionPct <= 0.25 && isInelastic) {
           // Only lift when inelastic (β1 > -1 means revenue increases with price)
-          suggested = this.roundToNearest99(p75 - 0.50);
-          focus = 'price-lift-on-margin-opportunity';
+          // Margin guard: compute real margin from pos_products (own_margin_pct was a phantom column)
+          const productCost = Number(product.cost_price ?? 0);
+          const realMarginPct = ourPrice > 0 && productCost > 0 ? (ourPrice - productCost) / ourPrice * 100 : 0;
+          if (realMarginPct > 30 || productCost === 0) {
+            suggested = this.roundToNearest99(p75 - 0.50);
+            focus = 'price-lift-on-margin-opportunity';
+          }
         }
 
         if (!suggested || Math.abs(suggested - ourPrice) < 0.10) continue;
