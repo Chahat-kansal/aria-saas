@@ -240,12 +240,19 @@ export default function ReelStudioPage() {
     return () => { if (pollRef.current) clearTimeout(pollRef.current) }
   }, [])
 
-  // Auto-poll history when any session is processing
+  // Auto-poll history: actively resolve any processing job against fal.ai, then refresh
   useEffect(() => {
     if (tab !== 'history' || !bid) return
-    const hasProcessing = sessions.some(s => s.status === 'processing')
-    if (!hasProcessing) return
-    const t = setTimeout(() => loadBiz(bid), 10000)
+    const processingJobs = sessions.filter(s => s.status === 'processing' && s.higgsfield_job_id)
+    if (!processingJobs.length) return
+    const t = setTimeout(async () => {
+      // Hit the status endpoint for each processing job — this checks fal.ai and updates the DB
+      await Promise.all(processingJobs.map(s =>
+        fetch(STATUS_URL + '?job_id=' + s.higgsfield_job_id + '&session_id=' + s.id)
+          .then(r => r.json()).catch(() => null)
+      ))
+      if (bid) loadBiz(bid)
+    }, 6000)
     return () => clearTimeout(t)
   }, [tab, sessions, bid])
 
