@@ -4,6 +4,42 @@ import { trackAICall } from '@/lib/aria/ai-telemetry';
 import { BaseAgent } from './base-agent';
 import type { AgentType, AgentRunResult, AgentDecisionInput } from './types';
 
+// BG/NBD model (Fader, Hardie, Lee 2005) with fixed retail priors:
+// r=0.5, alpha=10 (Gamma-Poisson purchase rate); a=0.8, b=2.5 (Beta-Geometric churn)
+function bgNbd(
+  x: number,            // transactions in observation window T
+  T: number,            // observation window in days
+  daysSinceLast: number // days since most recent transaction
+): { pAlive: number; expectedPurchases90d: number; expectedNextOrderDays: number } {
+  const r = 0.5, alpha = 10.0, a = 0.8, b = 2.5;
+  if (x === 0 || T <= 0) {
+    return { pAlive: Math.round(b / (a + b) * 1000) / 1000, expectedPurchases90d: 0, expectedNextOrderDays: 60 };
+  }
+  // Gamma-Poisson posterior mean purchase rate (per day)
+  const lambdaPost = (r + x) / (alpha + T);
+  // Beta-Geometric: P(survived x churn opportunities)
+  const pSurvived = (b + x - 1) / (a + b + x - 1);
+  // Bayes P(alive | daysSinceLast silence): P(gap|alive)×P(alive) / normalizer
+  const pNoGap = Math.exp(-lambdaPost * daysSinceLast);
+  const pAliveNum = pNoGap * pSurvived;
+  const pAlive = Math.max(0.01, Math.min(0.99, pAliveNum / (pAliveNum + (1 - pSurvived))));
+  const expectedPurchases90d = pAlive * lambdaPost * 90;
+  const expectedNextOrderDays = pAlive > 0.1 ? Math.round(1 / lambdaPost) : 365;
+  return {
+    pAlive: Math.round(pAlive * 1000) / 1000,
+    expectedPurchases90d: Math.round(expectedPurchases90d * 10) / 10,
+    expectedNextOrderDays,
+  };
+}
+
+// Gamma-Gamma monetary model (Fader & Hardie 2013) — expected spend per transaction
+// given x transactions with sample mean zbar. Parameters p=6.25, q=3.74, gamma=15.44 (literature values)
+function gammaGammaExpectedSpend(avgBasket: number, x: number): number {
+  const p = 6.25, q = 3.74, gg = 15.44;
+  if (x <= 0 || avgBasket <= 0) return avgBasket;
+  return (p * gg + x * avgBasket) / (p * q + x);
+}
+
 interface PurchaseRecord {
   sale_id: string;
   created_at: string;
@@ -29,6 +65,9 @@ interface CustomerFeatures {
   visit_trend: 'accelerating' | 'stable' | 'decelerating' | 'dormant';
   spend_trend: 'growing' | 'stable' | 'declining';
   days_since_last_visit: number;
+  p_alive: number;
+  expected_purchases_next_90d: number;
+  expected_next_order_date: string | null;
   predicted_monthly_revenue: number;
   predicted_annual_revenue: number;
   predicted_3yr_clv: number;
@@ -272,14 +311,22 @@ export class CLVAgent extends BaseAgent {
         ? Math.floor((now - lastVisitDate.getTime()) / 86400000)
         : 999;
 
-      // CLV predictions
+      // BG/NBD + Gamma-Gamma CLV predictions
+      const daysAsCustomer = Math.max(monthsAsCustomer * 30, 1);
+      const bgResult = bgNbd(recentPurchases.length, daysAsCustomer, daysSinceLastVisit);
+      const pAlive = bgResult.pAlive;
+      const expectedPurchases90d = bgResult.expectedPurchases90d;
+      const expectedNextOrderDays = bgResult.expectedNextOrderDays;
+      const expectedNextOrderDate = pAlive > 0.1
+        ? new Date(Date.now() + expectedNextOrderDays * 86400000).toISOString().slice(0, 10)
+        : null;
+      // Gamma-Gamma adjusted basket (shrinks toward population mean for sparse buyers)
+      const adjustedBasket = gammaGammaExpectedSpend(avgBasket, recentPurchases.length);
       const trendAdj = spendTrend === 'growing' ? 0.10 : spendTrend === 'declining' ? -0.10 : 0;
-      const predictedMonthlyRevenue = avgBasket * visitFreq;
+      const predictedMonthlyRevenue = adjustedBasket * (expectedPurchases90d / 3);
       const predictedAnnualRevenue = predictedMonthlyRevenue * 12 * (1 + trendAdj);
-      const baseChurn = daysSinceLastVisit / 365;
-      const adjustedChurn = baseChurn * (1 - seasonalConsistency);
-      const churnProbability = Math.min(adjustedChurn, 0.90);
-      const predicted3yrClv = predictedAnnualRevenue * 3 * (1 - churnProbability);
+      const churnProbability = Math.round((1 - pAlive) * 1000) / 1000;
+      const predicted3yrClv = predictedAnnualRevenue * 3 * pAlive;
 
       businessAvgBasket += avgBasket;
 
@@ -301,10 +348,13 @@ export class CLVAgent extends BaseAgent {
         visit_trend: visitTrend,
         spend_trend: spendTrend,
         days_since_last_visit: daysSinceLastVisit,
+        p_alive: pAlive,
+        expected_purchases_next_90d: expectedPurchases90d,
+        expected_next_order_date: expectedNextOrderDate,
         predicted_monthly_revenue: Math.round(predictedMonthlyRevenue * 100) / 100,
         predicted_annual_revenue: Math.round(predictedAnnualRevenue * 100) / 100,
         predicted_3yr_clv: Math.round(predicted3yrClv * 100) / 100,
-        churn_probability: Math.round(churnProbability * 1000) / 1000,
+        churn_probability: churnProbability,
         // placeholders filled in second pass:
         clv_tier: 'loyal',
         intervention_priority: 'none',
@@ -576,6 +626,9 @@ Return JSON only: {"messages":[{"customer_id":"...","message":"..."}]}`;
         visit_trend: f.visit_trend,
         spend_trend: f.spend_trend,
         days_since_last_visit: f.days_since_last_visit,
+        p_alive: f.p_alive,
+        expected_purchases_next_90d: f.expected_purchases_next_90d,
+        expected_next_order_date: f.expected_next_order_date,
         intervention_priority: f.intervention_priority,
         recommended_offer_type: f.recommended_offer_type,
         recommended_offer_value: f.recommended_offer_value,
@@ -707,6 +760,9 @@ Return JSON only: {"messages":[{"customer_id":"...","message":"..."}]}`;
         recommended_offer_value: f.recommended_offer_value,
         message_preview: f.recommended_message?.slice(0, 80),
         days_since_last_visit: f.days_since_last_visit,
+        p_alive: f.p_alive,
+        expected_purchases_next_90d: f.expected_purchases_next_90d,
+        expected_next_order_date: f.expected_next_order_date,
       },
       reasoning: f.intervention_rationale,
       confidence_score: Math.min(f.predicted_3yr_clv / 10000, 1),

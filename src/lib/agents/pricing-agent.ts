@@ -16,6 +16,22 @@ function percentileOf(val: number, arr: number[]): number {
   return arr.filter(v => v <= val).length / arr.length;
 }
 
+// OLS log-log demand: ln(Q) = β0 + β1·ln(P)
+// Returns price elasticity β1, or null when < 3 valid data points
+function computeElasticity(pairs: Array<{ price: number; qty: number }>): number | null {
+  const valid = pairs.filter(p => p.price > 0 && p.qty > 0);
+  if (valid.length < 3) return null;
+  const xs = valid.map(p => Math.log(p.price));
+  const ys = valid.map(p => Math.log(p.qty));
+  const n = xs.length;
+  const xMean = xs.reduce((s, v) => s + v, 0) / n;
+  const yMean = ys.reduce((s, v) => s + v, 0) / n;
+  const ssxx = xs.reduce((s, v) => s + (v - xMean) ** 2, 0);
+  const ssxy = xs.reduce((s, v, i) => s + (v - xMean) * (ys[i] - yMean), 0);
+  if (Math.abs(ssxx) < 1e-10) return null;
+  return ssxy / ssxx;
+}
+
 export class PricingAgent extends BaseAgent {
   type: AgentType = 'pricing';
 
@@ -26,9 +42,9 @@ export class PricingAgent extends BaseAgent {
     if (!settings.enabled) return { decisions: [], errors: [], duration_ms: Date.now() - started };
 
     try {
-      // Fetch products and cooldown data up-front (needed by both competitor + fallback paths)
+      // Fetch products with category for elasticity grouping
       const { data: products } = await this.supabase.from('pos_products')
-        .select('id,name,price,cost_price,is_active')
+        .select('id,name,price,cost_price,is_active,category')
         .eq('business_id', business_id).eq('is_active', true).limit(500);
 
       const productIds = (products ?? []).map(p => p.id);
@@ -69,6 +85,29 @@ export class PricingAgent extends BaseAgent {
         const totalSold = Array.from(vel30.values()).reduce((s, v) => s + v, 0);
         const avgVelocity = productIds.length > 0 ? totalSold / productIds.length : 0;
 
+        // Build category elasticity map using OLS log-log across products in each category
+        const catPairs = new Map<string, Array<{ price: number; qty: number }>>();
+        for (const p of products ?? []) {
+          const price = Number(p.price ?? 0);
+          const qty = vel30.get(p.id) ?? 0;
+          if (price <= 0) continue;
+          const cat = String((p as Record<string, unknown>).category ?? '__all__');
+          if (!catPairs.has(cat)) catPairs.set(cat, []);
+          catPairs.get(cat)!.push({ price, qty });
+        }
+        // Also compute a global fallback
+        const allPairs: Array<{ price: number; qty: number }> = [];
+        for (const p of products ?? []) {
+          const price = Number(p.price ?? 0);
+          const qty = vel30.get(p.id) ?? 0;
+          if (price > 0) allPairs.push({ price, qty });
+        }
+        const globalElasticity = computeElasticity(allPairs);
+        const elasticityByCat = new Map<string, number | null>();
+        for (const [cat, pairs] of catPairs) {
+          elasticityByCat.set(cat, computeElasticity(pairs) ?? globalElasticity);
+        }
+
         const internalDecisions: AgentDecisionInput[] = [];
 
         for (const p of products ?? []) {
@@ -81,15 +120,20 @@ export class PricingAgent extends BaseAgent {
 
           if (recentlyPricedProductIds.has(p.id)) continue;
 
+          const cat = String((p as Record<string, unknown>).category ?? '__all__');
+          const elasticity = elasticityByCat.get(cat) ?? globalElasticity;
+          // β1 > -1: inelastic (revenue rises with price); β1 < -1: elastic (revenue falls with price)
+          const isInelastic = elasticity === null || elasticity > -1;
+
           let suggested: number | null = null;
           let focus = '';
 
-          // Fast seller with thin margin → lift price to protect profitability
-          if (velRatio > 1.5 && margin < 25) {
+          // Fast seller with thin margin → lift price only when inelastic
+          if (velRatio > 1.5 && margin < 25 && isInelastic) {
             suggested = this.roundToNearest99(price * 1.05);
             focus = 'high-velocity-margin-lift';
           }
-          // Slow seller with fat margin → small price cut to drive volume
+          // Slow seller with fat margin → small price cut to drive volume (always allowed)
           else if (velRatio < 0.4 && margin > 50 && unitsSold < 3) {
             suggested = this.roundToNearest99(price * 0.92);
             focus = 'low-velocity-price-cut';
@@ -102,7 +146,7 @@ export class PricingAgent extends BaseAgent {
 
           const reasoning = await this.claudeReason({
             system: 'You are Aria, a pricing advisor for an Australian small business. Be specific with dollars. Max 2 sentences.',
-            user: 'Product: ' + p.name + '. Price: A$' + price.toFixed(2) + '. Cost: A$' + cost.toFixed(2) + '. Margin: ' + margin.toFixed(0) + '%. Sold ' + unitsSold + ' units/30d (avg: ' + avgVelocity.toFixed(1) + '). Suggesting A$' + suggested.toFixed(2) + ' (' + focus + ').',
+            user: 'Product: ' + p.name + '. Price: A$' + price.toFixed(2) + '. Cost: A$' + cost.toFixed(2) + '. Margin: ' + margin.toFixed(0) + '%. Sold ' + unitsSold + ' units/30d (avg: ' + avgVelocity.toFixed(1) + '). Elasticity: ' + (elasticity !== null ? elasticity.toFixed(2) : 'unknown') + '. Suggesting A$' + suggested.toFixed(2) + ' (' + focus + ').',
             maxTokens: 100,
             agent_key: 'pricing',
             role: 'pricing',
@@ -121,6 +165,7 @@ export class PricingAgent extends BaseAgent {
               focus,
               margin_pct: Math.round(margin * 10) / 10,
               units_sold_30d: unitsSold,
+              elasticity: elasticity !== null ? Math.round(elasticity * 100) / 100 : null,
               data_source: 'internal_margin_velocity',
             },
             reasoning,
@@ -152,7 +197,6 @@ export class PricingAgent extends BaseAgent {
 
       const productByName = new Map((products ?? []).map(p => [p.name.toLowerCase(), p]));
 
-      // 30-day velocity
       const cutoff14 = new Date(Date.now() - 14 * 86400000).toISOString();
       const cutoff28 = new Date(Date.now() - 28 * 86400000).toISOString();
 
@@ -163,6 +207,25 @@ export class PricingAgent extends BaseAgent {
       const vel14Prev = new Map<string, number>();
       for (const si of (recent14 ?? [])) vel14.set(si.product_id, (vel14.get(si.product_id) ?? 0) + si.quantity);
       for (const si of (prev14 ?? [])) vel14Prev.set(si.product_id, (vel14Prev.get(si.product_id) ?? 0) + si.quantity);
+
+      // Category elasticity from 14-day velocity data for competitor path
+      const catPairsComp = new Map<string, Array<{ price: number; qty: number }>>();
+      for (const p of products ?? []) {
+        const price = Number(p.price ?? 0);
+        const qty = vel14.get(p.id) ?? 0;
+        if (price <= 0) continue;
+        const cat = String((p as Record<string, unknown>).category ?? '__all__');
+        if (!catPairsComp.has(cat)) catPairsComp.set(cat, []);
+        catPairsComp.get(cat)!.push({ price, qty });
+      }
+      const allPairsComp = (products ?? [])
+        .map(p => ({ price: Number(p.price ?? 0), qty: vel14.get(p.id) ?? 0 }))
+        .filter(p => p.price > 0);
+      const globalElasticityComp = computeElasticity(allPairsComp);
+      const elasticityByCatComp = new Map<string, number | null>();
+      for (const [cat, pairs] of catPairsComp) {
+        elasticityByCatComp.set(cat, computeElasticity(pairs) ?? globalElasticityComp);
+      }
 
       const decisions: AgentDecisionInput[] = [];
 
@@ -188,13 +251,19 @@ export class PricingAgent extends BaseAgent {
         const prevSold = vel14Prev.get(product.id) ?? 0;
         const velocityTrend = prevSold > 0 ? (recentSold - prevSold) / prevSold : 0;
 
+        const cat = String((product as Record<string, unknown>).category ?? '__all__');
+        const elasticity = elasticityByCatComp.get(cat) ?? globalElasticityComp;
+        const isInelastic = elasticity === null || elasticity > -1;
+
         let suggested: number | null = null;
         let focus = '';
 
         if (positionPct >= 0.75 && velocityTrend < -0.10) {
+          // Price drop always allowed — demand curve supports it
           suggested = this.roundToNearest99(median);
           focus = 'price-drop-to-recover-volume';
-        } else if (positionPct <= 0.25 && cc.own_margin_pct > 30) {
+        } else if (positionPct <= 0.25 && cc.own_margin_pct > 30 && isInelastic) {
+          // Only lift when inelastic (β1 > -1 means revenue increases with price)
           suggested = this.roundToNearest99(p75 - 0.50);
           focus = 'price-lift-on-margin-opportunity';
         }
@@ -206,7 +275,7 @@ export class PricingAgent extends BaseAgent {
 
         const reasoning = await this.claudeReason({
           system: 'You are Aria, an AI pricing advisor for an Australian bottle shop. Be specific with dollars and percentages. Max 2 sentences. Australian English.',
-          user: 'Product: ' + product.name + '. Our price: A$' + ourPrice.toFixed(2) + '. Market: median A$' + median.toFixed(2) + ', range A$' + p25.toFixed(2) + '-A$' + p75.toFixed(2) + '. Sales: ' + recentSold + ' units/14d, trending ' + (velocityTrend >= 0 ? '+' : '') + (velocityTrend * 100).toFixed(0) + '%. Suggesting A$' + suggested.toFixed(2) + ' because ' + focus + '. Project: ' + (direction === 'drop' ? 'volume recovery' : 'margin lift') + '.',
+          user: 'Product: ' + product.name + '. Our price: A$' + ourPrice.toFixed(2) + '. Market: median A$' + median.toFixed(2) + ', range A$' + p25.toFixed(2) + '-A$' + p75.toFixed(2) + '. Sales: ' + recentSold + ' units/14d, trending ' + (velocityTrend >= 0 ? '+' : '') + (velocityTrend * 100).toFixed(0) + '%. Elasticity: ' + (elasticity !== null ? elasticity.toFixed(2) : 'unknown') + '. Suggesting A$' + suggested.toFixed(2) + ' because ' + focus + '.',
           maxTokens: 100,
           agent_key: 'pricing',
           role: 'pricing',
@@ -226,6 +295,7 @@ export class PricingAgent extends BaseAgent {
             market: { median, p25, p75, position_pct: positionPct, competitor_count: compPrices.length },
             velocity: { recent_14d: recentSold, prev_14d: prevSold, trend_pct: velocityTrend },
             competitors: { cheapest, most_expensive: mostExpensive },
+            elasticity: elasticity !== null ? Math.round(elasticity * 100) / 100 : null,
           },
           reasoning,
           confidence_score: focus === 'price-drop-to-recover-volume' ? 0.78 : 0.65,
