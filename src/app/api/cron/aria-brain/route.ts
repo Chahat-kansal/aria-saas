@@ -35,14 +35,19 @@ export async function GET(req: Request) {
     const bid = biz.id as string
 
     // Low-stock products: qty = 0 OR (reorder_point set AND qty <= reorder_point)
-    const { data: lowStockProducts } = await sb
+    // PostgREST does not support nested and() inside or() — fetch candidates then filter in JS
+    const { data: stockCandidates } = await sb
       .from('pos_products')
       .select('id, name, stock_quantity, reorder_point')
       .eq('business_id', bid)
       .eq('is_active', true)
       .not('stock_quantity', 'is', null)
-      .or('stock_quantity.eq.0,and(reorder_point.not.is.null,stock_quantity.lte.reorder_point)')
-      .limit(10)
+      .or('stock_quantity.eq.0,reorder_point.not.is.null')
+      .limit(50)
+    const lowStockProducts = (stockCandidates ?? []).filter(p =>
+      p.stock_quantity === 0 ||
+      (p.reorder_point !== null && p.stock_quantity !== null && (p.stock_quantity as number) <= (p.reorder_point as number))
+    ).slice(0, 10)
 
     for (const product of lowStockProducts ?? []) {
       await ariaObserve({

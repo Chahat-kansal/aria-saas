@@ -59,12 +59,12 @@ async function _GET(req: Request) {
   }
 
   let processed = 0;
-  const updates: Array<{ id: string; rfm_score: string; rfm_score_numeric: number; customer_segment: string; churn_risk: number }> = [];
+  const updates: Array<{ id: string; rfm_score: string; rfm_score_numeric: number; customer_segment: string; churn_risk: 'low' | 'medium' | 'high' }> = [];
 
   for (const cust of customers) {
     const ss = salesByCustomer.get(cust.id) ?? [];
     if (ss.length === 0) {
-      updates.push({ id: cust.id, rfm_score: '111', rfm_score_numeric: 111, customer_segment: 'Lost', churn_risk: 95 });
+      updates.push({ id: cust.id, rfm_score: '111', rfm_score_numeric: 111, customer_segment: 'Lost', churn_risk: 'high' });
       continue;
     }
 
@@ -79,14 +79,15 @@ async function _GET(req: Request) {
 
     const seg = rfmScore(r, f, m);
     const numeric = r * 100 + f * 10 + m;
-    const churn = Math.max(0, Math.min(100, Math.round((5 - r) * 20 + (5 - f) * 4)));
+    const churnNum = Math.max(0, Math.min(100, Math.round((5 - r) * 20 + (5 - f) * 4)));
+    const churnRisk: 'low' | 'medium' | 'high' = churnNum <= 30 ? 'low' : churnNum <= 70 ? 'medium' : 'high';
 
     // Predict next visit: avg interval * 1.1
     const intervals = sorted.slice(0, -1).map((s, i) => (new Date(s.created_at).getTime() - new Date(sorted[i + 1].created_at).getTime()) / 86400000);
     const avgInterval = intervals.length > 0 ? intervals.reduce((t, v) => t + v, 0) / intervals.length : null;
     const predictedNext = avgInterval ? new Date(new Date(sorted[0].created_at).getTime() + avgInterval * 1.1 * 86400000).toISOString() : null;
 
-    updates.push({ id: cust.id, rfm_score: `${r}${f}${m}`, rfm_score_numeric: numeric, customer_segment: seg, churn_risk: churn, ...(predictedNext ? { predicted_next_visit: predictedNext } : {}) } as any);
+    updates.push({ id: cust.id, rfm_score: `${r}${f}${m}`, rfm_score_numeric: numeric, customer_segment: seg, churn_risk: churnRisk, ...(predictedNext ? { predicted_next_visit: predictedNext } : {}) } as any);
     processed++;
   }
 

@@ -117,28 +117,10 @@ async function _POST(req: NextRequest) {
     jobBody.medias = [{ value: startFrameJobId, role: 'start_image' }]
   }
 
-  console.log('[generate-video] submitting to Higgsfield:', {
-    model: 'kling3_0',
-    duration: clampedDuration,
-    hasStartFrame: !!startFrameJobId,
-    influencer_id,
-    estimatedCost,
-  })
-
-  let jobId: string
-  try {
-    const result = await hgPost('/v1/video/generate', jobBody)
-    jobId = result.id ?? result.job_id ?? result.request_id
-    if (!jobId) throw new Error('No job ID returned: ' + JSON.stringify(result))
-  } catch (err: any) {
-    console.error('[generate-video] Higgsfield failed:', err.message)
-    return NextResponse.json({ error: 'generation_failed', message: err.message }, { status: 502 })
-  }
-
+  // Update social_posts metadata now (fal_request_id set via PATCH after browser gets job_id)
   if (post_id) {
     try {
       await supabaseAdmin.from('social_posts').update({
-        fal_request_id: jobId,
         reel_mode, reel_style,
         reel_custom_prompt: reel_custom_prompt || null,
         reel_duration_seconds: clampedDuration,
@@ -157,23 +139,47 @@ async function _POST(req: NextRequest) {
     await supabaseAdmin.from('reel_usage_log').insert({
       business_id,
       social_post_id: post_id || null,
-      fal_request_id: jobId,
       model: 'kling3_0_higgsfield',
       duration_seconds: clampedDuration,
       cost_aud: estimatedCost,
-      status: 'processing',
+      status: 'pending',
     })
   } catch {}
 
+  // Return credentials to browser — Vercel IPs are blocked by Higgsfield (522),
+  // so the browser calls Higgsfield directly then PATCHes back the job_id.
+  const rawKey = process.env.HIGGSFIELD_API_KEY!.replace(/^Bearer\s+/i, '').replace(/^Key\s+/i, '')
   return NextResponse.json({
-    fal_request_id: jobId,
-    job_id: jobId,
+    hf_key: rawKey,
+    hf_endpoint: 'https://api.higgsfield.ai/v1/video/generate',
+    payload: jobBody,
+    post_id: post_id || null,
+    business_id,
     model_id: 'kling3_0',
     duration: clampedDuration,
     estimated_cost_aud: estimatedCost,
-    status: 'queued',
-    provider: 'higgsfield',
   })
+}
+
+async function _PATCH(req: NextRequest) {
+  const supabase = createServerSupabaseClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const { post_id, job_id } = await req.json()
+  if (!job_id) return NextResponse.json({ error: 'job_id required' }, { status: 400 })
+
+  if (post_id) {
+    try { await supabaseAdmin.from('social_posts').update({ fal_request_id: job_id }).eq('id', post_id) } catch {}
+    try {
+      await supabaseAdmin.from('reel_usage_log')
+        .update({ fal_request_id: job_id, status: 'processing' })
+        .eq('social_post_id', post_id)
+        .is('fal_request_id', null)
+    } catch {}
+  }
+
+  return NextResponse.json({ ok: true, fal_request_id: job_id })
 }
 
 async function _GET(req: NextRequest) {
@@ -232,4 +238,5 @@ async function _GET(req: NextRequest) {
 }
 
 export const POST = withErrorCapture('social/generate-video', _POST)
+export const PATCH = withErrorCapture('social/generate-video', _PATCH)
 export const GET = withErrorCapture('social/generate-video', _GET)

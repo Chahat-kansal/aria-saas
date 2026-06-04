@@ -27,13 +27,13 @@ export async function POST(req: NextRequest) {
   // Rate limit: skip if sent a review request to this number in the last 30 days
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
   const { data: recent } = await supabase.from('aria_autopilot_actions')
-    .select('id').eq('business_id', business_id)
+    .select('id, action_data').eq('business_id', business_id)
     .eq('action_type', 'review_request')
     .gte('created_at', thirtyDaysAgo)
     .limit(20)
 
   const alreadySent = (recent ?? []).some(
-    r => (r as any).metadata?.phone === customer_phone
+    r => (r as any).action_data?.phone === customer_phone
   )
   if (alreadySent)
     return NextResponse.json({ ok: true, skipped: true, reason: 'Rate limited — already sent in last 30 days' })
@@ -52,10 +52,12 @@ export async function POST(req: NextRequest) {
   // Log for rate limiting + dashboard stats
   await supabase.from('aria_autopilot_actions').insert({
     business_id,
+    category: 'marketing',
     action_type: 'review_request',
-    action_label: `Review SMS → ${firstName}`,
-    status: 'sent',
-    metadata: { phone: customer_phone, sale_id, message_id: result.message_id },
+    title: 'Review SMS → ' + firstName,
+    description: 'Google review request sent via ClickSend SMS',
+    status: 'executed',
+    action_data: { phone: customer_phone, sale_id, message_id: result.message_id },
   })
 
   return NextResponse.json({ ok: true, message_id: result.message_id })

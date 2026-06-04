@@ -80,7 +80,7 @@ async function _POST(req: Request) {
 
   if (flaggedItems.length > 0) {
     supabaseAdmin.from('aria_autopilot_actions').insert({
-      business_id: bid, category: 'compliance', priority: 'high',
+      business_id: bid, category: 'compliance', priority: 'urgent',
       title: `Shift audit: ${flaggedItems.length} failed check${flaggedItems.length > 1 ? 's' : ''}`,
       description: ariaAssessment,
       action_data: { flagged_items: flaggedItems, audit_id: audit.id, session_id: body.session_id },

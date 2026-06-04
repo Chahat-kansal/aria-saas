@@ -563,7 +563,8 @@ export default function SocialPage() {
 
     const post = posts.find(p => p.id === actualPostId)
     try {
-      const res = await fetch('/api/social/generate-video', {
+      // Step 1: get HF credentials from server (Vercel IPs are blocked by Higgsfield)
+      const prepRes = await fetch('/api/social/generate-video', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -581,21 +582,51 @@ export default function SocialPage() {
           voiceover_url: voiceUrls[originalPostId] || null,
         }),
       })
-      const d = await res.json()
-      if (d.fal_request_id) {
-        setReelPolling(prev => ({
-          ...prev,
-          [actualPostId]: {
-            requestId: d.fal_request_id,
-            modelId: d.model_id,
-            bgMusic: reelBgMusic,
-            voiceoverUrl: voiceUrls[originalPostId],
-          },
-        }))
-        setReelCreatorPostId(null)
-      } else {
-        alert(d.message || d.error || 'Generation failed')
+      const prep = await prepRes.json()
+      if (!prep.hf_key) {
+        alert(prep.message || prep.error || 'Generation failed')
+        setReelGenerating(false)
+        setSelectedInfluencerId(null)
+        setSelectedInfluencerUrl(null)
+        return
       }
+
+      // Step 2: browser calls Higgsfield directly (bypasses Vercel IP block)
+      let jobId: string | null = null
+      try {
+        const hfRes = await fetch(prep.hf_endpoint, {
+          method: 'POST',
+          headers: { Authorization: prep.hf_key, 'Content-Type': 'application/json' },
+          body: JSON.stringify(prep.payload),
+        })
+        const hfData = await hfRes.json()
+        jobId = hfData.id ?? hfData.job_id ?? hfData.request_id ?? null
+        if (!jobId) throw new Error('No job ID in response: ' + JSON.stringify(hfData))
+      } catch (e: any) {
+        alert('Higgsfield error: ' + e.message)
+        setReelGenerating(false)
+        setSelectedInfluencerId(null)
+        setSelectedInfluencerUrl(null)
+        return
+      }
+
+      // Step 3: save job_id back to server
+      fetch('/api/social/generate-video', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ post_id: actualPostId, job_id: jobId }),
+      }).catch(() => {})
+
+      setReelPolling(prev => ({
+        ...prev,
+        [actualPostId]: {
+          requestId: jobId!,
+          modelId: prep.model_id ?? 'kling3_0',
+          bgMusic: reelBgMusic,
+          voiceoverUrl: voiceUrls[originalPostId],
+        },
+      }))
+      setReelCreatorPostId(null)
     } catch (e: any) {
       alert('Network error: ' + e.message)
     }

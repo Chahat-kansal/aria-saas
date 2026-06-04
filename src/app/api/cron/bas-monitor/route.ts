@@ -46,8 +46,9 @@ export async function GET(req: Request) {
         try {
           await supabaseAdmin.from('aria_autopilot_actions').insert({
             business_id: biz.id,
-            agent_type: 'bas_compliance',
-            action_type: 'alert',
+            category: 'compliance',
+            action_type: 'bas_reminder',
+            title: 'BAS due in ' + Math.round(daysUntilDue) + ' days',
             description: 'BAS due in ' + Math.round(daysUntilDue) + ' days (' + q.due_date.toISOString().slice(0, 10) + '). Status: ' + existing.status + '. Log in to review.',
             status: 'pending',
           })
@@ -69,8 +70,9 @@ export async function GET(req: Request) {
           try {
             await supabaseAdmin.from('aria_autopilot_actions').insert({
               business_id: biz.id,
-              agent_type: 'bas_compliance',
-              action_type: 'alert',
+              category: 'compliance',
+              action_type: 'super_reminder',
+              title: 'Super payment due in ' + Math.round(daysUntilSuperDue) + ' days',
               description: 'Super payment due in ' + Math.round(daysUntilSuperDue) + ' days for ' + superRow.staff_name + ': $' + Number(superRow.super_amount_owed).toFixed(0),
               status: 'pending',
             })

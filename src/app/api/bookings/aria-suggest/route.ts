@@ -51,7 +51,7 @@ async function _POST() {
   const insight = ((resp.content[0] as { type: string; text: string }).text ?? '').trim()
 
   waitUntil((async () => { try { await supabaseAdmin.from('aria_ai_calls').insert({ business_id: bid, model: 'claude-haiku-4-5-20251001', prompt_summary: 'booking_analysis', response_summary: insight.slice(0, 200), tokens_used: resp.usage.input_tokens + resp.usage.output_tokens }) } catch {} })())
-  waitUntil((async () => { try { await supabaseAdmin.from('aria_autopilot_actions').insert({ business_id: bid, action_type: 'booking_insight', summary: insight.slice(0, 200), confidence: 0.85, status: 'pending' }) } catch {} })())
+  waitUntil((async () => { try { await supabaseAdmin.from('aria_autopilot_actions').insert({ business_id: bid, category: 'sales', action_type: 'booking_insight', title: 'Booking analysis', summary: insight.slice(0, 200), confidence: 0.85, status: 'pending' }) } catch {} })())
 
   return NextResponse.json({ insight })
 }
