@@ -290,7 +290,13 @@ export default function ReelStudioPage() {
         if (!d.job_id) throw new Error(d.error ?? 'No job_id returned')
         setGenProgress(15); setActiveJob({ jobId: d.job_id, sessionId: d.session_id })
         pollStatus(d.job_id, d.session_id, userToken)
-      } catch (e: any) { setGenMsg(e.message); setGenerating(false); setGenProgress(0) }
+      } catch (e: any) {
+        const msg = (e.message ?? '').replace(/<[^>]*>/g, '').slice(0, 120)
+        const friendly = msg.includes('522') || msg.includes('timeout') || msg.includes('DOCTYPE')
+          ? 'Higgsfield API is temporarily unavailable. Please try again in 30 seconds.'
+          : msg || 'Generation failed'
+        setGenMsg(friendly); setGenerating(false); setGenProgress(0)
+      }
       return
     }
 
@@ -311,7 +317,13 @@ export default function ReelStudioPage() {
       setGenMsg(clipUrls.length + ' clips ready. Showing clip 1 — download all below.')
       setTab('edit')
       if (bid) loadBiz(bid)
-    } catch (e: any) { setGenMsg(e.message); setGenerating(false); setGenProgress(0) }
+    } catch (e: any) {
+      const msg = (e.message ?? '').replace(/<[^>]*>/g, '').slice(0, 120)
+      const friendly = msg.includes('522') || msg.includes('timeout') || msg.includes('DOCTYPE')
+        ? 'Higgsfield API is temporarily unavailable. Please try again in 30 seconds.'
+        : msg || 'Generation failed'
+      setGenMsg(friendly); setGenerating(false); setGenProgress(0)
+    }
   }
 
   async function publishReel() {
