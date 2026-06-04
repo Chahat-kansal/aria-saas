@@ -7,9 +7,24 @@ const KNOWN_LEAD_TIMES: Record<string, number> = {
   ALM: 2, ILG: 3, LMG: 3,
 };
 const DEFAULT_LEAD_DAYS = 5;
-const SAFETY_STOCK_FACTOR = 1.5;
 const TARGET_COVER_DAYS = 14;
 const MIN_AVG_DAILY = 0.1; // skip very slow movers
+
+function zFromServiceLevel(sl: number): number {
+  if (sl >= 0.99) return 2.33;
+  if (sl >= 0.98) return 2.05;
+  if (sl >= 0.95) return 1.65;
+  if (sl >= 0.90) return 1.28;
+  if (sl >= 0.85) return 1.04;
+  return 0.84;
+}
+
+function sampleStdDev(values: number[]): number {
+  if (values.length < 2) return 0;
+  const mean = values.reduce((s, v) => s + v, 0) / values.length;
+  const variance = values.reduce((s, v) => s + (v - mean) ** 2, 0) / (values.length - 1);
+  return Math.sqrt(variance);
+}
 
 interface ProductRow {
   id: string; name: string; sku: string | null; case_quantity: number | null;
@@ -52,24 +67,40 @@ export class ReorderAgent extends BaseAgent {
       if (!products?.length) return { decisions: [], errors: [], duration_ms: Date.now() - started };
 
       // Fetch 30-day sales per product — two-step to exclude voided sales
+      // Include created_at to build per-day unit maps for σ_D statistical safety stock
+      const serviceLevel = Number((settings.config as Record<string, unknown>).service_level ?? 0.95);
+      const Z = zFromServiceLevel(serviceLevel);
+
       const cutoff = new Date(Date.now() - 30 * 86400000).toISOString();
       const { data: recentSales } = await this.supabase.from('pos_sales')
-        .select('id')
+        .select('id,created_at')
         .eq('business_id', business_id)
         .neq('status', 'voided')
         .gte('created_at', cutoff)
         .limit(2000);
       const recentSaleIds = (recentSales ?? []).map(s => s.id);
+      const saleDateMap = new Map<string, string>(
+        (recentSales ?? []).map(s => [s.id, String(s.created_at).slice(0, 10)])
+      );
 
       const sold30d = new Map<string, number>();
+      // dailyUnitsByProduct[product_id][dateStr] = units sold that day
+      const dailyUnitsByProduct = new Map<string, Map<string, number>>();
+
       if (recentSaleIds.length > 0) {
         const { data: saleItems } = await this.supabase.from('pos_sale_items')
-          .select('product_id,quantity')
+          .select('product_id,quantity,sale_id')
           .in('sale_id', recentSaleIds)
           .in('product_id', products.map(p => p.id))
           .limit(10000);
         for (const si of (saleItems ?? [])) {
           sold30d.set(si.product_id, (sold30d.get(si.product_id) ?? 0) + (si.quantity ?? 0));
+          const dateStr = saleDateMap.get(String(si.sale_id)) ?? '';
+          if (dateStr) {
+            if (!dailyUnitsByProduct.has(si.product_id)) dailyUnitsByProduct.set(si.product_id, new Map());
+            const dayMap = dailyUnitsByProduct.get(si.product_id)!;
+            dayMap.set(dateStr, (dayMap.get(dateStr) ?? 0) + Number(si.quantity ?? 0));
+          }
         }
       }
 
@@ -143,13 +174,26 @@ export class ReorderAgent extends BaseAgent {
         const nextDelivery = calcNextDeliveryDate(supplier?.delivery_days ?? [], leadDays);
         const daysToDelivery = Math.round((nextDelivery.getTime() - Date.now()) / 86400000);
 
-        const safetyStock = avgDaily * leadDays * SAFETY_STOCK_FACTOR;
+        // Statistical safety stock: SS = Z × σ_D × √LT
+        // Build 30-day array including zero-sales days for proper σ_D
+        const dayUnits = dailyUnitsByProduct.get(p.id);
+        const dailyValues: number[] = [];
+        for (let i = 0; i < 30; i++) {
+          const d = new Date(Date.now() - i * 86400000).toISOString().slice(0, 10);
+          dailyValues.push(dayUnits?.get(d) ?? 0);
+        }
+        const sigmaD = sampleStdDev(dailyValues);
+        const safetyStock = sigmaD > 0
+          ? Z * sigmaD * Math.sqrt(leadDays)
+          : avgDaily * leadDays * 1.5; // fallback when insufficient variance data
+
         const targetCover = daysToDelivery + TARGET_COVER_DAYS;
         const current = p.stock_quantity ?? 0;
         let rawQty = Math.max(0, Math.ceil(avgDaily * targetCover + safetyStock - current));
         rawQty = Math.ceil(rawQty * trendMultiplier);
 
-        const reorderPoint = safetyStock + avgDaily * leadDays;
+        // ROP = D_avg × LT + SS
+        const reorderPoint = avgDaily * leadDays + safetyStock;
         if (current >= reorderPoint && rawQty <= 0) continue;
 
         const caseQty = p.case_quantity ?? 1;
