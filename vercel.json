@@ -25,6 +25,9 @@
     },
     "src/app/api/**/*.ts": {
       "maxDuration": 60
+    },
+    "src/app/api/reels/**/*.ts": {
+      "maxDuration": 60
     }
   },
   "crons": [
