@@ -167,6 +167,12 @@ export default function ReelStudioPage() {
   const [totalSpent, setTotalSpent] = useState(0)
   const [monthlyReels, setMonthlyReels] = useState(0)
   const videoRef = useRef<HTMLVideoElement>(null)
+  const uploadVideoRef = useRef<HTMLInputElement>(null)
+  const [uploadingVideo, setUploadingVideo] = useState(false)
+  const [uploadedVideo, setUploadedVideo] = useState<string | null>(null)
+  const [backgroundUrl, setBackgroundUrl] = useState<string | null>(null)
+  const [backgroundPreview, setBackgroundPreview] = useState<string | null>(null)
+  const bgRef = useRef<HTMLInputElement>(null)
 
   const [reelIdeas, setReelIdeas] = useState<ReelIdea[]>([])
   const [ideasLoading, setIdeasLoading] = useState(false)
@@ -215,6 +221,33 @@ export default function ReelStudioPage() {
     setIdeasLoading(false)
   }
   async function loadIdeas() { if (!bid || ideasLoading) return; loadIdeasForBiz(bid) }
+
+  async function handleVideoUpload(file: File) {
+    if (!bid) return
+    setUploadingVideo(true)
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      fd.append('business_id', bid)
+      const d = await fetch('/api/reels/upload', { method: 'POST', body: fd }).then(r => r.json())
+      if (d.error) throw new Error(d.error)
+      setUploadedVideo(d.video_url)
+      setLatestVideo(d.video_url)
+      setTab('edit')
+    } catch (e: any) { setGenMsg('Upload failed: ' + e.message) }
+    setUploadingVideo(false)
+  }
+
+  async function handleBackgroundUpload(file: File) {
+    if (!bid) return
+    try {
+      const path = bid + '/bg-' + Date.now() + '.' + file.name.split('.').pop()
+      await (createBrowserClient(SB_URL, SB_ANON)).storage.from('reel-scenes').upload(path, file)
+      const { data: { publicUrl } } = (createBrowserClient(SB_URL, SB_ANON)).storage.from('reel-scenes').getPublicUrl(path)
+      setBackgroundUrl(publicUrl)
+      setBackgroundPreview(URL.createObjectURL(file))
+    } catch (e: any) { setGenMsg('Background upload failed: ' + e.message) }
+  }
 
   function applyIdea(idea: ReelIdea) {
     setStyle(idea.style); setPrompt(idea.prompt)
@@ -282,7 +315,7 @@ export default function ReelStudioPage() {
     setGenerating(true); setLatestVideo(null); setGenProgress(5); setClipProgress(0)
     const clips = clipsNeeded(duration); setTotalClips(clips)
     const clipSecs = clipDuration(duration)
-    const base = { business_id: bid, influencer_id: selectedInf?.id ?? null, image_url: selectedInf?.image_url ?? null, scene_image_url: sceneUrl ?? null, style, resolution, genre }
+    const base = { business_id: bid, influencer_id: selectedInf?.id ?? null, image_url: selectedInf?.image_url ?? null, background_url: backgroundUrl ?? null, scene_image_url: sceneUrl ?? null, style, resolution, genre }
 
     if (clips === 1) {
       setGenMsg('Reel submitted — generating in background (~3–5 min). You can navigate away and come back.')
@@ -455,6 +488,32 @@ export default function ReelStudioPage() {
               )}
             </Card>
 
+            {/* Background photo */}
+            <Card>
+              <SectionLabel><span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><ImageIcon size={10} />Background <span style={{ color: T.textFaint, fontWeight: 400, textTransform: 'none' }}>optional — your cafe/shop</span></span></SectionLabel>
+              <input ref={bgRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => e.target.files?.[0] && handleBackgroundUpload(e.target.files[0])} />
+              {backgroundPreview ? (
+                <div style={{ position: 'relative', display: 'inline-block' }}>
+                  <img src={backgroundPreview} alt="Background" style={{ height: 72, borderRadius: T.r.sm, objectFit: 'cover', border: `1.5px solid ${T.borderAccent}` }} />
+                  <button onClick={() => { setBackgroundPreview(null); setBackgroundUrl(null) }} style={{ position: 'absolute', top: -6, right: -6, width: 20, height: 20, borderRadius: T.r.full, border: 'none', background: T.danger, color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><X size={11} /></button>
+                </div>
+              ) : (
+                <button onClick={() => bgRef.current?.click()} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: T.sp.sm, width: '100%', padding: T.sp.md + 'px', borderRadius: T.r.sm, border: `1px dashed ${T.border}`, background: 'transparent', cursor: 'pointer', color: T.textDim, fontFamily: T.font, fontSize: 12, minHeight: 48 }}>
+                  <Upload size={14} />Upload your cafe / shop background
+                </button>
+              )}
+            </Card>
+
+            {/* Upload own video */}
+            <Card style={{ border: `1px solid ${T.borderAccent}`, background: 'linear-gradient(135deg,rgba(127,184,151,0.05),rgba(45,82,64,0.08))' }}>
+              <SectionLabel><span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Upload size={10} color={T.accent} />Upload your own video</span></SectionLabel>
+              <p style={{ fontSize: 11, color: T.textDim, margin: `0 0 ${T.sp.sm}px`, lineHeight: 1.5 }}>Already have a reel? Upload it and push straight to Instagram.</p>
+              <input ref={uploadVideoRef} type="file" accept="video/*" style={{ display: 'none' }} onChange={(e) => e.target.files?.[0] && handleVideoUpload(e.target.files[0])} />
+              <PrimaryBtn onClick={() => uploadVideoRef.current?.click()} loading={uploadingVideo} style={{ background: 'linear-gradient(135deg,#6366f1,#4f46e5)', minHeight: 40, fontSize: 12 }}>
+                <Upload size={14} />{uploadingVideo ? 'Uploading…' : 'Upload Video → Edit & Publish'}
+              </PrimaryBtn>
+            </Card>
+
             {/* Style */}
             <Card>
               <SectionLabel><span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Layers size={10} />Vibe</span></SectionLabel>
@@ -547,9 +606,15 @@ export default function ReelStudioPage() {
               </div>
             ) : generating ? (
               <div style={{ textAlign: 'center' }}>
-                <Loader2 size={48} color={T.accent} style={{ animation: 'spin 0.8s linear infinite', marginBottom: T.sp.lg }} />
-                <p style={{ fontSize: 14, color: T.textMid, margin: 0 }}>Generating reel…</p>
-                <p style={{ fontSize: 11, color: T.textDim, margin: `${T.sp.sm}px 0 0` }}>~3–5 minutes · AI is working on your reel</p>
+                <div style={{ width: 120, height: 200, borderRadius: T.r.xl, border: `2px solid ${T.borderAccent}`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', margin: '0 auto ' + T.sp.lg + 'px', gap: T.sp.md }}>
+                  <Loader2 size={32} color={T.accent} style={{ animation: 'spin 0.8s linear infinite' }} />
+                  <div style={{ width: 80, height: 4, borderRadius: T.r.full, background: 'rgba(255,255,255,0.1)', overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: genProgress + '%', background: T.accent, borderRadius: T.r.full, transition: 'width 1s ease' }} />
+                  </div>
+                </div>
+                <p style={{ fontSize: 14, fontWeight: 700, color: T.text, margin: 0 }}>AI is generating your reel</p>
+                <p style={{ fontSize: 11, color: T.textDim, margin: `${T.sp.sm}px 0 0` }}>~3–5 minutes · You can navigate away and come back</p>
+                <p style={{ fontSize: 10, color: T.textFaint, margin: `${T.sp.xs}px 0 0` }}>Check History tab when ready</p>
               </div>
             ) : (
               <div style={{ textAlign: 'center', color: T.textFaint }}>
