@@ -11,7 +11,7 @@ import {
 const SB_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const SB_ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 const EDGE = '/api/reels/generate'
-const STATUS = '/api/reels/status'
+const STATUS_URL = '/api/reels/status'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type Inf = { id: string; name: string; description: string; image_url: string; higgsfield_job_id: string; soul_id: string | null; soul_status: string | null }
@@ -253,7 +253,7 @@ export default function ReelStudioPage() {
     for (let i = 0; i < 60; i++) {
       await new Promise((r) => setTimeout(r, 5000))
       try {
-        const d = await fetch(STATUS + '?job_id=' + jobId + '&session_id=' + sessionId).then(r => r.json())
+        const d = await fetch(STATUS_URL + '?job_id=' + jobId + '&session_id=' + sessionId).then(r => r.json())
         if (d.status === 'COMPLETED' && d.video_url) return d.video_url as string
         if (d.status === 'FAILED') return null
       } catch {}
@@ -263,7 +263,7 @@ export default function ReelStudioPage() {
 
   const pollStatus = useCallback(async (jobId: string, sessionId: string, token: string) => {
     try {
-      const d = await fetch(STATUS + '?job_id=' + jobId + '&session_id=' + sessionId).then(r => r.json())
+      const d = await fetch(STATUS_URL + '?job_id=' + jobId + '&session_id=' + sessionId).then(r => r.json())
       if (d.status === 'COMPLETED') {
         setLatestVideo(d.video_url); setGenerating(false); setGenProgress(100)
         setGenMsg('Reel ready!'); setActiveJob(null); setTab('edit')
@@ -287,7 +287,7 @@ export default function ReelStudioPage() {
     if (clips === 1) {
       setGenMsg('Generating ' + duration + 's reel…')
       try {
-        const d = await fetch(EDGE, { method: 'POST', headers: { 'Content-Type': 'application/json', }, body: JSON.stringify({ ...base, prompt: prompt || null, duration_seconds: duration }) }).then(r => r.json())
+        const d = await fetch(EDGE, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + userToken }, body: JSON.stringify({ ...base, prompt: prompt || null, duration_seconds: duration }) }).then(r => r.json())
         if (!d.job_id) throw new Error(d.error ?? 'No job_id returned')
         setGenProgress(15); setActiveJob({ jobId: d.job_id, sessionId: d.session_id })
         pollStatus(d.job_id, d.session_id, userToken)
@@ -300,7 +300,7 @@ export default function ReelStudioPage() {
       const clipUrls: string[] = []
       for (let i = 0; i < clips; i++) {
         const clipPrompt = prompt ? (i === 0 ? prompt : prompt + ', continuation ' + (i + 1) + ' of ' + clips) : null
-        const d = await fetch(EDGE, { method: 'POST', headers: { 'Content-Type': 'application/json', }, body: JSON.stringify({ ...base, prompt: clipPrompt, duration_seconds: clipSecs }) }).then(r => r.json())
+        const d = await fetch(EDGE, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + userToken }, body: JSON.stringify({ ...base, prompt: clipPrompt, duration_seconds: clipSecs }) }).then(r => r.json())
         if (!d.job_id) throw new Error('Clip ' + (i + 1) + ' failed: ' + (d.error ?? 'No job_id'))
         setGenMsg('Clip ' + (i + 1) + '/' + clips + ' submitted, waiting…'); setGenProgress(10 + Math.floor(i * 70 / clips))
         const url = await pollClip(d.job_id, d.session_id, userToken)
