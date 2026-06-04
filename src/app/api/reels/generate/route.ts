@@ -82,6 +82,10 @@ export async function POST(req: NextRequest) {
   // Call Higgsfield from Vercel (AWS Lambda — no IP block)
   let jobId: string
   try {
+    // Diagnostic: log key presence (not value) and payload size
+    const keyRaw = process.env.HIGGSFIELD_API_KEY ?? ''
+    console.log('[reels/generate] key present:', !!keyRaw, 'key length:', keyRaw.length, 'has colon:', keyRaw.includes(':'), 'payload model:', genPayload.model)
+
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), 50000) // 50s timeout
     const res = await fetch(`${HF}/v1/video/generate`, {
