@@ -3,6 +3,43 @@ import { supabaseAdmin } from '@/lib/supabase-admin'
 import { trackAICall } from '@/lib/aria/ai-telemetry'
 import type { AgentType, AgentDecision, AgentCouncilSession, AgentCouncilProposal } from './types'
 
+// Explicit agent registry — maps each AgentType to its real class.
+// (Previously a dynamic `./${agentType}-agent` import silently failed for every
+// underscore-named agent because the files are hyphen-named, so 10 of 14 agents
+// produced nothing. Static imports fix the names AND ensure the bundler includes them.)
+import { ReorderAgent } from './reorder-agent'
+import { PricingAgent } from './pricing-agent'
+import { ScheduleAgent } from './schedule-agent'
+import { MenuEngineeringAgent } from './menu-engineering-agent'
+import { FlashRevenueAgent } from './flash-revenue-agent'
+import { CLVAgent } from './clv-agent'
+import { LabourOptimisationAgent } from './labour-optimisation-agent'
+import { WasteEliminationAgent } from './waste-elimination-agent'
+import { SupplierNegotiationAgent } from './supplier-negotiation-agent'
+import { BasAgent } from './bas-agent'
+import { ReputationDefenceAgent } from './reputation-defence-agent'
+import { ReconciliationAgent } from './reconciliation-agent'
+import { CustomerAcquisitionAgent } from './customer-acquisition-agent'
+import { InventoryFinancingAgent } from './inventory-financing-agent'
+
+type AgentCtor = { new(): { run(bid: string): Promise<{ decisions: AgentDecision[] }> } }
+const AGENT_REGISTRY: Record<string, AgentCtor> = {
+  reorder: ReorderAgent as AgentCtor,
+  pricing: PricingAgent as AgentCtor,
+  schedule: ScheduleAgent as AgentCtor,
+  menu_engineering: MenuEngineeringAgent as AgentCtor,
+  flash_revenue: FlashRevenueAgent as AgentCtor,
+  clv: CLVAgent as AgentCtor,
+  labour_optimisation: LabourOptimisationAgent as AgentCtor,
+  waste_elimination: WasteEliminationAgent as AgentCtor,
+  supplier_negotiation: SupplierNegotiationAgent as AgentCtor,
+  bas_compliance: BasAgent as AgentCtor,
+  reputation_defence: ReputationDefenceAgent as AgentCtor,
+  reconciliation: ReconciliationAgent as AgentCtor,
+  customer_acquisition: CustomerAcquisitionAgent as AgentCtor,
+  inventory_financing: InventoryFinancingAgent as AgentCtor,
+}
+
 const MODEL = 'claude-sonnet-4-5-20250929'
 
 export interface CouncilSession {
@@ -226,15 +263,12 @@ export async function runCouncilSession(business_id: string): Promise<CouncilSes
 
         if (agentSettings?.enabled === false) return
 
-        // Dynamically import agent — handle missing agents gracefully
-        let AgentClass: { new(): { run(bid: string): Promise<{ decisions: AgentDecision[] }> } } | null = null
-        try {
-          const mod = await import(`./${agentType}-agent`)
-          const className = agentType.split('_').map((w: string) => w[0].toUpperCase() + w.slice(1)).join('') + 'Agent'
-          AgentClass = mod[className] ?? null
-        } catch { /* agent not built yet */ }
-
-        if (!AgentClass) return
+        // Resolve agent from the explicit registry (no fragile string transforms).
+        const AgentClass = AGENT_REGISTRY[agentType] ?? null
+        if (!AgentClass) {
+          agentErrors.push(agentType + ': not registered')
+          return
+        }
 
         const result = await Promise.race([
           new AgentClass().run(business_id),
