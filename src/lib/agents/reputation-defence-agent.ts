@@ -1,13 +1,13 @@
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { BaseAgent } from './base-agent'
-import type { AgentType, AgentRunResult } from './types'
+import type { AgentType, AgentRunResult, AgentDecisionInput } from './types'
 
 export class ReputationDefenceAgent extends BaseAgent {
   type: AgentType = 'reputation_defence'
 
   async run(business_id: string): Promise<AgentRunResult> {
     const start = Date.now()
-    const decisions: AgentRunResult['decisions'] = []
+    const decisions: AgentDecisionInput[] = []
     const errors: Error[] = []
 
     try {
@@ -37,14 +37,14 @@ export class ReputationDefenceAgent extends BaseAgent {
       // STEP 5: Proactive review requests
       await this.sendReviewRequests(business_id, biz.name, biz.google_place_id, settings.config)
 
-      if (drafted > 0 || decisions.length > 0) {
-        await this.saveDecisions(decisions)
-      }
     } catch (e) {
       errors.push(e instanceof Error ? e : new Error(String(e)))
     }
 
-    const result: AgentRunResult = { decisions, errors, duration_ms: Date.now() - start }
+    const savedDecisions = decisions.length > 0
+      ? await this.saveDecisions(decisions)
+      : []
+    const result: AgentRunResult = { decisions: savedDecisions, errors, duration_ms: Date.now() - start }
     await this.logRun(business_id, result)
     return result
   }
@@ -94,6 +94,9 @@ export class ReputationDefenceAgent extends BaseAgent {
           system: 'You analyse customer reviews and return JSON only.',
           user: 'Analyse this review. Return JSON: { "sentiment": "positive"|"neutral"|"negative", "score": -1_to_1, "key_themes": ["string"], "is_crisis": boolean }\n\nCrisis = rating<=2 AND mentions food safety, illness, discrimination, or legal threat.\n\nReview: ' + String(review.review_text ?? ''),
           maxTokens: 200,
+          agent_key: 'reputation_defence',
+          role: 'analysis',
+          business_id,
         })
         if (result) {
           await supabaseAdmin.from('business_reviews').update({
@@ -151,6 +154,9 @@ export class ReputationDefenceAgent extends BaseAgent {
             "feels warm and personal not corporate. Never say 'valued customer' or 'we strive to'.\n" +
             (toneExamples ? 'Match this response tone:\n' + toneExamples : ''),
           maxTokens: 200,
+          agent_key: 'reputation_defence',
+          role: 'narrative',
+          business_id,
         })
         if (draft) {
           const newStatus = (autoMode && Number(review.rating) >= 4) ? 'approved' : 'pending'
@@ -166,8 +172,8 @@ export class ReputationDefenceAgent extends BaseAgent {
     return drafted
   }
 
-  private async checkReviewVelocity(business_id: string, bizName: string): Promise<AgentRunResult['decisions']> {
-    const decisions: AgentRunResult['decisions'] = []
+  private async checkReviewVelocity(business_id: string, bizName: string): Promise<AgentDecisionInput[]> {
+    const decisions: AgentDecisionInput[] = []
     const now = new Date()
     const h24 = new Date(now.getTime() - 24 * 3600000).toISOString()
     const d7 = new Date(now.getTime() - 7 * 86400000).toISOString()
@@ -220,16 +226,14 @@ export class ReputationDefenceAgent extends BaseAgent {
 
     if ((thisWeek ?? 0) > 0 && (lastWeek ?? 0) === 0 && (thisWeek ?? 0) >= 5) {
       decisions.push({
-        id: '',
         agent_type: 'reputation_defence',
         business_id,
         decision_data: { this_week: thisWeek, last_week: lastWeek },
         reasoning: 'Review velocity spike: ' + String(thisWeek) + ' reviews this week vs ' + String(lastWeek) + ' last week',
         confidence_score: 0.8,
-        projected_impact_cents: 0,
+        projected_impact_cents: Math.round((thisWeek ?? 0) * 5000),
         status: 'pending',
         expires_at: new Date(Date.now() + 7 * 86400000).toISOString(),
-        created_at: new Date().toISOString(),
       })
     }
 

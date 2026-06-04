@@ -206,7 +206,6 @@ export class InventoryFinancingAgent extends BaseAgent {
       .select('id,name,stock_quantity,cost_price,supplier_id,reorder_point,reorder_qty,case_quantity')
       .eq('business_id', business_id)
       .eq('is_active', true)
-      .eq('track_stock', true)
       .limit(300)
 
     if (!products?.length) return byWeek

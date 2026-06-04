@@ -501,7 +501,7 @@ export class LabourOptimisationAgent extends BaseAgent {
           decision_data: { action_type: 'labour_pct_alert', labour_pct: labourPct, threshold: labourPctThreshold, revenue_today: revenueToday, active_staff: activeCount, priority_action: aiLabourReasoning?.priority_action },
           reasoning: aiLabourReasoning?.reasoning ?? alertMsg,
           confidence_score: 0.95,
-          projected_impact_cents: 0,
+          projected_impact_cents: Math.round(((labourPct - labourPctThreshold) / 100) * revenueToday * 100),
           expires_at: new Date(now.getTime() + 4 * 3600000).toISOString(),
         })
       }

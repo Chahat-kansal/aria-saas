@@ -130,6 +130,9 @@ export class ScheduleAgent extends BaseAgent {
           system: 'You are Aria, summarising a generated staff roster for an Australian bottle shop manager. Be specific with hours and cost. Max 2 sentences. Australian English.',
           user: `Outlet: ${outlet.name}. Roster: ${shifts.length} shifts, ${totalHours} staff-hours, A$${(totalCostCents / 100).toFixed(0)} cost. Strongest demand: ${shifts.filter(s => s.reasoning.includes('200')).length > 0 ? 'peak hours covered' : 'steady coverage'}. ${holidaysInWeek.join(' ')} Summarise why this roster looks right.`,
           maxTokens: 120,
+          agent_key: 'schedule',
+          role: 'rostering',
+          business_id,
         });
 
         // Save roster row
@@ -150,7 +153,7 @@ export class ScheduleAgent extends BaseAgent {
             total_cost_cents: totalCostCents,
           },
           reasoning, confidence_score: 0.72,
-          projected_impact_cents: -totalCostCents, // cost saving vs. manual over-staffing
+          projected_impact_cents: totalCostCents,
           expires_at: weekStart.toISOString(),
         });
       }

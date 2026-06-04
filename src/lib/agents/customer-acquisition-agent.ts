@@ -136,6 +136,9 @@ export class CustomerAcquisitionAgent extends BaseAgent {
             'Identify top 5 specific AEO improvements for ChatGPT/Perplexity/Google AI visibility.\n' +
             'Return JSON: { "recommendations": [{ "field": "...", "action": "...", "impact": "high|medium|low", "effort": "minutes|hours|days", "priority": 1-5 }] }',
           maxTokens: 600,
+          agent_key: 'customer_acquisition',
+          role: 'competitor',
+          business_id,
         })
         if (recs?.recommendations) recommendations = recs.recommendations
       } catch { /* non-fatal */ }
@@ -170,6 +173,9 @@ export class CustomerAcquisitionAgent extends BaseAgent {
           system: 'Write factual, specific business descriptions for AI search engines. 150-200 words.',
           user: 'Write a description for "' + String(biz.name) + '", an Australian ' + String(biz.industry ?? 'business') + ' in ' + String(biz.city ?? 'Australia') + '. Top items: ' + (productNames || 'various products') + '. Include suburb name, what makes them special. Factual and specific for AI search.',
           maxTokens: 250,
+          agent_key: 'customer_acquisition',
+          role: 'narrative',
+          business_id,
         })
         if (desc) {
           await supabaseAdmin.from('businesses').update({ description: desc }).eq('id', business_id)
@@ -195,6 +201,9 @@ export class CustomerAcquisitionAgent extends BaseAgent {
           system: 'Generate Q&A FAQ entries that answer common AI assistant queries about a business. Return JSON array.',
           user: 'Generate 5 FAQ Q&A pairs for "' + String(biz.name) + '", a ' + String(biz.industry ?? 'business') + ' in ' + String(biz.city ?? 'Australia') + '. Include: opening hours, location, what they serve, price range, parking. Return: [{ "q": "...", "a": "..." }]',
           maxTokens: 400,
+          agent_key: 'customer_acquisition',
+          role: 'customer',
+          business_id,
         })
         if (faqs && faqs.length > 0) {
           for (const faq of faqs.slice(0, 5)) {
@@ -222,6 +231,9 @@ export class CustomerAcquisitionAgent extends BaseAgent {
           system: 'Write AI-citation-optimised social posts for local businesses. First sentence answers a question. Include location, hours, price.',
           user: 'Write a 100-word Google Business Post for "' + String(biz.name) + '" in ' + suburb + '. Start with a factual statement answering "where to find good ' + String(biz.industry) + ' in ' + suburb + '". Include address, hours if known, 1-2 signature items with prices if known.',
           maxTokens: 180,
+          agent_key: 'customer_acquisition',
+          role: 'social',
+          business_id,
         })
         if (postContent) {
           await supabaseAdmin.from('aeo_content_pieces').insert({
@@ -264,7 +276,7 @@ export class CustomerAcquisitionAgent extends BaseAgent {
             reasoning: 'Competitor "' + String(compData.competitor_name) + '" has stronger AI search signals: ' +
               String(compReviews) + ' reviews vs your ' + String(reviewCount) + '. Increase review requests.',
             confidence_score: 0.8,
-            projected_impact_cents: 0,
+            projected_impact_cents: Math.max(5000, Math.round((compReviews - reviewCount) * 500)),
             expires_at: new Date(Date.now() + 30 * 86400000).toISOString(),
             status: 'pending',
           })
@@ -279,19 +291,19 @@ export class CustomerAcquisitionAgent extends BaseAgent {
           decision_data: { field: rec.field, action: rec.action, impact: rec.impact, effort: rec.effort },
           reasoning: 'AEO improvement (' + rec.impact + ' impact, ' + rec.effort + '): ' + rec.action,
           confidence_score: rec.impact === 'high' ? 0.9 : 0.7,
-          projected_impact_cents: 0,
+          projected_impact_cents: rec.impact === 'high' ? 150000 : rec.impact === 'medium' ? 50000 : 20000,
           expires_at: new Date(Date.now() + 30 * 86400000).toISOString(),
           status: 'pending',
         })
       }
       void autoMode
 
-      if (decisions.length > 0) await this.saveDecisions(decisions)
     } catch (e) {
       errors.push(e instanceof Error ? e : new Error(String(e)))
     }
 
-    const result: AgentRunResult = { decisions: [], errors, duration_ms: Date.now() - start }
+    const savedDecisions = decisions.length > 0 ? await this.saveDecisions(decisions) : []
+    const result: AgentRunResult = { decisions: savedDecisions, errors, duration_ms: Date.now() - start }
     await this.logRun(business_id, result)
     return result
   }

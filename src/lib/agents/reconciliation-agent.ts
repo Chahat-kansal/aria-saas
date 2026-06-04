@@ -39,7 +39,10 @@ export class ReconciliationAgent extends BaseAgent {
       // STEP 5: Quarter-end handover check
       await this.quarterEndCheck(business_id, settings.config)
 
-      if (decisions.length > 0) await this.saveDecisions(decisions)
+      const saved = decisions.length > 0 ? await this.saveDecisions(decisions) : []
+      const result: AgentRunResult = { decisions: saved, errors, duration_ms: Date.now() - start }
+      await this.logRun(business_id, result)
+      return result
     } catch (e) {
       errors.push(e instanceof Error ? e : new Error(String(e)))
     }
@@ -130,6 +133,9 @@ export class ReconciliationAgent extends BaseAgent {
         system: 'You analyse financial reconciliation variances and suggest explanations. Be concise.',
         user: 'POS total for ' + dateStr + ': $' + pos_sales_total.toFixed(2) + '. Bank deposits: $' + bank_deposits_total.toFixed(2) + '. Variance: $' + variance_amount.toFixed(2) + '. Suggest 2-3 likely explanations.',
         maxTokens: 150,
+        agent_key: 'reconciliation',
+        role: 'analysis',
+        business_id,
       })
       decisions.push({
         agent_type: 'reconciliation',
@@ -240,6 +246,9 @@ export class ReconciliationAgent extends BaseAgent {
           system: 'Return a JSON array of 3 short possible causes for this expense anomaly.',
           user: String(exp.label) + ' in category ' + cat + ' costs $' + amount.toFixed(0) + ' vs avg $' + avg.toFixed(0) + '. What are 3 possible causes?',
           maxTokens: 150,
+          agent_key: 'reconciliation',
+          role: 'analysis',
+          business_id,
         })
 
         await supabaseAdmin.from('expense_anomalies').insert({
@@ -360,6 +369,9 @@ export class ReconciliationAgent extends BaseAgent {
       system: 'You write concise financial summaries for small business owners. 3 sentences max.',
       user: 'Month ' + String(month) + '/' + String(year) + ' P&L: Revenue $' + net_revenue.toFixed(0) + ', COGS $' + cogs_from_supplier_invoices.toFixed(0) + ', Gross margin ' + gross_margin_pct.toFixed(1) + '%, Labour $' + labour_cost.toFixed(0) + ', EBITDA $' + ebitda.toFixed(0) + '. Revenue vs last month: ' + revenue_vs_last_month_pct.toFixed(1) + '%. Write a 3-sentence monthly summary with headline, key driver, and one recommendation.',
       maxTokens: 200,
+      agent_key: 'reconciliation',
+      role: 'narrative',
+      business_id,
     })
 
     await supabaseAdmin.from('monthly_pl_reports').upsert({
@@ -423,6 +435,9 @@ export class ReconciliationAgent extends BaseAgent {
       system: 'Write a professional accountant handover letter for an Australian business. Formal tone.',
       user: 'Business: ' + String(biz?.name ?? '') + '. Quarter ending ' + today.toISOString().slice(0, 10) + '. Total revenue: $' + totalRevenue.toFixed(0) + '. Months: ' + (plRows ?? []).map(r => 'Month ' + String(r.period_month) + ' revenue $' + Number(r.net_revenue).toFixed(0) + ', margin ' + Number(r.gross_margin_pct).toFixed(1) + '%').join('; ') + '. Reconciliation: ' + String(variances) + ' variances detected. Write a 4-sentence handover letter summarising the quarter for the accountant.',
       maxTokens: 300,
+      agent_key: 'reconciliation',
+      role: 'narrative',
+      business_id,
     })
 
     await fetch('https://api.resend.com/emails', {
