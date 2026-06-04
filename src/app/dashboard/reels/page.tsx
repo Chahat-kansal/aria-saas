@@ -159,6 +159,7 @@ export default function ReelStudioPage() {
   const [activeJob, setActiveJob] = useState<{ jobId: string; sessionId: string } | null>(null)
   const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  const [connectedPlatforms, setConnectedPlatforms] = useState<string[]>([])
   const [publishing, setPublishing] = useState(false)
   const [publishMsg, setPublishMsg] = useState('')
   const [publishCaption, setPublishCaption] = useState('')
@@ -203,6 +204,10 @@ export default function ReelStudioPage() {
         setTotalSpent(done.reduce((a: number, s: Session) => a + Number(s.cost_aud ?? 0), 0))
         setMonthlyReels(sesRes.data.filter((s: Session) => new Date(s.created_at).getMonth() === new Date().getMonth()).length)
       }
+      // Load connected social platforms
+      const { data: connections } = await supabase.from('social_connections')
+        .select('platform').eq('business_id', biz.id).eq('is_active', true)
+      setConnectedPlatforms((connections ?? []).map((c: any) => c.platform))
       loadIdeasForBiz(biz.id)
     } catch (e: any) { setPageError('Failed to load: ' + e.message) }
   }
@@ -329,18 +334,27 @@ export default function ReelStudioPage() {
     }
   }
 
-  async function publishReel() {
+  async function publishReelTo(platform: string) {
     if (!latestVideo || !bid || publishing) return
     setPublishing(true); setPublishMsg('')
     try {
-      const cd = await fetch('/api/social/posts/create', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ business_id: bid, platform: publishPlatform, caption: publishCaption || 'Check out our latest reel!', hashtags: ['smallbusiness', 'australia', 'reels'], post_type: 'reel', video_url: latestVideo }) }).then(r => r.json())
+      const cd = await fetch('/api/social/posts/create', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ business_id: bid, platform, caption: publishCaption || 'Check out our latest reel! 🎬', hashtags: ['smallbusiness', 'australia', 'reels'], post_type: 'reel', video_url: latestVideo }),
+      }).then(r => r.json())
       if (!cd.post?.id) throw new Error(cd.error ?? 'Could not create post')
-      const pd = await fetch('/api/social/publish', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ post_id: cd.post.id, business_id: bid, post_type_override: 'reel' }) })
+      const pd = await fetch('/api/social/publish', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ post_id: cd.post.id, business_id: bid, post_type_override: 'reel' }),
+      })
       if (!pd.ok) { const e = await pd.json(); throw new Error(e.error ?? 'Publish failed') }
-      setPublishMsg('Published to ' + publishPlatform + ' Reels!')
+      setPublishMsg('Published to ' + platform.charAt(0).toUpperCase() + platform.slice(1) + ' Reels!')
     } catch (e: any) { setPublishMsg(e.message) }
     setPublishing(false)
   }
+
+  // Keep old publishReel for backward compat
+  async function publishReel() { return publishReelTo(publishPlatform) }
 
   const selectedFilter = FILTERS.find((f) => f.id === filter) ?? FILTERS[0]
   const selectedDur = DURATIONS.find((d) => d.secs === duration)
@@ -652,17 +666,33 @@ export default function ReelStudioPage() {
             {latestVideo && (
               <Card>
                 <SectionLabel><span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Send size={10} />Publish to social</span></SectionLabel>
-                <div style={{ display: 'flex', gap: 6, marginBottom: T.sp.sm }}>
-                  {(['instagram', 'facebook'] as const).map((p) => (
-                    <button key={p} onClick={() => setPublishPlatform(p)} aria-pressed={publishPlatform === p} style={{ flex: 1, padding: '9px 0', borderRadius: T.r.sm, border: 'none', cursor: 'pointer', fontFamily: T.font, fontSize: 12, fontWeight: 600, background: publishPlatform === p ? T.accentDim : 'rgba(255,255,255,0.04)', boxShadow: publishPlatform === p ? `inset 0 0 0 1.5px ${T.borderAccent}` : `inset 0 0 0 1px ${T.border}`, color: publishPlatform === p ? T.accent : T.textMid, transition: 'all 120ms', minHeight: 40 }}>
-                      {p === 'instagram' ? 'Instagram' : 'Facebook'}
-                    </button>
-                  ))}
-                </div>
+
+                {/* Caption */}
                 <textarea value={publishCaption} onChange={(e) => setPublishCaption(e.target.value)} rows={3} placeholder="Caption (blank = auto-generated)" aria-label="Social media caption" style={{ width: '100%', padding: '10px 12px', borderRadius: T.r.sm, background: 'rgba(255,255,255,0.04)', border: `1px solid ${T.border}`, color: T.text, fontSize: 12, fontFamily: T.font, resize: 'none', outline: 'none', boxSizing: 'border-box', marginBottom: T.sp.sm, lineHeight: 1.6 }} />
-                <PrimaryBtn onClick={publishReel} loading={publishing} style={{ background: publishing ? 'rgba(99,102,241,0.25)' : 'linear-gradient(135deg,#6366f1,#4f46e5)' }}>
-                  <Send size={14} />Publish to {publishPlatform === 'instagram' ? 'Instagram' : 'Facebook'} Reels
-                </PrimaryBtn>
+
+                {/* 1-click per connected platform */}
+                {connectedPlatforms.length === 0 ? (
+                  <div style={{ fontSize: 12, color: T.textDim, padding: '8px 0' }}>
+                    No social accounts connected. Connect them in <a href="/dashboard/social" style={{ color: T.accent }}>Social settings</a>.
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {connectedPlatforms.map(platform => (
+                      <button key={platform} onClick={() => { setPublishPlatform(platform as 'instagram' | 'facebook'); publishReelTo(platform) }}
+                        disabled={publishing} aria-label={'Publish to ' + platform}
+                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '12px 0', borderRadius: T.r.sm, border: 'none', cursor: publishing ? 'wait' : 'pointer', fontFamily: T.font, fontSize: 13, fontWeight: 700, minHeight: 44, transition: 'opacity 150ms',
+                          background: platform === 'instagram' ? 'linear-gradient(135deg,#833ab4,#fd1d1d,#fcb045)'
+                            : platform === 'facebook' ? 'linear-gradient(135deg,#1877f2,#1651b5)'
+                            : platform === 'tiktok' ? 'linear-gradient(135deg,#000,#333)'
+                            : 'linear-gradient(135deg,#6366f1,#4f46e5)',
+                          color: '#fff', opacity: publishing ? 0.5 : 1 }}>
+                        <Send size={14} />
+                        Publish to {platform.charAt(0).toUpperCase() + platform.slice(1)} Reels
+                      </button>
+                    ))}
+                  </div>
+                )}
+
                 {publishMsg && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, marginTop: T.sp.sm, padding: '8px 12px', borderRadius: T.r.sm, background: 'rgba(255,255,255,0.03)', color: publishMsg.includes('Published') ? T.accent : T.danger }}>
                     {publishMsg.includes('Published') ? <CheckCircle2 size={13} /> : <AlertCircle size={13} />}
