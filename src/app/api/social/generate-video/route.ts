@@ -26,7 +26,7 @@ async function hgPost(path: string, body: object) {
   if (!key) throw new Error('HIGGSFIELD_API_KEY not set')
   const res = await fetch('https://api.higgsfield.ai' + path, {
     method: 'POST',
-    headers: { Authorization: 'Bearer ' + key, 'Content-Type': 'application/json' },
+    headers: { Authorization: key.replace(/^Bearer\s+/i,'').replace(/^Key\s+/i,''), 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
   const text = await res.text()
