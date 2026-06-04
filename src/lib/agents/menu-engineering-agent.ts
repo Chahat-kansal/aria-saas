@@ -27,7 +27,9 @@ interface ScoreData {
   halo_products: string[]
   halo_avg_copur_margin: number
   composite_score: number
-  performance_tier: 'star' | 'plowhouse' | 'puzzle' | 'dog' | 'normal'
+  units_sold_14d: number
+  cm_dollars: number
+  performance_tier: 'star' | 'plowhorse' | 'puzzle' | 'dog' | 'normal'
 }
 
 export class MenuEngineeringAgent extends BaseAgent {
@@ -148,7 +150,33 @@ export class MenuEngineeringAgent extends BaseAgent {
         haloBySaleId[si.sale_id].push({ product_id: si.product_id, line_total: Number(si.line_total) })
       }
 
-      // STEP 6: COMPOSITE SCORE + BCG CLASSIFICATION
+      // STEP 6: Kasavana & Smith category averages
+      // K&S Contribution Margin = price - cost (not margin%)
+      // HIGH popularity = units_sold_14d >= 0.70 × category_average_units_14d
+      // HIGH CM = product_cm >= category_average_cm
+      const unitsSold14d: Record<string, number> = {}
+      for (const si of saleItemsHalo) {
+        unitsSold14d[si.product_id] = (unitsSold14d[si.product_id] ?? 0) + Number(si.quantity)
+      }
+
+      const catUnits: Record<string, number[]> = {}
+      const catCm: Record<string, number[]> = {}
+      for (const p of products) {
+        const cat = p.category_id ?? '__none__'
+        const cm = Number(p.price ?? 0) - Number(p.cost_price ?? p.price * 0.5)
+        const units = unitsSold14d[p.id] ?? 0
+        if (!catUnits[cat]) { catUnits[cat] = []; catCm[cat] = [] }
+        catUnits[cat].push(units)
+        catCm[cat].push(cm)
+      }
+      const catAvgUnits: Record<string, number> = {}
+      const catAvgCm: Record<string, number> = {}
+      for (const cat of Object.keys(catUnits)) {
+        catAvgUnits[cat] = catUnits[cat].reduce((s, v) => s + v, 0) / catUnits[cat].length
+        catAvgCm[cat] = catCm[cat].reduce((s, v) => s + v, 0) / catCm[cat].length
+      }
+
+      // STEP 6: COMPOSITE SCORE + K&S CLASSIFICATION
       const scores: ScoreData[] = products.map(p => {
         // Velocity
         const unitsSold = unitsSoldNow[p.id] ?? 0
@@ -197,17 +225,27 @@ export class MenuEngineeringAgent extends BaseAgent {
 
         const composite = velocityVsAvg * velocityWeight + marginScore * marginWeight + haloScore * haloWeight
 
-        let tier: 'star' | 'plowhouse' | 'puzzle' | 'dog' | 'normal' = 'normal'
-        if (velocityVsAvg > starVelThreshold && marginScore > starMarginThreshold) tier = 'star'
-        else if (velocityVsAvg > starVelThreshold && marginScore <= dogMarginThreshold) tier = 'plowhouse'
-        else if (velocityVsAvg <= dogVelThreshold && marginScore > starMarginThreshold) tier = 'puzzle'
-        else if (velocityVsAvg <= dogVelThreshold && marginScore <= dogMarginThreshold) tier = 'dog'
+        // Kasavana & Smith classification
+        const cat = p.category_id ?? '__none__'
+        const cm = Number(p.price ?? 0) - Number(p.cost_price ?? Number(p.price ?? 0) * 0.5)
+        const units14 = unitsSold14d[p.id] ?? 0
+        const isHighPopularity = catAvgUnits[cat] > 0
+          ? units14 >= 0.70 * catAvgUnits[cat]
+          : velocityVsAvg >= 1.0
+        const isHighCm = catAvgCm[cat] > 0 ? cm >= catAvgCm[cat] : marginScore >= 0.5
+        let tier: 'star' | 'plowhorse' | 'puzzle' | 'dog' | 'normal' = 'normal'
+        if (isHighPopularity && isHighCm) tier = 'star'
+        else if (isHighPopularity && !isHighCm) tier = 'plowhorse'
+        else if (!isHighPopularity && isHighCm) tier = 'puzzle'
+        else tier = 'dog'
 
         return {
           product: p,
           velocity_vs_avg: velocityVsAvg,
           units_sold_this_period: unitsSold,
           units_sold_baseline: baselineAvg,
+          units_sold_14d: units14,
+          cm_dollars: Math.round(cm * 100) / 100,
           margin_pct: rawMargin,
           margin_dollars_per_unit: marginPerUnit,
           margin_score: marginScore,
@@ -292,7 +330,7 @@ export class MenuEngineeringAgent extends BaseAgent {
           stars: starProducts.length,
           dogs: scores.filter(s => s.performance_tier === 'dog').length,
           puzzles: puzzleProducts.length,
-          plowhouses: scores.filter(s => s.performance_tier === 'plowhouse').length,
+          plowhorses: scores.filter(s => s.performance_tier === 'plowhorse').length,
           grid_changes: gridActions.length,
           mode: currentMode,
           top_recommendation: aiReasoning?.top_recommendation,
@@ -489,6 +527,8 @@ export class MenuEngineeringAgent extends BaseAgent {
           period_hours: 4,
           units_sold_this_period: s.units_sold_this_period,
           units_sold_baseline_same_period: s.units_sold_baseline,
+          units_sold_14d: s.units_sold_14d,
+          cm_dollars: s.cm_dollars,
           velocity_vs_avg: Math.round(s.velocity_vs_avg * 1000) / 1000,
           margin_pct: Math.round(s.margin_pct * 100) / 100,
           margin_dollars_per_unit: Math.round(s.margin_dollars_per_unit * 100) / 100,

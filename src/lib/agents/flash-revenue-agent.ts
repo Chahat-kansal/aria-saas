@@ -279,6 +279,19 @@ Return ONLY valid JSON with no markdown.`;
       });
     } catch { /* non-fatal */ }
 
+    // Elasticity-adjusted projected impact — deterministic, no AI computing money
+    // For revenue_shortfall: sigma_below × 0.20 → recovery fraction (capped at 0.65)
+    // For other triggers: AI lift pct applied to 2h baseline revenue
+    let projectedImpactCents: number;
+    if (primaryTrigger.type === 'revenue_shortfall') {
+      const sigmaBelow = Number((primaryTrigger.data as Record<string, unknown>).sigma_below ?? 1.5);
+      const shortfallAmt = Number((primaryTrigger.data as Record<string, unknown>).shortfall_pct ?? 30) / 100 * revenueIn2hBefore;
+      const recoveryRate = Math.min(0.65, sigmaBelow * 0.20); // stronger signal → higher expected recovery
+      projectedImpactCents = Math.round(Math.max(0, shortfallAmt * recoveryRate) * 100);
+    } else {
+      projectedImpactCents = Math.round(revenueIn2hBefore * (intervention.expected_lift_pct ?? 15) / 100 * 100);
+    }
+
     // STEP 9 — Save agent decision
     const decisions = await this.saveDecisions([{
       business_id,
@@ -290,7 +303,7 @@ Return ONLY valid JSON with no markdown.`;
       },
       reasoning: intervention.reasoning,
       confidence_score: Math.min(1, (intervention.expected_lift_pct ?? 15) / 100),
-      projected_impact_cents: Math.round(revenueIn2hBefore * (intervention.expected_lift_pct ?? 15) / 100 * 100),
+      projected_impact_cents: projectedImpactCents,
       expires_at: expiresAt.toISOString(),
       status: mode === 'auto' ? 'auto_executed' : 'pending',
     }]);
@@ -340,26 +353,34 @@ Return ONLY valid JSON with no markdown.`;
 
     if (samePeriodSales.length < 5) return null; // not enough history
 
-    // Group by date and average
+    // Group by date and sum
     const byDate: Record<string, number> = {};
     for (const s of samePeriodSales) {
       const d = s.created_at.slice(0, 10);
       byDate[d] = (byDate[d] ?? 0) + (Number(s.total_amount) || 0);
     }
     const dailyTotals = Object.values(byDate);
-    const baseline = dailyTotals.reduce((a, b) => a + b, 0) / dailyTotals.length;
+    const mean = dailyTotals.reduce((a, b) => a + b, 0) / dailyTotals.length;
+    if (mean < 5) return null;
 
-    if (baseline < 5) return null; // too small to matter
-    const shortfallPct = ((baseline - currentRevenue) / baseline) * 100;
+    // Demand-curve-relative trigger: fire when >1.5σ below expected hourly demand
+    const variance = dailyTotals.reduce((s, v) => s + (v - mean) ** 2, 0) / Math.max(dailyTotals.length - 1, 1);
+    const stdDev = Math.sqrt(variance);
+    const sigmaBelow = stdDev > 0 ? (mean - currentRevenue) / stdDev : (mean - currentRevenue) / mean;
+    const shortfallPct = ((mean - currentRevenue) / mean) * 100;
 
-    if (shortfallPct > threshold) {
+    // Also accept legacy threshold as fallback when stdDev insufficient
+    const triggered = sigmaBelow > 1.5 || (stdDev === 0 && shortfallPct > threshold);
+    if (triggered) {
       return {
         type: 'revenue_shortfall',
-        severity: shortfallPct > 60 ? 'critical' : 'high',
+        severity: sigmaBelow > 2.5 ? 'critical' : 'high',
         data: {
           shortfall_pct: Math.round(shortfallPct),
+          sigma_below: Math.round(sigmaBelow * 10) / 10,
           current_1h_revenue: Math.round(currentRevenue * 100) / 100,
-          baseline_1h_revenue: Math.round(baseline * 100) / 100,
+          baseline_1h_revenue: Math.round(mean * 100) / 100,
+          baseline_std_dev: Math.round(stdDev * 100) / 100,
         },
       };
     }
