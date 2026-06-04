@@ -99,20 +99,23 @@ export async function POST(req: NextRequest) {
 
     if (!res.ok) throw new Error(`fal.ai ${res.status}: ${data.detail ?? JSON.stringify(data).slice(0, 100)}`)
 
-    const { request_id } = data
+    const { request_id, status_url, response_url } = data
     if (!request_id) throw new Error('No request_id from fal.ai: ' + JSON.stringify(data).slice(0, 100))
 
+    // Save status_url and response_url — these are the EXACT URLs fal.ai wants us to poll
     await supabaseAdmin.from('reel_studio_sessions').update({
       higgsfield_job_id: request_id,
-      fal_model: model,
+      fal_model: status_url ?? model,   // store status_url in fal_model column temporarily
+      scene_image_url: response_url ?? null, // store response_url in scene_image_url temporarily
     }).eq('id', session?.id)
 
     return NextResponse.json({
       job_id: request_id,
       session_id: session?.id,
+      status_url,
+      response_url,
       duration: durNum,
       estimated_cost_aud: costAud,
-      model,
     })
   } catch (e: any) {
     await supabaseAdmin.from('reel_studio_sessions').update({ status: 'failed' }).eq('id', session?.id)
