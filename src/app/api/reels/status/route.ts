@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
 
   try {
     // fal.ai status check
-    const res = await fetch(`https://queue.fal.run/fal-ai/kling-video/requests/${jobId}/status`, {
+    const res = await fetch(`https://queue.fal.run/fal-ai/kling-video/v1.6/pro/text-to-video/requests/${jobId}/status`, {
       headers: { 'Authorization': `Key ${FAL_KEY}` },
     })
     const d = await res.json()
@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
 
     if (status === 'COMPLETED') {
       // Get the actual result
-      const resResult = await fetch(`https://queue.fal.run/fal-ai/kling-video/requests/${jobId}`, {
+      const resResult = await fetch(`https://queue.fal.run/fal-ai/kling-video/v1.6/pro/text-to-video/requests/${jobId}`, {
         headers: { 'Authorization': `Key ${FAL_KEY}` },
       })
       const result = await resResult.json()
