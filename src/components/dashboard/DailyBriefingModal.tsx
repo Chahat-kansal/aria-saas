@@ -168,7 +168,7 @@ export function DailyBriefingModal() {
                 metric: '',
                 metric_label: '',
                 trend: null,
-                action_payload: { href: '/dashboard/ask-aria' },
+                action_payload: { href: '/dashboard/ask-aria?q=Give+me+the+full+detailed+daily+briefing+for+today+including+all+insights+recommendations+and+actions' },
               };
             });
 
@@ -184,7 +184,7 @@ export function DailyBriefingModal() {
                 metric: '',
                 metric_label: '',
                 trend: null,
-                action_payload: { href: '/dashboard/ask-aria' },
+                action_payload: { href: '/dashboard/ask-aria?q=Give+me+the+full+detailed+daily+briefing+for+today+including+all+insights+recommendations+and+actions' },
               });
             }
 
@@ -448,7 +448,7 @@ export function DailyBriefingModal() {
               <p className="px-5 pt-3 pb-1 text-[11px] text-[rgba(255,255,255,0.4)]">
                 Here&apos;s what I noticed about {business?.name}
               </p>
-              <div className="overflow-y-auto max-h-[55vh] md:max-h-[400px] px-3 py-2 space-y-2">
+              <div className="overflow-y-auto max-h-[72vh] md:max-h-[calc(100vh-200px)] px-3 py-2 space-y-2">
                 {sorted.map(rec => (
                   <div key={rec.id}
                     className="bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.07)] rounded-xl overflow-hidden flex">
@@ -471,7 +471,7 @@ export function DailyBriefingModal() {
                               )}
                             </div>
                           )}
-                          <p className="text-[11px] text-[rgba(255,255,255,0.45)] leading-snug mb-2.5">{rec.description}</p>
+                          <p className="text-[11px] text-[rgba(255,255,255,0.55)] leading-relaxed mb-2.5 whitespace-pre-wrap">{rec.description}</p>
                           <div className="flex items-center gap-2">
                             <button
                               onClick={() => handleAction(rec)}

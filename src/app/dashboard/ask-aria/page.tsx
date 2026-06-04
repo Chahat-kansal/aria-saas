@@ -351,8 +351,18 @@ export default function AskAriaPage() {
 
   useEffect(() => {
     const q = new URLSearchParams(window.location.search).get('q')
-    if (q && !input && messages.length === 0) setInput(q)
-  }, [input, messages.length])
+    if (q && messages.length === 0) {
+      setInput(q)
+      // Auto-send after a short delay to let the page fully mount
+      const timer = setTimeout(() => {
+        const sendBtn = document.querySelector('[data-aria-send]') as HTMLButtonElement | null
+        if (sendBtn && !sendBtn.disabled) {
+          sendBtn.click()
+        }
+      }, 800)
+      return () => clearTimeout(timer)
+    }
+  }, [messages.length])
 
   const loadHistory = useCallback(async () => {
     try {
