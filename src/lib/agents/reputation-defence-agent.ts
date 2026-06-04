@@ -37,6 +37,10 @@ export class ReputationDefenceAgent extends BaseAgent {
       // STEP 5: Proactive review requests
       await this.sendReviewRequests(business_id, biz.name, biz.google_place_id, settings.config)
 
+      // STEP 6: Competitor rating benchmarking
+      const compDecisions = await this.benchmarkCompetitorRatings(business_id, biz.name)
+      decisions.push(...compDecisions)
+
     } catch (e) {
       errors.push(e instanceof Error ? e : new Error(String(e)))
     }
@@ -90,10 +94,16 @@ export class ReputationDefenceAgent extends BaseAgent {
           score: number
           key_themes: string[]
           is_crisis: boolean
+          aspect_scores: { food: number | null; service: number | null; ambiance: number | null; value: number | null }
         }>({
           system: 'You analyse customer reviews and return JSON only.',
-          user: 'Analyse this review. Return JSON: { "sentiment": "positive"|"neutral"|"negative", "score": -1_to_1, "key_themes": ["string"], "is_crisis": boolean }\n\nCrisis = rating<=2 AND mentions food safety, illness, discrimination, or legal threat.\n\nReview: ' + String(review.review_text ?? ''),
-          maxTokens: 200,
+          user: 'Analyse this review. Return JSON:\n' +
+            '{ "sentiment": "positive"|"neutral"|"negative", "score": -1_to_1, "key_themes": ["string"], "is_crisis": boolean,\n' +
+            '  "aspect_scores": { "food": -1_to_1_or_null, "service": -1_to_1_or_null, "ambiance": -1_to_1_or_null, "value": -1_to_1_or_null } }\n\n' +
+            'aspect_scores: score each aspect -1 (very negative) to 1 (very positive); null if not mentioned.\n' +
+            'Crisis = rating<=2 AND mentions food safety, illness, discrimination, or legal threat.\n\n' +
+            'Review (rating ' + String(review.rating) + '/5): ' + String(review.review_text ?? ''),
+          maxTokens: 250,
           agent_key: 'reputation_defence',
           role: 'analysis',
           business_id,
@@ -104,6 +114,7 @@ export class ReputationDefenceAgent extends BaseAgent {
             sentiment_score: result.score,
             key_themes: result.key_themes,
             is_crisis: result.is_crisis,
+            aspect_scores: result.aspect_scores ?? null,
           }).eq('id', review.id)
         }
       } catch { /* per-review non-fatal */ }
@@ -118,16 +129,20 @@ export class ReputationDefenceAgent extends BaseAgent {
   ): Promise<number> {
     const autoMode = String(config.response_mode ?? 'suggest') === 'auto'
 
-    // Fetch past posted responses to learn tone
+    // Fetch past posted review+response pairs to teach tone and avoid repetition
     const { data: posted } = await supabaseAdmin
       .from('business_reviews')
-      .select('response_text')
+      .select('rating,review_text,response_text')
       .eq('business_id', business_id)
       .eq('response_status', 'posted')
       .not('response_text', 'is', null)
-      .limit(5)
+      .order('response_posted_at', { ascending: false })
+      .limit(8)
 
-    const toneExamples = (posted ?? []).map(p => p.response_text).filter(Boolean).join('\n---\n')
+    const toneExamples = (posted ?? [])
+      .filter(p => p.response_text)
+      .map(p => '[' + String(p.rating) + '★] Review: "' + String(p.review_text ?? '').slice(0, 80) + '…"\nResponse: ' + String(p.response_text))
+      .join('\n---\n')
 
     const { data: pending } = await supabaseAdmin
       .from('business_reviews')
@@ -332,5 +347,58 @@ export class ReputationDefenceAgent extends BaseAgent {
         }
       } catch { /* per-customer non-fatal */ }
     }
+  }
+
+  private async benchmarkCompetitorRatings(business_id: string, bizName: string): Promise<AgentDecisionInput[]> {
+    const decisions: AgentDecisionInput[] = []
+    try {
+      // Own avg rating from synced reviews
+      const { data: ownReviews } = await supabaseAdmin
+        .from('business_reviews')
+        .select('rating')
+        .eq('business_id', business_id)
+        .gte('review_date', new Date(Date.now() - 90 * 86400000).toISOString())
+      const ownRatings = (ownReviews ?? []).map(r => Number(r.rating)).filter(v => v > 0)
+      const ownAvg = ownRatings.length > 0 ? ownRatings.reduce((s, v) => s + v, 0) / ownRatings.length : 0
+      const ownCount = ownRatings.length
+
+      const { data: competitors } = await supabaseAdmin
+        .from('aria_competitor_watches')
+        .select('competitor_name,competitor_data')
+        .eq('business_id', business_id)
+        .eq('is_active', true)
+        .limit(5)
+        .then(r => r, () => ({ data: null }))
+
+      for (const comp of competitors ?? []) {
+        const info = comp.competitor_data as Record<string, unknown> | null
+        const compRating = Number(info?.rating ?? 0)
+        const compCount = Number(info?.user_ratings_total ?? info?.review_count ?? 0)
+        if (compRating <= 0) continue
+        const ratingGap = compRating - ownAvg
+        const countGap = compCount - ownCount
+        if (ratingGap < 0.2 && countGap < 20) continue // no meaningful gap
+        const impactCents = Math.round(Math.max(10000, (ratingGap * 50000) + (countGap * 300)))
+        decisions.push({
+          agent_type: 'reputation_defence',
+          business_id,
+          decision_data: {
+            type: 'competitor_rating_gap',
+            competitor: String(comp.competitor_name),
+            your_avg_rating: Math.round(ownAvg * 100) / 100,
+            your_review_count_90d: ownCount,
+            comp_avg_rating: compRating,
+            comp_review_count: compCount,
+            rating_gap: Math.round(ratingGap * 100) / 100,
+          },
+          reasoning: String(bizName) + ' avg ' + ownAvg.toFixed(1) + '★ vs ' + String(comp.competitor_name) + ' ' + String(compRating.toFixed(1)) + '★ — close the gap by increasing review request frequency and resolving recurring complaint themes.',
+          confidence_score: 0.78,
+          projected_impact_cents: impactCents,
+          expires_at: new Date(Date.now() + 30 * 86400000).toISOString(),
+          status: 'pending',
+        })
+      }
+    } catch { /* non-fatal */ }
+    return decisions
   }
 }

@@ -115,15 +115,22 @@ export class CustomerAcquisitionAgent extends BaseAgent {
 
       const overall_aeo_score = Math.round(gbpScore * 0.4 + reviewScore * 0.35 + contentScore * 0.25)
 
-      // Missing fields
-      const missingFields: string[] = []
-      if (!biz.address && !gbpDetails.formatted_address) missingFields.push('physical_address')
-      if (!biz.phone && !gbpDetails.formatted_phone_number) missingFields.push('phone_number')
-      if (!biz.website && !gbpDetails.website) missingFields.push('website')
-      if (!biz.description || String(biz.description).length < 100) missingFields.push('business_description')
-      if (hoursCount < 7) missingFields.push('opening_hours_all_days')
-      if (photoCount < 5) missingFields.push('photos_5_plus')
-      if (reviewCount < 20) missingFields.push('min_20_reviews')
+      // GBP completeness checklist with per-field impact weighting
+      interface GBPCheckItem { field: string; present: boolean; impact_cents: number; fix: string }
+      const gbpChecklist: GBPCheckItem[] = [
+        { field: 'physical_address', present: !!(biz.address || gbpDetails.formatted_address), impact_cents: 80000, fix: 'Add full street address to Google Business Profile' },
+        { field: 'phone_number', present: !!(biz.phone || gbpDetails.formatted_phone_number), impact_cents: 50000, fix: 'Add local phone number to GBP' },
+        { field: 'website', present: !!(biz.website || gbpDetails.website), impact_cents: 60000, fix: 'Link your website to GBP' },
+        { field: 'business_description_150+', present: !!(biz.description && String(biz.description).length >= 150), impact_cents: 70000, fix: 'Write a 150+ word keyword-rich business description' },
+        { field: 'opening_hours_all_7_days', present: hoursCount >= 7, impact_cents: 40000, fix: 'Set opening hours for all 7 days in GBP' },
+        { field: 'photos_5_plus', present: photoCount >= 5, impact_cents: 55000, fix: 'Upload 5+ high-quality photos to GBP' },
+        { field: 'photos_20_plus', present: photoCount >= 20, impact_cents: 35000, fix: 'Upload 20+ photos — businesses with 20+ photos see 35% more clicks' },
+        { field: 'min_20_reviews', present: reviewCount >= 20, impact_cents: 100000, fix: 'Reach 20 Google reviews to appear in local AI results' },
+        { field: 'min_50_reviews', present: reviewCount >= 50, impact_cents: 80000, fix: 'Reach 50 Google reviews for strong local pack ranking' },
+        { field: 'rating_4_plus', present: rating >= 4.0, impact_cents: 120000, fix: 'Improve rating to 4.0+ by resolving top complaint themes' },
+      ]
+      const missingFields = gbpChecklist.filter(c => !c.present).map(c => c.field)
+      const gbpGapImpactCents = gbpChecklist.filter(c => !c.present).reduce((s, c) => s + c.impact_cents, 0)
 
       // STEP 2: Gap analysis via Sonnet
       let recommendations: Array<{ field: string; action: string; impact: string; effort: string; priority: number }> = []
@@ -160,6 +167,7 @@ export class CustomerAcquisitionAgent extends BaseAgent {
         known_price_range: priceRange,
         missing_fields: missingFields,
         improvement_recommendations: recommendations,
+        gbp_checklist: gbpChecklist,
         last_updated: new Date().toISOString(),
       }, { onConflict: 'business_id' })
 
@@ -247,7 +255,7 @@ export class CustomerAcquisitionAgent extends BaseAgent {
         }
       }
 
-      // STEP 5: Competitor AEO comparison
+      // STEP 5: Competitor AEO comparison + query/topic gap analysis
       const { data: competitors } = await supabaseAdmin
         .from('aria_competitor_watches')
         .select('competitor_name,competitor_data')
@@ -256,31 +264,75 @@ export class CustomerAcquisitionAgent extends BaseAgent {
         .limit(3)
         .then(r => r, () => ({ data: null }))
 
+      // Own target queries from existing content pieces
+      const { data: ownContent } = await supabaseAdmin
+        .from('aeo_content_pieces')
+        .select('target_queries')
+        .eq('business_id', business_id)
+        .limit(30)
+        .then(r => r, () => ({ data: null }))
+      const ownQueries = new Set<string>(
+        (ownContent ?? []).flatMap(c => Array.isArray(c.target_queries) ? c.target_queries as string[] : []).map(q => String(q).toLowerCase())
+      )
+
       if (competitors && competitors.length > 0) {
-        const compData = competitors[0]
-        const compInfo = compData.competitor_data as Record<string, unknown> | null
-        const compRating = Number((compInfo as Record<string, unknown> | null)?.rating ?? 0)
-        const compReviews = Number((compInfo as Record<string, unknown> | null)?.user_ratings_total ?? 0)
-        if (compRating > rating || compReviews > reviewCount) {
-          decisions.push({
-            agent_type: 'customer_acquisition',
-            business_id,
-            decision_data: {
-              your_score: overall_aeo_score,
-              competitor: String(compData.competitor_name),
-              your_rating: rating,
-              comp_rating: compRating,
-              your_reviews: reviewCount,
-              comp_reviews: compReviews,
-            },
-            reasoning: 'Competitor "' + String(compData.competitor_name) + '" has stronger AI search signals: ' +
-              String(compReviews) + ' reviews vs your ' + String(reviewCount) + '. Increase review requests.',
-            confidence_score: 0.8,
-            projected_impact_cents: Math.max(5000, Math.round((compReviews - reviewCount) * 500)),
-            expires_at: new Date(Date.now() + 30 * 86400000).toISOString(),
-            status: 'pending',
-          })
+        for (const compData of competitors) {
+          const compInfo = compData.competitor_data as Record<string, unknown> | null
+          const compRating = Number(compInfo?.rating ?? 0)
+          const compReviews = Number(compInfo?.user_ratings_total ?? compInfo?.review_count ?? 0)
+          const compQueries: string[] = Array.isArray(compInfo?.target_queries) ? (compInfo.target_queries as string[]).map(String) : []
+
+          // Query/topic gaps — topics competitor covers that we don't
+          const queryGaps = compQueries.filter(q => !ownQueries.has(q.toLowerCase()))
+
+          if (compRating > rating || compReviews > reviewCount || queryGaps.length > 0) {
+            const reviewGap = compReviews - reviewCount
+            const ratingGap = compRating - rating
+            const impactCents = Math.max(5000,
+              Math.round((reviewGap > 0 ? reviewGap * 500 : 0) + (ratingGap > 0 ? ratingGap * 80000 : 0) + (queryGaps.length * 8000))
+            )
+            decisions.push({
+              agent_type: 'customer_acquisition',
+              business_id,
+              decision_data: {
+                your_score: overall_aeo_score,
+                competitor: String(compData.competitor_name),
+                your_rating: rating,
+                comp_rating: compRating,
+                your_reviews: reviewCount,
+                comp_reviews: compReviews,
+                query_gaps: queryGaps.slice(0, 5),
+                gbp_gap_impact_cents: gbpGapImpactCents,
+              },
+              reasoning: 'Competitor "' + String(compData.competitor_name) + '" leads with ' + String(compReviews) + ' reviews (' + String(compRating.toFixed(1)) + '★) vs your ' + String(reviewCount) + ' (' + String(rating.toFixed(1)) + '★)' +
+                (queryGaps.length > 0 ? '; missing ' + String(queryGaps.length) + ' topic gaps: ' + queryGaps.slice(0, 3).join(', ') : '') + '.',
+              confidence_score: 0.82,
+              projected_impact_cents: impactCents,
+              expires_at: new Date(Date.now() + 30 * 86400000).toISOString(),
+              status: 'pending',
+            })
+          }
         }
+      }
+
+      // GBP checklist decision when total gap impact is significant
+      const topGbpGaps = gbpChecklist.filter(c => !c.present).sort((a, b) => b.impact_cents - a.impact_cents).slice(0, 3)
+      if (topGbpGaps.length > 0) {
+        decisions.push({
+          agent_type: 'customer_acquisition',
+          business_id,
+          decision_data: {
+            type: 'gbp_completeness',
+            checklist_gaps: topGbpGaps.map(c => ({ field: c.field, fix: c.fix, impact_cents: c.impact_cents })),
+            total_gap_impact_cents: gbpGapImpactCents,
+            gbp_score: gbpScore,
+          },
+          reasoning: 'GBP profile is ' + String(gbpScore) + '% complete — fixing top ' + String(topGbpGaps.length) + ' gaps (' + topGbpGaps.map(c => c.field).join(', ') + ') could unlock A$' + (gbpGapImpactCents / 100).toFixed(0) + ' in additional monthly revenue from local AI search.',
+          confidence_score: 0.85,
+          projected_impact_cents: gbpGapImpactCents,
+          expires_at: new Date(Date.now() + 14 * 86400000).toISOString(),
+          status: 'pending',
+        })
       }
 
       // STEP 6: Top 3 recommendations as decisions
