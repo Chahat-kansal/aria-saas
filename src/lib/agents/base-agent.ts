@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
+import { supabaseAdmin } from '@/lib/supabase-admin';
 import type { AgentType, AgentDecision, AgentDecisionInput, AgentRunResult, AgentSettings } from './types';
 
 export abstract class BaseAgent {
@@ -25,7 +26,6 @@ export abstract class BaseAgent {
         config: (data?.config as Record<string, unknown>) ?? {},
       };
     } catch {
-      // agent_settings table may not exist yet — default to enabled
       return { enabled: true, auto_approve_below_cents: 0, config: {} };
     }
   }
@@ -63,22 +63,95 @@ export abstract class BaseAgent {
     }
   }
 
-  protected async claudeReason(opts: { system: string; user: string; maxTokens?: number }): Promise<string> {
+  private computeCostCents(model: string, inputTokens: number, outputTokens: number): number {
+    if (model.includes('sonnet')) {
+      return Math.round((inputTokens * 0.000003 + outputTokens * 0.000015) * 100);
+    }
+    if (model.includes('opus')) {
+      return Math.round((inputTokens * 0.000015 + outputTokens * 0.000075) * 100);
+    }
+    // haiku
+    return Math.round((inputTokens * 0.00000025 + outputTokens * 0.00000125) * 100);
+  }
+
+  protected async claudeReason(opts: {
+    system: string;
+    user: string;
+    maxTokens?: number;
+    model?: string;
+    agent_key?: string;
+    role?: string;
+    business_id?: string;
+  }): Promise<string> {
+    const t0 = Date.now();
+    const model = opts.model ?? 'claude-haiku-4-5-20251001';
     try {
       const msg = await this.anthropic.messages.create({
-        model: 'claude-haiku-4-5-20251001',
+        model,
         max_tokens: opts.maxTokens ?? 256,
         system: opts.system,
         messages: [{ role: 'user', content: opts.user }],
       });
-      return msg.content[0]?.type === 'text' ? msg.content[0].text : '';
+      const latencyMs = Date.now() - t0;
+      const raw = msg.content[0]?.type === 'text' ? msg.content[0].text : '';
+
+      if (opts.agent_key && opts.role) {
+        const costUsdCents = this.computeCostCents(model, msg.usage.input_tokens, msg.usage.output_tokens);
+        try {
+          await supabaseAdmin.from('aria_ai_calls').insert({
+            business_id: opts.business_id ?? null,
+            agent_key: opts.agent_key,
+            provider: 'anthropic',
+            model_id: model,
+            role: opts.role,
+            input_tokens: msg.usage.input_tokens,
+            output_tokens: msg.usage.output_tokens,
+            latency_ms: latencyMs,
+            cost_usd_cents: costUsdCents,
+            success: true,
+            request_summary: opts.agent_key + ' reasoning call',
+            response_summary: raw.slice(0, 120),
+          });
+        } catch { /* non-fatal */ }
+      }
+
+      return raw;
     } catch (e) {
       console.warn('[base-agent] claudeReason failed:', e);
+
+      if (opts.agent_key && opts.role) {
+        try {
+          await supabaseAdmin.from('aria_ai_calls').insert({
+            business_id: opts.business_id ?? null,
+            agent_key: opts.agent_key,
+            provider: 'anthropic',
+            model_id: model,
+            role: opts.role,
+            input_tokens: 0,
+            output_tokens: 0,
+            latency_ms: Date.now() - t0,
+            cost_usd_cents: 0,
+            success: false,
+            error_message: (e as Error).message,
+            request_summary: opts.agent_key + ' reasoning call',
+            response_summary: null,
+          });
+        } catch { /* non-fatal */ }
+      }
+
       return '';
     }
   }
 
-  protected async claudeStructured<T>(opts: { system: string; user: string; maxTokens?: number }): Promise<T | null> {
+  protected async claudeStructured<T>(opts: {
+    system: string;
+    user: string;
+    maxTokens?: number;
+    model?: string;
+    agent_key?: string;
+    role?: string;
+    business_id?: string;
+  }): Promise<T | null> {
     const raw = await this.claudeReason({ ...opts, maxTokens: opts.maxTokens ?? 512 });
     try {
       const cleaned = raw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();

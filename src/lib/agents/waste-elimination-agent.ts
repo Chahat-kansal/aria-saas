@@ -1,5 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import type { AgentType, AgentRunResult } from './types'
+import type { AgentType, AgentDecisionInput, AgentRunResult } from './types'
 import { BaseAgent } from './base-agent'
 
 // Australian public holidays 2026 (national + key states)
@@ -61,7 +61,7 @@ export class WasteEliminationAgent extends BaseAgent {
         .or('prep_time_minutes.gt.0,shelf_life_hours.not.is.null')
 
       if (!products || products.length === 0) {
-        return { decisions: [], errors, duration_ms: Date.now() - start}
+        return { decisions: [], errors, duration_ms: Date.now() - start }
       }
 
       // STEP 2: Fetch business location for weather
@@ -217,10 +217,10 @@ export class WasteEliminationAgent extends BaseAgent {
       }
 
       if (predictions.length === 0) {
-        return { decisions: [], errors, duration_ms: Date.now() - start}
+        return { decisions: [], errors, duration_ms: Date.now() - start }
       }
 
-      // STEP 3b: Generate narrative prep briefing via Haiku
+      // STEP 3b: Generate narrative prep briefing via Haiku (routed through logged helper)
       const topItems = [...predictions]
         .sort((a, b) => b.recommended_prep_qty - a.recommended_prep_qty)
         .slice(0, 6)
@@ -232,21 +232,18 @@ export class WasteEliminationAgent extends BaseAgent {
 
       let narrative = 'Prep guide for ' + tomorrowStr + ': ' + topItems
       try {
-        const resp = await this.anthropic.messages.create({
-          model: 'claude-haiku-4-5-20251001',
-          max_tokens: 200,
-          messages: [{
-            role: 'user',
-            content: 'Write a kitchen briefing in 3-4 sentences for tomorrow (' + tomorrowStr + ').' +
-              ' Weather code: ' + weatherCode + ', max temp: ' + maxTemp + 'C.' +
-              (pubHoliday ? ' Public holiday — expect higher traffic.' : '') +
-              ' Prep plan:\n' + topItems +
-              '\nHighlight top 3 items, mention weather if notable. Tone: practical, like a head chef briefing.',
-          }],
-        })
-        narrative = (resp.content[0] as { type: string; text: string }).type === 'text'
-          ? (resp.content[0] as { text: string }).text
-          : narrative
+        narrative = await this.claudeReason({
+          system: 'You are a head chef writing a kitchen prep briefing. Be practical and direct — 3-4 sentences.',
+          user: 'Write a kitchen briefing for tomorrow (' + tomorrowStr + ').' +
+            ' Weather code: ' + weatherCode + ', max temp: ' + maxTemp + 'C.' +
+            (pubHoliday ? ' Public holiday — expect higher traffic.' : '') +
+            ' Prep plan:\n' + topItems +
+            '\nHighlight top 3 items, mention weather if notable. Tone: practical, like a head chef briefing.',
+          maxTokens: 200,
+          agent_key: 'waste_elimination',
+          role: 'narrative',
+          business_id,
+        }) || narrative
       } catch { /* non-fatal */ }
 
       // Attach narrative to all predictions
@@ -278,14 +275,49 @@ export class WasteEliminationAgent extends BaseAgent {
         }
       }
 
-      return {
-        decisions: [],
-        errors,
-        duration_ms: Date.now() - start,
+      // STEP 6: Build agent decisions for high-waste-risk products
+      const decisions: AgentDecisionInput[] = []
+
+      const wasteRisks = predictions
+        .map(p => {
+          const prod = products.find(pr => pr.id === p.product_id)
+          const costPrice = Number(prod?.cost_price ?? 0)
+          const wasteUnits = Math.max(0, p.recommended_prep_qty - p.predicted_units_sold)
+          const wasteValue = wasteUnits * costPrice
+          return { p, prod, wasteUnits, wasteValue }
+        })
+        .filter(r => r.wasteValue > 0.5) // only flag significant waste risk
+        .sort((a, b) => b.wasteValue - a.wasteValue)
+        .slice(0, 5)
+
+      for (const risk of wasteRisks) {
+        decisions.push({
+          business_id,
+          agent_type: 'waste_elimination' as AgentType,
+          decision_data: {
+            action_type: 'reduce_prep',
+            product_id: risk.p.product_id,
+            product_name: risk.prod?.name ?? 'Unknown',
+            prediction_date: tomorrowStr,
+            predicted_units: risk.p.predicted_units_sold,
+            prep_qty: risk.p.recommended_prep_qty,
+            waste_risk_units: Math.round(risk.wasteUnits * 10) / 10,
+            waste_risk_value: Math.round(risk.wasteValue * 100) / 100,
+            confidence: risk.p.prediction_confidence,
+          },
+          reasoning: narrative,
+          confidence_score: risk.p.prediction_confidence,
+          projected_impact_cents: Math.round(risk.wasteValue * 100),
+          expires_at: tomorrowStr + 'T23:59:59.000Z',
+        })
       }
+
+      const saved = await this.saveDecisions(decisions)
+      await this.logRun(business_id, { decisions: saved, errors, duration_ms: Date.now() - start })
+      return { decisions: saved, errors, duration_ms: Date.now() - start }
     } catch (e) {
       errors.push(e instanceof Error ? e : new Error(String(e)))
-      return { decisions: [], errors, duration_ms: Date.now() - start}
+      return { decisions: [], errors, duration_ms: Date.now() - start }
     }
   }
 

@@ -1,5 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import type { AgentType, AgentRunResult } from './types'
+import type { AgentType, AgentRunResult, AgentDecisionInput } from './types'
 import { BaseAgent } from './base-agent'
 
 interface NegotiationBriefResponse {
@@ -20,6 +20,7 @@ export class SupplierNegotiationAgent extends BaseAgent {
   async run(business_id: string): Promise<AgentRunResult> {
     const start = Date.now()
     const errors: Error[] = []
+    const decisions: AgentDecisionInput[] = []
     const twelveMonthsAgo = new Date(Date.now() - 365 * 86400000).toISOString()
     const thirteenMonthsAgo = new Date(Date.now() - 396 * 86400000).toISOString()
     const elevenMonthsAgo = new Date(Date.now() - 335 * 86400000).toISOString()
@@ -189,7 +190,7 @@ export class SupplierNegotiationAgent extends BaseAgent {
 
           if (totalSpend > 100000) { leverageScore += 25; leverageFactors.push('Very high spend volume ($100k+/year)') }
           else if (totalSpend > 50000) { leverageScore += 15; leverageFactors.push('High spend volume ($50k+/year)') }
-          else if (totalSpend < 10000) { leverageScore -= 10; }
+          else if (totalSpend < 10000) { leverageScore -= 10 }
 
           if (paymentOnTimePct > 95) { leverageScore += 10; leverageFactors.push('Excellent payment record (' + Math.round(paymentOnTimePct) + '% on time)') }
 
@@ -197,7 +198,7 @@ export class SupplierNegotiationAgent extends BaseAgent {
 
           if (avgCreepPct > 5 && !contractRenewalDate) { leverageScore += 10; leverageFactors.push('Price creep of ' + Math.round(avgCreepPct) + '% with no contract protection') }
 
-          if (relationshipYears < 1) { leverageScore -= 15; }
+          if (relationshipYears < 1) { leverageScore -= 15 }
           else if (relationshipYears > 3) { leverageScore += 5; leverageFactors.push('Established ' + Math.round(relationshipYears) + '-year relationship') }
 
           if (overchargeCount > 3) { leverageScore += 5; leverageFactors.push('History of billing inaccuracies (' + overchargeCount + ' overcharges)') }
@@ -243,11 +244,12 @@ export class SupplierNegotiationAgent extends BaseAgent {
       if (profiles.length > 0) {
         await supabaseAdmin
           .from('supplier_negotiation_profiles')
-          .upsert(profiles as Parameters<typeof supabaseAdmin.from>[0] extends never ? never : never[], { onConflict: 'business_id,supplier_name' })
+          .upsert(profiles as Record<string, unknown>[], { onConflict: 'business_id,supplier_name' })
       }
 
       // STEP 3: Generate briefs for urgent + high priority
       const urgentProfiles = profiles.filter(p => p.negotiation_priority === 'urgent' || p.negotiation_priority === 'high')
+      const ninetyDaysOut = new Date(Date.now() + 90 * 86400000).toISOString()
 
       for (const profile of urgentProfiles) {
         try {
@@ -280,39 +282,26 @@ export class SupplierNegotiationAgent extends BaseAgent {
             negotiation_priority: profile.negotiation_priority,
           }
 
-          const resp = await this.anthropic.messages.create({
-            model: 'claude-sonnet-4-5-20250929',
-            max_tokens: 1500,
+          const brief = await this.claudeStructured<NegotiationBriefResponse>({
             system: 'You are an expert procurement negotiator for Australian small businesses. Generate a complete supplier negotiation package. Respond with valid JSON only, no markdown.',
-            messages: [{
-              role: 'user',
-              content: 'Generate a negotiation brief for this supplier context:\n' + JSON.stringify(context, null, 2) +
-                '\n\nRespond with JSON matching this schema exactly:\n' +
-                '{"negotiation_goal":"string","leverage_arguments":[{"argument":"string","data_point":"string","strength":"strong|medium|weak"}],"expected_outcome":"string","success_probability":0.0-1.0,"draft_email_subject":"string","draft_email_body":"string","draft_talking_points":["string"],"annual_saving_if_successful":number,"monthly_saving_if_successful":number}',
-            }],
-          })
-
-          const rawText = (resp.content[0] as { type: string; text: string }).type === 'text'
-            ? (resp.content[0] as { text: string }).text
-            : '{}'
-
-          let brief: NegotiationBriefResponse
-          try {
-            brief = JSON.parse(rawText) as NegotiationBriefResponse
-          } catch {
-            // Try to extract JSON from the response
-            const match = rawText.match(/\{[\s\S]*\}/)
-            brief = match ? JSON.parse(match[0]) as NegotiationBriefResponse : {
-              negotiation_goal: 'Negotiate price reduction with ' + String(profile.supplier_name),
-              leverage_arguments: [],
-              expected_outcome: 'Moderate chance of success',
-              success_probability: 0.5,
-              draft_email_subject: 'Price Review — ' + String(profile.supplier_name),
-              draft_email_body: 'We would like to discuss our pricing arrangement.',
-              draft_talking_points: ['Review price creep', 'Discuss contract terms'],
-              annual_saving_if_successful: 0,
-              monthly_saving_if_successful: 0,
-            }
+            user: 'Generate a negotiation brief for this supplier context:\n' + JSON.stringify(context, null, 2) +
+              '\n\nRespond with JSON matching this schema exactly:\n' +
+              '{"negotiation_goal":"string","leverage_arguments":[{"argument":"string","data_point":"string","strength":"strong|medium|weak"}],"expected_outcome":"string","success_probability":0.0,"draft_email_subject":"string","draft_email_body":"string","draft_talking_points":["string"],"annual_saving_if_successful":0,"monthly_saving_if_successful":0}',
+            maxTokens: 1500,
+            model: 'claude-sonnet-4-5-20250929',
+            agent_key: 'supplier_negotiation',
+            role: 'analysis',
+            business_id,
+          }) ?? {
+            negotiation_goal: 'Negotiate price reduction with ' + String(profile.supplier_name),
+            leverage_arguments: [] as NegotiationBriefResponse['leverage_arguments'],
+            expected_outcome: 'Moderate chance of success',
+            success_probability: 0.5,
+            draft_email_subject: 'Price Review — ' + String(profile.supplier_name),
+            draft_email_body: 'We would like to discuss our pricing arrangement.',
+            draft_talking_points: ['Review price creep', 'Discuss contract terms'],
+            annual_saving_if_successful: 0,
+            monthly_saving_if_successful: 0,
           }
 
           const { data: profileRow } = await supabaseAdmin
@@ -341,13 +330,31 @@ export class SupplierNegotiationAgent extends BaseAgent {
               monthly_saving_if_successful: brief.monthly_saving_if_successful,
               status: 'pending',
             })
+
+          decisions.push({
+            business_id,
+            agent_type: 'supplier_negotiation' as AgentType,
+            decision_data: {
+              action_type: 'negotiate_supplier',
+              supplier_name: profile.supplier_name,
+              negotiation_goal: brief.negotiation_goal,
+              annual_saving_if_successful: brief.annual_saving_if_successful,
+              leverage_score: profile.leverage_score,
+              priority: profile.negotiation_priority,
+            },
+            reasoning: brief.expected_outcome + ' — ' + brief.negotiation_goal,
+            confidence_score: brief.success_probability,
+            projected_impact_cents: Math.round(Number(brief.annual_saving_if_successful) * 100),
+            expires_at: ninetyDaysOut,
+          })
         } catch (e) {
           errors.push(e instanceof Error ? e : new Error(String(e)))
         }
       }
 
-      // STEP 4: Log run
-      await this.logRun(business_id, { decisions: [], errors, duration_ms: Date.now() - start })
+      const saved = await this.saveDecisions(decisions)
+      await this.logRun(business_id, { decisions: saved, errors, duration_ms: Date.now() - start })
+      return { decisions: saved, errors, duration_ms: Date.now() - start }
 
     } catch (e) {
       errors.push(e instanceof Error ? e : new Error(String(e)))

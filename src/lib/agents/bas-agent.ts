@@ -1,5 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import type { AgentType, AgentRunResult } from './types'
+import type { AgentType, AgentRunResult, AgentDecisionInput } from './types'
 import { BaseAgent } from './base-agent'
 
 // ATO quarter definitions
@@ -27,12 +27,38 @@ export class BasAgent extends BaseAgent {
   type: AgentType = 'bas_compliance'
 
   async run(business_id: string): Promise<AgentRunResult> {
+    const start = Date.now()
+    const errors: Error[] = []
     const q = getCurrentQuarter()
-    await this.generateBasDraft(business_id, q.period_start, q.period_end)
-    return { decisions: [], errors: [], duration_ms: 0 }
+    try {
+      const { totalPayable, dueDate, quarter } = await this.generateBasDraft(business_id, q.period_start, q.period_end)
+      if (totalPayable > 0) {
+        const decision: AgentDecisionInput = {
+          business_id,
+          agent_type: 'bas_compliance' as AgentType,
+          decision_data: {
+            action_type: 'review_bas_draft',
+            quarter,
+            total_payable: Math.round(totalPayable * 100) / 100,
+            due_date: dueDate.toISOString().slice(0, 10),
+          },
+          reasoning: 'BAS ' + quarter + ' draft prepared: $' + totalPayable.toFixed(0) + ' payable by ' + dueDate.toISOString().slice(0, 10) + '. Review and lodge via your accountant or the ATO business portal.',
+          confidence_score: 0.95,
+          projected_impact_cents: Math.round(totalPayable * 100),
+          expires_at: dueDate.toISOString(),
+        }
+        const saved = await this.saveDecisions([decision])
+        await this.logRun(business_id, { decisions: saved, errors, duration_ms: Date.now() - start })
+        return { decisions: saved, errors, duration_ms: Date.now() - start }
+      }
+    } catch (e) {
+      errors.push(e instanceof Error ? e : new Error(String(e)))
+    }
+    await this.logRun(business_id, { decisions: [], errors, duration_ms: Date.now() - start })
+    return { decisions: [], errors, duration_ms: Date.now() - start }
   }
 
-  async generateBasDraft(business_id: string, period_start: Date, period_end: Date): Promise<void> {
+  async generateBasDraft(business_id: string, period_start: Date, period_end: Date): Promise<{ totalPayable: number; dueDate: Date; quarter: string }> {
     const startStr = period_start.toISOString()
     const endStr = new Date(period_end.getTime() + 86399000).toISOString() // include end of day
 
@@ -190,31 +216,29 @@ export class BasAgent extends BaseAgent {
         .eq('id', business_id)
         .maybeSingle()
 
-      const resp = await this.anthropic.messages.create({
+      handoverSummary = await this.claudeReason({
+        system: 'You are an Australian tax expert writing concise BAS handover notes for accountant review.',
+        user: 'Write a concise BAS handover summary (3-4 sentences) for an Australian accountant:\n' +
+          'Business: ' + (bizData?.name ?? 'Unknown') + '\n' +
+          'Quarter: ' + q + '\n' +
+          'Period: ' + period_start.toISOString().slice(0, 10) + ' to ' + period_end.toISOString().slice(0, 10) + '\n' +
+          'Due: ' + dueDate.toISOString().slice(0, 10) + '\n' +
+          'G1 Total Sales: $' + g1TotalSales.toFixed(0) + '\n' +
+          'G3 GST-free: $' + g3GstFreeSales.toFixed(0) + '\n' +
+          '1A GST on sales: $' + field1aGstOnSales.toFixed(0) + '\n' +
+          '1B GST credits: $' + field1bGstCredits.toFixed(0) + '\n' +
+          'Net GST: $' + netGst.toFixed(0) + (netGst > 0 ? ' (payable)' : ' (refund)') + '\n' +
+          'W1 Wages: $' + w1TotalSalaryWages.toFixed(0) + '\n' +
+          'W2 PAYG: $' + w2AmountsWithheld.toFixed(0) + '\n' +
+          'Total payable: $' + totalPayable.toFixed(0) + '\n' +
+          (unclassifiedCount > 0 ? unclassifiedCount + ' products need GST classification.\n' : '') +
+          'Tone: professional, factual, suitable for accountant review.',
+        maxTokens: 400,
         model: 'claude-sonnet-4-5-20250929',
-        max_tokens: 400,
-        messages: [{
-          role: 'user',
-          content: 'Write a concise BAS handover summary (3-4 sentences) for an Australian accountant:\n' +
-            'Business: ' + (bizData?.name ?? 'Unknown') + '\n' +
-            'Quarter: ' + q + '\n' +
-            'Period: ' + period_start.toISOString().slice(0, 10) + ' to ' + period_end.toISOString().slice(0, 10) + '\n' +
-            'Due: ' + dueDate.toISOString().slice(0, 10) + '\n' +
-            'G1 Total Sales: $' + g1TotalSales.toFixed(0) + '\n' +
-            'G3 GST-free: $' + g3GstFreeSales.toFixed(0) + '\n' +
-            '1A GST on sales: $' + field1aGstOnSales.toFixed(0) + '\n' +
-            '1B GST credits: $' + field1bGstCredits.toFixed(0) + '\n' +
-            'Net GST: $' + netGst.toFixed(0) + (netGst > 0 ? ' (payable)' : ' (refund)') + '\n' +
-            'W1 Wages: $' + w1TotalSalaryWages.toFixed(0) + '\n' +
-            'W2 PAYG: $' + w2AmountsWithheld.toFixed(0) + '\n' +
-            'Total payable: $' + totalPayable.toFixed(0) + '\n' +
-            (unclassifiedCount > 0 ? unclassifiedCount + ' products need GST classification.\n' : '') +
-            'Tone: professional, factual, suitable for accountant review.',
-        }],
+        agent_key: 'bas_compliance',
+        role: 'compliance',
+        business_id,
       })
-      handoverSummary = (resp.content[0] as { type: string; text: string }).type === 'text'
-        ? (resp.content[0] as { text: string }).text
-        : ''
     } catch { /* non-fatal */ }
 
     // STEP 12: Upsert bas_drafts
@@ -241,5 +265,7 @@ export class BasAgent extends BaseAgent {
         handover_summary: handoverSummary,
         handover_generated_at: handoverSummary ? new Date().toISOString() : null,
       }, { onConflict: 'business_id,period_start' })
+
+    return { totalPayable, dueDate, quarter: q }
   }
 }
