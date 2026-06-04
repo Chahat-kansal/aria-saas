@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useRef, useCallback } from 'react'
+import dynamic from 'next/dynamic'
 import { createBrowserClient } from '@supabase/ssr'
 import {
   Sparkles, Film, Clock, Edit3, RefreshCw, ChevronDown, ChevronUp,
@@ -7,6 +8,11 @@ import {
   Loader2, AlertCircle, CheckCircle2, Users, Image as ImageIcon,
   Layers, Mic, Star, Search,
 } from 'lucide-react'
+
+const TimelineEditor = dynamic(
+  () => import('@/components/reels/TimelineEditor').then(m => m.TimelineEditor),
+  { ssr: false, loading: () => <div style={{ color: '#7FB897', padding: 24, fontSize: 13 }}>Loading editor…</div> },
+)
 
 const SB_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const SB_ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -216,6 +222,7 @@ export default function ReelStudioPage() {
   // ── Sessions / tabs
   const [sessions, setSessions] = useState<Session[]>([])
   const [tab, setTab] = useState<'create' | 'editor' | 'history'>('create')
+  const [latestSessionId, setLatestSessionId] = useState<string | null>(null)
   const [totalSpent, setTotalSpent] = useState(0)
   const [monthlyReels, setMonthlyReels] = useState(0)
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -327,6 +334,7 @@ export default function ReelStudioPage() {
       if (!d.url) throw new Error(d.error ?? 'Upload failed')
       setUploadedVideoUrl(d.url)
       setLatestVideo(d.url)
+      if (d.session_id) setLatestSessionId(d.session_id)
       if (bid) loadBiz(bid)
       setTab('editor')
     } catch (e: any) { setGenMsg('Video upload failed: ' + e.message) }
@@ -351,6 +359,7 @@ export default function ReelStudioPage() {
       if (d.status === 'COMPLETED') {
         setLatestVideo(d.video_url); setGenerating(false); setGenProgress(100)
         setGenMsg('Reel ready!'); setActiveJob(null); setTab('editor')
+        setLatestSessionId(sessionId)
         if (bid) loadBiz(bid)
       } else if (d.status === 'FAILED') {
         setGenMsg(d.error ?? 'Generation failed'); setGenerating(false); setGenProgress(0); setActiveJob(null)
@@ -666,39 +675,52 @@ export default function ReelStudioPage() {
           </aside>
 
           {/* ── CENTER PANEL ───────────────────────────────────────────────── */}
-          <main style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#070809', gap: T.sp.lg, overflow: 'hidden', padding: T.sp.xxl + 'px' }}>
-            <PhoneFrame width={240}>
-              {latestVideo ? (
-                <video
-                  ref={videoRef} src={latestVideo} controls autoPlay loop playsInline
-                  style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', filter: selectedFilter.css }}
-                  onLoadedMetadata={() => { if (videoRef.current) videoRef.current.playbackRate = speed }}
-                />
-              ) : generating ? (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', background: 'linear-gradient(180deg,#0a1209,#0d1a10)', gap: T.sp.lg, padding: '0 20px' }}>
-                  <Loader2 size={36} color={T.accent} style={{ animation: 'spin 0.8s linear infinite' }} />
-                  <p style={{ fontSize: 11, color: T.textMid, textAlign: 'center', margin: 0, lineHeight: 1.5 }}>{genMsg || 'Generating…'}</p>
-                  <div style={{ width: 120, height: 3, background: 'rgba(255,255,255,0.08)', borderRadius: 2, overflow: 'hidden' }}>
-                    <div style={{ height: '100%', width: genProgress + '%', background: T.accent, transition: 'width 0.8s ease' }} />
+          <main style={{ display: 'flex', flexDirection: 'column', background: '#070809', overflow: tab === 'editor' && !!latestVideo ? 'auto' : 'hidden', padding: T.sp.xxl + 'px', alignItems: tab === 'editor' && !!latestVideo ? 'flex-start' : 'center', justifyContent: tab === 'editor' && !!latestVideo ? 'flex-start' : 'center', gap: T.sp.lg }}>
+
+            {/* Editor tab with video: show Remotion TimelineEditor */}
+            {tab === 'editor' && latestVideo ? (
+              <TimelineEditor
+                videoUrl={latestVideo}
+                sessionId={latestSessionId ?? sessions[0]?.id ?? ''}
+                businessId={bid ?? ''}
+                onPublish={(editedUrl) => setLatestVideo(editedUrl)}
+              />
+            ) : (
+              <>
+                <PhoneFrame width={240}>
+                  {latestVideo ? (
+                    <video
+                      ref={videoRef} src={latestVideo} controls autoPlay loop playsInline
+                      style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', filter: selectedFilter.css }}
+                      onLoadedMetadata={() => { if (videoRef.current) videoRef.current.playbackRate = speed }}
+                    />
+                  ) : generating ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', background: 'linear-gradient(180deg,#0a1209,#0d1a10)', gap: T.sp.lg, padding: '0 20px' }}>
+                      <Loader2 size={36} color={T.accent} style={{ animation: 'spin 0.8s linear infinite' }} />
+                      <p style={{ fontSize: 11, color: T.textMid, textAlign: 'center', margin: 0, lineHeight: 1.5 }}>{genMsg || 'Generating…'}</p>
+                      <div style={{ width: 120, height: 3, background: 'rgba(255,255,255,0.08)', borderRadius: 2, overflow: 'hidden' }}>
+                        <div style={{ height: '100%', width: genProgress + '%', background: T.accent, transition: 'width 0.8s ease' }} />
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', background: 'linear-gradient(180deg,#0a0d0b,#0f140f)', gap: T.sp.md, padding: '0 24px' }}>
+                      <Film size={32} color={T.textFaint} />
+                      <p style={{ fontSize: 11, color: T.textFaint, textAlign: 'center', margin: 0, lineHeight: 1.5 }}>Configure your reel and hit Generate</p>
+                      <p style={{ fontSize: 10, color: T.textFaint, textAlign: 'center', margin: 0, opacity: 0.6 }}>9:16 vertical · up to 60s</p>
+                    </div>
+                  )}
+                </PhoneFrame>
+                {latestVideo && (
+                  <div style={{ display: 'flex', gap: T.sp.sm }}>
+                    <a href={latestVideo} download="aria-reel.mp4" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: T.r.sm, background: 'rgba(255,255,255,0.08)', color: T.text, fontSize: 12, fontWeight: 700, textDecoration: 'none', minHeight: 36 }}>
+                      <Download size={13} />Download
+                    </a>
+                    <button onClick={() => setTab('editor')} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: T.r.sm, border: 'none', cursor: 'pointer', background: T.accent, color: '#0a0f0d', fontSize: 12, fontWeight: 700, fontFamily: T.font, minHeight: 36 }}>
+                      <Edit3 size={13} />Edit
+                    </button>
                   </div>
-                </div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', background: 'linear-gradient(180deg,#0a0d0b,#0f140f)', gap: T.sp.md, padding: '0 24px' }}>
-                  <Film size={32} color={T.textFaint} />
-                  <p style={{ fontSize: 11, color: T.textFaint, textAlign: 'center', margin: 0, lineHeight: 1.5 }}>Configure your reel and hit Generate</p>
-                  <p style={{ fontSize: 10, color: T.textFaint, textAlign: 'center', margin: 0, opacity: 0.6 }}>9:16 vertical · up to 60s</p>
-                </div>
-              )}
-            </PhoneFrame>
-            {latestVideo && (
-              <div style={{ display: 'flex', gap: T.sp.sm }}>
-                <a href={latestVideo} download="aria-reel.mp4" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: T.r.sm, background: 'rgba(255,255,255,0.08)', color: T.text, fontSize: 12, fontWeight: 700, textDecoration: 'none', minHeight: 36 }}>
-                  <Download size={13} />Download
-                </a>
-                <button onClick={() => setTab('editor')} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: T.r.sm, border: 'none', cursor: 'pointer', background: T.accent, color: '#0a0f0d', fontSize: 12, fontWeight: 700, fontFamily: T.font, minHeight: 36 }}>
-                  <Edit3 size={13} />Edit
-                </button>
-              </div>
+                )}
+              </>
             )}
           </main>
 

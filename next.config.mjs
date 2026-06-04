@@ -11,7 +11,14 @@ const nextConfig = {
   experimental: {
     workerThreads: false,
     cpus: 2,
-    serverComponentsExternalPackages: ['mongoose'],
+    serverComponentsExternalPackages: [
+      'mongoose',
+      'remotion',
+      '@remotion/bundler',
+      '@remotion/renderer',
+      '@remotion/vercel',
+      '@vercel/sandbox',
+    ],
     serverSourceMaps: false,
     outputFileTracingExcludes: {
       '*': [
@@ -23,6 +30,9 @@ const nextConfig = {
         './node_modules/@aws-sdk/**',
         './node_modules/canvas/**',
       ],
+    },
+    outputFileTracingIncludes: {
+      '/api/reels/render': ['./src/remotion/**/*'],
     },
   },
   typescript: {
