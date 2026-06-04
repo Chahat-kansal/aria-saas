@@ -84,12 +84,23 @@ async function handleCompleted(
         signal: AbortSignal.timeout(10000),
       })
       const result = await res.json()
-      console.log('[reels/status] result:', JSON.stringify(result).slice(0, 400))
+      console.log('[reels/status] result:', JSON.stringify(result).slice(0, 600))
 
-      const videoUrl = result?.video?.url ?? result?.output?.video?.url
+      // fal.ai Kling returns the video URL in various shapes — check all known paths
+      const videoUrl =
+        result?.video?.url ??
+        result?.output?.video?.url ??
+        result?.video_url ??
+        result?.videos?.[0]?.url ??
+        result?.output?.url ??
+        (typeof result?.video === 'string' ? result.video : null) ??
+        (Array.isArray(result?.output) ? result.output[0]?.url : null)
+
       if (!videoUrl) {
-        console.error('[reels/status] no video.url in result')
-        return NextResponse.json({ status: 'FAILED', error: 'No video URL in fal.ai result' })
+        // Result payload may not be fully ready yet even though status says COMPLETED.
+        // Keep polling (IN_QUEUE) instead of permanently failing.
+        console.error('[reels/status] COMPLETED but no video url yet, full result:', JSON.stringify(result).slice(0, 600))
+        return NextResponse.json({ status: 'IN_QUEUE' })
       }
 
       if (sessionId) {
