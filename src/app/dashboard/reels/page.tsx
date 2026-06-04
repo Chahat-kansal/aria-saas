@@ -294,18 +294,24 @@ export default function ReelStudioPage() {
     if (clips === 1) {
       setGenMsg('Generating ' + duration + 's reel…')
       try {
-        const d = await fetch(REEL_GENERATE, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...base, prompt: prompt || null, duration_seconds: duration }) }).then(r => r.json())
-        if (!d.job_id) throw new Error(d.error ?? 'No job_id returned')
-        setGenProgress(15); setActiveJob({ jobId: d.job_id, sessionId: d.session_id })
-        pollStatus(d.job_id, d.session_id, userToken)
+        // Step 1: get session + key from Vercel
+        const prep = await fetch(REEL_GENERATE, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...base, prompt: prompt || null, duration_seconds: duration }) }).then(r => r.json())
+        if (prep.error) throw new Error(prep.error)
+        // Step 2: call Higgsfield from browser (Vercel IPs blocked)
+        const hfRes = await fetch(prep.hf_endpoint, { method: 'POST', headers: { 'Authorization': prep.hf_key, 'Content-Type': 'application/json' }, body: JSON.stringify(prep.payload) })
+        const hfText = await hfRes.text()
+        if (!hfRes.ok) throw new Error(hfText.startsWith('<') ? 'Higgsfield temporarily unavailable. Try again in 30 seconds.' : 'Higgsfield ' + hfRes.status + ': ' + hfText.slice(0, 100))
+        const hf = JSON.parse(hfText)
+        const jobId = hf.id ?? hf.job_id ?? hf.request_id
+        if (!jobId) throw new Error('No job ID returned from Higgsfield')
+        // Step 3: save job_id to DB
+        await fetch(REEL_GENERATE, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ session_id: prep.session_id, job_id: jobId, status: 'processing' }) })
+        setGenProgress(15); setActiveJob({ jobId, sessionId: prep.session_id })
+        pollStatus(jobId, prep.session_id, userToken)
       } catch (e: any) {
         const msg = (e.message ?? '').replace(/<[^>]*>/g, '').slice(0, 120)
-        const friendly = msg.includes('522') || msg.includes('timeout') || msg.includes('DOCTYPE')
-          ? 'Higgsfield API is temporarily unavailable. Please try again in 30 seconds.'
-          : msg || 'Generation failed'
-        setGenMsg(friendly); setGenerating(false); setGenProgress(0)
+        setGenMsg(msg || 'Generation failed'); setGenerating(false); setGenProgress(0)
       }
-      return
     }
 
     setGenMsg('Generating ' + clips + ' clips for ' + duration + 's reel…')
@@ -313,8 +319,15 @@ export default function ReelStudioPage() {
       const clipUrls: string[] = []
       for (let i = 0; i < clips; i++) {
         const clipPrompt = prompt ? (i === 0 ? prompt : prompt + ', continuation ' + (i + 1) + ' of ' + clips) : null
-        const d = await fetch(REEL_GENERATE, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...base, prompt: clipPrompt || null, duration_seconds: clipSecs }) }).then(r => r.json())
+        const prep = await fetch(REEL_GENERATE, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...base, prompt: clipPrompt || null, duration_seconds: clipSecs }) }).then(r => r.json())
+        if (prep.error) throw new Error('Clip ' + (i + 1) + ' failed: ' + prep.error)
+        const hfRes2 = await fetch(prep.hf_endpoint, { method: 'POST', headers: { 'Authorization': prep.hf_key, 'Content-Type': 'application/json' }, body: JSON.stringify(prep.payload) })
+        const hfText2 = await hfRes2.text()
+        if (!hfRes2.ok) throw new Error('Clip ' + (i + 1) + ' failed: Higgsfield ' + hfRes2.status)
+        const hf2 = JSON.parse(hfText2)
+        const d = { job_id: hf2.id ?? hf2.job_id ?? hf2.request_id, session_id: prep.session_id }
         if (!d.job_id) throw new Error('Clip ' + (i + 1) + ' failed: no job_id')
+        await fetch(REEL_GENERATE, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ session_id: prep.session_id, job_id: d.job_id, status: 'processing' }) })
         setGenMsg('Clip ' + (i + 1) + '/' + clips + ' submitted, waiting…'); setGenProgress(10 + Math.floor(i * 70 / clips))
         const url = await pollClip(d.job_id, d.session_id, userToken)
         if (!url) throw new Error('Clip ' + (i + 1) + ' generation failed')
